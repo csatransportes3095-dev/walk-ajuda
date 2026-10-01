@@ -1846,6 +1846,23 @@ export const appRouter = router({
           // A persistência e o status inicial já foram confirmados antes dos side effects restantes.
           const regId = persistedOrder.registrationId;
           const createdOrderStatus = { id: persistedOrder.orderStatusId };
+
+          // Congelar a sequência escolhida pelo produto no nascimento do pedido.
+          // Falha nesta camada não cancela o pedido: o fluxo padrão permanece como fallback.
+          try {
+            const { assignOrderStatusFlow } = await import('./db');
+            await assignOrderStatusFlow({
+              registrationId: regId,
+              orderStatusId: persistedOrder.orderStatusId,
+              orderNumber: persistedOrder.orderNumber ?? null,
+              productId: input.productId ?? null,
+              optionId: input.optionId ?? null,
+            });
+            console.log('[StatusFlow] sequência congelada para o pedido', persistedOrder.orderNumber ?? regId);
+          } catch (flowError) {
+            console.error('[StatusFlow] falha ao congelar sequência:', flowError);
+          }
+
           const previousOrderCount = persistedOrder.previousOrderCount;
           const orderNum = persistedOrder.orderNumber;
           const phoneDigits = effectivePhone;
@@ -4324,6 +4341,17 @@ export const appRouter = router({
         if (input.status === 'recebido') {
           return { success: false, error: 'Status recebido não pode ser definido manualmente' };
         }
+
+        try {
+          const { getOrderStatusFlowForOrder } = await import('./db');
+          const flow = await getOrderStatusFlowForOrder(input.registrationId, input.orderNumber ?? null);
+          if (flow && input.status !== 'cancelado' && !flow.statusKeys.includes(input.status)) {
+            return { success: false, error: 'Este status não pertence à sequência configurada para este pedido.' };
+          }
+        } catch (flowError) {
+          console.error('[StatusFlow] falha ao validar sequência:', flowError);
+        }
+
         const result = await updateLastOrderStatus({
           registrationId: input.registrationId,
           subOrderIndex: input.subOrderIndex,
@@ -6176,6 +6204,52 @@ export const appRouter = router({
         const { deleteOrderStatusType } = await import('./db');
         await deleteOrderStatusType(input.id);
         return { success: true };
+      }),
+  }),
+
+  // Sequências de status por produto
+  statusFlows: router({
+    list: adminProcedure.query(async () => {
+      const { listOrderStatusFlowsDetailed } = await import('./db');
+      return await listOrderStatusFlowsDetailed();
+    }),
+    create: adminProcedure
+      .input(z.object({
+        name: z.string().min(1).max(128),
+        description: z.string().nullable().optional(),
+        statusKeys: z.array(z.string().min(1).max(64)).max(64),
+        productIds: z.array(z.number().int().positive()).max(300),
+      }))
+      .mutation(async ({ input }) => {
+        const { createOrderStatusFlowConfig } = await import('./db');
+        return await createOrderStatusFlowConfig(input);
+      }),
+    update: adminProcedure
+      .input(z.object({
+        id: z.number().int().positive(),
+        name: z.string().min(1).max(128).optional(),
+        description: z.string().nullable().optional(),
+        statusKeys: z.array(z.string().min(1).max(64)).max(64).optional(),
+        productIds: z.array(z.number().int().positive()).max(300).optional(),
+        isActive: z.number().int().min(0).max(1).optional(),
+      }))
+      .mutation(async ({ input }) => {
+        const { updateOrderStatusFlowConfig } = await import('./db');
+        await updateOrderStatusFlowConfig(input);
+        return { success: true };
+      }),
+    orderMap: adminProcedure.query(async () => {
+      const { getOrderStatusFlowMap } = await import('./db');
+      return await getOrderStatusFlowMap();
+    }),
+    forOrder: publicProcedure
+      .input(z.object({
+        registrationId: z.number().int().positive(),
+        orderNumber: z.number().int().positive().optional(),
+      }))
+      .query(async ({ input }) => {
+        const { getOrderStatusFlowForOrder } = await import('./db');
+        return await getOrderStatusFlowForOrder(input.registrationId, input.orderNumber ?? null);
       }),
   }),
 
