@@ -539,6 +539,7 @@ export const orderStatusTypes = mysqlTable("orderStatusTypes", {
   sortOrder: int("sortOrder").notNull().default(0),
   isSystem: int("isSystem").notNull().default(0),               // 1 = protegido, nÃ£o pode excluir
   isActive: int("isActive").notNull().default(1),
+  isGlobal: int("isGlobal").notNull().default(1), // Membership only; custom links are independent.
   pulseColor: varchar("pulseColor", { length: 32 }).default("#ffffff"),  // cor hex do neon/pulso
   showInProgress: int("showInProgress").notNull().default(0),  // 1 = aparece na barra de progresso do cliente
   progressOrder: int("progressOrder").notNull().default(0),    // ordem na barra de progresso do cliente

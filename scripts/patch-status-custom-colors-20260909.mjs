@@ -1,6 +1,20 @@
 import fs from 'node:fs';
 
 function replaceOnce(source, oldText, newText, label) {
+  // The scope UI adds flowId and cache invalidation; keep both when adding colors.
+  // Adapt only these three reviewed anchors; unknown source still aborts below.
+  if (source.includes('import { isGlobalStatus } from "@shared/orderStatusScope";')) {
+    const adapt = text => {
+      if (label === 'cores padrao livres') return text.replace('  pulseColor: "#ffffff",\n};', '  pulseColor: "#ffffff",\n  flowId: 0,\n};');
+      if (label === 'reset das cores apos criar') return text.replace('utils.statusTypes.list.invalidate();', 'refreshScopes();');
+      if (label === 'estado dos seletores de cor') return text
+        .replace('useState(false)', 'useState(!!requestedFlowId)')
+        .replace('useState<FormData>(defaultForm)', 'useState<FormData>({ ...defaultForm, flowId: requestedFlowId, key: restoreKey })');
+      return text;
+    };
+    oldText = adapt(oldText);
+    newText = adapt(newText);
+  }
   const count = source.split(oldText).length - 1;
   if (count !== 1) throw new Error(`[status-custom-colors] ${label}: esperado 1 bloco, encontrado ${count}`);
   return source.replace(oldText, newText);

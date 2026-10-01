@@ -17,6 +17,8 @@ run_boot_step() {
   return "$code"
 }
 
+run_boot_step "db-migrate-status-scope" pnpm exec tsx scripts/apply-status-scope-migration.ts
+
 echo "Verificando migrações pendentes..."
 run_boot_step "db-migrate-question-audio" pnpm run db:migrate:question-audio
 run_boot_step "db-migrate-private-authenticator-qr" pnpm run db:migrate:private-authenticator-qr

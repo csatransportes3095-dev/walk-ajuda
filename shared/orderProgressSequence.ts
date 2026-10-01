@@ -1,6 +1,8 @@
+import { isGlobalStatus } from "./orderStatusScope";
 export type OrderProgressStatusLike = {
   key: string;
   isActive?: number | null;
+  isGlobal?: number | null;
   showInProgress?: number | null;
   progressOrder?: number | null;
   sortOrder?: number | null;
@@ -33,7 +35,7 @@ export function findProgressStatusIndex(progressKeys: string[], status: unknown)
 }
 
 function activeNormalStatuses(statuses: OrderProgressStatusLike[]): OrderProgressStatusLike[] {
-  return statuses.filter(status => status.isActive === 1 && !EXCLUDED_FROM_NORMAL_PROGRESS.has(cleanKey(status.key)));
+  return statuses.filter(status => status.isActive === 1 && isGlobalStatus(status) && !EXCLUDED_FROM_NORMAL_PROGRESS.has(cleanKey(status.key)));
 }
 
 export function getConfiguredGlobalProgressKeys(statuses: OrderProgressStatusLike[]): string[] {

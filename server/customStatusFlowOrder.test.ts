@@ -20,6 +20,6 @@ describe("custom status flow ordering", () => {
     const orders = read("client/src/pages/AdminOrders.tsx");
     expect(db).toContain("INSERT INTO orderStatusFlowItems (flowId, statusKey, sortOrder)");
     expect(db).toContain("ORDER BY i.sortOrder ASC, i.id ASC");
-    expect(orders).toContain("return Array.isArray(keys) && keys.length > 0 ? keys : ACTIVE_STATUS_ORDER");
+    expect(orders).toContain("return statusChoicesForFlow(dynamicStatuses, flow ?? null)");
   });
 });

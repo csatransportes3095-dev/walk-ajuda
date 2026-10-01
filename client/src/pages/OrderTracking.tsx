@@ -1,3 +1,4 @@
+import { globalActiveStatuses, unavailableFlowKeys } from "@shared/orderStatusScope";
 import React, { useState, useMemo, useEffect } from "react";
 import { toast } from "sonner";
 import { trpc } from "@/lib/trpc";
@@ -433,7 +434,7 @@ export default function OrderTracking() {
   const selectedOrderNumber = history.find((entry: any) => entry.orderNumber != null)?.orderNumber ?? null;
   const statusFlowForOrderQuery = trpc.statusFlows.forOrder.useQuery(
     { registrationId, orderNumber: selectedOrderNumber ?? undefined },
-    { enabled: canAccess && registrationId > 0, staleTime: 30_000 }
+    { enabled: canAccess && registrationId > 0, staleTime: 0, refetchInterval: 15_000, refetchOnWindowFocus: true }
   );
   // Documentos enviados pelo admin para o cliente (filtrado pelo pedido selecionado)
   const adminFilesQuery = trpc.orderStatus.getAdminFilesForClient.useQuery(
@@ -1098,20 +1099,24 @@ export default function OrderTracking() {
 
             {/* === JORNADA VERTICAL DO PEDIDO === */}
             {(() => {
-              const productFlowKeys = statusFlowForOrderQuery.data && statusFlowForOrderQuery.data.isDefault !== 1
-                ? (statusFlowForOrderQuery.data.statusKeys ?? [])
-                : [];
-              const configuredKeys = productFlowKeys.length > 0
+              if (statusFlowForOrderQuery.isLoading) return <p className="text-xs text-white/50">Carregando sequencia do pedido...</p>;
+              if (statusFlowForOrderQuery.isError) return <p className="text-xs text-amber-200">Nao foi possivel carregar as etapas. O status atual do pedido permanece acima.</p>;
+              const customFlow = statusFlowForOrderQuery.data && statusFlowForOrderQuery.data.isDefault !== 1;
+              const productFlowKeys = customFlow ? (statusFlowForOrderQuery.data?.statusKeys ?? []) : [];
+              if (customFlow && unavailableFlowKeys(productFlowKeys, dynamicStatuses).length > 0) {
+                return <p className="rounded-xl border border-amber-400/20 bg-amber-500/5 p-3 text-sm text-amber-100">As etapas deste servico estao em revisao. O status atual do seu pedido continua disponivel acima.</p>;
+              }
+              const globalStatuses = globalActiveStatuses(dynamicStatuses).filter(status => status.key !== 'cancelado');
+              const allowedGlobal = new Set(globalStatuses.map(status => status.key));
+              const configuredKeys = customFlow
                 ? productFlowKeys
-                : globalProgressSequenceQuery.data?.enabled
+                : (globalProgressSequenceQuery.data?.enabled
                   ? (globalProgressSequenceQuery.data.keys ?? [])
-                  : (progressConfigPublicQuery?.data ?? []);
-              const fallbackKeys = dynamicStatuses
-                .filter((status: any) => status.key !== 'cancelado')
-                .map((status: any) => status.key);
-              const progressKeys = configuredKeys.length > 0 ? configuredKeys : fallbackKeys;
+                  : (progressConfigPublicQuery?.data ?? [])).filter((key: string) => allowedGlobal.has(key));
+              // A custom flow, even empty, never inherits unrelated global stages.
+              const progressKeys = customFlow || configuredKeys.length > 0 ? configuredKeys : globalStatuses.map(status => status.key);
               const progressSteps = progressKeys
-                .map((key: string) => (statusTypesQuery.data ?? []).find((status: any) => status.key === key))
+                .map((key: string) => dynamicStatuses.find((status: any) => status.key === key))
                 .filter(Boolean);
 
               if (progressSteps.length === 0) return null;
