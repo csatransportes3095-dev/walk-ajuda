@@ -2,6 +2,8 @@ import React, { useState, useMemo, useEffect } from "react";
 import { toast } from "sonner";
 import { trpc } from "@/lib/trpc";
 import { publicSiteUrl } from "@shared/publicLinks";
+import { safeLoginLink } from "@shared/orderLoginPresentation";
+import "@/styles/order-login-layout.css";
 import { findProgressStatusIndex, resolveProgressPosition } from "@shared/orderProgressSequence";
 import { Link, useSearch } from "wouter";
 import { useDevToolsDetection } from "@/hooks/useDevToolsDetection";
@@ -439,8 +441,9 @@ export default function OrderTracking() {
     { enabled: canAccess && history.length > 0, staleTime: 0, refetchInterval: 30000 }
   );
   const loginDataQuery = trpc.loginData.getForClient.useQuery(
-    { registrationId, customerPhone: searchPhone },
-    { enabled: canAccess && (latestStatus === 'entregue' || latestStatus === 'pedido_entregue') && registrationId > 0 }
+    { registrationId, customerPhone: searchPhone, cpToken: pwdToken || undefined },
+    { enabled: canAccess && (latestStatus === 'entregue' || latestStatus === 'pedido_entregue') && registrationId > 0,
+      staleTime: 0, refetchInterval: 15000, refetchOnWindowFocus: true }
   );
   const authenticatorQrQuery = trpc.loginData.getAuthenticatorQrForClient.useQuery(
     { registrationId, cpToken: pwdToken },
@@ -1579,7 +1582,7 @@ export default function OrderTracking() {
 
             {/* === BLOCO LOGIN / ENTREGUE — visível para o cliente apenas quando entregue === */}
             {(latestStatus === 'entregue' || latestStatus === 'pedido_entregue') && canAccess && (
-              <div className="bg-[#0e1f12] rounded-2xl border border-lime-500/40 p-5 space-y-4">
+              <div className="order-login-client bg-[#0e1f12] rounded-2xl border border-lime-500/40 p-5 space-y-4">
                 <p className="text-xs text-lime-400 font-semibold uppercase tracking-wider flex items-center gap-1.5">
                   <svg className="w-3.5 h-3.5" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M15 7a2 2 0 012 2m4 0a6 6 0 01-7.743 5.743L11 17H9v2H7v2H4a1 1 0 01-1-1v-2.586a1 1 0 01.293-.707l5.964-5.964A6 6 0 1121 9z" /></svg>
                   Seus Dados de Acesso
@@ -1590,10 +1593,10 @@ export default function OrderTracking() {
                     <Loader2 className="w-5 h-5 animate-spin text-lime-400" />
                   </div>
                 ) : loginDataQuery.data ? (
-                  <div className="space-y-3">
+                  <div className="order-login-fields-grid">
                     {(loginDataQuery.data as any).loginPhone && (
                       <div className="bg-black/30 rounded-xl p-3 flex items-center justify-between gap-3">
-                        <div className="min-w-0">
+                        <div className="min-w-0 flex-1">
                           <p className="text-[10px] text-white/40 uppercase tracking-wider mb-0.5">Número de Telefone</p>
                           <p className="text-sm font-mono text-white font-semibold break-all">{(loginDataQuery.data as any).loginPhone}</p>
                         </div>
@@ -1608,7 +1611,7 @@ export default function OrderTracking() {
                     )}
                     {loginDataQuery.data.loginEmail && (
                       <div className="bg-black/30 rounded-xl p-3 flex items-center justify-between gap-3">
-                        <div className="min-w-0">
+                        <div className="min-w-0 flex-1">
                           <p className="text-[10px] text-white/40 uppercase tracking-wider mb-0.5">Login (Email ou Telefone enviado pelo sistema)</p>
                           <p className="text-sm font-mono text-white font-semibold break-all">{loginDataQuery.data.loginEmail}</p>
                         </div>
@@ -1623,7 +1626,7 @@ export default function OrderTracking() {
                     )}
                     {loginDataQuery.data.loginPassword && (
                       <div className="bg-black/30 rounded-xl p-3 flex items-center justify-between gap-3">
-                        <div className="min-w-0">
+                        <div className="min-w-0 flex-1">
                           <p className="text-[10px] text-white/40 uppercase tracking-wider mb-0.5">Senha do app Uber e do e-mail Outlook</p>
                           <p className="text-sm font-mono text-white font-semibold break-all">{loginDataQuery.data.loginPassword}</p>
                           <p className="text-[10px] text-lime-400/70 mt-1">🔑 Use esta senha para entrar no app Uber <strong>e</strong> também para acessar o e-mail Outlook cadastrado</p>
@@ -1637,45 +1640,14 @@ export default function OrderTracking() {
                         </button>
                       </div>
                     )}
-                    {loginDataQuery.data.authCode && (
-                      <div className="bg-black/30 rounded-xl p-3 flex items-center justify-between gap-3">
-                        <div className="min-w-0">
-                          <p className="text-[10px] text-white/40 uppercase tracking-wider mb-0.5">Código Autenticador</p>
-                          <p className="text-sm font-mono text-white font-semibold break-all">{loginDataQuery.data.authCode}</p>
-                        </div>
-                        <button
-                          onClick={() => copyField(loginDataQuery.data!.authCode!, 'authcode')}
-                          className="flex-shrink-0 p-2 rounded-lg bg-lime-500/10 hover:bg-lime-500/20 border border-lime-500/30 text-lime-400 transition-colors"
-                          title="Copiar código"
-                        >
-                          {copiedField === 'authcode' ? <Check className="w-4 h-4" /> : <Copy className="w-4 h-4" />}
-                        </button>
-                      </div>
-                    )}
-                    {authenticatorQrQuery.data && (
-                      <div className="rounded-xl border border-lime-400/35 bg-lime-500/[0.07] p-3 space-y-2.5">
-                        <div className="flex items-start gap-2">
-                          <QrCode className="w-4 h-4 text-lime-300 mt-0.5 flex-shrink-0" />
-                          <div>
-                            <p className="text-xs font-bold text-lime-200">QR CODE DO AUTENTICADOR</p>
-                            <p className="text-[11px] text-lime-100/65">Use este QR somente para configurar o autenticador da sua conta.</p>
-                          </div>
-                        </div>
-                        {authenticatorQrQuery.data ? (
-                          <>
-                            <div className="rounded-lg bg-white p-2 flex justify-center">
-                              <img src={`data:${authenticatorQrQuery.data.mimeType};base64,${authenticatorQrQuery.data.data}`} alt="QR Code do autenticador" className="max-h-56 max-w-full object-contain" />
-                            </div>
-                            <div className="grid grid-cols-2 gap-2">
-                              <button type="button" onClick={() => setQrExpanded(true)} className="rounded-lg border border-white/15 bg-white/5 px-3 py-2 text-xs font-semibold text-white hover:bg-white/10"><Maximize2 className="inline w-3.5 h-3.5 mr-1" />Ampliar</button>
-                              <button type="button" onClick={downloadAuthenticatorQr} className="rounded-lg border border-lime-400/35 bg-lime-500/15 px-3 py-2 text-xs font-semibold text-lime-100 hover:bg-lime-500/25"><Download className="inline w-3.5 h-3.5 mr-1" />Salvar imagem</button>
-                            </div>
-                          </>
-                        ) : null}
+                    {loginDataQuery.data.cnhCode && (
+                      <div className="min-w-0 rounded-xl border border-lime-400/25 bg-black/30 p-3 flex items-center justify-between gap-3" data-login-field="cnh">
+                        <div className="min-w-0 flex-1"><p className="text-[11px] text-lime-200/70 mb-1">Código de Habilitação CNH</p><p className="font-mono text-xl font-semibold tracking-widest text-white">{loginDataQuery.data.cnhCode}</p></div>
+                        <button type="button" onClick={() => copyField(loginDataQuery.data!.cnhCode!, 'cnhcode')} title="Copiar código CNH" className="shrink-0 rounded-lg border border-lime-500/30 bg-lime-500/10 p-3 text-lime-300">{copiedField === 'cnhcode' ? <Check className="w-4 h-4" /> : <Copy className="w-4 h-4" />}</button>
                       </div>
                     )}
                     {(loginDataQuery.data as any).emailLink && (
-                      <div className="bg-black/30 rounded-xl p-3 flex items-center justify-between gap-3">
+                      <details className="order-login-full rounded-xl border border-white/10"><summary className="cursor-pointer p-3 text-xs text-white/50">Acesso ao e-mail (registro anterior)</summary><div className="bg-black/30 rounded-xl p-3 flex items-center justify-between gap-3">
                         <div className="min-w-0 flex-1">
                           <p className="text-[10px] text-white/40 uppercase tracking-wider mb-0.5">Link de Acesso ao E-mail</p>
                           <p className="text-xs font-mono text-blue-300 break-all">{(loginDataQuery.data as any).emailLink}</p>
@@ -1700,43 +1672,63 @@ export default function OrderTracking() {
                             <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M10 6H6a2 2 0 00-2 2v10a2 2 0 002 2h10a2 2 0 002-2v-4M14 4h6m0 0v6m0-6L10 14" /></svg>
                           </button>
                         </div>
-                      </div>
+                      </div></details>
                     )}
-                    {(loginDataQuery.data as any).loginGroupLink && (
-                      <div className="bg-black/30 rounded-xl p-3 flex items-center justify-between gap-3">
-                        <div className="min-w-0 flex-1">
-                          <p className="text-[10px] text-white/40 uppercase tracking-wider mb-0.5">Link do Grupo</p>
-                          <p className="text-xs font-mono text-green-300 break-all">{(loginDataQuery.data as any).loginGroupLink}</p>
-                        </div>
-                        <div className="flex gap-2 flex-shrink-0">
-                          <button
-                            onClick={() => copyField((loginDataQuery.data as any).loginGroupLink, 'grouplink')}
-                            className="p-2 rounded-lg bg-lime-500/10 hover:bg-lime-500/20 border border-lime-500/30 text-lime-400 transition-colors"
-                            title="Copiar link"
-                          >
-                            {copiedField === 'grouplink' ? <Check className="w-4 h-4" /> : <Copy className="w-4 h-4" />}
-                          </button>
-                          <button
-                            onClick={() => {
-                              const url = (loginDataQuery.data as any).loginGroupLink;
-                              const finalUrl = url.startsWith('http') ? url : 'https://' + url;
-                              window.open(finalUrl, '_blank', 'noopener,noreferrer');
-                            }}
-                            className="p-2 rounded-lg bg-green-500/10 hover:bg-green-500/20 border border-green-500/30 text-green-400 transition-colors"
-                            title="Abrir link do grupo"
-                          >
-                            <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M10 6H6a2 2 0 00-2 2v10a2 2 0 002 2h10a2 2 0 002-2v-4M14 4h6m0 0v6m0-6L10 14" /></svg>
-                          </button>
+                    {loginDataQuery.data.loginGroupLink && (
+                      <div className="order-login-full flex flex-wrap items-center justify-between gap-3 rounded-xl border border-emerald-400/25 bg-emerald-500/5 p-3" data-login-field="group">
+                        <div><p className="text-sm font-semibold text-emerald-100">Grupo do WhatsApp</p><p className="mt-1 text-xs text-white/50">Acesse pelo botão abaixo.</p></div>
+                        <div className="flex flex-wrap gap-2">
+                          {safeLoginLink(loginDataQuery.data.loginGroupLink) && <a href={safeLoginLink(loginDataQuery.data.loginGroupLink)!} target="_blank" rel="noopener noreferrer" className="rounded-lg bg-emerald-600 px-4 py-2.5 text-xs font-bold text-white">Entrar no grupo</a>}
+                          <button type="button" onClick={() => copyField(loginDataQuery.data!.loginGroupLink!, 'grouplink')} title="Copiar link do grupo" className="rounded-lg border border-emerald-400/30 px-3 py-2 text-emerald-200">{copiedField === 'grouplink' ? <Check className="w-4 h-4" /> : <Copy className="w-4 h-4" />}</button>
                         </div>
                       </div>
                     )}
                     {(loginDataQuery.data as any).loginNotes && (
-                      <div className="bg-black/30 rounded-xl p-3">
+                      <div className="order-login-full bg-black/30 rounded-xl p-3" data-login-field="notes">
                         <p className="text-[10px] text-white/40 uppercase tracking-wider mb-1.5">📝 Instruções</p>
                         <p className="text-xs text-white/80 whitespace-pre-line leading-relaxed">{(loginDataQuery.data as any).loginNotes}</p>
                       </div>
                     )}
-                    {!loginDataQuery.data.loginEmail && !loginDataQuery.data.loginPassword && !loginDataQuery.data.authCode && !(loginDataQuery.data as any).emailLink && !(loginDataQuery.data as any).loginGroupLink && !(loginDataQuery.data as any).loginNotes && !authenticatorQrQuery.data && (
+                    <div className="order-login-full space-y-3" data-login-field="authenticator">
+                    {loginDataQuery.data.authCode && (
+                      <div className="bg-black/30 rounded-xl p-3 flex items-center justify-between gap-3">
+                        <div className="min-w-0 flex-1">
+                          <p className="text-[10px] text-white/40 uppercase tracking-wider mb-0.5">Código Autenticador</p>
+                          <p className="text-sm font-mono text-white font-semibold break-all">{loginDataQuery.data.authCode}</p>
+                        </div>
+                        <button
+                          onClick={() => copyField(loginDataQuery.data!.authCode!, 'authcode')}
+                          className="flex-shrink-0 p-2 rounded-lg bg-lime-500/10 hover:bg-lime-500/20 border border-lime-500/30 text-lime-400 transition-colors"
+                          title="Copiar código"
+                        >
+                          {copiedField === 'authcode' ? <Check className="w-4 h-4" /> : <Copy className="w-4 h-4" />}
+                        </button>
+                      </div>
+                    )}
+                    {authenticatorQrQuery.data && (
+                      <div className="rounded-xl border border-lime-400/35 bg-lime-500/[0.07] p-3 space-y-2.5">
+                        <div className="flex items-start gap-2">
+                          <QrCode className="w-4 h-4 text-lime-300 mt-0.5 flex-shrink-0" />
+                          <div>
+                            <p className="text-xs font-bold text-lime-200">QR CODE DO AUTENTICADOR</p>
+                            <p className="text-[11px] text-lime-100/65">Use este QR somente para configurar o autenticador da sua conta.</p>
+                          </div>
+                        </div>
+                        {authenticatorQrQuery.data ? (
+                          <>
+                            <div className="mx-auto w-fit max-w-full rounded-lg bg-white p-3 flex justify-center">
+                              <img src={`data:${authenticatorQrQuery.data.mimeType};base64,${authenticatorQrQuery.data.data}`} alt="QR Code do autenticador" className="max-h-56 max-w-full object-contain" />
+                            </div>
+                            <div className="grid grid-cols-2 gap-2">
+                              <button type="button" onClick={() => setQrExpanded(true)} className="rounded-lg border border-white/15 bg-white/5 px-3 py-2 text-xs font-semibold text-white hover:bg-white/10"><Maximize2 className="inline w-3.5 h-3.5 mr-1" />Ampliar</button>
+                              <button type="button" onClick={downloadAuthenticatorQr} className="rounded-lg border border-lime-400/35 bg-lime-500/15 px-3 py-2 text-xs font-semibold text-lime-100 hover:bg-lime-500/25"><Download className="inline w-3.5 h-3.5 mr-1" />Salvar imagem</button>
+                            </div>
+                          </>
+                        ) : null}
+                      </div>
+                    )}
+                    </div>
+                    {!loginDataQuery.data.cnhCode && !loginDataQuery.data.loginPhone && !loginDataQuery.data.loginEmail && !loginDataQuery.data.loginPassword && !loginDataQuery.data.authCode && !(loginDataQuery.data as any).emailLink && !(loginDataQuery.data as any).loginGroupLink && !(loginDataQuery.data as any).loginNotes && !authenticatorQrQuery.data && (
                       <p className="text-xs text-white/40 text-center py-2">Aguarde — os dados serão disponibilizados em breve.</p>
                     )}
                   </div>

@@ -20,6 +20,7 @@ run_boot_step() {
 echo "Verificando migrações pendentes..."
 run_boot_step "db-migrate-question-audio" pnpm run db:migrate:question-audio
 run_boot_step "db-migrate-private-authenticator-qr" pnpm run db:migrate:private-authenticator-qr
+run_boot_step "db-migrate-order-login-improvements" pnpm exec tsx scripts/apply-order-login-improvements-migration.ts
 run_boot_step "db-migrate-admin-authenticator-vault" pnpm run db:migrate:admin-authenticator-vault
 run_boot_step "db-migrate-admin-authenticator-order-links" pnpm run db:migrate:admin-authenticator-order-links
 run_boot_step "db-migrate-option-card-appearance" pnpm run db:migrate:option-card-appearance

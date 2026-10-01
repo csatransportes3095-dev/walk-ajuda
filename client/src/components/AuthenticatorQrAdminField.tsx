@@ -110,8 +110,8 @@ export function AuthenticatorQrAdminField({ registrationId, hasExistingQr, pendi
             <p className="text-[11px] font-bold text-lime-300">QR CODE DO AUTENTICADOR</p>
             <span className="text-[10px] text-lime-300/70">{pendingValue && typeof pendingValue === 'object' ? 'Aguardando salvar' : 'Salvo com proteção'}</span>
           </div>
-          <div className="flex justify-center rounded-md bg-white p-2">
-            <img src={previewData} alt="QR Code do autenticador" className="max-h-44 max-w-full object-contain" />
+          <div className="mx-auto flex w-fit max-w-full justify-center rounded-md bg-white p-3">
+            <img src={previewData} alt="QR Code do autenticador" className="max-h-56 max-w-full object-contain" />
           </div>
           <div className="grid grid-cols-2 sm:grid-cols-4 gap-1.5">
             <button type="button" onClick={() => setExpanded(true)} disabled={disabled} className="rounded-lg border border-white/15 bg-white/5 px-2 py-1.5 text-[11px] font-semibold text-white hover:bg-white/10 disabled:opacity-50"><Maximize2 className="inline w-3.5 h-3.5 mr-1" />Ampliar</button>

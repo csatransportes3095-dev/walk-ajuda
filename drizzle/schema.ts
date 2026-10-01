@@ -650,7 +650,8 @@ export const orderLoginData = mysqlTable("orderLoginData", {
   loginEmail: varchar("loginEmail", { length: 320 }),
   loginPassword: varchar("loginPassword", { length: 256 }),
   authCode: varchar("authCode", { length: 512 }),
-  emailLink: varchar("emailLink", { length: 512 }),
+  emailLink: varchar("emailLink", { length: 512 }), // Legacy links retained.
+  cnhCode: varchar("cnhCode", { length: 6 }), // Manual, preserving leading zeros.
   loginNotes: text("loginNotes"),
   loginGroupLink: varchar("loginGroupLink", { length: 1024 }),
   // QR do autenticador: metadados somente; os bytes ficam cifrados no storage.
@@ -662,6 +663,15 @@ export const orderLoginData = mysqlTable("orderLoginData", {
 });
 export type OrderLoginData = typeof orderLoginData.$inferSelect;
 export type InsertOrderLoginData = typeof orderLoginData.$inferInsert;
+
+// Private login defaults, NOT public siteSettings. No row = legacy mode.
+// A row with groupLink NULL records an explicit removal for every order.
+export const orderLoginDefaults = mysqlTable("orderLoginDefaults", {
+  id: int("id").primaryKey(),
+  groupLink: varchar("groupLink", { length: 1024 }),
+  revision: int("revision").notNull().default(1),
+  updatedAt: timestamp("updatedAt").defaultNow().onUpdateNow().notNull(),
+});
 
 // Senha personalizada do cliente para acompanhar pedido
 // firstAccess=1: cliente ainda nÃ£o criou senha pessoal (usa 4 Ãºltimos dÃ­gitos do telefone)

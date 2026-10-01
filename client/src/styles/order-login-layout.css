@@ -1,0 +1,19 @@
+/* Scoped only to order login editors and the delivered access card. */
+.order-login-layout, .order-login-client { min-width: 0; max-width: 100%; }
+.order-login-fields-grid { display: grid; grid-template-columns: minmax(0,1fr); gap: 1rem; }
+.order-login-fields-grid > * { min-width: 0; }
+.order-login-full { grid-column: 1 / -1; }
+.order-login-layout input, .order-login-layout textarea { min-width: 0; max-width: 100%; font-size: 14px; }
+.order-login-layout input:not([type="file"]) { min-height: 38px; }
+.order-login-layout textarea { min-height: 90px; resize: vertical; }
+.order-login-layout label, .order-login-layout p, .order-login-client p { overflow-wrap: anywhere; }
+.order-login-layout .flex > input, .order-login-layout .flex > textarea { min-width: 0; }
+.order-login-layout button { white-space: normal; }
+.order-login-layout > .flex { flex-wrap: wrap; }
+.order-login-layout > .flex > button { min-height: 40px; }
+.order-login-layout details[open] > summary { border-bottom: 1px solid rgb(255 255 255 / .08); margin-bottom: .5rem; }
+@media (min-width: 768px) { .order-login-fields-grid { grid-template-columns: repeat(2,minmax(0,1fr)); } }
+@media (max-width: 480px) {
+  .order-login-layout .flex:has(> input), .order-login-layout .flex:has(> textarea) { flex-wrap: wrap; }
+  .order-login-layout .flex > input, .order-login-layout .flex > textarea { flex: 1 1 100%; width: 100%; }
+}

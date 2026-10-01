@@ -1,0 +1,78 @@
+name: Order login validation
+on:
+  push:
+    branches: [feature/order-login-cnh-global-group-20261001, recovery/organizar-salvos-2026-08-24]
+    paths:
+      - '.github/workflows/order-login-validation.yml'
+      - 'client/src/pages/AdminOrders.tsx'
+      - 'client/src/pages/OrderTracking.tsx'
+      - 'client/src/components/OrderLoginExtrasFields.tsx'
+      - 'client/src/components/AuthenticatorQrAdminField.tsx'
+      - 'client/src/styles/order-login-layout.css'
+      - 'shared/orderLoginPresentation.ts'
+      - 'server/orderLogin*.ts'
+      - 'server/routers.ts'
+      - 'drizzle/schema.ts'
+      - 'scripts/*order-login*'
+      - 'scripts/render-start.sh'
+  pull_request:
+    branches: [recovery/organizar-salvos-2026-08-24]
+    paths: ['client/src/pages/AdminOrders.tsx', 'client/src/pages/OrderTracking.tsx', 'server/orderLogin*.ts', 'shared/orderLoginPresentation.ts']
+concurrency:
+  group: order-login-${{ github.ref }}
+  cancel-in-progress: true
+permissions:
+  contents: read
+jobs:
+  validate:
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+    services:
+      mysql:
+        image: mysql:8.4
+        env:
+          MYSQL_ROOT_PASSWORD: isolated-login-test
+          MYSQL_DATABASE: h2_login_test
+        ports: ['3306:3306']
+        options: >-
+          --health-cmd="mysqladmin ping -h 127.0.0.1 -pisolated-login-test"
+          --health-interval=10s --health-timeout=5s --health-retries=12
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with: {node-version: 22}
+      - name: Install locked dependencies
+        run: |
+          npm install -g pnpm@10.4.1
+          pnpm install --frozen-lockfile
+      - name: Login, authenticator and isolated database regression
+        env:
+          LOGIN_TEST_DB_URL: mysql://root:isolated-login-test@127.0.0.1:3306/h2_login_test
+        run: |
+          mkdir -p /tmp/login-report
+          set -o pipefail
+          pnpm exec vitest run server/orderLoginImprovements.test.ts server/adminAuthenticatorIntegration.test.ts server/adminOrderLoginQuickEnhancer.test.ts server/adminAuthenticatorOrder.test.ts server/adminAuthenticatorVault.test.ts 2>&1 | tee /tmp/login-report/tests.txt
+      - name: Production build
+        run: |
+          set -o pipefail
+          pnpm build 2>&1 | tee /tmp/login-report/build.txt
+      - uses: actions/upload-artifact@v4
+        if: always()
+        with:
+          name: order-login-release-evidence
+          path: |
+            /tmp/login-report
+            dist/public/index.html
+            dist/public/assets
+          retention-days: 5
+  public-smoke:
+    if: github.event_name == 'push' && github.ref == 'refs/heads/recovery/organizar-salvos-2026-08-24'
+    needs: validate
+    runs-on: ubuntu-latest
+    timeout-minutes: 12
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with: {node-version: 22}
+      - name: Read-only public deployment check
+        run: node scripts/check-order-login-public.mjs
