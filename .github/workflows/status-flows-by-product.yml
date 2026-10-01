@@ -8,7 +8,6 @@ on:
     branches:
       - feature/status-flows-by-product
     paths:
-      - "scripts/status-flows-by-product-patch.mjs"
       - ".github/workflows/status-flows-by-product.yml"
       - "drizzle/schema.ts"
   workflow_dispatch:
@@ -27,9 +26,6 @@ jobs:
         with:
           ref: feature/status-flows-by-product
           fetch-depth: 0
-
-      - name: Apply guarded status-flow patch
-        run: node scripts/status-flows-by-product-patch.mjs
 
       - name: Validate whitespace
         run: git diff --check
