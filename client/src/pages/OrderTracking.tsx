@@ -428,6 +428,11 @@ export default function OrderTracking() {
 
   // Dados de login liberado
   const registrationId = history.length > 0 ? ((history[0] as any).registrationId ?? 0) : 0;
+  const selectedOrderNumber = history.find((entry: any) => entry.orderNumber != null)?.orderNumber ?? null;
+  const statusFlowForOrderQuery = trpc.statusFlows.forOrder.useQuery(
+    { registrationId, orderNumber: selectedOrderNumber ?? undefined },
+    { enabled: canAccess && registrationId > 0, staleTime: 30_000 }
+  );
   // Documentos enviados pelo admin para o cliente (filtrado pelo pedido selecionado)
   const adminFilesQuery = trpc.orderStatus.getAdminFilesForClient.useQuery(
     { phone: searchPhone, registrationId: registrationId > 0 ? registrationId : undefined },
@@ -1090,9 +1095,14 @@ export default function OrderTracking() {
 
             {/* === JORNADA VERTICAL DO PEDIDO === */}
             {(() => {
-              const configuredKeys = globalProgressSequenceQuery.data?.enabled
-                ? (globalProgressSequenceQuery.data.keys ?? [])
-                : (progressConfigPublicQuery?.data ?? []);
+              const productFlowKeys = statusFlowForOrderQuery.data && statusFlowForOrderQuery.data.isDefault !== 1
+                ? (statusFlowForOrderQuery.data.statusKeys ?? [])
+                : [];
+              const configuredKeys = productFlowKeys.length > 0
+                ? productFlowKeys
+                : globalProgressSequenceQuery.data?.enabled
+                  ? (globalProgressSequenceQuery.data.keys ?? [])
+                  : (progressConfigPublicQuery?.data ?? []);
               const fallbackKeys = dynamicStatuses
                 .filter((status: any) => status.key !== 'cancelado')
                 .map((status: any) => status.key);
