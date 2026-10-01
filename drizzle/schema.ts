@@ -548,6 +548,50 @@ export const orderStatusTypes = mysqlTable("orderStatusTypes", {
 export type OrderStatusType = typeof orderStatusTypes.$inferSelect;
 export type InsertOrderStatusType = typeof orderStatusTypes.$inferInsert;
 
+// Sequências de status por produto. Produtos sem vínculo explícito usam o fluxo padrão.
+export const orderStatusFlows = mysqlTable("orderStatusFlows", {
+  id: int("id").autoincrement().primaryKey(),
+  name: varchar("name", { length: 128 }).notNull(),
+  description: text("description"),
+  isDefault: int("isDefault").notNull().default(0),
+  isActive: int("isActive").notNull().default(1),
+  createdAt: timestamp("createdAt").defaultNow().notNull(),
+  updatedAt: timestamp("updatedAt").defaultNow().onUpdateNow().notNull(),
+});
+export type OrderStatusFlow = typeof orderStatusFlows.$inferSelect;
+export type InsertOrderStatusFlow = typeof orderStatusFlows.$inferInsert;
+
+export const orderStatusFlowItems = mysqlTable("orderStatusFlowItems", {
+  id: int("id").autoincrement().primaryKey(),
+  flowId: int("flowId").notNull(),
+  statusKey: varchar("statusKey", { length: 64 }).notNull(),
+  sortOrder: int("sortOrder").notNull().default(0),
+  createdAt: timestamp("createdAt").defaultNow().notNull(),
+});
+export type OrderStatusFlowItem = typeof orderStatusFlowItems.$inferSelect;
+export type InsertOrderStatusFlowItem = typeof orderStatusFlowItems.$inferInsert;
+
+export const productStatusFlows = mysqlTable("productStatusFlows", {
+  id: int("id").autoincrement().primaryKey(),
+  productId: int("productId").notNull().unique(),
+  flowId: int("flowId").notNull(),
+  createdAt: timestamp("createdAt").defaultNow().notNull(),
+  updatedAt: timestamp("updatedAt").defaultNow().onUpdateNow().notNull(),
+});
+export type ProductStatusFlow = typeof productStatusFlows.$inferSelect;
+
+export const orderStatusFlowAssignments = mysqlTable("orderStatusFlowAssignments", {
+  id: int("id").autoincrement().primaryKey(),
+  registrationId: int("registrationId").notNull(),
+  orderStatusId: int("orderStatusId").notNull().unique(),
+  orderNumber: int("orderNumber"),
+  productId: int("productId"),
+  optionId: int("optionId"),
+  flowId: int("flowId").notNull(),
+  createdAt: timestamp("createdAt").defaultNow().notNull(),
+});
+export type OrderStatusFlowAssignment = typeof orderStatusFlowAssignments.$inferSelect;
+
 // Contador de pedidos (AUTO_INCREMENT = 10000)
 export const orderCounter = mysqlTable("orderCounter", {
   id: int("id").autoincrement().primaryKey(),
