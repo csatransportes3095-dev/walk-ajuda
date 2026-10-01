@@ -105,7 +105,7 @@ import {
   addOrderFile, getOrderFiles, getOrderFilesByPhone, getOrderFilesByPhoneGrouped, deleteOrderFile,
   getStatusLabelFromDb,
   getStatusInfoFromDb,
-  setGlobalOrderProgressSequence,
+  listOrderStatusTypes, setGlobalOrderProgressSequence,
   generateOrderNumber,
   updateLastOrderStatus,
   completeOpenAppointmentsForOrder,
