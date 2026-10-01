@@ -1960,6 +1960,28 @@ export async function getOrderStatusFlowMap() {
     }
     map[`${Number(row.registrationId)}_${row.orderNumber == null ? "null" : Number(row.orderNumber)}`] = flow;
   }
+
+  // Pedidos anteriores à implantação: inferir pelo nome exato do produto sem gravar nada.
+  const legacyResult = await db.execute(sql`
+    SELECT DISTINCT osh.registrationId, osh.orderNumber, pf.flowId
+    FROM orderStatusHistory osh
+    INNER JOIN products p ON LOWER(TRIM(p.name)) = LOWER(TRIM(osh.serviceName))
+    INNER JOIN productStatusFlows pf ON pf.productId = p.id
+    INNER JOIN orderStatusFlows f ON f.id = pf.flowId AND f.isActive = 1
+    WHERE osh.serviceName IS NOT NULL
+  `);
+  const legacyRows = (legacyResult as any)[0] as Array<{ registrationId: number; orderNumber: number | null; flowId: number }>;
+  for (const row of legacyRows || []) {
+    const key = `${Number(row.registrationId)}_${row.orderNumber == null ? "null" : Number(row.orderNumber)}`;
+    if (map[key]) continue;
+    const flowId = Number(row.flowId);
+    let flow = cache.get(flowId);
+    if (!flow) {
+      flow = await getOrderStatusFlowDefinition(flowId);
+      cache.set(flowId, flow);
+    }
+    map[key] = flow;
+  }
   return map;
 }
 
