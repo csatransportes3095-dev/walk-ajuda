@@ -12,20 +12,6 @@ const ccPurchaseDateSchema = z.string()
     return parsed.getFullYear() === year && parsed.getMonth() === month - 1 && parsed.getDate() === day;
   }, "Data da compra inválida");
 
-function historicalPaidInvoice(invoices: any[], currentCompetence: string, targetCompetence: string) {
-  if (targetCompetence >= currentCompetence) return null;
-  return invoices.find((invoice: any) =>
-    String(invoice.competencia) === targetCompetence &&
-    String(invoice.status || "").toUpperCase() === "PAGA"
-  ) ?? null;
-}
-
-function historicalPaymentDate(invoice: any, fallbackDate: string) {
-  const paidAt = String(invoice?.paidAt ?? "").replace("T", " ").slice(0, 19);
-  if (/^\d{4}-\d{2}-\d{2}/.test(paidAt)) return paidAt;
-  const dueDate = String(invoice?.dueDate ?? "").slice(0, 10);
-  return /^\d{4}-\d{2}-\d{2}$/.test(dueDate) ? dueDate + " 12:00:00" : fallbackDate + " 12:00:00";
-}
 import { TRPCError } from "@trpc/server";
 import { router, publicProcedure, adminProcedure } from "../_core/trpc";
 import { getDb } from "../db";
@@ -33,6 +19,7 @@ import { sql } from "drizzle-orm";
 import * as jose from "jose";
 import bcrypt from "bcryptjs";
 import { bootstrapCardInvoices, createExpenseInvoiceLink, getCardInvoices, getCurrentInvoice, getNextInvoice, getOverdueInvoices, markInvoiceAsPaid, refreshInvoice, reverseInvoicePayment } from "../cardsBilling";
+import { historicalPaidInvoice, historicalPaymentDate } from "../cartaoRetroactiveRules";
 
 const CC_JWT_SECRET = new TextEncoder().encode(
   process.env.CC_JWT_SECRET || process.env.JWT_SECRET || "cc-cartoes-secret-2024"
