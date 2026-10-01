@@ -3,6 +3,29 @@
 // Autenticação própria: telefone + senha bcrypt + JWT em cookie (cc_session)
 
 import { z } from "zod";
+
+const ccPurchaseDateSchema = z.string()
+  .regex(/^\d{4}-\d{2}-\d{2}$/, "Data da compra inválida")
+  .refine((value) => {
+    const [year, month, day] = value.split("-").map(Number);
+    const parsed = new Date(year, month - 1, day, 12, 0, 0);
+    return parsed.getFullYear() === year && parsed.getMonth() === month - 1 && parsed.getDate() === day;
+  }, "Data da compra inválida");
+
+function historicalPaidInvoice(invoices: any[], currentCompetence: string, targetCompetence: string) {
+  if (targetCompetence >= currentCompetence) return null;
+  return invoices.find((invoice: any) =>
+    String(invoice.competencia) === targetCompetence &&
+    String(invoice.status || "").toUpperCase() === "PAGA"
+  ) ?? null;
+}
+
+function historicalPaymentDate(invoice: any, fallbackDate: string) {
+  const paidAt = String(invoice?.paidAt ?? "").replace("T", " ").slice(0, 19);
+  if (/^\d{4}-\d{2}-\d{2}/.test(paidAt)) return paidAt;
+  const dueDate = String(invoice?.dueDate ?? "").slice(0, 10);
+  return /^\d{4}-\d{2}-\d{2}$/.test(dueDate) ? dueDate + " 12:00:00" : fallbackDate + " 12:00:00";
+}
 import { TRPCError } from "@trpc/server";
 import { router, publicProcedure, adminProcedure } from "../_core/trpc";
 import { getDb } from "../db";
@@ -489,7 +512,7 @@ export const cartoesRouter = router({
         cartaoId: z.number().int(),
         descricao: z.string().min(1).max(200),
         valor: z.number().positive(),
-        data: z.string().optional(),
+        data: ccPurchaseDateSchema.optional(),
         responsavel: z.string().max(100).optional(),
         categoriaId: z.number().int().optional().nullable(),
       }))
@@ -498,15 +521,26 @@ export const cartoesRouter = router({
         const cartaoRows = await ccExec(`SELECT id, fechamentoDia, vencimentoDia FROM cc_cartoes WHERE id = ${input.cartaoId} AND userId = ${userId} LIMIT 1`);
         if (!cartaoRows.length) throw new TRPCError({ code: "NOT_FOUND", message: "Cartão não encontrado" });
         const fechDia = cartaoRows[0].fechamentoDia ? Number(cartaoRows[0].fechamentoDia) : null;
-        const dataCompra = input.data ? new Date(input.data.slice(0, 10) + 'T12:00:00') : new Date();
+        const card = { id: Number(cartaoRows[0].id), fechamentoDia: fechDia, vencimentoDia: Number(cartaoRows[0].vencimentoDia) };
+        const dataOriginal = input.data ? input.data.slice(0, 10) : new Date().toISOString().slice(0, 10);
+        const dataCompra = new Date(dataOriginal + 'T12:00:00');
         const cicloFatura = calcCicloFatura(dataCompra, fechDia);
-        const dataStr = input.data ? `'${input.data.slice(0, 10)} 00:00:00'` : "NOW()";
+        // Snapshot ANTES do lançamento: somente uma fatura antiga que já estava quitada
+        // transforma o lançamento retroativo em histórico pago. Atual e futuras permanecem normais.
+        const currentInvoice = await getCurrentInvoice(card);
+        const invoicesBefore = await getCardInvoices(card);
+        const paidHistory = historicalPaidInvoice(invoicesBefore, String(currentInvoice.competencia), cicloFatura);
         const responsavel = input.responsavel ? `'${input.responsavel.replace(/'/g, "''")}' ` : "NULL";
         const categoriaId = input.categoriaId ?? "NULL";
-        await ccExec(`INSERT INTO cc_gastos (cartaoId, descricao, valor, data, responsavel, categoriaId, cicloFatura) VALUES (${input.cartaoId}, '${input.descricao.replace(/'/g, "''")}', ${input.valor}, ${dataStr}, ${responsavel}, ${categoriaId}, '${cicloFatura}')`);
+        if (paidHistory) {
+          const paidAt = historicalPaymentDate(paidHistory, dataOriginal);
+          await ccExec(`INSERT INTO cc_gastos (cartaoId, descricao, valor, data, dataOriginal, paga, responsavel, categoriaId, cicloFatura) VALUES (${input.cartaoId}, '${input.descricao.replace(/'/g, "''")}', ${input.valor}, '${paidAt}', '${dataOriginal} 00:00:00', 1, ${responsavel}, ${categoriaId}, '${cicloFatura}')`);
+        } else {
+          await ccExec(`INSERT INTO cc_gastos (cartaoId, descricao, valor, data, responsavel, categoriaId, cicloFatura) VALUES (${input.cartaoId}, '${input.descricao.replace(/'/g, "''")}', ${input.valor}, '${dataOriginal} 00:00:00', ${responsavel}, ${categoriaId}, '${cicloFatura}')`);
+        }
         const inserted = await ccExec(`SELECT LAST_INSERT_ID() AS id`);
-        await createExpenseInvoiceLink({ id: Number(cartaoRows[0].id), fechamentoDia: fechDia, vencimentoDia: Number(cartaoRows[0].vencimentoDia) }, cicloFatura, Number(inserted[0].id));
-        return { success: true };
+        await createExpenseInvoiceLink(card, cicloFatura, Number(inserted[0].id));
+        return { success: true, historicoQuitado: Boolean(paidHistory) };
       }),
 
     delete: ccProtected
@@ -685,14 +719,19 @@ export const cartoesRouter = router({
         descricao: z.string().min(1).max(200),
         valorTotal: z.number().positive(),
         numParcelas: z.number().int().min(2).max(120),
-        dataInicio: z.string(),
+        dataInicio: ccPurchaseDateSchema,
         responsavel: z.string().max(100).optional(),
       }))
       .mutation(async ({ input, ctx }) => {
         const userId = (ctx as any).ccUserId as number;
-        const cartaoRows = await ccExec(`SELECT id, fechamentoDia FROM cc_cartoes WHERE id = ${input.cartaoId} AND userId = ${userId} LIMIT 1`);
+        const cartaoRows = await ccExec(`SELECT id, fechamentoDia, vencimentoDia FROM cc_cartoes WHERE id = ${input.cartaoId} AND userId = ${userId} LIMIT 1`);
         if (!cartaoRows.length) throw new TRPCError({ code: "NOT_FOUND" });
         const fechDia = cartaoRows[0].fechamentoDia ? Number(cartaoRows[0].fechamentoDia) : null;
+        const card = { id: Number(cartaoRows[0].id), fechamentoDia: fechDia, vencimentoDia: Number(cartaoRows[0].vencimentoDia) };
+        // Estado das faturas antes de inserir esta compra. Não usamos o estado recalculado depois.
+        const currentInvoice = await getCurrentInvoice(card);
+        const currentCompetence = String(currentInvoice.competencia);
+        const invoicesBefore = await getCardInvoices(card);
         const valorParcela = Math.round((input.valorTotal / input.numParcelas) * 100) / 100;
         const responsavel = input.responsavel ? `'${input.responsavel.replace(/'/g, "''")}' ` : "NULL";
         await ccExec(`INSERT INTO cc_parcelamentos (cartaoId, descricao, valorTotal, valorParcela, numParcelas, dataInicio, responsavel) VALUES (${input.cartaoId}, '${input.descricao.replace(/'/g, "''")}', ${input.valorTotal}, ${valorParcela}, ${input.numParcelas}, '${input.dataInicio.slice(0, 10)} 00:00:00', ${responsavel})`);
@@ -702,13 +741,23 @@ export const cartoesRouter = router({
         // A data de cada parcela é a data da compra + i meses (mesmo dia)
         // O cicloFatura é calculado com base na data de cada parcela e o fechamentoDia
         const [ano, mes, dia] = input.dataInicio.slice(0, 10).split("-").map(Number);
+        let parcelasPagasAutomaticamente = 0;
         for (let i = 0; i < input.numParcelas; i++) {
           const d = new Date(ano, mes - 1 + i, dia, 12, 0, 0); // meio-dia para evitar timezone
           const dataStr = d.toISOString().slice(0, 10);
           const cicloFatura = calcCicloFatura(d, fechDia);
-          await ccExec(`INSERT INTO cc_gastos (cartaoId, descricao, valor, data, parcelamentoId, numeroParcela, totalParcelas, responsavel, cicloFatura) VALUES (${input.cartaoId}, '${input.descricao.replace(/'/g, "''")} (${i + 1}/${input.numParcelas})', ${valorParcela}, '${dataStr} 00:00:00', ${parcelamentoId}, ${i + 1}, ${input.numParcelas}, ${responsavel}, '${cicloFatura}')`);
+          const paidHistory = historicalPaidInvoice(invoicesBefore, currentCompetence, cicloFatura);
+          if (paidHistory) {
+            const paidAt = historicalPaymentDate(paidHistory, dataStr);
+            await ccExec(`INSERT INTO cc_gastos (cartaoId, descricao, valor, data, dataOriginal, paga, parcelamentoId, numeroParcela, totalParcelas, responsavel, cicloFatura) VALUES (${input.cartaoId}, '${input.descricao.replace(/'/g, "''")} (${i + 1}/${input.numParcelas})', ${valorParcela}, '${paidAt}', '${dataStr} 00:00:00', 1, ${parcelamentoId}, ${i + 1}, ${input.numParcelas}, ${responsavel}, '${cicloFatura}')`);
+            parcelasPagasAutomaticamente++;
+          } else {
+            await ccExec(`INSERT INTO cc_gastos (cartaoId, descricao, valor, data, parcelamentoId, numeroParcela, totalParcelas, responsavel, cicloFatura) VALUES (${input.cartaoId}, '${input.descricao.replace(/'/g, "''")} (${i + 1}/${input.numParcelas})', ${valorParcela}, '${dataStr} 00:00:00', ${parcelamentoId}, ${i + 1}, ${input.numParcelas}, ${responsavel}, '${cicloFatura}')`);
+          }
+          const inserted = await ccExec(`SELECT LAST_INSERT_ID() AS id`);
+          await createExpenseInvoiceLink(card, cicloFatura, Number(inserted[0].id));
         }
-        return { success: true };
+        return { success: true, parcelasPagasAutomaticamente };
       }),
 
     cancelar: ccProtected
