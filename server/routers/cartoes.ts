@@ -20,6 +20,7 @@ import * as jose from "jose";
 import bcrypt from "bcryptjs";
 import { bootstrapCardInvoices, createExpenseInvoiceLink, getCardInvoices, getCurrentInvoice, getNextInvoice, getOverdueInvoices, markInvoiceAsPaid, refreshInvoice, reverseInvoicePayment } from "../cardsBilling";
 import { historicalPaidInvoice, historicalPaymentDate } from "../cartaoRetroactiveRules";
+import { buildInstallmentSchedule, saoPauloDateOnly } from "../cartaoInstallmentSchedule";
 
 const CC_JWT_SECRET = new TextEncoder().encode(
   process.env.CC_JWT_SECRET || process.env.JWT_SECRET || "cc-cartoes-secret-2024"
@@ -715,36 +716,26 @@ export const cartoesRouter = router({
         if (!cartaoRows.length) throw new TRPCError({ code: "NOT_FOUND" });
         const fechDia = cartaoRows[0].fechamentoDia ? Number(cartaoRows[0].fechamentoDia) : null;
         const card = { id: Number(cartaoRows[0].id), fechamentoDia: fechDia, vencimentoDia: Number(cartaoRows[0].vencimentoDia) };
-        // Estado das faturas antes de inserir esta compra. Não usamos o estado recalculado depois.
-        const currentInvoice = await getCurrentInvoice(card);
-        const currentCompetence = String(currentInvoice.competencia);
-        const invoicesBefore = await getCardInvoices(card);
         const valorParcela = Math.round((input.valorTotal / input.numParcelas) * 100) / 100;
         const responsavel = input.responsavel ? `'${input.responsavel.replace(/'/g, "''")}' ` : "NULL";
         await ccExec(`INSERT INTO cc_parcelamentos (cartaoId, descricao, valorTotal, valorParcela, numParcelas, dataInicio, responsavel) VALUES (${input.cartaoId}, '${input.descricao.replace(/'/g, "''")}', ${input.valorTotal}, ${valorParcela}, ${input.numParcelas}, '${input.dataInicio.slice(0, 10)} 00:00:00', ${responsavel})`);
         const pRows = await ccExec(`SELECT LAST_INSERT_ID() as id`);
         const parcelamentoId = pRows[0]?.id;
-        // Gerar parcelas mensais — cada parcela recebe seu cicloFatura correto
-        // A data de cada parcela é a data da compra + i meses (mesmo dia)
-        // O cicloFatura é calculado com base na data de cada parcela e o fechamentoDia
-        const [ano, mes, dia] = input.dataInicio.slice(0, 10).split("-").map(Number);
+
+        // Parcelas seguem o CICLO DO CARTÃO. A data exibida é o vencimento da fatura,
+        // não o dia em que a compra foi feita.
+        const agenda = buildInstallmentSchedule(input.dataInicio.slice(0, 10), input.numParcelas, card, saoPauloDateOnly());
         let parcelasPagasAutomaticamente = 0;
-        for (let i = 0; i < input.numParcelas; i++) {
-          const d = new Date(ano, mes - 1 + i, dia, 12, 0, 0); // meio-dia para evitar timezone
-          const dataStr = d.toISOString().slice(0, 10);
-          const cicloFatura = calcCicloFatura(d, fechDia);
-          const paidHistory = historicalPaidInvoice(invoicesBefore, currentCompetence, cicloFatura);
-          if (paidHistory) {
-            const paidAt = historicalPaymentDate(paidHistory, dataStr);
-            await ccExec(`INSERT INTO cc_gastos (cartaoId, descricao, valor, data, dataOriginal, paga, parcelamentoId, numeroParcela, totalParcelas, responsavel, cicloFatura) VALUES (${input.cartaoId}, '${input.descricao.replace(/'/g, "''")} (${i + 1}/${input.numParcelas})', ${valorParcela}, '${paidAt}', '${dataStr} 00:00:00', 1, ${parcelamentoId}, ${i + 1}, ${input.numParcelas}, ${responsavel}, '${cicloFatura}')`);
-            parcelasPagasAutomaticamente++;
-          } else {
-            await ccExec(`INSERT INTO cc_gastos (cartaoId, descricao, valor, data, parcelamentoId, numeroParcela, totalParcelas, responsavel, cicloFatura) VALUES (${input.cartaoId}, '${input.descricao.replace(/'/g, "''")} (${i + 1}/${input.numParcelas})', ${valorParcela}, '${dataStr} 00:00:00', ${parcelamentoId}, ${i + 1}, ${input.numParcelas}, ${responsavel}, '${cicloFatura}')`);
-          }
+        for (const item of agenda) {
+          const vencimento = item.vencimento;
+          const paga = item.historicaPaga ? 1 : 0;
+          const dataOriginal = item.historicaPaga ? `'${vencimento} 12:00:00'` : "NULL";
+          await ccExec(`INSERT INTO cc_gastos (cartaoId, descricao, valor, data, dataOriginal, paga, parcelamentoId, numeroParcela, totalParcelas, responsavel, cicloFatura) VALUES (${input.cartaoId}, '${input.descricao.replace(/'/g, "''")} (${item.numeroParcela}/${input.numParcelas})', ${valorParcela}, '${vencimento} 12:00:00', ${dataOriginal}, ${paga}, ${parcelamentoId}, ${item.numeroParcela}, ${input.numParcelas}, ${responsavel}, '${item.competencia}')`);
           const inserted = await ccExec(`SELECT LAST_INSERT_ID() AS id`);
-          await createExpenseInvoiceLink(card, cicloFatura, Number(inserted[0].id));
+          await createExpenseInvoiceLink(card, item.competencia, Number(inserted[0].id));
+          if (item.historicaPaga) parcelasPagasAutomaticamente++;
         }
-        return { success: true, parcelasPagasAutomaticamente };
+        return { success: true, parcelasPagasAutomaticamente, agenda };
       }),
 
     cancelar: ccProtected
@@ -800,24 +791,41 @@ export const cartoesRouter = router({
       .input(z.object({
         id: z.number().int(),
         cartaoId: z.number().int(),
-        novaData: z.string(),
+        novaData: ccPurchaseDateSchema,
       }))
       .mutation(async ({ input, ctx }) => {
         const userId = (ctx as any).ccUserId as number;
-        const cartaoRows = await ccExec(`SELECT id, fechamentoDia FROM cc_cartoes WHERE id = ${input.cartaoId} AND userId = ${userId} LIMIT 1`);
+        const cartaoRows = await ccExec(`SELECT id, fechamentoDia, vencimentoDia FROM cc_cartoes WHERE id = ${input.cartaoId} AND userId = ${userId} LIMIT 1`);
         if (!cartaoRows.length) throw new TRPCError({ code: "NOT_FOUND" });
-        const fechDia = cartaoRows[0].fechamentoDia ? Number(cartaoRows[0].fechamentoDia) : null;
-        const parcelas = await ccExec(`SELECT id, numeroParcela FROM cc_gastos WHERE parcelamentoId = ${input.id} AND cartaoId = ${input.cartaoId} AND paga = 0 ORDER BY numeroParcela ASC`);
-        const [ano, mes, dia] = input.novaData.slice(0, 10).split("-").map(Number);
+        const card = {
+          id: Number(cartaoRows[0].id),
+          fechamentoDia: cartaoRows[0].fechamentoDia ? Number(cartaoRows[0].fechamentoDia) : null,
+          vencimentoDia: Number(cartaoRows[0].vencimentoDia),
+        };
+        const parcelamento = await ccExec(`SELECT numParcelas FROM cc_parcelamentos WHERE id = ${input.id} AND cartaoId = ${input.cartaoId} LIMIT 1`);
+        if (!parcelamento.length) throw new TRPCError({ code: "NOT_FOUND" });
+        const agenda = buildInstallmentSchedule(input.novaData.slice(0, 10), Number(parcelamento[0].numParcelas), card, saoPauloDateOnly());
+        const parcelas = await ccExec(`SELECT id, numeroParcela, paga, dataOriginal, invoiceId FROM cc_gastos WHERE parcelamentoId = ${input.id} AND cartaoId = ${input.cartaoId} ORDER BY numeroParcela ASC`);
+        const oldInvoiceIds = new Set<number>();
         for (const p of parcelas) {
-          const offset = (p.numeroParcela || 1) - 1;
-          const d = new Date(ano, mes - 1 + offset, dia, 12, 0, 0);
-          const dataStr = d.toISOString().slice(0, 10);
-          const cicloFatura = calcCicloFatura(d, fechDia);
-          await ccExec(`UPDATE cc_gastos SET data = '${dataStr} 00:00:00', cicloFatura = '${cicloFatura}' WHERE id = ${p.id}`);
+          const item = agenda[(Number(p.numeroParcela) || 1) - 1];
+          if (!item) continue;
+          if (p.invoiceId) oldInvoiceIds.add(Number(p.invoiceId));
+          if (item.historicaPaga && Number(p.paga) !== 1) {
+            await ccExec(`UPDATE cc_gastos SET data = '${item.vencimento} 12:00:00', dataOriginal = '${item.vencimento} 12:00:00', paga = 1, cicloFatura = '${item.competencia}' WHERE id = ${p.id}`);
+          } else if (Number(p.paga) === 0) {
+            await ccExec(`UPDATE cc_gastos SET data = '${item.vencimento} 12:00:00', dataOriginal = NULL, cicloFatura = '${item.competencia}' WHERE id = ${p.id}`);
+          } else {
+            // Pagamento manual já existente não é desfeito; apenas a referência do ciclo é corrigida.
+            await ccExec(`UPDATE cc_gastos SET dataOriginal = COALESCE(dataOriginal, '${item.vencimento} 12:00:00'), cicloFatura = '${item.competencia}' WHERE id = ${p.id}`);
+          }
+          await createExpenseInvoiceLink(card, item.competencia, Number(p.id));
         }
-        await ccExec(`UPDATE cc_parcelamentos SET dataInicio = '${input.novaData.slice(0, 10)} 00:00:00' WHERE id = ${input.id}`);
-        return { success: true };
+        for (const invoiceId of oldInvoiceIds) {
+          try { await refreshInvoice(invoiceId); } catch {}
+        }
+        await ccExec(`UPDATE cc_parcelamentos SET dataInicio = '${input.novaData.slice(0, 10)} 00:00:00' WHERE id = ${input.id} AND cartaoId = ${input.cartaoId}`);
+        return { success: true, agenda };
       }),
   }),
 
