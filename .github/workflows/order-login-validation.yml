@@ -14,13 +14,27 @@ permissions:
 jobs:
   validate:
     runs-on: ubuntu-latest
-    timeout-minutes: 20
+    timeout-minutes: 25
+    services:
+      mysql:
+        image: mysql:8.4
+        env:
+          MYSQL_ROOT_PASSWORD: isolated-login-test
+          MYSQL_DATABASE: h2_login_test
+        ports:
+          - 3306:3306
+        options: >-
+          --health-cmd="mysqladmin ping -h 127.0.0.1 -pisolated-login-test"
+          --health-interval=10s --health-timeout=5s --health-retries=12
     steps:
       - uses: actions/checkout@v4
         with:
           ref: feature/order-login-cnh-global-group-20261001
           fetch-depth: 1
-      - name: Export source for local review (no runtime data)
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+      - name: Export source for local review
         run: |
           mkdir -p /tmp/login-review
           git archive --format=tar.gz -o /tmp/login-review/source.tgz HEAD
@@ -30,29 +44,69 @@ jobs:
           name: order-login-source
           path: /tmp/login-review
           retention-days: 2
-      - uses: actions/setup-node@v4
-        with:
-          node-version: 22
-      - name: Apply reviewed patch on isolated feature branch
-        if: ${{ hashFiles('scripts/order-login-patch-20261001.mjs') != '' }}
-        run: node scripts/order-login-patch-20261001.mjs
       - name: Install locked dependencies
         if: ${{ hashFiles('scripts/order-login-patch-20261001.mjs') != '' }}
         run: |
           npm install -g pnpm@10.4.1
           pnpm install --frozen-lockfile
-      - name: Test login changes
+      - name: Typecheck baseline snapshot
         if: ${{ hashFiles('scripts/order-login-patch-20261001.mjs') != '' }}
-        run: pnpm exec vitest run server/orderLoginImprovements.test.ts
+        run: |
+          mkdir -p /tmp/login-base /tmp/login-report
+          git fetch origin 1d4b3f2f01adcd8db5a3940dd3dab2dee97e444d --depth=1
+          git archive 1d4b3f2f01adcd8db5a3940dd3dab2dee97e444d | tar -x -C /tmp/login-base
+          ln -s "$PWD/node_modules" /tmp/login-base/node_modules
+          pnpm exec tsc -p /tmp/login-base/tsconfig.json --incremental false --pretty false > /tmp/login-report/types-before.txt 2>&1 || true
+      - name: Apply reviewed patch on isolated feature branch
+        if: ${{ hashFiles('scripts/order-login-patch-20261001.mjs') != '' }}
+        run: node scripts/order-login-patch-20261001.mjs
+      - name: Reject new type errors
+        if: ${{ hashFiles('scripts/order-login-patch-20261001.mjs') != '' }}
+        run: |
+          pnpm exec tsc --incremental false --pretty false > /tmp/login-report/types-after.txt 2>&1 || true
+          node --input-type=module <<'JS'
+          import fs from 'node:fs';
+          function messages(file) {
+            return fs.readFileSync(file, 'utf8').split('\n').filter(x => x.includes('error TS')).map(x => x.replace(/^.*?(client\/src\/|server\/|shared\/)/, '$1').replace(/\(\d+,\d+\)/, '(LINE)'));
+          }
+          const before = messages('/tmp/login-report/types-before.txt');
+          const after = messages('/tmp/login-report/types-after.txt');
+          const added = after.filter(x => { const i=before.indexOf(x); if(i<0) return true; before.splice(i,1); return false; });
+          fs.writeFileSync('/tmp/login-report/new-type-errors.txt', added.join('\n'));
+          if (added.length) { console.error(added.join('\n')); process.exit(1); }
+          console.log('No new TypeScript errors compared with production snapshot.');
+          JS
+      - name: Unit and isolated database regression
+        if: ${{ hashFiles('scripts/order-login-patch-20261001.mjs') != '' }}
+        env:
+          LOGIN_TEST_DB_URL: mysql://root:isolated-login-test@127.0.0.1:3306/h2_login_test
+        run: |
+          set -o pipefail
+          pnpm exec vitest run server/orderLoginImprovements.test.ts server/adminAuthenticatorIntegration.test.ts server/adminOrderLoginQuickEnhancer.test.ts server/adminAuthenticatorOrder.test.ts server/adminAuthenticatorVault.test.ts 2>&1 | tee /tmp/login-report/tests.txt
       - name: Production build
         if: ${{ hashFiles('scripts/order-login-patch-20261001.mjs') != '' }}
-        run: pnpm build
+        run: |
+          set -o pipefail
+          pnpm build 2>&1 | tee /tmp/login-report/build.txt
+      - name: Export evidence
+        if: ${{ always() && hashFiles('scripts/order-login-patch-20261001.mjs') != '' }}
+        run: |
+          mkdir -p /tmp/login-report
+          git diff --stat > /tmp/login-report/diff-stat.txt
+          git diff > /tmp/login-report/implementation.diff
+          tar -czf /tmp/login-report/modified-files.tgz client/src/components/OrderLoginExtrasFields.tsx client/src/components/AuthenticatorQrAdminField.tsx client/src/styles/order-login-layout.css client/src/pages/AdminOrders.tsx client/src/pages/OrderTracking.tsx drizzle/schema.ts server/orderLoginDefaults.ts server/orderLoginImprovements.test.ts shared/orderLoginPresentation.ts server/routers.ts scripts/apply-order-login-improvements-migration.ts scripts/render-start.sh
+      - uses: actions/upload-artifact@v4
+        if: ${{ always() && hashFiles('scripts/order-login-patch-20261001.mjs') != '' }}
+        with:
+          name: order-login-validation-results
+          path: /tmp/login-report
+          retention-days: 5
       - name: Commit validated code to feature branch only
         if: ${{ hashFiles('scripts/order-login-patch-20261001.mjs') != '' }}
         run: |
           git config user.name 'github-actions[bot]'
           git config user.email '41898282+github-actions[bot]@users.noreply.github.com'
-          git add client/src server shared drizzle scripts package.json
+          git add client/src server shared drizzle scripts
           if ! git diff --cached --quiet; then
             git commit -m 'feat(login): manual CNH code, global group and ordered access layout'
             git push origin HEAD:feature/order-login-cnh-global-group-20261001
