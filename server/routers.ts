@@ -6686,6 +6686,59 @@ export const appRouter = router({
             : allowedExtras ? resolveOrderGroupLink(defaults) : null,
         };
       }),
+    // Cliente autenticado recebe somente o código TOTP atual do autenticador vinculado ao próprio pedido.
+    getAuthenticatorCodeForClient: publicProcedure
+      .input(z.object({ registrationId: z.number().int().positive(), cpToken: z.string().min(20).max(512) }))
+      .query(async ({ input }) => {
+        const { getDb } = await import('./db');
+        const { customerPasswordSessions, orderStatusHistory, adminAuthenticatorOrderLinks, adminAuthenticatorEntries } = await import('../drizzle/schema');
+        const { eq, desc } = await import('drizzle-orm');
+        const { decryptTotpSecret, generateTotp } = await import('./adminAuthenticatorVault');
+        const db = await getDb();
+        if (!db) throw new TRPCError({ code: 'INTERNAL_SERVER_ERROR', message: 'Banco indisponível.' });
+
+        const sessions = await db.select().from(customerPasswordSessions)
+          .where(eq(customerPasswordSessions.token, input.cpToken))
+          .limit(1);
+        const session = sessions[0];
+        if (!session || new Date(session.expiresAt) < new Date()) {
+          throw new TRPCError({ code: 'UNAUTHORIZED', message: 'Sessão expirada. Entre novamente para acessar o autenticador.' });
+        }
+
+        const sessionPhone = String(session.phone || '').replace(/\D/g, '');
+        const ownerRows = await db.select({ customerPhone: orderStatusHistory.customerPhone })
+          .from(orderStatusHistory)
+          .where(eq(orderStatusHistory.registrationId, input.registrationId))
+          .limit(1);
+        const ownerPhone = String(ownerRows[0]?.customerPhone || '').replace(/\D/g, '');
+        if (!ownerPhone || ownerPhone !== sessionPhone) {
+          throw new TRPCError({ code: 'FORBIDDEN', message: 'Este pedido não pertence à sessão atual.' });
+        }
+
+        const linked = await db.select({
+          ciphertext: adminAuthenticatorEntries.secretCiphertext,
+          iv: adminAuthenticatorEntries.secretIv,
+          tag: adminAuthenticatorEntries.secretTag,
+        })
+          .from(adminAuthenticatorOrderLinks)
+          .innerJoin(adminAuthenticatorEntries, eq(adminAuthenticatorOrderLinks.authenticatorEntryId, adminAuthenticatorEntries.id))
+          .where(eq(adminAuthenticatorOrderLinks.registrationId, input.registrationId))
+          .orderBy(desc(adminAuthenticatorOrderLinks.updatedAt))
+          .limit(1);
+
+        if (!linked[0]) return null;
+        try {
+          const secret = decryptTotpSecret({
+            ciphertext: linked[0].ciphertext,
+            iv: linked[0].iv,
+            tag: linked[0].tag,
+          });
+          return generateTotp(secret);
+        } catch {
+          return null;
+        }
+      }),
+
     // Cliente só recebe QR após validar a sessão do acompanhamento e a titularidade do pedido.
     getAuthenticatorQrForClient: publicProcedure
       .input(z.object({ registrationId: z.number().int().positive(), cpToken: z.string().min(20).max(512) }))
