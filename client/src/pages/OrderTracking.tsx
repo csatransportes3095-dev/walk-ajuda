@@ -450,6 +450,15 @@ export default function OrderTracking() {
     { registrationId, cpToken: pwdToken },
     { enabled: canAccess && !!pwdToken && registrationId > 0 }
   );
+  const authenticatorKeyQuery = trpc.loginData.getAuthenticatorKeyForClient.useQuery(
+    { registrationId, cpToken: pwdToken },
+    {
+      enabled: canAccess && !!pwdToken && registrationId > 0 && (latestStatus === 'entregue' || latestStatus === 'pedido_entregue'),
+      staleTime: 0,
+      refetchInterval: 15000,
+      refetchOnWindowFocus: true,
+    }
+  );
   const [qrExpanded, setQrExpanded] = useState(false);
   const downloadAuthenticatorQr = () => {
     const qr = authenticatorQrQuery.data;
@@ -1695,18 +1704,20 @@ export default function OrderTracking() {
                       </div>
                     )}
                     <div className="order-login-full space-y-3" data-login-field="authenticator">
-                    {loginDataQuery.data.authCode && (
+                    {(authenticatorKeyQuery.data?.authCode || loginDataQuery.data.authCode) && (
                       <div className="bg-black/30 rounded-xl p-3 flex items-center justify-between gap-3">
                         <div className="min-w-0 flex-1">
-                          <p className="text-[10px] text-white/40 uppercase tracking-wider mb-0.5">Código Autenticador</p>
-                          <p className="text-sm font-mono text-white font-semibold break-all">{loginDataQuery.data.authCode}</p>
+                          <p className="text-[10px] text-white/40 uppercase tracking-wider mb-0.5">Chave do Autenticador</p>
+                          <p className="text-sm font-mono text-white font-semibold break-all">
+                            {authenticatorKeyQuery.data?.authCode || loginDataQuery.data.authCode}
+                          </p>
                         </div>
                         <button
-                          onClick={() => copyField(loginDataQuery.data!.authCode!, 'authcode')}
+                          onClick={() => copyField((authenticatorKeyQuery.data?.authCode || loginDataQuery.data.authCode)!, 'authkey')}
                           className="flex-shrink-0 p-2 rounded-lg bg-lime-500/10 hover:bg-lime-500/20 border border-lime-500/30 text-lime-400 transition-colors"
-                          title="Copiar código"
+                          title="Copiar chave do autenticador"
                         >
-                          {copiedField === 'authcode' ? <Check className="w-4 h-4" /> : <Copy className="w-4 h-4" />}
+                          {copiedField === 'authkey' ? <Check className="w-4 h-4" /> : <Copy className="w-4 h-4" />}
                         </button>
                       </div>
                     )}
@@ -1733,7 +1744,7 @@ export default function OrderTracking() {
                       </div>
                     )}
                     </div>
-                    {!loginDataQuery.data.cnhCode && !loginDataQuery.data.loginPhone && !loginDataQuery.data.loginEmail && !loginDataQuery.data.loginPassword && !loginDataQuery.data.authCode && !(loginDataQuery.data as any).emailLink && !(loginDataQuery.data as any).loginGroupLink && !(loginDataQuery.data as any).loginNotes && !authenticatorQrQuery.data && (
+                    {!loginDataQuery.data.cnhCode && !loginDataQuery.data.loginPhone && !loginDataQuery.data.loginEmail && !loginDataQuery.data.loginPassword && !(authenticatorKeyQuery.data?.authCode || loginDataQuery.data.authCode) && !(loginDataQuery.data as any).emailLink && !(loginDataQuery.data as any).loginGroupLink && !(loginDataQuery.data as any).loginNotes && !authenticatorQrQuery.data && (
                       <p className="text-xs text-white/40 text-center py-2">Aguarde — os dados serão disponibilizados em breve.</p>
                     )}
                   </div>
