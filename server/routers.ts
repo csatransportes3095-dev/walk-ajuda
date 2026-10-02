@@ -5350,36 +5350,51 @@ export const appRouter = router({
             `);
             frozenAttribution = await getReferralCommissionAttributionByRegistration(input.registrationId);
           } else {
-            const identityRows = await db.execute(sql`
+            // Compatibilidade com pedidos antigos: buscar cada parte separadamente.
+            // Evita a subconsulta correlacionada que falhava em alguns registros legados.
+            const customerRows = await db.execute(sql`
               SELECT
                 c.id AS referredCustomerId,
                 c.name AS referredName,
                 c.phone AS referredPhone,
                 c.referredBy AS referrerName,
-                c.referredByPhone AS referrerPhone,
-                cr.id AS referrerCustomerId,
-                COALESCE(NULLIF(TRIM(c.referredBy), ''), cr.name) AS resolvedReferrerName,
-                firstStatus.id AS orderStatusId,
-                firstStatus.orderNumber AS orderNumber
+                c.referredByPhone AS referrerPhone
               FROM accessCodePhones acp
               INNER JOIN customers c
                 ON RIGHT(REGEXP_REPLACE(c.phone, '[^0-9]', ''), 11)
                  = RIGHT(REGEXP_REPLACE(acp.phone, '[^0-9]', ''), 11)
-              LEFT JOIN customers cr
-                ON RIGHT(REGEXP_REPLACE(cr.phone, '[^0-9]', ''), 11)
-                 = RIGHT(REGEXP_REPLACE(c.referredByPhone, '[^0-9]', ''), 11)
-              INNER JOIN orderStatusHistory firstStatus
-                ON firstStatus.id = (
-                  SELECT osh0.id
-                  FROM orderStatusHistory osh0
-                  WHERE osh0.registrationId = acp.id
-                  ORDER BY osh0.createdAt ASC, osh0.id ASC
-                  LIMIT 1
-                )
               WHERE acp.id = ${input.registrationId}
               LIMIT 1
             `);
-            const identity = (identityRows[0] as unknown as any[])?.[0];
+            const customerIdentity = (customerRows[0] as unknown as any[])?.[0];
+
+            const firstStatusRows = await db.execute(sql`
+              SELECT id AS orderStatusId, orderNumber
+              FROM orderStatusHistory
+              WHERE registrationId = ${input.registrationId}
+              ORDER BY createdAt ASC, id ASC
+              LIMIT 1
+            `);
+            const firstStatusIdentity = (firstStatusRows[0] as unknown as any[])?.[0];
+
+            let referrerIdentity: any = null;
+            const referrerPhone = String(customerIdentity?.referrerPhone || '').replace(/\D/g, '');
+            if (referrerPhone) {
+              const referrerRows = await db.execute(sql`
+                SELECT id AS referrerCustomerId, name AS resolvedReferrerName
+                FROM customers
+                WHERE RIGHT(REGEXP_REPLACE(phone, '[^0-9]', ''), 11) = RIGHT(${referrerPhone}, 11)
+                LIMIT 1
+              `);
+              referrerIdentity = (referrerRows[0] as unknown as any[])?.[0] || null;
+            }
+
+            const identity = {
+              ...customerIdentity,
+              ...firstStatusIdentity,
+              ...referrerIdentity,
+            };
+
             if (!identity?.referredCustomerId || !identity?.orderStatusId || !identity?.referrerPhone) {
               throw new TRPCError({
                 code: 'BAD_REQUEST',
