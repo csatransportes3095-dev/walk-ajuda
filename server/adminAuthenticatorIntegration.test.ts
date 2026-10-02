@@ -47,16 +47,30 @@ describe("integração do autenticador privado", () => {
   it("mostra o direcionamento no cofre e gera o código dentro dos Dados de Login", () => {
     expect(authenticatorPage).toContain("Direcionar chave para página de login");
     expect(authenticatorPage).toContain("Direcionar para login");
-    expect(ordersPage).toContain("<OrderLoginAuthenticatorCode registrationId={order.id} />");
+    expect(ordersPage).toContain("<OrderLoginAuthenticatorCode");
     expect(orderCodeBlock).toContain("AUTENTICADOR PRIVADO DO ADM");
     expect(orderCodeBlock).toContain("refetchInterval: isPageVisible ? 5000 : false");
   });
 
-  it("não insere o código privado na rota de login do cliente", () => {
+  it("mantém a chave privada fora da rota geral de login do cliente", () => {
     expect(orderCodeBlock).not.toContain("getForClient");
     expect(authenticatorRouter).toContain("adminAuthenticatorOrderLinks");
-    const customerRoute = clientLoginRoute.slice(clientLoginRoute.indexOf("getForClient: publicProcedure"), clientLoginRoute.indexOf("getAuthenticatorQrForClient: publicProcedure"));
+    const customerRoute = clientLoginRoute.slice(
+      clientLoginRoute.indexOf("getForClient: publicProcedure"),
+      clientLoginRoute.indexOf("getAuthenticatorCodeForClient: publicProcedure"),
+    );
     expect(customerRoute).not.toContain("getCodeForOrder");
     expect(customerRoute).not.toContain("adminAuthenticatorOrderLinks");
+  });
+
+  it("expõe somente o TOTP atual para a sessão do próprio pedido", () => {
+    const totpRoute = clientLoginRoute.slice(
+      clientLoginRoute.indexOf("getAuthenticatorCodeForClient: publicProcedure"),
+      clientLoginRoute.indexOf("getAuthenticatorQrForClient: publicProcedure"),
+    );
+    expect(totpRoute).toContain("customerPasswordSessions");
+    expect(totpRoute).toContain("Este pedido não pertence à sessão atual.");
+    expect(totpRoute).toContain("generateTotp(secret)");
+    expect(totpRoute).not.toContain("return { secret");
   });
 });
