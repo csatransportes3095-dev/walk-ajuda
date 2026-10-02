@@ -4618,10 +4618,12 @@ export default function Home() {
               const confirmedDate = isConfirmed && schedule.slotDate
                 ? new Intl.DateTimeFormat('pt-BR', { day: '2-digit', month: '2-digit', year: 'numeric', timeZone: 'UTC' }).format(new Date(`${schedule.slotDate}T12:00:00Z`))
                 : '';
-              const title = 'Agendamento para foto';
+              const title = isConfirmed
+                ? 'Agendamento confirmado'
+                : isActive ? 'Agendamento disponível' : 'Agendamento para foto';
               const subtitle = isConfirmed
                 ? `Confirmado: ${confirmedDate}${schedule.slotTime ? ` às ${schedule.slotTime}` : ''}`
-                : isActive ? 'Aguardando agendamento para foto' : 'Aguardando liberação do ADM';
+                : isActive ? 'Clique para agendar agora' : 'Aguardando liberação do ADM';
 
               return (
                 <button
@@ -4629,24 +4631,28 @@ export default function Home() {
                   disabled={!isActive}
                   onClick={() => { if (isActive) window.location.href = `/agendar/${schedule.token}`; }}
                   className={`group col-span-2 flex min-h-[82px] w-full items-center gap-3 rounded-2xl border px-4 py-3 text-left transition-all sm:min-h-[90px] ${isConfirmed
-                    ? 'border-green-400/45 bg-gradient-to-br from-green-500/20 to-emerald-500/10 shadow-[0_0_20px_rgba(74,222,128,0.10)] hover:border-green-300/70 hover:bg-green-500/25 active:scale-[0.99]'
+                    ? 'h2-schedule-card-confirmed border-green-400/70 bg-gradient-to-br from-green-500/24 to-emerald-500/12 shadow-[0_0_24px_rgba(74,222,128,0.20)] hover:border-green-300/90 hover:bg-green-500/28 active:scale-[0.99]'
                     : isActive
-                      ? 'border-violet-400/45 bg-gradient-to-br from-violet-500/20 to-fuchsia-500/10 shadow-[0_0_20px_rgba(167,139,250,0.10)] hover:border-violet-300/70 hover:bg-violet-500/25 active:scale-[0.99]'
+                      ? 'h2-schedule-card-available border-cyan-400/70 bg-gradient-to-br from-cyan-500/22 to-sky-500/10 shadow-[0_0_24px_rgba(34,211,238,0.20)] hover:border-cyan-300/90 hover:bg-cyan-500/26 active:scale-[0.99]'
                       : 'cursor-not-allowed border-violet-400/40 bg-gradient-to-br from-violet-500/16 to-fuchsia-500/8 shadow-[0_0_20px_rgba(167,139,250,0.09)]'
                   }`}
                   aria-label={title}
                   title={title}
                 >
-                  <span className={`flex h-11 w-11 shrink-0 items-center justify-center rounded-xl ring-1 ${isConfirmed ? 'bg-green-400/15 text-green-200 ring-green-300/30' : 'bg-violet-400/15 text-violet-200 ring-violet-300/30'}`}>
+                  <span className={`flex h-11 w-11 shrink-0 items-center justify-center rounded-xl ring-1 ${isConfirmed
+                    ? 'bg-green-400/15 text-green-200 ring-green-300/40'
+                    : isActive
+                      ? 'bg-cyan-400/15 text-cyan-200 ring-cyan-300/40'
+                      : 'bg-violet-400/15 text-violet-200 ring-violet-300/30'}`}>
                     <CalendarDays className="h-6 w-6" />
                   </span>
                   <span className="min-w-0 flex-1">
                     <span className="block text-xs font-black uppercase leading-tight tracking-wide text-white sm:text-sm">{title}</span>
-                    <span className={`mt-1 block text-[11px] leading-tight sm:text-xs ${isConfirmed ? 'text-green-100/75' : 'text-violet-100/75'}`}>{subtitle}</span>
+                    <span className={`mt-1 block text-[11px] leading-tight sm:text-xs ${isConfirmed ? 'text-green-100/80' : isActive ? 'text-cyan-100/80' : 'text-violet-100/75'}`}>{subtitle}</span>
                   </span>
                   {isActive && (
-                    <span className={`shrink-0 rounded-lg border px-2.5 py-2 text-[9px] font-black uppercase tracking-wide sm:px-3 sm:text-[10px] ${isConfirmed ? 'border-green-300/30 bg-green-400/10 text-green-100' : 'border-violet-300/30 bg-violet-400/10 text-violet-100'}`}>
-                      {isConfirmed ? 'Alterar agendamento' : 'Agendar'}
+                    <span className={`shrink-0 rounded-lg border px-2.5 py-2 text-[9px] font-black uppercase tracking-wide sm:px-3 sm:text-[10px] ${isConfirmed ? 'border-green-300/40 bg-green-400/15 text-green-100' : 'border-cyan-300/40 bg-cyan-400/15 text-cyan-50'}`}>
+                      {isConfirmed ? 'Alterar agendamento' : 'Agendar agora'}
                     </span>
                   )}
                 </button>
@@ -4663,6 +4669,39 @@ export default function Home() {
       {/* O titulo do Hero aceita HTML completo. O fundo galactico e o texto precisam
           permanecer como uma unica composicao: centraliza o bloco sem esticar sua largura. */}
       <style>{`
+        @keyframes h2ScheduleAvailablePulse {
+          0%, 100% {
+            border-color: rgba(34, 211, 238, .58);
+            box-shadow: 0 0 16px rgba(34, 211, 238, .20), inset 0 0 0 1px rgba(103, 232, 249, .04);
+          }
+          50% {
+            border-color: rgba(103, 232, 249, .98);
+            box-shadow: 0 0 32px rgba(34, 211, 238, .52), 0 0 0 2px rgba(34, 211, 238, .10), inset 0 0 18px rgba(34, 211, 238, .08);
+          }
+        }
+        @keyframes h2ScheduleConfirmedPulse {
+          0%, 100% {
+            border-color: rgba(74, 222, 128, .58);
+            box-shadow: 0 0 15px rgba(74, 222, 128, .18), inset 0 0 0 1px rgba(134, 239, 172, .04);
+          }
+          50% {
+            border-color: rgba(134, 239, 172, .96);
+            box-shadow: 0 0 28px rgba(74, 222, 128, .42), 0 0 0 2px rgba(74, 222, 128, .09), inset 0 0 16px rgba(74, 222, 128, .07);
+          }
+        }
+        .h2-schedule-card-available {
+          animation: h2ScheduleAvailablePulse 1.7s ease-in-out infinite;
+        }
+        .h2-schedule-card-confirmed {
+          animation: h2ScheduleConfirmedPulse 2.1s ease-in-out infinite;
+        }
+        @media (prefers-reduced-motion: reduce) {
+          .h2-schedule-card-available,
+          .h2-schedule-card-confirmed {
+            animation: none;
+          }
+        }
+
         .public-hero-title-shell {
           width: 100%;
           min-width: 0;
