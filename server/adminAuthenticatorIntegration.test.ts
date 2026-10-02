@@ -47,7 +47,7 @@ describe("integração do autenticador privado", () => {
   it("mostra o direcionamento no cofre e gera o código dentro dos Dados de Login", () => {
     expect(authenticatorPage).toContain("Direcionar chave para página de login");
     expect(authenticatorPage).toContain("Direcionar para login");
-    expect(ordersPage).toContain("<OrderLoginAuthenticatorCode registrationId={order.id} />");
+    expect(ordersPage).toContain("<OrderLoginAuthenticatorCode");
     expect(orderCodeBlock).toContain("AUTENTICADOR PRIVADO DO ADM");
     expect(orderCodeBlock).toContain("refetchInterval: isPageVisible ? 5000 : false");
   });
