@@ -43,7 +43,13 @@ function findB2CodeInput() {
   return null;
 }
 
-export function OrderLoginAuthenticatorCode({ registrationId }: { registrationId: number }) {
+export function OrderLoginAuthenticatorCode({
+  registrationId,
+  onSecretLinked,
+}: {
+  registrationId: number;
+  onSecretLinked?: (secret: string) => void;
+}) {
   const utils = trpc.useUtils();
   const [isPageVisible, setIsPageVisible] = useState(() => typeof document === "undefined" ? true : !document.hidden);
   const [copiedEntryId, setCopiedEntryId] = useState<number | null>(null);
@@ -57,11 +63,13 @@ export function OrderLoginAuthenticatorCode({ registrationId }: { registrationId
   );
 
   const createForOrder = trpc.adminAuthenticator.createForOrder.useMutation({
-    onSuccess: async (result) => {
+    onSuccess: async (result, variables) => {
       setIssuer("");
-      setSecret("");
+      const cleanSecret = normalizeBase32(variables.secret);
+      setSecret(cleanSecret);
       const b2 = findB2CodeInput();
-      if (b2 && b2.value) setNativeInputValue(b2, "");
+      if (b2 && b2.value !== cleanSecret) setNativeInputValue(b2, cleanSecret);
+      onSecretLinked?.(cleanSecret);
       setShowSecret(false);
       await utils.adminAuthenticator.getCodeForOrder.invalidate({ registrationId });
       await codeQuery.refetch();
@@ -86,8 +94,6 @@ export function OrderLoginAuthenticatorCode({ registrationId }: { registrationId
   }, []);
 
   useEffect(() => {
-    setSecret("");
-
     let boundInput: HTMLInputElement | null = null;
     let onB2Input: (() => void) | null = null;
     let initialized = false;
@@ -100,11 +106,10 @@ export function OrderLoginAuthenticatorCode({ registrationId }: { registrationId
       if (boundInput && onB2Input) boundInput.removeEventListener("input", onB2Input);
       boundInput = b2;
 
-      // Cada abertura do pedido começa com os dois campos vazios.
+      // Mantém a chave já salva no campo do pedido e usa o mesmo valor no cofre.
       if (!initialized) {
         initialized = true;
-        if (b2.value) setNativeInputValue(b2, "");
-        setSecret("");
+        setSecret(normalizeBase32(b2.value));
       }
 
       onB2Input = () => {
@@ -166,7 +171,7 @@ export function OrderLoginAuthenticatorCode({ registrationId }: { registrationId
         <LockKeyhole className="mt-0.5 h-4 w-4 shrink-0 text-cyan-200" />
         <div className="min-w-0 flex-1">
           <p className="text-xs font-black text-cyan-100">AUTENTICADOR PRIVADO DO ADM</p>
-          <p className="mt-0.5 text-[11px] text-cyan-100/70">Cole somente a chave real deste pedido. Ela fica cifrada e nunca é mostrada ao cliente nem entra no WhatsApp.</p>
+          <p className="mt-0.5 text-[11px] text-cyan-100/70">Cole a chave real deste pedido. O código temporário é gerado automaticamente a partir dela.</p>
         </div>
       </div>
 
@@ -193,7 +198,7 @@ export function OrderLoginAuthenticatorCode({ registrationId }: { registrationId
           <label className="space-y-1 md:col-span-2"><span className="text-[10px] font-semibold text-slate-400">Chave secreta Base32</span><div className="flex rounded-lg border border-white/10 bg-black/30 focus-within:border-cyan-300/50"><input value={secret} onChange={(event) => syncSecretToB2(event.target.value)} type={showSecret ? "text" : "password"} autoComplete="new-password" spellCheck={false} placeholder="Cole a chave do Google Authenticator" className="min-w-0 flex-1 bg-transparent px-3 py-2 font-mono text-xs text-white outline-none" /><button type="button" onClick={() => setShowSecret((value) => !value)} className="px-3 text-slate-400 hover:text-white" aria-label={showSecret ? "Ocultar chave" : "Mostrar chave"}>{showSecret ? <EyeOff className="h-4 w-4" /> : <Eye className="h-4 w-4" />}</button></div></label>
         </div>
         <button type="button" onClick={create} disabled={createForOrder.isPending} className="mt-3 inline-flex items-center gap-2 rounded-lg bg-cyan-300 px-3 py-2 text-[11px] font-black text-slate-950 hover:bg-cyan-200 disabled:cursor-not-allowed disabled:opacity-50"><KeyRound className="h-3.5 w-3.5" />{createForOrder.isPending ? "Criando e vinculando..." : "Criar e vincular"}</button>
-        <p className="mt-2 text-[10px] leading-4 text-slate-500">Os dois campos começam limpos. Cole a chave aqui ou no Código Autenticador: ambos são preenchidos juntos e o QR é gerado automaticamente.</p>
+        <p className="mt-2 text-[10px] leading-4 text-slate-500">A chave permanece no campo Código Autenticador do pedido e o QR é gerado automaticamente.</p>
       </div>
     </section>
   );
