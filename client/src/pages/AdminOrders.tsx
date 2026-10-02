@@ -6447,7 +6447,23 @@ export default function AdminOrders() {
                                   {fields.loginNotes && <button onClick={() => setField('loginNotes', '')} className="px-2 py-1.5 bg-red-500/10 border border-red-500/30 text-red-400 rounded-lg text-xs hover:bg-red-500/20 transition-colors" title="Limpar">✕</button>}
                                 </div>
                               </div>
-                            <details className="order-login-full rounded-xl border border-cyan-400/25 bg-cyan-500/5"><summary className="cursor-pointer px-4 py-3 text-xs font-semibold text-cyan-200">Autenticador privado do ADM <span className="text-white/40">· expandir / recolher</span></summary><div className="p-3 pt-0"><OrderLoginAuthenticatorCode registrationId={order.id} /></div></details>
+                            <details className="order-login-full rounded-xl border border-cyan-400/25 bg-cyan-500/5"><summary className="cursor-pointer px-4 py-3 text-xs font-semibold text-cyan-200">Autenticador privado do ADM <span className="text-white/40">· expandir / recolher</span></summary><div className="p-3 pt-0"><OrderLoginAuthenticatorCode
+  registrationId={order.id}
+  onSecretLinked={(linkedSecret) => {
+    setField('authCode', linkedSecret);
+    saveLoginDataMut.mutate({
+      registrationId: order.id,
+      customerPhone: order.phone,
+      loginPhone: fields.loginPhone,
+      loginEmail: fields.loginEmail,
+      loginPassword: fields.loginPassword,
+      authCode: linkedSecret,
+      cnhCode: fields.cnhCode,
+      loginNotes: fields.loginNotes,
+      authenticatorQrAction: 'keep',
+    });
+  }}
+/></div></details>
 <div className="order-login-full space-y-3 border-t border-white/10 pt-4" data-login-field="authenticator"><div>
                                 <label className="text-xs text-muted-foreground mb-1 block">Código Autenticador</label>
                                 <div className="flex gap-1">
