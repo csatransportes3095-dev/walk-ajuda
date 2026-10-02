@@ -17,6 +17,7 @@ import {
 import { syncUnifiedCustomerRegistry } from "../customerIdentity";
 import { storagePut } from "../storage";
 import { getMissingCustomerProfileFields } from "../customerProfileRequirements";
+import { generateNextCustomerNumber } from "../customerNumberSequence";
 
 const SESSION_DURATION_MS = 90 * 24 * 60 * 60 * 1000;
 const PASSWORD_DURATION_MS = 30 * 24 * 60 * 60 * 1000;
@@ -215,6 +216,44 @@ export const customerUpdateRouter = router({
       return { success: true, url };
     }),
 
+  generateCustomerNumber: adminProcedure
+    .input(z.object({ customerId: z.number().int().positive() }))
+    .mutation(async ({ input }) => {
+      const db = await getDb() as any;
+      if (!db) throw new TRPCError({ code: "INTERNAL_SERVER_ERROR", message: "Banco indisponível." });
+      const current = await rows(db, sql`
+        SELECT id, customerNumber
+        FROM customers
+        WHERE id=${input.customerId} AND deletedAt IS NULL
+        LIMIT 1
+      `);
+      if (!current[0]) {
+        throw new TRPCError({ code: "NOT_FOUND", message: "Cadastro não encontrado." });
+      }
+      if (current[0].customerNumber != null) {
+        return { success: true, customerNumber: Number(current[0].customerNumber), unchanged: true };
+      }
+
+      const customerNumber = await generateNextCustomerNumber(db);
+      await db.execute(sql`
+        UPDATE customers
+        SET customerNumber=${customerNumber}, updatedAt=NOW()
+        WHERE id=${input.customerId} AND deletedAt IS NULL AND customerNumber IS NULL
+      `);
+
+      const refreshed = await rows(db, sql`
+        SELECT customerNumber
+        FROM customers
+        WHERE id=${input.customerId}
+        LIMIT 1
+      `);
+      return {
+        success: true,
+        customerNumber: Number(refreshed[0]?.customerNumber || customerNumber),
+        unchanged: false,
+      };
+    }),
+
   adminCreatePartial: adminProcedure
     .input(z.object({
       phone: z.string().min(10).max(32),
@@ -275,8 +314,7 @@ export const customerUpdateRouter = router({
         referredBy = String(referrer.name || "").trim();
       }
 
-      const nextRows = await rows(db, sql`SELECT COALESCE(MAX(CASE WHEN customerNumber <> 99999 THEN customerNumber END), 451) + 1 AS nextNum FROM customers`);
-      const customerNumber = Number(nextRows[0]?.nextNum || 1);
+      const customerNumber = await generateNextCustomerNumber(db);
       const name = String(input.name || "").trim().replace(/\s+/g, " ") || "CADASTRO RECUPERADO";
       const city = String(input.city || "").trim().replace(/\s+/g, " ");
       const profilePhotoUrl = String(input.profilePhotoUrl || "").trim();

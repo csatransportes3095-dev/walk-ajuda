@@ -4,6 +4,7 @@ import { orderedFlowKeys } from "../shared/orderStatusScope";
 import { eq, asc, desc, sql, and, gte, inArray, gt } from "drizzle-orm";
 import { drizzle } from "drizzle-orm/mysql2";
 import { isValidCPF, normalizeCpf } from "@shared/cpf";
+import { generateNextCustomerNumber } from "./customerNumberSequence";
 
 import {
   InsertUser, users,
@@ -966,23 +967,8 @@ export async function createCustomer(data: MainCustomerProfileInput): Promise<Cu
   const db = await getDb();
   if (!db) throw new Error('Database not available');
   const required = validateMainCustomerProfile(data);
-  // Gerador AUTOMÁTICO: começa em 470 e não usa números manuais altos como base.
-  // Escolhe o primeiro número livre >= 470 sem alterar cadastros já existentes.
-  const numberRows = await db.execute(sql`
-    SELECT customerNumber
-    FROM customers
-    WHERE customerNumber IS NOT NULL
-      AND customerNumber >= 470
-      AND customerNumber <> 99999
-    ORDER BY customerNumber ASC
-  `) as unknown as [Array<{ customerNumber: number | string | null }>, unknown];
-  const usedNumbers = new Set(
-    (numberRows[0] || [])
-      .map((row) => Number(row.customerNumber))
-      .filter((value) => Number.isInteger(value) && value >= 470 && value !== 99999),
-  );
-  let nextNum = 470;
-  while (usedNumbers.has(nextNum) || nextNum === 99999) nextNum += 1;
+  // Mesma fonte oficial usada pelo ADM e por qualquer cadastro novo.
+  const nextNum = await generateNextCustomerNumber(db);
   await db.insert(customers).values({
     customerNumber: nextNum,
     name: data.name ? data.name.toUpperCase().trim() : data.name,

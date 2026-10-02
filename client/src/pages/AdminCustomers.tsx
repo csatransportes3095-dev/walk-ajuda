@@ -500,6 +500,15 @@ export default function AdminCustomers() {
     onSuccess: () => { customersQuery.refetch(); toast.success("Cliente atualizado!"); setEditingId(null); },
     onError: (error) => toast.error(error.message || "Erro ao atualizar cliente"),
   });
+  const generateCustomerNumberMut = trpc.customerUpdate.generateCustomerNumber.useMutation({
+    onSuccess: (data) => {
+      setEditCustomerNumber(String(data.customerNumber));
+      setEditOriginal(prev => prev ? { ...prev, customerNumber: String(data.customerNumber) } : prev);
+      customersQuery.refetch();
+      toast.success(`Número de cadastro *${data.customerNumber} gerado pela sequência oficial.`);
+    },
+    onError: (error) => toast.error(error.message || "Erro ao gerar número de cadastro"),
+  });
   const [deleteConfirmModal, setDeleteConfirmModal] = useState<{ id: number; name: string } | null>(null);
   const [deleteWithOrdersLoading, setDeleteWithOrdersLoading] = useState(false);
 
@@ -1539,12 +1548,26 @@ export default function AdminCustomers() {
                         type="number"
                         min="1"
                         value={editCustomerNumber}
-                        onChange={(e) => setEditCustomerNumber(e.target.value)}
-                        className="flex-1 px-2 py-1.5 bg-background border border-border rounded-lg text-sm text-foreground focus:outline-none focus:ring-1 focus:ring-primary/50"
-                        placeholder="Ex: 136"
+                        readOnly
+                        className="flex-1 px-2 py-1.5 bg-muted/40 border border-border rounded-lg text-sm text-foreground cursor-default"
+                        placeholder="Sem número"
+                        title="Número controlado pela sequência oficial do sistema"
                       />
+                      {!editCustomerNumber && editingId && (
+                        <button
+                          type="button"
+                          onClick={() => generateCustomerNumberMut.mutate({ customerId: editingId })}
+                          disabled={generateCustomerNumberMut.isPending}
+                          className="shrink-0 rounded-lg border border-emerald-500/50 bg-emerald-500/15 px-3 py-1.5 text-xs font-black text-emerald-300 hover:bg-emerald-500/25 disabled:cursor-wait disabled:opacity-60"
+                          title="Gerar o próximo número oficial da sequência do sistema"
+                        >
+                          {generateCustomerNumberMut.isPending ? "Gerando..." : "Gerar número"}
+                        </button>
+                      )}
                     </div>
-                    <p className="text-xs text-muted-foreground mt-1">Número de identificação do cliente (ex: *136)</p>
+                    <p className="text-xs text-emerald-300/80 mt-1">
+                      Sequência oficial automática do sistema. Cadastros do cliente e do ADM usam o mesmo gerador.
+                    </p>
                   </div>
                   <div>
                     <label className="text-xs text-muted-foreground">Telefone</label>
