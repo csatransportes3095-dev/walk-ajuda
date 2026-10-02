@@ -450,6 +450,24 @@ export default function OrderTracking() {
     { registrationId, cpToken: pwdToken },
     { enabled: canAccess && !!pwdToken && registrationId > 0 }
   );
+  const authenticatorCodeQuery = trpc.loginData.getAuthenticatorCodeForClient.useQuery(
+    { registrationId, cpToken: pwdToken },
+    {
+      enabled: canAccess && !!pwdToken && registrationId > 0 && (latestStatus === 'entregue' || latestStatus === 'pedido_entregue'),
+      staleTime: 0,
+      refetchInterval: 5000,
+      refetchOnWindowFocus: true,
+    }
+  );
+  const [authenticatorNow, setAuthenticatorNow] = useState(() => Date.now());
+  useEffect(() => {
+    if (!authenticatorCodeQuery.data?.expiresAt) return;
+    const timer = window.setInterval(() => setAuthenticatorNow(Date.now()), 1000);
+    return () => window.clearInterval(timer);
+  }, [authenticatorCodeQuery.data?.expiresAt]);
+  const authenticatorSecondsLeft = authenticatorCodeQuery.data?.expiresAt
+    ? Math.max(0, Math.ceil((authenticatorCodeQuery.data.expiresAt - authenticatorNow) / 1000))
+    : 0;
   const [qrExpanded, setQrExpanded] = useState(false);
   const downloadAuthenticatorQr = () => {
     const qr = authenticatorQrQuery.data;
@@ -1602,7 +1620,7 @@ export default function OrderTracking() {
                     {(loginDataQuery.data as any).loginPhone && (
                       <div className="bg-black/30 rounded-xl p-3 flex items-center justify-between gap-3">
                         <div className="min-w-0 flex-1">
-                          <p className="text-[10px] text-white/40 uppercase tracking-wider mb-0.5">Número de Telefone</p>
+                          <p className="text-[10px] text-white/40 uppercase tracking-wider mb-0.5">LOGIN 1 — TELEFONE</p>
                           <p className="text-sm font-mono text-white font-semibold break-all">{(loginDataQuery.data as any).loginPhone}</p>
                         </div>
                         <button
@@ -1617,7 +1635,7 @@ export default function OrderTracking() {
                     {loginDataQuery.data.loginEmail && (
                       <div className="bg-black/30 rounded-xl p-3 flex items-center justify-between gap-3">
                         <div className="min-w-0 flex-1">
-                          <p className="text-[10px] text-white/40 uppercase tracking-wider mb-0.5">Login (Email ou Telefone enviado pelo sistema)</p>
+                          <p className="text-[10px] text-white/40 uppercase tracking-wider mb-0.5">LOGIN 2 — E-MAIL</p>
                           <p className="text-sm font-mono text-white font-semibold break-all">{loginDataQuery.data.loginEmail}</p>
                         </div>
                         <button
@@ -1632,9 +1650,9 @@ export default function OrderTracking() {
                     {loginDataQuery.data.loginPassword && (
                       <div className="bg-black/30 rounded-xl p-3 flex items-center justify-between gap-3">
                         <div className="min-w-0 flex-1">
-                          <p className="text-[10px] text-white/40 uppercase tracking-wider mb-0.5">Senha do app Uber e do e-mail Outlook</p>
+                          <p className="text-[10px] text-white/40 uppercase tracking-wider mb-0.5">SENHA PARA ENTRAR NO APP UBER</p>
                           <p className="text-sm font-mono text-white font-semibold break-all">{loginDataQuery.data.loginPassword}</p>
-                          <p className="text-[10px] text-lime-400/70 mt-1">🔑 Use esta senha para entrar no app Uber <strong>e</strong> também para acessar o e-mail Outlook cadastrado</p>
+                          <p className="text-[10px] text-lime-400/70 mt-1">🔑 Use esta senha para entrar no app Uber</p>
                         </div>
                         <button
                           onClick={() => copyField(loginDataQuery.data!.loginPassword!, 'password')}
@@ -1698,15 +1716,36 @@ export default function OrderTracking() {
                     {loginDataQuery.data.authCode && (
                       <div className="bg-black/30 rounded-xl p-3 flex items-center justify-between gap-3">
                         <div className="min-w-0 flex-1">
-                          <p className="text-[10px] text-white/40 uppercase tracking-wider mb-0.5">Código Autenticador</p>
+                          <p className="text-[10px] text-white/40 uppercase tracking-wider mb-0.5">CHAVE DO AUTENTICADOR</p>
                           <p className="text-sm font-mono text-white font-semibold break-all">{loginDataQuery.data.authCode}</p>
                         </div>
                         <button
                           onClick={() => copyField(loginDataQuery.data!.authCode!, 'authcode')}
                           className="flex-shrink-0 p-2 rounded-lg bg-lime-500/10 hover:bg-lime-500/20 border border-lime-500/30 text-lime-400 transition-colors"
-                          title="Copiar código"
+                          title="Copiar chave do autenticador"
                         >
                           {copiedField === 'authcode' ? <Check className="w-4 h-4" /> : <Copy className="w-4 h-4" />}
+                        </button>
+                      </div>
+                    )}
+                    {authenticatorCodeQuery.data?.code && (
+                      <div className="rounded-xl border border-cyan-400/35 bg-cyan-500/[0.07] p-3 flex items-center justify-between gap-3">
+                        <div className="min-w-0 flex-1">
+                          <p className="text-[10px] text-cyan-200/70 uppercase tracking-wider mb-1">CÓDIGO DO AUTENTICADOR</p>
+                          <p className="font-mono text-2xl font-black tracking-[0.22em] text-white">
+                            {authenticatorCodeQuery.data.code}
+                          </p>
+                          <p className="mt-1 text-[10px] text-cyan-200/70">
+                            Novo código em {authenticatorSecondsLeft}s
+                          </p>
+                        </div>
+                        <button
+                          type="button"
+                          onClick={() => copyField(authenticatorCodeQuery.data!.code!, 'totpcode')}
+                          className="flex-shrink-0 p-3 rounded-lg bg-cyan-500/10 hover:bg-cyan-500/20 border border-cyan-400/30 text-cyan-300 transition-colors"
+                          title="Copiar código de 6 dígitos"
+                        >
+                          {copiedField === 'totpcode' ? <Check className="w-4 h-4" /> : <Copy className="w-4 h-4" />}
                         </button>
                       </div>
                     )}
@@ -1733,7 +1772,7 @@ export default function OrderTracking() {
                       </div>
                     )}
                     </div>
-                    {!loginDataQuery.data.cnhCode && !loginDataQuery.data.loginPhone && !loginDataQuery.data.loginEmail && !loginDataQuery.data.loginPassword && !loginDataQuery.data.authCode && !(loginDataQuery.data as any).emailLink && !(loginDataQuery.data as any).loginGroupLink && !(loginDataQuery.data as any).loginNotes && !authenticatorQrQuery.data && (
+                    {!loginDataQuery.data.cnhCode && !loginDataQuery.data.loginPhone && !loginDataQuery.data.loginEmail && !loginDataQuery.data.loginPassword && !loginDataQuery.data.authCode && !(loginDataQuery.data as any).emailLink && !(loginDataQuery.data as any).loginGroupLink && !(loginDataQuery.data as any).loginNotes && !authenticatorCodeQuery.data?.code && !authenticatorQrQuery.data && (
                       <p className="text-xs text-white/40 text-center py-2">Aguarde — os dados serão disponibilizados em breve.</p>
                     )}
                   </div>
