@@ -5289,13 +5289,17 @@ export const appRouter = router({
 
     // Admin: marcar/desmarcar comissao como paga
     toggleCommissionPaid: adminProcedure
-      .input(z.object({ registrationId: z.number(), paid: z.boolean() }))
+      .input(z.object({
+        registrationId: z.number(),
+        paid: z.boolean(),
+        manualCommissionValue: z.number().int().positive().max(100_000_000).optional(),
+      }))
       .mutation(async ({ input }) => {
         const db = await (await import('./db')).getDb();
         if (!db) throw new TRPCError({ code: 'INTERNAL_SERVER_ERROR', message: 'Banco indisponível ao atualizar a comissão.' });
         await ensureCommissionReferralStatusColumns(db);
         const { getReferralCommissionAttributionByRegistration, updateReferralCommissionAttributionStatus } = await import('./db');
-        const frozenAttribution = await getReferralCommissionAttributionByRegistration(input.registrationId);
+        let frozenAttribution = await getReferralCommissionAttributionByRegistration(input.registrationId);
         if (input.paid && frozenAttribution && frozenAttribution.status !== 'elegivel') {
           throw new TRPCError({ code: 'BAD_REQUEST', message: 'A comissão precisa ser aprovada antes do pagamento.' });
         }
@@ -5322,8 +5326,97 @@ export const appRouter = router({
             candidates,
           }).value;
         }
+
+        // Quando a regra antiga/produto não possui valor, o ADM pode informar
+        // o valor deste pagamento manualmente. O valor é salvo somente nesta
+        // comissão; não altera o produto nem outras indicações.
+        const manualCommissionValue = Number(input.manualCommissionValue || 0);
         if (input.paid && resolvedCommissionValue <= 0) {
-          throw new TRPCError({ code: 'BAD_REQUEST', message: 'Valor da comissão não configurado para este produto/opção. Configure a comissão antes de pagar.' });
+          if (!Number.isInteger(manualCommissionValue) || manualCommissionValue <= 0) {
+            throw new TRPCError({
+              code: 'BAD_REQUEST',
+              message: 'Informe o valor manual da comissão antes de autorizar o pagamento.',
+            });
+          }
+          resolvedCommissionValue = manualCommissionValue;
+
+          if (frozenAttribution) {
+            await db.execute(sql`
+              UPDATE referralCommissionAttributions
+              SET commissionValue = ${resolvedCommissionValue},
+                  commissionRule = 'manual_admin',
+                  updatedAt = NOW()
+              WHERE registrationId = ${input.registrationId}
+            `);
+            frozenAttribution = await getReferralCommissionAttributionByRegistration(input.registrationId);
+          } else {
+            const identityRows = await db.execute(sql`
+              SELECT
+                c.id AS referredCustomerId,
+                c.name AS referredName,
+                c.phone AS referredPhone,
+                c.referredBy AS referrerName,
+                c.referredByPhone AS referrerPhone,
+                cr.id AS referrerCustomerId,
+                COALESCE(NULLIF(TRIM(c.referredBy), ''), cr.name) AS resolvedReferrerName,
+                firstStatus.id AS orderStatusId,
+                firstStatus.orderNumber AS orderNumber
+              FROM accessCodePhones acp
+              INNER JOIN customers c
+                ON RIGHT(REGEXP_REPLACE(c.phone, '[^0-9]', ''), 11)
+                 = RIGHT(REGEXP_REPLACE(acp.phone, '[^0-9]', ''), 11)
+              LEFT JOIN customers cr
+                ON RIGHT(REGEXP_REPLACE(cr.phone, '[^0-9]', ''), 11)
+                 = RIGHT(REGEXP_REPLACE(c.referredByPhone, '[^0-9]', ''), 11)
+              INNER JOIN orderStatusHistory firstStatus
+                ON firstStatus.id = (
+                  SELECT osh0.id
+                  FROM orderStatusHistory osh0
+                  WHERE osh0.registrationId = acp.id
+                  ORDER BY osh0.createdAt ASC, osh0.id ASC
+                  LIMIT 1
+                )
+              WHERE acp.id = ${input.registrationId}
+              LIMIT 1
+            `);
+            const identity = (identityRows[0] as unknown as any[])?.[0];
+            if (!identity?.referredCustomerId || !identity?.orderStatusId || !identity?.referrerPhone) {
+              throw new TRPCError({
+                code: 'BAD_REQUEST',
+                message: 'Não foi possível vincular o valor manual à indicação. Confira o indicador deste cadastro.',
+              });
+            }
+            await db.execute(sql`
+              INSERT INTO referralCommissionAttributions (
+                referrerCustomerId, referrerPhone, referrerName,
+                referredCustomerId, referredPhone, referredName,
+                source, sourceReference, registrationId, orderStatusId, orderNumber,
+                serviceName, serviceOption, commissionRule, commissionValue,
+                status, eligibleAt, createdAt, updatedAt
+              ) VALUES (
+                ${identity.referrerCustomerId || null},
+                ${String(identity.referrerPhone || '').replace(/\D/g, '')},
+                ${identity.resolvedReferrerName || identity.referrerName || null},
+                ${Number(identity.referredCustomerId)},
+                ${String(identity.referredPhone || '').replace(/\D/g, '')},
+                ${identity.referredName || null},
+                'cadastro',
+                'admin_manual',
+                ${input.registrationId},
+                ${Number(identity.orderStatusId)},
+                ${identity.orderNumber ? Number(identity.orderNumber) : null},
+                ${orderState?.serviceName || null},
+                ${orderState?.serviceOption || null},
+                'manual_admin',
+                ${resolvedCommissionValue},
+                'elegivel',
+                NOW(),
+                NOW(),
+                NOW()
+              )
+            `);
+            frozenAttribution = await getReferralCommissionAttributionByRegistration(input.registrationId);
+          }
         }
 
         const update = await db.execute(sql`
@@ -5385,6 +5478,7 @@ export const appRouter = router({
               }
               return {
                 success: true,
+                commissionValue: resolvedCommissionValue,
                 whatsapp: {
                   phone: referrerClean,
                   name: row.referrerName || referrer?.name || '',
@@ -5398,7 +5492,7 @@ export const appRouter = router({
           }
         }
 
-        return { success: true };
+        return { success: true, commissionValue: resolvedCommissionValue };
       }),
     // Admin: definir previsão de entrega do pedido
     updateDeliveryEstimate: adminProcedure
@@ -5454,6 +5548,7 @@ export const appRouter = router({
           acp.id as registrationId,
           acp.phone,
           c.name as customerName,
+          c.customerNumber as customerNumber,
           COALESCE(
             NULLIF(TRIM(c.referredBy), ''),
             (
@@ -5521,7 +5616,12 @@ export const appRouter = router({
             SELECT cr.profilePhotoUrl FROM customers cr
             WHERE RIGHT(REGEXP_REPLACE(cr.phone, '[^0-9]', ''), 11) = RIGHT(REGEXP_REPLACE(c.referredByPhone, '[^0-9]', ''), 11)
             LIMIT 1
-          ) as referrerPhotoUrl
+          ) as referrerPhotoUrl,
+          (
+            SELECT cr.customerNumber FROM customers cr
+            WHERE RIGHT(REGEXP_REPLACE(cr.phone, '[^0-9]', ''), 11) = RIGHT(REGEXP_REPLACE(c.referredByPhone, '[^0-9]', ''), 11)
+            LIMIT 1
+          ) as referrerCustomerNumber
         FROM accessCodePhones acp
         LEFT JOIN customers c ON RIGHT(REGEXP_REPLACE(c.phone, '[^0-9]', ''), 11) = RIGHT(REGEXP_REPLACE(acp.phone, '[^0-9]', ''), 11)
         LEFT JOIN referralCommissionAttributions rca ON rca.registrationId = acp.id
@@ -5552,6 +5652,7 @@ export const appRouter = router({
           registrationId: r.registrationId as number,
           phone: r.phone as string,
           customerName: r.customerName as string | null,
+          customerNumber: r.customerNumber ? Number(r.customerNumber) : null,
           referredBy: r.referredBy as string,
           referredByPhone: r.referredByPhone as string | null,
           latestStatus: r.latestStatus as string | null,
@@ -5567,6 +5668,7 @@ export const appRouter = router({
           orderNumber: r.frozenOrderNumber ? Number(r.frozenOrderNumber) : (r.orderNumber ? Number(r.orderNumber) : null),
           totalReferrals: Number(r.totalReferrals ?? 0),
           referrerPhotoUrl: r.referrerPhotoUrl as string | null,
+          referrerCustomerNumber: r.referrerCustomerNumber ? Number(r.referrerCustomerNumber) : null,
         };
       });
     }),

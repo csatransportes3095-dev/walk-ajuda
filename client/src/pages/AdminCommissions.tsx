@@ -23,6 +23,17 @@ function formatDate(d: Date | number | null) {
   return `${pad(sp.getUTCDate())}/${pad(sp.getUTCMonth()+1)}/${String(sp.getUTCFullYear()).slice(-2)} ${pad(sp.getUTCHours())}:${pad(sp.getUTCMinutes())}`;
 }
 
+function parseCommissionReaisToCents(value: string) {
+  const clean = value.trim().replace(/\s/g, "");
+  if (!clean) return 0;
+  const normalized = clean.includes(",")
+    ? clean.replace(/\./g, "").replace(",", ".")
+    : clean;
+  const amount = Number(normalized);
+  return Number.isFinite(amount) && amount > 0 ? Math.round(amount * 100) : 0;
+}
+
+
 const STATUS_MAP_FALLBACK: Record<string, { label: string; color: string; bg: string }> = {
   recebido:             { label: "Recebido",              color: "text-blue-400",   bg: "bg-blue-500/10 border-blue-500/30" },
   pedido_recebido:      { label: "Pedido Recebido",       color: "text-blue-400",   bg: "bg-blue-500/10 border-blue-500/30" },
@@ -37,6 +48,8 @@ export default function AdminCommissions() {
   const utils = trpc.useUtils();
   const [, navigate] = useLocation();
   const [filterPaid, setFilterPaid] = useState<"all" | "pending" | "paid" | "invalid">("all");
+  const [searchTerm, setSearchTerm] = useState("");
+  const [manualCommissionValue, setManualCommissionValue] = useState("");
 
   const commissionsQuery = trpc.orderStatus.listCommissions.useQuery();
   const customersQuery = trpc.customers.list.useQuery(undefined, {
@@ -62,6 +75,7 @@ export default function AdminCommissions() {
       // Fecha a confirmação imediatamente e atualiza o cache local antes de abrir o WhatsApp.
       // Assim, ao voltar para a tela, não entra novamente no fluxo de confirmação.
       setConfirmPayment(null);
+      setManualCommissionValue("");
       utils.orderStatus.listCommissions.setData(undefined, (current: any) => {
         if (!Array.isArray(current)) return current;
         return current.map((item: any) => item.registrationId === variables.registrationId
@@ -69,6 +83,7 @@ export default function AdminCommissions() {
               ...item,
               commissionPaid: variables.paid ? 1 : 0,
               commissionStatus: variables.paid ? 'paga' : 'elegivel',
+              commissionValue: variables.manualCommissionValue || item.commissionValue,
             }
           : item);
       });
@@ -100,6 +115,7 @@ export default function AdminCommissions() {
     },
     onError: (error) => {
       setConfirmPayment(null);
+      setManualCommissionValue("");
       toast.error(error.message || "Erro ao atualizar comissão");
       void commissionsQuery.refetch();
     },
@@ -131,7 +147,7 @@ export default function AdminCommissions() {
   });
 
   const all = commissionsQuery.data ?? [];
-  const mainCustomers = (customersQuery.data ?? []) as unknown as Array<{ phone: string; profilePhotoUrl?: string | null }>;
+  const mainCustomers = (customersQuery.data ?? []) as unknown as Array<{ phone: string; name?: string | null; customerNumber?: number | null; profilePhotoUrl?: string | null }>;
   const normalizePhoneKey = (phone?: string | null) => String(phone || "").replace(/\D/g, "");
   const profilePhotoByPhone = new Map(
     mainCustomers
@@ -139,13 +155,38 @@ export default function AdminCommissions() {
       .map(customer => [normalizePhoneKey(customer.phone), customer.profilePhotoUrl || null] as const),
   );
 
-  // Filtrar por status de pagamento
+  // Busca por indicador ou cliente indicado: nome, telefone e número de cadastro.
+  const normalizedSearch = searchTerm.trim().toLowerCase();
+  const searchDigits = searchTerm.replace(/\D/g, "");
   const filtered = all.filter(c => {
     const invalid = Boolean((c as any).referralInvalid);
-    if (filterPaid === "all") return true;
-    if (filterPaid === "paid") return c.commissionPaid === 1 && !invalid;
-    if (filterPaid === "invalid") return invalid;
-    return c.commissionPaid !== 1 && !invalid;
+    const statusMatches =
+      filterPaid === "all" ? true :
+      filterPaid === "paid" ? c.commissionPaid === 1 && !invalid :
+      filterPaid === "invalid" ? invalid :
+      c.commissionPaid !== 1 && !invalid;
+    if (!statusMatches) return false;
+    if (!normalizedSearch) return true;
+
+    const textFields = [
+      c.referredBy,
+      c.customerName,
+      c.referredByPhone,
+      c.phone,
+      (c as any).referrerCustomerNumber,
+      (c as any).customerNumber,
+    ].map(value => String(value ?? "").toLowerCase());
+
+    if (textFields.some(value => value.includes(normalizedSearch))) return true;
+    if (searchDigits) {
+      return [
+        c.referredByPhone,
+        c.phone,
+        (c as any).referrerCustomerNumber,
+        (c as any).customerNumber,
+      ].some(value => String(value ?? "").replace(/\D/g, "").includes(searchDigits));
+    }
+    return false;
   });
 
   // Agrupar por indicador (nome + telefone)
@@ -208,6 +249,21 @@ export default function AdminCommissions() {
 
   return (
     <div className="min-h-screen bg-background text-foreground">
+      <style>{`
+        @keyframes commissionNeonPending {
+          0%, 100% { box-shadow: inset 3px 0 0 rgba(239,68,68,.75), 0 0 8px rgba(239,68,68,.10); }
+          50% { box-shadow: inset 3px 0 0 rgba(248,113,113,1), 0 0 22px rgba(239,68,68,.42); }
+        }
+        @keyframes commissionNeonPaid {
+          0%, 100% { box-shadow: inset 3px 0 0 rgba(34,197,94,.75), 0 0 8px rgba(34,197,94,.10); }
+          50% { box-shadow: inset 3px 0 0 rgba(74,222,128,1), 0 0 22px rgba(34,197,94,.38); }
+        }
+        .commission-neon-pending { animation: commissionNeonPending 1.65s ease-in-out infinite; }
+        .commission-neon-paid { animation: commissionNeonPaid 2.05s ease-in-out infinite; }
+        @media (prefers-reduced-motion: reduce) {
+          .commission-neon-pending, .commission-neon-paid { animation: none; }
+        }
+      `}</style>
       <AdminHeader title="Comissões / Indicações" backTo="/admin/orders" rightContent={
         <button onClick={exportCSV} className="flex items-center gap-1 px-2.5 py-1.5 rounded-lg bg-primary text-primary-foreground text-xs font-medium hover:bg-primary/90 transition-colors">
           <Download className="w-3.5 h-3.5" />
@@ -247,6 +303,26 @@ export default function AdminCommissions() {
             <p className="text-2xl font-bold text-amber-400">{uniqueReferrers}</p>
             <p className="text-xs text-muted-foreground mt-0.5">Indicadores</p>
           </div>
+        </div>
+
+        {/* Busca rápida */}
+        <div className="relative">
+          <input
+            type="search"
+            value={searchTerm}
+            onChange={(event) => setSearchTerm(event.target.value)}
+            placeholder="Buscar por nome, telefone ou nº de cadastro..."
+            className="w-full rounded-xl border border-cyan-500/30 bg-card px-4 py-3 pr-10 text-sm text-foreground outline-none transition focus:border-cyan-400 focus:ring-2 focus:ring-cyan-500/20"
+          />
+          {searchTerm && (
+            <button
+              type="button"
+              onClick={() => setSearchTerm("")}
+              className="absolute right-3 top-1/2 -translate-y-1/2 rounded-md px-2 py-1 text-xs font-bold text-muted-foreground hover:text-foreground"
+            >
+              Limpar
+            </button>
+          )}
         </div>
 
         {/* Filtros */}
@@ -345,6 +421,9 @@ export default function AdminCommissions() {
                       {indicadorPhone && (
                         <span className="text-xs text-muted-foreground font-mono">{formatPhone(indicadorPhone)}</span>
                       )}
+                      {(pedidos[0] as any)?.referrerCustomerNumber && (
+                        <span className="text-[10px] font-bold text-cyan-300">Cadastro *{(pedidos[0] as any).referrerCustomerNumber}</span>
+                      )}
                     </div>
                     <div className="flex items-center gap-3 mt-1.5 flex-wrap">
                       <span className="flex items-center gap-1 text-xs text-muted-foreground">
@@ -393,7 +472,10 @@ export default function AdminCommissions() {
                     const isUnderReview = commissionStatus === 'em_analise';
                     const isReferralAction = referralAction?.registrationId === c.registrationId;
                     return (
-                      <div key={c.registrationId} className={`px-4 py-3 flex items-start gap-3 ${isPaid ? "opacity-70" : ""}`}>
+                      <div
+                        key={c.registrationId}
+                        className={`px-4 py-3 flex items-start gap-3 rounded-lg ${isInvalid ? "" : isPaid ? "commission-neon-paid" : "commission-neon-pending"}`}
+                      >
                         {/* Info do cliente indicado */}
                         <div className="flex-1 min-w-0 space-y-1">
                           {/* Nome e telefone do indicado */}
@@ -403,6 +485,9 @@ export default function AdminCommissions() {
                                 {c.customerName ?? "—"}
                               </p>
                               <p className="text-xs text-muted-foreground font-mono">{formatPhone(c.phone)}</p>
+                              {(c as any).customerNumber && (
+                                <p className="text-[10px] font-bold text-cyan-300">Cadastro *{(c as any).customerNumber}</p>
+                              )}
                             </div>
                           </div>
 
@@ -474,17 +559,56 @@ export default function AdminCommissions() {
                         {/* Botões de ação */}
                         <div className="flex-shrink-0 flex flex-col items-end gap-1.5 pt-0.5">
                           {confirmPayment === c.registrationId ? (
-                            <div className="w-full rounded-lg border border-emerald-500/40 bg-emerald-500/10 p-2 space-y-1.5">
-                              <p className="text-[10px] font-semibold text-emerald-300">Confirmar pagamento da comissão?</p>
+                            <div className="w-full min-w-[220px] rounded-lg border border-emerald-500/50 bg-emerald-500/10 p-2 space-y-2 shadow-[0_0_18px_rgba(34,197,94,0.12)]">
+                              <p className="text-[10px] font-semibold text-emerald-300">Autorizar pagamento da comissão?</p>
+                              {(c as any).commissionValue > 0 ? (
+                                <p className="text-xs font-black text-white">{formatMoney((c as any).commissionValue)}</p>
+                              ) : (
+                                <div className="space-y-1">
+                                  <label className="block text-[10px] font-bold text-amber-300">Valor manual da comissão (R$)</label>
+                                  <input
+                                    type="text"
+                                    inputMode="decimal"
+                                    value={manualCommissionValue}
+                                    onChange={(event) => setManualCommissionValue(event.target.value.replace(/[^0-9.,]/g, ""))}
+                                    placeholder="Ex: 50,00"
+                                    className="w-full rounded-md border border-amber-500/40 bg-background px-2 py-1.5 text-xs font-bold text-foreground outline-none focus:border-amber-400"
+                                    autoFocus
+                                  />
+                                  <p className="text-[9px] text-muted-foreground">Este valor vale somente para esta comissão.</p>
+                                </div>
+                              )}
                               <div className="flex gap-1.5">
-                                <button onClick={() => toggleCommissionPaidMutation.mutate({ registrationId: c.registrationId, paid: true })} disabled={toggleCommissionPaidMutation.isPending} className="flex-1 rounded-md bg-emerald-600 px-2 py-1 text-[10px] font-bold text-white disabled:opacity-50">{toggleCommissionPaidMutation.isPending ? 'Salvando...' : 'Confirmar'}</button>
-                                <button onClick={() => setConfirmPayment(null)} disabled={toggleCommissionPaidMutation.isPending} className="rounded-md border border-border px-2 py-1 text-[10px] text-muted-foreground disabled:opacity-50">Cancelar</button>
+                                <button
+                                  onClick={() => {
+                                    const cents = parseCommissionReaisToCents(manualCommissionValue);
+                                    toggleCommissionPaidMutation.mutate({
+                                      registrationId: c.registrationId,
+                                      paid: true,
+                                      ...((c as any).commissionValue > 0 ? {} : { manualCommissionValue: cents }),
+                                    });
+                                  }}
+                                  disabled={
+                                    toggleCommissionPaidMutation.isPending ||
+                                    ((c as any).commissionValue <= 0 && parseCommissionReaisToCents(manualCommissionValue) <= 0)
+                                  }
+                                  className="flex-1 rounded-md bg-emerald-600 px-2 py-1 text-[10px] font-bold text-white disabled:opacity-50"
+                                >
+                                  {toggleCommissionPaidMutation.isPending ? 'Salvando...' : 'AUTORIZAR'}
+                                </button>
+                                <button
+                                  onClick={() => { setConfirmPayment(null); setManualCommissionValue(""); }}
+                                  disabled={toggleCommissionPaidMutation.isPending}
+                                  className="rounded-md border border-border px-2 py-1 text-[10px] text-muted-foreground disabled:opacity-50"
+                                >
+                                  Cancelar
+                                </button>
                               </div>
                             </div>
                           ) : isPaid ? (
                             <button onClick={() => toggleCommissionPaidMutation.mutate({ registrationId: c.registrationId, paid: false })} disabled={toggleCommissionPaidMutation.isPending} className="flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-xs font-bold border bg-green-500/20 border-green-500/40 text-green-400 hover:bg-red-500/10 hover:border-red-500/30 hover:text-red-400 disabled:opacity-50" title="Clique para desfazer"><CheckCircle className="w-3.5 h-3.5" /> Pagamento confirmado</button>
                           ) : !isInvalid && isEligible ? (
-                            <button onClick={() => setConfirmPayment(c.registrationId)} disabled={toggleCommissionPaidMutation.isPending} className="flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-xs font-bold border bg-red-500/20 border-red-500/40 text-red-400 hover:bg-green-500/10 hover:border-green-500/30 hover:text-green-400 disabled:opacity-50" title="Marcar como paga"><Clock className="w-3.5 h-3.5" /> Pagar</button>
+                            <button onClick={() => { setManualCommissionValue(""); setConfirmPayment(c.registrationId); }} disabled={toggleCommissionPaidMutation.isPending} className="flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-xs font-bold border bg-red-500/20 border-red-500/40 text-red-400 hover:bg-green-500/10 hover:border-green-500/30 hover:text-green-400 disabled:opacity-50" title="Marcar como paga"><Clock className="w-3.5 h-3.5" /> Pagar</button>
                           ) : null}
                           {isReferralAction ? (
                             <div className="w-full rounded-lg border border-amber-500/40 bg-amber-500/10 p-2 space-y-1.5">
