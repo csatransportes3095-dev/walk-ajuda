@@ -2213,6 +2213,29 @@ export default function AdminOrders() {
     }
   }
 
+  // A aba Todos deve respeitar a criação original do pedido.
+  // Atualizações posteriores de status não podem mover pedidos antigos para o topo.
+  function sortTodosOrders(list: Order[], key: FolderSortKey, dir: FolderSortDir): Order[] {
+    return [...list].sort((a, b) => {
+      let cmp = 0;
+      if (key === "number") {
+        const na = a.customerNumber ?? a.orderNumber ?? 999999;
+        const nb = b.customerNumber ?? b.orderNumber ?? 999999;
+        cmp = na - nb;
+      } else if (key === "name") {
+        const na = (a.customerName || "").toLowerCase();
+        const nb = (b.customerName || "").toLowerCase();
+        cmp = na.localeCompare(nb, "pt-BR");
+      } else {
+        const da = a.submittedAt ?? a.accessedAt ?? 0;
+        const db = b.submittedAt ?? b.accessedAt ?? 0;
+        cmp = da - db;
+        if (cmp === 0) cmp = (a.id ?? 0) - (b.id ?? 0);
+      }
+      return dir === "asc" ? cmp : -cmp;
+    });
+  }
+
   // Helper de ordenação para pastas (Arquivo e Entregues)
   function sortFolderOrders<T extends { customerName?: string | null; customerNumber?: number | null; orderNumber?: number | null; latestStatusAt?: number | null; accessedAt?: number | null }>(list: T[], key: "number" | "name" | "date", dir: "asc" | "desc"): T[] {
     return [...list].sort((a, b) => {
@@ -5155,7 +5178,7 @@ export default function AdminOrders() {
                             return getKey(a).localeCompare(getKey(b));
                           });
                         }
-                        return sortFolderOrders(filtered, todosSortKey, todosSortDir);
+                        return sortTodosOrders(filtered, todosSortKey, todosSortDir);
                       })() }]
                     : group.isDelivered
                       ? [{ name: "", orders: sortDeliveredOrders(group.orders, deliveredSortKey, deliveredSortDir) }]
