@@ -23,6 +23,17 @@ function formatDate(d: Date | number | null) {
   return `${pad(sp.getUTCDate())}/${pad(sp.getUTCMonth()+1)}/${String(sp.getUTCFullYear()).slice(-2)} ${pad(sp.getUTCHours())}:${pad(sp.getUTCMinutes())}`;
 }
 
+function parseCommissionReaisToCents(value: string) {
+  const clean = value.trim().replace(/\s/g, "");
+  if (!clean) return 0;
+  const normalized = clean.includes(",")
+    ? clean.replace(/\./g, "").replace(",", ".")
+    : clean;
+  const amount = Number(normalized);
+  return Number.isFinite(amount) && amount > 0 ? Math.round(amount * 100) : 0;
+}
+
+
 const STATUS_MAP_FALLBACK: Record<string, { label: string; color: string; bg: string }> = {
   recebido:             { label: "Recebido",              color: "text-blue-400",   bg: "bg-blue-500/10 border-blue-500/30" },
   pedido_recebido:      { label: "Pedido Recebido",       color: "text-blue-400",   bg: "bg-blue-500/10 border-blue-500/30" },
@@ -570,8 +581,7 @@ export default function AdminCommissions() {
                               <div className="flex gap-1.5">
                                 <button
                                   onClick={() => {
-                                    const normalized = manualCommissionValue.trim().replace(/\./g, "").replace(",", ".");
-                                    const cents = Math.round(Number(normalized || 0) * 100);
+                                    const cents = parseCommissionReaisToCents(manualCommissionValue);
                                     toggleCommissionPaidMutation.mutate({
                                       registrationId: c.registrationId,
                                       paid: true,
@@ -580,7 +590,7 @@ export default function AdminCommissions() {
                                   }}
                                   disabled={
                                     toggleCommissionPaidMutation.isPending ||
-                                    ((c as any).commissionValue <= 0 && !(Math.round(Number(manualCommissionValue.trim().replace(/\./g, "").replace(",", ".") || 0) * 100) > 0))
+                                    ((c as any).commissionValue <= 0 && parseCommissionReaisToCents(manualCommissionValue) <= 0)
                                   }
                                   className="flex-1 rounded-md bg-emerald-600 px-2 py-1 text-[10px] font-bold text-white disabled:opacity-50"
                                 >
