@@ -1260,7 +1260,7 @@ function LoansTab() {
                                   <AlertTriangle className="w-4 h-4" />
                                   -Taxa
                                 </button>
-                              ) : inst.isOverdue ? (
+                              ) : loan.paymentType === "diario" ? (
                                 <button
                                   className="flex flex-col items-center justify-center gap-1 rounded-xl py-2.5 px-2 bg-amber-500/10 border border-amber-500/30 text-amber-400 hover:bg-amber-500/20 transition-all text-xs font-semibold active:scale-95"
                                   onClick={() => { setFeeModal({ inst, loanId: loan.id }); setFeeCustomAmount(""); }}>
@@ -1301,7 +1301,7 @@ function LoansTab() {
                                   <AlertTriangle className="w-4 h-4" />
                                   -Taxa
                                 </button>
-                              ) : inst.isOverdue ? (
+                              ) : loan.paymentType === "diario" ? (
                                 <button
                                   className="flex flex-col items-center justify-center gap-1 rounded-xl py-2.5 px-2 bg-amber-500/10 border border-amber-500/30 text-amber-400 hover:bg-amber-500/20 transition-all text-xs font-semibold active:scale-95"
                                   onClick={() => { setFeeModal({ inst, loanId: loan.id }); setFeeCustomAmount(""); }}>
@@ -1847,7 +1847,7 @@ function LoansTab() {
             const feeAfter20h = cfg ? parseFloat(String(cfg.fee_after_20h)) || 0 : 10;
             const feeMidnightPct = cfg ? parseFloat(String(cfg.fee_after_midnight_pct)) || 100 : 100;
             const feeTotal18_20 = feeAfter18h + feeAfter20h;
-            const feeMidnight = Math.round(originalAmt * (feeMidnightPct / 100) * 100) / 100;
+            const feeMidnight = Math.max(feeTotal18_20, Math.round(originalAmt * (feeMidnightPct / 100) * 100) / 100);
             const customFee = parseFloat(feeCustomAmount) || 0;
             return (
               <div className="space-y-4">
@@ -1863,7 +1863,7 @@ function LoansTab() {
                       onClick={() => applyLateFee.mutate({ installmentId: inst.id, feeAmount: feeAfter18h })}
                       disabled={applyLateFee.isPending}
                     >
-                      <span className="text-sm text-amber-300">Taxa 18h–20h</span>
+                      <span className="text-sm text-amber-300">Taxa manual — regra 18:01</span>
                       <span className="text-sm font-bold text-amber-400">+R$ {feeAfter18h.toFixed(2).replace('.', ',')}</span>
                     </button>
                     <button
@@ -1871,7 +1871,7 @@ function LoansTab() {
                       onClick={() => applyLateFee.mutate({ installmentId: inst.id, feeAmount: feeTotal18_20 })}
                       disabled={applyLateFee.isPending}
                     >
-                      <span className="text-sm text-orange-300">Taxa 20h–23:59 (acumulada)</span>
+                      <span className="text-sm text-orange-300">Taxa manual acumulada — regra 20:01</span>
                       <span className="text-sm font-bold text-orange-400">+R$ {feeTotal18_20.toFixed(2).replace('.', ',')}</span>
                     </button>
                     <button
@@ -1879,7 +1879,7 @@ function LoansTab() {
                       onClick={() => applyLateFee.mutate({ installmentId: inst.id, feeAmount: feeMidnight })}
                       disabled={applyLateFee.isPending}
                     >
-                      <span className="text-sm text-red-300">Taxa após meia-noite ({feeMidnightPct}%)</span>
+                      <span className="text-sm text-red-300">Taxa final — 23:59 ({feeMidnightPct}%)</span>
                       <span className="text-sm font-bold text-red-400">+R$ {feeMidnight.toFixed(2).replace('.', ',')}</span>
                     </button>
                   </div>
