@@ -1,0 +1,27 @@
+name: Validate home card admin order
+on:
+  push:
+    branches: [fix/home-card-admin-order-20261001]
+    paths:
+      - 'client/src/components/H2WelcomePremium.tsx'
+      - 'shared/homePremiumOrder.ts'
+      - 'server/homePremiumOrder.test.ts'
+      - '.github/workflows/validate-home-card-order.yml'
+permissions:
+  contents: read
+jobs:
+  validate:
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+      - run: |
+          npm install -g pnpm@10.4.1
+          pnpm install --frozen-lockfile
+      - name: Ordem dos cards
+        run: pnpm exec vitest run server/homePremiumOrder.test.ts
+      - name: Compatibilidade da home e build
+        run: pnpm build
