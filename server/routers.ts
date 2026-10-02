@@ -6686,6 +6686,43 @@ export const appRouter = router({
             : allowedExtras ? resolveOrderGroupLink(defaults) : null,
         };
       }),
+    // Cliente autenticado lê somente a chave Base32 salva no pedido.
+    // Não retorna código TOTP temporário nem dados do cofre administrativo.
+    getAuthenticatorKeyForClient: publicProcedure
+      .input(z.object({ registrationId: z.number().int().positive(), cpToken: z.string().min(20).max(512) }))
+      .query(async ({ input }) => {
+        const { getDb } = await import('./db');
+        const { orderLoginData, customerPasswordSessions, orderStatusHistory } = await import('../drizzle/schema');
+        const { eq, and } = await import('drizzle-orm');
+        const db = await getDb();
+        if (!db) throw new TRPCError({ code: 'INTERNAL_SERVER_ERROR', message: 'Banco indisponível.' });
+
+        const sessions = await db.select().from(customerPasswordSessions)
+          .where(eq(customerPasswordSessions.token, input.cpToken))
+          .limit(1);
+        const session = sessions[0];
+        if (!session || new Date(session.expiresAt) < new Date()) {
+          throw new TRPCError({ code: 'UNAUTHORIZED', message: 'Sessão expirada. Entre novamente para acessar a chave do autenticador.' });
+        }
+
+        const sessionPhone = String(session.phone || '').replace(/\D/g, '');
+        const ownerRows = await db.select({ customerPhone: orderStatusHistory.customerPhone })
+          .from(orderStatusHistory)
+          .where(eq(orderStatusHistory.registrationId, input.registrationId))
+          .limit(1);
+        const ownerPhone = String(ownerRows[0]?.customerPhone || '').replace(/\D/g, '');
+        if (!ownerPhone || ownerPhone !== sessionPhone) {
+          throw new TRPCError({ code: 'FORBIDDEN', message: 'Este pedido não pertence à sessão atual.' });
+        }
+
+        const rows = await db.select({ authCode: orderLoginData.authCode })
+          .from(orderLoginData)
+          .where(eq(orderLoginData.registrationId, input.registrationId))
+          .limit(1);
+        const authCode = cleanLoginText(rows[0]?.authCode)?.replace(/[-\s]/g, '') ?? null;
+        return authCode ? { authCode } : null;
+      }),
+
     // Cliente só recebe QR após validar a sessão do acompanhamento e a titularidade do pedido.
     getAuthenticatorQrForClient: publicProcedure
       .input(z.object({ registrationId: z.number().int().positive(), cpToken: z.string().min(20).max(512) }))
