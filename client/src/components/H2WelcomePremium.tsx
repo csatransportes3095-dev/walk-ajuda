@@ -2,6 +2,7 @@ import { useMemo, useState } from "react";
 import type { CSSProperties } from "react";
 import { trpc } from "@/lib/trpc";
 import { OnlineSupportWidget } from "@/components/OnlineSupportWidget";
+import { keepAdminHomeButtonOrder } from "@shared/homePremiumOrder";
 import {
   ArrowRight,
   BarChart3,
@@ -155,15 +156,10 @@ export default function H2WelcomePremium() {
   );
 
   const buttons = useMemo(() => {
-    const dynamic = (rawButtons as HomeButton[]).filter((button) => Number(button.vipOnly || 0) !== 1);
-    const used = new Set<number>();
-
-    const resolve = (kind: "cadastro" | "gastos" | "emprestimo" | "sorteio"): HomeButton | null => {
-      const matched = dynamic.find((button) => kindFor(button) === kind);
-      if (!matched) return null;
-      used.add(matched.id);
-      return { ...FALLBACKS[kind], ...matched, subtitle: matched.subtitle || FALLBACKS[kind].subtitle, url: matched.url || FALLBACKS[kind].url };
-    };
+    // A API publica ja entrega homeButtons por sortOrder. A home premium NAO pode
+    // impor uma segunda ordem por tipo (cadastro/gastos/sorteio/etc.), porque isso
+    // quebra a ordem definida pelas setas no Hub Central do ADM.
+    const dynamic = keepAdminHomeButtonOrder(rawButtons as HomeButton[]);
 
     const fixedEssentials: HomeButton[] = [
       {
@@ -188,15 +184,21 @@ export default function H2WelcomePremium() {
       },
     ];
 
-    const managedEssentials = [
-      resolve("cadastro"),
-      resolve("gastos"),
-      resolve("emprestimo"),
-      resolve("sorteio"),
-    ].filter((button): button is HomeButton => button !== null);
+    const orderedManaged = dynamic.map((button) => {
+      const kind = kindFor(button);
+      if (kind !== "cadastro" && kind !== "gastos" && kind !== "emprestimo" && kind !== "sorteio") {
+        return button;
+      }
+      const fallback = FALLBACKS[kind];
+      return {
+        ...fallback,
+        ...button,
+        subtitle: button.subtitle || fallback.subtitle,
+        url: button.url || fallback.url,
+      };
+    });
 
-    const remaining = dynamic.filter((button) => !used.has(button.id) && kindFor(button) === "default");
-    return [...fixedEssentials, ...managedEssentials, ...remaining];
+    return [...fixedEssentials, ...orderedManaged];
   }, [rawButtons, settings]);
 
   if (!isHome) return null;
