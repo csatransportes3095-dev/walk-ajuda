@@ -1524,7 +1524,7 @@ export default function AdminOrders() {
   const [globalVideoTitle, setGlobalVideoTitle] = useState('');
   const [globalVideoDescription, setGlobalVideoDescription] = useState('');
   const [globalVideoUrl, setGlobalVideoUrl] = useState('');
-  const [globalVideoStatusScope, setGlobalVideoStatusScope] = useState<string>('all');
+  const [globalVideoStatusScopes, setGlobalVideoStatusScopes] = useState<string[]>([]);
   const globalVideosQuery = trpc.orderStatus.getGlobalOrderVideosAdmin.useQuery(undefined, { staleTime: 0 });
   // Reutilizar documentos do cadastro
   const [showReuseDocsFor, setShowReuseDocsFor] = useState<string | null>(null);
@@ -1561,7 +1561,7 @@ export default function AdminOrders() {
     setGlobalVideoTitle('');
     setGlobalVideoDescription('');
     setGlobalVideoUrl('');
-    setGlobalVideoStatusScope('all');
+    setGlobalVideoStatusScopes([]);
   };
 
   const saveGlobalVideoMut = trpc.orderStatus.saveGlobalOrderVideo.useMutation({
@@ -7504,22 +7504,64 @@ export default function AdminOrders() {
                               onChange={e => setGlobalVideoUrl(e.target.value)}
                               className="w-full text-xs bg-background border border-purple-500/30 rounded px-2.5 py-1.5 text-foreground placeholder:text-muted-foreground focus:outline-none focus:border-purple-400"
                             />
-                            <div className="space-y-1">
-                              <p className="text-[10px] font-bold uppercase tracking-wider text-purple-200/70">Exibir em</p>
-                              <select
-                                value={globalVideoStatusScope}
-                                onChange={e => setGlobalVideoStatusScope(e.target.value)}
-                                className="w-full rounded border border-purple-500/30 bg-background px-2.5 py-2 text-xs text-foreground focus:outline-none focus:border-purple-400"
-                              >
-                                <option value="all">Todos os status</option>
+                            <div className="space-y-2 rounded-lg border border-purple-500/20 bg-black/15 p-2.5">
+                              <div className="flex items-center justify-between gap-2">
+                                <div>
+                                  <p className="text-[10px] font-bold uppercase tracking-wider text-purple-200/70">Exibir em quais status</p>
+                                  <p className="text-[10px] text-purple-200/50">Marque vários status ou selecione Todos os status.</p>
+                                </div>
+                                <label className="flex cursor-pointer items-center gap-2 rounded-md border border-purple-500/20 bg-purple-500/5 px-2 py-1.5">
+                                  <input
+                                    type="checkbox"
+                                    checked={globalVideoStatusScopes.length === 0}
+                                    onChange={(e) => {
+                                      if (e.target.checked) setGlobalVideoStatusScopes([]);
+                                      else {
+                                        const first = dynamicStatuses
+                                          .filter((status: any) => status.isActive === 1)
+                                          .sort((a: any, b: any) => a.sortOrder - b.sortOrder)[0];
+                                        setGlobalVideoStatusScopes(first ? [first.key] : []);
+                                      }
+                                    }}
+                                  />
+                                  <span className="text-[10px] font-bold text-purple-200">Todos os status</span>
+                                </label>
+                              </div>
+
+                              <div className="grid grid-cols-1 gap-1.5 sm:grid-cols-2 lg:grid-cols-3">
                                 {dynamicStatuses
                                   .filter((status: any) => status.isActive === 1)
                                   .sort((a: any, b: any) => a.sortOrder - b.sortOrder)
-                                  .map((status: any) => (
-                                    <option key={status.key} value={status.key}>{status.label}</option>
-                                  ))}
-                              </select>
-                              <p className="text-[10px] text-purple-200/50">Escolha um status específico ou deixe em Todos os status.</p>
+                                  .map((status: any) => {
+                                    const checked = globalVideoStatusScopes.includes(status.key);
+                                    const allSelected = globalVideoStatusScopes.length === 0;
+                                    return (
+                                      <label
+                                        key={status.key}
+                                        className={`flex cursor-pointer items-center gap-2 rounded-md border px-2 py-1.5 text-[10px] transition-colors ${checked ? 'border-purple-400/50 bg-purple-500/15 text-purple-100' : 'border-white/10 bg-white/[0.02] text-slate-400'} ${allSelected ? 'opacity-45' : ''}`}
+                                      >
+                                        <input
+                                          type="checkbox"
+                                          disabled={allSelected}
+                                          checked={checked}
+                                          onChange={(e) => {
+                                            setGlobalVideoStatusScopes(prev => {
+                                              if (e.target.checked) return Array.from(new Set([...prev, status.key]));
+                                              return prev.filter(key => key !== status.key);
+                                            });
+                                          }}
+                                        />
+                                        <span className="truncate">{status.label}</span>
+                                      </label>
+                                    );
+                                  })}
+                              </div>
+
+                              <p className="text-[10px] font-medium text-purple-200/60">
+                                {globalVideoStatusScopes.length === 0
+                                  ? '✓ Este vídeo aparecerá em TODOS os status.'
+                                  : `✓ Este vídeo aparecerá em ${globalVideoStatusScopes.length} status selecionado(s).`}
+                              </p>
                             </div>
                             <div className="flex gap-2">
                               <button
@@ -7530,7 +7572,7 @@ export default function AdminOrders() {
                                   description: globalVideoDescription.trim(),
                                   url: globalVideoUrl.trim(),
                                   active: true,
-                                  statusScope: globalVideoStatusScope === 'all' ? null : globalVideoStatusScope,
+                                  statusScopes: globalVideoStatusScopes,
                                 })}
                                 className="flex-1 flex items-center justify-center gap-2 py-2 rounded-lg bg-purple-600 hover:bg-purple-500 disabled:opacity-50 disabled:cursor-not-allowed text-white text-xs font-semibold transition-colors"
                               >
@@ -7564,7 +7606,9 @@ export default function AdminOrders() {
                                             {video.active ? 'ATIVO' : 'DESATIVADO'}
                                           </span>
                                           <span className="rounded bg-purple-500/10 px-1.5 py-0.5 text-[9px] font-bold text-purple-300">
-                                            {video.statusScope ? (ACTIVE_STATUS_CONFIG[video.statusScope]?.label || video.statusScope) : 'TODOS OS STATUS'}
+                                            {Array.isArray(video.statusScopes) && video.statusScopes.length > 0
+                                              ? video.statusScopes.map((key: string) => ACTIVE_STATUS_CONFIG[key]?.label || key).join(' • ')
+                                              : 'TODOS OS STATUS'}
                                           </span>
                                         </div>
                                         {video.description && <p className="mt-1 text-[10px] leading-relaxed text-slate-400">{video.description}</p>}
@@ -7592,7 +7636,7 @@ export default function AdminOrders() {
                                             setGlobalVideoTitle(video.title);
                                             setGlobalVideoDescription(video.description || '');
                                             setGlobalVideoUrl(video.url);
-                                            setGlobalVideoStatusScope(video.statusScope || 'all');
+                                            setGlobalVideoStatusScopes(Array.isArray(video.statusScopes) ? video.statusScopes : (video.statusScope ? [video.statusScope] : []));
                                           }}
                                           className="rounded px-2 py-1 text-[10px] font-semibold text-cyan-300 hover:bg-cyan-500/10"
                                         >Editar</button>
