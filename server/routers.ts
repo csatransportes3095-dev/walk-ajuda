@@ -84,6 +84,53 @@ function stripLegacyOrderPinTemplate(text: string | null | undefined): string | 
     .trim();
 }
 
+const GLOBAL_ORDER_VIDEOS_SETTING = 'order_tracking_global_videos_v1';
+
+type GlobalOrderVideo = {
+  id: string;
+  title: string;
+  description: string;
+  url: string;
+  active: boolean;
+  sortOrder: number;
+  createdAt: string;
+  updatedAt: string;
+};
+
+function sanitizeGlobalOrderVideos(raw: string | null | undefined): GlobalOrderVideo[] {
+  if (!raw) return [];
+  try {
+    const parsed = JSON.parse(raw);
+    if (!Array.isArray(parsed)) return [];
+    return parsed
+      .map((item: any, index: number) => ({
+        id: String(item?.id || '').trim(),
+        title: String(item?.title || '').trim().slice(0, 160),
+        description: String(item?.description || '').trim().slice(0, 1200),
+        url: String(item?.url || '').trim().slice(0, 2000),
+        active: item?.active !== false,
+        sortOrder: Number.isFinite(Number(item?.sortOrder)) ? Number(item.sortOrder) : index,
+        createdAt: String(item?.createdAt || ''),
+        updatedAt: String(item?.updatedAt || ''),
+      }))
+      .filter((item: GlobalOrderVideo) => item.id && item.title && /^https?:\/\//i.test(item.url))
+      .sort((a: GlobalOrderVideo, b: GlobalOrderVideo) => a.sortOrder - b.sortOrder || a.title.localeCompare(b.title));
+  } catch {
+    return [];
+  }
+}
+
+async function readGlobalOrderVideos(): Promise<GlobalOrderVideo[]> {
+  return sanitizeGlobalOrderVideos(await getSetting(GLOBAL_ORDER_VIDEOS_SETTING));
+}
+
+async function writeGlobalOrderVideos(videos: GlobalOrderVideo[]): Promise<void> {
+  const normalized = videos
+    .map((item, index) => ({ ...item, sortOrder: index }))
+    .sort((a, b) => a.sortOrder - b.sortOrder);
+  await upsertSetting(GLOBAL_ORDER_VIDEOS_SETTING, JSON.stringify(normalized));
+}
+
 import {
   validateAccessCode, createAccessCode, listAccessCodes, toggleAccessCode,
   deleteAccessCode, renewAccessCode, checkAccessCodeCanSubmit, consumeAccessCode,
@@ -4145,6 +4192,98 @@ export const appRouter = router({
           return adminFiles.filter(f => f.registrationId === input.registrationId);
         }
         return adminFiles;
+      }),
+
+    // Público autenticado pela tela /acompanhar: vídeos globais ativos para todos os pedidos
+    getGlobalOrderVideos: publicProcedure.query(async () => {
+      const videos = await readGlobalOrderVideos();
+      return videos.filter(video => video.active);
+    }),
+
+    // Admin: lista completa, inclusive vídeos desativados
+    getGlobalOrderVideosAdmin: adminProcedure.query(async () => {
+      return await readGlobalOrderVideos();
+    }),
+
+    // Admin: cria ou edita um vídeo global sem tocar nos arquivos individuais dos pedidos
+    saveGlobalOrderVideo: adminProcedure
+      .input(z.object({
+        id: z.string().min(1).optional(),
+        title: z.string().trim().min(1).max(160),
+        description: z.string().trim().max(1200).default(''),
+        url: z.string().url().max(2000),
+        active: z.boolean().default(true),
+      }))
+      .mutation(async ({ input }) => {
+        const videos = await readGlobalOrderVideos();
+        const now = new Date().toISOString();
+        const existingIndex = input.id ? videos.findIndex(video => video.id === input.id) : -1;
+        if (input.id && existingIndex < 0) {
+          throw new TRPCError({ code: 'NOT_FOUND', message: 'Vídeo global não encontrado.' });
+        }
+
+        if (existingIndex >= 0) {
+          const current = videos[existingIndex];
+          videos[existingIndex] = {
+            ...current,
+            title: input.title,
+            description: input.description,
+            url: input.url,
+            active: input.active,
+            updatedAt: now,
+          };
+        } else {
+          videos.push({
+            id: randomUUID(),
+            title: input.title,
+            description: input.description,
+            url: input.url,
+            active: input.active,
+            sortOrder: videos.length,
+            createdAt: now,
+            updatedAt: now,
+          });
+        }
+
+        await writeGlobalOrderVideos(videos);
+        return await readGlobalOrderVideos();
+      }),
+
+    toggleGlobalOrderVideo: adminProcedure
+      .input(z.object({ id: z.string().min(1), active: z.boolean() }))
+      .mutation(async ({ input }) => {
+        const videos = await readGlobalOrderVideos();
+        const video = videos.find(item => item.id === input.id);
+        if (!video) throw new TRPCError({ code: 'NOT_FOUND', message: 'Vídeo global não encontrado.' });
+        video.active = input.active;
+        video.updatedAt = new Date().toISOString();
+        await writeGlobalOrderVideos(videos);
+        return { success: true };
+      }),
+
+    deleteGlobalOrderVideo: adminProcedure
+      .input(z.object({ id: z.string().min(1) }))
+      .mutation(async ({ input }) => {
+        const videos = await readGlobalOrderVideos();
+        const next = videos.filter(video => video.id !== input.id);
+        if (next.length === videos.length) {
+          throw new TRPCError({ code: 'NOT_FOUND', message: 'Vídeo global não encontrado.' });
+        }
+        await writeGlobalOrderVideos(next);
+        return { success: true };
+      }),
+
+    moveGlobalOrderVideo: adminProcedure
+      .input(z.object({ id: z.string().min(1), direction: z.enum(['up', 'down']) }))
+      .mutation(async ({ input }) => {
+        const videos = await readGlobalOrderVideos();
+        const index = videos.findIndex(video => video.id === input.id);
+        if (index < 0) throw new TRPCError({ code: 'NOT_FOUND', message: 'Vídeo global não encontrado.' });
+        const target = input.direction === 'up' ? index - 1 : index + 1;
+        if (target < 0 || target >= videos.length) return { success: true };
+        [videos[index], videos[target]] = [videos[target], videos[index]];
+        await writeGlobalOrderVideos(videos);
+        return { success: true };
       }),
 
     // Admin: excluir documento de um pedido

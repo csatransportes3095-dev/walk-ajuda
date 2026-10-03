@@ -1518,11 +1518,13 @@ export default function AdminOrders() {
   const [newAdminDocLabel, setNewAdminDocLabel] = useState<Record<string, string>>({});
   const [showAdminUploadFor, setShowAdminUploadFor] = useState<string | null>(null);
   const [uploadingAdminDocFor, setUploadingAdminDocFor] = useState<string | null>(null);
-  // URL de vídeo externo
+  // Vídeos globais exibidos em todos os pedidos no /acompanhar
   const [showVideoUrlFor, setShowVideoUrlFor] = useState<string | null>(null);
-  const [videoUrlInput, setVideoUrlInput] = useState<Record<string, string>>({});
-  const [videoUrlLabel, setVideoUrlLabel] = useState<Record<string, string>>({});
-  const [savingVideoUrlFor, setSavingVideoUrlFor] = useState<string | null>(null);
+  const [globalVideoEditId, setGlobalVideoEditId] = useState<string | null>(null);
+  const [globalVideoTitle, setGlobalVideoTitle] = useState('');
+  const [globalVideoDescription, setGlobalVideoDescription] = useState('');
+  const [globalVideoUrl, setGlobalVideoUrl] = useState('');
+  const globalVideosQuery = trpc.orderStatus.getGlobalOrderVideosAdmin.useQuery(undefined, { staleTime: 0 });
   // Reutilizar documentos do cadastro
   const [showReuseDocsFor, setShowReuseDocsFor] = useState<string | null>(null);
   const [reusingFileId, setReusingFileId] = useState<number | null>(null);
@@ -1553,14 +1555,47 @@ export default function AdminOrders() {
     onError: () => toast.error('Erro ao remover documento'),
   });
 
-  const addVideoUrlMut = trpc.orderStatus.addVideoUrl.useMutation({
-    onSuccess: () => {
-      toast.success('Vídeo adicionado ao cliente!');
-      setSavingVideoUrlFor(null);
-      setShowVideoUrlFor(null);
-      filesQuery.refetch();
+  const resetGlobalVideoForm = () => {
+    setGlobalVideoEditId(null);
+    setGlobalVideoTitle('');
+    setGlobalVideoDescription('');
+    setGlobalVideoUrl('');
+  };
+
+  const saveGlobalVideoMut = trpc.orderStatus.saveGlobalOrderVideo.useMutation({
+    onSuccess: async () => {
+      toast.success(globalVideoEditId ? 'Vídeo global atualizado!' : 'Vídeo global adicionado!');
+      resetGlobalVideoForm();
+      await globalVideosQuery.refetch();
+      void trpcUtils.orderStatus.getGlobalOrderVideos.invalidate();
     },
-    onError: () => { toast.error('Erro ao salvar URL do vídeo'); setSavingVideoUrlFor(null); },
+    onError: (error) => toast.error(error.message || 'Erro ao salvar vídeo global'),
+  });
+
+  const toggleGlobalVideoMut = trpc.orderStatus.toggleGlobalOrderVideo.useMutation({
+    onSuccess: async () => {
+      await globalVideosQuery.refetch();
+      void trpcUtils.orderStatus.getGlobalOrderVideos.invalidate();
+    },
+    onError: (error) => toast.error(error.message || 'Erro ao alterar vídeo global'),
+  });
+
+  const deleteGlobalVideoMut = trpc.orderStatus.deleteGlobalOrderVideo.useMutation({
+    onSuccess: async () => {
+      toast.success('Vídeo global removido!');
+      resetGlobalVideoForm();
+      await globalVideosQuery.refetch();
+      void trpcUtils.orderStatus.getGlobalOrderVideos.invalidate();
+    },
+    onError: (error) => toast.error(error.message || 'Erro ao excluir vídeo global'),
+  });
+
+  const moveGlobalVideoMut = trpc.orderStatus.moveGlobalOrderVideo.useMutation({
+    onSuccess: async () => {
+      await globalVideosQuery.refetch();
+      void trpcUtils.orderStatus.getGlobalOrderVideos.invalidate();
+    },
+    onError: (error) => toast.error(error.message || 'Erro ao reordenar vídeos globais'),
   });
 
   const reuseFileMut = trpc.orderStatus.reuseFile.useMutation({
@@ -7377,10 +7412,10 @@ export default function AdminOrders() {
                             <button
                               onClick={() => { setShowVideoUrlFor(showVideoUrlFor === getOrderKey(order) ? null : getOrderKey(order)); setShowAdminUploadFor(null); }}
                               className="flex items-center gap-1 text-xs text-purple-400 hover:text-purple-300 font-medium transition-colors"
-                              title="Enviar vídeo por URL"
+                              title="Gerenciar vídeos globais do /acompanhar"
                             >
                               <svg className="w-3.5 h-3.5" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M15 10l4.553-2.069A1 1 0 0121 8.868v6.264a1 1 0 01-1.447.894L15 14M5 18h8a2 2 0 002-2V8a2 2 0 00-2-2H5a2 2 0 00-2 2v8a2 2 0 002 2z" /></svg>
-                              Vídeo URL
+                              Vídeo Global
                             </button>
                             <button
                               onClick={() => { setShowAdminUploadFor(showAdminUploadFor === getOrderKey(order) ? null : getOrderKey(order)); setShowVideoUrlFor(null); }}
@@ -7435,48 +7470,132 @@ export default function AdminOrders() {
                             <p className="text-[10px] text-emerald-200/70">Copie um print, informe o nome do documento e toque em <strong className="text-cyan-300">Colar print</strong> para enviar ao cliente.</p>
                           </div>
                         )}
-                        {/* Formulário de URL de vídeo externo */}
+                        {/* Gerenciador de vídeos globais para todos os pedidos */}
                         {showVideoUrlFor === getOrderKey(order) && (
-                          <div className="bg-purple-500/5 border border-purple-500/20 rounded-lg p-3 space-y-2">
-                            <p className="text-xs font-semibold text-purple-400">🎬 Enviar Vídeo por URL</p>
+                          <div className="bg-purple-500/5 border border-purple-500/20 rounded-lg p-3 space-y-3">
+                            <div className="flex items-center justify-between gap-2">
+                              <div>
+                                <p className="text-xs font-semibold text-purple-300">🎬 Vídeos Globais do Acompanhamento</p>
+                                <p className="text-[10px] text-purple-200/60">Tudo que estiver ATIVO aparece automaticamente em todos os pedidos no h2colombiano.com/acompanhar.</p>
+                              </div>
+                              <span className="rounded-full border border-purple-400/30 bg-purple-500/10 px-2 py-0.5 text-[9px] font-bold text-purple-300">GLOBAL</span>
+                            </div>
+
                             <input
                               type="text"
-                              placeholder="Nome do vídeo (ex: Tutorial de Ativação...)"
-                              value={videoUrlLabel[getOrderKey(order)] || ''}
-                              onChange={e => setVideoUrlLabel(prev => ({ ...prev, [getOrderKey(order)]: e.target.value }))}
+                              placeholder="Título do vídeo (ex: Como entrar na sua conta)"
+                              value={globalVideoTitle}
+                              onChange={e => setGlobalVideoTitle(e.target.value)}
                               className="w-full text-xs bg-background border border-purple-500/30 rounded px-2.5 py-1.5 text-foreground placeholder:text-muted-foreground focus:outline-none focus:border-purple-400"
+                            />
+                            <textarea
+                              placeholder="Texto explicativo para o cliente (ex: Assista este vídeo antes de fazer o primeiro acesso...)"
+                              value={globalVideoDescription}
+                              onChange={e => setGlobalVideoDescription(e.target.value)}
+                              rows={3}
+                              className="w-full resize-y text-xs bg-background border border-purple-500/30 rounded px-2.5 py-2 text-foreground placeholder:text-muted-foreground focus:outline-none focus:border-purple-400"
                             />
                             <input
                               type="url"
-                              placeholder="Cole aqui a URL do vídeo (YouTube, Google Drive, Vimeo...)"
-                              value={videoUrlInput[getOrderKey(order)] || ''}
-                              onChange={e => setVideoUrlInput(prev => ({ ...prev, [getOrderKey(order)]: e.target.value }))}
+                              placeholder="URL do vídeo (https://...)"
+                              value={globalVideoUrl}
+                              onChange={e => setGlobalVideoUrl(e.target.value)}
                               className="w-full text-xs bg-background border border-purple-500/30 rounded px-2.5 py-1.5 text-foreground placeholder:text-muted-foreground focus:outline-none focus:border-purple-400"
                             />
-                            <button
-                              disabled={savingVideoUrlFor === getOrderKey(order) || !videoUrlInput[getOrderKey(order)]?.trim() || !videoUrlLabel[getOrderKey(order)]?.trim()}
-                              onClick={() => {
-                                const url = videoUrlInput[getOrderKey(order)]?.trim();
-                                const label = videoUrlLabel[getOrderKey(order)]?.trim();
-                                if (!url || !label) return;
-                                setSavingVideoUrlFor(getOrderKey(order));
-                                addVideoUrlMut.mutate({
-                                  registrationId: order.id,
-                                  customerPhone: order.phone,
-                                  label,
-                                  videoUrl: url,
-                                });
-                                setVideoUrlInput(prev => { const n = { ...prev }; delete n[getOrderKey(order)]; return n; });
-                                setVideoUrlLabel(prev => { const n = { ...prev }; delete n[getOrderKey(order)]; return n; });
-                              }}
-                              className="w-full flex items-center justify-center gap-2 py-2 rounded-lg bg-purple-600 hover:bg-purple-500 disabled:opacity-50 disabled:cursor-not-allowed text-white text-xs font-semibold transition-colors"
-                            >
-                              {savingVideoUrlFor === getOrderKey(order) ? (
-                                <><div className="animate-spin rounded-full h-3.5 w-3.5 border-t-2 border-white" /><span>Salvando...</span></>
-                              ) : (
-                                <><svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M15 10l4.553-2.069A1 1 0 0121 8.868v6.264a1 1 0 01-1.447.894L15 14M5 18h8a2 2 0 002-2V8a2 2 0 00-2-2H5a2 2 0 00-2 2v8a2 2 0 002 2z" /></svg><span>Salvar URL do Vídeo</span></>
+                            <div className="flex gap-2">
+                              <button
+                                disabled={saveGlobalVideoMut.isPending || !globalVideoTitle.trim() || !globalVideoUrl.trim()}
+                                onClick={() => saveGlobalVideoMut.mutate({
+                                  id: globalVideoEditId || undefined,
+                                  title: globalVideoTitle.trim(),
+                                  description: globalVideoDescription.trim(),
+                                  url: globalVideoUrl.trim(),
+                                  active: true,
+                                })}
+                                className="flex-1 flex items-center justify-center gap-2 py-2 rounded-lg bg-purple-600 hover:bg-purple-500 disabled:opacity-50 disabled:cursor-not-allowed text-white text-xs font-semibold transition-colors"
+                              >
+                                {saveGlobalVideoMut.isPending ? 'Salvando...' : globalVideoEditId ? '✓ Atualizar vídeo global' : '+ Adicionar vídeo global'}
+                              </button>
+                              {globalVideoEditId && (
+                                <button
+                                  type="button"
+                                  onClick={resetGlobalVideoForm}
+                                  className="px-3 py-2 rounded-lg border border-white/15 text-xs text-slate-300 hover:bg-white/5"
+                                >
+                                  Cancelar
+                                </button>
                               )}
-                            </button>
+                            </div>
+
+                            <div className="border-t border-purple-500/15 pt-2 space-y-2">
+                              <p className="text-[10px] font-bold uppercase tracking-wider text-purple-200/70">Vídeos globais salvos ({globalVideosQuery.data?.length ?? 0})</p>
+                              {globalVideosQuery.isLoading ? (
+                                <p className="text-[10px] text-muted-foreground">Carregando...</p>
+                              ) : !globalVideosQuery.data?.length ? (
+                                <p className="text-[10px] text-muted-foreground">Nenhum vídeo global cadastrado.</p>
+                              ) : (
+                                globalVideosQuery.data.map((video: any, index: number) => (
+                                  <div key={video.id} className="rounded-lg border border-purple-500/20 bg-black/20 p-2.5">
+                                    <div className="flex items-start gap-2">
+                                      <div className="min-w-0 flex-1">
+                                        <div className="flex flex-wrap items-center gap-1.5">
+                                          <p className="truncate text-xs font-semibold text-white">{video.title}</p>
+                                          <span className={`rounded px-1.5 py-0.5 text-[9px] font-bold ${video.active ? 'bg-emerald-500/15 text-emerald-300' : 'bg-slate-500/15 text-slate-400'}`}>
+                                            {video.active ? 'ATIVO' : 'DESATIVADO'}
+                                          </span>
+                                        </div>
+                                        {video.description && <p className="mt-1 text-[10px] leading-relaxed text-slate-400">{video.description}</p>}
+                                        <p className="mt-1 truncate text-[9px] text-purple-300/70">{video.url}</p>
+                                      </div>
+                                      <div className="flex shrink-0 items-center gap-1">
+                                        <button
+                                          type="button"
+                                          disabled={index === 0 || moveGlobalVideoMut.isPending}
+                                          onClick={() => moveGlobalVideoMut.mutate({ id: video.id, direction: 'up' })}
+                                          className="rounded px-1.5 py-1 text-[10px] text-slate-300 hover:bg-white/5 disabled:opacity-25"
+                                          title="Mover para cima"
+                                        >↑</button>
+                                        <button
+                                          type="button"
+                                          disabled={index === (globalVideosQuery.data?.length ?? 0) - 1 || moveGlobalVideoMut.isPending}
+                                          onClick={() => moveGlobalVideoMut.mutate({ id: video.id, direction: 'down' })}
+                                          className="rounded px-1.5 py-1 text-[10px] text-slate-300 hover:bg-white/5 disabled:opacity-25"
+                                          title="Mover para baixo"
+                                        >↓</button>
+                                        <button
+                                          type="button"
+                                          onClick={() => {
+                                            setGlobalVideoEditId(video.id);
+                                            setGlobalVideoTitle(video.title);
+                                            setGlobalVideoDescription(video.description || '');
+                                            setGlobalVideoUrl(video.url);
+                                          }}
+                                          className="rounded px-2 py-1 text-[10px] font-semibold text-cyan-300 hover:bg-cyan-500/10"
+                                        >Editar</button>
+                                        <button
+                                          type="button"
+                                          disabled={toggleGlobalVideoMut.isPending}
+                                          onClick={() => toggleGlobalVideoMut.mutate({ id: video.id, active: !video.active })}
+                                          className={`rounded px-2 py-1 text-[10px] font-semibold ${video.active ? 'text-amber-300 hover:bg-amber-500/10' : 'text-emerald-300 hover:bg-emerald-500/10'}`}
+                                        >
+                                          {video.active ? 'Desativar' : 'Ativar'}
+                                        </button>
+                                        <button
+                                          type="button"
+                                          disabled={deleteGlobalVideoMut.isPending}
+                                          onClick={() => {
+                                            if (window.confirm(`Excluir o vídeo global "${video.title}"? Ele deixará de aparecer para todos os clientes.`)) {
+                                              deleteGlobalVideoMut.mutate({ id: video.id });
+                                            }
+                                          }}
+                                          className="rounded px-2 py-1 text-[10px] font-semibold text-red-300 hover:bg-red-500/10"
+                                        >Excluir</button>
+                                      </div>
+                                    </div>
+                                  </div>
+                                ))
+                              )}
+                            </div>
                           </div>
                         )}
 

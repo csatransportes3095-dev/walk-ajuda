@@ -441,6 +441,10 @@ export default function OrderTracking() {
     { phone: searchPhone, registrationId: registrationId > 0 ? registrationId : undefined },
     { enabled: canAccess && history.length > 0, staleTime: 0, refetchInterval: 30000 }
   );
+  const globalVideosQuery = trpc.orderStatus.getGlobalOrderVideos.useQuery(
+    undefined,
+    { enabled: canAccess && history.length > 0, staleTime: 0, refetchInterval: 30000, refetchOnWindowFocus: true }
+  );
   const loginDataQuery = trpc.loginData.getForClient.useQuery(
     { registrationId, customerPhone: searchPhone, cpToken: pwdToken || undefined },
     { enabled: canAccess && (latestStatus === 'entregue' || latestStatus === 'pedido_entregue') && registrationId > 0,
@@ -1869,6 +1873,40 @@ export default function OrderTracking() {
                     </div>
                   </div>
                 ))}
+              </div>
+            )}
+
+            {/* Vídeos globais configurados pelo ADM — independentes do pedido */}
+            {globalVideosQuery.data && globalVideosQuery.data.length > 0 && (
+              <div className="rounded-2xl border border-purple-500/30 bg-gradient-to-br from-purple-950/35 to-[#12122a] p-5">
+                <div className="mb-3 flex items-center justify-between gap-2">
+                  <p className="flex items-center gap-1.5 text-xs font-semibold uppercase tracking-wider text-purple-300">
+                    <span>🎬</span>
+                    Vídeos e Orientações H2
+                  </p>
+                  <span className="rounded-full border border-purple-400/25 bg-purple-500/10 px-2 py-0.5 text-[9px] font-bold text-purple-300">GLOBAL</span>
+                </div>
+                <div className="space-y-3">
+                  {globalVideosQuery.data.map((video: any) => (
+                    <div key={video.id} className="overflow-hidden rounded-xl border border-purple-500/20 bg-black/20">
+                      <div className="p-3">
+                        <p className="text-sm font-bold text-white">{video.title}</p>
+                        {video.description && (
+                          <p className="mt-1.5 whitespace-pre-line text-xs leading-relaxed text-purple-100/70">{video.description}</p>
+                        )}
+                      </div>
+                      <a
+                        href={video.url}
+                        target="_blank"
+                        rel="noopener noreferrer"
+                        className="flex w-full items-center justify-center gap-2 border-t border-purple-500/20 bg-purple-600/20 py-3 text-sm font-bold text-purple-200 transition-colors hover:bg-purple-600/30"
+                      >
+                        <span>▶</span>
+                        Assistir Vídeo
+                      </a>
+                    </div>
+                  ))}
+                </div>
               </div>
             )}
 
