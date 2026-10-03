@@ -349,51 +349,14 @@ export async function ensureCustomerH2ScoreAccount(db: any, customerId: number, 
   await ensureLoanH2ScoreTables(db);
   const existing = rows(await db.execute(sql`SELECT * FROM customerH2ScoreAccounts WHERE customerId=${customerId} LIMIT 1`))[0];
   if (existing) return existing;
-  const config = await getLoanH2ScoreConfig(db);
-      const relatedLoanClientIds = await getRelatedLoanClientIdsForCustomer(db, customerId, loanClientId);
-      const relatedIdsSql = relatedLoanClientIds.length ? sql.raw(relatedLoanClientIds.join(',')) : sql.raw('0');
-      const linkedProfiles = relatedLoanClientIds.length ? rows(await db.execute(sql`
-        SELECT id, profileSlug, updatedAt FROM loanClients
-        WHERE id IN (${relatedIdsSql})
-        ORDER BY CASE WHEN id=${loanClientId || 0} THEN 0 ELSE 1 END, updatedAt DESC, id DESC
-      `)) : [];
-      const selected = linkedProfiles.find((row: any) => ['bronze', 'prata', 'ouro', 'diamante'].includes(String(row.profileSlug || '').toLowerCase()));
-      const selectedSlug = String(selected?.profileSlug || '').toLowerCase();
-      if (selectedSlug) {
-        const before = clampH2Score(Number(existing.totalPoints || 0));
-        const scoreLevel = getH2ScoreLevel(before, config);
-        if (scoreLevel.slug !== selectedSlug) {
-          const targetByProfile: Record<string, number> = {
-            bronze: Math.max(Number(config.initialPoints || 0), Number(config.bronzeMin || 0)),
-            prata: Number(config.prataMin || 0),
-            ouro: Number(config.ouroMin || 0),
-            diamante: Number(config.diamanteMin || 100),
-          };
-          const target = clampH2Score(targetByProfile[selectedSlug]);
-          const change = target - before;
-          const label = selectedSlug.charAt(0).toUpperCase() + selectedSlug.slice(1);
-          await db.execute(sql`
-            INSERT INTO customerH2ScoreEvents
-              (customerId, loanClientId, eventType, pointsBefore, pointsChange, pointsAfter, reason, createdBy)
-            VALUES
-              (${customerId}, ${Number(selected?.id || loanClientId || 0) || null}, 'ajuste_manual', ${before}, ${change}, ${target}, ${`Perfil ${label} definido pelo ADM`}, 'Sistema')
-          `);
-          await db.execute(sql`
-            UPDATE customerH2ScoreAccounts
-            SET totalPoints=${target}, levelSlug=${selectedSlug}, commercialProfileSlug=${selectedSlug}, isCommercialCustom=0, updatedAt=NOW()
-            WHERE customerId=${customerId}
-          `);
-          return rows(await db.execute(sql`SELECT * FROM customerH2ScoreAccounts WHERE customerId=${customerId} LIMIT 1`))[0];
-        }
-      }
-    }
-    return existing;
-  }
+
   const config = await getLoanH2ScoreConfig(db);
   const relatedLoanClientIds = await getRelatedLoanClientIdsForCustomer(db, customerId, loanClientId);
   const relatedIdsSql = relatedLoanClientIds.length ? sql.raw(relatedLoanClientIds.join(',')) : sql.raw('0');
   const legacy = rows(await db.execute(sql`
-    SELECT COALESCE(SUM(points), 0) AS totalPoints FROM loanH2ScoreLedger WHERE clientId IN (${relatedIdsSql})
+    SELECT COALESCE(SUM(points), 0) AS totalPoints
+    FROM loanH2ScoreLedger
+    WHERE clientId IN (${relatedIdsSql})
   `))[0];
   const loanClients = relatedLoanClientIds.length ? rows(await db.execute(sql`
     SELECT id, profileSlug FROM loanClients WHERE id IN (${relatedIdsSql}) ORDER BY id DESC
@@ -403,10 +366,12 @@ export async function ensureCustomerH2ScoreAccount(db: any, customerId: number, 
   const level = getH2ScoreLevel(initial, config);
   const custom = customLoanClient ? 1 : 0;
   const commercialProfile = custom ? String(customLoanClient?.profileSlug || 'personalizado') : level.slug;
+
   await db.execute(sql`
     INSERT IGNORE INTO customerH2ScoreAccounts (customerId, totalPoints, levelSlug, commercialProfileSlug, isCommercialCustom)
     VALUES (${customerId}, ${initial}, ${level.slug}, ${commercialProfile}, ${custom})
   `);
+
   const account = rows(await db.execute(sql`SELECT * FROM customerH2ScoreAccounts WHERE customerId=${customerId} LIMIT 1`))[0];
   const hasInitialEvent = rows(await db.execute(sql`
     SELECT id FROM customerH2ScoreEvents WHERE customerId=${customerId} AND eventType='inicial' LIMIT 1
