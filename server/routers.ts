@@ -92,6 +92,7 @@ type GlobalOrderVideo = {
   description: string;
   url: string;
   active: boolean;
+  statusScope: string | null;
   sortOrder: number;
   createdAt: string;
   updatedAt: string;
@@ -109,6 +110,7 @@ function sanitizeGlobalOrderVideos(raw: string | null | undefined): GlobalOrderV
         description: String(item?.description || '').trim().slice(0, 1200),
         url: String(item?.url || '').trim().slice(0, 2000),
         active: item?.active !== false,
+        statusScope: item?.statusScope ? String(item.statusScope).trim() : null,
         sortOrder: Number.isFinite(Number(item?.sortOrder)) ? Number(item.sortOrder) : index,
         createdAt: String(item?.createdAt || ''),
         updatedAt: String(item?.updatedAt || ''),
@@ -4195,10 +4197,13 @@ export const appRouter = router({
       }),
 
     // Público autenticado pela tela /acompanhar: vídeos globais ativos para todos os pedidos
-    getGlobalOrderVideos: publicProcedure.query(async () => {
-      const videos = await readGlobalOrderVideos();
-      return videos.filter(video => video.active);
-    }),
+    getGlobalOrderVideos: publicProcedure
+      .input(z.object({ status: z.string().trim().optional() }).optional())
+      .query(async ({ input }) => {
+        const currentStatus = String(input?.status || '').trim();
+        const videos = await readGlobalOrderVideos();
+        return videos.filter(video => video.active && (!video.statusScope || video.statusScope === currentStatus));
+      }),
 
     // Admin: lista completa, inclusive vídeos desativados
     getGlobalOrderVideosAdmin: adminProcedure.query(async () => {
@@ -4213,6 +4218,7 @@ export const appRouter = router({
         description: z.string().trim().max(1200).default(''),
         url: z.string().url().max(2000),
         active: z.boolean().default(true),
+        statusScope: z.string().trim().max(120).nullable().optional(),
       }))
       .mutation(async ({ input }) => {
         const videos = await readGlobalOrderVideos();
@@ -4230,6 +4236,7 @@ export const appRouter = router({
             description: input.description,
             url: input.url,
             active: input.active,
+            statusScope: input.statusScope || null,
             updatedAt: now,
           };
         } else {
@@ -4239,6 +4246,7 @@ export const appRouter = router({
             description: input.description,
             url: input.url,
             active: input.active,
+            statusScope: input.statusScope || null,
             sortOrder: videos.length,
             createdAt: now,
             updatedAt: now,

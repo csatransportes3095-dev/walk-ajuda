@@ -442,7 +442,7 @@ export default function OrderTracking() {
     { enabled: canAccess && history.length > 0, staleTime: 0, refetchInterval: 30000 }
   );
   const globalVideosQuery = trpc.orderStatus.getGlobalOrderVideos.useQuery(
-    undefined,
+    { status: latestStatus || undefined },
     { enabled: canAccess && history.length > 0, staleTime: 0, refetchInterval: 30000, refetchOnWindowFocus: true }
   );
   const loginDataQuery = trpc.loginData.getForClient.useQuery(

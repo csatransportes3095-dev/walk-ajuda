@@ -1524,6 +1524,7 @@ export default function AdminOrders() {
   const [globalVideoTitle, setGlobalVideoTitle] = useState('');
   const [globalVideoDescription, setGlobalVideoDescription] = useState('');
   const [globalVideoUrl, setGlobalVideoUrl] = useState('');
+  const [globalVideoStatusScope, setGlobalVideoStatusScope] = useState<string>('all');
   const globalVideosQuery = trpc.orderStatus.getGlobalOrderVideosAdmin.useQuery(undefined, { staleTime: 0 });
   // Reutilizar documentos do cadastro
   const [showReuseDocsFor, setShowReuseDocsFor] = useState<string | null>(null);
@@ -1560,6 +1561,7 @@ export default function AdminOrders() {
     setGlobalVideoTitle('');
     setGlobalVideoDescription('');
     setGlobalVideoUrl('');
+    setGlobalVideoStatusScope('all');
   };
 
   const saveGlobalVideoMut = trpc.orderStatus.saveGlobalOrderVideo.useMutation({
@@ -7502,6 +7504,23 @@ export default function AdminOrders() {
                               onChange={e => setGlobalVideoUrl(e.target.value)}
                               className="w-full text-xs bg-background border border-purple-500/30 rounded px-2.5 py-1.5 text-foreground placeholder:text-muted-foreground focus:outline-none focus:border-purple-400"
                             />
+                            <div className="space-y-1">
+                              <p className="text-[10px] font-bold uppercase tracking-wider text-purple-200/70">Exibir em</p>
+                              <select
+                                value={globalVideoStatusScope}
+                                onChange={e => setGlobalVideoStatusScope(e.target.value)}
+                                className="w-full rounded border border-purple-500/30 bg-background px-2.5 py-2 text-xs text-foreground focus:outline-none focus:border-purple-400"
+                              >
+                                <option value="all">Todos os status</option>
+                                {dynamicStatuses
+                                  .filter((status: any) => status.isActive === 1)
+                                  .sort((a: any, b: any) => a.sortOrder - b.sortOrder)
+                                  .map((status: any) => (
+                                    <option key={status.key} value={status.key}>{status.label}</option>
+                                  ))}
+                              </select>
+                              <p className="text-[10px] text-purple-200/50">Escolha um status específico ou deixe em Todos os status.</p>
+                            </div>
                             <div className="flex gap-2">
                               <button
                                 disabled={saveGlobalVideoMut.isPending || !globalVideoTitle.trim() || !globalVideoUrl.trim()}
@@ -7511,6 +7530,7 @@ export default function AdminOrders() {
                                   description: globalVideoDescription.trim(),
                                   url: globalVideoUrl.trim(),
                                   active: true,
+                                  statusScope: globalVideoStatusScope === 'all' ? null : globalVideoStatusScope,
                                 })}
                                 className="flex-1 flex items-center justify-center gap-2 py-2 rounded-lg bg-purple-600 hover:bg-purple-500 disabled:opacity-50 disabled:cursor-not-allowed text-white text-xs font-semibold transition-colors"
                               >
@@ -7543,6 +7563,9 @@ export default function AdminOrders() {
                                           <span className={`rounded px-1.5 py-0.5 text-[9px] font-bold ${video.active ? 'bg-emerald-500/15 text-emerald-300' : 'bg-slate-500/15 text-slate-400'}`}>
                                             {video.active ? 'ATIVO' : 'DESATIVADO'}
                                           </span>
+                                          <span className="rounded bg-purple-500/10 px-1.5 py-0.5 text-[9px] font-bold text-purple-300">
+                                            {video.statusScope ? (ACTIVE_STATUS_CONFIG[video.statusScope]?.label || video.statusScope) : 'TODOS OS STATUS'}
+                                          </span>
                                         </div>
                                         {video.description && <p className="mt-1 text-[10px] leading-relaxed text-slate-400">{video.description}</p>}
                                         <p className="mt-1 truncate text-[9px] text-purple-300/70">{video.url}</p>
@@ -7569,6 +7592,7 @@ export default function AdminOrders() {
                                             setGlobalVideoTitle(video.title);
                                             setGlobalVideoDescription(video.description || '');
                                             setGlobalVideoUrl(video.url);
+                                            setGlobalVideoStatusScope(video.statusScope || 'all');
                                           }}
                                           className="rounded px-2 py-1 text-[10px] font-semibold text-cyan-300 hover:bg-cyan-500/10"
                                         >Editar</button>
