@@ -1447,7 +1447,7 @@ export default function OrderTracking() {
                           </div>
                           <div className="min-w-0 flex-1">
                             <p className="text-fuchsia-200 text-[10px] font-black uppercase tracking-[0.18em]">Agendamento obrigatório</p>
-                            <p className="text-white text-lg font-black leading-tight mt-1">Escolha a data e o horário do seu atendimento</p>
+                            <p className="text-white text-lg font-black leading-tight mt-1">FOTO DE PERFIL</p>
                             {a.serviceName && <p className="text-fuchsia-200/70 text-xs font-semibold mt-1">{a.serviceName}</p>}
                           </div>
                         </div>
@@ -1455,25 +1455,24 @@ export default function OrderTracking() {
                         <div className="rounded-xl border border-white/10 bg-black/20 p-3">
                           <p className="text-[10px] font-black uppercase tracking-wider text-fuchsia-200/70 mb-1.5">Para que serve este agendamento?</p>
                           <p className="text-xs leading-relaxed text-white/75">
-                            Este agendamento é para realizar a FOTO DE PERFIL do seu pedido com a equipe H2.
-                            Escolha uma data e um horário em que você realmente estará disponível para fazer a foto e seguir todas as orientações até a conclusão do procedimento.
+                            Este agendamento é para realizar sua FOTO DE PERFIL com a equipe H2.
+                            Escolha um horário em que você esteja disponível.
                           </p>
                         </div>
 
                         <div className="rounded-xl border border-amber-400/20 bg-amber-500/10 p-3">
-                          <p className="text-[10px] font-black uppercase tracking-wider text-amber-300 mb-2">Antes de agendar, deixe tudo preparado</p>
+                          <p className="text-[10px] font-black uppercase tracking-wider text-amber-300 mb-2">Antes de agendar</p>
                           <div className="space-y-1.5 text-xs leading-relaxed text-white/70">
-                            <p>✓ Esteja preparado para realizar a FOTO DE PERFIL no horário escolhido.</p>
-                            <p>✓ Esteja com o celular que será usado no procedimento em mãos.</p>
-                            <p>✓ Mantenha o WhatsApp disponível para receber as orientações da equipe.</p>
-                            <p>✓ Se houver preparação do aparelho ou aplicativo, deixe tudo pronto antes do horário escolhido.</p>
-                            <p>✓ Reserve tempo suficiente para concluir o atendimento sem interrupções.</p>
+                            <p>✓ Celular do procedimento em mãos.</p>
+                            <p>✓ WhatsApp disponível.</p>
+                            <p>✓ Aparelho e aplicativo preparados.</p>
+                            <p>✓ Esteja disponível no horário escolhido.</p>
                           </div>
                         </div>
 
                         <div className="rounded-xl border border-red-400/20 bg-red-500/10 px-3 py-2.5">
                           <p className="text-xs font-semibold leading-relaxed text-red-200">
-                            ⚠️ Escolha o horário com atenção. Caso não esteja disponível no momento do atendimento, poderá ser necessário realizar um novo agendamento.
+                            ⚠️ Se não estiver disponível no horário, será necessário reagendar.
                           </p>
                         </div>
 
