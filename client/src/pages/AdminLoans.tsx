@@ -3291,6 +3291,7 @@ function ClientsTab() {
   const [filterMode, setFilterMode] = useState<"all" | "sem_limite" | "desabilitado">("all");
   const [editClient, setEditClient] = useState<any | null>(null);
   const [showCreate, setShowCreate] = useState(false);
+  const [scoreClient, setScoreClient] = useState<any | null>(null);
   const utils = trpc.useUtils();
   const { data: clientsRaw = [], isLoading } = trpc.loans.listClients.useQuery({ search });
   const clients = (clientsRaw as any[]).filter((c) => {
@@ -3376,6 +3377,15 @@ function ClientsTab() {
                   <span className="text-xs text-muted-foreground">Empréstimo</span>
                   <Switch checked={!!c.loanEnabled} onCheckedChange={(v) => toggleEnabled.mutate({ clientId: c.id, enabled: v ? 1 : 0 })} />
                 </div>
+                <Button
+                  size="icon"
+                  variant="ghost"
+                  className="h-8 w-8 text-cyan-300 hover:text-cyan-200"
+                  onClick={() => setScoreClient(c)}
+                  title="Editar H2 Score e ver histórico"
+                >
+                  <TrendingUp className="w-3.5 h-3.5" />
+                </Button>
                 <Button size="icon" variant="ghost" className="h-8 w-8" onClick={() => setEditClient(c)}>
                   <Settings className="w-3.5 h-3.5" />
                 </Button>
@@ -3401,7 +3411,174 @@ function ClientsTab() {
           }}
         />
       )}
+
+      {scoreClient && (
+        <ClientScoreHistoryModal
+          client={scoreClient}
+          onClose={() => setScoreClient(null)}
+        />
+      )}
     </div>
+  );
+}
+
+function ClientScoreHistoryModal({ client, onClose }: { client: any; onClose: () => void }) {
+  const utils = trpc.useUtils();
+  const query = trpc.loans.getH2ScoreCustomerAdminDetail.useQuery(
+    { loanClientId: Number(client.id) },
+    { enabled: !!client?.id }
+  );
+  const detail: any = query.data as any;
+  const [score, setScore] = useState("");
+  const [reason, setReason] = useState("");
+
+  useEffect(() => {
+    if (detail?.account?.totalPoints !== undefined) {
+      setScore(String(detail.account.totalPoints));
+    }
+  }, [detail?.account?.totalPoints]);
+
+  const save = trpc.loans.setH2ScoreExact.useMutation({
+    onSuccess: async (res: any) => {
+      const change = Number(res?.result?.change || 0);
+      toast.success(change === 0 ? "H2 Score já estava neste valor." : `H2 Score atualizado (${change > 0 ? "+" : ""}${change}).`);
+      setReason("");
+      await query.refetch();
+      utils.loans.getH2ScoreCustomerDirectory.invalidate();
+      utils.loans.listLoans.invalidate();
+    },
+    onError: (e) => toast.error(e.message),
+  });
+
+  const scoreValue = Number(score);
+  const stats = detail?.paymentStats || {};
+  const events = (detail?.events || []) as any[];
+  const payments = (detail?.paymentHistory || []) as any[];
+
+  return (
+    <Dialog open onOpenChange={onClose}>
+      <DialogContent className="max-w-4xl max-h-[92vh] overflow-y-auto">
+        <DialogHeader>
+          <DialogTitle className="flex flex-wrap items-center gap-2">
+            <TrendingUp className="w-5 h-5 text-cyan-300" />
+            H2 Score e histórico — {client.name}
+          </DialogTitle>
+        </DialogHeader>
+
+        {query.isLoading ? (
+          <div className="py-12 text-center text-muted-foreground"><RefreshCw className="w-5 h-5 animate-spin mx-auto" /></div>
+        ) : query.isError ? (
+          <div className="rounded-lg border border-red-500/30 bg-red-500/10 p-3 text-sm text-red-300">{query.error.message}</div>
+        ) : (
+          <div className="space-y-5">
+            <div className="grid gap-3 sm:grid-cols-3">
+              <Card className="border-cyan-500/30 bg-cyan-500/10 p-4">
+                <p className="text-xs uppercase tracking-wide text-cyan-200/70">H2 Score atual</p>
+                <p className="mt-1 text-3xl font-black text-cyan-200">{detail?.account?.totalPoints ?? 0}</p>
+                <p className="text-xs text-cyan-100/70">{detail?.level?.icon} {detail?.level?.label || detail?.account?.levelSlug}</p>
+              </Card>
+              <Card className="border-emerald-500/25 bg-emerald-500/10 p-4">
+                <p className="text-xs uppercase tracking-wide text-emerald-200/70">Pagamentos em dia</p>
+                <p className="mt-1 text-3xl font-black text-emerald-300">{stats.paidOnTime ?? 0}</p>
+                <p className="text-xs text-emerald-100/60">de {stats.paidInstallments ?? 0} parcela(s) paga(s)</p>
+              </Card>
+              <Card className="border-red-500/25 bg-red-500/10 p-4">
+                <p className="text-xs uppercase tracking-wide text-red-200/70">Histórico de atraso</p>
+                <p className="mt-1 text-3xl font-black text-red-300">{stats.paidLate ?? 0}</p>
+                <p className="text-xs text-red-100/60">{stats.openLate ?? 0} aberta(s) em atraso · maior {stats.maxDelayDays ?? 0} dia(s)</p>
+              </Card>
+            </div>
+
+            <Card className="border-violet-500/25 bg-card/70">
+              <CardHeader className="pb-2">
+                <CardTitle className="text-base">Editar H2 Score</CardTitle>
+                <p className="text-xs text-muted-foreground">A alteração é numérica e auditável. Trocar o perfil do cliente não altera mais o saldo H2 Score existente.</p>
+              </CardHeader>
+              <CardContent className="space-y-3">
+                <div className="grid gap-3 sm:grid-cols-[140px_1fr]">
+                  <div className="space-y-1">
+                    <Label>Novo Score</Label>
+                    <Input type="number" min="0" max="100" value={score} onChange={(e) => setScore(e.target.value)} />
+                  </div>
+                  <div className="space-y-1">
+                    <Label>Motivo obrigatório</Label>
+                    <Input
+                      value={reason}
+                      onChange={(e) => setReason(e.target.value)}
+                      placeholder="Ex: correção administrativa para 98 pontos"
+                    />
+                  </div>
+                </div>
+                <Button
+                  onClick={() => save.mutate({ loanClientId: Number(client.id), score: scoreValue, reason: reason.trim() })}
+                  disabled={!Number.isInteger(scoreValue) || scoreValue < 0 || scoreValue > 100 || reason.trim().length < 3 || save.isPending}
+                >
+                  {save.isPending ? "Salvando..." : "Salvar H2 Score"}
+                </Button>
+              </CardContent>
+            </Card>
+
+            <div className="grid gap-4 lg:grid-cols-2">
+              <Card className="bg-card/60 border-border">
+                <CardHeader className="pb-2">
+                  <CardTitle className="text-base">Histórico do H2 Score</CardTitle>
+                </CardHeader>
+                <CardContent className="space-y-2 max-h-80 overflow-y-auto">
+                  {events.length === 0 ? <p className="text-sm text-muted-foreground">Sem eventos registrados.</p> : events.map((event: any) => (
+                    <div key={event.id} className="rounded-lg border border-border/60 bg-background/40 p-2.5 text-xs">
+                      <div className="flex items-center justify-between gap-2">
+                        <span className={Number(event.pointsChange) >= 0 ? "font-bold text-emerald-300" : "font-bold text-red-300"}>
+                          {event.pointsBefore} → {event.pointsAfter} ({Number(event.pointsChange) >= 0 ? "+" : ""}{event.pointsChange})
+                        </span>
+                        <span className="text-muted-foreground">{fmtDateTime(event.createdAt)}</span>
+                      </div>
+                      <p className="mt-1 text-muted-foreground">{event.reason || event.eventType}</p>
+                      {event.createdBy && <p className="mt-0.5 text-[10px] text-muted-foreground/70">Responsável: {event.createdBy}</p>}
+                    </div>
+                  ))}
+                </CardContent>
+              </Card>
+
+              <Card className="bg-card/60 border-border">
+                <CardHeader className="pb-2">
+                  <CardTitle className="text-base">Histórico das parcelas</CardTitle>
+                  <p className="text-xs text-muted-foreground">
+                    {stats.paidLate ?? 0} paga(s) com atraso · média {stats.averagePaidDelayDays ?? 0} dia(s) nos atrasos pagos
+                  </p>
+                </CardHeader>
+                <CardContent className="space-y-2 max-h-80 overflow-y-auto">
+                  {payments.length === 0 ? <p className="text-sm text-muted-foreground">Sem parcelas registradas.</p> : payments.map((item: any) => {
+                    const delay = Number(item.delayDays || 0);
+                    const isPaid = item.status === "pago";
+                    const label = isPaid
+                      ? (delay > 0 ? `Pago com ${delay} dia(s) de atraso` : "Pago em dia")
+                      : (delay > 0 ? `Em atraso há ${delay} dia(s)` : String(item.status || "pendente").replaceAll("_", " "));
+                    const tone = isPaid ? (delay > 0 ? "text-amber-300" : "text-emerald-300") : (delay > 0 ? "text-red-300" : "text-muted-foreground");
+                    return (
+                      <div key={item.id} className="rounded-lg border border-border/60 bg-background/40 p-2.5 text-xs">
+                        <div className="flex items-center justify-between gap-2">
+                          <span className="font-semibold">Empréstimo #{item.loanId} · Parcela #{item.installmentNumber}</span>
+                          <span className={tone}>{label}</span>
+                        </div>
+                        <div className="mt-1 flex flex-wrap gap-x-3 gap-y-1 text-muted-foreground">
+                          <span>Vencimento: {fmtDate(item.dueDate)}</span>
+                          <span>Valor: {fmt(item.amount)}</span>
+                          {item.paidAt && <span>Pagamento: {fmtDateTime(item.paidAt)}</span>}
+                        </div>
+                      </div>
+                    );
+                  })}
+                </CardContent>
+              </Card>
+            </div>
+          </div>
+        )}
+
+        <DialogFooter>
+          <Button variant="outline" onClick={onClose}>Fechar</Button>
+        </DialogFooter>
+      </DialogContent>
+    </Dialog>
   );
 }
 

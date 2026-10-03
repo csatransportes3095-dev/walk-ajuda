@@ -348,9 +348,8 @@ async function syncCommercialProfileFromLevel(db: any, customerId: number, level
 export async function ensureCustomerH2ScoreAccount(db: any, customerId: number, loanClientId?: number | null) {
   await ensureLoanH2ScoreTables(db);
   const existing = rows(await db.execute(sql`SELECT * FROM customerH2ScoreAccounts WHERE customerId=${customerId} LIMIT 1`))[0];
-  if (existing) {
-    if (Number(existing?.isCommercialCustom || 0) !== 1) {
-      const config = await getLoanH2ScoreConfig(db);
+  if (existing) return existing;
+  const config = await getLoanH2ScoreConfig(db);
       const relatedLoanClientIds = await getRelatedLoanClientIdsForCustomer(db, customerId, loanClientId);
       const relatedIdsSql = relatedLoanClientIds.length ? sql.raw(relatedLoanClientIds.join(',')) : sql.raw('0');
       const linkedProfiles = relatedLoanClientIds.length ? rows(await db.execute(sql`
@@ -456,6 +455,68 @@ export async function getCustomerH2ScoreSummary(db: any, customerId: number, loa
   };
 }
 
+export async function getCustomerH2ScoreHistory(db: any, customerId: number, loanClientId?: number | null) {
+  const summary = await getCustomerH2ScoreSummary(db, customerId, loanClientId);
+  const relatedLoanClientIds = await getRelatedLoanClientIdsForCustomer(db, customerId, loanClientId);
+  const idsSql = relatedLoanClientIds.length ? sql.raw(relatedLoanClientIds.join(',')) : sql.raw('0');
+  const today = brazilDateTime().date;
+
+  const paymentHistory = rows(await db.execute(sql`
+    SELECT
+      li.id,
+      li.loanId,
+      li.installmentNumber,
+      li.dueDate,
+      li.amount,
+      li.status,
+      li.paidAt,
+      li.proofSentAt,
+      li.paidBy,
+      l.paymentType,
+      CASE
+        WHEN li.status='pago' AND li.paidAt IS NOT NULL
+          THEN GREATEST(0, DATEDIFF(DATE(DATE_SUB(li.paidAt, INTERVAL 3 HOUR)), li.dueDate))
+        WHEN li.status IN ('pendente','atrasado','em_analise') AND li.dueDate < ${today}
+          THEN GREATEST(0, DATEDIFF(${today}, li.dueDate))
+        ELSE 0
+      END AS delayDays,
+      CASE
+        WHEN li.status='pago' AND li.paidAt IS NOT NULL
+          AND DATE(DATE_SUB(li.paidAt, INTERVAL 3 HOUR)) <= li.dueDate THEN 1
+        ELSE 0
+      END AS paidOnTime
+    FROM loanInstallments li
+    INNER JOIN loans l ON l.id=li.loanId
+    WHERE l.clientId IN (${idsSql})
+    ORDER BY li.dueDate DESC, li.installmentNumber DESC, li.id DESC
+    LIMIT 300
+  `));
+
+  const paidRows = paymentHistory.filter((item: any) => item.status === 'pago');
+  const paidLateRows = paidRows.filter((item: any) => Number(item.delayDays || 0) > 0);
+  const paidOnTimeRows = paidRows.filter((item: any) => Number(item.paidOnTime || 0) === 1);
+  const openLateRows = paymentHistory.filter((item: any) =>
+    ['pendente','atrasado','em_analise'].includes(String(item.status || '')) &&
+    String(item.dueDate || '').slice(0, 10) < today
+  );
+  const paidDelayTotal = paidLateRows.reduce((sum: number, item: any) => sum + Number(item.delayDays || 0), 0);
+  const maxDelayDays = paymentHistory.reduce((max: number, item: any) => Math.max(max, Number(item.delayDays || 0)), 0);
+
+  return {
+    ...summary,
+    paymentStats: {
+      totalInstallments: paymentHistory.length,
+      paidInstallments: paidRows.length,
+      paidOnTime: paidOnTimeRows.length,
+      paidLate: paidLateRows.length,
+      openLate: openLateRows.length,
+      averagePaidDelayDays: paidLateRows.length ? Number((paidDelayTotal / paidLateRows.length).toFixed(1)) : 0,
+      maxDelayDays,
+    },
+    paymentHistory,
+  };
+}
+
 export async function applyH2ScoreEventFromSubmission(db: any, installmentId: number) {
   await ensureLoanH2ScoreTables(db);
   const submission = rows(await db.execute(sql`
@@ -510,6 +571,59 @@ export async function adjustCustomerH2Score(db: any, input: { customerId: number
   `);
   await syncCommercialProfileFromLevel(db, input.customerId, level.slug);
   return { before, after, change: appliedChange, previousLevel, level };
+}
+
+export async function setCustomerH2ScoreExact(db: any, input: {
+  customerId: number;
+  loanClientId?: number | null;
+  targetScore: number;
+  reason: string;
+  adminName: string;
+}) {
+  await ensureCustomerH2ScoreAccount(db, input.customerId, input.loanClientId);
+  const target = clampH2Score(input.targetScore);
+  const reason = String(input.reason || '').trim();
+  if (!reason) throw new Error('Informe o motivo da alteração do H2 Score.');
+
+  const apply = async (tx: any) => {
+    const current = rows(await tx.execute(sql`
+      SELECT * FROM customerH2ScoreAccounts
+      WHERE customerId=${input.customerId}
+      LIMIT 1
+      FOR UPDATE
+    `))[0];
+    if (!current) throw new Error('Conta H2 Score do cliente não encontrada.');
+
+    const config = await getLoanH2ScoreConfig(tx);
+    const before = clampH2Score(Number(current.totalPoints || 0));
+    const after = target;
+    const change = after - before;
+    const previousLevel = getH2ScoreLevel(before, config);
+    const level = getH2ScoreLevel(after, config);
+
+    if (before === after) {
+      return { before, after, change: 0, previousLevel, level, unchanged: true };
+    }
+
+    await tx.execute(sql`
+      INSERT INTO customerH2ScoreEvents
+        (customerId, loanClientId, eventType, pointsBefore, pointsChange, pointsAfter, reason, createdBy)
+      VALUES
+        (${input.customerId}, ${input.loanClientId || null}, 'ajuste_manual', ${before}, ${change}, ${after}, ${reason}, ${input.adminName})
+    `);
+    await tx.execute(sql`
+      UPDATE customerH2ScoreAccounts
+      SET totalPoints=${after}, levelSlug=${level.slug}, updatedAt=NOW()
+      WHERE customerId=${input.customerId}
+    `);
+
+    return { before, after, change, previousLevel, level, unchanged: false };
+  };
+
+  if (typeof db.transaction === 'function') {
+    return await db.transaction(async (tx: any) => apply(tx));
+  }
+  return await apply(db);
 }
 
 export async function setCustomerCommercialProfileMode(db: any, customerId: number, profileSlug: string, isCustom: boolean) {

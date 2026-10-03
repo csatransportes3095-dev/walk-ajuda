@@ -9,7 +9,7 @@ import { CUSTOMER_ROUTES, findMainCustomerByIdentity, getRouteAccess, reconcileL
 import { storagePut } from "../storage";
 import { spreadsheetSessions } from "../../drizzle/schema";
 import { eq, sql as drizzleSql } from "drizzle-orm";
-import { applyH2ScoreEventFromSubmission, approveH2ScoreSubmission, backfillLegacyH2ScoreEvents, getClientH2ScoreSummary, getCustomerH2ScoreSummary, getH2ScoreCustomerDirectory, getH2ScoreSubmissionMap, getLoanH2ScoreConfig, registerH2ScoreSubmission, refuseH2ScoreSubmission } from "../loans/h2Score";
+import { applyH2ScoreEventFromSubmission, approveH2ScoreSubmission, backfillLegacyH2ScoreEvents, getClientH2ScoreSummary, getCustomerH2ScoreHistory, getCustomerH2ScoreSummary, getH2ScoreCustomerDirectory, getH2ScoreSubmissionMap, getLoanH2ScoreConfig, registerH2ScoreSubmission, refuseH2ScoreSubmission, setCustomerH2ScoreExact } from "../loans/h2Score";
 import { calculateLateFeeDetailsForInstallment, calculateLateFeeForInstallment } from "../loans/lateFee";
 import { calculateParceladoFromAdminPlan } from "../loans/parcelado";
 import PDFDocument from "pdfkit";
@@ -1317,6 +1317,66 @@ export const loanRouter = router({
     await backfillLegacyH2ScoreEvents(db);
     return await getH2ScoreCustomerDirectory(db);
   }),
+
+  getH2ScoreCustomerAdminDetail: adminProcedure
+    .input(z.object({ loanClientId: z.number().int().positive() }))
+    .query(async ({ input }) => {
+      const db = await getDb() as any;
+      const linked = await qRows(db, drizzleSql`
+        SELECT lc.id AS loanClientId, lc.name, lc.phone, lc.cpf, c.id AS customerId
+        FROM loanClients lc
+        LEFT JOIN customers c ON c.deletedAt IS NULL AND (
+          REGEXP_REPLACE(c.phone, '[^0-9]', '')=REGEXP_REPLACE(lc.phone, '[^0-9]', '')
+          OR (REGEXP_REPLACE(c.cpf, '[^0-9]', '')<>'' AND REGEXP_REPLACE(c.cpf, '[^0-9]', '')=REGEXP_REPLACE(lc.cpf, '[^0-9]', ''))
+        )
+        WHERE lc.id=${input.loanClientId}
+        ORDER BY c.id ASC
+        LIMIT 1
+      `);
+      const row = linked[0];
+      if (!row) throw new TRPCError({ code: 'NOT_FOUND', message: 'Cliente de empréstimo não encontrado.' });
+      if (!row.customerId) throw new TRPCError({ code: 'BAD_REQUEST', message: 'Este cliente ainda não está vinculado ao cadastro principal.' });
+
+      await backfillLegacyH2ScoreEvents(db);
+      const detail = await getCustomerH2ScoreHistory(db, Number(row.customerId), Number(row.loanClientId));
+      return { ...detail, customer: row };
+    }),
+
+  setH2ScoreExact: adminProcedure
+    .input(z.object({
+      loanClientId: z.number().int().positive(),
+      score: z.number().int().min(0).max(100),
+      reason: z.string().trim().min(3).max(240),
+    }))
+    .mutation(async ({ input, ctx }) => {
+      const db = await getDb() as any;
+      const linked = await qRows(db, drizzleSql`
+        SELECT lc.id AS loanClientId, lc.name, lc.phone, lc.cpf, c.id AS customerId
+        FROM loanClients lc
+        LEFT JOIN customers c ON c.deletedAt IS NULL AND (
+          REGEXP_REPLACE(c.phone, '[^0-9]', '')=REGEXP_REPLACE(lc.phone, '[^0-9]', '')
+          OR (REGEXP_REPLACE(c.cpf, '[^0-9]', '')<>'' AND REGEXP_REPLACE(c.cpf, '[^0-9]', '')=REGEXP_REPLACE(lc.cpf, '[^0-9]', ''))
+        )
+        WHERE lc.id=${input.loanClientId}
+        ORDER BY c.id ASC
+        LIMIT 1
+      `);
+      const row = linked[0];
+      if (!row) throw new TRPCError({ code: 'NOT_FOUND', message: 'Cliente de empréstimo não encontrado.' });
+      if (!row.customerId) throw new TRPCError({ code: 'BAD_REQUEST', message: 'Este cliente ainda não está vinculado ao cadastro principal.' });
+
+      const result = await setCustomerH2ScoreExact(db, {
+        customerId: Number(row.customerId),
+        loanClientId: Number(row.loanClientId),
+        targetScore: input.score,
+        reason: input.reason,
+        adminName: ctx.user?.name || 'ADM Empréstimos',
+      });
+      return {
+        result,
+        detail: await getCustomerH2ScoreHistory(db, Number(row.customerId), Number(row.loanClientId)),
+      };
+    }),
 
   getLoan: adminProcedure.input(z.object({ id: z.number() })).query(async ({ input }) => {
     const db = await getDb() as any;
