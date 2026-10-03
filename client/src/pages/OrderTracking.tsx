@@ -1455,14 +1455,15 @@ export default function OrderTracking() {
                         <div className="rounded-xl border border-white/10 bg-black/20 p-3">
                           <p className="text-[10px] font-black uppercase tracking-wider text-fuchsia-200/70 mb-1.5">Para que serve este agendamento?</p>
                           <p className="text-xs leading-relaxed text-white/75">
-                            Este horário reserva seu atendimento com a equipe H2 para realizar a etapa necessária do seu pedido. 
-                            Escolha um horário em que você realmente estará disponível para seguir o procedimento até o final.
+                            Este agendamento é para realizar a FOTO DE PERFIL do seu pedido com a equipe H2.
+                            Escolha uma data e um horário em que você realmente estará disponível para fazer a foto e seguir todas as orientações até a conclusão do procedimento.
                           </p>
                         </div>
 
                         <div className="rounded-xl border border-amber-400/20 bg-amber-500/10 p-3">
                           <p className="text-[10px] font-black uppercase tracking-wider text-amber-300 mb-2">Antes de agendar, deixe tudo preparado</p>
                           <div className="space-y-1.5 text-xs leading-relaxed text-white/70">
+                            <p>✓ Esteja preparado para realizar a FOTO DE PERFIL no horário escolhido.</p>
                             <p>✓ Esteja com o celular que será usado no procedimento em mãos.</p>
                             <p>✓ Mantenha o WhatsApp disponível para receber as orientações da equipe.</p>
                             <p>✓ Se houver preparação do aparelho ou aplicativo, deixe tudo pronto antes do horário escolhido.</p>
