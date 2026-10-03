@@ -1440,19 +1440,46 @@ export default function OrderTracking() {
                       rel="noopener noreferrer"
                       className="block rounded-2xl overflow-hidden border-2 border-fuchsia-500/70 shadow-lg shadow-fuchsia-900/30 hover:border-fuchsia-400 hover:shadow-fuchsia-800/40 active:scale-[0.98] transition-all"
                     >
-                      <div className="bg-gradient-to-br from-fuchsia-900/60 to-purple-900/40 px-5 py-6 flex flex-col items-center text-center gap-3">
-                        <div className="w-16 h-16 rounded-full bg-fuchsia-500/20 border-2 border-fuchsia-400/60 flex items-center justify-center">
-                          <Calendar className="w-8 h-8 text-fuchsia-300 animate-pulse" />
+                      <div className="bg-gradient-to-br from-fuchsia-900/60 to-purple-900/40 px-5 py-5 space-y-4">
+                        <div className="flex items-start gap-3">
+                          <div className="w-12 h-12 rounded-xl bg-fuchsia-500/20 border border-fuchsia-400/50 flex items-center justify-center flex-shrink-0">
+                            <Calendar className="w-6 h-6 text-fuchsia-300 animate-pulse" />
+                          </div>
+                          <div className="min-w-0 flex-1">
+                            <p className="text-fuchsia-200 text-[10px] font-black uppercase tracking-[0.18em]">Agendamento obrigatório</p>
+                            <p className="text-white text-lg font-black leading-tight mt-1">Escolha a data e o horário do seu atendimento</p>
+                            {a.serviceName && <p className="text-fuchsia-200/70 text-xs font-semibold mt-1">{a.serviceName}</p>}
+                          </div>
                         </div>
-                        <div>
-                          <p className="text-fuchsia-200 text-xs font-bold uppercase tracking-widest mb-1">Agendamento de Atendimento</p>
-                          {a.serviceName && <p className="text-white/50 text-xs mb-2">{a.serviceName}</p>}
-                          <p className="text-white text-xl font-black">📅 Escolher Data e Horário</p>
-                          <p className="text-white/50 text-sm mt-1">Toque aqui para agendar seu atendimento</p>
+
+                        <div className="rounded-xl border border-white/10 bg-black/20 p-3">
+                          <p className="text-[10px] font-black uppercase tracking-wider text-fuchsia-200/70 mb-1.5">Para que serve este agendamento?</p>
+                          <p className="text-xs leading-relaxed text-white/75">
+                            Este horário reserva seu atendimento com a equipe H2 para realizar a etapa necessária do seu pedido. 
+                            Escolha um horário em que você realmente estará disponível para seguir o procedimento até o final.
+                          </p>
                         </div>
-                        <div className="w-full py-4 rounded-xl bg-fuchsia-600 hover:bg-fuchsia-500 text-white text-base font-black flex items-center justify-center gap-2 mt-1 transition-colors">
-                          <Calendar className="w-5 h-5" /> Agendar Agora
+
+                        <div className="rounded-xl border border-amber-400/20 bg-amber-500/10 p-3">
+                          <p className="text-[10px] font-black uppercase tracking-wider text-amber-300 mb-2">Antes de agendar, deixe tudo preparado</p>
+                          <div className="space-y-1.5 text-xs leading-relaxed text-white/70">
+                            <p>✓ Esteja com o celular que será usado no procedimento em mãos.</p>
+                            <p>✓ Mantenha o WhatsApp disponível para receber as orientações da equipe.</p>
+                            <p>✓ Se houver preparação do aparelho ou aplicativo, deixe tudo pronto antes do horário escolhido.</p>
+                            <p>✓ Reserve tempo suficiente para concluir o atendimento sem interrupções.</p>
+                          </div>
                         </div>
+
+                        <div className="rounded-xl border border-red-400/20 bg-red-500/10 px-3 py-2.5">
+                          <p className="text-xs font-semibold leading-relaxed text-red-200">
+                            ⚠️ Escolha o horário com atenção. Caso não esteja disponível no momento do atendimento, poderá ser necessário realizar um novo agendamento.
+                          </p>
+                        </div>
+
+                        <div className="w-full py-3.5 rounded-xl bg-fuchsia-600 hover:bg-fuchsia-500 text-white text-sm font-black flex items-center justify-center gap-2 transition-colors">
+                          <Calendar className="w-5 h-5" /> ESCOLHER DATA E HORÁRIO
+                        </div>
+                        <p className="text-center text-[10px] text-white/40">Toque no botão acima para visualizar os horários disponíveis.</p>
                       </div>
                     </a>
                   );
