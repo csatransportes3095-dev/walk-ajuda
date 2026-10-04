@@ -105,6 +105,20 @@ type Order = {
 const getOrderKey = (order: Order): string => `${order.id}_${order.subOrderIndex ?? 0}`;
 const getIdFromKey = (key: string): number => parseInt(key.split('_')[0], 10);
 
+function generateOrderLoginPassword(length = 10): string {
+  const chars = "ABCDEFGHJKLMNPQRSTUVWXYZabcdefghijkmnopqrstuvwxyz23456789";
+  let value = "";
+  const cryptoObj = typeof window !== "undefined" ? window.crypto : undefined;
+  if (cryptoObj?.getRandomValues) {
+    const bytes = new Uint32Array(length);
+    cryptoObj.getRandomValues(bytes);
+    for (let i = 0; i < length; i++) value += chars[bytes[i] % chars.length];
+    return value;
+  }
+  for (let i = 0; i < length; i++) value += chars[Math.floor(Math.random() * chars.length)];
+  return value;
+}
+
 
 type EditData = {
   name: string;
@@ -4203,10 +4217,17 @@ export default function AdminOrders() {
 
                                               {/* Dados de Login */}
                                               <div className="order-login-layout bg-lime-500/5 border border-lime-500/30 rounded-lg p-3 space-y-3">
-                                                <p className="text-xs font-semibold text-lime-400 flex items-center gap-1.5">
-                                                  <svg className="w-3.5 h-3.5" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M15 7a2 2 0 012 2m4 0a6 6 0 01-7.743 5.743L11 17H9v2H7v2H4a1 1 0 01-1-1v-2.586a1 1 0 01.293-.707l5.964-5.964A6 6 0 1121 9z" /></svg>
-                                                  Dados de Login para o Cliente
-                                                </p>
+                                                <div className="order-login-generator-bar order-login-full flex flex-wrap items-center justify-between gap-2 rounded-lg border border-lime-400/20 bg-black/20 p-2">
+                                                  <p className="text-xs font-semibold text-lime-400 flex items-center gap-1.5">
+                                                    <svg className="w-3.5 h-3.5" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M15 7a2 2 0 012 2m4 0a6 6 0 01-7.743 5.743L11 17H9v2H7v2H4a1 1 0 01-1-1v-2.586a1 1 0 01.293-.707l5.964-5.964A6 6 0 1121 9z" /></svg>
+                                                    Dados de Login para o Cliente
+                                                  </p>
+                                                  <div className="order-login-generator-actions flex flex-wrap items-center gap-1.5">
+                                                    <button type="button" onClick={() => window.open('/admin/telefone', '_blank', 'noopener,noreferrer')} className="inline-flex min-h-8 items-center gap-1 rounded-lg border border-cyan-400/30 bg-cyan-500/10 px-2.5 py-1.5 text-[11px] font-bold text-cyan-200 hover:bg-cyan-500/20" title="Abrir gerador de telefone">⚡ Telefone</button>
+                                                    <button type="button" onClick={() => window.open('/admin/email', '_blank', 'noopener,noreferrer')} className="inline-flex min-h-8 items-center gap-1 rounded-lg border border-blue-400/30 bg-blue-500/10 px-2.5 py-1.5 text-[11px] font-bold text-blue-200 hover:bg-blue-500/20" title="Abrir gerador de e-mail">✉️ Email</button>
+                                                    <button type="button" onClick={() => setField('loginPassword', generateOrderLoginPassword())} className="inline-flex min-h-8 items-center gap-1 rounded-lg border border-amber-400/30 bg-amber-500/10 px-2.5 py-1.5 text-[11px] font-bold text-amber-200 hover:bg-amber-500/20" title="Gerar senha segura e preencher o campo">🔐 Senha</button>
+                                                  </div>
+                                                </div>
                                                 <fieldset disabled={loginDataQuery.isPending || loginDataQuery.isError || saveLoginDataMut.isPending} className="order-login-fields-grid disabled:opacity-60">
                                                   <div><label className="text-xs text-muted-foreground mb-1 block">📱 Login 1 — Telefone <span className="text-lime-400/70">(cliente pode usar este para entrar)</span></label><div className="flex gap-1"><input type="text" value={fields.loginPhone} onChange={e => setField('loginPhone', e.target.value)} placeholder="Ex: (21) 99999-9999" className="flex-1 px-3 py-1.5 bg-background border border-border rounded-lg text-xs text-foreground placeholder:text-muted-foreground focus:outline-none focus:border-lime-500/60" />{fields.loginPhone && <button onClick={() => setField('loginPhone', '')} className="px-2 py-1.5 bg-red-500/10 border border-red-500/30 text-red-400 rounded-lg text-xs hover:bg-red-500/20 transition-colors">✕</button>}</div></div><div><label className="text-xs text-muted-foreground mb-1 block">✉️ Login 2 — Email <span className="text-lime-400/70">(cliente pode usar este para entrar)</span></label><div className="flex gap-1"><input type="text" value={fields.loginEmail} onChange={e => setField('loginEmail', e.target.value)} placeholder="Ex: usuario@email.com" className="flex-1 px-3 py-1.5 bg-background border border-border rounded-lg text-xs text-foreground placeholder:text-muted-foreground focus:outline-none focus:border-lime-500/60" />{fields.loginEmail && <button onClick={() => setField('loginEmail', '')} className="px-2 py-1.5 bg-red-500/10 border border-red-500/30 text-red-400 rounded-lg text-xs hover:bg-red-500/20 transition-colors">✕</button>}</div></div>
                                                   <div><label className="text-xs text-muted-foreground mb-1 block">Senha para entrar na sua conta</label><div className="flex gap-1"><input type="text" value={fields.loginPassword} onChange={e => setField('loginPassword', e.target.value)} placeholder="Ex: senha123" className="flex-1 px-3 py-1.5 bg-background border border-border rounded-lg text-xs text-foreground placeholder:text-muted-foreground focus:outline-none focus:border-lime-500/60" />{fields.loginPassword && <button onClick={() => setField('loginPassword', '')} className="px-2 py-1.5 bg-red-500/10 border border-red-500/30 text-red-400 rounded-lg text-xs hover:bg-red-500/20 transition-colors">✕</button>}</div></div>
@@ -4637,10 +4658,17 @@ export default function AdminOrders() {
 
                                                           {/* Dados de Login */}
                                                           <div className="order-login-layout bg-lime-500/5 border border-lime-500/30 rounded-lg p-3 space-y-3">
-                                                            <p className="text-xs font-semibold text-lime-400 flex items-center gap-1.5">
-                                                              <svg className="w-3.5 h-3.5" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M15 7a2 2 0 012 2m4 0a6 6 0 01-7.743 5.743L11 17H9v2H7v2H4a1 1 0 01-1-1v-2.586a1 1 0 01.293-.707l5.964-5.964A6 6 0 1121 9z" /></svg>
-                                                              Dados de Login para o Cliente
-                                                            </p>
+                                                            <div className="order-login-generator-bar order-login-full flex flex-wrap items-center justify-between gap-2 rounded-lg border border-lime-400/20 bg-black/20 p-2">
+                                                              <p className="text-xs font-semibold text-lime-400 flex items-center gap-1.5">
+                                                                <svg className="w-3.5 h-3.5" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M15 7a2 2 0 012 2m4 0a6 6 0 01-7.743 5.743L11 17H9v2H7v2H4a1 1 0 01-1-1v-2.586a1 1 0 01.293-.707l5.964-5.964A6 6 0 1121 9z" /></svg>
+                                                                Dados de Login para o Cliente
+                                                              </p>
+                                                              <div className="order-login-generator-actions flex flex-wrap items-center gap-1.5">
+                                                                <button type="button" onClick={() => window.open('/admin/telefone', '_blank', 'noopener,noreferrer')} className="inline-flex min-h-8 items-center gap-1 rounded-lg border border-cyan-400/30 bg-cyan-500/10 px-2.5 py-1.5 text-[11px] font-bold text-cyan-200 hover:bg-cyan-500/20" title="Abrir gerador de telefone">⚡ Telefone</button>
+                                                                <button type="button" onClick={() => window.open('/admin/email', '_blank', 'noopener,noreferrer')} className="inline-flex min-h-8 items-center gap-1 rounded-lg border border-blue-400/30 bg-blue-500/10 px-2.5 py-1.5 text-[11px] font-bold text-blue-200 hover:bg-blue-500/20" title="Abrir gerador de e-mail">✉️ Email</button>
+                                                                <button type="button" onClick={() => setField('loginPassword', generateOrderLoginPassword())} className="inline-flex min-h-8 items-center gap-1 rounded-lg border border-amber-400/30 bg-amber-500/10 px-2.5 py-1.5 text-[11px] font-bold text-amber-200 hover:bg-amber-500/20" title="Gerar senha segura e preencher o campo">🔐 Senha</button>
+                                                              </div>
+                                                            </div>
                                                             <fieldset disabled={loginDataQuery.isPending || loginDataQuery.isError || saveLoginDataMut.isPending} className="order-login-fields-grid disabled:opacity-60">
                                                               <div><label className="text-xs text-muted-foreground mb-1 block">📱 Login 1 — Telefone <span className="text-lime-400/70">(cliente pode usar este para entrar)</span></label><div className="flex gap-1"><input type="text" value={fields.loginPhone} onChange={e => setField('loginPhone', e.target.value)} placeholder="Ex: (21) 99999-9999" className="flex-1 px-3 py-1.5 bg-background border border-border rounded-lg text-xs text-foreground placeholder:text-muted-foreground focus:outline-none focus:border-lime-500/60" />{fields.loginPhone && <button onClick={() => setField('loginPhone', '')} className="px-2 py-1.5 bg-red-500/10 border border-red-500/30 text-red-400 rounded-lg text-xs hover:bg-red-500/20 transition-colors">✕</button>}</div></div><div><label className="text-xs text-muted-foreground mb-1 block">✉️ Login 2 — Email <span className="text-lime-400/70">(cliente pode usar este para entrar)</span></label><div className="flex gap-1"><input type="text" value={fields.loginEmail} onChange={e => setField('loginEmail', e.target.value)} placeholder="Ex: usuario@email.com" className="flex-1 px-3 py-1.5 bg-background border border-border rounded-lg text-xs text-foreground placeholder:text-muted-foreground focus:outline-none focus:border-lime-500/60" />{fields.loginEmail && <button onClick={() => setField('loginEmail', '')} className="px-2 py-1.5 bg-red-500/10 border border-red-500/30 text-red-400 rounded-lg text-xs hover:bg-red-500/20 transition-colors">✕</button>}</div></div>
                                                               <div><label className="text-xs text-muted-foreground mb-1 block">Senha para entrar na sua conta</label><div className="flex gap-1"><input type="text" value={fields.loginPassword} onChange={e => setField('loginPassword', e.target.value)} placeholder="Ex: senha123" className="flex-1 px-3 py-1.5 bg-background border border-border rounded-lg text-xs text-foreground placeholder:text-muted-foreground focus:outline-none focus:border-lime-500/60" />{fields.loginPassword && <button onClick={() => setField('loginPassword', '')} className="px-2 py-1.5 bg-red-500/10 border border-red-500/30 text-red-400 rounded-lg text-xs hover:bg-red-500/20 transition-colors">✕</button>}</div></div>
@@ -6555,10 +6583,17 @@ export default function AdminOrders() {
 
                             {/* Seção: Dados de Login do Serviço */}
                             <div className="order-login-layout bg-lime-500/5 border border-lime-500/30 rounded-lg p-3 space-y-3">
-                            <p className="text-xs font-semibold text-lime-400 flex items-center gap-1.5">
-                              <svg className="w-3.5 h-3.5" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M15 7a2 2 0 012 2m4 0a6 6 0 01-7.743 5.743L11 17H9v2H7v2H4a1 1 0 01-1-1v-2.586a1 1 0 01.293-.707l5.964-5.964A6 6 0 1121 9z" /></svg>
-                              Dados de Login para o Cliente
-                            </p>
+                            <div className="order-login-generator-bar order-login-full flex flex-wrap items-center justify-between gap-2 rounded-lg border border-lime-400/20 bg-black/20 p-2">
+                              <p className="text-xs font-semibold text-lime-400 flex items-center gap-1.5">
+                                <svg className="w-3.5 h-3.5" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M15 7a2 2 0 012 2m4 0a6 6 0 01-7.743 5.743L11 17H9v2H7v2H4a1 1 0 01-1-1v-2.586a1 1 0 01.293-.707l5.964-5.964A6 6 0 1121 9z" /></svg>
+                                Dados de Login para o Cliente
+                              </p>
+                              <div className="order-login-generator-actions flex flex-wrap items-center gap-1.5">
+                                <button type="button" onClick={() => window.open('/admin/telefone', '_blank', 'noopener,noreferrer')} className="inline-flex min-h-8 items-center gap-1 rounded-lg border border-cyan-400/30 bg-cyan-500/10 px-2.5 py-1.5 text-[11px] font-bold text-cyan-200 hover:bg-cyan-500/20" title="Abrir gerador de telefone">⚡ Telefone</button>
+                                <button type="button" onClick={() => window.open('/admin/email', '_blank', 'noopener,noreferrer')} className="inline-flex min-h-8 items-center gap-1 rounded-lg border border-blue-400/30 bg-blue-500/10 px-2.5 py-1.5 text-[11px] font-bold text-blue-200 hover:bg-blue-500/20" title="Abrir gerador de e-mail">✉️ Email</button>
+                                <button type="button" onClick={() => setField('loginPassword', generateOrderLoginPassword())} className="inline-flex min-h-8 items-center gap-1 rounded-lg border border-amber-400/30 bg-amber-500/10 px-2.5 py-1.5 text-[11px] font-bold text-amber-200 hover:bg-amber-500/20" title="Gerar senha segura e preencher o campo">🔐 Senha</button>
+                              </div>
+                            </div>
                             <fieldset disabled={loginDataQuery.isPending || loginDataQuery.isError || saveLoginDataMut.isPending} className="order-login-fields-grid disabled:opacity-60">
                               <div>
                                 <label className="text-xs text-muted-foreground mb-1 block">📱 Login 1 — Telefone <span className="text-lime-400/70">(cliente pode usar este para entrar)</span></label>

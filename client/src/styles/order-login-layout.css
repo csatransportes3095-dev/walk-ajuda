@@ -17,3 +17,12 @@
   .order-login-layout .flex:has(> input), .order-login-layout .flex:has(> textarea) { flex-wrap: wrap; }
   .order-login-layout .flex > input, .order-login-layout .flex > textarea { flex: 1 1 100%; width: 100%; }
 }
+
+/* Barra dos geradores: nunca ocultar/cortar dentro do editor de login. */
+.order-login-generator-bar { display:flex !important; visibility:visible !important; opacity:1 !important; overflow:visible !important; width:100%; position:relative; z-index:2; }
+.order-login-generator-actions { display:flex !important; visibility:visible !important; opacity:1 !important; max-width:100%; }
+.order-login-generator-actions > button { display:inline-flex !important; visibility:visible !important; opacity:1 !important; flex:0 0 auto; }
+@media (max-width:560px) {
+  .order-login-generator-actions { width:100%; display:grid !important; grid-template-columns:repeat(3,minmax(0,1fr)); }
+  .order-login-generator-actions > button { justify-content:center; min-width:0; }
+}
