@@ -3815,7 +3815,11 @@ export async function listAppointments(): Promise<(ScheduleAppointment & { custo
     })
     .from(scheduleAppointments)
     .leftJoin(accessCodePhones, eq(accessCodePhones.id, scheduleAppointments.registrationId))
-    .leftJoin(customers, eq(customers.phone, accessCodePhones.phone))
+    .leftJoin(customers, sql`
+      ${customers.deletedAt} IS NULL
+      AND RIGHT(REGEXP_REPLACE(${customers.phone}, '[^0-9]', ''), 11)
+        = RIGHT(REGEXP_REPLACE(COALESCE(${accessCodePhones.phone}, ${scheduleAppointments.customerPhone}), '[^0-9]', ''), 11)
+    `)
     .orderBy(desc(scheduleAppointments.id));
   const all = rows as unknown as (ScheduleAppointment & { customerNumber?: number | null; customerProfilePhotoUrl?: string | null; orderStatusKey?: string | null; orderStatusLabel?: string | null })[];
   // Deduplicar: manter apenas o registro mais recente por (registrationId, subOrderIndex)
@@ -3829,14 +3833,17 @@ export async function listAppointments(): Promise<(ScheduleAppointment & { custo
   }
   const result = Array.from(seen.values());
 
-  // A foto do agendamento e um snapshot. Agendamentos automaticos antigos podem
-  // ter sido criados sem esse snapshot; nesse caso usa a foto atual do cadastro
-  // central do cliente, sem alterar horarios, status ou regras do agendamento.
+  // A foto exibida no painel deve acompanhar a foto atual do cadastro do cliente.
+  // O snapshot do agendamento pode conter URL antiga/quebrada; quando existir foto
+  // atual no cadastro central ela tem prioridade, sem alterar o agendamento em si.
   for (const appt of result) {
     const snapshotPhoto = String(appt.customerPhotoUrl || "").trim();
     const profilePhoto = String(appt.customerProfilePhotoUrl || "").trim();
-    if ((!snapshotPhoto || snapshotPhoto.toUpperCase() === "NULL") && profilePhoto) {
+    const validProfilePhoto = profilePhoto && profilePhoto.toUpperCase() !== "NULL";
+    if (validProfilePhoto) {
       appt.customerPhotoUrl = profilePhoto;
+    } else if (!snapshotPhoto || snapshotPhoto.toUpperCase() === "NULL") {
+      appt.customerPhotoUrl = null;
     }
   }
 
