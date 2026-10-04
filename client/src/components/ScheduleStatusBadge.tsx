@@ -19,6 +19,17 @@ function formatDate(d: string): string {
   });
 }
 
+function saoPauloDateKey(date = new Date()): string {
+  const parts = new Intl.DateTimeFormat("en-CA", {
+    timeZone: "America/Sao_Paulo",
+    year: "numeric",
+    month: "2-digit",
+    day: "2-digit",
+  }).formatToParts(date);
+  const map = Object.fromEntries(parts.map(part => [part.type, part.value]));
+  return `${map.year}-${map.month}-${map.day}`;
+}
+
 // Mantém na tela o último estado operacional conhecido durante refetch/re-render.
 // O cache só é substituído por um novo pending/confirmed e só é removido quando
 // houver encerramento real (completed/cancelled ou avanço do pedido para etapa final).
@@ -143,21 +154,31 @@ export default function ScheduleStatusBadge({ registrationId, subOrderIndex, cus
     appt.adminSeenConfirmedAt === null;
 
   if (appt && appt.status === "confirmed") {
+    const isToday = Boolean(appt.slotDate) && String(appt.slotDate).slice(0, 10) === saoPauloDateKey();
+
     return (
       <div className="w-full space-y-2">
-        <div className="w-full rounded-2xl border-2 border-green-500/60 bg-green-500/12 px-5 py-4 shadow-[0_0_14px_rgba(34,197,94,0.25)]">
+        <div className={
+          isToday
+            ? "w-full rounded-2xl border-2 border-yellow-300 bg-yellow-400/20 px-5 py-4 shadow-[0_0_26px_rgba(250,204,21,0.65)] animate-pulse"
+            : "w-full rounded-2xl border-2 border-green-500/60 bg-green-500/12 px-5 py-4 shadow-[0_0_14px_rgba(34,197,94,0.25)]"
+        }>
           <div className="flex items-center gap-2 mb-1.5">
-            <CalendarCheck className="w-[18px] h-[18px] text-green-400 shrink-0" />
-            <span className="text-xs font-extrabold tracking-[0.12em] text-green-400 uppercase">Agendamento confirmado</span>
+            <CalendarCheck className={`w-[18px] h-[18px] shrink-0 ${isToday ? "text-yellow-300" : "text-green-400"}`} />
+            <span className={`text-xs font-extrabold tracking-[0.12em] uppercase ${isToday ? "text-yellow-200" : "text-green-400"}`}>
+              {isToday ? "⚠ AGENDAMENTO HOJE" : "Agendamento confirmado"}
+            </span>
           </div>
-          <p className="text-xl font-extrabold leading-tight text-green-300">
+          <p className={`text-xl font-extrabold leading-tight ${isToday ? "text-yellow-100" : "text-green-300"}`}>
             {appt.slotDate ? formatDate(appt.slotDate) : "Data não informada"}
-            {appt.slotTime && <span className="text-green-200/90"> às {appt.slotTime}</span>}
+            {appt.slotTime && <span className={isToday ? "text-yellow-100" : "text-green-200/90"}> às {appt.slotTime}</span>}
           </p>
-          <p className="text-sm text-green-300/70 leading-tight mt-1">
-            {appt.slotDate || appt.slotTime
-              ? "Data e horário confirmados pelo cliente"
-              : "Agendamento confirmado — confira os dados no painel de agendamentos"}
+          <p className={`text-sm leading-tight mt-1 ${isToday ? "text-yellow-100/80 font-semibold" : "text-green-300/70"}`}>
+            {isToday
+              ? "Atendimento marcado para hoje"
+              : (appt.slotDate || appt.slotTime
+                  ? "Data e horário confirmados pelo cliente"
+                  : "Agendamento confirmado — confira os dados no painel de agendamentos")}
           </p>
         </div>
         {showConfirmedAlert && (
