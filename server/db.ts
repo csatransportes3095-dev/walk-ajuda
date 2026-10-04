@@ -1835,6 +1835,79 @@ export async function assignOrderStatusFlow(data: {
   `);
 }
 
+function normalizeLegacyStatusFlowServiceName(value: unknown): string {
+  return String(value || '')
+    .normalize('NFD')
+    .replace(/[\u0300-\u036f]/g, '')
+    .toLowerCase()
+    .replace(/veicuilo/g, 'veiculo')
+    .replace(/documento/g, 'doc')
+    .replace(/\b(somente|so|para|pra|p|uber|99|indrive|aleatorio|aleatoria)\b/g, ' ')
+    .replace(/[^a-z0-9]+/g, ' ')
+    .replace(/\s+/g, ' ')
+    .trim();
+}
+
+function legacyServiceMatchesConfiguredProduct(serviceName: unknown, productName: unknown): boolean {
+  const service = normalizeLegacyStatusFlowServiceName(serviceName);
+  const product = normalizeLegacyStatusFlowServiceName(productName);
+  if (!service || !product) return false;
+  if (service === product) return true;
+
+  const clean = (value: string) => value
+    .split(' ')
+    .filter(token => token && !['de','da','do','das','dos','doc'].includes(token));
+
+  const serviceTokens = clean(service);
+  const productTokens = clean(product);
+  if (!serviceTokens.length || !productTokens.length) return false;
+
+  const serviceSet = new Set(serviceTokens);
+  const productSet = new Set(productTokens);
+  const shared = serviceTokens.filter(token => productSet.has(token));
+
+  // Compatibilidade segura para nomes históricos do mesmo produto, por exemplo:
+  // "EDIÇÃO DE VEÍCULO — SOMENTE P/ UBER" x "EDIÇÃO DOC VEICUILO".
+  const hasEditionVehicle =
+    serviceSet.has('edicao') && serviceSet.has('veiculo') &&
+    productSet.has('edicao') && productSet.has('veiculo');
+  if (hasEditionVehicle) return true;
+
+  const shorter = Math.min(serviceTokens.length, productTokens.length);
+  return shorter >= 2 && shared.length >= shorter && shared.length >= 2;
+}
+
+async function resolveLegacyOrderStatusFlowByServiceName(
+  db: any,
+  registrationId: number,
+  orderNumber?: number | null,
+): Promise<number | null> {
+  const serviceResult = await db.execute(sql`
+    SELECT serviceName
+    FROM orderStatusHistory
+    WHERE registrationId = ${registrationId}
+      AND (${orderNumber ?? null} IS NULL OR orderNumber = ${orderNumber ?? null})
+      AND serviceName IS NOT NULL
+      AND TRIM(serviceName) <> ''
+    ORDER BY id ASC
+    LIMIT 1
+  `);
+  const serviceRows = (serviceResult as any)[0] as Array<{ serviceName: string }>;
+  const serviceName = serviceRows?.[0]?.serviceName;
+  if (!serviceName) return null;
+
+  const configuredResult = await db.execute(sql`
+    SELECT p.id AS productId, p.name AS productName, pf.flowId
+    FROM productStatusFlows pf
+    INNER JOIN products p ON p.id = pf.productId
+    INNER JOIN orderStatusFlows f ON f.id = pf.flowId AND f.isActive = 1
+    ORDER BY p.id ASC
+  `);
+  const configuredRows = (configuredResult as any)[0] as Array<{ productId: number; productName: string; flowId: number }>;
+  const matched = (configuredRows || []).find(row => legacyServiceMatchesConfiguredProduct(serviceName, row.productName));
+  return matched?.flowId ? Number(matched.flowId) : null;
+}
+
 export async function getOrderStatusFlowForOrder(registrationId: number, orderNumber?: number | null) {
   await ensureOrderStatusFlowTables();
   const db = await getDb();
@@ -1859,7 +1932,8 @@ export async function getOrderStatusFlowForOrder(registrationId: number, orderNu
     return await getOrderStatusFlowDefinition(Number(assignmentRows[0].flowId));
   }
 
-  // Compatibilidade com pedidos antigos: tenta identificar o produto pelo nome do serviço.
+  // Compatibilidade com pedidos antigos: primeiro tenta nome exato; depois resolve
+  // nomes históricos do mesmo produto sem alterar o pedido nem a configuração do fluxo.
   const legacyResult = await db.execute(sql`
     SELECT p.id AS productId, pf.flowId
     FROM orderStatusHistory osh
@@ -1874,6 +1948,11 @@ export async function getOrderStatusFlowForOrder(registrationId: number, orderNu
   const legacyRows = (legacyResult as any)[0] as Array<{ productId: number; flowId: number }>;
   if (legacyRows?.[0]?.flowId) {
     return await getOrderStatusFlowDefinition(Number(legacyRows[0].flowId));
+  }
+
+  const legacyCompatibleFlowId = await resolveLegacyOrderStatusFlowByServiceName(db, registrationId, orderNumber ?? null);
+  if (legacyCompatibleFlowId) {
+    return await getOrderStatusFlowDefinition(legacyCompatibleFlowId);
   }
 
   return await getOrderStatusFlowDefinition(await getDefaultOrderStatusFlowId());
@@ -2008,6 +2087,27 @@ export async function getOrderStatusFlowMap() {
     const key = `${Number(row.registrationId)}_${row.orderNumber == null ? "null" : Number(row.orderNumber)}`;
     if (map[key]) continue;
     const flowId = Number(row.flowId);
+    let flow = cache.get(flowId);
+    if (!flow) {
+      flow = await getOrderStatusFlowDefinition(flowId);
+      cache.set(flowId, flow);
+    }
+    map[key] = flow;
+  }
+
+  // Segunda camada para pedidos históricos cujo nome do serviço mudou.
+  // Não grava nem altera dados: somente escolhe a sequência já vinculada ao produto correto.
+  const legacyServiceResult = await db.execute(sql`
+    SELECT DISTINCT registrationId, orderNumber
+    FROM orderStatusHistory
+    WHERE serviceName IS NOT NULL AND TRIM(serviceName) <> ''
+  `);
+  const legacyServiceRows = (legacyServiceResult as any)[0] as Array<{ registrationId: number; orderNumber: number | null }>;
+  for (const row of legacyServiceRows || []) {
+    const key = `${Number(row.registrationId)}_${row.orderNumber == null ? "null" : Number(row.orderNumber)}`;
+    if (map[key]) continue;
+    const flowId = await resolveLegacyOrderStatusFlowByServiceName(db, Number(row.registrationId), row.orderNumber == null ? null : Number(row.orderNumber));
+    if (!flowId) continue;
     let flow = cache.get(flowId);
     if (!flow) {
       flow = await getOrderStatusFlowDefinition(flowId);
