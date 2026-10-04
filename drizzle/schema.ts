@@ -336,7 +336,18 @@ export const raffles = mysqlTable("raffles", {
   winnerName: varchar("winnerName", { length: 128 }),
   winnerPhone: varchar("winnerPhone", { length: 32 }),
   winnerProfilePhotoUrl: text("winnerProfilePhotoUrl"),
+  winnerEmail: varchar("winnerEmail", { length: 320 }),
   drawnAt: timestamp("drawnAt"),
+  drawMode: mysqlEnum("drawMode", ["manual", "automatic"]).notNull().default("manual"),
+  scheduledDrawAt: timestamp("scheduledDrawAt"),
+  drawEligibility: mysqlEnum("drawEligibility", ["all", "paid"]).notNull().default("paid"),
+  autoDrawState: mysqlEnum("autoDrawState", ["idle", "scheduled", "processing", "completed", "failed"]).notNull().default("idle"),
+  autoDrawError: text("autoDrawError"),
+  winnerNotifiedAt: timestamp("winnerNotifiedAt"),
+  adminNotifiedAt: timestamp("adminNotifiedAt"),
+  prizeStatus: mysqlEnum("prizeStatus", ["awaiting_contact", "pix_requested", "pix_received", "paid"]),
+  pixRequestedAt: timestamp("pixRequestedAt"),
+  prizePaidAt: timestamp("prizePaidAt"),
   createdAt: timestamp("createdAt").defaultNow().notNull(),
 });
 

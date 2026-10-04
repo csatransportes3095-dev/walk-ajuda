@@ -3,7 +3,7 @@ import { buildWhatsappMessageUrl } from "@shared/whatsappUrl";
 import { useState, useEffect } from "react";
 import { trpc } from "@/lib/trpc";
 import { toast } from "sonner";
-import { Gift, Plus, Trash2, Play, Eye, EyeOff, Edit2, Trophy, Users, Shield, Key, Ticket, Package, Globe, Lock, ExternalLink, Save, Copy, MessageCircle } from "lucide-react";
+import { Gift, Plus, Trash2, Play, Eye, EyeOff, Edit2, Trophy, Users, Shield, Key, Ticket, Package, Globe, Lock, ExternalLink, Save, Copy, MessageCircle, CalendarClock, ImageDown, CreditCard } from "lucide-react";
 import AdminHeader from "@/components/AdminHeader";
 
 type Raffle = {
@@ -14,9 +14,17 @@ type Raffle = {
   winnerNumber: number | null;
   winnerName: string | null;
   winnerPhone: string | null;
+  winnerEmail?: string | null;
+  winnerProfilePhotoUrl?: string | null;
   drawnAt: Date | null;
   createdAt: Date;
   maxNumbersPerPerson: number | null;
+  drawMode?: "manual" | "automatic";
+  scheduledDrawAt?: Date | null;
+  drawEligibility?: "all" | "paid";
+  autoDrawState?: "idle" | "scheduled" | "processing" | "completed" | "failed";
+  autoDrawError?: string | null;
+  prizeStatus?: "awaiting_contact" | "pix_requested" | "pix_received" | "paid" | null;
 };
 
 type RaffleEntry = {
@@ -41,6 +49,10 @@ export default function AdminRaffles() {
     onSuccess: () => { utils.raffles.getById.invalidate(); toast.success('Status atualizado!'); },
     onError: () => toast.error('Erro ao atualizar status'),
   });
+  const prizeStatusMutation = trpc.raffles.updatePrizeStatus.useMutation({
+    onSuccess: () => { utils.raffles.list.invalidate(); utils.raffles.getById.invalidate(); },
+    onError: () => toast.error("Erro ao atualizar pagamento do prêmio"),
+  });
   const removeEntryMutation = trpc.raffles.removeEntry.useMutation({
     onSuccess: () => {
       utils.raffles.getById.invalidate();
@@ -54,10 +66,16 @@ export default function AdminRaffles() {
   const [newTitle, setNewTitle] = useState("");
   const [newDescription, setNewDescription] = useState("");
   const [newMaxNumbers, setNewMaxNumbers] = useState(1);
+  const [newDrawMode, setNewDrawMode] = useState<"manual" | "automatic">("manual");
+  const [newScheduledAt, setNewScheduledAt] = useState("");
+  const [newDrawEligibility, setNewDrawEligibility] = useState<"all" | "paid">("paid");
   const [editingId, setEditingId] = useState<number | null>(null);
   const [editTitle, setEditTitle] = useState("");
   const [editDescription, setEditDescription] = useState("");
   const [editMaxNumbers, setEditMaxNumbers] = useState(1);
+  const [editDrawMode, setEditDrawMode] = useState<"manual" | "automatic">("manual");
+  const [editScheduledAt, setEditScheduledAt] = useState("");
+  const [editDrawEligibility, setEditDrawEligibility] = useState<"all" | "paid">("paid");
   const [viewingId, setViewingId] = useState<number | null>(null);
   const [confirmRemoveEntry, setConfirmRemoveEntry] = useState<{ entryId: number; raffleId: number; number: number; name: string } | null>(null);
   const [whatsappListMode, setWhatsappListMode] = useState<"all" | "paid" | "pending">("all");
@@ -93,15 +111,35 @@ export default function AdminRaffles() {
   }
   const handleCreate = async () => {
     if (!newTitle.trim()) { toast.error("Informe o título do sorteio"); return; }
-    await createMutation.mutateAsync({ title: newTitle.trim(), description: newDescription.trim() || undefined, maxNumbersPerPerson: newMaxNumbers });
+    if (newDrawMode === "automatic" && !newScheduledAt) { toast.error("Informe data e hora do sorteio automático."); return; }
+    await createMutation.mutateAsync({
+      title: newTitle.trim(),
+      description: newDescription.trim() || undefined,
+      maxNumbersPerPerson: newMaxNumbers,
+      drawMode: newDrawMode,
+      scheduledDrawAt: newDrawMode === "automatic" ? saoPauloInputToDate(newScheduledAt) : null,
+      drawEligibility: newDrawEligibility,
+    });
     setNewTitle("");
     setNewDescription("");
     setNewMaxNumbers(1);
+    setNewDrawMode("manual");
+    setNewScheduledAt("");
+    setNewDrawEligibility("paid");
     toast.success("Sorteio criado!");
   };
 
   const handleUpdate = async (id: number) => {
-    await updateMutation.mutateAsync({ id, title: editTitle.trim() || undefined, description: editDescription.trim() || undefined, maxNumbersPerPerson: editMaxNumbers });
+    if (editDrawMode === "automatic" && !editScheduledAt) { toast.error("Informe data e hora do sorteio automático."); return; }
+    await updateMutation.mutateAsync({
+      id,
+      title: editTitle.trim() || undefined,
+      description: editDescription.trim() || undefined,
+      maxNumbersPerPerson: editMaxNumbers,
+      drawMode: editDrawMode,
+      scheduledDrawAt: editDrawMode === "automatic" ? saoPauloInputToDate(editScheduledAt) : null,
+      drawEligibility: editDrawEligibility,
+    });
     setEditingId(null);
     toast.success("Sorteio atualizado!");
   };
@@ -126,6 +164,100 @@ export default function AdminRaffles() {
     if (!confirm("Excluir este sorteio e todos os números escolhidos?")) return;
     await deleteMutation.mutateAsync({ id });
     toast.success("Sorteio excluído!");
+  };
+
+  const toSaoPauloInput = (value?: Date | string | null) => {
+    if (!value) return "";
+    const d = new Date(value);
+    if (Number.isNaN(d.getTime())) return "";
+    const parts = new Intl.DateTimeFormat("en-CA", {
+      timeZone: "America/Sao_Paulo", year: "numeric", month: "2-digit", day: "2-digit", hour: "2-digit", minute: "2-digit", hour12: false,
+    }).formatToParts(d);
+    const map = Object.fromEntries(parts.map(p => [p.type, p.value]));
+    return `${map.year}-${map.month}-${map.day}T${map.hour}:${map.minute}`;
+  };
+
+  const saoPauloInputToDate = (value: string) => value ? new Date(`${value}:00-03:00`) : null;
+
+  const formatDrawDate = (value?: Date | string | null) => value
+    ? new Date(value).toLocaleString("pt-BR", { timeZone: "America/Sao_Paulo", day: "2-digit", month: "2-digit", year: "numeric", hour: "2-digit", minute: "2-digit" })
+    : "Não programado";
+
+  const buildWinnerWhatsapp = (raffle: Raffle, askPix = false) => {
+    const base = [
+      "🏆 *H2 COLOMBIANO — GANHADOR DO SORTEIO*",
+      `Olá, ${raffle.winnerName || "ganhador"}!`,
+      `Número sorteado: *#${raffle.winnerNumber}*`,
+      `Sorteio: *${raffle.title}*`,
+      `Data/Hora: *${formatDrawDate(raffle.drawnAt)}*`,
+      "",
+      "Parabéns! 🎉",
+    ];
+    if (askPix) base.push("", "Para realizarmos o pagamento do prêmio, envie sua *chave PIX* e o *nome do titular* por aqui.");
+    else base.push("", "A equipe H2 entrará em contato para concluir a entrega do prêmio.");
+    return base.join("\n");
+  };
+
+  const openWinnerWhatsapp = (raffle: Raffle, askPix = false) => {
+    if (!raffle.winnerPhone) return toast.error("Telefone do ganhador não disponível.");
+    const url = buildWhatsappMessageUrl(raffle.winnerPhone, prepareWhatsappMessage(buildWinnerWhatsapp(raffle, askPix)));
+    window.open(url, "_blank", "noopener,noreferrer");
+    if (askPix) prizeStatusMutation.mutate({ id: raffle.id, status: "pix_requested" });
+  };
+
+  const downloadWinnerCard = async (raffle: Raffle) => {
+    if (!raffle.winnerName || !raffle.winnerNumber || !raffle.drawnAt) return toast.error("Resultado ainda não disponível.");
+    const canvas = document.createElement("canvas");
+    canvas.width = 1080; canvas.height = 1920;
+    const ctx = canvas.getContext("2d");
+    if (!ctx) return;
+
+    const gradient = ctx.createLinearGradient(0, 0, 1080, 1920);
+    gradient.addColorStop(0, "#090914"); gradient.addColorStop(0.55, "#24104a"); gradient.addColorStop(1, "#7c4a03");
+    ctx.fillStyle = gradient; ctx.fillRect(0, 0, 1080, 1920);
+    ctx.textAlign = "center";
+    ctx.fillStyle = "#facc15"; ctx.font = "900 58px Arial"; ctx.fillText("H2 COLOMBIANO", 540, 150);
+    ctx.fillStyle = "#ffffff"; ctx.font = "900 82px Arial"; ctx.fillText("GANHADOR DO SORTEIO", 540, 260);
+
+    const drawPhotoFallback = () => {
+      ctx.fillStyle = "#312e81"; ctx.beginPath(); ctx.arc(540, 650, 220, 0, Math.PI * 2); ctx.fill();
+      ctx.fillStyle = "#ffffff"; ctx.font = "900 130px Arial";
+      ctx.fillText((raffle.winnerName || "H2").split(/\s+/).slice(0,2).map(x => x[0]).join("").toUpperCase(), 540, 700);
+    };
+
+    if (raffle.winnerProfilePhotoUrl) {
+      try {
+        const img = new Image();
+        img.crossOrigin = "anonymous";
+        await new Promise<void>((resolve, reject) => { img.onload = () => resolve(); img.onerror = () => reject(); img.src = raffle.winnerProfilePhotoUrl!; });
+        ctx.save(); ctx.beginPath(); ctx.arc(540, 650, 220, 0, Math.PI * 2); ctx.clip();
+        const scale = Math.max(440 / img.width, 440 / img.height);
+        const w = img.width * scale, h = img.height * scale;
+        ctx.drawImage(img, 540 - w/2, 650 - h/2, w, h); ctx.restore();
+        ctx.strokeStyle = "#facc15"; ctx.lineWidth = 14; ctx.beginPath(); ctx.arc(540,650,225,0,Math.PI*2); ctx.stroke();
+      } catch { drawPhotoFallback(); }
+    } else drawPhotoFallback();
+
+    ctx.fillStyle = "#ffffff"; ctx.font = "900 60px Arial";
+    const winnerName = (raffle.winnerName || "").toUpperCase();
+    const maxWidth = 930;
+    let fontSize = 60;
+    while (ctx.measureText(winnerName).width > maxWidth && fontSize > 36) { fontSize -= 2; ctx.font = `900 ${fontSize}px Arial`; }
+    ctx.fillText(winnerName, 540, 1010);
+    ctx.fillStyle = "#facc15"; ctx.font = "900 170px Arial"; ctx.fillText(`#${raffle.winnerNumber}`, 540, 1240);
+    ctx.fillStyle = "#e5e7eb"; ctx.font = "700 44px Arial"; ctx.fillText(raffle.title.toUpperCase(), 540, 1360);
+    ctx.fillStyle = "#ffffff"; ctx.font = "700 50px Arial"; ctx.fillText(formatDrawDate(raffle.drawnAt), 540, 1480);
+    ctx.fillStyle = "#facc15"; ctx.font = "900 54px Arial"; ctx.fillText("PARABÉNS! 🎉", 540, 1630);
+    ctx.fillStyle = "#a1a1aa"; ctx.font = "600 34px Arial"; ctx.fillText("h2colombiano.com", 540, 1775);
+
+    canvas.toBlob((blob) => {
+      if (!blob) return;
+      const a = document.createElement("a");
+      a.href = URL.createObjectURL(blob);
+      a.download = `ganhador-sorteio-${raffle.id}-${raffle.winnerNumber}.png`;
+      a.click();
+      setTimeout(() => URL.revokeObjectURL(a.href), 1000);
+    }, "image/png");
   };
 
   const formatPhone = (phone: string) => {
@@ -395,6 +527,17 @@ export default function AdminRaffles() {
                 <span className="text-white/50 text-sm">número(s) por cadastro</span>
               </div>
             </div>
+            <div className="rounded-xl border border-purple-500/30 bg-purple-500/10 p-4 space-y-3">
+              <div className="flex items-center gap-2 text-purple-200 font-bold"><CalendarClock className="w-4 h-4" /> Modo do sorteio</div>
+              <div className="grid grid-cols-2 gap-2">
+                <button type="button" onClick={() => setNewDrawMode("manual")} className={`rounded-lg border px-3 py-2 text-sm font-bold ${newDrawMode === "manual" ? "border-yellow-400 bg-yellow-500/20 text-yellow-200" : "border-white/10 bg-white/5 text-white/60"}`}>Manual</button>
+                <button type="button" onClick={() => setNewDrawMode("automatic")} className={`rounded-lg border px-3 py-2 text-sm font-bold ${newDrawMode === "automatic" ? "border-fuchsia-400 bg-fuchsia-500/20 text-fuchsia-200" : "border-white/10 bg-white/5 text-white/60"}`}>Automático</button>
+              </div>
+              {newDrawMode === "automatic" && <>
+                <div><label className="text-white/70 text-xs mb-1 block">Data e hora — São Paulo</label><input type="datetime-local" value={newScheduledAt} onChange={e => setNewScheduledAt(e.target.value)} className="w-full px-3 py-2 rounded-lg bg-black/30 border border-fuchsia-400/30 text-white" /></div>
+                <div><label className="text-white/70 text-xs mb-1 block">Quem participa do automático</label><select value={newDrawEligibility} onChange={e => setNewDrawEligibility(e.target.value as "all"|"paid")} className="w-full px-3 py-2 rounded-lg bg-black/30 border border-fuchsia-400/30 text-white"><option value="paid">Somente números PAGOS</option><option value="all">Todos os números ocupados</option></select></div>
+              </>}
+            </div>
             <button onClick={handleCreate} disabled={createMutation.isPending}
               className="px-6 py-2 rounded-lg font-bold text-black bg-gradient-to-r from-yellow-400 to-yellow-600 hover:from-yellow-500 hover:to-yellow-700 transition-all disabled:opacity-50">
               {createMutation.isPending ? "Criando..." : "Criar Sorteio"}
@@ -437,6 +580,17 @@ export default function AdminRaffles() {
                       <span className="text-white/50 text-sm">número(s) por cadastro</span>
                     </div>
                   </div>
+                  <div className="rounded-xl border border-purple-500/30 bg-purple-500/10 p-4 space-y-3">
+                    <div className="flex items-center gap-2 text-purple-200 font-bold"><CalendarClock className="w-4 h-4" /> Execução do sorteio</div>
+                    <div className="grid grid-cols-2 gap-2">
+                      <button type="button" onClick={() => setEditDrawMode("manual")} className={`rounded-lg border px-3 py-2 text-sm font-bold ${editDrawMode === "manual" ? "border-yellow-400 bg-yellow-500/20 text-yellow-200" : "border-white/10 bg-white/5 text-white/60"}`}>Manual</button>
+                      <button type="button" onClick={() => setEditDrawMode("automatic")} className={`rounded-lg border px-3 py-2 text-sm font-bold ${editDrawMode === "automatic" ? "border-fuchsia-400 bg-fuchsia-500/20 text-fuchsia-200" : "border-white/10 bg-white/5 text-white/60"}`}>Automático</button>
+                    </div>
+                    {editDrawMode === "automatic" && <>
+                      <div><label className="text-white/70 text-xs mb-1 block">Data e hora — São Paulo</label><input type="datetime-local" value={editScheduledAt} onChange={e => setEditScheduledAt(e.target.value)} className="w-full px-3 py-2 rounded-lg bg-black/30 border border-fuchsia-400/30 text-white" /></div>
+                      <div><label className="text-white/70 text-xs mb-1 block">Participantes elegíveis</label><select value={editDrawEligibility} onChange={e => setEditDrawEligibility(e.target.value as "all"|"paid")} className="w-full px-3 py-2 rounded-lg bg-black/30 border border-fuchsia-400/30 text-white"><option value="paid">Somente números PAGOS</option><option value="all">Todos os números ocupados</option></select></div>
+                    </>}
+                  </div>
                   <div className="flex gap-2">
                     <button onClick={() => handleUpdate(raffle.id)} className="px-4 py-1.5 rounded-lg bg-yellow-500 text-black font-bold text-sm">Salvar</button>
                     <button onClick={() => setEditingId(null)} className="px-4 py-1.5 rounded-lg bg-white/10 text-white text-sm">Cancelar</button>
@@ -460,13 +614,37 @@ export default function AdminRaffles() {
                   </div>
 
                   {raffle.description && <p className="text-white/60 text-sm mb-3 whitespace-pre-line">{raffle.description}</p>}
+                  {raffle.status !== "drawn" && (
+                    <div className={`mb-3 rounded-lg border p-3 text-sm ${raffle.drawMode === "automatic" ? "border-fuchsia-500/30 bg-fuchsia-500/10" : "border-white/10 bg-white/5"}`}>
+                      <div className="flex flex-wrap items-center gap-2">
+                        <span className="font-bold text-white">{raffle.drawMode === "automatic" ? "⏰ SORTEIO AUTOMÁTICO" : "▶ SORTEIO MANUAL"}</span>
+                        {raffle.drawMode === "automatic" && <span className="text-fuchsia-200">{formatDrawDate(raffle.scheduledDrawAt)}</span>}
+                        {raffle.drawMode === "automatic" && <span className="text-xs text-white/50">• {raffle.drawEligibility === "all" ? "todos os números" : "somente pagos"}</span>}
+                        {raffle.autoDrawState === "failed" && <span className="text-red-300 text-xs">⚠ {raffle.autoDrawError || "Falha no automático"}</span>}
+                      </div>
+                    </div>
+                  )}
 
                   {/* Resultado do sorteio */}
                   {raffle.status === "drawn" && raffle.winnerName && (
-                    <div className="bg-yellow-500/10 border border-yellow-500/30 rounded-lg p-3 mb-3">
-                      <p className="text-yellow-400 font-bold flex items-center gap-1"><Trophy className="w-4 h-4" /> Ganhador</p>
-                      <p className="text-white">{raffle.winnerName} - Número <span className="text-yellow-400 font-bold">{raffle.winnerNumber}</span></p>
-                      <p className="text-white/50 text-sm">{raffle.winnerPhone && formatPhone(raffle.winnerPhone)}</p>
+                    <div className="bg-yellow-500/10 border border-yellow-500/30 rounded-xl p-4 mb-3">
+                      <div className="flex flex-col md:flex-row gap-4">
+                        {raffle.winnerProfilePhotoUrl ? <img src={raffle.winnerProfilePhotoUrl} alt="Foto do ganhador" className="w-24 h-24 rounded-full object-cover border-4 border-yellow-400 self-center md:self-start" /> : <div className="w-24 h-24 rounded-full bg-yellow-500/20 border-4 border-yellow-400 flex items-center justify-center text-3xl self-center md:self-start">🏆</div>}
+                        <div className="flex-1">
+                          <p className="text-yellow-400 font-black flex items-center gap-1 text-lg"><Trophy className="w-5 h-5" /> GANHADOR CONFIRMADO</p>
+                          <p className="text-white font-bold text-xl">{raffle.winnerName}</p>
+                          <p className="text-yellow-300 text-3xl font-black">#{raffle.winnerNumber}</p>
+                          <p className="text-white/60 text-sm">{raffle.winnerPhone && formatPhone(raffle.winnerPhone)}</p>
+                          <p className="text-white/60 text-sm">{formatDrawDate(raffle.drawnAt)}</p>
+                          <p className="text-xs text-white/40 mt-1">Status do prêmio: {raffle.prizeStatus === "pix_requested" ? "PIX solicitado" : raffle.prizeStatus === "pix_received" ? "PIX recebido" : raffle.prizeStatus === "paid" ? "Prêmio pago" : "Aguardando contato"}</p>
+                        </div>
+                      </div>
+                      <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-2 mt-4">
+                        <button type="button" onClick={() => openWinnerWhatsapp(raffle, false)} className="rounded-lg bg-green-600/20 border border-green-500/30 text-green-200 px-3 py-2 text-xs font-bold flex items-center justify-center gap-1"><MessageCircle className="w-4 h-4" /> WhatsApp</button>
+                        <button type="button" onClick={() => openWinnerWhatsapp(raffle, true)} className="rounded-lg bg-emerald-600/20 border border-emerald-500/30 text-emerald-200 px-3 py-2 text-xs font-bold flex items-center justify-center gap-1"><CreditCard className="w-4 h-4" /> Pedir PIX</button>
+                        <button type="button" onClick={() => void downloadWinnerCard(raffle)} className="rounded-lg bg-purple-600/20 border border-purple-500/30 text-purple-200 px-3 py-2 text-xs font-bold flex items-center justify-center gap-1"><ImageDown className="w-4 h-4" /> Arte do ganhador</button>
+                        <button type="button" onClick={() => prizeStatusMutation.mutate({ id: raffle.id, status: raffle.prizeStatus === "paid" ? "awaiting_contact" : "paid" })} className="rounded-lg bg-yellow-600/20 border border-yellow-500/30 text-yellow-200 px-3 py-2 text-xs font-bold">{raffle.prizeStatus === "paid" ? "Reabrir prêmio" : "✓ Marcar pago"}</button>
+                      </div>
                     </div>
                   )}
 
@@ -496,7 +674,7 @@ export default function AdminRaffles() {
                     </button>
 
                     {raffle.status !== "drawn" && (
-                      <button onClick={() => { setEditingId(raffle.id); setEditTitle(raffle.title); setEditDescription(raffle.description || ""); setEditMaxNumbers(raffle.maxNumbersPerPerson ?? 1); }}
+                      <button onClick={() => { setEditingId(raffle.id); setEditTitle(raffle.title); setEditDescription(raffle.description || ""); setEditMaxNumbers(raffle.maxNumbersPerPerson ?? 1); setEditDrawMode(raffle.drawMode || "manual"); setEditScheduledAt(toSaoPauloInput(raffle.scheduledDrawAt)); setEditDrawEligibility(raffle.drawEligibility || "paid"); }}
                         className="flex items-center gap-1 px-3 py-1.5 rounded-lg text-sm font-medium bg-white/10 text-white/70 hover:bg-white/20 border border-white/20 transition-all">
                         <Edit2 className="w-4 h-4" /> Editar
                       </button>

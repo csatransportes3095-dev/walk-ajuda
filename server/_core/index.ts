@@ -25,6 +25,7 @@ import { publicSiteUrl } from "../../shared/publicLinks";
 import { bootstrapCardInvoices } from "../cardsBilling";
 import { getBackupDownload, getBackupDownloadName } from "../routers/backup";
 import { logProcessDiagnostic, reconcileBackupsAfterRestart } from "../backupService";
+import { ensureRaffleAutomationInfrastructure, startRaffleAutoDrawWorker } from "../raffleAutomation";
 import path from "path";
 import fs from "fs";
 
@@ -166,6 +167,12 @@ async function startServer() {
   }).catch((error) => {
     console.error('[Backup] reconciliação de execuções abandonadas não concluída:', error);
   });
+  try {
+    await ensureRaffleAutomationInfrastructure();
+    startRaffleAutoDrawWorker();
+  } catch (error) {
+    console.error("[RaffleAuto] infraestrutura/worker não iniciado:", error);
+  }
   registerUploadRoute(app);
   registerApkDownloadRoute(app);
   registerH2FaceRoutes(app);

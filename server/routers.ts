@@ -198,6 +198,7 @@ import {
 import { storagePut } from "./storage";
 import { r2DeleteObjects, r2GetObjectBuffer } from "./r2Storage";
 import { getAdminJwtSecret } from "./adminJwt";
+import { configureRaffleAutomation, performRaffleDraw, updateRafflePrizeStatus } from "./raffleAutomation";
 import { requireCustomerSession } from "./customerSession";
 import { resolveReferralDeclaration, restrictedReferralAccessError } from "./referral";
 import {
@@ -3252,18 +3253,47 @@ export const appRouter = router({
 
     // Admin: criar sorteio
     create: adminProcedure
-      .input(z.object({ title: z.string().min(1), description: z.string().optional(), maxNumbersPerPerson: z.number().min(1).max(10).optional() }))
+      .input(z.object({
+        title: z.string().min(1),
+        description: z.string().optional(),
+        maxNumbersPerPerson: z.number().min(1).max(10).optional(),
+        drawMode: z.enum(["manual", "automatic"]).default("manual"),
+        scheduledDrawAt: z.coerce.date().nullable().optional(),
+        drawEligibility: z.enum(["all", "paid"]).default("paid"),
+      }))
       .mutation(async ({ input }) => {
-        const raffle = await createRaffle({ ...input, maxNumbersPerPerson: input.maxNumbersPerPerson ?? 1 });
-        return raffle;
+        const raffle = await createRaffle({
+          title: input.title,
+          description: input.description,
+          maxNumbersPerPerson: input.maxNumbersPerPerson ?? 1,
+        });
+        if (!raffle) throw new TRPCError({ code: "INTERNAL_SERVER_ERROR", message: "Não foi possível criar o sorteio." });
+        await configureRaffleAutomation(raffle.id, {
+          drawMode: input.drawMode,
+          scheduledDrawAt: input.scheduledDrawAt ?? null,
+          drawEligibility: input.drawEligibility,
+        });
+        return await getRaffleById(raffle.id);
       }),
 
     // Admin: atualizar sorteio (título, descrição, status)
     update: adminProcedure
-      .input(z.object({ id: z.number(), title: z.string().optional(), description: z.string().optional(), status: z.enum(["open", "closed", "drawn"]).optional(), maxNumbersPerPerson: z.number().min(1).max(10).optional() }))
+      .input(z.object({
+        id: z.number(),
+        title: z.string().optional(),
+        description: z.string().optional(),
+        status: z.enum(["open", "closed", "drawn"]).optional(),
+        maxNumbersPerPerson: z.number().min(1).max(10).optional(),
+        drawMode: z.enum(["manual", "automatic"]).optional(),
+        scheduledDrawAt: z.coerce.date().nullable().optional(),
+        drawEligibility: z.enum(["all", "paid"]).optional(),
+      }))
       .mutation(async ({ input }) => {
-        const { id, ...data } = input;
+        const { id, drawMode, scheduledDrawAt, drawEligibility, ...data } = input;
         await updateRaffle(id, data);
+        if (drawMode !== undefined || scheduledDrawAt !== undefined || drawEligibility !== undefined) {
+          await configureRaffleAutomation(id, { drawMode, scheduledDrawAt, drawEligibility });
+        }
         return { success: true };
       }),
 
@@ -3295,20 +3325,17 @@ export const appRouter = router({
     draw: adminProcedure
       .input(z.object({ id: z.number() }))
       .mutation(async ({ input }) => {
-        const entries = await getRaffleEntries(input.id);
-        if (entries.length === 0) return { success: false, error: "Nenhum participante" };
-        const winner = entries[Math.floor(Math.random() * entries.length)];
-        // Buscar foto de perfil do ganhador
-        const winnerCustomer = await getCustomerByPhone(winner.customerPhone);
-        await updateRaffle(input.id, {
-          status: "drawn",
-          winnerNumber: winner.number,
-          winnerName: winner.customerName,
-          winnerPhone: winner.customerPhone,
-          winnerProfilePhotoUrl: winnerCustomer?.profilePhotoUrl || null,
-          drawnAt: new Date(),
-        });
-        return { success: true, winner: { number: winner.number, name: winner.customerName, phone: winner.customerPhone } };
+        return await performRaffleDraw(input.id, "manual");
+      }),
+
+    updatePrizeStatus: adminProcedure
+      .input(z.object({
+        id: z.number(),
+        status: z.enum(["awaiting_contact", "pix_requested", "pix_received", "paid"]),
+      }))
+      .mutation(async ({ input }) => {
+        await updateRafflePrizeStatus(input.id, input.status);
+        return { success: true };
       }),
 
     // Público: obter sorteio ativo (para cliente escolher número)
