@@ -52,11 +52,11 @@ replaceExactlyOnce(
   'faixa do grupo dentro do card usa cor solida do grupo',
 );
 
-const expectedMainCardGroupBorder = "const c = GROUP_COLOR_MAP[orderGroup.color] || GROUP_COLOR_MAP.red;\n                  return c.border + ' ring-1 ring-offset-0';";
-assertExactlyOnce(
-  expectedMainCardGroupBorder,
-  'borda do card principal continua vindo do grupo',
-);
+const mainCardGroupBorderRegex = /const\s+c\s*=\s*GROUP_COLOR_MAP\[orderGroup\.color\]\s*\|\|\s*GROUP_COLOR_MAP\.red;\s*return\s+c\.border\s*\+\s*['"] ring-1 ring-offset-0['"];/g;
+const mainCardGroupBorderMatches = source.match(mainCardGroupBorderRegex) || [];
+if (mainCardGroupBorderMatches.length !== 1) {
+  throw new Error(`[order-group-border-only] borda do card principal continua vindo do grupo: esperado 1 bloco semantico, encontrado ${mainCardGroupBorderMatches.length}`);
+}
 
 const expectedGroupedCardRule = 'className={`${statusCardBackground(statusCfg?.bg)} ${withoutBackgroundClasses(colorCfg.card)} border rounded-xl p-3 flex flex-col gap-2 cursor-pointer transition-all${isExpandedGroupCard ? \' col-span-full\' : \'\'}`}';
 assertExactlyOnce(
