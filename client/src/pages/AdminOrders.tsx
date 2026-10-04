@@ -778,6 +778,58 @@ export default function AdminOrders() {
   const dynamicStatuses = statusTypesQuery.data ?? [];
   const statusFlowOrderMapQuery = trpc.statusFlows.orderMap.useQuery(undefined, { staleTime: 0, refetchInterval: 15_000, refetchOnWindowFocus: true });
   const statusFlowOrderMap = (statusFlowOrderMapQuery.data ?? {}) as Record<string, { isDefault: number; statusKeys: string[] }>;
+  const statusFlowDefinitionsQuery = trpc.statusFlows.list.useQuery(undefined, { staleTime: 0, refetchInterval: 15_000, refetchOnWindowFocus: true });
+  const statusFlowDefinitions = (statusFlowDefinitionsQuery.data ?? []) as Array<{
+    id: number;
+    isDefault: number;
+    isActive: number;
+    statusKeys: string[];
+    productNames?: string[];
+  }>;
+
+  const normalizeFlowServiceName = (value: unknown): string =>
+    String(value || '')
+      .normalize('NFD')
+      .replace(/[\u0300-\u036f]/g, '')
+      .toLowerCase()
+      .replace(/veicuilo/g, 'veiculo')
+      .replace(/documento/g, 'doc')
+      .replace(/\b(somente|so|para|pra|p|uber|99|indrive|aleatorio|aleatoria)\b/g, ' ')
+      .replace(/[^a-z0-9]+/g, ' ')
+      .replace(/\s+/g, ' ')
+      .trim();
+
+  const matchesConfiguredFlowProduct = (serviceName: unknown, productName: unknown): boolean => {
+    const service = normalizeFlowServiceName(serviceName);
+    const product = normalizeFlowServiceName(productName);
+    if (!service || !product) return false;
+    if (service === product) return true;
+    const clean = (value: string) => value.split(' ').filter(token => token && !['de','da','do','das','dos','doc'].includes(token));
+    const serviceTokens = clean(service);
+    const productTokens = clean(product);
+    if (!serviceTokens.length || !productTokens.length) return false;
+    const serviceSet = new Set(serviceTokens);
+    const productSet = new Set(productTokens);
+    if (serviceSet.has('edicao') && serviceSet.has('veiculo') && productSet.has('edicao') && productSet.has('veiculo')) return true;
+    const shared = serviceTokens.filter(token => productSet.has(token));
+    const shorter = Math.min(serviceTokens.length, productTokens.length);
+    return shorter >= 2 && shared.length >= shorter && shared.length >= 2;
+  };
+
+  const resolveConfiguredFlowForOrder = (order: any) => {
+    const registrationId = Number(order?.id ?? order?.registrationId ?? 0);
+    const orderNumber = order?.orderNumber == null ? 'null' : String(order.orderNumber);
+    const mapped = statusFlowOrderMap[`${registrationId}_${orderNumber}`];
+    if (mapped && mapped.isDefault !== 1) return mapped;
+
+    const serviceName = order?.serviceName;
+    const matched = statusFlowDefinitions.find(flow =>
+      flow.isDefault !== 1 &&
+      Number(flow.isActive) === 1 &&
+      (flow.productNames || []).some(productName => matchesConfiguredFlowProduct(serviceName, productName))
+    );
+    return matched || mapped || null;
+  };
   const [showGlobalProgressSequence, setShowGlobalProgressSequence] = useState(false);
   const globalProgressSequenceQuery = trpc.statusTypes.getProgressSequence.useQuery(undefined, { staleTime: 0 });
   const saveGlobalProgressSequence = trpc.statusTypes.setProgressSequence.useMutation({
@@ -833,10 +885,8 @@ export default function AdminOrders() {
   const INITIAL_STATUS_KEY = GLOBAL_STATUS_ORDER[0] || 'recebido';
   const isManualSelectableStatus = (s: string) => s !== 'cancelado' && s !== 'recebido' && s !== INITIAL_STATUS_KEY;
   const getStatusOrderForOrder = (order: any): string[] => {
-    const registrationId = Number(order?.id ?? order?.registrationId ?? 0);
-    const orderNumber = order?.orderNumber == null ? 'null' : String(order.orderNumber);
-    const flow = statusFlowOrderMap[`${registrationId}_${orderNumber}`];
-    if (statusFlowOrderMapQuery.isLoading || statusFlowOrderMapQuery.isError) return [];
+    if (statusFlowOrderMapQuery.isLoading || statusFlowDefinitionsQuery.isLoading) return [];
+    const flow = resolveConfiguredFlowForOrder(order);
     return statusChoicesForFlow(dynamicStatuses, flow ?? null);
   };
 
