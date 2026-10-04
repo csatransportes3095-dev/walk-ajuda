@@ -35,11 +35,17 @@ replaceOnce(
 );
 
 // Card principal de pedido: troca apenas bg-card pela cor de fundo do status.
-replaceOnce(
-  `              className={\`bg-card border rounded-xl overflow-hidden transition-all ${'${'}\n                isExpanded ? "col-span-full" : ""\n              } ${'${'}(() => {`,
-  `              className={\`${'${statusCardBackground(statusCfg?.bg)}'} border rounded-xl overflow-hidden transition-all ${'${'}\n                isExpanded ? "col-span-full" : ""\n              } ${'${'}(() => {`,
-  'fundo do card principal',
-);
+// Compatível também com o destaque amarelo do agendamento do dia.
+const mainCardOld = '              className={`bg-card border rounded-xl overflow-hidden transition-all ${\n                isExpanded ? "col-span-full" : ""\n              } ';
+const mainCardNew = '              className={`${statusCardBackground(statusCfg?.bg)} border rounded-xl overflow-hidden transition-all ${\n                isExpanded ? "col-span-full" : ""\n              } ';
+const mainCount = source.split(mainCardOld).length - 1;
+if (mainCount === 1) {
+  source = source.replace(mainCardOld, mainCardNew);
+} else if (source.includes('className={`${statusCardBackground(statusCfg?.bg)} border rounded-xl overflow-hidden transition-all')) {
+  // Já aplicado em uma execução anterior.
+} else {
+  throw new Error(`[orders-status-background] fundo do card principal: esperado 1 bloco compatível, encontrado ${mainCount}`);
+}
 
 fs.writeFileSync(file, source, 'utf8');
 console.log('[orders-status-background] OK: somente o fundo dos cards acompanha automaticamente a cor do status; bordas preservadas.');
