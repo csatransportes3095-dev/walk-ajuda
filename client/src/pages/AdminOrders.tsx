@@ -657,7 +657,7 @@ export default function AdminOrders() {
   const [deliveredPhoneFilter, setDeliveredPhoneFilter] = useState("");
   const [todosSortKey, setTodosSortKey] = useState<FolderSortKey>("date");
   const [todosSortDir, setTodosSortDir] = useState<FolderSortDir>("desc");
-  const [todosQuickFilter, setTodosQuickFilter] = useState<"all" | "sem_status" | "agendamento_confirmado" | "agendamento" | "em_analise" | "novo" | "aguardando_ativa" | "conta_ativa">("all");
+  const [todosQuickFilter, setTodosQuickFilter] = useState<"all" | "sem_status" | "agendamento_confirmado" | "agendamento" | "em_analise" | "foto_aprovada" | "doc_veiculo_teste" | "novo" | "aguardando_ativa" | "conta_ativa">("all");
   // Estado para expandir cards individuais de ARQUIVO e RG/CNH
   const [expandedArchivedId, setExpandedArchivedId] = useState<string | null>(null);
   const [expandedRgCnhId, setExpandedRgCnhId] = useState<string | null>(null);
@@ -912,6 +912,25 @@ export default function AdminOrders() {
           description: (s as any).description ?? '',
         }]))
       : STATUS_CONFIG as Record<string, { label: string; color: string; bg: string; icon: React.ReactNode; description?: string }>;
+
+  const normalizeStatusLabel = (value: unknown): string =>
+    String(value || '')
+      .normalize('NFD')
+      .replace(/[\u0300-\u036f]/g, '')
+      .toLowerCase()
+      .replace(/[^a-z0-9]+/g, ' ')
+      .replace(/\s+/g, ' ')
+      .trim();
+
+  const isDocVehicleTestStatus = (statusKey: unknown): boolean => {
+    const key = String(statusKey || '');
+    if (!key) return false;
+    if (['doc_veiculo_em_teste', 'documento_em_teste', 'doc_veiculo_teste'].includes(key)) return true;
+    const label = ACTIVE_STATUS_CONFIG[key]?.label || dynamicStatuses.find((s: any) => s.key === key)?.label || '';
+    const normalized = normalizeStatusLabel(label);
+    return normalized.includes('doc veiculo em teste') || normalized.includes('documento veiculo em teste');
+  };
+
   const ACTIVE_STATUS_ORDER: string[] = dynamicStatuses.length > 0
     ? dynamicStatuses.filter(s => s.isActive === 1).sort((a, b) => a.sortOrder - b.sortOrder).map(s => s.key)
     : STATUS_ORDER;
@@ -4979,6 +4998,7 @@ export default function AdminOrders() {
                         { id: "agendamento",            label: "Aguardando",        desc: "Aguardando confirmação", icon: Clock,        glow: "#eab308", ab: "linear-gradient(135deg,#713f12,#854d0e)", ac: "#eab308", at: "#fef08a" },
                         { id: "em_analise",             label: "Em Análise",        desc: "Foto em análise",        icon: Search,       glow: "#38bdf8", ab: "linear-gradient(135deg,#0c4a6e,#075985)", ac: "#38bdf8", at: "#bae6fd" },
                         { id: "foto_aprovada",          label: "Foto Aprovada",      desc: "Foto de perfil aprovada", icon: FileCheck,    glow: "#f97316", ab: "linear-gradient(135deg,#7c2d12,#9a3412)", ac: "#f97316", at: "#fed7aa" },
+                        { id: "doc_veiculo_teste",       label: "Doc em Teste",       desc: "DOC VEÍCULO EM TESTE",   icon: Search,       glow: "#60a5fa", ab: "linear-gradient(135deg,#1e3a8a,#1d4ed8)", ac: "#60a5fa", at: "#dbeafe" },
                         { id: "novo",                   label: "Novos",             desc: "Não visualizados",       icon: Star,         glow: "#6366f1", ab: "linear-gradient(135deg,#1e1b4b,#312e81)", ac: "#6366f1", at: "#a5b4fc" },
                         { id: "aguardando_ativa",       label: "Ag. Ficar Ativa",   desc: "Aguardando ficar ativa", icon: Zap,          glow: "#84cc16", ab: "linear-gradient(135deg,#1a2e05,#365314)", ac: "#84cc16", at: "#bef264" },
                         { id: "conta_ativa",            label: "Conta Ativa",       desc: "Conta já ativa",         icon: UserCheck,    glow: "#10b981", ab: "linear-gradient(135deg,#022c22,#064e3b)", ac: "#10b981", at: "#6ee7b7" },
@@ -4987,6 +5007,9 @@ export default function AdminOrders() {
                       for (const order of group.orders) {
                         const bucket = getOperationalBucket(order);
                         counts[bucket] = (counts[bucket] || 0) + 1;
+                        if (isDocVehicleTestStatus(order.latestStatus)) {
+                          counts.doc_veiculo_teste = (counts.doc_veiculo_teste || 0) + 1;
+                        }
                         if (!viewedOrders.has(getOrderKey(order))) counts.novo += 1;
                       }
                       return (
@@ -5284,6 +5307,7 @@ export default function AdminOrders() {
                     ? [{ name: "", orders: (() => {
                         const filtered = group.orders.filter((o: any) => {
                           if (todosQuickFilter === "novo") return !viewedOrders.has(getOrderKey(o));
+                          if (todosQuickFilter === "doc_veiculo_teste") return isDocVehicleTestStatus(o.latestStatus);
                           if (todosQuickFilter !== "all") return getOperationalBucket(o) === todosQuickFilter;
                           return true;
                         });
