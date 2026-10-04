@@ -787,6 +787,40 @@ export default function AdminOrders() {
     productNames?: string[];
   }>;
 
+  // Agendamentos confirmados do dia: usados para destacar o CARD INTEIRO no painel.
+  const todayScheduleAppointmentsQuery = trpc.schedule.listAppointments.useQuery(undefined, {
+    staleTime: 5_000,
+    refetchInterval: 15_000,
+    refetchOnWindowFocus: true,
+  });
+
+  const saoPauloTodayKey = useMemo(() => {
+    const parts = new Intl.DateTimeFormat("en-CA", {
+      timeZone: "America/Sao_Paulo",
+      year: "numeric",
+      month: "2-digit",
+      day: "2-digit",
+    }).formatToParts(new Date());
+    const map = Object.fromEntries(parts.map(part => [part.type, part.value]));
+    return `${map.year}-${map.month}-${map.day}`;
+  }, [Math.floor(Date.now() / 60_000)]);
+
+  const todayConfirmedScheduleKeys = useMemo(() => {
+    const keys = new Set<string>();
+    for (const appt of (todayScheduleAppointmentsQuery.data || []) as any[]) {
+      if (
+        appt?.status === "confirmed" &&
+        String(appt?.slotDate || "").slice(0, 10) === saoPauloTodayKey
+      ) {
+        keys.add(`${Number(appt.registrationId)}_${Number(appt.subOrderIndex ?? 0)}`);
+      }
+    }
+    return keys;
+  }, [todayScheduleAppointmentsQuery.data, saoPauloTodayKey]);
+
+  const hasTodayConfirmedSchedule = (order: any) =>
+    todayConfirmedScheduleKeys.has(`${Number(order?.id ?? order?.registrationId ?? 0)}_${Number(order?.subOrderIndex ?? 0)}`);
+
   const normalizeFlowServiceName = (value: unknown): string =>
     String(value || '')
       .normalize('NFD')
@@ -5309,6 +5343,7 @@ export default function AdminOrders() {
                       const tab = getTab(getOrderKey(order));
                       const isSelectedCard = selected.has(getOrderKey(order));
                       const editData = editingCustomer[getOrderKey(order)];
+                      const isTodayScheduled = hasTodayConfirmedSchedule(order);
 
                       // Ocultar cards que não estão em foco quando algum está expandido
                       if (expandedId !== null && !isExpanded) return null;
@@ -5319,19 +5354,27 @@ export default function AdminOrders() {
               id={`order-card-${getOrderKey(order)}`}
               className={`bg-card border rounded-xl overflow-hidden transition-all ${
                 isExpanded ? "col-span-full" : ""
-              } ${(() => {
-                const groups = customGroupsQuery.data || [];
-                const orderGroup = groups.find((g: any) => g.memberIds.includes(order.id));
-                if (order.isUrgent === 1 || filterStatus === 'urgente') return 'border-red-500 ring-1 ring-red-500/40';
-                if (orderGroup) {
-                  const c = GROUP_COLOR_MAP[orderGroup.color] || GROUP_COLOR_MAP.red;
-                  return c.border + ' ring-1 ring-offset-0';
-                }
-                if (attentionMap.has(order.id)) return 'border-green-400 ring-2 ring-green-400/50 shadow-lg shadow-green-500/20';
-                if (isSelectedCard) return 'border-primary/60 ring-1 ring-primary/30';
-                return 'border-border';
-              })()}`}
+              } ${isTodayScheduled
+                ? "!border-yellow-300 !ring-4 !ring-yellow-300/80 !bg-yellow-400/[0.10] shadow-[0_0_38px_rgba(250,204,21,0.85)] animate-[pulse_0.65s_ease-in-out_infinite]"
+                : (() => {
+                    const groups = customGroupsQuery.data || [];
+                    const orderGroup = groups.find((g: any) => g.memberIds.includes(order.id));
+                    if (order.isUrgent === 1 || filterStatus === 'urgente') return 'border-red-500 ring-1 ring-red-500/40';
+                    if (orderGroup) {
+                      const c = GROUP_COLOR_MAP[orderGroup.color] || GROUP_COLOR_MAP.red;
+                      return c.border + ' ring-1 ring-offset-0';
+                    }
+                    if (attentionMap.has(order.id)) return 'border-green-400 ring-2 ring-green-400/50 shadow-lg shadow-green-500/20';
+                    if (isSelectedCard) return 'border-primary/60 ring-1 ring-primary/30';
+                    return 'border-border';
+                  })()
+              }`}
             >
+              {isTodayScheduled && (
+                <div className="bg-yellow-400 text-black border-b-2 border-yellow-200 px-4 py-1.5 flex items-center justify-center gap-2 font-black tracking-wider animate-[pulse_0.65s_ease-in-out_infinite]">
+                  <span className="text-sm">⚠️ AGENDAMENTO HOJE — ATENÇÃO</span>
+                </div>
+              )}
               {(order.isUrgent === 1 || filterStatus === 'urgente') && (
                 <div className="bg-red-600/20 border-b border-red-500/40 px-4 py-1 flex items-center gap-2">
                   <span className="text-red-400 text-xs font-bold animate-pulse">🚨 URGENTE</span>
