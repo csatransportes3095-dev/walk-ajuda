@@ -1929,7 +1929,19 @@ export async function getOrderStatusFlowForOrder(registrationId: number, orderNu
   }
   const assignmentRows = (assignmentResult as any)[0] as Array<{ flowId: number }>;
   if (assignmentRows?.[0]?.flowId) {
-    return await getOrderStatusFlowDefinition(Number(assignmentRows[0].flowId));
+    const assignedFlow = await getOrderStatusFlowDefinition(Number(assignmentRows[0].flowId));
+    if (assignedFlow && Number(assignedFlow.isDefault) !== 1) {
+      return assignedFlow;
+    }
+
+    // Pedidos antigos podem ter recebido a sequência padrão antes da criação
+    // da sequência personalizada do produto. Nesse caso, o vínculo padrão não
+    // pode bloquear a regra atual do produto.
+    const compatibleCustomFlowId = await resolveLegacyOrderStatusFlowByServiceName(db, registrationId, orderNumber ?? null);
+    if (compatibleCustomFlowId) {
+      return await getOrderStatusFlowDefinition(compatibleCustomFlowId);
+    }
+    return assignedFlow;
   }
 
   // Compatibilidade com pedidos antigos: primeiro tenta nome exato; depois resolve
@@ -2105,15 +2117,26 @@ export async function getOrderStatusFlowMap() {
   const legacyServiceRows = (legacyServiceResult as any)[0] as Array<{ registrationId: number; orderNumber: number | null }>;
   for (const row of legacyServiceRows || []) {
     const key = `${Number(row.registrationId)}_${row.orderNumber == null ? "null" : Number(row.orderNumber)}`;
-    if (map[key]) continue;
-    const flowId = await resolveLegacyOrderStatusFlowByServiceName(db, Number(row.registrationId), row.orderNumber == null ? null : Number(row.orderNumber));
+    const existing = map[key];
+    // Uma sequência personalizada já atribuída tem prioridade absoluta.
+    if (existing && Number(existing.isDefault) !== 1) continue;
+
+    const flowId = await resolveLegacyOrderStatusFlowByServiceName(
+      db,
+      Number(row.registrationId),
+      row.orderNumber == null ? null : Number(row.orderNumber),
+    );
     if (!flowId) continue;
+
     let flow = cache.get(flowId);
     if (!flow) {
       flow = await getOrderStatusFlowDefinition(flowId);
       cache.set(flowId, flow);
     }
-    map[key] = flow;
+    // Só substitui ausência ou sequência padrão antiga; nunca troca uma customizada por outra.
+    if (!existing || Number(existing.isDefault) === 1) {
+      map[key] = flow;
+    }
   }
   return map;
 }
