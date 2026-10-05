@@ -190,25 +190,48 @@ statusSource = replaceOnce(
 
 statusSource = replaceOnce(
   statusSource,
-`                          <div className={\`relative inline-flex items-center justify-center w-8 h-8 rounded-full border \${editForm.color ?? "text-gray-400"} \${BG_MAP[editForm.color ?? ""] || "bg-gray-500/20 border-gray-500/40"}\`}>
-                            {ICON_MAP[editForm.icon ?? "Clock"] ?? null}
+`                        <div className={\`relative w-14 h-14 rounded-xl border flex items-center justify-center overflow-hidden \${editForm.color ?? "text-gray-400"} \${BG_MAP[editForm.color ?? ""] || "bg-gray-500/20 border-gray-500/40"}\`}>
+                          {(editForm as any).imageUrl
+                            ? <img src={(editForm as any).imageUrl} alt="Prévia do status" className="w-full h-full object-contain p-1" />
+                            : (ICON_MAP[editForm.icon ?? "Clock"] ?? <Clock className="w-4 h-4" />)}
+                        </div>`,
+`                        <div className="relative w-14 h-14 rounded-xl border flex items-center justify-center overflow-hidden text-white" style={statusSelectionStyle(editColors)}>
+                          {(editForm as any).imageUrl
+                            ? <img src={(editForm as any).imageUrl} alt="Prévia do status" className="w-full h-full object-contain p-1" />
+                            : (ICON_MAP[editForm.icon ?? "Clock"] ?? <Clock className="w-4 h-4" />)}
+                        </div>`,
+  'preview da imagem personalizada',
+);
+
+statusSource = replaceOnce(
+  statusSource,
+`                          <div className={\`relative inline-flex items-center justify-center w-8 h-8 rounded-full border overflow-hidden \${editForm.color ?? "text-gray-400"} \${BG_MAP[editForm.color ?? ""] || "bg-gray-500/20 border-gray-500/40"}\`}>
+                            {(editForm as any).imageUrl
+                              ? <img src={(editForm as any).imageUrl} alt="" className="w-full h-full object-contain p-0.5" />
+                              : (ICON_MAP[editForm.icon ?? "Clock"] ?? null)}
                           </div>`,
-`                          <div className="relative inline-flex items-center justify-center w-8 h-8 rounded-full border text-white" style={statusSelectionStyle(editColors)}>
-                            {ICON_MAP[editForm.icon ?? "Clock"] ?? null}
+`                          <div className="relative inline-flex items-center justify-center w-8 h-8 rounded-full border overflow-hidden text-white" style={statusSelectionStyle(editColors)}>
+                            {(editForm as any).imageUrl
+                              ? <img src={(editForm as any).imageUrl} alt="" className="w-full h-full object-contain p-0.5" />
+                              : (ICON_MAP[editForm.icon ?? "Clock"] ?? null)}
                           </div>`,
   'preview da edicao',
 );
 
 statusSource = replaceOnce(
   statusSource,
-`                      <div className={\`relative w-9 h-9 rounded-xl border flex items-center justify-center \${s.color} \${s.bgColor}\`}>
-                        {ICON_MAP[s.icon] ?? <Clock className="w-4 h-4" />}
+`                      <div className={\`relative w-9 h-9 rounded-xl border flex items-center justify-center overflow-hidden \${s.color} \${s.bgColor}\`}>
+                        {s.imageUrl
+                          ? <img src={s.imageUrl} alt="" className="w-full h-full object-contain p-0.5" />
+                          : (ICON_MAP[s.icon] ?? <Clock className="w-4 h-4" />)}
                       </div>`,
 `                      <div
-                        className={\`relative w-9 h-9 rounded-xl border flex items-center justify-center \${isCustomStatusBackground(s.bgColor) ? "text-white" : \`${'${s.color} ${s.bgColor}'}\`}\`}
+                        className={\`relative w-9 h-9 rounded-xl border flex items-center justify-center overflow-hidden \${isCustomStatusBackground(s.bgColor) ? "text-white" : \`${s.color} ${s.bgColor}\`}\`}
                         style={getStatusInlineStyle(s.bgColor)}
                       >
-                        {ICON_MAP[s.icon] ?? <Clock className="w-4 h-4" />}
+                        {s.imageUrl
+                          ? <img src={s.imageUrl} alt="" className="w-full h-full object-contain p-0.5" />
+                          : (ICON_MAP[s.icon] ?? <Clock className="w-4 h-4" />)}
                       </div>`,
   'preview salvo do status',
 );
