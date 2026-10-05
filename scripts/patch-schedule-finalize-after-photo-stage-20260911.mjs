@@ -2,10 +2,17 @@ import fs from 'node:fs';
 
 const centralLifecycleSource = fs.readFileSync('server/db.ts', 'utf8');
 if (
-  centralLifecycleSource.includes('const scheduleClosedAfterAnalysisStatuses = new Set([') &&
   (
-    centralLifecycleSource.includes("regenerateAutomaticScheduleForOrder") ||
-    centralLifecycleSource.includes("ensureActiveAutomaticScheduleForAnalysis")
+    centralLifecycleSource.includes('const scheduleClosedAfterAnalysisStatuses = new Set([') &&
+    (
+      centralLifecycleSource.includes("regenerateAutomaticScheduleForOrder") ||
+      centralLifecycleSource.includes("ensureActiveAutomaticScheduleForAnalysis")
+    )
+  ) ||
+  (
+    centralLifecycleSource.includes('isScheduleClosedByOrderStatus') &&
+    centralLifecycleSource.includes('isScheduleClosedStatusInFlow') &&
+    centralLifecycleSource.includes('completeOpenAppointmentsForOrder')
   )
 ) {
   console.log('[schedule-stage-close] regra central nova detectada; patch legado ignorado com seguranca.');
