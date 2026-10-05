@@ -214,8 +214,8 @@ export default function OrderTracking() {
         bg: extractBg(s.bgColor),
         border: extractBorder(s.bgColor),
         icon: (s as any).imageUrl
-          ? <img src={(s as any).imageUrl} alt="" className="w-full h-full object-contain p-1" />
-          : (ICON_MAP[s.icon] ?? <Clock className="w-6 h-6" />),
+          ? <img src={(s as any).imageUrl} alt="" className="w-full h-full object-contain p-0" />
+          : (ICON_MAP[s.icon] ?? <Clock className="w-7 h-7" />),
         step: s.sortOrder,
         description: s.description ?? null,
         pulseColor: (s as any).pulseColor ?? null,
@@ -1187,9 +1187,10 @@ export default function OrderTracking() {
                   <div className="space-y-3 p-4 sm:p-5">
                     <div className={`rounded-2xl border-2 p-4 ${latestCfg.bg} ${latestCfg.border}`}>
                       <div className="flex items-start gap-3">
-                        <div className="relative flex h-16 w-16 flex-shrink-0 items-center justify-center">
-                          <span className="absolute h-16 w-16 animate-ping rounded-full opacity-25" style={{ backgroundColor: latestCfg.pulseColor ?? '#22d3ee', animationDuration: '1.8s' }} />
-                          <div className={`relative z-10 flex h-14 w-14 items-center justify-center overflow-hidden rounded-full border-2 shadow-[0_0_18px_rgba(34,211,238,0.35)] ${latestCfg.bg} ${latestCfg.border} ${latestCfg.color}`}>
+                        <div className="relative flex h-20 w-20 flex-shrink-0 items-center justify-center">
+                          <span className="absolute h-20 w-20 animate-ping rounded-full opacity-15" style={{ backgroundColor: latestCfg.pulseColor ?? '#22d3ee', animationDuration: '2.1s' }} />
+                          <span className="absolute h-[74px] w-[74px] rounded-full opacity-25 blur-md" style={{ backgroundColor: latestCfg.pulseColor ?? '#22d3ee' }} />
+                          <div className={`relative z-10 flex h-[72px] w-[72px] items-center justify-center overflow-hidden rounded-full border-[3px] bg-black/20 shadow-[0_0_0_3px_rgba(255,255,255,0.08),0_0_22px_rgba(34,211,238,0.55)] ${latestCfg.border} ${latestCfg.color}`}>
                             {latestCfg.icon}
                           </div>
                         </div>
