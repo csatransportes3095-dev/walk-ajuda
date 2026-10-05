@@ -814,8 +814,34 @@ export default function AdminCustomers() {
     setEditResellerDiscountValue(String((c as any).resellerDiscountValue ?? '0'));
   };
 
+  const normalizeEditablePhone = (value: string) => {
+    let digits = value.replace(/\D/g, "");
+    if ((digits.length === 12 || digits.length === 13) && digits.startsWith("55")) digits = digits.slice(2);
+    return digits;
+  };
+
+  const savePhoneEdit = () => {
+    if (!editingId) return;
+    const phoneDigits = normalizeEditablePhone(editPhone);
+    if (!/^\d{10,11}$/.test(phoneDigits)) {
+      toast.error("Telefone inválido. Informe DDD + número.");
+      return;
+    }
+    const originalPhone = String(editOriginal?.phone || "");
+    if (phoneDigits === originalPhone) {
+      toast.info("O telefone não foi alterado.");
+      return;
+    }
+    updateMut.mutate({ id: editingId, phone: phoneDigits } as any);
+  };
+
   const saveEdit = () => {
     if (!editingId) return;
+    const phoneDigits = normalizeEditablePhone(editPhone);
+    if (!/^\d{10,11}$/.test(phoneDigits)) {
+      toast.error("Telefone inválido. Informe DDD + número.");
+      return;
+    }
     const parsedCustomerNumber = editCustomerNumber ? parseInt(editCustomerNumber, 10) : null;
     if (editCustomerNumber && (isNaN(parsedCustomerNumber!) || parsedCustomerNumber! <= 0)) {
       toast.error("Número de cadastro inválido");
@@ -844,6 +870,7 @@ export default function AdminCustomers() {
     const customerNumber = parsedCustomerNumber ? String(parsedCustomerNumber) : '';
 
     if (changed('name', name)) payload.name = name;
+    if (changed('phone', phoneDigits)) payload.phone = phoneDigits;
     if (changed('email', email)) payload.email = email;
     if (changed('cep', cep)) payload.cep = cep;
     if (changed('street', street)) payload.street = street;
@@ -1571,7 +1598,35 @@ export default function AdminCustomers() {
                   </div>
                   <div>
                     <label className="text-xs text-muted-foreground">Telefone</label>
-                    <input type="tel" value={editPhone} readOnly disabled title="Telefone é a identidade fixa do cliente e não pode ser alterado" className="w-full px-2 py-1.5 bg-muted/50 border border-border rounded-lg text-sm text-muted-foreground mt-0.5 cursor-not-allowed" />
+                    <input
+                      type="tel"
+                      value={editPhone}
+                      onChange={(e) => setEditPhone(formatPhoneInput(e.target.value))}
+                      className="w-full px-2 py-1.5 bg-background border border-border rounded-lg text-sm text-foreground mt-0.5 focus:outline-none focus:ring-1 focus:ring-emerald-500/50"
+                      placeholder="(11) 99999-9999"
+                      inputMode="tel"
+                    />
+                    <p className="mt-1 text-[11px] text-amber-300">
+                      Editável somente pelo ADM. Ao salvar, o telefone é sincronizado com pedidos e acessos vinculados.
+                    </p>
+                    <div className="mt-2 flex gap-2">
+                      <button
+                        type="button"
+                        onClick={savePhoneEdit}
+                        disabled={updateMut.isPending}
+                        className="rounded-xl bg-emerald-500 px-3 py-2 text-xs font-black text-white transition hover:bg-emerald-400 disabled:cursor-wait disabled:opacity-60"
+                      >
+                        {updateMut.isPending ? "SALVANDO..." : "SALVAR TELEFONE"}
+                      </button>
+                      <button
+                        type="button"
+                        onClick={() => setEditPhone(formatPhoneInput(String(editOriginal?.phone || "")))}
+                        disabled={updateMut.isPending}
+                        className="rounded-xl border border-white/15 bg-white/5 px-3 py-2 text-xs font-bold text-slate-200 transition hover:bg-white/10 disabled:opacity-60"
+                      >
+                        CANCELAR
+                      </button>
+                    </div>
                   </div>
                   <div className="grid grid-cols-2 gap-2">
                     <div><label className="text-xs text-muted-foreground">CEP</label><input type="text" value={editCep} onChange={(e) => setEditCep(e.target.value)} className="w-full px-2 py-1.5 bg-background border border-border rounded-lg text-sm mt-0.5" /></div>
