@@ -1645,7 +1645,7 @@ export async function createOrderStatusType(data: Omit<InsertOrderStatusType, "i
   });
 }
 
-export async function updateOrderStatusType(id: number, data: Partial<Pick<OrderStatusType, "label" | "color" | "bgColor" | "icon" | "description" | "sortOrder" | "isActive" | "isGlobal" | "pulseColor" | "showInProgress" | "progressOrder">>): Promise<void> {
+export async function updateOrderStatusType(id: number, data: Partial<Pick<OrderStatusType, "label" | "color" | "bgColor" | "icon" | "imageUrl" | "description" | "sortOrder" | "isActive" | "isGlobal" | "pulseColor" | "showInProgress" | "progressOrder">>): Promise<void> {
   await ensureOrderStatusFlowTables();
   const db = await getDb();
   if (!db) throw new Error("Database not available");
