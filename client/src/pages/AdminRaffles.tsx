@@ -60,7 +60,7 @@ export default function AdminRaffles() {
       toast.success('Número liberado com sucesso!');
       setConfirmRemoveEntry(null);
     },
-    onError: () => toast.error('Erro ao liberar número'),
+    onError: (error) => toast.error(error.message || 'Erro ao liberar número'),
   });
 
   const [newTitle, setNewTitle] = useState("");
@@ -747,6 +747,7 @@ export default function AdminRaffles() {
                                 <th className="text-left py-2 px-2">Telefone</th>
                                 <th className="text-left py-2 px-2">Data/Hora</th>
                                 <th className="text-left py-2 px-2">Pagamento</th>
+                                <th className="text-left py-2 px-2">Ação</th>
                               </tr>
                             </thead>
                             <tbody>
@@ -775,15 +776,19 @@ export default function AdminRaffles() {
                                     </button>
                                   </td>
                                   <td className="py-2 px-2">
-                                    {raffle.status === 'open' && raffle.winnerNumber !== entry.number && (
+                                    {raffle.status === 'open' && raffle.winnerNumber !== entry.number && entry.paymentStatus === 'pending' ? (
                                       <button
                                         onClick={() => setConfirmRemoveEntry({ entryId: entry.id, raffleId: raffle.id, number: entry.number, name: entry.customerName })}
-                                        className="px-2 py-1 rounded text-xs bg-red-600/30 hover:bg-red-600/60 text-red-300 hover:text-white transition-colors border border-red-500/30"
-                                        title="Liberar número (não pago)"
+                                        className="inline-flex items-center gap-1 rounded-lg border border-red-400/40 bg-red-500/15 px-2.5 py-1.5 text-xs font-black text-red-200 transition hover:bg-red-500/30 hover:text-white"
+                                        title="Remover reserva não paga e devolver o número para disponível"
                                       >
-                                        Liberar
+                                        <Trash2 className="w-3.5 h-3.5" /> LIBERAR Nº
                                       </button>
-                                    )}
+                                    ) : entry.paymentStatus === 'paid' ? (
+                                      <span className="inline-flex items-center gap-1 rounded-lg border border-green-500/20 bg-green-500/10 px-2 py-1 text-[10px] font-bold text-green-300">
+                                        <Lock className="w-3 h-3" /> PROTEGIDO
+                                      </span>
+                                    ) : null}
                                   </td>
                                 </tr>
                               ))}
@@ -799,20 +804,36 @@ export default function AdminRaffles() {
                           {Array.from({ length: 100 }, (_, i) => i + 1).map(num => {
                             const entry = viewingRaffle.entries?.find((e: RaffleEntry) => e.number === num);
                             const isWinner = raffle.winnerNumber === num;
+                            const isPending = entry?.paymentStatus === 'pending';
+                            const canReleasePending = Boolean(entry && isPending && raffle.status === 'open' && !isWinner);
                             return (
-                              <div key={num} title={entry ? `${entry.customerName} - ${formatPhone(entry.customerPhone)}` : `Número ${num} - Disponível`}
-                                className={`aspect-square rounded text-[10px] flex items-center justify-center font-bold ${
-                                  isWinner ? 'bg-yellow-500 text-black ring-2 ring-yellow-300' :
-                                  entry ? 'bg-blue-600/60 text-white' : 'bg-white/5 text-white/30'
-                                }`}>
+                              <button
+                                type="button"
+                                key={num}
+                                disabled={!canReleasePending}
+                                onClick={() => {
+                                  if (!entry || !canReleasePending) return;
+                                  setConfirmRemoveEntry({ entryId: entry.id, raffleId: raffle.id, number: entry.number, name: entry.customerName });
+                                }}
+                                title={entry
+                                  ? `${entry.customerName} - ${formatPhone(entry.customerPhone)} - ${entry.paymentStatus === 'paid' ? 'PAGO' : 'NÃO PAGO'}${canReleasePending ? ' — clique para liberar' : ''}`
+                                  : `Número ${num} - Disponível`}
+                                className={`aspect-square rounded text-[10px] flex items-center justify-center font-bold border transition ${
+                                  isWinner ? 'bg-yellow-500 text-black ring-2 ring-yellow-300 border-yellow-300' :
+                                  entry?.paymentStatus === 'paid' ? 'bg-green-600/50 text-white border-green-400/30 cursor-default' :
+                                  entry ? 'bg-orange-600/45 text-orange-100 border-orange-400/40 hover:bg-red-600/60 hover:border-red-400 cursor-pointer' :
+                                  'bg-white/5 text-white/30 border-white/5 cursor-default'
+                                }`}
+                              >
                                 {num}
-                              </div>
+                              </button>
                             );
                           })}
                         </div>
                         <div className="flex items-center gap-4 mt-2 text-[10px] text-white/50">
                           <span className="flex items-center gap-1"><span className="w-2.5 h-2.5 rounded bg-white/5"></span> Disponível</span>
-                          <span className="flex items-center gap-1"><span className="w-2.5 h-2.5 rounded bg-blue-600/60"></span> Ocupado</span>
+                          <span className="flex items-center gap-1"><span className="w-2.5 h-2.5 rounded bg-orange-600/60"></span> Não pago — clique para liberar</span>
+                          <span className="flex items-center gap-1"><span className="w-2.5 h-2.5 rounded bg-green-600/60"></span> Pago</span>
                           <span className="flex items-center gap-1"><span className="w-2.5 h-2.5 rounded bg-yellow-500"></span> Ganhador</span>
                         </div>
                       </div>
@@ -831,7 +852,7 @@ export default function AdminRaffles() {
           <div className="bg-gray-900 border border-red-500/40 rounded-2xl shadow-2xl max-w-sm w-full p-6" onClick={e => e.stopPropagation()}>
             <h3 className="text-lg font-bold text-white mb-2">Liberar número {confirmRemoveEntry.number}?</h3>
             <p className="text-white/60 text-sm mb-6">
-              O número <span className="text-yellow-400 font-bold">{confirmRemoveEntry.number}</span> escolhido por <span className="text-white font-semibold">{confirmRemoveEntry.name}</span> será devolvido para disponível. Esta ação não pode ser desfeita.
+              O número <span className="text-yellow-400 font-bold">#{confirmRemoveEntry.number}</span>, reservado por <span className="text-white font-semibold">{confirmRemoveEntry.name}</span>, está sem pagamento e será liberado imediatamente para outro cliente escolher.
             </p>
             <div className="flex gap-3">
               <button onClick={() => setConfirmRemoveEntry(null)} className="flex-1 py-2 rounded-lg bg-white/10 hover:bg-white/20 text-white text-sm transition-colors">Cancelar</button>
@@ -840,7 +861,7 @@ export default function AdminRaffles() {
                 disabled={removeEntryMutation.isPending}
                 className="flex-1 py-2 rounded-lg bg-red-600 hover:bg-red-700 text-white text-sm font-bold transition-colors disabled:opacity-50"
               >
-                {removeEntryMutation.isPending ? 'Liberando...' : 'Sim, liberar'}
+                {removeEntryMutation.isPending ? 'Liberando...' : 'LIBERAR NÚMERO'}
               </button>
             </div>
           </div>

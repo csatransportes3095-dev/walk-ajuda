@@ -3317,8 +3317,23 @@ export const appRouter = router({
     removeEntry: adminProcedure
       .input(z.object({ entryId: z.number(), raffleId: z.number() }))
       .mutation(async ({ input }) => {
+        const raffle = await getRaffleById(input.raffleId);
+        if (!raffle) {
+          throw new TRPCError({ code: "NOT_FOUND", message: "Sorteio não encontrado." });
+        }
+        if (raffle.status !== "open") {
+          throw new TRPCError({ code: "BAD_REQUEST", message: "Só é possível liberar números enquanto o sorteio estiver aberto." });
+        }
+        const entries = await getRaffleEntries(input.raffleId);
+        const entry = entries.find((item: any) => Number(item.id) === Number(input.entryId));
+        if (!entry) {
+          throw new TRPCError({ code: "NOT_FOUND", message: "Número não encontrado neste sorteio." });
+        }
+        if (entry.paymentStatus === "paid") {
+          throw new TRPCError({ code: "BAD_REQUEST", message: "Número pago está protegido. Altere para Aguardando antes de liberar." });
+        }
         await deleteRaffleEntry(input.entryId);
-        return { success: true };
+        return { success: true, number: entry.number };
       }),
 
     // Admin: realizar sorteio (sortear um número entre os participantes)
