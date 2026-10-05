@@ -14,6 +14,11 @@ export async function ensureStatusScopeSchema(db: any): Promise<void> {
         try { await db.execute(sql.raw('ALTER TABLE orderStatusTypes ADD COLUMN isGlobal INT NOT NULL DEFAULT 1')); }
         catch (error: any) { if (error?.code !== 'ER_DUP_FIELDNAME' && error?.cause?.code !== 'ER_DUP_FIELDNAME') throw error; }
       }
+      const imageCols = scopeRows(await db.execute(sql`SHOW COLUMNS FROM orderStatusTypes LIKE 'imageUrl'`));
+      if (!imageCols.length) {
+        try { await db.execute(sql.raw('ALTER TABLE orderStatusTypes ADD COLUMN imageUrl TEXT NULL AFTER icon')); }
+        catch (error: any) { if (error?.code !== 'ER_DUP_FIELDNAME' && error?.cause?.code !== 'ER_DUP_FIELDNAME') throw error; }
+      }
       await db.execute(sql.raw(`CREATE TABLE IF NOT EXISTS orderStatusScopeControl (
         id INT NOT NULL PRIMARY KEY, recoveryVersion INT NOT NULL DEFAULT 0
       ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4`));
