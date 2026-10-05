@@ -1297,7 +1297,7 @@ export async function addOrderStatus(data: { registrationId: number; customerPho
  * Assim, qualquer status adicionado depois de FOTO EM ANALISE tambem encerra
  * a agenda, sem depender de uma lista fixa que possa ficar desatualizada.
  */
-async function isScheduleClosedByOrderStatus(data: {
+export async function isScheduleClosedByOrderStatus(data: {
   registrationId: number;
   orderNumber?: number | null;
   statusKey: string;
