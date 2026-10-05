@@ -213,7 +213,9 @@ export default function OrderTracking() {
         color: s.color,
         bg: extractBg(s.bgColor),
         border: extractBorder(s.bgColor),
-        icon: ICON_MAP[s.icon] ?? <Clock className="w-5 h-5" />,
+        icon: (s as any).imageUrl
+          ? <img src={(s as any).imageUrl} alt="" className="w-5 h-5 object-contain" />
+          : (ICON_MAP[s.icon] ?? <Clock className="w-5 h-5" />),
         step: s.sortOrder,
         description: s.description ?? null,
         pulseColor: (s as any).pulseColor ?? null,
