@@ -25,6 +25,7 @@ export default function Raffle() {
   const { data: config, isLoading: configLoading } = trpc.raffleAccess.config.useQuery();
   const { data: activeRaffle } = trpc.raffles.active.useQuery(undefined, { enabled: accessGranted });
   const { data: raffleResult } = trpc.raffles.result.useQuery(undefined, { enabled: accessGranted });
+  const { data: raffleHistory } = trpc.raffles.history.useQuery(undefined, { enabled: accessGranted });
   const raffleId = useMemo(() => activeRaffle?.id ?? 0, [activeRaffle?.id]);
   const { data: raffleEntries, refetch: refetchEntries } = trpc.raffles.entries.useQuery(
     { raffleId },
@@ -251,21 +252,66 @@ export default function Raffle() {
     );
   }
 
-  // Resultado do sorteio
+  // Resultado / galeria de ganhadores
   if (!activeRaffle && raffleResult) {
+    const winners = raffleHistory?.length ? raffleHistory : [raffleResult];
     return (
-      <div className="min-h-screen bg-[#0a0a1a] flex flex-col items-center justify-center px-6 relative">
-        <div className="absolute inset-0 bg-gradient-to-br from-yellow-900/10 via-transparent to-orange-900/10" />
-        <div className="relative z-10 w-full max-w-sm mx-auto text-center">
-          <div className="w-24 h-24 bg-gradient-to-br from-yellow-500 to-orange-500 rounded-full flex items-center justify-center mx-auto mb-4 shadow-2xl shadow-yellow-900/40">
-            <Trophy className="w-12 h-12 text-white" />
+      <div className="min-h-screen bg-[#070912] text-white px-4 py-8 md:px-6 relative overflow-hidden">
+        <div className="fixed inset-0 pointer-events-none bg-[radial-gradient(circle_at_top_left,rgba(124,58,237,0.18),transparent_34%),radial-gradient(circle_at_top_right,rgba(245,158,11,0.14),transparent_30%)]" />
+        <div className="relative z-10 mx-auto w-full max-w-6xl">
+          <div className="text-center">
+            <div className="mx-auto flex h-20 w-20 items-center justify-center rounded-full bg-gradient-to-br from-yellow-400 to-orange-500 shadow-2xl shadow-yellow-900/40">
+              <Trophy className="h-10 w-10 text-white" />
+            </div>
+            <p className="mt-5 text-xs font-black uppercase tracking-[0.28em] text-yellow-300">H2 Colombiano</p>
+            <h1 className="mt-2 text-3xl font-black md:text-5xl">GALERIA DE GANHADORES</h1>
+            <p className="mx-auto mt-3 max-w-2xl text-sm text-white/50 md:text-base">
+              Confira quem já ganhou nos sorteios anteriores. Seu nome pode ser o próximo.
+            </p>
           </div>
-          <h1 className="text-2xl font-black text-white mb-1">GANHADOR!</h1>
-          <p className="text-white/50 text-sm mb-6">{raffleResult.title}</p>
-          <div className="bg-gradient-to-br from-yellow-500/20 to-orange-500/20 border border-yellow-500/30 rounded-2xl p-6 space-y-3">
-            <div className="text-6xl font-black text-yellow-400">#{raffleResult.winnerNumber}</div>
-            <div className="text-xl font-bold text-white">{raffleResult.winnerName}</div>
-            <div className="text-white/50 text-sm">{raffleResult.winnerPhone}</div>
+
+          <div className="mt-8 grid gap-4 sm:grid-cols-2 lg:grid-cols-3">
+            {winners.map((winner: any, index: number) => (
+              <article
+                key={winner.id}
+                className={`relative overflow-hidden rounded-3xl border ${index === 0 ? "border-yellow-400/50 bg-gradient-to-br from-yellow-500/15 via-[#11152a] to-orange-500/10 shadow-xl shadow-yellow-950/20" : "border-white/10 bg-[#0c1120]/92"} p-5`}
+              >
+                {index === 0 && (
+                  <div className="absolute right-4 top-4 rounded-full border border-yellow-300/30 bg-yellow-400/10 px-3 py-1 text-[10px] font-black uppercase tracking-wider text-yellow-200">
+                    Mais recente
+                  </div>
+                )}
+                <div className="flex items-center gap-4">
+                  <div className="relative h-20 w-20 shrink-0 overflow-hidden rounded-full border-4 border-yellow-400/70 bg-purple-950">
+                    {winner.winnerProfilePhotoUrl ? (
+                      <img src={winner.winnerProfilePhotoUrl} alt="" className="h-full w-full object-cover" />
+                    ) : (
+                      <div className="flex h-full w-full items-center justify-center text-2xl font-black text-white">
+                        {String(winner.winnerName || "H2").split(/\s+/).filter(Boolean).slice(0,2).map((part: string) => part[0]).join("").toUpperCase()}
+                      </div>
+                    )}
+                  </div>
+                  <div className="min-w-0">
+                    <p className="text-xs font-black uppercase tracking-wider text-yellow-300">Ganhador</p>
+                    <h2 className="mt-1 truncate text-lg font-black text-white">{winner.winnerName}</h2>
+                    <p className="mt-1 text-sm text-white/45">{winner.title}</p>
+                  </div>
+                </div>
+
+                <div className="mt-5 rounded-2xl border border-yellow-400/20 bg-gradient-to-r from-yellow-500/10 to-orange-500/10 p-4 text-center">
+                  <div className="text-5xl font-black text-yellow-300">#{winner.winnerNumber}</div>
+                </div>
+
+                <div className="mt-4 flex items-center justify-between text-xs text-white/40">
+                  <span>Sorteio realizado</span>
+                  <span>
+                    {winner.drawnAt
+                      ? new Date(winner.drawnAt).toLocaleDateString("pt-BR", { timeZone: "America/Sao_Paulo" })
+                      : ""}
+                  </span>
+                </div>
+              </article>
+            ))}
           </div>
         </div>
       </div>
