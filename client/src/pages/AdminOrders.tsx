@@ -922,7 +922,9 @@ export default function AdminOrders() {
           label: s.label,
           color: s.color,
           bg: s.bgColor,
-          icon: ICON_MAP[s.icon] ?? <Clock className="w-4 h-4" />,
+          icon: (s as any).imageUrl
+            ? <img src={(s as any).imageUrl} alt="" className="w-4 h-4 object-contain" />
+            : (ICON_MAP[s.icon] ?? <Clock className="w-4 h-4" />),
           description: (s as any).description ?? '',
         }]))
       : STATUS_CONFIG as Record<string, { label: string; color: string; bg: string; icon: React.ReactNode; description?: string }>;
