@@ -546,6 +546,7 @@ export const orderStatusTypes = mysqlTable("orderStatusTypes", {
   color: varchar("color", { length: 64 }).notNull().default("text-gray-400"),   // classe Tailwind
   bgColor: varchar("bgColor", { length: 128 }).notNull().default("bg-gray-500/20 border-gray-500/40"),
   icon: varchar("icon", { length: 32 }).notNull().default("Clock"),             // nome do Ã­cone Lucide
+  imageUrl: text("imageUrl"),                                     // imagem personalizada do status (R2); null = usa icone Lucide
   description: text("description"),                             // texto explicativo para o cliente
   sortOrder: int("sortOrder").notNull().default(0),
   isSystem: int("isSystem").notNull().default(0),               // 1 = protegido, nÃ£o pode excluir
