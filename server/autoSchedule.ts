@@ -1,16 +1,9 @@
 import crypto from "crypto";
 import { sql } from "drizzle-orm";
-import { completeOpenAppointmentsForOrder, createAppointment, deleteAppointment, getAppointmentByOrder, getDb, getLatestOrderStatus, getStatusLabelFromDb } from "./db";
+import { completeOpenAppointmentsForOrder, createAppointment, deleteAppointment, getAppointmentByOrder, getDb, getLatestOrderStatus, getStatusLabelFromDb, isScheduleClosedByOrderStatus } from "./db";
 import { findMainCustomerByIdentity, normalizeCustomerPhone } from "./customerAccess";
 import { publicSiteUrl } from "../shared/publicLinks";
 import { sendMailDirect } from "./_core/sendMailDirect";
-
-const SCHEDULE_CLOSED_STATUSES = new Set([
-  "foto_em_anal", "foto_em_analise", "foto_analise",
-  "documentos_aprovados", "foto_aprovada", "foto_perfil_aprovada",
-  "aguardando_ativa", "aguardando_ficar_ativa",
-  "conta_ativa", "p", "entregue", "pedido_entregue", "cancelado",
-]);
 
 type AutomaticScheduleOption = {
   id: number;
@@ -45,15 +38,21 @@ export function baseServiceOptionLabel(value: unknown): string {
   return raw.trim();
 }
 
-async function isScheduleClosedStatus(status: unknown): Promise<boolean> {
+async function isScheduleClosedStatus(
+  registrationId: number,
+  orderNumber: number | null | undefined,
+  status: unknown,
+): Promise<boolean> {
   const key = String(status || "").trim();
   if (!key) return false;
   let label = key;
   try { label = await getStatusLabelFromDb(key); } catch {}
-  const semantic = normalizeLabel(label).replace(/[_-]+/g, " ");
-  if (semantic === "em analise") return false;
-  if (semantic === "foto em analise") return true;
-  return SCHEDULE_CLOSED_STATUSES.has(key);
+  return isScheduleClosedByOrderStatus({
+    registrationId,
+    orderNumber: orderNumber ?? null,
+    statusKey: key,
+    statusLabel: label,
+  });
 }
 
 async function notifyAutomaticScheduleByEmail(input: {
@@ -167,7 +166,7 @@ export async function ensureAutomaticScheduleForOrder(input: {
   if (!option) return { created: false, registrationId, optionId };
 
   const latestStatus = await getLatestOrderStatus(registrationId);
-  if (latestStatus && await isScheduleClosedStatus(latestStatus.status)) {
+  if (latestStatus && await isScheduleClosedStatus(registrationId, latestStatus.orderNumber ?? null, latestStatus.status)) {
     return { created: false, registrationId, optionId };
   }
 
@@ -398,7 +397,7 @@ export async function syncAutomaticSchedulesForCustomer(phoneInput: string): Pro
   if (automaticOptions.length === 0) return [];
 
   const result = await db.execute(sql`
-    SELECT id, registrationId, customerPhone, status, serviceName, serviceOption, createdAt
+    SELECT id, registrationId, customerPhone, status, serviceName, serviceOption, orderNumber, createdAt
     FROM orderStatusHistory
     WHERE REGEXP_REPLACE(customerPhone, '[^0-9]', '') IN (${phone}, ${"55" + phone})
     ORDER BY registrationId DESC, id DESC
@@ -420,7 +419,15 @@ export async function syncAutomaticSchedulesForCustomer(phoneInput: string): Pro
 
   for (const [registrationId, history] of byRegistration.entries()) {
     const latest = history[0];
-    if (!latest || await isScheduleClosedStatus(latest.status)) continue;
+    if (!latest) continue;
+    if (await isScheduleClosedStatus(registrationId, latest.orderNumber ?? null, latest.status)) {
+      try {
+        await completeOpenAppointmentsForOrder(registrationId, 0, phone, false);
+      } catch (error) {
+        console.error(`[AutoSchedule] Falha ao finalizar agenda fora da etapa permitida no pedido ${registrationId}:`, error);
+      }
+      continue;
+    }
 
     const orderInfo = [...history].reverse().find((entry) => entry.serviceOption || entry.serviceName) || latest;
     const option = findAutomaticOption(automaticOptions, orderInfo.serviceName, orderInfo.serviceOption);
@@ -471,7 +478,7 @@ export async function backfillAutomaticSchedulesForOption(optionIdInput: number)
   summary.options = 1;
 
   const result = await db.execute(sql`
-    SELECT id, registrationId, customerPhone, status, serviceName, serviceOption, createdAt
+    SELECT id, registrationId, customerPhone, status, serviceName, serviceOption, orderNumber, createdAt
     FROM orderStatusHistory
     ORDER BY registrationId DESC, id DESC
   `);
@@ -493,7 +500,7 @@ export async function backfillAutomaticSchedulesForOption(optionIdInput: number)
     summary.scannedOrders++;
     const latest = history[0];
     if (!latest) continue;
-    if (await isScheduleClosedStatus(latest.status)) {
+    if (await isScheduleClosedStatus(registrationId, latest.orderNumber ?? null, latest.status)) {
       summary.skippedClosed++;
       continue;
     }
