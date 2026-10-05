@@ -346,6 +346,16 @@ export default function OrderTracking() {
   // Pegar o status mais recente para a timeline
   const latestStatus = history.length > 0 ? history[0].status : null;
   const latestCfg = latestStatus ? getStatusCfg(latestStatus) : null;
+  const latestStatusSemantic = String(latestCfg?.label || latestStatus || '')
+    .normalize('NFD')
+    .replace(/[\u0300-\u036f]/g, '')
+    .replace(/[_-]+/g, ' ')
+    .replace(/\s+/g, ' ')
+    .trim()
+    .toLowerCase();
+  const canShowScheduleForCurrentOrder =
+    latestStatusSemantic === 'em analise' ||
+    latestStatusSemantic === 'agendamento confirmado';
   const previousLiveStatusRef = React.useRef<string | null>(null);
   useEffect(() => {
     if (!latestStatus) return;
@@ -1383,7 +1393,7 @@ export default function OrderTracking() {
             )}
 
             {/* === AGENDAMENTO DE ATENDIMENTO === */}
-            {canAccess && (scheduleQuery.data?.length ?? 0) > 0 && (
+            {canAccess && canShowScheduleForCurrentOrder && (scheduleQuery.data?.length ?? 0) > 0 && (
               <div className="space-y-3">
                 {scheduleQuery.data!.map((a) => {
                   const link = publicSiteUrl(`/agendar/${a.token}`);
