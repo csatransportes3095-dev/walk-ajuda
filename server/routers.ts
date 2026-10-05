@@ -416,6 +416,20 @@ async function loadCommissionCandidates(db: any): Promise<CommissionCandidate[]>
   }));
 }
 
+async function withResolvedRaffleWinnerPhoto<T extends any>(raffle: T): Promise<T> {
+  if (!raffle || raffle.status !== "drawn" || raffle.winnerProfilePhotoUrl || !raffle.winnerPhone) return raffle;
+  try {
+    const customer = await getCustomerByPhoneNormalized(String(raffle.winnerPhone));
+    const photoUrl = customer?.profilePhotoUrl ? String(customer.profilePhotoUrl).trim() : "";
+    if (!photoUrl) return raffle;
+    await updateRaffle(Number(raffle.id), { winnerProfilePhotoUrl: photoUrl });
+    return { ...raffle, winnerProfilePhotoUrl: photoUrl };
+  } catch (error) {
+    console.warn("[Raffle] não foi possível reparar foto histórica do ganhador:", error);
+    return raffle;
+  }
+}
+
 export const appRouter = router({
   system: systemRouter,
   optionPriceModels: optionPriceModelsRouter,
@@ -3235,20 +3249,6 @@ export const appRouter = router({
       }),
   }),
   // ===== SORTEIOS ======
-async function withResolvedRaffleWinnerPhoto<T extends any>(raffle: T): Promise<T> {
-  if (!raffle || raffle.status !== "drawn" || raffle.winnerProfilePhotoUrl || !raffle.winnerPhone) return raffle;
-  try {
-    const customer = await getCustomerByPhoneNormalized(String(raffle.winnerPhone));
-    const photoUrl = customer?.profilePhotoUrl ? String(customer.profilePhotoUrl).trim() : "";
-    if (!photoUrl) return raffle;
-    await updateRaffle(Number(raffle.id), { winnerProfilePhotoUrl: photoUrl });
-    return { ...raffle, winnerProfilePhotoUrl: photoUrl };
-  } catch (error) {
-    console.warn("[Raffle] não foi possível reparar foto histórica do ganhador:", error);
-    return raffle;
-  }
-}
-
   raffles: router({
     // Admin: listar todos os sorteios
     list: adminProcedure.query(async () => {
