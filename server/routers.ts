@@ -6596,8 +6596,7 @@ export const appRouter = router({
         const ext = input.mimeType === 'image/jpeg' ? 'jpg' : input.mimeType === 'image/webp' ? 'webp' : 'png';
         const fileKey = `status-images/status-${input.id}-${Date.now()}-${Math.random().toString(36).slice(2, 9)}.${ext}`;
         const { url } = await storagePut(fileKey, buffer, input.mimeType);
-        const { updateOrderStatusType } = await import('./db');
-        await updateOrderStatusType(input.id, { imageUrl: url });
+        // Apenas envia ao R2. O vínculo com o status só é salvo quando o ADM clicar em Salvar.
         return { success: true, url };
       }),
 
