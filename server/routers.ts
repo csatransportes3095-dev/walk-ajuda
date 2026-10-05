@@ -2696,6 +2696,7 @@ export const appRouter = router({
       .input(z.object({
         id: z.number(),
         name: z.string().optional(),
+        phone: z.string().optional(),
         email: z.string().optional(),
         cep: z.string().optional(),
         street: z.string().optional(),
@@ -2714,24 +2715,95 @@ export const appRouter = router({
         const { id, ...rawData } = input;
         const data = {
           ...rawData,
+          phone: rawData.phone !== undefined ? normalizeCustomerPhone(rawData.phone) : undefined,
           cpf: rawData.cpf !== undefined ? rawData.cpf.replace(/\D/g, '') : undefined,
           referredByPhone: rawData.referredByPhone !== undefined ? rawData.referredByPhone.replace(/\D/g, '') : undefined,
         };
+        if (rawData.phone !== undefined && !data.phone) {
+          throw new TRPCError({ code: 'BAD_REQUEST', message: 'Telefone inválido. Informe DDD + número.' });
+        }
         const db = await (await import('./db')).getDb() as any;
         if (!db) throw new TRPCError({ code: 'INTERNAL_SERVER_ERROR', message: 'Banco indisponível' });
 
         const custRows = await db.execute(sql`SELECT phone, cpf FROM customers WHERE id = ${id} LIMIT 1`);
         const current = (custRows[0] as unknown as Array<{ phone: string; cpf?: string | null }>)[0];
         if (!current) throw new TRPCError({ code: 'NOT_FOUND', message: 'Cliente não encontrado' });
-        const oldPhone = String(current.phone || '').replace(/\D/g, '');
+        const oldPhone = normalizeCustomerPhone(current.phone);
+        const newPhone = data.phone || oldPhone;
+        const phoneChanged = Boolean(data.phone && newPhone && newPhone !== oldPhone);
 
-        // Primeiro grava o cadastro principal. As sincronizações abaixo nunca podem
-        // impedir o ADM de salvar nome/telefone/cidade no cliente principal.
+        if (phoneChanged) {
+          const duplicateRows = await db.execute(sql`
+            SELECT id, name
+            FROM customers
+            WHERE id <> ${id}
+              AND deletedAt IS NULL
+              AND RIGHT(REGEXP_REPLACE(phone, '[^0-9]', ''), 11) = ${newPhone}
+            LIMIT 1
+          `);
+          const duplicate = (duplicateRows[0] as unknown as Array<{ id: number; name?: string | null }>)[0];
+          if (duplicate) {
+            throw new TRPCError({
+              code: 'CONFLICT',
+              message: `Este telefone já está cadastrado para ${duplicate.name || 'outro cliente'}.`,
+            });
+          }
+        }
+
+        // Primeiro grava o cadastro principal.
         const updated = await updateCustomer(id, data);
         if (!updated) throw new TRPCError({ code: 'NOT_FOUND', message: 'Cliente não encontrado' });
 
-        // Reúne novamente todos os cadastros com o mesmo CPF/telefone, para que
-        // /gastos e /emprestimo recebam os dados atualizados do cadastro principal.
+        if (phoneChanged) {
+          const registrationRows = await db.execute(sql`
+            SELECT id FROM accessCodePhones
+            WHERE REGEXP_REPLACE(phone, '[^0-9]', '') = ${oldPhone}
+          `);
+          const registrationIds = (registrationRows[0] as unknown as Array<{ id: number }>)
+            .map(row => Number(row.id))
+            .filter(registrationId => Number.isFinite(registrationId) && registrationId > 0);
+
+          const propagationQueries = [
+            sql`UPDATE customerPasswordSessions SET phone = ${newPhone} WHERE REGEXP_REPLACE(phone, '[^0-9]', '') = ${oldPhone}`,
+            sql`UPDATE customerPasswords SET phone = ${newPhone} WHERE REGEXP_REPLACE(phone, '[^0-9]', '') = ${oldPhone}`,
+            sql`UPDATE customerLoginHistory SET phone = ${newPhone} WHERE REGEXP_REPLACE(phone, '[^0-9]', '') = ${oldPhone}`,
+            sql`UPDATE customerPins SET phone = ${newPhone} WHERE REGEXP_REPLACE(phone, '[^0-9]', '') = ${oldPhone}`,
+            sql`UPDATE customerProductAccess SET phone = ${newPhone} WHERE REGEXP_REPLACE(phone, '[^0-9]', '') = ${oldPhone}`,
+            sql`UPDATE accessCodes SET accessedByPhone = ${newPhone} WHERE REGEXP_REPLACE(accessedByPhone, '[^0-9]', '') = ${oldPhone}`,
+            sql`UPDATE accessCodePhones SET phone = ${newPhone} WHERE REGEXP_REPLACE(phone, '[^0-9]', '') = ${oldPhone}`,
+            sql`UPDATE spreadsheetClients SET phone = ${newPhone} WHERE REGEXP_REPLACE(phone, '[^0-9]', '') = ${oldPhone}`,
+            sql`UPDATE loanClients SET phone = ${newPhone} WHERE REGEXP_REPLACE(phone, '[^0-9]', '') = ${oldPhone}`,
+          ];
+          for (const query of propagationQueries) {
+            try {
+              await db.execute(query);
+            } catch (error: any) {
+              console.warn('[customers.update] sincronização de telefone não aplicada:', error?.message);
+            }
+          }
+
+          if (registrationIds.length > 0) {
+            const registrationList = sql.join(registrationIds.map(registrationId => sql`${registrationId}`), sql`, `);
+            const orderQueries = [
+              sql`UPDATE orderStatusHistory SET customerPhone = ${newPhone} WHERE registrationId IN (${registrationList})`,
+              sql`UPDATE orderFiles SET customerPhone = ${newPhone} WHERE registrationId IN (${registrationList})`,
+              sql`UPDATE orderLoginData SET customerPhone = ${newPhone} WHERE registrationId IN (${registrationList})`,
+              sql`UPDATE scheduleAppointments SET customerPhone = ${newPhone} WHERE registrationId IN (${registrationList})`,
+              sql`UPDATE docRequests SET customerPhone = ${newPhone} WHERE registrationId IN (${registrationList})`,
+              sql`UPDATE uploadSessions SET customerPhone = ${newPhone} WHERE CAST(registrationId AS UNSIGNED) IN (${registrationList})`,
+              sql`UPDATE hiddenSubOrders SET customerPhone = ${newPhone} WHERE registrationId IN (${registrationList})`,
+            ];
+            for (const query of orderQueries) {
+              try {
+                await db.execute(query);
+              } catch (error: any) {
+                console.warn('[customers.update] sincronização do pedido não aplicada:', error?.message);
+              }
+            }
+          }
+        }
+
+        // Reúne novamente gastos/empréstimos com a identidade antiga para preservar o mesmo cliente.
         try {
           await syncUnifiedCustomerRegistry([{ phone: oldPhone, cpf: String(current.cpf || '').replace(/\D/g, '') }]);
         } catch (error: any) {
