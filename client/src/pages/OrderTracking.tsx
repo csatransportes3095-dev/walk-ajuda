@@ -1273,7 +1273,7 @@ export default function OrderTracking() {
                                 <div className="min-w-0">
                                   <p className={`text-sm font-bold ${isCurrent ? cfg.color : isDone ? 'text-emerald-300' : isNext ? 'text-violet-200' : 'text-white/40'}`}>{cfg.label}</p>
                                   {(isCurrent || isNext) && cfg.description && (
-                                    <p className="mt-1 line-clamp-2 text-[11px] leading-relaxed text-white/40">{cfg.description}</p>
+                                    <p className="mt-1 whitespace-pre-line break-words text-[11px] leading-relaxed text-white/45">{cfg.description}</p>
                                   )}
                                 </div>
                                 <span className={`flex-shrink-0 rounded-full px-2 py-1 text-[8px] font-black tracking-wider ${
