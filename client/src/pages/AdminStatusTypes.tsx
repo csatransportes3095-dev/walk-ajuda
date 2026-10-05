@@ -65,6 +65,7 @@ type StatusType = {
   color: string;
   bgColor: string;
   icon: string;
+  imageUrl?: string | null;
   description: string | null;
   sortOrder: number;
   isSystem: number;
@@ -126,11 +127,14 @@ export default function AdminStatusTypes() {
     onSuccess: () => { refreshScopes(); utils.statusTypes.list.refetch(); toast.success("Status removido!"); },
     onError: (e) => toast.error(e.message),
   });
+  const uploadImageMutation = trpc.statusTypes.uploadImage.useMutation({
+    onError: (e) => toast.error(e.message || "Não foi possível enviar a imagem."),
+  });
 
   const [showCreate, setShowCreate] = useState(!!requestedFlowId);
   const [form, setForm] = useState<FormData>({ ...defaultForm, flowId: requestedFlowId, key: restoreKey });
   const [editingId, setEditingId] = useState<number | null>(null);
-  const [editForm, setEditForm] = useState<Partial<FormData & { isActive: number }>>({});
+  const [editForm, setEditForm] = useState<Partial<FormData & { isActive: number; imageUrl: string | null }>>({});
 
   function startEdit(s: StatusType) {
     setEditingId(s.id);
@@ -138,6 +142,7 @@ export default function AdminStatusTypes() {
       label: s.label,
       color: s.color,
       icon: s.icon,
+      imageUrl: s.imageUrl ?? null,
       description: s.description ?? "",
       sortOrder: s.sortOrder,
       isActive: s.isActive,
@@ -185,6 +190,7 @@ export default function AdminStatusTypes() {
       color: editForm.color,
       bgColor: editForm.color ? (BG_MAP[editForm.color] || "bg-gray-500/20 border-gray-500/40") : undefined,
       icon: editForm.icon,
+      imageUrl: editForm.imageUrl ?? null,
       description: editForm.description ?? null,
       sortOrder: editForm.sortOrder,
       isActive: editForm.isActive,
@@ -192,6 +198,36 @@ export default function AdminStatusTypes() {
       showInProgress: (editForm as any).showInProgress ?? 0,
       progressOrder: (editForm as any).progressOrder ?? 0,
     });
+  }
+
+  async function handleStatusImageSelect(statusId: number, file?: File) {
+    if (!file) return;
+    if (!['image/jpeg', 'image/png', 'image/webp'].includes(file.type)) {
+      toast.error('Envie uma imagem JPG, PNG ou WEBP.');
+      return;
+    }
+    if (file.size > 5 * 1024 * 1024) {
+      toast.error('Imagem muito grande. Máximo de 5 MB.');
+      return;
+    }
+    try {
+      const imageBase64 = await new Promise<string>((resolve, reject) => {
+        const reader = new FileReader();
+        reader.onload = () => resolve(String(reader.result || '').split(',')[1] || '');
+        reader.onerror = reject;
+        reader.readAsDataURL(file);
+      });
+      const result = await uploadImageMutation.mutateAsync({
+        id: statusId,
+        imageBase64,
+        mimeType: file.type as 'image/jpeg' | 'image/png' | 'image/webp',
+      });
+      if (!result.url) throw new Error('Upload sem URL');
+      setEditForm(current => ({ ...current, imageUrl: result.url }));
+      toast.success('Imagem enviada. Clique em Salvar para aplicar.');
+    } catch {
+      toast.error('Não foi possível enviar a imagem do status.');
+    }
   }
 
   const inputCls = "bg-[#0d0d1a] border border-white/10 text-white text-sm rounded-lg px-3 py-2 focus:outline-none focus:ring-2 focus:ring-primary/50 placeholder:text-white/30";
@@ -408,6 +444,36 @@ export default function AdminStatusTypes() {
                       </div>
                     </div>
                     <div className="space-y-1">
+                      <label className="text-xs text-white/50">Imagem personalizada do status</label>
+                      <div className="flex flex-wrap items-center gap-3 rounded-xl border border-white/10 bg-black/20 p-3">
+                        <div className={`relative w-14 h-14 rounded-xl border flex items-center justify-center overflow-hidden ${editForm.color ?? "text-gray-400"} ${BG_MAP[editForm.color ?? ""] || "bg-gray-500/20 border-gray-500/40"}`}>
+                          {(editForm as any).imageUrl
+                            ? <img src={(editForm as any).imageUrl} alt="Prévia do status" className="w-full h-full object-contain p-1" />
+                            : (ICON_MAP[editForm.icon ?? "Clock"] ?? <Clock className="w-4 h-4" />)}
+                        </div>
+                        <label className="cursor-pointer rounded-lg border border-violet-400/40 bg-violet-500/15 px-3 py-2 text-xs font-bold text-violet-200 hover:bg-violet-500/25">
+                          {uploadImageMutation.isPending ? 'Enviando...' : 'Escolher imagem'}
+                          <input
+                            type="file"
+                            accept="image/jpeg,image/png,image/webp"
+                            className="hidden"
+                            disabled={uploadImageMutation.isPending}
+                            onChange={e => { void handleStatusImageSelect(s.id, e.target.files?.[0]); e.currentTarget.value = ''; }}
+                          />
+                        </label>
+                        {(editForm as any).imageUrl && (
+                          <button
+                            type="button"
+                            onClick={() => setEditForm(current => ({ ...current, imageUrl: null }))}
+                            className="text-xs font-bold text-red-300 hover:text-red-200"
+                          >
+                            Remover imagem
+                          </button>
+                        )}
+                      </div>
+                      <p className="text-[10px] text-white/35">PNG, JPG ou WEBP até 5 MB. Sem imagem, continua usando o ícone atual.</p>
+                    </div>
+                    <div className="space-y-1">
                       <label className="text-xs text-white/50">Descrição para o cliente</label>
                       <Textarea
                         className={`${inputCls} resize-none whitespace-pre-wrap`}
@@ -429,8 +495,10 @@ export default function AdminStatusTypes() {
                         {/* Preview animado */}
                         <div className="relative inline-flex items-center justify-center w-10 h-10">
                           <span className="absolute inline-flex w-full h-full rounded-full opacity-40 animate-ping" style={{ backgroundColor: (editForm as any).pulseColor ?? "#ffffff" }} />
-                          <div className={`relative inline-flex items-center justify-center w-8 h-8 rounded-full border ${editForm.color ?? "text-gray-400"} ${BG_MAP[editForm.color ?? ""] || "bg-gray-500/20 border-gray-500/40"}`}>
-                            {ICON_MAP[editForm.icon ?? "Clock"] ?? null}
+                          <div className={`relative inline-flex items-center justify-center w-8 h-8 rounded-full border overflow-hidden ${editForm.color ?? "text-gray-400"} ${BG_MAP[editForm.color ?? ""] || "bg-gray-500/20 border-gray-500/40"}`}>
+                            {(editForm as any).imageUrl
+                              ? <img src={(editForm as any).imageUrl} alt="" className="w-full h-full object-contain p-0.5" />
+                              : (ICON_MAP[editForm.icon ?? "Clock"] ?? null)}
                           </div>
                         </div>
                       </div>
@@ -463,8 +531,10 @@ export default function AdminStatusTypes() {
                     {/* Badge de preview com neon */}
                     <div className="relative flex-shrink-0 w-9 h-9 flex items-center justify-center">
                       {s.pulseColor && <span className="absolute inset-0 rounded-xl opacity-30 animate-pulse" style={{ backgroundColor: s.pulseColor }} />}
-                      <div className={`relative w-9 h-9 rounded-xl border flex items-center justify-center ${s.color} ${s.bgColor}`}>
-                        {ICON_MAP[s.icon] ?? <Clock className="w-4 h-4" />}
+                      <div className={`relative w-9 h-9 rounded-xl border flex items-center justify-center overflow-hidden ${s.color} ${s.bgColor}`}>
+                        {s.imageUrl
+                          ? <img src={s.imageUrl} alt="" className="w-full h-full object-contain p-0.5" />
+                          : (ICON_MAP[s.icon] ?? <Clock className="w-4 h-4" />)}
                       </div>
                     </div>
                     <div className="flex-1 min-w-0">
