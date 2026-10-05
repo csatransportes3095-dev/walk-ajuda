@@ -1,6 +1,10 @@
 import { TRPCError } from "@trpc/server";
 import { ensureStatusScopeSchema, withStatusScopeLock, archiveScopeDefinition, assertStatusCanBeRemoved, assertNotInitialStatus, scopeRows } from "./orderStatusScope";
 import { orderedFlowKeys } from "../shared/orderStatusScope";
+import {
+  isAnalysisOrderStatusSemantic,
+  isScheduleClosedStatusInFlow,
+} from "../shared/scheduleOrderLifecycle";
 import { eq, asc, desc, sql, and, gte, inArray, gt } from "drizzle-orm";
 import { drizzle } from "drizzle-orm/mysql2";
 import { isValidCPF, normalizeCpf } from "@shared/cpf";
@@ -1288,24 +1292,36 @@ export async function addOrderStatus(data: { registrationId: number; customerPho
   return row;
 }
 
-function normalizeOrderStatusSemantic(value: unknown): string {
-  return String(value ?? '')
-    .normalize('NFD')
-    .replace(/[\u0300-\u036f]/g, '')
-    .replace(/[_-]+/g, ' ')
-    .replace(/\s+/g, ' ')
-    .trim()
-    .toLowerCase();
-}
+/**
+ * A ordem configurada para o pedido e a fonte definitiva desta regra.
+ * Assim, qualquer status adicionado depois de FOTO EM ANALISE tambem encerra
+ * a agenda, sem depender de uma lista fixa que possa ficar desatualizada.
+ */
+async function isScheduleClosedByOrderStatus(data: {
+  registrationId: number;
+  orderNumber?: number | null;
+  statusKey: string;
+  statusLabel: string;
+}): Promise<boolean> {
+  const closesWithoutFlow = isScheduleClosedStatusInFlow({
+    targetKey: data.statusKey,
+    targetLabel: data.statusLabel,
+    flowStatusKeys: [],
+    statuses: [],
+  });
+  if (closesWithoutFlow) return true;
 
-function isAnalysisStatusSemantic(key: unknown, label: unknown): boolean {
-  return normalizeOrderStatusSemantic(label) === 'em analise'
-    || normalizeOrderStatusSemantic(key) === 'em analise';
-}
-
-function isPhotoAnalysisStatusSemantic(key: unknown, label: unknown): boolean {
-  return normalizeOrderStatusSemantic(label) === 'foto em analise'
-    || normalizeOrderStatusSemantic(key) === 'foto em analise';
+  const flow = await getOrderStatusFlowForOrder(data.registrationId, data.orderNumber ?? null);
+  const db = await getDb();
+  if (!db) return false;
+  const catalogue = await db.select({ key: orderStatusTypes.key, label: orderStatusTypes.label })
+    .from(orderStatusTypes);
+  return isScheduleClosedStatusInFlow({
+    targetKey: data.statusKey,
+    targetLabel: data.statusLabel,
+    flowStatusKeys: flow?.statusKeys ?? [],
+    statuses: catalogue,
+  });
 }
 
 // Registra uma nova mudança de status no sub-pedido, preservando todo o histórico.
@@ -1368,16 +1384,16 @@ export async function updateLastOrderStatus(data: {
     getStatusLabelFromDb(data.status).catch(() => data.status),
     getStatusLabelFromDb(latestEntry.status).catch(() => latestEntry.status),
   ]);
-  const targetIsAnalysis = isAnalysisStatusSemantic(data.status, targetStatusLabel);
-  const previousIsAnalysis = isAnalysisStatusSemantic(latestEntry.status, previousStatusLabel);
-  const targetIsPhotoAnalysis = isPhotoAnalysisStatusSemantic(data.status, targetStatusLabel);
-
-  const scheduleClosedAfterAnalysisStatuses = new Set([
-    'documentos_aprovados', 'foto_aprovada', 'foto_perfil_aprovada',
-    'aguardando_ativa', 'aguardando_ficar_ativa',
-    'conta_ativa', 'p',
-    'entregue', 'pedido_entregue', 'cancelado',
-  ]);
+  const targetIsAnalysis = isAnalysisOrderStatusSemantic(data.status, targetStatusLabel);
+  const previousIsAnalysis = isAnalysisOrderStatusSemantic(latestEntry.status, previousStatusLabel);
+  const lifecycleOrderNumber = [...subHistory].reverse()
+    .find(history => history.orderNumber != null)?.orderNumber ?? latestEntry.orderNumber;
+  const shouldCloseSchedule = await isScheduleClosedByOrderStatus({
+    registrationId: data.registrationId,
+    orderNumber: lifecycleOrderNumber,
+    statusKey: data.status,
+    statusLabel: targetStatusLabel,
+  });
 
   // Se não houve troca de status, atualizar a nota. Em EM ANÁLISE também
   // garantimos a invariante operacional: precisa existir um agendamento ativo.
@@ -1411,7 +1427,7 @@ export async function updateLastOrderStatus(data: {
       } catch (error) {
         console.error('[AutoSchedule] Falha ao garantir agenda ativa em EM ANÁLISE:', error);
       }
-    } else if (targetIsPhotoAnalysis || scheduleClosedAfterAnalysisStatuses.has(data.status)) {
+    } else if (shouldCloseSchedule) {
       try {
         const completed = await completeOpenAppointmentsForOrder(
           data.registrationId,
@@ -1474,7 +1490,7 @@ export async function updateLastOrderStatus(data: {
     } catch (error) {
       console.error('[AutoSchedule] Falha ao aplicar regra central de Em Análise:', error);
     }
-  } else if (targetIsPhotoAnalysis || scheduleClosedAfterAnalysisStatuses.has(data.status)) {
+  } else if (shouldCloseSchedule) {
     try {
       // FOTO EM ANÁLISE (e qualquer etapa posterior) finaliza a agenda aberta.
       // A chave exata pedido + subpedido evita encerrar agenda de outro pedido do mesmo telefone.

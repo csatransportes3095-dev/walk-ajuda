@@ -1157,6 +1157,9 @@ export default function AdminOrders() {
     },
     onSuccess: (data, vars) => {
       showStatusEmailResult(data, vars);
+      void trpcUtils.schedule.getForOrder.invalidate();
+      void trpcUtils.schedule.listAppointments.invalidate();
+      void trpcUtils.schedule.listForTracking.invalidate();
       // Aguardar servidor persistir, depois refetch e limpar override
       setTimeout(() => {
         ordersQuery.refetch().then(() => {

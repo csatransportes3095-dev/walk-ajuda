@@ -9,10 +9,6 @@ async function scheduleRouterSource() {
   return readFile(new URL("./routers/schedule.ts", import.meta.url), "utf8");
 }
 
-async function appRouterSource() {
-  return readFile(new URL("./routers.ts", import.meta.url), "utf8");
-}
-
 describe("regras definitivas de consumo dos horarios", () => {
   it("ao finalizar consome o horario e nunca devolve bookedCount", async () => {
     const source = await dbSource();
@@ -69,8 +65,8 @@ describe("regras definitivas de consumo dos horarios", () => {
   });
 
   it("Foto em Analise automatico encerra pelo mesmo helper auditado", async () => {
-    const source = await appRouterSource();
-    expect(source).toContain("['foto_em_anal', 'foto_em_analise', 'foto_analise', 'em_analise'].includes(input.status)");
-    expect(source).toContain("completeOpenAppointmentsForOrder(input.registrationId, input.subOrderIndex, input.customerPhone)");
+    const source = await dbSource();
+    expect(source).toContain("const shouldCloseSchedule = await isScheduleClosedByOrderStatus");
+    expect(source).toContain("completeOpenAppointmentsForOrder(");
   });
 });

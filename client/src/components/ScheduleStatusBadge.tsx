@@ -1,6 +1,7 @@
 import { trpc } from "@/lib/trpc";
 import { CalendarCheck, CalendarClock } from "lucide-react";
 import { selectEffectiveScheduleAppointment } from "@shared/scheduleAppointmentResolution";
+import { isAnalysisOrderStatusSemantic } from "@shared/scheduleOrderLifecycle";
 
 interface Props {
   registrationId: number;
@@ -120,6 +121,7 @@ export default function ScheduleStatusBadge({ registrationId, subOrderIndex, cus
       : confirmedRegistrationRow ?? baseResolvedAppointment ?? newestRegistrationRow;
 
   const status = String(orderStatus || '');
+  const orderIsInAnalysis = isAnalysisOrderStatusSemantic(status, status);
   const scheduleClosedByOrder = [
     // EM ANÁLISE pode manter agenda ativa; FOTO EM ANÁLISE encerra a agenda.
     'foto_em_anal', 'foto_em_analise', 'foto_analise',
@@ -208,7 +210,10 @@ export default function ScheduleStatusBadge({ registrationId, subOrderIndex, cus
     );
   }
 
-  if (appt && appt.status === "pending") {
+  // "Aguardando agendamento" pertence exclusivamente a EM ANÁLISE.
+  // A agenda pode ainda estar chegando como pending por cache durante a troca
+  // de status, mas nao deve reaparecer visualmente em nenhuma outra etapa.
+  if (appt && appt.status === "pending" && orderIsInAnalysis) {
     const notifiedAt = appt.createdAt
       ? new Date(appt.createdAt).toLocaleString("pt-BR", {
           day: "2-digit", month: "2-digit", year: "numeric",

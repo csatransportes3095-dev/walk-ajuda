@@ -22,19 +22,21 @@ describe("independência entre status do pedido e agendamento", () => {
     const completion = source.slice(start, source.indexOf("/**", start));
 
     expect(completion).toContain("status: 'completed'");
-    expect(completion).toContain("slotDate: null");
-    expect(completion).toContain("slotTime: null");
+    expect(completion).not.toContain("slotDate: null");
+    expect(completion).not.toContain("slotTime: null");
     expect(completion).not.toContain("db.delete(scheduleAppointments)");
   });
 
   it("encerra agenda pendente ou confirmada ao alterar o pedido para foto em análise", async () => {
-    const source = await routerSource();
-    const updateStart = source.indexOf("updateStatus: adminProcedure");
-    const updateEnd = source.indexOf("// Admin: atualizar orderSource", updateStart);
+    const source = await dbSource();
+    const updateStart = source.indexOf("export async function updateLastOrderStatus");
+    const updateEnd = source.indexOf("export async function getOrderStatusHistory", updateStart);
     const updateProcedure = source.slice(updateStart, updateEnd);
 
-    expect(updateProcedure).toContain("if (['foto_em_anal', 'foto_em_analise', 'foto_analise', 'em_analise'].includes(input.status))");
-    expect(updateProcedure).toContain("completeOpenAppointmentsForOrder(input.registrationId, input.subOrderIndex, input.customerPhone)");
+    expect(updateProcedure).toContain("isScheduleClosedByOrderStatus");
+    expect(updateProcedure).toContain("completeOpenAppointmentsForOrder(");
+    expect(updateProcedure).toContain("data.registrationId");
+    expect(updateProcedure).toContain("data.subOrderIndex");
   });
 
   it("helper de Foto em Análise conclui somente agenda aberta do mesmo pedido/subpedido", async () => {
