@@ -6565,6 +6565,7 @@ export const appRouter = router({
         color: z.string().optional(),
         bgColor: z.string().optional(),
         icon: z.string().optional(),
+        imageUrl: z.string().url().nullable().optional(),
         description: z.string().nullable().optional(),
         sortOrder: z.number().int().optional(),
         isActive: z.number().int().min(0).max(1).optional(),
@@ -6579,6 +6580,27 @@ export const appRouter = router({
         await updateOrderStatusType(id, data);
         return { success: true };
       }),
+
+    // Admin: imagem personalizada do status. Se removida, o icone Lucide atual continua como fallback.
+    uploadImage: adminProcedure
+      .input(z.object({
+        id: z.number().int().positive(),
+        imageBase64: z.string().min(1),
+        mimeType: z.enum(['image/jpeg', 'image/png', 'image/webp']),
+      }))
+      .mutation(async ({ input }) => {
+        const buffer = Buffer.from(input.imageBase64, 'base64');
+        if (!buffer.length || buffer.length > 5 * 1024 * 1024) {
+          throw new TRPCError({ code: 'BAD_REQUEST', message: 'Imagem vazia ou acima de 5 MB.' });
+        }
+        const ext = input.mimeType === 'image/jpeg' ? 'jpg' : input.mimeType === 'image/webp' ? 'webp' : 'png';
+        const fileKey = `status-images/status-${input.id}-${Date.now()}-${Math.random().toString(36).slice(2, 9)}.${ext}`;
+        const { url } = await storagePut(fileKey, buffer, input.mimeType);
+        const { updateOrderStatusType } = await import('./db');
+        await updateOrderStatusType(input.id, { imageUrl: url });
+        return { success: true, url };
+      }),
+
     // Admin: excluir status (apenas não-sistema)
     delete: adminProcedure
       .input(z.object({ id: z.number().int() }))
