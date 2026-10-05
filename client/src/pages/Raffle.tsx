@@ -2,7 +2,7 @@ import { useState, useEffect, useMemo } from "react";
 import { trpc } from "@/lib/trpc";
 import { isValidCPF, normalizeCpf } from "@shared/cpf";
 import { toast } from "sonner";
-import { Gift, Lock, Trophy, Users, Ticket, CheckCircle2, Star, Phone, User, RefreshCw, Hash, LogOut } from "lucide-react";
+import { Gift, Lock, Trophy, Users, Ticket, CheckCircle2, Star, Phone, User, RefreshCw, Hash, LogOut, CalendarClock, Clock3, ShieldCheck, Sparkles, Info } from "lucide-react";
 
 const RAFFLE_SESSION_KEY = "walk_raffle_access";
 
@@ -20,6 +20,7 @@ export default function Raffle() {
   const [submitted, setSubmitted] = useState(false);
   const [lastChosenNumber, setLastChosenNumber] = useState<number | null>(null);
   const [phoneChecked, setPhoneChecked] = useState(false); // true após digitar 11 dígitos
+  const [nowMs, setNowMs] = useState(() => Date.now());
 
   const { data: config, isLoading: configLoading } = trpc.raffleAccess.config.useQuery();
   const { data: activeRaffle } = trpc.raffles.active.useQuery(undefined, { enabled: accessGranted });
@@ -30,9 +31,10 @@ export default function Raffle() {
     { enabled: accessGranted && !!activeRaffle, refetchInterval: 8000 }
   );
   const savedPhone = typeof window !== "undefined" ? localStorage.getItem("walk_client_phone") || "" : "";
+  const currentParticipantPhone = (phone.replace(/\D/g, "").length === 11 ? phone.replace(/\D/g, "") : savedPhone.replace(/\D/g, "")).slice(-11);
   const { data: myEntry, refetch: refetchMyEntry } = trpc.raffles.myEntry.useQuery(
-    { raffleId, phone: savedPhone },
-    { enabled: accessGranted && !!activeRaffle && !!savedPhone }
+    { raffleId, phone: currentParticipantPhone },
+    { enabled: accessGranted && !!activeRaffle && currentParticipantPhone.length === 11, refetchInterval: 8000 }
   );
   const chooseNumberMutation = trpc.raffles.chooseNumber.useMutation();
   const verifyMutation = trpc.raffleAccess.verify.useMutation();
@@ -76,6 +78,11 @@ export default function Raffle() {
     }
     setChecking(false);
   }, [config, configLoading]);
+
+  useEffect(() => {
+    const timer = window.setInterval(() => setNowMs(Date.now()), 1000);
+    return () => window.clearInterval(timer);
+  }, []);
 
   // Pré-preencher telefone e nome
   useEffect(() => {
@@ -137,6 +144,7 @@ export default function Raffle() {
         customerPhone: phone.replace(/\D/g, ""),
       });
       if (result.success) {
+        localStorage.setItem("walk_client_phone", phone.replace(/\D/g, "").slice(-11));
         setLastChosenNumber(selectedNumber);
         setSelectedNumber(null);
         await refetchEntries();
@@ -160,6 +168,24 @@ export default function Raffle() {
   };
 
   const takenNumbers = useMemo(() => raffleEntries?.map(e => e.number) || activeRaffle?.takenNumbers || [], [raffleEntries, activeRaffle]);
+  const entryByNumber = useMemo(() => new Map((raffleEntries || []).map((entry: any) => [entry.number, entry])), [raffleEntries]);
+
+  const scheduledAtMs = activeRaffle?.scheduledDrawAt ? new Date(activeRaffle.scheduledDrawAt).getTime() : null;
+  const remainingMs = scheduledAtMs ? Math.max(0, scheduledAtMs - nowMs) : 0;
+  const countdown = {
+    days: Math.floor(remainingMs / 86400000),
+    hours: Math.floor((remainingMs % 86400000) / 3600000),
+    minutes: Math.floor((remainingMs % 3600000) / 60000),
+    seconds: Math.floor((remainingMs % 60000) / 1000),
+  };
+  const format2 = (value: number) => String(value).padStart(2, "0");
+  const scheduledLabel = activeRaffle?.scheduledDrawAt
+    ? new Date(activeRaffle.scheduledDrawAt).toLocaleString("pt-BR", {
+        timeZone: "America/Sao_Paulo",
+        day: "2-digit", month: "2-digit", year: "numeric",
+        hour: "2-digit", minute: "2-digit",
+      })
+    : null;
 
   // Loading
   if (checking || configLoading) {
@@ -248,48 +274,125 @@ export default function Raffle() {
 
   // Sorteio ativo
   return (
-    <div className="min-h-screen bg-[#0a0a1a] pb-10">
-      {/* Header com botão de sair */}
-      <div className="bg-black/40 backdrop-blur-md border-b border-yellow-500/20 px-4 py-3 sticky top-0 z-10">
-        <div className="max-w-lg mx-auto flex items-center justify-between gap-2">
-          {/* Esquerda: ícone + título */}
-          <div className="flex items-center gap-2 min-w-0">
-            <Gift className="w-5 h-5 text-yellow-400 flex-shrink-0" />
-            <span className="font-black text-white truncate">{activeRaffle?.title || config?.title || "SORTEIO"}</span>
-          </div>
-          {/* Centro: badge ABERTO */}
-          <div className="flex items-center gap-1.5 bg-green-500/20 border border-green-500/30 rounded-full px-2.5 py-1 flex-shrink-0">
-            <div className="w-2 h-2 bg-green-400 rounded-full animate-pulse" />
-            <span className="text-green-400 text-xs font-bold">ABERTO</span>
-          </div>
-          {/* Direita: botão Sair */}
-          <button
-            onClick={() => {
-              sessionStorage.removeItem(RAFFLE_SESSION_KEY);
-              localStorage.removeItem("walk_access_granted");
-              localStorage.removeItem("walk_access_type");
-              localStorage.removeItem("walk_client_phone");
-              window.location.href = "/";
-            }}
-            className="flex items-center gap-1.5 text-white/40 hover:text-red-400 transition-colors text-sm flex-shrink-0"
-          >
-            <LogOut className="w-4 h-4" />
-            <span className="text-xs">Sair</span>
-          </button>
-        </div>
-      </div>
+    <div className="min-h-screen bg-[#070912] text-white pb-12">
+      <div className="fixed inset-0 pointer-events-none bg-[radial-gradient(circle_at_top_left,rgba(124,58,237,0.16),transparent_34%),radial-gradient(circle_at_top_right,rgba(245,158,11,0.10),transparent_32%)]" />
 
-      <div className="max-w-lg mx-auto px-4 pt-6 space-y-5">
-        {/* Tela de atualização de CPF obrigatória */}
-        {needsCpfUpdate && (
-          <div className="bg-black/40 border border-yellow-500/30 rounded-2xl p-6 space-y-4">
-            <div className="text-center space-y-2">
-              <div className="text-3xl">📋</div>
-              <p className="text-white font-semibold">Atualização de cadastro necessária</p>
-              <p className="text-sm text-yellow-300">Para participar do sorteio, informe seu CPF. Este dado é obrigatório.</p>
+      <header className="sticky top-0 z-30 border-b border-white/10 bg-[#070912]/92 backdrop-blur-xl">
+        <div className="mx-auto flex max-w-7xl items-center justify-between px-4 py-3 md:px-6">
+          <div className="flex items-center gap-3 min-w-0">
+            <div className="flex h-10 w-10 items-center justify-center rounded-xl border border-yellow-400/30 bg-yellow-400/10">
+              <Gift className="h-5 w-5 text-yellow-300" />
             </div>
-            <div>
-              <label className="block text-sm font-medium text-white/80 mb-2">CPF <span className="text-red-400">*</span></label>
+            <div className="min-w-0">
+              <p className="text-[10px] font-black uppercase tracking-[0.18em] text-yellow-300">H2 Colombiano</p>
+              <p className="truncate text-sm font-bold text-white/85">Sorteio oficial</p>
+            </div>
+          </div>
+          <div className="flex items-center gap-3">
+            <div className="hidden sm:flex items-center gap-2 rounded-full border border-emerald-400/20 bg-emerald-500/10 px-3 py-1.5">
+              <span className="h-2 w-2 rounded-full bg-emerald-400 animate-pulse" />
+              <span className="text-xs font-black text-emerald-300">SORTEIO ATIVO</span>
+            </div>
+            <button
+              onClick={() => {
+                sessionStorage.removeItem(RAFFLE_SESSION_KEY);
+                localStorage.removeItem("walk_access_granted");
+                localStorage.removeItem("walk_access_type");
+                localStorage.removeItem("walk_client_phone");
+                window.location.href = "/";
+              }}
+              className="flex items-center gap-1.5 rounded-lg border border-white/10 bg-white/[0.03] px-3 py-2 text-xs text-white/55 hover:text-red-300"
+            >
+              <LogOut className="h-4 w-4" /> Sair
+            </button>
+          </div>
+        </div>
+      </header>
+
+      <main className="relative z-10 mx-auto max-w-7xl px-4 pt-5 md:px-6 md:pt-8">
+        <section className="overflow-hidden rounded-3xl border border-purple-400/20 bg-gradient-to-br from-[#11152a] via-[#0b1020] to-[#1a0f29] shadow-2xl shadow-purple-950/20">
+          <div className="grid lg:grid-cols-[1.15fr_.85fr]">
+            <div className="p-5 md:p-8 lg:p-10">
+              <div className="mb-4 inline-flex items-center gap-2 rounded-full border border-yellow-400/30 bg-yellow-400/10 px-3 py-1.5 text-xs font-black text-yellow-300">
+                <span className="h-2 w-2 rounded-full bg-yellow-300 animate-pulse" /> SORTEIO ATIVO
+              </div>
+              <h1 className="text-3xl font-black tracking-tight sm:text-4xl lg:text-5xl">
+                {activeRaffle?.title || config?.title || "Sorteio H2 Colombiano"}
+              </h1>
+              <p className="mt-3 max-w-2xl text-sm leading-relaxed text-white/60 md:text-base">
+                Escolha até <strong className="text-white">{maxAllowed}</strong> número(s) de 1 a 100. Participe com seu cadastro validado e acompanhe o resultado diretamente nesta página.
+              </p>
+              <div className="mt-6 grid gap-3 sm:grid-cols-3">
+                <div className="rounded-2xl border border-yellow-400/20 bg-yellow-400/[0.07] p-4">
+                  <Gift className="mb-2 h-5 w-5 text-yellow-300" />
+                  <p className="text-[10px] font-bold uppercase tracking-wider text-white/40">Prêmio</p>
+                  <p className="mt-1 font-black text-yellow-200">Confira nas regras</p>
+                </div>
+                <div className="rounded-2xl border border-blue-400/15 bg-blue-400/[0.05] p-4">
+                  <Hash className="mb-2 h-5 w-5 text-blue-300" />
+                  <p className="text-[10px] font-bold uppercase tracking-wider text-white/40">Por pessoa</p>
+                  <p className="mt-1 font-black">{maxAllowed} número(s)</p>
+                </div>
+                <div className="rounded-2xl border border-emerald-400/15 bg-emerald-400/[0.05] p-4">
+                  <ShieldCheck className="mb-2 h-5 w-5 text-emerald-300" />
+                  <p className="text-[10px] font-bold uppercase tracking-wider text-white/40">Participação</p>
+                  <p className="mt-1 font-black">Cadastro validado</p>
+                </div>
+              </div>
+            </div>
+
+            <div className="border-t border-white/10 bg-black/20 p-5 md:p-8 lg:border-l lg:border-t-0 lg:p-10">
+              {activeRaffle?.drawMode === "automatic" && scheduledLabel ? (
+                <>
+                  <div className="flex items-center gap-2 text-sm font-bold text-purple-200">
+                    <CalendarClock className="h-5 w-5 text-yellow-300" /> SORTEIO PROGRAMADO
+                  </div>
+                  <p className="mt-2 text-sm text-white/55">{scheduledLabel} • horário de São Paulo</p>
+                  <div className="mt-5 grid grid-cols-4 gap-2">
+                    {[
+                      [format2(countdown.days), "DIAS"],
+                      [format2(countdown.hours), "HORAS"],
+                      [format2(countdown.minutes), "MIN"],
+                      [format2(countdown.seconds), "SEG"],
+                    ].map(([value,label]) => (
+                      <div key={label} className="rounded-2xl border border-purple-400/20 bg-[#11162a] px-2 py-4 text-center">
+                        <div className="text-2xl font-black tabular-nums md:text-3xl">{value}</div>
+                        <div className="mt-1 text-[9px] font-black tracking-wider text-white/35">{label}</div>
+                      </div>
+                    ))}
+                  </div>
+                  <div className="mt-4 flex items-center gap-2 rounded-xl border border-yellow-400/20 bg-yellow-400/[0.06] px-3 py-2 text-xs text-yellow-100/80">
+                    <Clock3 className="h-4 w-4 text-yellow-300" /> Contagem regressiva em tempo real.
+                  </div>
+                </>
+              ) : (
+                <div className="flex min-h-[180px] flex-col justify-center rounded-2xl border border-white/10 bg-white/[0.03] p-5">
+                  <CalendarClock className="h-8 w-8 text-yellow-300" />
+                  <p className="mt-3 text-lg font-black">Sorteio manual</p>
+                  <p className="mt-1 text-sm text-white/45">A equipe H2 realizará o sorteio e publicará o resultado aqui.</p>
+                </div>
+              )}
+            </div>
+          </div>
+        </section>
+
+        {activeRaffle?.description && (
+          <section className="mt-5 rounded-2xl border border-white/10 bg-white/[0.03] p-4 md:p-5">
+            <div className="flex items-start gap-3">
+              <Info className="mt-0.5 h-5 w-5 flex-shrink-0 text-yellow-300" />
+              <div>
+                <p className="text-xs font-black uppercase tracking-wider text-white/55">Regras e informações</p>
+                <p className="mt-2 whitespace-pre-wrap text-sm leading-relaxed text-white/65">{activeRaffle.description}</p>
+              </div>
+            </div>
+          </section>
+        )}
+
+        {needsCpfUpdate && (
+          <section className="mt-5 rounded-2xl border border-yellow-500/30 bg-yellow-500/[0.08] p-5">
+            <p className="font-bold text-yellow-200">Atualização de cadastro necessária</p>
+            <p className="mt-1 text-sm text-white/55">Informe seu CPF para continuar.</p>
+            <div className="mt-3 max-w-md">
               <input
                 type="text"
                 inputMode="numeric"
@@ -301,230 +404,145 @@ export default function Raffle() {
                   else if (d.length > 6) f = `${d.slice(0,3)}.${d.slice(3,6)}.${d.slice(6)}`;
                   else if (d.length > 3) f = `${d.slice(0,3)}.${d.slice(3)}`;
                   setCpfValue(f);
-                  setCpfError(d.length === 11 && !isValidCPF(d) ? 'CPF inválido. Digite um CPF válido para continuar.' : '');
+                  setCpfError(d.length === 11 && !isValidCPF(d) ? 'CPF inválido.' : '');
                 }}
                 placeholder="000.000.000-00"
-                className={`w-full px-4 py-4 bg-white text-black text-lg text-center font-medium rounded-xl border-2 outline-none transition-all ${
-                  cpfError ? 'border-red-500' : isValidCPF(cpfValue) ? 'border-green-500' : 'border-gray-300'
-                }`}
+                className={`w-full rounded-xl border-2 bg-white px-4 py-3 text-center text-lg font-medium text-black outline-none ${cpfError ? 'border-red-500' : isValidCPF(cpfValue) ? 'border-green-500' : 'border-gray-300'}`}
               />
-              {cpfError && <p className="text-red-400 text-sm mt-1">{cpfError}</p>}
+              {cpfError && <p className="mt-1 text-sm text-red-300">{cpfError}</p>}
+              <button
+                disabled={cpfLoading || !isValidCPF(cpfValue)}
+                onClick={async () => {
+                  const d = normalizeCpf(cpfValue);
+                  if (!isValidCPF(d)) { setCpfError('CPF inválido.'); return; }
+                  setCpfLoading(true);
+                  try {
+                    const res = await updateCpfMutation.mutateAsync({ phone: phoneDigits || savedPhone, cpf: d });
+                    if (!res.success) { setCpfError(res.message || 'Erro ao salvar CPF'); return; }
+                    setNeedsCpfUpdate(false);
+                    toast.success('CPF cadastrado! Agora escolha seu número.');
+                  } catch { setCpfError('Erro ao salvar. Tente novamente.'); }
+                  finally { setCpfLoading(false); }
+                }}
+                className="mt-3 w-full rounded-xl bg-gradient-to-r from-yellow-500 to-amber-400 px-4 py-3 font-black text-black disabled:opacity-50"
+              >
+                {cpfLoading ? 'Salvando...' : 'SALVAR E CONTINUAR'}
+              </button>
             </div>
-            <button
-              disabled={cpfLoading || !isValidCPF(cpfValue)}
-              onClick={async () => {
-                const d = normalizeCpf(cpfValue);
-                if (!isValidCPF(d)) { setCpfError('CPF inválido. Digite um CPF válido para continuar.'); return; }
-                setCpfLoading(true);
-                try {
-                  const res = await updateCpfMutation.mutateAsync({ phone: phoneDigits || savedPhone, cpf: d });
-                  if (!res.success) { setCpfError(res.message || 'Erro ao salvar CPF'); return; }
-                  setNeedsCpfUpdate(false);
-                  toast.success('CPF cadastrado! Agora escolha seu número.');
-                } catch { setCpfError('Erro ao salvar. Tente novamente.'); }
-                finally { setCpfLoading(false); }
-              }}
-              className="w-full px-4 py-4 bg-gradient-to-r from-yellow-600 to-yellow-500 hover:from-yellow-600/80 hover:to-yellow-500/80 disabled:opacity-50 disabled:cursor-not-allowed text-white font-bold text-lg rounded-xl transition-all"
-            >
-              {cpfLoading ? 'Salvando...' : 'SALVAR E CONTINUAR'}
-            </button>
-          </div>
+          </section>
         )}
 
-        {/* Descrição */}
-        {activeRaffle?.description && (
-          <div className="bg-yellow-500/10 border border-yellow-500/20 rounded-2xl p-4 space-y-3">
-            <h3 className="text-white font-bold text-center text-sm">REGRAS DO SORTEIO GRÁTIS</h3>
-            <p className="text-white/70 text-sm whitespace-pre-wrap break-words text-left">{activeRaffle.description}</p>
-          </div>
-        )}
-
-        {/* Limite de números */}
-        {maxAllowed > 1 && (
-          <div className="bg-yellow-500/10 border border-yellow-500/30 rounded-2xl p-3 flex items-center justify-between">
-            <div className="flex items-center gap-2">
-              <Hash className="w-4 h-4 text-yellow-400" />
-              <span className="text-white/70 text-sm">Números por pessoa:</span>
-            </div>
-            <span className="text-yellow-400 font-black text-lg">{maxAllowed}</span>
-          </div>
-        )}
-
-        {/* Stats */}
-        <div className="grid grid-cols-2 gap-3">
-          <div className="bg-white/5 border border-white/10 rounded-2xl p-4 text-center">
-            <Users className="w-5 h-5 text-yellow-400 mx-auto mb-1" />
-            <p className="text-2xl font-black text-white">{takenNumbers.length}</p>
-            <p className="text-xs text-white/40">Números ocupados</p>
-          </div>
-          <div className="bg-white/5 border border-white/10 rounded-2xl p-4 text-center">
-            <Ticket className="w-5 h-5 text-orange-400 mx-auto mb-1" />
-            <p className="text-2xl font-black text-white">{100 - takenNumbers.length}</p>
-            <p className="text-xs text-white/40">Números livres</p>
-          </div>
-        </div>
-
-        {/* Números já escolhidos pelo cliente */}
-        {myEntry?.hasEntry && myChosenNumbers.length > 0 && (
-          <div className="bg-green-500/15 border border-green-500/30 rounded-2xl p-4 space-y-2">
-            <div className="flex items-center gap-3">
-              <CheckCircle2 className="w-6 h-6 text-green-400 flex-shrink-0" />
+        <div className="mt-5 grid gap-5 lg:grid-cols-[1fr_320px]">
+          <section className="rounded-3xl border border-white/10 bg-[#0c1120]/90 p-4 md:p-5">
+            <div className="mb-4 flex flex-col gap-3 sm:flex-row sm:items-end sm:justify-between">
               <div>
-                <p className="text-white font-bold">Seus números escolhidos</p>
-                {canChooseMore ? (
-                  <p className="text-yellow-400 text-sm">Você ainda pode escolher mais <strong>{remainingChoices}</strong> número(s)!</p>
-                ) : (
-                  <p className="text-white/50 text-sm">Você usou todos os {maxAllowed} número(s) disponíveis.</p>
-                )}
+                <div className="flex items-center gap-2"><Sparkles className="h-5 w-5 text-yellow-300" /><h2 className="text-lg font-black md:text-xl">Escolha seus números</h2></div>
+                <p className="mt-1 text-xs text-white/40">Selecione de 1 a 100. Limite: {maxAllowed} por pessoa.</p>
+              </div>
+              <div className="flex flex-wrap items-center gap-3 text-[10px] font-semibold text-white/50">
+                <span className="flex items-center gap-1.5"><span className="h-2.5 w-2.5 rounded bg-white/10 border border-white/15" /> Disponível</span>
+                <span className="flex items-center gap-1.5"><span className="h-2.5 w-2.5 rounded bg-red-500/70" /> Ocupado</span>
+                <span className="flex items-center gap-1.5"><span className="h-2.5 w-2.5 rounded bg-yellow-400" /> Selecionado</span>
               </div>
             </div>
-            <div className="flex flex-wrap gap-2 pt-1">
-              {myChosenNumbers.map((n) => (
-                <span key={n} className="bg-green-500/20 border border-green-500/40 text-green-400 font-black text-lg rounded-xl px-3 py-1">
-                  #{n}
-                </span>
-              ))}
-            </div>
-          </div>
-        )}
 
-        {/* Formulário — só aparece se ainda pode escolher */}
-        {canChooseMore && !submitted && (
-          <div className="bg-black/40 border border-white/10 rounded-2xl p-5 space-y-4">
-            <h3 className="text-white font-black flex items-center gap-2">
-              <Star className="w-5 h-5 text-yellow-400" />
-              {myChosenCount > 0 ? `Escolha mais ${remainingChoices} número(s)` : "Escolha seu número"}
-              {maxAllowed > 1 && (
-                <span className="ml-auto text-xs text-white/40 font-normal">
-                  {myChosenCount}/{maxAllowed} escolhidos
-                </span>
-              )}
-            </h3>
+            {myEntry?.hasEntry && myChosenNumbers.length > 0 && (
+              <div className="mb-4 rounded-xl border border-emerald-400/20 bg-emerald-500/[0.08] p-3">
+                <p className="text-xs font-bold text-emerald-200">Seus números: {myChosenNumbers.map(n => `#${n}`).join(" • ")}</p>
+                {canChooseMore ? <p className="mt-1 text-[11px] text-white/45">Você ainda pode escolher mais {remainingChoices}.</p> : <p className="mt-1 text-[11px] font-bold text-yellow-200">Limite de {maxAllowed} número(s) atingido.</p>}
+              </div>
+            )}
 
-            {/* Grid de números */}
-            <div className="grid grid-cols-10 gap-1.5">
+            <div className="grid grid-cols-5 gap-2 sm:grid-cols-10">
               {Array.from({ length: 100 }, (_, i) => i + 1).map((num) => {
                 const taken = takenNumbers.includes(num);
+                const entry: any = entryByNumber.get(num);
                 const isMyNumber = myChosenNumbers.includes(num);
                 const isSelected = selectedNumber === num;
                 return (
                   <button
                     key={num}
-                    disabled={taken && !isMyNumber}
-                    onClick={() => !taken && !isMyNumber && setSelectedNumber(isSelected ? null : num)}
-                    className={`
-                      aspect-square rounded-lg text-xs font-bold transition-all duration-150
-                      ${isMyNumber
-                        ? "bg-green-500/30 text-green-400 cursor-default border border-green-500/40"
-                        : taken
-                          ? "bg-red-500/20 text-red-400/50 cursor-not-allowed border border-red-500/20"
-                          : isSelected
-                            ? "bg-gradient-to-br from-yellow-500 to-orange-500 text-white shadow-lg shadow-yellow-900/40 scale-110 border-2 border-yellow-400"
-                            : "bg-white/5 text-white/70 hover:bg-white/15 hover:text-white border border-white/10"
-                      }
-                    `}
+                    disabled={(taken && !isMyNumber) || !canChooseMore}
+                    onClick={() => !taken && !isMyNumber && canChooseMore && setSelectedNumber(isSelected ? null : num)}
+                    className={`relative aspect-square overflow-hidden rounded-xl border text-xs font-black transition-all duration-150 ${isMyNumber
+                      ? "border-emerald-400/50 bg-emerald-500/20 text-emerald-200"
+                      : taken
+                        ? "border-red-500/25 bg-red-500/15 text-white/90 cursor-not-allowed"
+                        : isSelected
+                          ? "scale-105 border-yellow-300 bg-yellow-400 text-black shadow-lg shadow-yellow-500/20"
+                          : !canChooseMore
+                            ? "border-white/5 bg-white/[0.02] text-white/20 cursor-not-allowed"
+                            : "border-white/10 bg-white/[0.04] text-white/75 hover:border-white/25 hover:bg-white/[0.08]"
+                    }`}
                   >
-                    {num}
+                    {taken && entry?.profilePhotoUrl && <img src={entry.profilePhotoUrl} alt="" className="absolute inset-0 h-full w-full object-cover opacity-70" />}
+                    {taken && <span className="absolute inset-0 bg-gradient-to-t from-black/60 to-black/10" />}
+                    <span className="relative z-10 drop-shadow">{num}</span>
                   </button>
                 );
               })}
             </div>
+          </section>
 
-            {selectedNumber && (
-              <div className="bg-yellow-500/10 border border-yellow-500/30 rounded-xl p-3 text-center">
-                <p className="text-yellow-400 font-bold">Número selecionado: <span className="text-2xl">#{selectedNumber}</span></p>
+          <aside className="space-y-4">
+            <div className="rounded-3xl border border-white/10 bg-[#0c1120]/90 p-5">
+              <p className="text-xs font-black uppercase tracking-wider text-white/45">Sua participação</p>
+              <div className="mt-3 flex items-end justify-between">
+                <div><div className="text-4xl font-black">{myChosenCount}<span className="text-xl text-white/30">/{maxAllowed}</span></div><p className="mt-1 text-xs text-white/40">números confirmados</p></div>
+                <Ticket className="h-8 w-8 text-yellow-300" />
               </div>
-            )}
-
-            {/* Dados do participante */}
-            <div className="space-y-3">
-              <div className="relative">
-                <User className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-white/30" />
-                <input
-                  type="text"
-                  value={name}
-                  onChange={(e) => setName(e.target.value)}
-                  placeholder="Seu nome completo"
-                  className="w-full bg-black/40 border border-white/10 rounded-xl pl-10 pr-4 py-3 text-white placeholder-white/30 focus:outline-none focus:border-yellow-500/50"
-                />
-              </div>
-              <div className="relative">
-                <Phone className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-white/30" />
-                <input
-                  type="tel"
-                  value={phone}
-                  onChange={(e) => setPhone(e.target.value)}
-                  placeholder="Seu telefone com DDD (11 dígitos)"
-                  className={`w-full bg-black/40 border rounded-xl pl-10 pr-10 py-3 text-white placeholder-white/30 focus:outline-none transition-colors ${
-                    isPhoneRegistered === true ? 'border-green-500/60 focus:border-green-500' :
-                    isPhoneRegistered === false ? 'border-red-500/60 focus:border-red-500' :
-                    'border-white/10 focus:border-yellow-500/50'
-                  }`}
-                />
-                {/* Ícone de status do telefone */}
-                {phoneDigits.length === 11 && (
-                  <div className="absolute right-3 top-1/2 -translate-y-1/2">
-                    {phoneCheckLoading ? (
-                      <RefreshCw className="w-4 h-4 text-white/40 animate-spin" />
-                    ) : isPhoneRegistered === true ? (
-                      <CheckCircle2 className="w-4 h-4 text-green-400" />
-                    ) : isPhoneRegistered === false ? (
-                      <span className="text-red-400 text-lg font-bold">✕</span>
-                    ) : null}
-                  </div>
-                )}
-              </div>
-              {/* Mensagem de não cadastrado */}
-              {isPhoneRegistered === false && (
-                <div className="flex items-start gap-2 bg-red-500/10 border border-red-500/30 rounded-xl px-4 py-3">
-                  <span className="text-red-400 text-lg mt-0.5">⚠</span>
-                  <div>
-                    <p className="text-red-300 font-bold text-sm">Número não cadastrado</p>
-                    <p className="text-red-300/70 text-xs mt-0.5">O sorteio é exclusivo para clientes cadastrados. Entre em contato para se cadastrar.</p>
-                  </div>
-                </div>
-              )}
-              {/* Mensagem de cliente confirmado */}
-              {isPhoneRegistered === true && (
-                <div className="flex items-center gap-2 bg-green-500/10 border border-green-500/30 rounded-xl px-4 py-2">
-                  <CheckCircle2 className="w-4 h-4 text-green-400 flex-shrink-0" />
-                  <p className="text-green-300 text-xs font-semibold">Cliente cadastrado — você pode participar!</p>
-                </div>
-              )}
+              <div className="mt-4 h-2 overflow-hidden rounded-full bg-white/10"><div className="h-full rounded-full bg-gradient-to-r from-yellow-400 to-amber-300" style={{ width: `${Math.min(100, (myChosenCount / Math.max(1,maxAllowed))*100)}%` }} /></div>
             </div>
 
-            <button
-              onClick={handleChooseNumber}
-              disabled={!selectedNumber || !name.trim() || !phone.trim() || submitting || isPhoneRegistered === false || (phoneDigits.length === 11 && isPhoneRegistered === null)}
-              className="w-full bg-gradient-to-r from-yellow-500 to-orange-500 hover:from-yellow-400 hover:to-orange-400 disabled:opacity-40 disabled:cursor-not-allowed text-white font-black text-lg rounded-xl py-4 transition-all duration-300 transform hover:scale-[1.02] active:scale-95 flex items-center justify-center gap-2"
-            >
-              {submitting ? <RefreshCw className="w-5 h-5 animate-spin" /> : <Ticket className="w-5 h-5" />}
-              {submitting ? "Confirmando..." : selectedNumber ? `CONFIRMAR NÚMERO ${selectedNumber}` : "SELECIONE UM NÚMERO"}
-            </button>
-          </div>
-        )}
-
-        {/* Sucesso final */}
-        {submitted && (
-          <div className="bg-green-500/15 border border-green-500/30 rounded-2xl p-6 text-center space-y-3">
-            <CheckCircle2 className="w-16 h-16 text-green-400 mx-auto" />
-            <h3 className="text-xl font-black text-white">Participação confirmada!</h3>
-            {lastChosenNumber && (
-              <p className="text-white/60 text-sm">Último número: <strong className="text-green-400 text-xl">#{lastChosenNumber}</strong></p>
-            )}
-            {myChosenNumbers.length > 0 && (
-              <div className="flex flex-wrap gap-2 justify-center pt-1">
-                {myChosenNumbers.map((n) => (
-                  <span key={n} className="bg-green-500/20 border border-green-500/40 text-green-400 font-bold rounded-lg px-2 py-0.5 text-sm">
-                    #{n}
-                  </span>
-                ))}
+            {canChooseMore && !submitted && (
+              <div className="rounded-3xl border border-yellow-400/20 bg-gradient-to-br from-yellow-400/[0.08] to-transparent p-5">
+                <p className="font-black">Confirmar participação</p>
+                <p className="mt-1 text-xs text-white/45">Selecione um número e confirme seus dados.</p>
+                {selectedNumber && <div className="mt-4 rounded-xl border border-yellow-400/30 bg-yellow-400/10 p-3 text-center"><span className="text-xs text-yellow-100/60">Número selecionado</span><div className="text-3xl font-black text-yellow-200">#{selectedNumber}</div></div>}
+                <div className="mt-4 space-y-3">
+                  <div className="relative"><User className="absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 text-white/25" /><input type="text" value={name} onChange={(e) => setName(e.target.value)} placeholder="Seu nome completo" className="w-full rounded-xl border border-white/10 bg-black/30 py-3 pl-10 pr-3 text-sm outline-none focus:border-yellow-400/40" /></div>
+                  <div className="relative"><Phone className="absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 text-white/25" /><input type="tel" value={phone} onChange={(e) => setPhone(e.target.value)} placeholder="Telefone com DDD" className={`w-full rounded-xl border bg-black/30 py-3 pl-10 pr-9 text-sm outline-none ${isPhoneRegistered === true ? 'border-green-500/40' : isPhoneRegistered === false ? 'border-red-500/40' : 'border-white/10 focus:border-yellow-400/40'}`} />{phoneDigits.length === 11 && <div className="absolute right-3 top-1/2 -translate-y-1/2">{phoneCheckLoading ? <RefreshCw className="h-4 w-4 animate-spin text-white/30" /> : isPhoneRegistered === true ? <CheckCircle2 className="h-4 w-4 text-green-400" /> : <span className="font-bold text-red-400">×</span>}</div>}</div>
+                </div>
+                {isPhoneRegistered === false && <p className="mt-2 text-xs text-red-300">Telefone não cadastrado no sistema.</p>}
+                {isPhoneRegistered === true && <p className="mt-2 text-xs text-emerald-300">Cliente confirmado.</p>}
+                <button
+                  onClick={handleChooseNumber}
+                  disabled={!selectedNumber || !name.trim() || !phone.trim() || submitting || isPhoneRegistered === false || (phoneDigits.length === 11 && isPhoneRegistered === null)}
+                  className="mt-4 flex w-full items-center justify-center gap-2 rounded-xl bg-gradient-to-r from-yellow-400 to-amber-300 px-4 py-3.5 font-black text-black disabled:opacity-35"
+                >
+                  {submitting ? <RefreshCw className="h-5 w-5 animate-spin" /> : <Ticket className="h-5 w-5" />}
+                  {submitting ? "Confirmando..." : selectedNumber ? `CONFIRMAR #${selectedNumber}` : "SELECIONE UM NÚMERO"}
+                </button>
               </div>
             )}
-            <p className="text-white/40 text-xs">Boa sorte! 🍀</p>
-          </div>
+
+            {!canChooseMore && (
+              <div className="rounded-3xl border border-emerald-400/20 bg-emerald-500/[0.08] p-5 text-center">
+                <CheckCircle2 className="mx-auto h-8 w-8 text-emerald-400" />
+                <p className="mt-2 font-black">Participação completa</p>
+                <p className="mt-1 text-xs text-white/45">Você atingiu o limite de {maxAllowed} número(s) deste sorteio.</p>
+              </div>
+            )}
+
+            <div className="rounded-3xl border border-white/10 bg-[#0c1120]/90 p-5">
+              <p className="text-xs font-black uppercase tracking-wider text-white/45">Resumo</p>
+              <div className="mt-4 space-y-3 text-sm">
+                <div className="flex justify-between"><span className="text-white/45">Ocupados</span><strong>{takenNumbers.length}</strong></div>
+                <div className="flex justify-between"><span className="text-white/45">Disponíveis</span><strong>{100 - takenNumbers.length}</strong></div>
+                <div className="flex justify-between"><span className="text-white/45">Limite por pessoa</span><strong>{maxAllowed}</strong></div>
+              </div>
+            </div>
+          </aside>
+        </div>
+
+        {submitted && (
+          <section className="mt-5 rounded-3xl border border-emerald-500/25 bg-emerald-500/[0.08] p-6 text-center">
+            <CheckCircle2 className="mx-auto h-14 w-14 text-emerald-400" />
+            <h3 className="mt-3 text-xl font-black">Participação confirmada!</h3>
+            <p className="mt-1 text-sm text-white/45">Boa sorte! O resultado será publicado no sistema.</p>
+          </section>
         )}
-      </div>
+      </main>
     </div>
   );
 }

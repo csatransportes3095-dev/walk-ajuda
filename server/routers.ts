@@ -3344,7 +3344,16 @@ export const appRouter = router({
       if (!raffle) return null;
       const entries = await getRaffleEntries(raffle.id);
       const takenNumbers = entries.map(e => e.number);
-      return { id: raffle.id, title: raffle.title, description: raffle.description, takenNumbers, maxNumbersPerPerson: raffle.maxNumbersPerPerson ?? 1 };
+      return {
+        id: raffle.id,
+        title: raffle.title,
+        description: raffle.description,
+        takenNumbers,
+        maxNumbersPerPerson: raffle.maxNumbersPerPerson ?? 1,
+        drawMode: (raffle as any).drawMode ?? "manual",
+        scheduledDrawAt: (raffle as any).scheduledDrawAt ?? null,
+        drawEligibility: (raffle as any).drawEligibility ?? "paid",
+      };
     }),
 
     // Público: obter resultado do último sorteio realizado
@@ -3362,8 +3371,13 @@ export const appRouter = router({
         if (!raffle || raffle.status !== "open") return { success: false, error: "Sorteio não está aberto" };
         // Verificar limite de números por pessoa
         const entries = await getRaffleEntries(input.raffleId);
-        const myEntries = entries.filter((e: any) => e.customerPhone === input.customerPhone);
-        const maxAllowed = raffle.maxNumbersPerPerson ?? 1;
+        const normalizeRafflePhone = (value: unknown) => {
+          const digits = String(value || "").replace(/\D/g, "");
+          return digits.startsWith("55") && digits.length > 11 ? digits.slice(-11) : digits.slice(-11);
+        };
+        const inputPhone = normalizeRafflePhone(input.customerPhone);
+        const myEntries = entries.filter((e: any) => normalizeRafflePhone(e.customerPhone) === inputPhone);
+        const maxAllowed = Math.max(1, Number(raffle.maxNumbersPerPerson ?? 1));
         if (myEntries.length >= maxAllowed) {
           if (maxAllowed === 1) {
             return { success: false, error: "Você já escolheu o número " + myEntries[0].number + ". Não é possível alterar." };
@@ -3398,7 +3412,9 @@ export const appRouter = router({
       .input(z.object({ raffleId: z.number(), phone: z.string().min(10) }))
       .query(async ({ input }) => {
         const entries = await getRaffleEntries(input.raffleId);
-        const myEntries = entries.filter((e: any) => e.customerPhone === input.phone);
+        const normalizeRafflePhone = (value: unknown) => String(value || "").replace(/\D/g, "").slice(-11);
+        const inputPhone = normalizeRafflePhone(input.phone);
+        const myEntries = entries.filter((e: any) => normalizeRafflePhone(e.customerPhone) === inputPhone);
         if (myEntries.length === 0) return { hasEntry: false, number: null, numbers: [] as number[], count: 0 };
         return { hasEntry: true, number: myEntries[0].number, numbers: myEntries.map((e: any) => e.number), count: myEntries.length };
       }),
