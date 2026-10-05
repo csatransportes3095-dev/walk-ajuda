@@ -3395,6 +3395,29 @@ export const appRouter = router({
       return { id: raffle.id, title: raffle.title, winnerNumber: raffle.winnerNumber, winnerName: raffle.winnerName, winnerPhone: raffle.winnerPhone, winnerProfilePhotoUrl: raffle.winnerProfilePhotoUrl, drawnAt: raffle.drawnAt };
     }),
 
+    // Público: galeria com todos os ganhadores já sorteados.
+    // Não expõe telefone no histórico; mostra apenas os dados necessários para a vitrine.
+    history: publicProcedure.query(async () => {
+      const items = await getAllRaffles();
+      const drawn = items.filter((item: any) =>
+        item?.status === "drawn" &&
+        item?.winnerNumber !== null &&
+        item?.winnerNumber !== undefined &&
+        String(item?.winnerName || "").trim()
+      );
+      const resolved = await Promise.all(drawn.map((item: any) => withResolvedRaffleWinnerPhoto(item)));
+      return resolved
+        .sort((a: any, b: any) => new Date(b.drawnAt || b.createdAt || 0).getTime() - new Date(a.drawnAt || a.createdAt || 0).getTime())
+        .map((raffle: any) => ({
+          id: raffle.id,
+          title: raffle.title,
+          winnerNumber: raffle.winnerNumber,
+          winnerName: raffle.winnerName,
+          winnerProfilePhotoUrl: raffle.winnerProfilePhotoUrl,
+          drawnAt: raffle.drawnAt,
+        }));
+    }),
+
     // Público: escolher um número no sorteio ativo
     chooseNumber: publicProcedure
       .input(z.object({ raffleId: z.number(), number: z.number().min(1).max(100), customerName: z.string().min(1), customerPhone: z.string().min(10) }))
