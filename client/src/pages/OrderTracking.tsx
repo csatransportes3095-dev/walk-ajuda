@@ -214,8 +214,8 @@ export default function OrderTracking() {
         bg: extractBg(s.bgColor),
         border: extractBorder(s.bgColor),
         icon: (s as any).imageUrl
-          ? <img src={(s as any).imageUrl} alt="" className="w-5 h-5 object-contain" />
-          : (ICON_MAP[s.icon] ?? <Clock className="w-5 h-5" />),
+          ? <img src={(s as any).imageUrl} alt="" className="w-full h-full object-contain p-1" />
+          : (ICON_MAP[s.icon] ?? <Clock className="w-6 h-6" />),
         step: s.sortOrder,
         description: s.description ?? null,
         pulseColor: (s as any).pulseColor ?? null,
@@ -1187,9 +1187,9 @@ export default function OrderTracking() {
                   <div className="space-y-3 p-4 sm:p-5">
                     <div className={`rounded-2xl border-2 p-4 ${latestCfg.bg} ${latestCfg.border}`}>
                       <div className="flex items-start gap-3">
-                        <div className="relative flex h-12 w-12 flex-shrink-0 items-center justify-center">
-                          <span className="absolute h-12 w-12 animate-ping rounded-full opacity-25" style={{ backgroundColor: latestCfg.pulseColor ?? '#22d3ee', animationDuration: '1.8s' }} />
-                          <div className={`relative z-10 flex h-10 w-10 items-center justify-center rounded-full border-2 ${latestCfg.bg} ${latestCfg.border} ${latestCfg.color}`}>
+                        <div className="relative flex h-16 w-16 flex-shrink-0 items-center justify-center">
+                          <span className="absolute h-16 w-16 animate-ping rounded-full opacity-25" style={{ backgroundColor: latestCfg.pulseColor ?? '#22d3ee', animationDuration: '1.8s' }} />
+                          <div className={`relative z-10 flex h-14 w-14 items-center justify-center overflow-hidden rounded-full border-2 shadow-[0_0_18px_rgba(34,211,238,0.35)] ${latestCfg.bg} ${latestCfg.border} ${latestCfg.color}`}>
                             {latestCfg.icon}
                           </div>
                         </div>
