@@ -11,8 +11,9 @@ import { registerUploadRoute } from "../uploadRoute";
 import { registerApkDownloadRoute, ensureApkTable } from "../routers/apk";
 import { appRouter } from "../routers";
 import { createContext } from "./context";
+import { isAdminJwtValid } from "./trpc";
 import { serveStatic, setupVite } from "./vite";
-import { isIpBlocked, getSetting, getDb } from "../db";
+import { isIpBlocked, getSetting, getDb, getRaffleById, getRaffleEntries, deleteRaffleEntry } from "../db";
 import { broadcastEmailHandler } from "../broadcastEmailHandler";
 import { registerPingRoute } from "./pingRoute";
 import { registerRaffleIntegrityRoutes } from "../raffleIntegrityRoutes";
@@ -202,6 +203,50 @@ async function startServer() {
   // Configure body parser with larger size limit for file uploads
   app.use(express.json({ limit: "200mb" }));
   app.use(express.urlencoded({ limit: "200mb", extended: true }));
+
+  // Rota administrativa dedicada para liberar reserva NÃO PAGA do sorteio.
+  // Usa a mesma autenticação JWT do adminProcedure, mas responde JSON puro para
+  // não depender do transformer do tRPC neste fluxo crítico do painel.
+  app.post("/api/admin/raffle/release-number", async (req, res) => {
+    try {
+      if (!isAdminJwtValid(req as any)) {
+        res.status(403).json({ success: false, error: "Acesso administrativo inválido." });
+        return;
+      }
+      const entryId = Number(req.body?.entryId);
+      const raffleId = Number(req.body?.raffleId);
+      if (!Number.isInteger(entryId) || entryId <= 0 || !Number.isInteger(raffleId) || raffleId <= 0) {
+        res.status(400).json({ success: false, error: "Dados inválidos para liberar o número." });
+        return;
+      }
+      const raffle = await getRaffleById(raffleId);
+      if (!raffle) {
+        res.status(404).json({ success: false, error: "Sorteio não encontrado." });
+        return;
+      }
+      if (raffle.status !== "open") {
+        res.status(409).json({ success: false, error: "Só é possível liberar números enquanto o sorteio estiver aberto." });
+        return;
+      }
+      const entries = await getRaffleEntries(raffleId);
+      const entry = entries.find((item: any) => Number(item.id) === entryId);
+      if (!entry) {
+        res.status(404).json({ success: false, error: "Reserva não encontrada neste sorteio." });
+        return;
+      }
+      if (entry.paymentStatus === "paid") {
+        res.status(409).json({ success: false, error: "Número pago está protegido. Altere para Aguardando antes de liberar." });
+        return;
+      }
+      await deleteRaffleEntry(entryId);
+      res.setHeader("Cache-Control", "no-store");
+      res.status(200).json({ success: true, number: Number(entry.number) });
+    } catch (error) {
+      console.error("[Raffle] falha ao liberar número:", error);
+      res.status(500).json({ success: false, error: "Não foi possível liberar o número." });
+    }
+  });
+
   // Integridade do sorteio vem antes do tRPC: uma entrada confirmada não pode
   // ser apagada nem por uma aba antiga do painel administrativo.
   registerRaffleIntegrityRoutes(app);

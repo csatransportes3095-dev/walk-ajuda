@@ -78,6 +78,7 @@ export default function AdminRaffles() {
   const [editDrawEligibility, setEditDrawEligibility] = useState<"all" | "paid">("paid");
   const [viewingId, setViewingId] = useState<number | null>(null);
   const [confirmRemoveEntry, setConfirmRemoveEntry] = useState<{ entryId: number; raffleId: number; number: number; name: string } | null>(null);
+  const [releasingEntry, setReleasingEntry] = useState(false);
   const [whatsappListMode, setWhatsappListMode] = useState<"all" | "paid" | "pending">("all");
 
   // Configuração de senha do sorteio
@@ -109,6 +110,34 @@ export default function AdminRaffles() {
   if (isLoading) {
     return <div className="min-h-screen bg-background flex items-center justify-center"><div className="text-white/60">Carregando...</div></div>;
   }
+  const releasePendingNumber = async () => {
+    if (!confirmRemoveEntry || releasingEntry) return;
+    setReleasingEntry(true);
+    try {
+      const response = await fetch("/api/admin/raffle/release-number", {
+        method: "POST",
+        credentials: "include",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          entryId: confirmRemoveEntry.entryId,
+          raffleId: confirmRemoveEntry.raffleId,
+        }),
+      });
+      const data = await response.json().catch(() => null);
+      if (!response.ok || data?.success !== true) {
+        throw new Error(data?.error || `Falha ao liberar número (HTTP ${response.status}).`);
+      }
+      await utils.raffles.getById.invalidate();
+      await utils.raffles.list.invalidate();
+      toast.success(`Número #${confirmRemoveEntry.number} liberado com sucesso!`);
+      setConfirmRemoveEntry(null);
+    } catch (error) {
+      toast.error(error instanceof Error ? error.message : "Erro ao liberar número");
+    } finally {
+      setReleasingEntry(false);
+    }
+  };
+
   const handleCreate = async () => {
     if (!newTitle.trim()) { toast.error("Informe o título do sorteio"); return; }
     if (newDrawMode === "automatic" && !newScheduledAt) { toast.error("Informe data e hora do sorteio automático."); return; }
@@ -857,11 +886,11 @@ export default function AdminRaffles() {
             <div className="flex gap-3">
               <button onClick={() => setConfirmRemoveEntry(null)} className="flex-1 py-2 rounded-lg bg-white/10 hover:bg-white/20 text-white text-sm transition-colors">Cancelar</button>
               <button
-                onClick={() => removeEntryMutation.mutate({ entryId: confirmRemoveEntry.entryId, raffleId: confirmRemoveEntry.raffleId })}
-                disabled={removeEntryMutation.isPending}
+                onClick={() => void releasePendingNumber()}
+                disabled={releasingEntry}
                 className="flex-1 py-2 rounded-lg bg-red-600 hover:bg-red-700 text-white text-sm font-bold transition-colors disabled:opacity-50"
               >
-                {removeEntryMutation.isPending ? 'Liberando...' : 'LIBERAR NÚMERO'}
+                {releasingEntry ? 'Liberando...' : 'LIBERAR NÚMERO'}
               </button>
             </div>
           </div>
