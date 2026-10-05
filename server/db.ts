@@ -908,6 +908,17 @@ export async function getCustomerByPhone(phone: string): Promise<Customer | null
   return result.length > 0 ? result[0] : null;
 }
 
+export async function getCustomerByPhoneNormalized(phone: string): Promise<Customer | null> {
+  const db = await getDb();
+  if (!db) return null;
+  const digits = String(phone || "").replace(/\D/g, "").slice(-11);
+  if (!digits) return null;
+  const rows = await db.select().from(customers)
+    .where(sql`RIGHT(REGEXP_REPLACE(${customers.phone}, '[^0-9]', ''), 11) = ${digits}`)
+    .limit(1);
+  return rows[0] || null;
+}
+
 export async function getCustomerByCpf(cpf: string): Promise<Customer | null> {
   const db = await getDb();
   if (!db) return null;
@@ -1145,7 +1156,7 @@ export async function getRaffleEntries(raffleId: number): Promise<(RaffleEntry &
       profilePhotoUrl: customers.profilePhotoUrl,
     })
     .from(raffleEntries)
-    .leftJoin(customers, eq(customers.phone, raffleEntries.customerPhone))
+    .leftJoin(customers, sql`RIGHT(REGEXP_REPLACE(${customers.phone}, '[^0-9]', ''), 11) = RIGHT(REGEXP_REPLACE(${raffleEntries.customerPhone}, '[^0-9]', ''), 11)`)
     .where(eq(raffleEntries.raffleId, raffleId))
     .orderBy(asc(raffleEntries.number));
   return rows;

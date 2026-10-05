@@ -207,6 +207,51 @@ async function startServer() {
   // Rota administrativa dedicada para liberar reserva NÃO PAGA do sorteio.
   // Usa a mesma autenticação JWT do adminProcedure, mas responde JSON puro para
   // não depender do transformer do tRPC neste fluxo crítico do painel.
+  app.get("/api/admin/raffle/winner-photo/:raffleId", async (req, res) => {
+    try {
+      if (!isAdminJwtValid(req as any)) {
+        res.status(403).end();
+        return;
+      }
+      const raffleId = Number(req.params.raffleId);
+      if (!Number.isInteger(raffleId) || raffleId <= 0) {
+        res.status(400).end();
+        return;
+      }
+      const raffle = await getRaffleById(raffleId);
+      if (!raffle?.winnerPhone) {
+        res.status(404).end();
+        return;
+      }
+      const { getCustomerByPhoneNormalized, updateRaffle } = await import("../db");
+      const customer = await getCustomerByPhoneNormalized(String(raffle.winnerPhone));
+      const photoUrl = String(raffle.winnerProfilePhotoUrl || customer?.profilePhotoUrl || "").trim();
+      if (!photoUrl) {
+        res.status(404).end();
+        return;
+      }
+      if (!raffle.winnerProfilePhotoUrl && customer?.profilePhotoUrl) {
+        await updateRaffle(raffleId, { winnerProfilePhotoUrl: customer.profilePhotoUrl });
+      }
+      const absoluteUrl = photoUrl.startsWith("http")
+        ? photoUrl
+        : new URL(photoUrl, `${req.protocol}://${req.get("host")}`).toString();
+      const response = await fetch(absoluteUrl, { headers: { "User-Agent": "H2-Raffle-Winner-Art/1.0" } });
+      if (!response.ok) {
+        res.status(502).end();
+        return;
+      }
+      const buffer = Buffer.from(await response.arrayBuffer());
+      const contentType = response.headers.get("content-type") || "image/jpeg";
+      res.setHeader("Content-Type", contentType);
+      res.setHeader("Cache-Control", "private, no-store");
+      res.status(200).send(buffer);
+    } catch (error) {
+      console.error("[Raffle] falha ao carregar foto do ganhador:", error);
+      res.status(500).end();
+    }
+  });
+
   app.post("/api/admin/raffle/release-number", async (req, res) => {
     try {
       if (!isAdminJwtValid(req as any)) {

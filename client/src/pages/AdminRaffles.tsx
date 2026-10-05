@@ -236,57 +236,202 @@ export default function AdminRaffles() {
 
   const downloadWinnerCard = async (raffle: Raffle) => {
     if (!raffle.winnerName || !raffle.winnerNumber || !raffle.drawnAt) return toast.error("Resultado ainda não disponível.");
+
     const canvas = document.createElement("canvas");
-    canvas.width = 1080; canvas.height = 1920;
+    canvas.width = 1080;
+    canvas.height = 1920;
     const ctx = canvas.getContext("2d");
     if (!ctx) return;
 
-    const gradient = ctx.createLinearGradient(0, 0, 1080, 1920);
-    gradient.addColorStop(0, "#090914"); gradient.addColorStop(0.55, "#24104a"); gradient.addColorStop(1, "#7c4a03");
-    ctx.fillStyle = gradient; ctx.fillRect(0, 0, 1080, 1920);
-    ctx.textAlign = "center";
-    ctx.fillStyle = "#facc15"; ctx.font = "900 58px Arial"; ctx.fillText("H2 COLOMBIANO", 540, 150);
-    ctx.fillStyle = "#ffffff"; ctx.font = "900 82px Arial"; ctx.fillText("GANHADOR DO SORTEIO", 540, 260);
+    const W = canvas.width;
+    const H = canvas.height;
+    const centerX = W / 2;
+    const neonPurple = "#8b5cf6";
+    const neonViolet = "#c026ff";
+    const gold = "#facc15";
+    const orange = "#ff8a00";
+    const panel = "#090b18";
 
-    const drawPhotoFallback = () => {
-      ctx.fillStyle = "#312e81"; ctx.beginPath(); ctx.arc(540, 650, 220, 0, Math.PI * 2); ctx.fill();
-      ctx.fillStyle = "#ffffff"; ctx.font = "900 130px Arial";
-      ctx.fillText((raffle.winnerName || "H2").split(/\s+/).slice(0,2).map(x => x[0]).join("").toUpperCase(), 540, 700);
+    const roundRect = (x: number, y: number, w: number, h: number, r: number) => {
+      const rr = Math.min(r, w / 2, h / 2);
+      ctx.beginPath();
+      ctx.moveTo(x + rr, y);
+      ctx.arcTo(x + w, y, x + w, y + h, rr);
+      ctx.arcTo(x + w, y + h, x, y + h, rr);
+      ctx.arcTo(x, y + h, x, y, rr);
+      ctx.arcTo(x, y, x + w, y, rr);
+      ctx.closePath();
+    };
+    const glowText = (text: string, x: number, y: number, size: number, color: string, maxWidth?: number) => {
+      ctx.save();
+      ctx.textAlign = "center";
+      ctx.textBaseline = "middle";
+      ctx.font = `900 ${size}px Arial, sans-serif`;
+      ctx.fillStyle = color;
+      ctx.shadowColor = color;
+      ctx.shadowBlur = 24;
+      if (maxWidth) ctx.fillText(text, x, y, maxWidth); else ctx.fillText(text, x, y);
+      ctx.shadowBlur = 4;
+      ctx.fillText(text, x, y, maxWidth);
+      ctx.restore();
+    };
+    const fitText = (text: string, maxWidth: number, startSize: number, minSize: number) => {
+      let size = startSize;
+      ctx.font = `900 ${size}px Arial, sans-serif`;
+      while (ctx.measureText(text).width > maxWidth && size > minSize) {
+        size -= 2;
+        ctx.font = `900 ${size}px Arial, sans-serif`;
+      }
+      return size;
+    };
+    const neonPanel = (x: number, y: number, w: number, h: number, strokeA = neonPurple, strokeB = orange) => {
+      const g = ctx.createLinearGradient(x, y, x + w, y + h);
+      g.addColorStop(0, "rgba(25,16,58,0.96)");
+      g.addColorStop(0.55, "rgba(8,10,24,0.98)");
+      g.addColorStop(1, "rgba(48,19,10,0.96)");
+      roundRect(x, y, w, h, 26);
+      ctx.fillStyle = g;
+      ctx.fill();
+      ctx.save();
+      ctx.lineWidth = 4;
+      const sg = ctx.createLinearGradient(x, y, x + w, y);
+      sg.addColorStop(0, strokeA);
+      sg.addColorStop(0.5, gold);
+      sg.addColorStop(1, strokeB);
+      ctx.strokeStyle = sg;
+      ctx.shadowColor = strokeA;
+      ctx.shadowBlur = 18;
+      ctx.stroke();
+      ctx.restore();
     };
 
-    if (raffle.winnerProfilePhotoUrl) {
-      try {
-        const img = new Image();
-        img.crossOrigin = "anonymous";
-        await new Promise<void>((resolve, reject) => { img.onload = () => resolve(); img.onerror = () => reject(); img.src = raffle.winnerProfilePhotoUrl!; });
-        ctx.save(); ctx.beginPath(); ctx.arc(540, 650, 220, 0, Math.PI * 2); ctx.clip();
-        const scale = Math.max(440 / img.width, 440 / img.height);
-        const w = img.width * scale, h = img.height * scale;
-        ctx.drawImage(img, 540 - w/2, 650 - h/2, w, h); ctx.restore();
-        ctx.strokeStyle = "#facc15"; ctx.lineWidth = 14; ctx.beginPath(); ctx.arc(540,650,225,0,Math.PI*2); ctx.stroke();
-      } catch { drawPhotoFallback(); }
-    } else drawPhotoFallback();
+    // Fundo gamer/cinemático.
+    const bg = ctx.createLinearGradient(0, 0, W, H);
+    bg.addColorStop(0, "#05030d");
+    bg.addColorStop(0.35, "#13072c");
+    bg.addColorStop(0.68, "#180622");
+    bg.addColorStop(1, "#1b0902");
+    ctx.fillStyle = bg;
+    ctx.fillRect(0, 0, W, H);
 
-    ctx.fillStyle = "#ffffff"; ctx.font = "900 60px Arial";
+    // Luzes laterais e feixes.
+    for (const [x, color] of [[75, neonViolet], [W - 75, orange]] as const) {
+      const lg = ctx.createLinearGradient(x - 45, 0, x + 45, 0);
+      lg.addColorStop(0, "transparent"); lg.addColorStop(0.5, color); lg.addColorStop(1, "transparent");
+      ctx.globalAlpha = 0.45; ctx.fillStyle = lg; ctx.fillRect(x - 50, 0, 100, H); ctx.globalAlpha = 1;
+    }
+    for (let i = 0; i < 34; i++) {
+      const x = (i * 173 + 97) % W;
+      const y = (i * 263 + 61) % H;
+      const size = 2 + (i % 5);
+      ctx.fillStyle = i % 2 ? "rgba(250,204,21,.65)" : "rgba(192,38,255,.6)";
+      ctx.shadowColor = ctx.fillStyle; ctx.shadowBlur = 12;
+      ctx.fillRect(x, y, size, size * 3);
+    }
+    ctx.shadowBlur = 0;
+
+    // Topo / marca.
+    ctx.textAlign = "center";
+    glowText("H2 COLOMBIANO", centerX, 118, 56, gold, 850);
+    ctx.strokeStyle = gold; ctx.lineWidth = 3;
+    ctx.beginPath(); ctx.moveTo(150, 165); ctx.lineTo(390, 165); ctx.moveTo(690, 165); ctx.lineTo(930, 165); ctx.stroke();
+
+    const title = "GANHADOR DO SORTEIO";
+    const titleSize = fitText(title, 930, 92, 54);
+    glowText(title, centerX, 255, titleSize, "#ffffff", 930);
+
+    // Halo central atrás da foto.
+    const halo = ctx.createRadialGradient(centerX, 600, 40, centerX, 600, 330);
+    halo.addColorStop(0, "rgba(250,204,21,.42)");
+    halo.addColorStop(.45, "rgba(139,92,246,.28)");
+    halo.addColorStop(1, "rgba(0,0,0,0)");
+    ctx.fillStyle = halo; ctx.fillRect(180, 270, 720, 720);
+
+    // Foto do ganhador via proxy same-origin (não sofre CORS).
+    const photoCx = centerX, photoCy = 615, photoR = 205;
+    let photoLoaded = false;
+    try {
+      const response = await fetch(`/api/admin/raffle/winner-photo/${raffle.id}?v=${Date.now()}`, { credentials: "include", cache: "no-store" });
+      if (response.ok) {
+        const blob = await response.blob();
+        const objectUrl = URL.createObjectURL(blob);
+        try {
+          const img = new Image();
+          await new Promise<void>((resolve, reject) => { img.onload = () => resolve(); img.onerror = () => reject(new Error("imagem inválida")); img.src = objectUrl; });
+          ctx.save();
+          ctx.beginPath(); ctx.arc(photoCx, photoCy, photoR, 0, Math.PI * 2); ctx.clip();
+          const scale = Math.max((photoR * 2) / img.width, (photoR * 2) / img.height);
+          const iw = img.width * scale, ih = img.height * scale;
+          ctx.drawImage(img, photoCx - iw / 2, photoCy - ih / 2, iw, ih);
+          ctx.restore();
+          photoLoaded = true;
+        } finally {
+          URL.revokeObjectURL(objectUrl);
+        }
+      }
+    } catch {}
+
+    if (!photoLoaded) {
+      const fg = ctx.createRadialGradient(photoCx - 70, photoCy - 80, 20, photoCx, photoCy, photoR);
+      fg.addColorStop(0, "#6d28d9"); fg.addColorStop(1, "#1e1b4b");
+      ctx.fillStyle = fg; ctx.beginPath(); ctx.arc(photoCx, photoCy, photoR, 0, Math.PI * 2); ctx.fill();
+      const initials = (raffle.winnerName || "H2").split(/\s+/).filter(Boolean).slice(0,2).map(x => x[0]).join("").toUpperCase();
+      glowText(initials, photoCx, photoCy + 8, 122, "#ffffff");
+    }
+
+    // Anéis gamer da foto.
+    for (const [r, width, color, blur] of [[218, 15, gold, 28], [235, 5, neonViolet, 22]] as const) {
+      ctx.save(); ctx.strokeStyle = color; ctx.lineWidth = width; ctx.shadowColor = color; ctx.shadowBlur = blur;
+      ctx.beginPath(); ctx.arc(photoCx, photoCy, r, 0, Math.PI * 2); ctx.stroke(); ctx.restore();
+    }
+
+    // Coroa geométrica.
+    ctx.save(); ctx.translate(centerX, 350); ctx.fillStyle = gold; ctx.shadowColor = gold; ctx.shadowBlur = 24;
+    ctx.beginPath(); ctx.moveTo(-72, 34); ctx.lineTo(-92, -28); ctx.lineTo(-36, 4); ctx.lineTo(0, -62); ctx.lineTo(38, 4); ctx.lineTo(94, -28); ctx.lineTo(72, 34); ctx.closePath(); ctx.fill();
+    ctx.fillStyle = orange; ctx.fillRect(-72, 38, 144, 18); ctx.restore();
+
+    // Nome.
+    neonPanel(95, 860, 890, 126);
     const winnerName = (raffle.winnerName || "").toUpperCase();
-    const maxWidth = 930;
-    let fontSize = 60;
-    while (ctx.measureText(winnerName).width > maxWidth && fontSize > 36) { fontSize -= 2; ctx.font = `900 ${fontSize}px Arial`; }
-    ctx.fillText(winnerName, 540, 1010);
-    ctx.fillStyle = "#facc15"; ctx.font = "900 170px Arial"; ctx.fillText(`#${raffle.winnerNumber}`, 540, 1240);
-    ctx.fillStyle = "#e5e7eb"; ctx.font = "700 44px Arial"; ctx.fillText(raffle.title.toUpperCase(), 540, 1360);
-    ctx.fillStyle = "#ffffff"; ctx.font = "700 50px Arial"; ctx.fillText(formatDrawDate(raffle.drawnAt), 540, 1480);
-    ctx.fillStyle = "#facc15"; ctx.font = "900 54px Arial"; ctx.fillText("PARABÉNS! 🎉", 540, 1630);
-    ctx.fillStyle = "#a1a1aa"; ctx.font = "600 34px Arial"; ctx.fillText("h2colombiano.com", 540, 1775);
+    const nameSize = fitText(winnerName, 810, 54, 34);
+    glowText(winnerName, centerX, 924, nameSize, "#ffffff", 820);
 
-    canvas.toBlob((blob) => {
-      if (!blob) return;
+    // Número campeão.
+    neonPanel(115, 1022, 850, 315, orange, neonPurple);
+    glowText(`#${raffle.winnerNumber}`, centerX, 1174, 210, gold, 760);
+
+    // Informações.
+    neonPanel(155, 1372, 770, 108);
+    ctx.fillStyle = "#ffffff"; ctx.textAlign = "center"; ctx.font = "800 42px Arial";
+    ctx.fillText("PRÊMIO", centerX - 150, 1436);
+    glowText("R$ 200,00", centerX + 165, 1434, 52, gold, 330);
+
+    neonPanel(155, 1503, 770, 108, neonPurple, neonPurple);
+    ctx.fillStyle = "#ffffff"; ctx.font = "800 42px Arial"; ctx.textAlign = "center";
+    ctx.fillText(formatDrawDate(raffle.drawnAt), centerX, 1568);
+
+    // Parabéns.
+    neonPanel(125, 1642, 830, 126, orange, neonPurple);
+    glowText("PARABÉNS!", centerX, 1705, 70, gold, 700);
+
+    ctx.fillStyle = "rgba(255,255,255,.65)";
+    ctx.font = "700 30px Arial";
+    ctx.textAlign = "center";
+    ctx.fillText("h2colombiano.com", centerX, 1845);
+
+    try {
+      const blob = await new Promise<Blob | null>((resolve) => canvas.toBlob(resolve, "image/png", 1));
+      if (!blob) throw new Error("Falha ao gerar imagem.");
+      const url = URL.createObjectURL(blob);
       const a = document.createElement("a");
-      a.href = URL.createObjectURL(blob);
+      a.href = url;
       a.download = `ganhador-sorteio-${raffle.id}-${raffle.winnerNumber}.png`;
       a.click();
-      setTimeout(() => URL.revokeObjectURL(a.href), 1000);
-    }, "image/png");
+      setTimeout(() => URL.revokeObjectURL(url), 1500);
+      if (!photoLoaded) toast.warning("Arte criada, mas a foto do ganhador não pôde ser carregada. Verifique o cadastro.");
+    } catch (error) {
+      toast.error(error instanceof Error ? error.message : "Erro ao gerar arte do ganhador.");
+    }
   };
 
   const formatPhone = (phone: string) => {

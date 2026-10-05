@@ -1,7 +1,7 @@
 import { randomInt } from "crypto";
 import nodemailer from "nodemailer";
 import { sql } from "drizzle-orm";
-import { getCustomerByPhone, getDb, getRaffleEntries, getSetting } from "./db";
+import { getCustomerByPhoneNormalized, getDb, getRaffleEntries, getSetting } from "./db";
 
 let infrastructurePromise: Promise<void> | null = null;
 let workerStarted = false;
@@ -247,7 +247,7 @@ export async function performRaffleDraw(
     }
 
     const winner = eligible[randomInt(0, eligible.length)] as any;
-    const customer = await getCustomerByPhone(winner.customerPhone);
+    const customer = await getCustomerByPhoneNormalized(winner.customerPhone);
     const drawnAt = new Date();
     const winnerEmail = customer?.email ? String(customer.email).trim() : null;
     const photoUrl = customer?.profilePhotoUrl || winner.profilePhotoUrl || null;

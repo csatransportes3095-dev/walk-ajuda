@@ -148,7 +148,7 @@ import {
   getQuestionAudioDraftsByIds, deleteQuestionAudioDrafts, createOrderQuestionAudioAnswers, getOrderQuestionAudioAnswers,
   listOptionDocuments, createOptionDocument, updateOptionDocument, deleteOptionDocument, deleteOptionDocumentsByOptionId,
   getAllSettings, upsertSettings, upsertSetting, getSetting, getSettings,
-  getCustomerByPhone, getCustomerByCpf, createCustomer, listCustomers, updateCustomer, deleteCustomer, updateCustomerLastAccess, validateMainCustomerProfile,
+  getCustomerByPhone, getCustomerByPhoneNormalized, getCustomerByCpf, createCustomer, listCustomers, updateCustomer, deleteCustomer, updateCustomerLastAccess, validateMainCustomerProfile,
   createRaffle, getAllRaffles, getRaffleById, updateRaffle, deleteRaffle, deleteRaffleEntry, updateRaffleEntryPayment,
   getRaffleEntries, createRaffleEntry, checkNumberTaken, getActiveRaffle, getLatestDrawnRaffle,
   getAdminCredential, updateAdminPassword,
@@ -3235,18 +3235,34 @@ export const appRouter = router({
       }),
   }),
   // ===== SORTEIOS ======
+async function withResolvedRaffleWinnerPhoto<T extends any>(raffle: T): Promise<T> {
+  if (!raffle || raffle.status !== "drawn" || raffle.winnerProfilePhotoUrl || !raffle.winnerPhone) return raffle;
+  try {
+    const customer = await getCustomerByPhoneNormalized(String(raffle.winnerPhone));
+    const photoUrl = customer?.profilePhotoUrl ? String(customer.profilePhotoUrl).trim() : "";
+    if (!photoUrl) return raffle;
+    await updateRaffle(Number(raffle.id), { winnerProfilePhotoUrl: photoUrl });
+    return { ...raffle, winnerProfilePhotoUrl: photoUrl };
+  } catch (error) {
+    console.warn("[Raffle] não foi possível reparar foto histórica do ganhador:", error);
+    return raffle;
+  }
+}
+
   raffles: router({
     // Admin: listar todos os sorteios
     list: adminProcedure.query(async () => {
-      return getAllRaffles();
+      const items = await getAllRaffles();
+      return Promise.all(items.map(item => withResolvedRaffleWinnerPhoto(item)));
     }),
 
     // Admin: obter sorteio por ID com entradas
     getById: adminProcedure
       .input(z.object({ id: z.number() }))
       .query(async ({ input }) => {
-        const raffle = await getRaffleById(input.id);
-        if (!raffle) return null;
+        const raffleRaw = await getRaffleById(input.id);
+        if (!raffleRaw) return null;
+        const raffle = await withResolvedRaffleWinnerPhoto(raffleRaw);
         const entries = await getRaffleEntries(input.id);
         return { ...raffle, entries };
       }),
@@ -3373,8 +3389,9 @@ export const appRouter = router({
 
     // Público: obter resultado do último sorteio realizado
     result: publicProcedure.query(async () => {
-      const raffle = await getLatestDrawnRaffle();
-      if (!raffle) return null;
+      const raffleRaw = await getLatestDrawnRaffle();
+      if (!raffleRaw) return null;
+      const raffle = await withResolvedRaffleWinnerPhoto(raffleRaw);
       return { id: raffle.id, title: raffle.title, winnerNumber: raffle.winnerNumber, winnerName: raffle.winnerName, winnerPhone: raffle.winnerPhone, winnerProfilePhotoUrl: raffle.winnerProfilePhotoUrl, drawnAt: raffle.drawnAt };
     }),
 
