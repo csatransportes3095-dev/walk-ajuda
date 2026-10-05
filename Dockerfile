@@ -12,6 +12,8 @@ RUN apt-get update && apt-get install -y --no-install-recommends \
     python3-cffi \
     poppler-utils \
     libpango-1.0-0 \
+    libpangoft2-1.0-0 \
+    libharfbuzz-subset0 \
     libcairo2 \
     libgdk-pixbuf2.0-0 \
     libffi-dev \
@@ -30,8 +32,10 @@ RUN curl --proto '=https' --tlsv1.2 -fsSL \
     && chmod 0755 /usr/local/bin/dumpling \
     && rm -f /tmp/dumpling.tar.gz
 
-# Instalar weasyprint via pip (mesma forma que no sandbox)
-RUN pip3 install weasyprint --break-system-packages
+# Instalar WeasyPrint e validar no build que as bibliotecas nativas estao carregando.
+# Se Pango/Harfbuzz faltar, o deploy falha aqui em vez de quebrar o PDF em producao.
+RUN pip3 install weasyprint --break-system-packages \
+    && /usr/local/bin/weasyprint --version
 
 WORKDIR /app
 COPY . .
