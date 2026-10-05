@@ -226,7 +226,7 @@ statusSource = replaceOnce(
                           : (ICON_MAP[s.icon] ?? <Clock className="w-4 h-4" />)}
                       </div>`,
 `                      <div
-                        className={\`relative w-9 h-9 rounded-xl border flex items-center justify-center overflow-hidden \${isCustomStatusBackground(s.bgColor) ? "text-white" : \`${s.color} ${s.bgColor}\`}\`}
+                        className={\`relative w-9 h-9 rounded-xl border flex items-center justify-center overflow-hidden \${isCustomStatusBackground(s.bgColor) ? "text-white" : \`${'${s.color} ${s.bgColor}'}\`}\`}
                         style={getStatusInlineStyle(s.bgColor)}
                       >
                         {s.imageUrl
