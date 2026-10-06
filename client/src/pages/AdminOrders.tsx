@@ -5412,7 +5412,7 @@ export default function AdminOrders() {
               className={`bg-card border rounded-xl overflow-hidden transition-all ${
                 isExpanded ? "col-span-full" : ""
               } ${isTodayScheduled
-                ? "!border-yellow-300 !ring-4 !ring-yellow-300/80 !bg-yellow-400/[0.10] shadow-[0_0_38px_rgba(250,204,21,0.85)] animate-[pulse_0.65s_ease-in-out_infinite]"
+                ? `!border-yellow-300 !ring-4 !ring-yellow-300/80 !bg-yellow-400/[0.10] shadow-[0_0_38px_rgba(250,204,21,0.85)] ${isExpanded ? "" : "animate-[pulse_0.65s_ease-in-out_infinite]"}`
                 : (() => {
                     const groups = customGroupsQuery.data || [];
                     const orderGroup = groups.find((g: any) => g.memberIds.includes(order.id));
@@ -5428,7 +5428,7 @@ export default function AdminOrders() {
               }`}
             >
               {isTodayScheduled && (
-                <div className="bg-yellow-400 text-black border-b-2 border-yellow-200 px-4 py-1.5 flex items-center justify-center gap-2 font-black tracking-wider animate-[pulse_0.65s_ease-in-out_infinite]">
+                <div className={`bg-yellow-400 text-black border-b-2 border-yellow-200 px-4 py-1.5 flex items-center justify-center gap-2 font-black tracking-wider ${isExpanded ? "" : "animate-[pulse_0.65s_ease-in-out_infinite]"}`}>
                   <span className="text-sm">⚠️ AGENDAMENTO HOJE — ATENÇÃO</span>
                 </div>
               )}
