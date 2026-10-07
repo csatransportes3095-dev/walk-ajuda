@@ -461,6 +461,8 @@ export default function AdminSimilarity() {
   const loadH2BicoCandidates = async () => {
     if (analyzing || loadingH2Bico) return;
     setLoadingH2Bico(true);
+    setProgress({ current: 0, total: 0, name: "Buscando banco H2BICO..." });
+
     try {
       const response = await h2bicoQuery.refetch();
       const records = response.data || [];
@@ -470,48 +472,94 @@ export default function AdminSimilarity() {
       }
 
       candidates.forEach((item) => URL.revokeObjectURL(item.preview));
-      const loaded: CandidatePhoto[] = [];
-      let failed = 0;
 
-      for (let index = 0; index < records.length; index += 1) {
+      const loaded: Array<CandidatePhoto | null> = new Array(records.length).fill(null);
+      let failed = 0;
+      let nextIndex = 0;
+      let completed = 0;
+      const concurrency = Math.min(12, records.length);
+
+      setProgress({ current: 0, total: records.length, name: `Carregando 0/${records.length} do H2BICO...` });
+
+      const loadOne = async (index: number) => {
         const record = records[index];
-        setProgress({ current: index + 1, total: records.length, name: `Carregando H2BICO • ${record.name}` });
+        const controller = new AbortController();
+        const timeout = window.setTimeout(() => controller.abort(), 12000);
+
         try {
-          const response = await fetch(record.photoUrl, { cache: "no-store", credentials: "omit" });
-          if (!response.ok) throw new Error(`HTTP ${response.status}`);
-          const blob = await response.blob();
+          const imageResponse = await fetch(record.photoUrl, {
+            cache: "force-cache",
+            credentials: "omit",
+            signal: controller.signal,
+          });
+          if (!imageResponse.ok) throw new Error(`HTTP ${imageResponse.status}`);
+
+          const blob = await imageResponse.blob();
+          if (!blob.size) throw new Error("Imagem vazia");
+
           const mimeType = blob.type.startsWith("image/") ? blob.type : "image/jpeg";
           const extension = mimeType.includes("png") ? "png" : mimeType.includes("webp") ? "webp" : "jpg";
-          const safeName = (record.originalFilename || `${record.name}_${record.cpf}${record.uf ? "_" + record.uf : ""}.${extension}`).replace(/[\\/]/g, "_");
-          const file = new File([blob], safeName, { type: mimeType, lastModified: Date.now() });
-          loaded.push({
+          const safeName = (
+            record.originalFilename ||
+            `${record.name}_${record.cpf}${record.uf ? "_" + record.uf : ""}.${extension}`
+          ).replace(/[\\/]/g, "_");
+
+          const file = new File([blob], safeName, {
+            type: mimeType,
+            lastModified: Date.now(),
+          });
+
+          loaded[index] = {
             id: `h2bico-${record.id}`,
             file,
             preview: URL.createObjectURL(blob),
             h2bicoId: record.id,
             h2bicoCpf: record.cpf,
             h2bicoName: record.name,
-          });
+          };
         } catch (error) {
           console.warn("[H2BICO] falha ao carregar foto", record.id, error);
           failed += 1;
+        } finally {
+          window.clearTimeout(timeout);
+          completed += 1;
+          setProgress({
+            current: completed,
+            total: records.length,
+            name: `Carregando H2BICO • ${completed}/${records.length}`,
+          });
         }
-      }
+      };
 
-      setCandidates(loaded);
+      const worker = async () => {
+        while (true) {
+          const index = nextIndex;
+          nextIndex += 1;
+          if (index >= records.length) return;
+          await loadOne(index);
+        }
+      };
+
+      await Promise.all(Array.from({ length: concurrency }, () => worker()));
+
+      const ready = loaded.filter((item): item is CandidatePhoto => item !== null);
+      setCandidates(ready);
       setResults([]);
       setPairwiseResults([]);
-      setProgress({ current: 0, total: 0, name: "" });
 
-      if (!loaded.length) {
+      if (!ready.length) {
         toast.error("Não foi possível carregar as fotos do H2BICO.");
         return;
       }
-      toast.success(`${loaded.length} foto(s) DISPONÍVEL(IS) do H2BICO carregada(s)${failed ? ` • ${failed} falha(s)` : ""}.`);
+
+      toast.success(
+        `${ready.length} foto(s) do H2BICO carregada(s) em paralelo${failed ? ` • ${failed} falha(s)` : ""}.`
+      );
     } catch (error: any) {
       toast.error(error?.message || "Falha ao buscar fotos do H2BICO.");
     } finally {
       setLoadingH2Bico(false);
+      setProgress({ current: 0, total: 0, name: "" });
     }
   };
 
@@ -1183,7 +1231,7 @@ export default function AdminSimilarity() {
                   className="flex items-center justify-center gap-2 rounded-xl border border-amber-300/40 bg-amber-300/10 px-3 py-3 text-sm font-black text-amber-100 transition hover:bg-amber-300/15 disabled:cursor-not-allowed disabled:opacity-40"
                   title="Carregar todas as fotos disponíveis armazenadas no H2BICO"
                 >
-                  <FolderOpen className="h-4 w-4" /> {loadingH2Bico ? "Carregando..." : "Banco H2BICO"}
+                  <FolderOpen className="h-4 w-4" /> {loadingH2Bico ? (progress.total ? `${progress.current}/${progress.total}` : "Buscando...") : "Banco H2BICO"}
                 </button>
               </div>
 
