@@ -145,27 +145,70 @@ export const h2bicoRouter = router({
     const parsed = parseFilename(input.filename);
 
     const duplicateRows = await db.execute(sql`
-      SELECT id,status,name,originalFilename
+      SELECT id,status,name,photoUrl,originalFilename
       FROM h2bico_records
       WHERE cpf = ${parsed.cpf}
       LIMIT 1
     `);
     const duplicate = (duplicateRows[0] as any[])[0];
+
+    const ext = input.mimeType === "image/png" ? "png" : input.mimeType === "image/webp" ? "webp" : "jpg";
+    const uploadCurrentPhoto = async () => {
+      const key = `h2bico/${parsed.cpf}-${Date.now()}-${Math.random().toString(36).slice(2,8)}.${ext}`;
+      return await storagePut(key, Buffer.from(input.base64, "base64"), input.mimeType);
+    };
+
     if (duplicate) {
+      let healthy = false;
+      const currentUrl = String(duplicate.photoUrl || "").trim();
+      if (currentUrl) {
+        try {
+          const response = await fetch(currentUrl, {
+            headers: { Range: "bytes=0-0", "User-Agent": "H2BICO-Photo-Check/1.0" },
+          });
+          const contentType = response.headers.get("content-type") || "";
+          healthy = (response.ok || response.status === 206) && (!contentType || contentType.startsWith("image/"));
+        } catch {
+          healthy = false;
+        }
+      }
+
+      if (healthy) {
+        return {
+          success: false as const,
+          result: "duplicate" as const,
+          cpf: parsed.cpf,
+          name: parsed.name,
+          existingId: Number(duplicate.id),
+          existingStatus: String(duplicate.status || ""),
+          existingName: String(duplicate.name || ""),
+        };
+      }
+
+      const { url } = await uploadCurrentPhoto();
+      await db.execute(sql`
+        UPDATE h2bico_records
+        SET photoUrl=${url},
+            originalFilename=${parsed.originalFilename},
+            uf=COALESCE(${parsed.uf}, uf),
+            name=CASE WHEN name='SEM NOME' AND ${parsed.name} <> 'SEM NOME' THEN ${parsed.name} ELSE name END
+        WHERE id=${Number(duplicate.id)}
+      `);
+      await db.execute(sql`
+        INSERT INTO h2bico_history (recordId,action,details)
+        VALUES (${Number(duplicate.id)},'photo_repaired',${"Foto reparada pela reimportação: " + parsed.originalFilename})
+      `);
       return {
-        success: false as const,
-        result: "duplicate" as const,
+        success: true as const,
+        result: "repaired" as const,
+        id: Number(duplicate.id),
         cpf: parsed.cpf,
         name: parsed.name,
-        existingId: Number(duplicate.id),
-        existingStatus: String(duplicate.status || ""),
-        existingName: String(duplicate.name || ""),
+        photoUrl: url,
       };
     }
 
-    const ext = input.mimeType === "image/png" ? "png" : input.mimeType === "image/webp" ? "webp" : "jpg";
-    const key = `h2bico/${parsed.cpf}-${Date.now()}-${Math.random().toString(36).slice(2,8)}.${ext}`;
-    const { url } = await storagePut(key, Buffer.from(input.base64, "base64"), input.mimeType);
+    const { url } = await uploadCurrentPhoto();
 
     try {
       const result:any = await db.execute(sql`
