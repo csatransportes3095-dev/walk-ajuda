@@ -8,13 +8,15 @@ import { storagePut } from "../storage";
 async function dbOrThrow() {
   const db = await getDb();
   if (!db) throw new TRPCError({ code: "INTERNAL_SERVER_ERROR", message: "Banco indisponível" });
+
   await db.execute(sql`
     CREATE TABLE IF NOT EXISTS h2bico_records (
       id INT NOT NULL AUTO_INCREMENT PRIMARY KEY,
       name VARCHAR(255) NOT NULL,
       cpf VARCHAR(11) NOT NULL UNIQUE,
-      photoUrl TEXT NULL,
-      extraPhotos LONGTEXT NULL,
+      uf VARCHAR(2) NULL,
+      photoUrl TEXT NOT NULL,
+      originalFilename VARCHAR(512) NULL,
       notes TEXT NULL,
       source VARCHAR(255) NULL,
       status ENUM('available','reserved','in_use','used','archived') NOT NULL DEFAULT 'available',
@@ -27,6 +29,21 @@ async function dbOrThrow() {
       INDEX idx_h2bico_status (status)
     ) CHARACTER SET utf8mb4 COLLATE utf8mb4_unicode_ci
   `);
+
+  for (const definition of [
+    "uf VARCHAR(2) NULL",
+    "originalFilename VARCHAR(512) NULL",
+  ]) {
+    try {
+      await db.execute(sql.raw(`ALTER TABLE h2bico_records ADD COLUMN IF NOT EXISTS ${definition}`));
+    } catch (error) {
+      const message = error instanceof Error ? error.message : String(error);
+      if (!/duplicate column|already exists/i.test(message)) {
+        console.warn("[H2BICO] coluna não garantida:", definition, message);
+      }
+    }
+  }
+
   await db.execute(sql`
     CREATE TABLE IF NOT EXISTS h2bico_history (
       id INT NOT NULL AUTO_INCREMENT PRIMARY KEY,
@@ -37,7 +54,32 @@ async function dbOrThrow() {
       INDEX idx_h2bico_history_record (recordId)
     ) CHARACTER SET utf8mb4 COLLATE utf8mb4_unicode_ci
   `);
+
   return db;
+}
+
+function parseFilename(filename: string) {
+  const clean = filename.split(/[\\/]/).pop() || filename;
+  const base = clean.replace(/\.[^.]+$/, "").replace(/\s*\(\d+\)\s*$/, "").trim();
+  const match = base.match(/\d{11}/);
+  if (!match || match.index == null) {
+    throw new TRPCError({
+      code: "BAD_REQUEST",
+      message: "Nome do arquivo sem CPF de 11 números.",
+    });
+  }
+
+  const cpf = match[0];
+  const rawName = base.slice(0, match.index).replace(/[_\-]+/g, " ").replace(/\s+/g, " ").trim();
+  const suffix = base.slice(match.index + 11).replace(/^[_\-\s]+/, "").trim();
+  const ufMatch = suffix.match(/^([A-Za-z]{2})(?:\b|[_\-\s])/i) || suffix.match(/^([A-Za-z]{2})$/i);
+  const uf = ufMatch?.[1]?.toUpperCase() || null;
+
+  if (rawName.length < 2) {
+    throw new TRPCError({ code: "BAD_REQUEST", message: "Nome não identificado no arquivo." });
+  }
+
+  return { name: rawName.toUpperCase(), cpf, uf, originalFilename: clean };
 }
 
 const cpf11 = z.string().transform(v => v.replace(/\D/g, "")).refine(v => v.length === 11, "CPF deve ter 11 números");
@@ -52,64 +94,183 @@ export const h2bicoRouter = router({
     const status = input?.status || "all";
     const like = `%${search}%`;
     const rows = await db.execute(sql`
-      SELECT id,name,cpf,photoUrl,extraPhotos,notes,source,status,linkedOrder,lastSimilarity,usedAt,createdAt,updatedAt
+      SELECT id,name,cpf,uf,photoUrl,originalFilename,notes,source,status,linkedOrder,lastSimilarity,usedAt,createdAt,updatedAt
       FROM h2bico_records
       WHERE (${search} = '' OR name LIKE ${like} OR cpf LIKE ${like})
         AND (${status} = 'all' OR status = ${status})
       ORDER BY CASE status WHEN 'available' THEN 0 WHEN 'reserved' THEN 1 WHEN 'in_use' THEN 2 WHEN 'used' THEN 3 ELSE 4 END,
                name ASC, id DESC
-      LIMIT 1000
+      LIMIT 5000
     `);
-    return (rows[0] as any[]).map(r => ({...r, id:Number(r.id), lastSimilarity:r.lastSimilarity == null ? null : Number(r.lastSimilarity)}));
+    return (rows[0] as any[]).map(r => ({
+      ...r,
+      id: Number(r.id),
+      lastSimilarity: r.lastSimilarity == null ? null : Number(r.lastSimilarity),
+    }));
   }),
+
+  availableForSimilarity: adminProcedure.query(async () => {
+    const db = await dbOrThrow();
+    const rows = await db.execute(sql`
+      SELECT id,name,cpf,uf,photoUrl,originalFilename
+      FROM h2bico_records
+      WHERE status = 'available' AND photoUrl IS NOT NULL AND photoUrl <> ''
+      ORDER BY name ASC, id ASC
+      LIMIT 10000
+    `);
+    return (rows[0] as any[]).map(r => ({
+      id: Number(r.id),
+      name: String(r.name || ""),
+      cpf: String(r.cpf || ""),
+      uf: r.uf ? String(r.uf) : null,
+      photoUrl: String(r.photoUrl || ""),
+      originalFilename: r.originalFilename ? String(r.originalFilename) : null,
+    }));
+  }),
+
   stats: adminProcedure.query(async () => {
     const db = await dbOrThrow();
     const rows = await db.execute(sql`SELECT status, COUNT(*) total FROM h2bico_records GROUP BY status`);
     const out:any = { total:0, available:0, reserved:0, in_use:0, used:0, archived:0 };
-    for (const r of rows[0] as any[]) { out[r.status]=Number(r.total); out.total += Number(r.total); }
+    for (const r of rows[0] as any[]) {
+      out[r.status] = Number(r.total);
+      out.total += Number(r.total);
+    }
     return out;
   }),
+
+  importPhoto: adminProcedure.input(z.object({
+    filename: z.string().min(1).max(512),
+    base64: z.string().min(10).max(15_000_000),
+    mimeType: z.enum(["image/jpeg","image/png","image/webp"]).default("image/jpeg"),
+  })).mutation(async ({ input }) => {
+    const db = await dbOrThrow();
+    const parsed = parseFilename(input.filename);
+
+    const duplicateRows = await db.execute(sql`
+      SELECT id,status,name,originalFilename
+      FROM h2bico_records
+      WHERE cpf = ${parsed.cpf}
+      LIMIT 1
+    `);
+    const duplicate = (duplicateRows[0] as any[])[0];
+    if (duplicate) {
+      return {
+        success: false as const,
+        result: "duplicate" as const,
+        cpf: parsed.cpf,
+        name: parsed.name,
+        existingId: Number(duplicate.id),
+        existingStatus: String(duplicate.status || ""),
+        existingName: String(duplicate.name || ""),
+      };
+    }
+
+    const ext = input.mimeType === "image/png" ? "png" : input.mimeType === "image/webp" ? "webp" : "jpg";
+    const key = `h2bico/${parsed.cpf}-${Date.now()}-${Math.random().toString(36).slice(2,8)}.${ext}`;
+    const { url } = await storagePut(key, Buffer.from(input.base64, "base64"), input.mimeType);
+
+    try {
+      const result:any = await db.execute(sql`
+        INSERT INTO h2bico_records (name,cpf,uf,photoUrl,originalFilename,source,status)
+        VALUES (${parsed.name},${parsed.cpf},${parsed.uf},${url},${parsed.originalFilename},'importacao-lote','available')
+      `);
+      const id = Number((result[0] as any).insertId || 0);
+      if (id) {
+        await db.execute(sql`
+          INSERT INTO h2bico_history (recordId,action,details)
+          VALUES (${id},'imported',${"Importado: " + parsed.originalFilename})
+        `);
+      }
+      return { success: true as const, result: "imported" as const, id, ...parsed, photoUrl: url };
+    } catch (error:any) {
+      if (String(error?.message || "").includes("Duplicate")) {
+        return { success: false as const, result: "duplicate" as const, cpf: parsed.cpf, name: parsed.name };
+      }
+      throw error;
+    }
+  }),
+
   create: adminProcedure.input(z.object({
     name: z.string().min(2).max(255),
     cpf: cpf11,
-    photoUrl: z.string().url().optional().nullable(),
+    photoUrl: z.string().url(),
     notes: z.string().max(5000).optional(),
     source: z.string().max(255).optional(),
   })).mutation(async ({ input }) => {
     const db = await dbOrThrow();
     try {
-      const result:any = await db.execute(sql`INSERT INTO h2bico_records (name,cpf,photoUrl,notes,source) VALUES (${input.name.trim()},${input.cpf},${input.photoUrl || null},${input.notes || null},${input.source || null})`);
+      const result:any = await db.execute(sql`
+        INSERT INTO h2bico_records (name,cpf,photoUrl,notes,source,status)
+        VALUES (${input.name.trim().toUpperCase()},${input.cpf},${input.photoUrl},${input.notes || null},${input.source || 'manual'},'available')
+      `);
       const id = Number((result[0] as any).insertId || 0);
-      if (id) await db.execute(sql`INSERT INTO h2bico_history (recordId,action,details) VALUES (${id},'created','Registro criado no H2BICO')`);
+      if (id) {
+        await db.execute(sql`
+          INSERT INTO h2bico_history (recordId,action,details)
+          VALUES (${id},'created','Registro criado manualmente no H2BICO')
+        `);
+      }
       return { success:true, id };
     } catch (e:any) {
-      if (String(e?.message || "").includes("Duplicate")) throw new TRPCError({code:"CONFLICT",message:"Este CPF já está cadastrado no H2BICO."});
+      if (String(e?.message || "").includes("Duplicate")) {
+        throw new TRPCError({code:"CONFLICT",message:"Este CPF já está cadastrado no H2BICO."});
+      }
       throw e;
     }
   }),
+
   uploadPhoto: adminProcedure.input(z.object({
     filename: z.string().min(1).max(255),
     base64: z.string().min(10).max(15_000_000),
     mimeType: z.enum(["image/jpeg","image/png","image/webp"]).default("image/jpeg"),
   })).mutation(async ({ input }) => {
     const ext = input.mimeType === "image/png" ? "png" : input.mimeType === "image/webp" ? "webp" : "jpg";
-    const key = `h2bico/${Date.now()}-${Math.random().toString(36).slice(2,10)}.${ext}`;
+    const key = `h2bico/manual-${Date.now()}-${Math.random().toString(36).slice(2,10)}.${ext}`;
     const { url } = await storagePut(key, Buffer.from(input.base64, "base64"), input.mimeType);
-    return { url };
+    return { success: true, url };
   }),
+
   setStatus: adminProcedure.input(z.object({
     id: z.number().int().positive(),
     status: z.enum(["available","reserved","in_use","used","archived"]),
     linkedOrder: z.string().max(64).optional().nullable(),
   })).mutation(async ({ input }) => {
     const db = await dbOrThrow();
-    await db.execute(sql`UPDATE h2bico_records SET status=${input.status}, linkedOrder=${input.linkedOrder || null}, usedAt=CASE WHEN ${input.status}='used' THEN NOW() ELSE usedAt END WHERE id=${input.id}`);
-    await db.execute(sql`INSERT INTO h2bico_history (recordId,action,details) VALUES (${input.id},${"status:" + input.status},${input.linkedOrder ? "Pedido " + input.linkedOrder : null})`);
+    const currentRows = await db.execute(sql`SELECT status FROM h2bico_records WHERE id=${input.id} LIMIT 1`);
+    const current = (currentRows[0] as any[])[0];
+    if (!current) throw new TRPCError({ code: "NOT_FOUND", message: "Registro não encontrado." });
+
+    if (String(current.status) === "used" && input.status !== "used") {
+      throw new TRPCError({
+        code: "FORBIDDEN",
+        message: "Registro USADO é definitivo e não pode voltar a ser reutilizado.",
+      });
+    }
+
+    await db.execute(sql`
+      UPDATE h2bico_records
+      SET status=${input.status},
+          linkedOrder=${input.linkedOrder || null},
+          usedAt=CASE WHEN ${input.status}='used' THEN COALESCE(usedAt,NOW()) ELSE usedAt END
+      WHERE id=${input.id}
+    `);
+    await db.execute(sql`
+      INSERT INTO h2bico_history (recordId,action,details)
+      VALUES (${input.id},${"status:" + input.status},${input.linkedOrder ? "Pedido " + input.linkedOrder : null})
+    `);
     return { success:true };
   }),
+
   history: adminProcedure.input(z.object({id:z.number().int().positive()})).query(async ({input}) => {
     const db=await dbOrThrow();
-    const rows=await db.execute(sql`SELECT id,action,details,createdAt FROM h2bico_history WHERE recordId=${input.id} ORDER BY id DESC LIMIT 100`);
+    const rows=await db.execute(sql`
+      SELECT id,action,details,createdAt
+      FROM h2bico_history
+      WHERE recordId=${input.id}
+      ORDER BY id DESC
+      LIMIT 100
+    `);
     return rows[0] as any[];
   }),
 });
