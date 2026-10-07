@@ -28,11 +28,11 @@ function parsePhotoFilename(file: File): ParsedFile {
   const match = base.match(/\d{11}/);
   if (!match || match.index == null) return { file, name: "", cpf: "", uf: null, valid: false, reason: "CPF não encontrado no nome do arquivo" };
   const cpf = match[0];
-  const name = base.slice(0, match.index).replace(/[_\-]+/g, " ").replace(/\s+/g, " ").trim().toUpperCase();
+  const extractedName = base.slice(0, match.index).replace(/[_\-]+/g, " ").replace(/\s+/g, " ").trim().toUpperCase();
+  const name = extractedName.length >= 2 ? extractedName : "SEM NOME";
   const suffix = base.slice(match.index + 11).replace(/^[_\-\s]+/, "").trim();
   const ufMatch = suffix.match(/^([A-Za-z]{2})(?:\b|[_\-\s])/i) || suffix.match(/^([A-Za-z]{2})$/i);
   const uf = ufMatch?.[1]?.toUpperCase() || null;
-  if (name.length < 2) return { file, name, cpf, uf, valid: false, reason: "Nome não identificado" };
   if (!["image/jpeg","image/png","image/webp"].includes(file.type)) return { file, name, cpf, uf, valid: false, reason: "Formato de imagem não permitido" };
   if (file.size > 8 * 1024 * 1024) return { file, name, cpf, uf, valid: false, reason: "Foto acima de 8 MB" };
   return { file, name, cpf, uf, valid: true };
@@ -140,7 +140,7 @@ export default function AdminH2Bico(){
         <div>
           <div className="text-xs font-black tracking-[0.18em] text-emerald-300 uppercase">Importação principal</div>
           <h2 className="text-2xl font-black mt-1">Importar fotos em lote</h2>
-          <p className="text-sm text-gray-400 mt-1">Selecione centenas de fotos ou uma pasta inteira. O H2BICO lê automaticamente NOME + CPF + UF pelo nome do arquivo.</p>
+          <p className="text-sm text-gray-400 mt-1">Selecione centenas de fotos ou uma pasta inteira. O CPF é obrigatório. Se não houver nome, o arquivo entra como SEM NOME. Arquivo com nome mas sem CPF é descartado.</p>
           <p className="text-xs text-gray-500 mt-2 font-mono">Exemplo: RAFAEL ANTERIO BARBOSA_44249385817_SP.jpg</p>
         </div>
 

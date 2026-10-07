@@ -71,15 +71,12 @@ function parseFilename(filename: string) {
 
   const cpf = match[0];
   const rawName = base.slice(0, match.index).replace(/[_\-]+/g, " ").replace(/\s+/g, " ").trim();
+  const name = rawName.length >= 2 ? rawName.toUpperCase() : "SEM NOME";
   const suffix = base.slice(match.index + 11).replace(/^[_\-\s]+/, "").trim();
   const ufMatch = suffix.match(/^([A-Za-z]{2})(?:\b|[_\-\s])/i) || suffix.match(/^([A-Za-z]{2})$/i);
   const uf = ufMatch?.[1]?.toUpperCase() || null;
 
-  if (rawName.length < 2) {
-    throw new TRPCError({ code: "BAD_REQUEST", message: "Nome não identificado no arquivo." });
-  }
-
-  return { name: rawName.toUpperCase(), cpf, uf, originalFilename: clean };
+  return { name, cpf, uf, originalFilename: clean };
 }
 
 const cpf11 = z.string().transform(v => v.replace(/\D/g, "")).refine(v => v.length === 11, "CPF deve ter 11 números");
