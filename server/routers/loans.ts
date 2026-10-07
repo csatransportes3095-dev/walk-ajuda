@@ -355,6 +355,51 @@ function generateInstallments(
   return result;
 }
 
+async function rescheduleLoanFromReleaseDate(db: any, loanId: number, releaseDate: string) {
+  const rows = await qRows(db, drizzleSql`
+    SELECT id, paymentType, installments, totalAmount, workDays
+    FROM loans WHERE id=${loanId} LIMIT 1
+  `);
+  if (!rows.length) throw new TRPCError({ code: "NOT_FOUND", message: "Empréstimo não encontrado" });
+
+  const loan = rows[0];
+  const paymentType = String(loan.paymentType || "") === "parcelado"
+    ? "mensal"
+    : String(loan.paymentType || "");
+  if (!["diario", "semanal", "mensal", "quinzenal"].includes(paymentType)) {
+    throw new TRPCError({ code: "BAD_REQUEST", message: "Modo de pagamento inválido para recalcular parcelas." });
+  }
+
+  const installments = Math.max(1, Number(loan.installments || 1));
+  const totalAmount = Number(loan.totalAmount || 0);
+  const workDays = (["seg_sab", "seg_dom", "custom"].includes(String(loan.workDays || ""))
+    ? String(loan.workDays)
+    : "seg_sab") as "seg_sab" | "seg_dom" | "custom";
+  const schedule = generateInstallments(
+    releaseDate,
+    paymentType as "diario" | "semanal" | "mensal" | "quinzenal",
+    installments,
+    totalAmount,
+    workDays
+  );
+  const dueDate = schedule[schedule.length - 1]?.dueDate || releaseDate;
+
+  await db.execute(drizzleSql`
+    UPDATE loans SET releaseDate=${releaseDate}, dueDate=${dueDate}, updatedAt=NOW()
+    WHERE id=${loanId}
+  `);
+  for (const inst of schedule) {
+    await db.execute(drizzleSql`
+      UPDATE loanInstallments
+      SET dueDate=${inst.dueDate}
+      WHERE loanId=${loanId}
+        AND installmentNumber=${inst.installmentNumber}
+        AND status IN ('pendente','atrasado')
+    `);
+  }
+  return { dueDate, schedule };
+}
+
 // Calcula simulação de parcelas sem criar no banco (usado pelo frontend para preview)
 function simulateLoan(
   amount: number,
@@ -709,16 +754,18 @@ export const loanRouter = router({
     const valorJuros = calc.interestAmount;
     const total = calc.totalAmount;
     const today = getBrazilToday();
-    // Parcelado é sempre mensal — data de liberação definida pelo ADM após aprovação
-    const schedule = generateInstallments(today, 'mensal', input.parcelas, total);
+    // A previsão de liberação é sempre 24h após a solicitação.
+    // As parcelas ainda não ficam ativas: o cronograma será recalculado pela data real do PIX.
+    const plannedReleaseDate = addDays(today, 1);
+    const schedule = generateInstallments(plannedReleaseDate, 'mensal', input.parcelas, total);
     const dueDate = schedule[schedule.length - 1].dueDate;
     try {
       const result = await db.execute(drizzleSql`
         INSERT INTO loans (userId, clientId, amount, interestRate, days, paymentType, installments,
-          interestAmount, totalAmount, dueDate, status, notes, workDays)
+          interestAmount, totalAmount, releaseDate, dueDate, status, notes, workDays)
         VALUES (1, ${client.id}, ${input.amount}, ${pct}, ${input.parcelas},
           'parcelado', ${input.parcelas}, ${valorJuros}, ${total},
-          ${dueDate}, 'pendente', ${null}, 'seg_dom')
+          ${plannedReleaseDate}, ${dueDate}, 'pendente', ${null}, 'seg_dom')
       `);
       const loanId = (result[0] as any).insertId;
       for (const inst of schedule) {
@@ -1139,7 +1186,8 @@ export const loanRouter = router({
       JOIN loans l ON l.id=li.loanId
       JOIN loanClients lc ON lc.id=l.clientId
       WHERE l.paymentType='diario'
-        AND l.status NOT IN ('pago','cancelado','reprovado')
+        AND l.status NOT IN ('pago','cancelado','reprovado','pendente')
+        AND NOT (l.status='aprovado' AND l.pixSentAt IS NULL)
         AND li.status IN ('pendente','atrasado','em_analise')
     `);
     const lateFeeTotalByLoan = new Map<number, number>();
@@ -1156,20 +1204,34 @@ export const loanRouter = router({
     const today = getBrazilToday();
     // Busca parcelas que vencem hoje para cada empréstimo aprovado
     const todayDueLoans = await qRows(db, drizzleSql`
-      SELECT DISTINCT loanId FROM loanInstallments
-      WHERE dueDate=${today} AND status='pendente'
+      SELECT DISTINCT li.loanId
+      FROM loanInstallments li
+      JOIN loans l ON l.id=li.loanId
+      WHERE li.dueDate=${today}
+        AND li.status='pendente'
+        AND l.status <> 'pendente'
+        AND NOT (l.status='aprovado' AND l.pixSentAt IS NULL)
     `);
     const todayDueLoanIds = new Set(todayDueLoans.map((r: any) => r.loanId));
     // Busca empréstimos que têm QUALQUER parcela pendente com vencimento anterior a hoje
     const overdueLoans = await qRows(db, drizzleSql`
-      SELECT DISTINCT loanId FROM loanInstallments
-      WHERE dueDate < ${today} AND status IN ('pendente','atrasado')
+      SELECT DISTINCT li.loanId
+      FROM loanInstallments li
+      JOIN loans l ON l.id=li.loanId
+      WHERE li.dueDate < ${today}
+        AND li.status IN ('pendente','atrasado')
+        AND l.status <> 'pendente'
+        AND NOT (l.status='aprovado' AND l.pixSentAt IS NULL)
     `);
     const overdueLoanIds = new Set(overdueLoans.map((r: any) => r.loanId));
     let result = rows.map((r: any) => ({
       ...r,
-      isOverdue: !['pago', 'cancelado', 'reprovado'].includes(r.status) && overdueLoanIds.has(r.id),
-      hasInstallmentDueToday: todayDueLoanIds.has(r.id) && !['pago', 'cancelado', 'reprovado'].includes(r.status),
+      isOverdue: !['pago', 'cancelado', 'reprovado', 'pendente'].includes(r.status)
+        && !(r.status === 'aprovado' && !r.pixSentAt)
+        && overdueLoanIds.has(r.id),
+      hasInstallmentDueToday: todayDueLoanIds.has(r.id)
+        && !['pago', 'cancelado', 'reprovado', 'pendente'].includes(r.status)
+        && !(r.status === 'aprovado' && !r.pixSentAt),
     }));
     if (input?.status && input.status !== 'todos') {
       if (input.status === 'solicitacoes_novas') {
@@ -1491,7 +1553,7 @@ export const loanRouter = router({
     await ensurePixDisbursementColumns(db);
     await ensureClientPixFieldsSynced(db);
     const rows = await qRows(db, drizzleSql`
-      SELECT l.id, l.clientId, l.status, l.pixSentAt,
+      SELECT l.id, l.clientId, l.status, l.pixSentAt, l.paymentType, l.installments, l.totalAmount, l.workDays,
         lc.cpf as clientCpf, lc.phone as clientPhone,
         COALESCE(NULLIF(lc.client_pix_key, ''), NULLIF(lc.pixKey, '')) as clientPixKey
       FROM loans l JOIN loanClients lc ON lc.id=l.clientId
@@ -1510,6 +1572,10 @@ export const loanRouter = router({
     if (loan.pixSentAt) throw new TRPCError({ code: 'BAD_REQUEST', message: 'Este PIX já foi confirmado como enviado.' });
     const sentBy = ctx.user?.name || 'admin';
     const confirmedDate = input.confirmedDate || getBrazilToday();
+
+    // A cobrança só nasce aqui: ao confirmar o PIX, a data real de liberação
+    // passa a ser a base das parcelas e do vencimento final.
+    await rescheduleLoanFromReleaseDate(db, input.id, confirmedDate);
     await db.execute(drizzleSql`
       UPDATE loans SET pixSentAt=NOW(), pixConfirmedDate=${confirmedDate}, pixSentBy=${sentBy}, pixSendNote=${input.note?.trim() || null}, updatedAt=NOW()
       WHERE id=${input.id}
@@ -1526,6 +1592,7 @@ export const loanRouter = router({
     const rows = await qRows(db, drizzleSql`SELECT pixSentAt FROM loans WHERE id=${input.id} LIMIT 1`);
     if (!rows.length) throw new TRPCError({ code: 'NOT_FOUND', message: 'Empréstimo não encontrado' });
     if (!rows[0].pixSentAt) throw new TRPCError({ code: 'BAD_REQUEST', message: 'Confirme o PIX enviado antes de editar a data.' });
+    await rescheduleLoanFromReleaseDate(db, input.id, input.confirmedDate);
     await db.execute(drizzleSql`UPDATE loans SET pixConfirmedDate=${input.confirmedDate}, updatedAt=NOW() WHERE id=${input.id}`);
     return { ok: true };
   }),
@@ -2052,6 +2119,7 @@ export const loanRouter = router({
 
     const loans = await qRows(db, drizzleSql`
       SELECT l.*,
+        DATE_ADD(l.createdAt, INTERVAL 24 HOUR) as plannedReleaseAt,
         (SELECT COUNT(*) FROM loanInstallments WHERE loanId=l.id AND status='pago') as paidInstallments,
         (SELECT COUNT(*) FROM loanInstallments WHERE loanId=l.id) as totalInstallments,
         (SELECT COUNT(*) FROM loanInstallments WHERE loanId=l.id AND status='em_analise') as pendingProofs
@@ -2062,13 +2130,20 @@ export const loanRouter = router({
     const today = getBrazilToday();
     // Busca empréstimos com parcelas pendentes vencidas
     const overdueClientLoans = await qRows(db, drizzleSql`
-      SELECT DISTINCT loanId FROM loanInstallments
-      WHERE dueDate < ${today} AND status IN ('pendente','atrasado')
+      SELECT DISTINCT li.loanId
+      FROM loanInstallments li
+      JOIN loans l ON l.id=li.loanId
+      WHERE li.dueDate < ${today}
+        AND li.status IN ('pendente','atrasado')
+        AND l.status <> 'pendente'
+        AND NOT (l.status='aprovado' AND l.pixSentAt IS NULL)
     `);
     const overdueClientLoanIds = new Set(overdueClientLoans.map((r: any) => r.loanId));
     const loansWithStatus = loans.map((l: any) => ({
       ...l,
-      isOverdue: !["pago", "cancelado", "reprovado"].includes(l.status) && overdueClientLoanIds.has(l.id),
+      isOverdue: !["pago", "cancelado", "reprovado", "pendente"].includes(l.status)
+        && !(l.status === "aprovado" && !l.pixSentAt)
+        && overdueClientLoanIds.has(l.id),
     }));
 
     const pixRows = await qRows(db, drizzleSql`SELECT * FROM loanPixConfig WHERE isActive=1 ORDER BY id DESC LIMIT 1`);
@@ -2091,9 +2166,14 @@ export const loanRouter = router({
       // - Pagas após 18h do dia de vencimento = pagas com atraso
       // Limite: dueDate + 18h = UNIX_TIMESTAMP(dueDate) * 1000 + 64800000 ms
       const overdueInstalls = await qRows(db, drizzleSql`
-        SELECT COUNT(*) as cnt FROM loanInstallments
-        WHERE loanId IN (${drizzleSql.raw(allLoanIds.join(','))})
-        AND status IN ('pendente','atrasado') AND dueDate < ${today}
+        SELECT COUNT(*) as cnt
+        FROM loanInstallments li
+        JOIN loans l ON l.id=li.loanId
+        WHERE li.loanId IN (${drizzleSql.raw(allLoanIds.join(','))})
+          AND li.status IN ('pendente','atrasado')
+          AND li.dueDate < ${today}
+          AND l.status <> 'pendente'
+          AND NOT (l.status='aprovado' AND l.pixSentAt IS NULL)
       `);
       const overdueCount = parseInt(overdueInstalls[0]?.cnt || '0');
       // Score baseado APENAS em parcelas pendentes vencidas atualmente
@@ -2112,7 +2192,8 @@ export const loanRouter = router({
         JOIN loans l ON l.id = li.loanId
         WHERE li.loanId IN (${drizzleSql.raw(allLoanIds.join(','))})
         AND li.status IN ('pendente', 'atrasado')
-        AND l.status NOT IN ('pago','cancelado','reprovado')
+        AND l.status NOT IN ('pago','cancelado','reprovado','pendente')
+        AND NOT (l.status='aprovado' AND l.pixSentAt IS NULL)
         ORDER BY li.dueDate ASC LIMIT 1
       `);
       nextInstallment = nextInsts[0] || null;
@@ -2180,6 +2261,9 @@ export const loanRouter = router({
     if (!loans.length) throw new TRPCError({ code: "NOT_FOUND" });
 
     const loan = loans[0];
+    const isPreRelease = loan.status === 'pendente' || (loan.status === 'aprovado' && !loan.pixSentAt);
+    if (isPreRelease) return { loan, installments: [] };
+
     const clock = getBrazilClock();
     const rawInstallments = await qRows(db, drizzleSql`SELECT * FROM loanInstallments WHERE loanId=${input.loanId} ORDER BY installmentNumber ASC`);
     const scoreByInstallment = await getH2ScoreSubmissionMap(db, rawInstallments.map((i: any) => Number(i.id)));
@@ -2244,11 +2328,14 @@ export const loanRouter = router({
     ].filter(Boolean)));
 
     const inst = await qRows(db, drizzleSql`
-      SELECT li.*, l.paymentType AS loanPaymentType FROM loanInstallments li
+      SELECT li.*, l.paymentType AS loanPaymentType, l.status AS loanStatus, l.pixSentAt AS loanPixSentAt FROM loanInstallments li
       JOIN loans l ON l.id = li.loanId
       WHERE li.id=${input.installmentId} AND l.clientId IN (${drizzleSql.raw(clientIds.join(','))})
     `);
     if (!inst.length) throw new TRPCError({ code: "NOT_FOUND" });
+    if (inst[0].loanStatus === 'pendente' || (inst[0].loanStatus === 'aprovado' && !inst[0].loanPixSentAt)) {
+      throw new TRPCError({ code: "BAD_REQUEST", message: "As parcelas ainda não estão ativas. Aguarde a liberação do PIX." });
+    }
     if (inst[0].status === 'em_analise' || inst[0].proofSentAt) {
       throw new TRPCError({ code: "BAD_REQUEST", message: "Já existe um comprovante em análise para esta parcela." });
     }
@@ -2329,13 +2416,14 @@ export const loanRouter = router({
       throw new TRPCError({ code: "BAD_REQUEST", message: `Valor solicitado excede seu limite de R$ ${parseFloat(client.creditLimit).toFixed(2)}` });
     }
     const today = getBrazilToday();
+    const plannedReleaseDate = addDays(today, 1);
     const sim = simulateLoan(
       input.amount,
       parseFloat(client.interestRate),
       input.paymentType,
       parseInt(client.maxDays),
       input.workDays,
-      today
+      plannedReleaseDate
     );
     // Não expor taxa ao cliente ââ‚¬â€ retorna apenas o resultado do cálculo
     return {
@@ -2387,13 +2475,14 @@ export const loanRouter = router({
     }
 
     const today = getBrazilToday();
+    const plannedReleaseDate = addDays(today, 1);
     const sim = simulateLoan(
       input.amount,
       parseFloat(client.interestRate),
       input.paymentType,
       parseInt(client.maxDays),
       input.workDays,
-      today
+      plannedReleaseDate
     );
 
     const result = await db.execute(drizzleSql`
@@ -2401,7 +2490,7 @@ export const loanRouter = router({
         interestAmount, totalAmount, releaseDate, dueDate, status, notes, workDays)
       VALUES (1, ${client.id}, ${input.amount}, ${parseFloat(client.interestRate)}, ${parseInt(client.maxDays)},
         ${input.paymentType}, ${sim.installments}, ${sim.interestAmount}, ${sim.totalAmount},
-        ${today}, ${sim.dueDate}, 'pendente', ${input.notes || null}, ${input.workDays})
+        ${plannedReleaseDate}, ${sim.dueDate}, 'pendente', ${input.notes || null}, ${input.workDays})
     `);
     const loanId = (result[0] as any).insertId;
 
