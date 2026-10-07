@@ -41,7 +41,9 @@ export default function Raffle() {
   const savedPhone = typeof window !== "undefined" ? localStorage.getItem("walk_client_phone") || "" : "";
   const normalizedTypedPhone = normalizeRafflePhone(phone);
   const normalizedSavedPhone = normalizeRafflePhone(savedPhone);
-  const currentParticipantPhone = normalizedTypedPhone.length === 11 ? normalizedTypedPhone : normalizedSavedPhone;
+  const currentParticipantPhone = phone.trim()
+    ? (normalizedTypedPhone.length === 11 ? normalizedTypedPhone : "")
+    : normalizedSavedPhone;
   const { data: myEntry, refetch: refetchMyEntry } = trpc.raffles.myEntry.useQuery(
     { raffleId, phone: currentParticipantPhone },
     { enabled: accessGranted && !!activeRaffle && currentParticipantPhone.length === 11, refetchInterval: 8000 }
