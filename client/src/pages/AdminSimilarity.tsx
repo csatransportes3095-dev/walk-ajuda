@@ -10,11 +10,15 @@ import { extractFaceResemblanceDescriptor, compareFaceResemblanceDescriptors, ty
 import { decideFaceMatch, type MatchVerdict } from "@/lib/faceMatchDecision";
 import { getCachedH2FaceModelBytes, loadH2FaceRuntimeFromBytes, loadH2FaceRuntimeFromUrls, type SimilarFaceRuntime } from "@/lib/similarFaceTfliteRuntime";
 import { cosineSimilarity512, similarFaceScorePercent } from "@/lib/similarFaceReference";
+import { trpc } from "@/lib/trpc";
 
 type CandidatePhoto = {
   id: string;
   file: File;
   preview: string;
+  h2bicoId?: number;
+  h2bicoCpf?: string;
+  h2bicoName?: string;
 };
 
 type ComparisonResult = {
@@ -347,6 +351,8 @@ export default function AdminSimilarity() {
   const [similarRuntime, setSimilarRuntime] = useState<SimilarFaceRuntime | null>(null);
   const [runtimeLoading, setRuntimeLoading] = useState(true);
   const [runtimeMessage, setRuntimeMessage] = useState("Verificando motor de referência...");
+  const h2bicoQuery = trpc.h2bico.availableForSimilarity.useQuery(undefined, { enabled: false });
+  const [loadingH2Bico, setLoadingH2Bico] = useState(false);
 
   useEffect(() => {
     let active = true;
@@ -450,6 +456,63 @@ export default function AdminSimilarity() {
     setMasterQuality(null);
     setResults([]);
     setPairwiseResults([]);
+  };
+
+  const loadH2BicoCandidates = async () => {
+    if (analyzing || loadingH2Bico) return;
+    setLoadingH2Bico(true);
+    try {
+      const response = await h2bicoQuery.refetch();
+      const records = response.data || [];
+      if (!records.length) {
+        toast.info("Nenhuma foto DISPONÍVEL no H2BICO.");
+        return;
+      }
+
+      candidates.forEach((item) => URL.revokeObjectURL(item.preview));
+      const loaded: CandidatePhoto[] = [];
+      let failed = 0;
+
+      for (let index = 0; index < records.length; index += 1) {
+        const record = records[index];
+        setProgress({ current: index + 1, total: records.length, name: `Carregando H2BICO • ${record.name}` });
+        try {
+          const response = await fetch(record.photoUrl, { cache: "no-store", credentials: "omit" });
+          if (!response.ok) throw new Error(`HTTP ${response.status}`);
+          const blob = await response.blob();
+          const mimeType = blob.type.startsWith("image/") ? blob.type : "image/jpeg";
+          const extension = mimeType.includes("png") ? "png" : mimeType.includes("webp") ? "webp" : "jpg";
+          const safeName = (record.originalFilename || `${record.name}_${record.cpf}${record.uf ? "_" + record.uf : ""}.${extension}`).replace(/[\\/]/g, "_");
+          const file = new File([blob], safeName, { type: mimeType, lastModified: Date.now() });
+          loaded.push({
+            id: `h2bico-${record.id}`,
+            file,
+            preview: URL.createObjectURL(blob),
+            h2bicoId: record.id,
+            h2bicoCpf: record.cpf,
+            h2bicoName: record.name,
+          });
+        } catch (error) {
+          console.warn("[H2BICO] falha ao carregar foto", record.id, error);
+          failed += 1;
+        }
+      }
+
+      setCandidates(loaded);
+      setResults([]);
+      setPairwiseResults([]);
+      setProgress({ current: 0, total: 0, name: "" });
+
+      if (!loaded.length) {
+        toast.error("Não foi possível carregar as fotos do H2BICO.");
+        return;
+      }
+      toast.success(`${loaded.length} foto(s) DISPONÍVEL(IS) do H2BICO carregada(s)${failed ? ` • ${failed} falha(s)` : ""}.`);
+    } catch (error: any) {
+      toast.error(error?.message || "Falha ao buscar fotos do H2BICO.");
+    } finally {
+      setLoadingH2Bico(false);
+    }
   };
 
   const addFiles = (files: FileList | File[]) => {
@@ -1089,7 +1152,7 @@ export default function AdminSimilarity() {
                 </p>
               </div>
 
-              <div className="mt-4 grid grid-cols-3 gap-2">
+              <div className="mt-4 grid grid-cols-2 gap-2 sm:grid-cols-4">
                 <button
                   type="button"
                   onClick={() => filesInputRef.current?.click()}
@@ -1112,6 +1175,15 @@ export default function AdminSimilarity() {
                   title="Colar o print que está na área de transferência"
                 >
                   <ClipboardPaste className="h-4 w-4" /> Colar print
+                </button>
+                <button
+                  type="button"
+                  onClick={() => void loadH2BicoCandidates()}
+                  disabled={analyzing || loadingH2Bico}
+                  className="flex items-center justify-center gap-2 rounded-xl border border-amber-300/40 bg-amber-300/10 px-3 py-3 text-sm font-black text-amber-100 transition hover:bg-amber-300/15 disabled:cursor-not-allowed disabled:opacity-40"
+                  title="Carregar todas as fotos disponíveis armazenadas no H2BICO"
+                >
+                  <FolderOpen className="h-4 w-4" /> {loadingH2Bico ? "Carregando..." : "Banco H2BICO"}
                 </button>
               </div>
 
@@ -1141,7 +1213,7 @@ export default function AdminSimilarity() {
 
               <div className="mt-4 rounded-xl border border-white/10 bg-black/20 p-3">
                 <div className="flex items-center justify-between gap-3 text-sm">
-                  <span className="text-slate-400">{candidates.length} imagem(ns) selecionada(s)</span>
+                  <span className="text-slate-400">{candidates.length} imagem(ns) pronta(s) para comparar</span>
                   {results.length > 0 && <span className="text-[11px] font-bold text-cyan-300">{results.length} resultado(s)</span>}
                 </div>
 
