@@ -2,9 +2,15 @@ import { useState, useEffect, useMemo } from "react";
 import { trpc } from "@/lib/trpc";
 import { isValidCPF, normalizeCpf } from "@shared/cpf";
 import { toast } from "sonner";
-import { Gift, Lock, Trophy, Users, Ticket, CheckCircle2, Star, Phone, User, RefreshCw, Hash, LogOut, CalendarClock, Clock3, ShieldCheck, Sparkles, Info } from "lucide-react";
+import { Gift, Lock, Trophy, Users, Ticket, CheckCircle2, Star, Phone, User, RefreshCw, Hash, LogOut, CalendarClock, Clock3, ShieldCheck, Sparkles, Info, AlertTriangle, UserPlus, ArrowLeft } from "lucide-react";
 
 const RAFFLE_SESSION_KEY = "walk_raffle_access";
+
+function normalizeRafflePhone(value: string) {
+  let digits = value.replace(/\D/g, "");
+  if (digits.length > 11 && digits.startsWith("55")) digits = digits.slice(2);
+  return digits.slice(0, 11);
+}
 
 export default function Raffle() {
   const [accessGranted, setAccessGranted] = useState(false);
@@ -20,6 +26,7 @@ export default function Raffle() {
   const [submitted, setSubmitted] = useState(false);
   const [lastChosenNumber, setLastChosenNumber] = useState<number | null>(null);
   const [phoneChecked, setPhoneChecked] = useState(false); // true após digitar 11 dígitos
+  const [showUnregisteredManifest, setShowUnregisteredManifest] = useState(false);
   const [nowMs, setNowMs] = useState(() => Date.now());
 
   const { data: config, isLoading: configLoading } = trpc.raffleAccess.config.useQuery();
@@ -32,7 +39,9 @@ export default function Raffle() {
     { enabled: accessGranted && !!activeRaffle, refetchInterval: 8000 }
   );
   const savedPhone = typeof window !== "undefined" ? localStorage.getItem("walk_client_phone") || "" : "";
-  const currentParticipantPhone = (phone.replace(/\D/g, "").length === 11 ? phone.replace(/\D/g, "") : savedPhone.replace(/\D/g, "")).slice(-11);
+  const normalizedTypedPhone = normalizeRafflePhone(phone);
+  const normalizedSavedPhone = normalizeRafflePhone(savedPhone);
+  const currentParticipantPhone = normalizedTypedPhone.length === 11 ? normalizedTypedPhone : normalizedSavedPhone;
   const { data: myEntry, refetch: refetchMyEntry } = trpc.raffles.myEntry.useQuery(
     { raffleId, phone: currentParticipantPhone },
     { enabled: accessGranted && !!activeRaffle && currentParticipantPhone.length === 11, refetchInterval: 8000 }
@@ -51,12 +60,18 @@ export default function Raffle() {
     { enabled: !!savedPhone }
   );
   // Verificar se o telefone digitado no formulário está cadastrado
-  const phoneDigits = phone.replace(/\D/g, '');
+  const phoneDigits = normalizeRafflePhone(phone);
   const { data: phoneCheckData, isFetching: phoneCheckLoading } = trpc.customers.checkByPhone.useQuery(
     { phone: phoneDigits },
     { enabled: phoneDigits.length === 11 }
   );
   const isPhoneRegistered = phoneDigits.length === 11 ? (phoneCheckData?.exists ?? null) : null;
+
+  useEffect(() => {
+    if (phoneDigits.length === 11 && !phoneCheckLoading && isPhoneRegistered === false) {
+      setShowUnregisteredManifest(true);
+    }
+  }, [phoneDigits, phoneCheckLoading, isPhoneRegistered]);
 
   // Verificar acesso na sessão
   useEffect(() => {
@@ -118,10 +133,19 @@ export default function Raffle() {
   const canChooseMore = myChosenCount < maxAllowed;
   const remainingChoices = maxAllowed - myChosenCount;
 
+  const handleTryAnotherPhone = () => {
+    setShowUnregisteredManifest(false);
+    setPhone("");
+    setName("");
+    window.setTimeout(() => {
+      document.getElementById("raffle-phone")?.focus();
+    }, 0);
+  };
+
   const handleChooseNumber = async () => {
     if (!activeRaffle || !selectedNumber) return;
     if (!name.trim()) { toast.error("Digite seu nome"); return; }
-    if (!phone.trim() || phone.replace(/\D/g, "").length < 11) { toast.error("Digite um telefone válido com DDD (11 dígitos)"); return; }
+    if (!phone.trim() || phoneDigits.length < 11) { toast.error("Digite um telefone válido com DDD (11 dígitos)"); return; }
     // Verificar se o cliente tem CPF cadastrado
     if (phoneCheckData?.exists && !(phoneCheckData?.customer as any)?.cpf) {
       setNeedsCpfUpdate(true);
@@ -129,7 +153,7 @@ export default function Raffle() {
     }
     // Verificar se o telefone está cadastrado
     if (isPhoneRegistered === false) {
-      toast.error("Este número não está cadastrado. O sorteio é exclusivo para clientes cadastrados.");
+      setShowUnregisteredManifest(true);
       return;
     }
     if (isPhoneRegistered === null || phoneCheckLoading) {
@@ -142,10 +166,10 @@ export default function Raffle() {
         raffleId: activeRaffle.id,
         number: selectedNumber,
         customerName: name.trim(),
-        customerPhone: phone.replace(/\D/g, ""),
+        customerPhone: phoneDigits,
       });
       if (result.success) {
-        localStorage.setItem("walk_client_phone", phone.replace(/\D/g, "").slice(-11));
+        localStorage.setItem("walk_client_phone", phoneDigits);
         setLastChosenNumber(selectedNumber);
         setSelectedNumber(null);
         await refetchEntries();
@@ -355,6 +379,48 @@ export default function Raffle() {
         </div>
       </header>
 
+      {showUnregisteredManifest && (
+        <div className="fixed inset-0 z-[100] flex items-center justify-center bg-black/80 px-4 backdrop-blur-sm">
+          <div
+            role="dialog"
+            aria-modal="true"
+            aria-labelledby="raffle-unregistered-title"
+            className="w-full max-w-sm overflow-hidden rounded-3xl border border-red-400/30 bg-[#0d1020] shadow-2xl shadow-black/60"
+          >
+            <div className="border-b border-white/10 bg-gradient-to-r from-red-500/15 via-orange-400/10 to-transparent p-5">
+              <div className="flex h-12 w-12 items-center justify-center rounded-2xl border border-red-400/30 bg-red-500/10">
+                <AlertTriangle className="h-6 w-6 text-red-300" />
+              </div>
+              <h2 id="raffle-unregistered-title" className="mt-4 text-xl font-black text-white">
+                Telefone não cadastrado
+              </h2>
+              <p className="mt-2 text-sm leading-relaxed text-white/60">
+                Este número não consta no cadastro do H2 Colombiano. Para participar do sorteio, faça seu cadastro ou informe outro telefone.
+              </p>
+            </div>
+
+            <div className="space-y-3 p-5">
+              <a
+                href="/pre-cadastro"
+                className="flex w-full items-center justify-center gap-2 rounded-xl bg-gradient-to-r from-yellow-400 to-amber-300 px-4 py-3.5 font-black text-black transition active:scale-[0.98]"
+              >
+                <UserPlus className="h-5 w-5" />
+                FAZER CADASTRO
+              </a>
+
+              <button
+                type="button"
+                onClick={handleTryAnotherPhone}
+                className="flex w-full items-center justify-center gap-2 rounded-xl border border-white/15 bg-white/[0.04] px-4 py-3.5 font-bold text-white transition hover:bg-white/[0.08] active:scale-[0.98]"
+              >
+                <ArrowLeft className="h-5 w-5" />
+                INFORMAR OUTRO TELEFONE
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
+
       <main className="relative z-10 mx-auto max-w-7xl px-4 pt-5 md:px-6 md:pt-8">
         <section className="overflow-hidden rounded-3xl border border-purple-400/20 bg-gradient-to-br from-[#11152a] via-[#0b1020] to-[#1a0f29] shadow-2xl shadow-purple-950/20">
           <div className="grid lg:grid-cols-[1.15fr_.85fr]">
@@ -547,7 +613,7 @@ export default function Raffle() {
                 {selectedNumber && <div className="mt-4 rounded-xl border border-yellow-400/30 bg-yellow-400/10 p-3 text-center"><span className="text-xs text-yellow-100/60">Número selecionado</span><div className="text-3xl font-black text-yellow-200">#{selectedNumber}</div></div>}
                 <div className="mt-4 space-y-3">
                   <div className="relative"><User className="absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 text-white/25" /><input type="text" value={name} onChange={(e) => setName(e.target.value)} placeholder="Seu nome completo" className="w-full rounded-xl border border-white/10 bg-black/30 py-3 pl-10 pr-3 text-sm outline-none focus:border-yellow-400/40" /></div>
-                  <div className="relative"><Phone className="absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 text-white/25" /><input type="tel" value={phone} onChange={(e) => setPhone(e.target.value)} placeholder="Telefone com DDD" className={`w-full rounded-xl border bg-black/30 py-3 pl-10 pr-9 text-sm outline-none ${isPhoneRegistered === true ? 'border-green-500/40' : isPhoneRegistered === false ? 'border-red-500/40' : 'border-white/10 focus:border-yellow-400/40'}`} />{phoneDigits.length === 11 && <div className="absolute right-3 top-1/2 -translate-y-1/2">{phoneCheckLoading ? <RefreshCw className="h-4 w-4 animate-spin text-white/30" /> : isPhoneRegistered === true ? <CheckCircle2 className="h-4 w-4 text-green-400" /> : <span className="font-bold text-red-400">×</span>}</div>}</div>
+                  <div className="relative"><Phone className="absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 text-white/25" /><input id="raffle-phone" type="tel" inputMode="numeric" maxLength={11} value={phone} onChange={(e) => { setPhone(normalizeRafflePhone(e.target.value)); if (showUnregisteredManifest) setShowUnregisteredManifest(false); }} placeholder="Telefone com DDD" className={`w-full rounded-xl border bg-black/30 py-3 pl-10 pr-9 text-sm outline-none ${isPhoneRegistered === true ? 'border-green-500/40' : isPhoneRegistered === false ? 'border-red-500/40' : 'border-white/10 focus:border-yellow-400/40'}`} />{phoneDigits.length === 11 && <div className="absolute right-3 top-1/2 -translate-y-1/2">{phoneCheckLoading ? <RefreshCw className="h-4 w-4 animate-spin text-white/30" /> : isPhoneRegistered === true ? <CheckCircle2 className="h-4 w-4 text-green-400" /> : <span className="font-bold text-red-400">×</span>}</div>}</div>
                 </div>
                 {isPhoneRegistered === false && <p className="mt-2 text-xs text-red-300">Telefone não cadastrado no sistema.</p>}
                 {isPhoneRegistered === true && <p className="mt-2 text-xs text-emerald-300">Cliente confirmado.</p>}
