@@ -29,6 +29,25 @@ function fmtDate(d: string | null | undefined) {
   return `${day}/${m}/${y}`;
 }
 
+function fmtDateTimeSP(value: string | null | undefined) {
+  if (!value) return "—";
+  const raw = String(value).trim();
+  const hasTimezone = raw.includes("Z") || /[+-]\d{2}:?\d{2}$/.test(raw);
+  const parsed = new Date(hasTimezone ? raw : raw.replace(" ", "T") + "Z");
+  if (Number.isNaN(parsed.getTime())) return fmtDate(raw);
+  const parts = new Intl.DateTimeFormat("pt-BR", {
+    timeZone: "America/Sao_Paulo",
+    day: "2-digit",
+    month: "2-digit",
+    year: "numeric",
+    hour: "2-digit",
+    minute: "2-digit",
+    hourCycle: "h23",
+  }).formatToParts(parsed);
+  const get = (type: Intl.DateTimeFormatPartTypes) => parts.find((part) => part.type === type)?.value || "";
+  return `${get("day")}/${get("month")}/${get("year")} às ${get("hour")}:${get("minute")}`;
+}
+
 function daysUntil(dateStr: string | null | undefined): number | null {
   if (!dateStr) return null;
   const todayStr = new Date().toISOString().slice(0, 10);
@@ -554,19 +573,20 @@ export function LoansTab({ token }: LoansTabProps) {
   );
 
   const requestParceladoMutation = trpc.loans.requestParcelado.useMutation({
-    onSuccess: () => {
+    onSuccess: async () => {
+      await refetch();
       toast.success('Solicitação enviada! Aguarde a aprovação.');
       setSubmitted(true); setRequestOpen(false); setRequestAmount(""); setRequestNotes("");
       setParceladoEnabled(false); setParceladoAmount(0); setParceladoSelecionado(null); setParceladoConfirm(false);
-      refetch();
     },
     onError: (e) => toast.error(e.message || "Erro ao solicitar empréstimo"),
   });
 
   const requestMutation = trpc.loans.requestLoan.useMutation({
-    onSuccess: () => {
+    onSuccess: async () => {
+      await refetch();
       toast.success("Solicitação enviada! Aguarde a análise.");
-      setSubmitted(true); setRequestOpen(false); setRequestAmount(""); setRequestNotes(""); setSimEnabled(false); refetch();
+      setSubmitted(true); setRequestOpen(false); setRequestAmount(""); setRequestNotes(""); setSimEnabled(false);
     },
     onError: (e) => toast.error(e.message || "Erro ao solicitar empréstimo"),
   });
@@ -669,6 +689,7 @@ export function LoansTab({ token }: LoansTabProps) {
 
   const activeLoans = (loans as any[]).filter((l) => !["pago", "cancelado", "reprovado"].includes(l.status));
   const hasActive = activeLoans.length > 0;
+  const hasReleasedLoan = activeLoans.some((l) => l.status !== "pendente" && !(l.status === "aprovado" && !l.pixSentAt));
   const sim = simQuery.data;
   const rejectedLoans = (loans as any[]).filter((l) => l.status === "reprovado").slice(0, 3);
   // O empréstimo atual vem sempre antes de históricos quitados, mesmo que existam registros antigos.
@@ -904,7 +925,7 @@ export function LoansTab({ token }: LoansTabProps) {
       })()}
 
       {/* PIX para pagamento */}
-      {pixConfig && hasActive && (
+      {pixConfig && hasReleasedLoan && (
         <div className="relative overflow-hidden rounded-2xl border-2 border-cyan-300/70 bg-gradient-to-br from-cyan-950/90 via-blue-950/80 to-violet-950/90 p-4 shadow-[0_14px_38px_rgba(34,211,238,0.22)] backdrop-blur-xl">
           <div className="pointer-events-none absolute -right-8 -top-8 h-28 w-28 rounded-full bg-cyan-300/20 blur-2xl" aria-hidden="true" />
           <div className="relative flex items-center justify-between gap-3 mb-3">
@@ -959,6 +980,8 @@ export function LoansTab({ token }: LoansTabProps) {
             const isFirstHistory = isHistoryLoan && !visibleLoans.slice(0, index).some((item: any) => ["pago", "cancelado"].includes(item.status));
             const isFirstCurrent = index === 0 && !isHistoryLoan;
             const isExpanded = expandedLoan === loan.id;
+            const isPreRelease = loan.status === "pendente" || (loan.status === "aprovado" && !loan.pixSentAt);
+            const plannedReleaseAt = loan.plannedReleaseAt || null;
             const showSendProof = !["pago", "cancelado", "reprovado"].includes(loan.status) && !!loan.pixSentAt;
             const paidCount = parseInt(loan.paidInstallments || 0);
             const totalCount = parseInt(loan.totalInstallments || 1);
@@ -1008,18 +1031,30 @@ export function LoansTab({ token }: LoansTabProps) {
                     </div>
                   )}
 
-                  {/* Banner pendente */}
+                  {/* Solicitação antes da liberação: sem cobrança ativa */}
                   {loan.status === "pendente" && (
-                    <div className="flex items-center gap-2 bg-blue-500/10 border border-blue-500/20 rounded-xl px-3 py-2 mb-4">
-                      <Clock className="w-4 h-4 text-blue-400 shrink-0 animate-pulse" />
-                      <p className="text-xs text-blue-300 font-medium">Solicitação em análise — aguarde a aprovação.</p>
+                    <div className="mb-4 rounded-xl border border-blue-500/30 bg-blue-500/10 px-3 py-3">
+                      <div className="flex items-start gap-2">
+                        <Clock className="mt-0.5 h-4 w-4 shrink-0 animate-pulse text-blue-400" />
+                        <div>
+                          <p className="text-sm font-black text-blue-200">Solicitação em análise — aguardando aprovação.</p>
+                          <p className="mt-1 text-xs leading-relaxed text-blue-100/75">Nenhuma parcela está ativa neste momento. O prazo de pagamento só começa depois da confirmação do PIX.</p>
+                          <p className="mt-2 text-xs font-black text-cyan-200">🕐 Previsão de liberação (24h): {fmtDateTimeSP(plannedReleaseAt)}</p>
+                        </div>
+                      </div>
                     </div>
                   )}
                   {/* Empréstimo aprovado, aguardando a transferência PIX pelo ADM */}
                   {loan.status === "aprovado" && !loan.pixSentAt && (
-                    <div className="flex items-center gap-2 bg-amber-500/10 border border-amber-500/20 rounded-xl px-3 py-2 mb-4">
-                      <Clock className="w-4 h-4 text-amber-400 shrink-0 animate-pulse" />
-                      <p className="text-xs text-amber-300 font-medium">Empréstimo aprovado — aguardando a liberação do PIX pelo administrador.</p>
+                    <div className="mb-4 rounded-xl border border-amber-500/30 bg-amber-500/10 px-3 py-3">
+                      <div className="flex items-start gap-2">
+                        <CheckCircle2 className="mt-0.5 h-4 w-4 shrink-0 text-amber-300" />
+                        <div>
+                          <p className="text-sm font-black text-amber-200">Solicitação aprovada ✅</p>
+                          <p className="mt-1 text-xs leading-relaxed text-amber-100/75">Aguardando a liberação do PIX. As parcelas ainda não estão ativas.</p>
+                          <p className="mt-2 text-xs font-black text-amber-200">🕐 Previsão de liberação (24h): {fmtDateTimeSP(plannedReleaseAt)}</p>
+                        </div>
+                      </div>
                     </div>
                   )}
                   {loan.status === "aprovado" && loan.pixSentAt && (
@@ -1033,7 +1068,7 @@ export function LoansTab({ token }: LoansTabProps) {
                   <div className="flex items-start justify-between gap-2 mb-4">
                     <StatusBadge status={loan.status} isOverdue={loan.isOverdue} />
                     <div className="text-right">
-                      <p className="text-xs text-muted-foreground">{isPaidLoan ? "Total quitado" : "Total c/ juros"}</p>
+                      <p className="text-xs text-muted-foreground">{isPaidLoan ? "Total quitado" : isPreRelease ? "Total previsto c/ juros" : "Total c/ juros"}</p>
                       <p className={`text-xl font-black ${isPaidLoan ? "text-emerald-300" : "text-yellow-400"}`}>{fmt(loan.totalAmount)}</p>
                     </div>
                   </div>
@@ -1044,16 +1079,24 @@ export function LoansTab({ token }: LoansTabProps) {
                       <p className="text-xs text-muted-foreground mb-1">💰 Solicitado</p>
                       <p className="text-base font-bold">{fmt(loan.amount)}</p>
                     </div>
-                    <div className="bg-white/5 rounded-xl p-3">
-                      <p className="text-xs text-muted-foreground mb-1">📅 Vencimento final</p>
-                      <p className={`text-base font-bold ${loan.isOverdue ? "text-red-400" : ""}`}>{fmtDate(loan.dueDate)}</p>
-                    </div>
-                    {loan.releaseDate && (
-                      <div className="bg-emerald-500/8 border border-emerald-500/20 rounded-xl p-3">
-                        <p className="text-xs text-muted-foreground mb-1">🟢 Liberação</p>
-                        <p className="text-base font-bold text-emerald-400">{fmtDate(loan.releaseDate)}</p>
+                    {!isPreRelease && (
+                      <div className="bg-white/5 rounded-xl p-3">
+                        <p className="text-xs text-muted-foreground mb-1">📅 Vencimento final</p>
+                        <p className={`text-base font-bold ${loan.isOverdue ? "text-red-400" : ""}`}>{fmtDate(loan.dueDate)}</p>
                       </div>
                     )}
+                    {isPreRelease ? (
+                      <div className="col-span-2 rounded-xl border border-cyan-500/25 bg-cyan-500/10 p-3">
+                        <p className="text-xs font-bold text-cyan-100/75 mb-1">🕐 Previsão automática de liberação</p>
+                        <p className="text-base font-black text-cyan-200">{fmtDateTimeSP(plannedReleaseAt)}</p>
+                        <p className="mt-1 text-[11px] text-cyan-100/65">24 horas após o envio da solicitação.</p>
+                      </div>
+                    ) : loan.releaseDate ? (
+                      <div className="bg-emerald-500/8 border border-emerald-500/20 rounded-xl p-3">
+                        <p className="text-xs text-muted-foreground mb-1">🟢 Liberação real</p>
+                        <p className="text-base font-bold text-emerald-400">{fmtDate(loan.releaseDate)}</p>
+                      </div>
+                    ) : null}
                     <div className="bg-white/5 rounded-xl p-3">
                       <p className="text-xs text-muted-foreground mb-1">📋 Modo</p>
                       <p className="text-sm font-bold capitalize">
@@ -1061,22 +1104,24 @@ export function LoansTab({ token }: LoansTabProps) {
                         {loan.workDays === "seg_sab" ? " · Seg–Sáb" : loan.workDays === "seg_dom" ? " · Seg–Dom" : ""}
                       </p>
                     </div>
-                    <div className="bg-white/5 rounded-xl p-3">
-                      <p className="text-xs text-muted-foreground mb-1">🔢 Parcelas</p>
-                      <p className="text-base font-bold">{paidCount}/{totalCount}</p>
-                    </div>
+                    {!isPreRelease && (
+                      <div className="bg-white/5 rounded-xl p-3">
+                        <p className="text-xs text-muted-foreground mb-1">🔢 Parcelas</p>
+                        <p className="text-base font-bold">{paidCount}/{totalCount}</p>
+                      </div>
+                    )}
                   </div>
 
-                  {/* Progresso financeiro */}
-                  <ProgressPanel paidCount={paidCount} totalCount={totalCount} totalAmount={totalAmt} />
+                  {/* Progresso financeiro só depois da liberação */}
+                  {!isPreRelease && <ProgressPanel paidCount={paidCount} totalCount={totalCount} totalAmount={totalAmt} />}
 
                   {/* Regras de atraso dentro do empréstimo ativo */}
-                  {lateFeeConfig?.enabled && !["pago", "cancelado", "reprovado"].includes(loan.status) && (
+                  {lateFeeConfig?.enabled && !isPreRelease && !["pago", "cancelado", "reprovado"].includes(loan.status) && (
                     <LateFeePanel config={lateFeeConfig} installmentAmount={totalAmt / Math.max(totalCount, 1)} paymentType={loan.paymentType} />
                   )}
 
                   {/* Botão ver parcelas */}
-                  <button
+                  {!isPreRelease && <button
                     onClick={() => setExpandedLoan(isExpanded ? null : loan.id)}
                     className={`w-full flex items-center justify-center gap-3 py-4 rounded-xl border font-bold text-sm transition-all active:scale-95 relative overflow-hidden ${
                       isPaidLoan
@@ -1110,10 +1155,10 @@ export function LoansTab({ token }: LoansTabProps) {
                         <span className="eq-bar eq-bar-1" style={{height:"8px",background:"rgba(167,139,250,0.9)"}}></span>
                       </span>
                     )}
-                  </button>
+                  </button>}
 
                   {/* Parcelas expandidas */}
-                  {isExpanded && instData && instData.loan.id === loan.id && (
+                  {!isPreRelease && isExpanded && instData && instData.loan.id === loan.id && (
                     <>
                       <DatesPanel loan={loan} installments={instData.installments as any[]} />
                       <InstallmentTimeline
