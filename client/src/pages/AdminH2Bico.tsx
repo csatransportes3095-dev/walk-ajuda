@@ -65,8 +65,10 @@ export default function AdminH2Bico(){
             <div className="min-w-0 flex-1"><div className="font-bold truncate">{r.name}</div><div className="text-sm text-gray-400 font-mono">{showCpf?r.cpf:maskCpf(r.cpf)}</div><div className="text-xs mt-1">{STATUS[r.status]}</div>{r.linkedOrder&&<div className="text-xs text-amber-300">Pedido: {r.linkedOrder}</div>}</div>
           </div>
           <div className="flex flex-wrap gap-2 mt-3">
-            {r.photoUrl&&<Button size="sm" variant="outline" onClick={()=>navigate(`/similaridade?h2bico=${r.id}&foto=${encodeURIComponent(r.photoUrl)}`)}>Comparar</Button>}
-            {r.status!=="used"&&<Button size="sm" onClick={()=>markUsed(r.id)}><CheckCircle2 className="w-4 h-4 mr-1"/>Usado</Button>}
+            {r.photoUrl&&<Button size="sm" variant="outline" onClick={()=>navigate("/similaridade")}>Comparar</Button>}
+            {r.status==="available"&&<Button size="sm" variant="outline" onClick={()=>setSt.mutate({id:r.id,status:"reserved"})}>Reservar</Button>}
+            {r.status==="reserved"&&<Button size="sm" variant="outline" onClick={()=>setSt.mutate({id:r.id,status:"in_use"})}>Em uso</Button>}
+            {r.status!=="used"&&r.status!=="archived"&&<Button size="sm" onClick={()=>markUsed(r.id)}><CheckCircle2 className="w-4 h-4 mr-1"/>Usado</Button>}
             {r.status!=="archived"?<Button size="sm" variant="outline" onClick={()=>setSt.mutate({id:r.id,status:"archived"})}><Archive className="w-4 h-4 mr-1"/>Arquivar</Button>:<Button size="sm" variant="outline" onClick={()=>setSt.mutate({id:r.id,status:"available"})}>Restaurar</Button>}
           </div>
         </Card>)}
