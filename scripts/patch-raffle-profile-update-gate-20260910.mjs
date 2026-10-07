@@ -79,14 +79,17 @@ if (!raffle.includes('const needsProfileUpdate =')) {
 }
 
 if (!raffle.includes('const goToUpdateCadastro = () =>')) {
-  raffle = replaceOnce(
-    raffle,
-`  const handleChooseNumber = async () => {
+  const legacyBlock = `  const handleChooseNumber = async () => {
     if (!activeRaffle || !selectedNumber) return;
     if (!name.trim()) { toast.error("Digite seu nome"); return; }
-    if (!phone.trim() || phone.replace(/\\D/g, "").length < 11) { toast.error("Digite um telefone válido com DDD (11 dígitos)"); return; }`,
-`  const goToUpdateCadastro = () => {
-    const cleanPhone = phone.replace(/\\D/g, "");
+    if (!phone.trim() || phone.replace(/\\D/g, "").length < 11) { toast.error("Digite um telefone válido com DDD (11 dígitos)"); return; }`;
+  const normalizedBlock = `  const handleChooseNumber = async () => {
+    if (!activeRaffle || !selectedNumber) return;
+    if (!name.trim()) { toast.error("Digite seu nome"); return; }
+    if (!phone.trim() || phoneDigits.length < 11) { toast.error("Digite um telefone válido com DDD (11 dígitos)"); return; }`;
+  const target = raffle.includes(normalizedBlock) ? normalizedBlock : legacyBlock;
+  const replacement = `  const goToUpdateCadastro = () => {
+    const cleanPhone = typeof phoneDigits === "string" ? phoneDigits : phone.replace(/\\D/g, "");
     if (cleanPhone) localStorage.setItem("customer_update_phone_hint", cleanPhone);
     sessionStorage.setItem("h2_customer_return_to", "/sorteio");
     window.location.assign("/atualizarcadastro");
@@ -95,13 +98,12 @@ if (!raffle.includes('const goToUpdateCadastro = () =>')) {
   const handleChooseNumber = async () => {
     if (!activeRaffle || !selectedNumber) return;
     if (!name.trim()) { toast.error("Digite seu nome"); return; }
-    if (!phone.trim() || phone.replace(/\\D/g, "").length < 11) { toast.error("Digite um telefone válido com DDD (11 dígitos)"); return; }
+    if (!phone.trim() || (typeof phoneDigits === "string" ? phoneDigits.length : phone.replace(/\\D/g, "").length) < 11) { toast.error("Digite um telefone válido com DDD (11 dígitos)"); return; }
     if (needsProfileUpdate) {
       toast.error("Atualização de cadastro necessária. Atualize seu cadastro antes de participar do sorteio.");
       return;
-    }`,
-    'bloqueio antes da confirmacao no frontend',
-  );
+    }`;
+  raffle = replaceOnce(raffle, target, replacement, 'bloqueio antes da confirmacao no frontend');
 }
 
 // Layout novo: mensagem/CTA de atualização no painel lateral.
