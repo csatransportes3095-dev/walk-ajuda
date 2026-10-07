@@ -47,6 +47,36 @@ function fileToBase64(file: File): Promise<string> {
   });
 }
 
+async function readDroppedEntry(entry: any): Promise<File[]> {
+  if (!entry) return [];
+  if (entry.isFile) {
+    return await new Promise<File[]>((resolve) => entry.file((file: File) => resolve([file]), () => resolve([])));
+  }
+  if (!entry.isDirectory) return [];
+
+  const reader = entry.createReader();
+  const files: File[] = [];
+  while (true) {
+    const entries: any[] = await new Promise((resolve) => reader.readEntries(resolve, () => resolve([])));
+    if (!entries.length) break;
+    for (const child of entries) files.push(...await readDroppedEntry(child));
+  }
+  return files;
+}
+
+async function readDroppedFiles(items: DataTransferItemList): Promise<File[]> {
+  const files: File[] = [];
+  for (const item of Array.from(items)) {
+    const entry = (item as any).webkitGetAsEntry?.();
+    if (entry) files.push(...await readDroppedEntry(entry));
+    else {
+      const file = item.getAsFile();
+      if (file) files.push(file);
+    }
+  }
+  return files;
+}
+
 export default function AdminH2Bico(){
   const [,navigate]=useLocation();
   const filesRef=useRef<HTMLInputElement>(null);
@@ -74,17 +104,38 @@ export default function AdminH2Bico(){
   const cpfs=useMemo(()=>Array.from(new Set((extractText.match(/\d[\d.\-\s]{9,16}\d/g)||[]).map(v=>v.replace(/\D/g,"")).filter(v=>v.length===11))),[extractText]);
 
   const prepareFiles=(files:FileList|File[])=>{
-    const parsed=Array.from(files).map(parsePhotoFilename);
-    const seen=new Set<string>();
-    const final=parsed.map(p=>{
-      const duplicateInSelection=!!p.cpf&&seen.has(p.cpf);
-      if(p.cpf&&!duplicateInSelection) seen.add(p.cpf);
-      return {...p,duplicateInSelection,alreadyExists:!!p.cpf&&existingCpfs.has(p.cpf)};
+    const incoming=Array.from(files);
+    setBatch(current=>{
+      const uniqueFiles=new Map<string,File>();
+      for(const item of current){
+        const key=`${item.file.webkitRelativePath||item.file.name}|${item.file.size}|${item.file.lastModified}`;
+        uniqueFiles.set(key,item.file);
+      }
+      for(const file of incoming){
+        const key=`${(file as any).webkitRelativePath||file.name}|${file.size}|${file.lastModified}`;
+        if(!uniqueFiles.has(key)) uniqueFiles.set(key,file);
+      }
+
+      const parsed=Array.from(uniqueFiles.values()).map(parsePhotoFilename);
+      const seen=new Set<string>();
+      const final=parsed.map(p=>{
+        const duplicateInSelection=!!p.cpf&&seen.has(p.cpf);
+        if(p.cpf&&!duplicateInSelection) seen.add(p.cpf);
+        return {...p,duplicateInSelection,alreadyExists:!!p.cpf&&existingCpfs.has(p.cpf)};
+      });
+      const valid=final.filter(p=>p.valid&&!p.duplicateInSelection&&!p.alreadyExists).length;
+      toast.success(`${incoming.length} arquivo(s) adicionado(s). Lote atual: ${final.length} • ${valid} pronto(s).`);
+      return final;
     });
-    setBatch(final);
     setSummary(null);
-    const valid=final.filter(p=>p.valid&&!p.duplicateInSelection&&!p.alreadyExists).length;
-    toast.success(`${final.length} foto(s) lida(s). ${valid} pronta(s) para importar.`);
+  };
+
+  const onDropFolders=async(e:React.DragEvent<HTMLDivElement>)=>{
+    e.preventDefault();
+    if(importing) return;
+    const files=await readDroppedFiles(e.dataTransfer.items);
+    if(!files.length){toast.error("Nenhuma imagem encontrada nas pastas soltas.");return;}
+    prepareFiles(files);
   };
 
   const readyBatch=batch.filter(p=>p.valid&&!p.duplicateInSelection&&!p.alreadyExists);
@@ -140,7 +191,7 @@ export default function AdminH2Bico(){
         <div>
           <div className="text-xs font-black tracking-[0.18em] text-emerald-300 uppercase">Importação principal</div>
           <h2 className="text-2xl font-black mt-1">Importar fotos em lote</h2>
-          <p className="text-sm text-gray-400 mt-1">Selecione centenas de fotos ou uma pasta inteira. O CPF é obrigatório. Se não houver nome, o arquivo entra como SEM NOME. Arquivo com nome mas sem CPF é descartado.</p>
+          <p className="text-sm text-gray-400 mt-1">Selecione fotos, adicione várias pastas uma após outra ou arraste várias pastas ao mesmo tempo. Tudo fica acumulado no mesmo lote. O CPF é obrigatório; sem nome entra como SEM NOME.</p>
           <p className="text-xs text-gray-500 mt-2 font-mono">Exemplo: RAFAEL ANTERIO BARBOSA_44249385817_SP.jpg</p>
         </div>
 
@@ -149,11 +200,22 @@ export default function AdminH2Bico(){
             <Images className="w-6 h-6 mr-2"/>SELECIONAR VÁRIAS FOTOS
           </Button>
           <Button className="h-16 text-base font-black" variant="outline" onClick={()=>folderRef.current?.click()} disabled={importing}>
-            <FolderOpen className="w-6 h-6 mr-2"/>SELECIONAR PASTA INTEIRA
+            <FolderOpen className="w-6 h-6 mr-2"/>ADICIONAR PASTA
           </Button>
         </div>
         <input ref={filesRef} type="file" multiple accept="image/jpeg,image/png,image/webp" className="hidden" onChange={e=>{if(e.target.files)prepareFiles(e.target.files);e.currentTarget.value="";}}/>
         <input ref={folderRef} type="file" multiple accept="image/*" className="hidden" {...({webkitdirectory:"",directory:""} as any)} onChange={e=>{if(e.target.files)prepareFiles(e.target.files);e.currentTarget.value="";}}/>
+
+        <div
+          onDragOver={e=>e.preventDefault()}
+          onDrop={e=>void onDropFolders(e)}
+          className="rounded-xl border-2 border-dashed border-cyan-400/35 bg-cyan-500/5 p-6 text-center transition hover:border-cyan-300/60"
+        >
+          <FolderOpen className="mx-auto h-8 w-8 text-cyan-300"/>
+          <div className="mt-2 font-black">ARRASTE VÁRIAS PASTAS AQUI</div>
+          <div className="mt-1 text-xs text-gray-400">Pode soltar várias pastas do Windows ao mesmo tempo. As fotos serão acumuladas no mesmo lote.</div>
+          {batch.length>0&&<div className="mt-2 text-xs font-bold text-emerald-300">Lote atual: {batch.length} arquivo(s). Você pode adicionar mais pastas antes de importar.</div>}
+        </div>
 
         {batch.length>0&&<>
           <div className="grid grid-cols-2 md:grid-cols-5 gap-2">
