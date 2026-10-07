@@ -85,6 +85,7 @@ import AdminOnlineSupport from "./pages/AdminOnlineSupport";
 import AdminChatFlow from "./pages/AdminChatFlow";
 import AdminAuthenticator from "./pages/AdminAuthenticator";
 import AdminSimilarity from "./pages/AdminSimilarity";
+import AdminH2Bico from "./pages/AdminH2Bico";
 import H2Ads from "./pages/H2Ads";
 import AdminReferrals from "./pages/AdminReferrals";
 import AdminPreRegistrations from "./pages/AdminPreRegistrations";
@@ -195,6 +196,9 @@ function Router() {
       </Route>
       <Route path={"/similaridade"}>
         <AdminGuard><AdminSimilarity /></AdminGuard>
+      </Route>
+      <Route path={"/admin/h2bico"}>
+        <AdminGuard><AdminH2Bico /></AdminGuard>
       </Route>
       <Route path={"/admin/access-filters"}>
         <AdminGuard><AdminUserAccessFilters /></AdminGuard>
