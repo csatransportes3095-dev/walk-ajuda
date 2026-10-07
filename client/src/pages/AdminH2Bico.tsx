@@ -75,9 +75,12 @@ export default function AdminH2Bico(){
 
   const prepareFiles=(files:FileList|File[])=>{
     const parsed=Array.from(files).map(parsePhotoFilename);
-    const counts=new Map<string,number>();
-    for(const p of parsed){if(p.cpf) counts.set(p.cpf,(counts.get(p.cpf)||0)+1);}
-    const final=parsed.map(p=>({...p,duplicateInSelection:!!p.cpf&&(counts.get(p.cpf)||0)>1,alreadyExists:!!p.cpf&&existingCpfs.has(p.cpf)}));
+    const seen=new Set<string>();
+    const final=parsed.map(p=>{
+      const duplicateInSelection=!!p.cpf&&seen.has(p.cpf);
+      if(p.cpf&&!duplicateInSelection) seen.add(p.cpf);
+      return {...p,duplicateInSelection,alreadyExists:!!p.cpf&&existingCpfs.has(p.cpf)};
+    });
     setBatch(final);
     setSummary(null);
     const valid=final.filter(p=>p.valid&&!p.duplicateInSelection&&!p.alreadyExists).length;
