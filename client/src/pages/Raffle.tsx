@@ -402,13 +402,25 @@ export default function Raffle() {
             </div>
 
             <div className="space-y-3 p-5">
-              <a
-                href="/pre-cadastro"
+              <button
+                type="button"
+                onClick={() => {
+                  // /login abre o PasswordGate, que é o cadastro principal (customers).
+                  // Remove apenas uma sessão legada de acesso ao sorteio para não redirecionar
+                  // de volta automaticamente antes de o cliente conseguir se cadastrar.
+                  if (localStorage.getItem("walk_access_type") === "raffle") {
+                    localStorage.removeItem("walk_access_granted");
+                    localStorage.removeItem("walk_access_code");
+                    localStorage.removeItem("walk_access_type");
+                    localStorage.removeItem("walk_access_expires");
+                  }
+                  window.location.assign("/login");
+                }}
                 className="flex w-full items-center justify-center gap-2 rounded-xl bg-gradient-to-r from-yellow-400 to-amber-300 px-4 py-3.5 font-black text-black transition active:scale-[0.98]"
               >
                 <UserPlus className="h-5 w-5" />
-                FAZER CADASTRO
-              </a>
+                FAZER CADASTRO PRINCIPAL
+              </button>
 
               <button
                 type="button"
