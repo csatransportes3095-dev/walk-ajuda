@@ -87,7 +87,7 @@ export default function AdminH2Bico(){
   const [batch,setBatch]=useState<ParsedFile[]>([]);
   const [importing,setImporting]=useState(false);
   const [progress,setProgress]=useState({done:0,total:0,name:""});
-  const [summary,setSummary]=useState<{imported:number;duplicates:number;errors:number}|null>(null);
+  const [summary,setSummary]=useState<{imported:number;repaired:number;duplicates:number;errors:number}|null>(null);
   const [extractText,setExtractText]=useState("");
   const utils=trpc.useUtils();
 
@@ -123,8 +123,8 @@ export default function AdminH2Bico(){
         if(p.cpf&&!duplicateInSelection) seen.add(p.cpf);
         return {...p,duplicateInSelection,alreadyExists:!!p.cpf&&existingCpfs.has(p.cpf)};
       });
-      const valid=final.filter(p=>p.valid&&!p.duplicateInSelection&&!p.alreadyExists).length;
-      toast.success(`${incoming.length} arquivo(s) adicionado(s). Lote atual: ${final.length} • ${valid} pronto(s).`);
+      const valid=final.filter(p=>p.valid&&!p.duplicateInSelection).length;
+      toast.success(`${incoming.length} arquivo(s) adicionado(s). Lote atual: ${final.length} • ${valid} para verificar/importar.`);
       return final;
     });
     setSummary(null);
@@ -138,7 +138,7 @@ export default function AdminH2Bico(){
     prepareFiles(files);
   };
 
-  const readyBatch=batch.filter(p=>p.valid&&!p.duplicateInSelection&&!p.alreadyExists);
+  const readyBatch=batch.filter(p=>p.valid&&!p.duplicateInSelection);
   const invalidCount=batch.filter(p=>!p.valid).length;
   const duplicateSelectionCount=batch.filter(p=>p.duplicateInSelection).length;
   const existingCount=batch.filter(p=>p.alreadyExists).length;
@@ -147,7 +147,7 @@ export default function AdminH2Bico(){
     if(!readyBatch.length){toast.error("Nenhuma foto válida para importar.");return;}
     setImporting(true);
     setSummary(null);
-    let imported=0,duplicates=0,errors=0;
+    let imported=0,repaired=0,duplicates=0,errors=0;
     setProgress({done:0,total:readyBatch.length,name:"Preparando..."});
     for(let i=0;i<readyBatch.length;i++){
       const item=readyBatch[i];
@@ -159,15 +159,17 @@ export default function AdminH2Bico(){
           base64,
           mimeType:(item.file.type as "image/jpeg"|"image/png"|"image/webp") || "image/jpeg",
         });
-        if(result.result==="imported") imported++; else duplicates++;
+        if(result.result==="imported") imported++;
+        else if(result.result==="repaired") repaired++;
+        else duplicates++;
       }catch(e){errors++;}
       setProgress({done:i+1,total:readyBatch.length,name:item.file.name});
     }
     setImporting(false);
-    setSummary({imported,duplicates,errors});
+    setSummary({imported,repaired,duplicates,errors});
     setBatch([]);
     await utils.h2bico.invalidate();
-    toast.success(`Importação concluída: ${imported} adicionada(s).`);
+    toast.success(`Concluído: ${imported} nova(s) • ${repaired} foto(s) reparada(s).`);
   };
 
   const markUsed=(id:number)=>{
@@ -221,20 +223,20 @@ export default function AdminH2Bico(){
           <div className="grid grid-cols-2 md:grid-cols-5 gap-2">
             <Card className="bg-black/25 border-white/10 p-3"><div className="text-xs text-gray-400">Selecionadas</div><div className="text-xl font-black">{batch.length}</div></Card>
             <Card className="bg-black/25 border-emerald-500/20 p-3"><div className="text-xs text-gray-400">Prontas</div><div className="text-xl font-black text-emerald-300">{readyBatch.length}</div></Card>
-            <Card className="bg-black/25 border-amber-500/20 p-3"><div className="text-xs text-gray-400">CPF já existe</div><div className="text-xl font-black text-amber-300">{existingCount}</div></Card>
+            <Card className="bg-black/25 border-amber-500/20 p-3"><div className="text-xs text-gray-400">CPF já existe</div><div className="text-xl font-black text-amber-300">{existingCount}</div><div className="mt-1 text-[10px] text-gray-500">será verificado/reparado</div></Card>
             <Card className="bg-black/25 border-orange-500/20 p-3"><div className="text-xs text-gray-400">Duplicadas no lote</div><div className="text-xl font-black text-orange-300">{duplicateSelectionCount}</div></Card>
             <Card className="bg-black/25 border-red-500/20 p-3"><div className="text-xs text-gray-400">Inválidas</div><div className="text-xl font-black text-red-300">{invalidCount}</div></Card>
           </div>
 
           <div className="max-h-72 overflow-auto rounded-xl border border-white/10 bg-black/20">
             {batch.slice(0,500).map((p,i)=><div key={i} className="flex items-center gap-3 border-b border-white/5 px-3 py-2 text-xs">
-              {p.valid&&!p.duplicateInSelection&&!p.alreadyExists?<CheckCircle2 className="w-4 h-4 text-emerald-400 shrink-0"/>:<XCircle className="w-4 h-4 text-red-400 shrink-0"/>}
+              {p.valid&&!p.duplicateInSelection?<CheckCircle2 className="w-4 h-4 text-emerald-400 shrink-0"/>:<XCircle className="w-4 h-4 text-red-400 shrink-0"/>}
               <div className="min-w-0 flex-1">
                 <div className="truncate font-semibold">{p.file.name}</div>
                 <div className="text-gray-500 truncate">{p.name||"Nome não identificado"} {p.cpf&&`• CPF ${p.cpf}`} {p.uf&&`• ${p.uf}`}</div>
               </div>
               <div className="shrink-0 text-right">
-                {!p.valid?<span className="text-red-300">{p.reason}</span>:p.alreadyExists?<span className="text-amber-300">CPF já cadastrado</span>:p.duplicateInSelection?<span className="text-orange-300">CPF repetido no lote</span>:<span className="text-emerald-300">Pronto</span>}
+                {!p.valid?<span className="text-red-300">{p.reason}</span>:p.duplicateInSelection?<span className="text-orange-300">CPF repetido no lote</span>:p.alreadyExists?<span className="text-amber-300">Verificar foto existente</span>:<span className="text-emerald-300">Pronto</span>}
               </div>
             </div>)}
           </div>
@@ -253,7 +255,7 @@ export default function AdminH2Bico(){
         </>}
 
         {summary&&<div className="rounded-xl border border-emerald-400/25 bg-emerald-500/10 p-4 text-sm">
-          <strong>Importação concluída.</strong> {summary.imported} adicionada(s) • {summary.duplicates} duplicada(s) ignorada(s) • {summary.errors} erro(s).
+          <strong>Importação concluída.</strong> {summary.imported} adicionada(s) • {summary.repaired} foto(s) reparada(s) • {summary.duplicates} duplicada(s) mantida(s) • {summary.errors} erro(s).
         </div>}
       </Card>
 
