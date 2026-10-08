@@ -434,14 +434,13 @@ export default function AdminSimilarity() {
 
   const rankedResults = useMemo(
     () =>
-      [...results].sort((a, b) => {
-        // O indice e ordenado numericamente, sem classificar fotos como aprovadas.
-        const similarityDiff = (b.similarity ?? -1) - (a.similarity ?? -1);
-        if (similarityDiff !== 0) return similarityDiff;
-
-        // Desempate: maior conjunto crítico primeiro.
-        return (b.criticalMean ?? -1) - (a.criticalMean ?? -1);
-      }),
+      results
+        .filter((result) => (result.similarity ?? -1) >= 75)
+        .sort((a, b) => {
+          const similarityDiff = (b.similarity ?? -1) - (a.similarity ?? -1);
+          if (similarityDiff !== 0) return similarityDiff;
+          return (b.criticalMean ?? -1) - (a.criticalMean ?? -1);
+        }),
     [results]
   );
 
@@ -1273,7 +1272,7 @@ export default function AdminSimilarity() {
               <div className="mt-4 rounded-xl border border-white/10 bg-black/20 p-3">
                 <div className="flex items-center justify-between gap-3 text-sm">
                   <span className="text-slate-400">{candidates.length} imagem(ns) pronta(s) para comparar</span>
-                  {results.length > 0 && <span className="text-[11px] font-bold text-cyan-300">{results.length} resultado(s)</span>}
+                  {results.length > 0 && <span className="text-[11px] font-bold text-cyan-300">{rankedResults.length} resultado(s) acima de 75%</span>}
                 </div>
 
                 <div className="mt-3 grid gap-2 sm:grid-cols-3 lg:grid-cols-1 2xl:grid-cols-3">
@@ -1352,14 +1351,22 @@ export default function AdminSimilarity() {
               </div>
             )}
 
+            {results.length > 0 && rankedResults.length === 0 && !analyzing && (
+              <div className="rounded-2xl border border-white/10 bg-white/[0.03] px-6 py-10 text-center">
+                <p className="text-xs font-bold uppercase tracking-[0.16em] text-cyan-300">Resultado final</p>
+                <h2 className="mt-2 text-2xl font-black text-white">Nenhum resultado acima de 75%</h2>
+                <p className="mt-2 text-sm text-slate-400">A análise foi concluída, mas nenhum registro atingiu o limite mínimo de exibição.</p>
+              </div>
+            )}
+
             {rankedResults.length > 0 && (
               <div className="space-y-3">
                 <div className="flex flex-col gap-1 sm:flex-row sm:items-end sm:justify-between">
                   <div>
                     <p className="text-xs font-bold uppercase tracking-[0.16em] text-cyan-300">Ranking</p>
-                    <h2 className="text-xl font-black">Resultado de semelhança facial</h2>
+                    <h2 className="text-xl font-black">Resultados acima de 75%</h2>
                   </div>
-                  <span className="text-xs text-slate-500">Ordem pelo H2 Face</span>
+                  <span className="rounded-full border border-cyan-400/20 bg-cyan-400/5 px-3 py-1 text-xs font-bold text-cyan-200">Exibindo somente 75% ou mais</span>
                 </div>
 
                 {rankedResults.map((result, index) => (
