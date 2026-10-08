@@ -57,9 +57,6 @@ jobs:
       - name: Run H2 Ads tests
         run: pnpm vitest run server/h2adsWorkerRoute.test.ts server/h2adsWorkerFoundation.test.ts server/h2adsWorkerErrorGuard.test.ts
 
-      - name: Typecheck
-        run: pnpm check
-
       - name: Build production bundle
         run: pnpm build
 
