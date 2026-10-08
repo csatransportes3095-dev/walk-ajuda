@@ -37,6 +37,26 @@ async function run() {
       assertSafeStatement(statement);
       await connection.query(statement);
     }
+
+    // CREATE TABLE IF NOT EXISTS nao adiciona colunas em tabelas restauradas.
+    // Upgrade estritamente aditivo: preserva menu, botoes, textos e IDs existentes.
+    const [columns] = await connection.query("SHOW COLUMNS FROM `onlineSupportMenuItems`");
+    const known = new Set((columns as Array<{ Field: string }>).map(row => row.Field.toLowerCase()));
+    const required: Array<[string, string]> = [
+      ["responseText", "TEXT NULL"],
+      ["responseImageUrl", "TEXT NULL"],
+      ["subButtonsJson", "LONGTEXT NULL"],
+      ["keywordsJson", "LONGTEXT NULL"],
+    ];
+    for (const [name, definition] of required) {
+      if (known.has(name.toLowerCase())) continue;
+      try {
+        await connection.query(`ALTER TABLE \`onlineSupportMenuItems\` ADD COLUMN \`${name}\` ${definition}`);
+      } catch (error) {
+        // Duas inicializacoes concorrentes podem adicionar a mesma coluna.
+        if ((error as { code?: string })?.code !== "ER_DUP_FIELDNAME") throw error;
+      }
+    }
   } finally {
     await connection.end();
   }
