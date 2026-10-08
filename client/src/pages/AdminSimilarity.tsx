@@ -353,6 +353,7 @@ export default function AdminSimilarity() {
   const [runtimeMessage, setRuntimeMessage] = useState("Verificando motor de referência...");
   const h2bicoQuery = trpc.h2bico.availableForSimilarity.useQuery(undefined, { enabled: false });
   const [loadingH2Bico, setLoadingH2Bico] = useState(false);
+  const autoAnalyzeH2BicoRef = useRef(false);
 
   useEffect(() => {
     let active = true;
@@ -544,6 +545,7 @@ export default function AdminSimilarity() {
 
       const ready = loaded.filter((item): item is CandidatePhoto => item !== null);
       setCandidates(ready);
+      autoAnalyzeH2BicoRef.current = Boolean(masterFile && ready.length);
       setResults([]);
       setPairwiseResults([]);
 
@@ -674,6 +676,8 @@ export default function AdminSimilarity() {
       toast.error("Selecione pelo menos uma foto para comparar.");
       return;
     }
+
+    const isH2BicoBatch = candidates.some((candidate) => Boolean(candidate.h2bicoId));
 
     setAnalyzing(true);
     setResults([]);
@@ -961,7 +965,7 @@ export default function AdminSimilarity() {
         }
       }
 
-      if (analyzedFaces.length >= 3) {
+      if (!isH2BicoBatch && analyzedFaces.length >= 3 && analyzedFaces.length <= 30) {
         const pairs: PairwiseResult[] = [];
         for (let i = 0; i < analyzedFaces.length; i += 1) {
           for (let j = i + 1; j < analyzedFaces.length; j += 1) {
@@ -1048,6 +1052,13 @@ export default function AdminSimilarity() {
       setAnalyzing(false);
     }
   };
+
+  useEffect(() => {
+    if (!autoAnalyzeH2BicoRef.current) return;
+    if (!masterFile || !similarRuntime || loadingH2Bico || analyzing || candidates.length === 0) return;
+    autoAnalyzeH2BicoRef.current = false;
+    void analyze();
+  }, [candidates, masterFile, similarRuntime, loadingH2Bico, analyzing]);
 
   return (
     <div className="relative min-h-screen overflow-x-hidden bg-[#06070d] text-white">
