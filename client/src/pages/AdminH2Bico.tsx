@@ -89,6 +89,7 @@ export default function AdminH2Bico(){
   const [progress,setProgress]=useState({done:0,total:0,name:""});
   const [summary,setSummary]=useState<{imported:number;repaired:number;duplicates:number;errors:number}|null>(null);
   const [extractText,setExtractText]=useState("");
+  const [brokenPhotos,setBrokenPhotos]=useState<Set<number>>(new Set());
   const utils=trpc.useUtils();
 
   const list=trpc.h2bico.list.useQuery({search,status});
@@ -282,7 +283,7 @@ export default function AdminH2Bico(){
 
       <div className="grid md:grid-cols-2 xl:grid-cols-3 gap-3">
         {(list.data||[]).map((r:any)=><Card key={r.id} className="bg-gray-900 border-gray-800 p-4">
-          <div className="flex gap-3">{r.photoUrl?<img src={r.photoUrl} className="w-20 h-20 rounded-xl object-cover border border-gray-700"/>:<div className="w-20 h-20 rounded-xl bg-gray-800 grid place-items-center"><UserCheck/></div>}
+          <div className="flex gap-3">{r.photoUrl&&!brokenPhotos.has(r.id)?<img src={`/api/admin/h2bico/photo/${r.id}`} onError={()=>setBrokenPhotos(current=>{const next=new Set(current);next.add(r.id);return next;})} className="w-20 h-20 rounded-xl object-cover border border-gray-700"/>:<div className="w-20 h-20 rounded-xl bg-gray-800 grid place-items-center"><UserCheck/></div>}
             <div className="min-w-0 flex-1"><div className="font-bold truncate">{r.name}</div><div className="text-sm text-gray-400 font-mono">{showCpf?r.cpf:maskCpf(r.cpf)}</div>{r.uf&&<div className="text-xs text-gray-500">{r.uf}</div>}<div className="text-xs mt-1 font-bold">{STATUS[r.status]}</div>{r.linkedOrder&&<div className="text-xs text-amber-300">Pedido: {r.linkedOrder}</div>}</div>
           </div>
           <div className="flex flex-wrap gap-2 mt-3">
