@@ -487,9 +487,9 @@ export default function AdminSimilarity() {
         const timeout = window.setTimeout(() => controller.abort(), 12000);
 
         try {
-          const imageResponse = await fetch(record.photoUrl, {
-            cache: "force-cache",
-            credentials: "omit",
+          const imageResponse = await fetch(`/api/admin/h2bico/photo/${record.id}`, {
+            cache: "no-store",
+            credentials: "include",
             signal: controller.signal,
           });
           if (!imageResponse.ok) throw new Error(`HTTP ${imageResponse.status}`);
