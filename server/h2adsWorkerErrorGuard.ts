@@ -9,9 +9,12 @@ import type { Request, Response } from "express";
  * e pode retentar a chamada respeitando suas regras atuais.
  */
 export function safeH2AdsWorkerRoute(handler: (req: Request, res: Response) => Promise<unknown>) {
-  return (req: Request, res: Response): void => {
-    void Promise.resolve()
+  return (req: Request, res: Response): Promise<void> => {
+    // Devolver a Promise permite que testes e chamadas internas aguardem a resposta.
+    // Express 4 nao usa essa Promise, por isso capturamos o erro aqui mesmo.
+    return Promise.resolve()
       .then(() => handler(req, res))
+      .then(() => undefined)
       .catch((error: unknown) => {
         const detail = error as { code?: unknown; cause?: { code?: unknown }; message?: unknown } | null;
         const rawCode = detail?.cause?.code ?? detail?.code;
