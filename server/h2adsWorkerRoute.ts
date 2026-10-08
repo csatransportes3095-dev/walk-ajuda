@@ -1,4 +1,5 @@
 import type { Express, Request, Response } from "express";
+import { safeH2AdsWorkerRoute } from "./h2adsWorkerErrorGuard";
 import path from "node:path";
 import { and, eq, lt } from "drizzle-orm";
 import { h2AdsWorkerBrowserCommands, h2AdsWorkerCommands } from "../drizzle/schema";
@@ -104,7 +105,7 @@ export function registerH2AdsWorkerRoute(app: Express): void {
     });
   });
 
-  app.post("/api/h2ads/worker/claim", async (req: Request, res: Response) => {
+  app.post("/api/h2ads/worker/claim", safeH2AdsWorkerRoute(async (req: Request, res: Response) => {
     noStore(res);
     const pairingCode = workerString(req.body?.pairingCode, 128);
     const computerName = workerString(req.body?.computerName);
@@ -119,9 +120,9 @@ export function registerH2AdsWorkerRoute(app: Express): void {
     } catch (_error) {
       res.status(401).json({ error: "Código de pareamento inválido ou expirado." });
     }
-  });
+  }));
 
-  app.post("/api/h2ads/worker/heartbeat", async (req: Request, res: Response) => {
+  app.post("/api/h2ads/worker/heartbeat", safeH2AdsWorkerRoute(async (req: Request, res: Response) => {
     noStore(res);
     const authorization = req.header("authorization");
     const workerToken = authorization?.startsWith("Bearer ") ? authorization.slice(7).trim() : null;
@@ -138,9 +139,9 @@ export function registerH2AdsWorkerRoute(app: Express): void {
       return;
     }
     res.status(204).end();
-  });
+  }));
 
-  app.post("/api/h2ads/worker/profiles/:instanceId/snapshot", async (req: Request, res: Response) => {
+  app.post("/api/h2ads/worker/profiles/:instanceId/snapshot", safeH2AdsWorkerRoute(async (req: Request, res: Response) => {
     noStore(res);
     const worker = await authenticateRequest(req, res);
     if (!worker) return;
@@ -157,9 +158,9 @@ export function registerH2AdsWorkerRoute(app: Express): void {
     } catch (error) {
       res.status(409).json({ error: error instanceof Error ? error.message : "Não foi possível salvar o snapshot H2ADS." });
     }
-  });
+  }));
 
-  app.get("/api/h2ads/worker/profiles/:instanceId/snapshot", async (req: Request, res: Response) => {
+  app.get("/api/h2ads/worker/profiles/:instanceId/snapshot", safeH2AdsWorkerRoute(async (req: Request, res: Response) => {
     noStore(res);
     const worker = await authenticateRequest(req, res);
     if (!worker) return;
@@ -186,9 +187,9 @@ export function registerH2AdsWorkerRoute(app: Express): void {
     } catch (error) {
       if (!res.headersSent) res.status(409).json({ error: error instanceof Error ? error.message : "Não foi possível recuperar o snapshot H2ADS." });
     }
-  });
+  }));
 
-  app.post("/api/h2ads/worker/profiles/:instanceId/restore-result", async (req: Request, res: Response) => {
+  app.post("/api/h2ads/worker/profiles/:instanceId/restore-result", safeH2AdsWorkerRoute(async (req: Request, res: Response) => {
     noStore(res);
     const worker = await authenticateRequest(req, res);
     if (!worker) return;
@@ -204,9 +205,9 @@ export function registerH2AdsWorkerRoute(app: Express): void {
     } catch (error) {
       res.status(409).json({ error: error instanceof Error ? error.message : "Não foi possível registrar a restauração H2ADS." });
     }
-  });
+  }));
 
-  app.post("/api/h2ads/worker/commands/next", async (req: Request, res: Response) => {
+  app.post("/api/h2ads/worker/commands/next", safeH2AdsWorkerRoute(async (req: Request, res: Response) => {
     noStore(res);
     const worker = await authenticateRequest(req, res);
     if (!worker) return;
@@ -244,9 +245,9 @@ export function registerH2AdsWorkerRoute(app: Express): void {
       else await completeH2AdsWorkerBrowserCommand({ workerId: worker.id, commandId: command.id, command: "launch_browser", state: "blocked", errorCategory: "route_unavailable" });
       res.status(409).json({ error: "A rota protegida da instância não está disponível." });
     }
-  });
+  }));
 
-  app.post("/api/h2ads/worker/commands/:commandId/result", async (req: Request, res: Response) => {
+  app.post("/api/h2ads/worker/commands/:commandId/result", safeH2AdsWorkerRoute(async (req: Request, res: Response) => {
     noStore(res);
     const worker = await authenticateRequest(req, res);
     if (!worker) return;
@@ -267,9 +268,9 @@ export function registerH2AdsWorkerRoute(app: Express): void {
       return;
     }
     res.status(204).end();
-  });
+  }));
 
-  app.post("/api/h2ads/worker/runs/:instanceId/state", async (req: Request, res: Response) => {
+  app.post("/api/h2ads/worker/runs/:instanceId/state", safeH2AdsWorkerRoute(async (req: Request, res: Response) => {
     noStore(res);
     const worker = await authenticateRequest(req, res);
     if (!worker) return;
@@ -288,5 +289,5 @@ export function registerH2AdsWorkerRoute(app: Express): void {
       return;
     }
     res.status(204).end();
-  });
+  }));
 }

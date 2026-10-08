@@ -3315,7 +3315,18 @@ export async function getScheduleConfig(): Promise<ScheduleConfig> {
 
     // Tenta criar a linha padrão, mas nunca bloqueia a página pública se a escrita falhar.
     try {
-      await db.insert(scheduleConfig).values({ id: 1 } as any);
+      await db.insert(scheduleConfig).values({
+        id: 1,
+        title: DEFAULT_SCHEDULE_CONFIG.title,
+        introMessage: DEFAULT_SCHEDULE_CONFIG.introMessage,
+        emailSubject: DEFAULT_SCHEDULE_CONFIG.emailSubject,
+        emailMessage: DEFAULT_SCHEDULE_CONFIG.emailMessage,
+        whatsappMessage: DEFAULT_SCHEDULE_CONFIG.whatsappMessage,
+        scheduledWhatsappMessage: DEFAULT_SCHEDULE_CONFIG.scheduledWhatsappMessage,
+        confirmationMessage: DEFAULT_SCHEDULE_CONFIG.confirmationMessage,
+        noShowWarning: DEFAULT_SCHEDULE_CONFIG.noShowWarning,
+        accentColor: DEFAULT_SCHEDULE_CONFIG.accentColor,
+      });
       const created = await db.select().from(scheduleConfig).where(eq(scheduleConfig.id, 1)).limit(1);
       return created.length > 0 ? created[0] : getDefaultScheduleConfig();
     } catch (error) {
