@@ -19,6 +19,7 @@ import { registerPingRoute } from "./pingRoute";
 import { registerRaffleIntegrityRoutes } from "../raffleIntegrityRoutes";
 import { registerH2AdsWorkerRoute } from "../h2adsWorkerRoute";
 import { registerH2FaceRoutes } from "../h2FaceRoute";
+import { registerH2BicoPhotoRoutes } from "../h2bicoPhotoRoute";
 import { sendMail } from "./mailer";
 import { ensureCustomerIdentityInfrastructure, reconcileLegacyLoanPermissions } from "../customerAccess";
 import { getSharePreviewProfile, sharePreviewProxyPath, type SharePreviewProfileId } from "../sharePreviewProfiles";
@@ -177,6 +178,7 @@ async function startServer() {
   registerUploadRoute(app);
   registerApkDownloadRoute(app);
   registerH2FaceRoutes(app);
+  registerH2BicoPhotoRoutes(app);
   app.get("/api/admin/backups/:id/download", async (req, res) => {
     try {
       const artifact = await getBackupDownload(req, req.params.id);
