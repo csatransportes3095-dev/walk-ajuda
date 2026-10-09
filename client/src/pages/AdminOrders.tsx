@@ -4153,7 +4153,7 @@ export default function AdminOrders() {
                                 </div>
                                 )}
                                 {isExpanded && (
-                                <div className="border-t border-border bg-background/50" onClick={e => e.stopPropagation()}>
+                                <div className="border-t border-border bg-background/50 text-zinc-100 [&_.text-foreground]:!text-zinc-100 [&_.text-muted-foreground]:!text-zinc-400" onClick={e => e.stopPropagation()}>
                                   {/* Abas */}
                                   <div className="flex border-b border-border">
                                     {(['status', 'cliente', 'historico', 'documentos', 'anotacoes'] as const).map(t => (
@@ -5245,7 +5245,7 @@ export default function AdminOrders() {
                           const badgeColor = folderBadgeMap[r.folderType] || folderBadgeMap.active;
                           return (
                             <div key={`emg-${r.registrationId}-${r.subOrderIndex ?? 0}`}
-                              className={`bg-card border rounded-xl overflow-hidden transition-all ${statusCfg?.color ?? "text-foreground"} [&_.text-foreground]:!text-current [&_.text-muted-foreground]:!text-current/70 ${cardBorder}`}
+                              className={`bg-card border rounded-xl overflow-hidden transition-all ${cardBorder}`}
                             >
                               {/* Faixa da pasta */}
                               <div className={`px-3 py-1 border-b border-white/5 flex items-center gap-1.5 ${
@@ -6149,7 +6149,7 @@ export default function AdminOrders() {
                               className={`flex flex-col items-start gap-0.5 p-2 rounded-lg border text-xs font-medium transition-all ${
                                 isSel
                                   ? `${cfg.bg} ${cfg.color} border-current`
-                                  : "bg-card border-border text-muted-foreground hover:border-primary/50"
+                                  : "bg-card border-border !text-zinc-300 hover:border-primary/50 hover:!text-white"
                               }`}
                             >
                               <span className="flex items-center gap-1.5">{cfg.icon}{cfg.label}</span>
