@@ -1962,6 +1962,26 @@ export async function getOrderStatusFlowDefinition(flowId: number) {
     ? ((alternativeResult as any)[0] as Array<{ primaryStatusKey: string; alternativeStatusKey: string; sortOrder: number }>)
     : [];
 
+  const statusKeys = (itemRows || []).map((row) => String(row.statusKey));
+  const rawAlternativeRules = (alternativeRows || []).map((row) => ({
+    primaryKey: String(row.primaryStatusKey),
+    alternativeKey: String(row.alternativeStatusKey),
+  }));
+  const cleanAlternativeRules = sanitizeStatusAlternativeRules(statusKeys, rawAlternativeRules);
+
+  if (Number(flow.isDefault) !== 1 && cleanAlternativeRules.length !== rawAlternativeRules.length) {
+    await db.execute(sql`DELETE FROM orderStatusFlowAlternatives WHERE flowId = ${flowId}`);
+    const groupedOrder = new Map<string, number>();
+    for (const rule of cleanAlternativeRules) {
+      const order = groupedOrder.get(rule.primaryKey) ?? 0;
+      await db.execute(sql`
+        INSERT INTO orderStatusFlowAlternatives (flowId, primaryStatusKey, alternativeStatusKey, sortOrder)
+        VALUES (${flowId}, ${rule.primaryKey}, ${rule.alternativeKey}, ${order})
+      `);
+      groupedOrder.set(rule.primaryKey, order + 1);
+    }
+  }
+
   return {
     id: Number(flow.id),
     name: String(flow.name),
@@ -1969,16 +1989,10 @@ export async function getOrderStatusFlowDefinition(flowId: number) {
     isDefault: Number(flow.isDefault),
     isActive: Number(flow.isActive),
     // Keep every configured key, including dangling references, for safe ADM review.
-    statusKeys: (itemRows || []).map((row) => String(row.statusKey)),
+    statusKeys,
     unavailableKeys: Number(flow.isDefault) === 1 ? [] : (itemRows || [])
       .filter(row => !row.catalogueId || Number(row.isActive) !== 1).map(row => String(row.statusKey)),
-    alternativeRules: sanitizeStatusAlternativeRules(
-      (itemRows || []).map((row) => String(row.statusKey)),
-      (alternativeRows || []).map((row) => ({
-        primaryKey: String(row.primaryStatusKey),
-        alternativeKey: String(row.alternativeStatusKey),
-      })),
-    ),
+    alternativeRules: cleanAlternativeRules,
   };
 }
 
