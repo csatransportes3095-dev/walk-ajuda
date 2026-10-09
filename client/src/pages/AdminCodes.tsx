@@ -1,7 +1,7 @@
 import { useState, useEffect } from "react";
 import { useSearch } from "wouter";
 import { toast } from "sonner";
-import { ToggleLeft, ToggleRight, KeyRound, Bell, CalendarClock, RefreshCw, ShieldCheck, ShieldAlert, ShieldX, Clock, X, Check, Loader2, Search, Eye, EyeOff, Ban, UserX, Plus, Trash2, Ticket, Package, Globe, Send, TrendingUp, ShoppingBag, Lock, HelpCircle, Layers, MapPin, Upload, Mail, LayoutGrid, Users, Gift, Shield, Phone, FileSearch, MessageCircle, Settings2, RotateCcw, Save, ArrowLeftRight, MailPlus, Monitor, ScanFace, DatabaseZap } from "lucide-react";
+import { ToggleLeft, ToggleRight, KeyRound, Bell, CalendarClock, RefreshCw, ShieldCheck, ShieldAlert, ShieldX, Clock, X, Check, Loader2, Search, Eye, EyeOff, Ban, UserX, Plus, Trash2, Ticket, Package, Globe, Send, TrendingUp, ShoppingBag, Lock, HelpCircle, Layers, MapPin, Upload, Mail, LayoutGrid, Users, Gift, Shield, Phone, FileSearch, MessageCircle, Settings2, RotateCcw, Save, ArrowLeftRight, MailPlus, Monitor, ScanFace, DatabaseZap, Car } from "lucide-react";
 import { TIMEZONE_OPTIONS, DEFAULT_TIMEZONE } from "@/hooks/useTimezone";
 import AdminHeader from "@/components/AdminHeader";
 import { Button } from "@/components/ui/button";
@@ -58,6 +58,7 @@ const ADMIN_SHORTCUTS: AdminShortcut[] = [
   { id: 'protected-photo', href: '/admin/protected-photo', label: 'Foto Prot.', icon: Lock, tone: 'bg-purple-900/30 border-purple-500/30 hover:bg-purple-900/50', iconTone: 'text-purple-400' },
   { id: 'gastos', href: '/admin/gastos', label: 'Gastos', icon: TrendingUp, tone: 'bg-purple-600/20 border-purple-500/30 hover:bg-purple-600/30', iconTone: 'text-purple-400' },
   { id: 'telefone', href: '/admin/telefone', label: 'Gerar Tel.', icon: Phone, tone: 'bg-green-600/20 border-green-500/30 hover:bg-green-600/30', iconTone: 'text-green-400' },
+  { id: 'gerador-chassi', href: '/gerador-chassi', label: 'Gerador Chassi', icon: Car, tone: 'bg-cyan-600/20 border-cyan-500/30 hover:bg-cyan-600/30', iconTone: 'text-cyan-300' },
   { id: 'hub-central', href: '/admin/hub-central', label: 'Hub Central', icon: LayoutGrid, tone: 'bg-sky-600/20 border-sky-500/30 hover:bg-sky-600/30', iconTone: 'text-sky-400' },
   { id: 'online-support', href: '/admin/online-support', label: 'Atendimento', icon: MessageCircle, tone: 'bg-blue-600/20 border-blue-500/30 hover:bg-blue-600/30', iconTone: 'text-blue-400' },
   { id: 'orders', href: '/admin/orders', label: 'Pedidos', icon: Package, tone: 'bg-pink-600/20 border-pink-500/30 hover:bg-pink-600/30', iconTone: 'text-pink-400' },
