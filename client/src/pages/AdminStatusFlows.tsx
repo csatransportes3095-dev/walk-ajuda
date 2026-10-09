@@ -89,7 +89,15 @@ export default function AdminStatusFlows() {
     setAlternativeRules((prev) => {
       const withoutCurrent = prev.filter((rule) => rule.alternativeKey !== alternativeKey);
       if (!primaryKey) return withoutCurrent;
-      return [...withoutCurrent, { primaryKey, alternativeKey }];
+
+      const primaryAlreadyAlternative = withoutCurrent.some((rule) => rule.alternativeKey === primaryKey);
+      if (primaryAlreadyAlternative) {
+        toast.error("Esse status ja e alternativa de outra etapa e nao pode virar principal.");
+        return withoutCurrent;
+      }
+
+      const withoutChildren = withoutCurrent.filter((rule) => rule.primaryKey !== alternativeKey);
+      return [...withoutChildren, { primaryKey, alternativeKey }];
     });
   };
 
@@ -241,6 +249,7 @@ export default function AdminStatusFlows() {
                               {statusKeys
                                 .slice(1, index)
                                 .filter((candidate) => candidate !== key)
+                                .filter((candidate) => !alternativeRules.some((rule) => rule.alternativeKey === candidate))
                                 .map((candidate) => {
                                   const candidateStatus: any = (statusesQuery.data ?? []).find((s: any) => s.key === candidate);
                                   return (
