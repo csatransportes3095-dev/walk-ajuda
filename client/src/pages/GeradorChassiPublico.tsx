@@ -458,7 +458,7 @@ export default function GeradorChassiPublico() {
                   value={buscaModelo}
                   onChange={(e) => setBuscaModelo(e.target.value)}
                   placeholder="Ex.: Ka, EcoSport, Focus, Fusion..."
-                  disabled={carregandoModelos || modelosFiltrados.length === 0}
+                  disabled={carregandoModelos || modelos.length === 0}
                   className="w-full rounded-xl border border-zinc-700 bg-zinc-800 py-2.5 pl-9 pr-3 text-sm text-white outline-none transition-colors placeholder:text-zinc-600 focus:border-cyan-500 disabled:opacity-50"
                 />
               </div>
