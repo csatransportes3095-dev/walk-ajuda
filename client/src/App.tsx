@@ -363,7 +363,9 @@ function Router() {
       <Route path={"/cartoes/despesas"} component={CartaoPage} />
       <Route path={"/cartoes/historico/:id"} component={CartaoHistoricoPage} />
       <Route path={"/cartoes/mercado"} component={CartaoMercadoPage} />
-      <Route path={"/gerador-chassi"} component={GeradorChassiPublico} />
+      <Route path={"/gerador-chassi"}>
+        <AdminGuard><GeradorChassiPublico /></AdminGuard>
+      </Route>
       <Route path={"/ajuda"} component={Ajuda} />
       <Route path={"/video/tutorial"} component={VideoTutorial} />
       <Route path={"/tutorial"} component={Tutorial} />
@@ -606,14 +608,9 @@ function AppContent() {
 
   // Rota /sorteio é pública — não passa pelo PasswordGate do site
   // O próprio Raffle.tsx controla o acesso (livre ou com senha própria do sorteio)
-  // Rota /gerador-chassi é pública — qualquer pessoa pode usar sem senha
+  // Rota /gerador-chassi é exclusiva do ADM.
   if (isGeradorChassiRoute) {
-    return (
-      <>
-        <Router />
-        <WarningOverlay />
-      </>
-    );
+    return <Router />;
   }
 
   if (isRaffleRoute || isFotoRoute) {
