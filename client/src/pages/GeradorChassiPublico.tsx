@@ -86,6 +86,7 @@ export default function GeradorChassiPublico() {
   const [marcaCode, setMarcaCode] = useState("59");
   const [buscaMarca, setBuscaMarca] = useState("");
   const [modelos, setModelos] = useState<FipeModel[]>([]);
+  const [buscaModelo, setBuscaModelo] = useState("");
   const [modelo, setModelo] = useState("");
   const [anoCode, setAnoCode] = useState("G");
   const [quantidade, setQuantidade] = useState(1);
@@ -108,6 +109,15 @@ export default function GeradorChassiPublico() {
 
     return marcas.filter((item) => item.name.toLowerCase().includes(termo));
   }, [buscaMarca, marcas]);
+
+  const modelosFiltrados = useMemo(() => {
+    const termo = buscaModelo.trim().toLowerCase();
+    if (!termo) return modelos;
+
+    return modelos.filter((item) =>
+      item.name.toLowerCase().includes(termo),
+    );
+  }, [buscaModelo, modelos]);
 
   useEffect(() => {
     let cancelado = false;
@@ -161,8 +171,18 @@ export default function GeradorChassiPublico() {
   }, [marcasFiltradas, marcaCode]);
 
   useEffect(() => {
+    if (
+      modelosFiltrados.length > 0 &&
+      !modelosFiltrados.some((item) => item.name === modelo)
+    ) {
+      setModelo(modelosFiltrados[0].name);
+    }
+  }, [modelosFiltrados, modelo]);
+
+  useEffect(() => {
     if (!marcaCode || !anoInfo) {
       setModelos([]);
+      setBuscaModelo("");
       setModelo("");
       return;
     }
@@ -173,6 +193,7 @@ export default function GeradorChassiPublico() {
       setCarregandoModelos(true);
       setErroCatalogo("");
       setModelos([]);
+      setBuscaModelo("");
       setModelo("");
 
       try {
@@ -429,6 +450,22 @@ export default function GeradorChassiPublico() {
 
             <div>
               <label className="mb-1.5 block text-xs font-semibold text-zinc-300">
+                Buscar modelo
+              </label>
+              <div className="relative">
+                <Search className="pointer-events-none absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 text-zinc-500" />
+                <input
+                  value={buscaModelo}
+                  onChange={(e) => setBuscaModelo(e.target.value)}
+                  placeholder="Ex.: Ka, EcoSport, Focus, Fusion..."
+                  disabled={carregandoModelos || modelosFiltrados.length === 0}
+                  className="w-full rounded-xl border border-zinc-700 bg-zinc-800 py-2.5 pl-9 pr-3 text-sm text-white outline-none transition-colors placeholder:text-zinc-600 focus:border-cyan-500 disabled:opacity-50"
+                />
+              </div>
+            </div>
+
+            <div>
+              <label className="mb-1.5 block text-xs font-semibold text-zinc-300">
                 Modelo / versão
               </label>
               <select
@@ -437,14 +474,16 @@ export default function GeradorChassiPublico() {
                 disabled={carregandoModelos || modelos.length === 0}
                 className="w-full rounded-xl border border-zinc-700 bg-zinc-800 px-3 py-2.5 text-sm text-white outline-none transition-colors focus:border-cyan-500 disabled:opacity-50"
               >
-                {modelos.length === 0 && (
+                {modelosFiltrados.length === 0 && (
                   <option value="">
                     {carregandoModelos
                       ? "Carregando modelos..."
-                      : "Nenhum modelo encontrado neste ano"}
+                      : buscaModelo.trim()
+                        ? "Nenhum modelo encontrado na busca"
+                        : "Nenhum modelo encontrado neste ano"}
                   </option>
                 )}
-                {modelos.map((item) => (
+                {modelosFiltrados.map((item) => (
                   <option key={`${item.code}-${item.name}`} value={item.name}>
                     {item.name}
                   </option>
@@ -453,7 +492,9 @@ export default function GeradorChassiPublico() {
               <p className="mt-1.5 text-xs text-zinc-500">
                 {carregandoModelos
                   ? "Consultando os modelos disponíveis para a marca e o ano..."
-                  : `${modelos.length} opções encontradas para ${anoInfo.ano}.`}
+                  : buscaModelo.trim()
+                    ? `${modelosFiltrados.length} de ${modelos.length} opções encontradas para ${anoInfo.ano}.`
+                    : `${modelos.length} opções encontradas para ${anoInfo.ano}.`}
               </p>
             </div>
 
@@ -489,7 +530,7 @@ export default function GeradorChassiPublico() {
               carregandoModelos ||
               !marca ||
               !modelo ||
-              modelos.length === 0
+              modelosFiltrados.length === 0
             }
             className="flex w-full items-center justify-center gap-2 rounded-xl bg-gradient-to-r from-cyan-600 to-blue-600 py-3.5 text-base font-bold text-white shadow-lg transition-all hover:opacity-90 active:scale-[0.99] disabled:cursor-not-allowed disabled:opacity-40"
           >
