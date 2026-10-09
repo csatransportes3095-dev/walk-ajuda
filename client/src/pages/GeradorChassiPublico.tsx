@@ -11,7 +11,7 @@ import {
   Trash2,
 } from "lucide-react";
 import { Link } from "wouter";
-import { ANOS_VIN, MONTADORAS_VIN, gerarMultiplosVINs } from "@/lib/vinGenerator";
+import { MONTADORAS_VIN, gerarMultiplosVINs } from "@/lib/vinGenerator";
 import { trpc } from "@/lib/trpc";
 
 const ANOS_GERADOR_PUBLICO = [
