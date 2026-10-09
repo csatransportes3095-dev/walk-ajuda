@@ -1150,12 +1150,18 @@ export default function OrderTracking() {
 
               // Status alternativos funcionam tanto em sequências personalizadas
               // quanto no Padrão H2 global.
-              const alternativeRules = customFlow
+              const rawAlternativeRules = (customFlow
                 ? (statusFlowForOrderQuery.data?.alternativeRules ?? [])
-                : (globalProgressSequenceQuery.data?.alternativeRules ?? []);
+                : (globalProgressSequenceQuery.data?.alternativeRules ?? [])) as Array<{ primaryKey: string; alternativeKey: string }>;
+
+              // Defesa adicional no cliente: nunca aceita cadeia de alternativas,
+              // mesmo se houver cache antigo durante a atualização do backend.
+              const rawPrimaryKeys = new Set(rawAlternativeRules.map(rule => rule.primaryKey));
+              const alternativeRules = rawAlternativeRules.filter(rule => !rawPrimaryKeys.has(rule.alternativeKey));
+
               const alternativesByPrimary = new Map<string, string[]>();
               const alternativeKeys = new Set<string>();
-              for (const rule of alternativeRules as Array<{ primaryKey: string; alternativeKey: string }>) {
+              for (const rule of alternativeRules) {
                 if (!alternativesByPrimary.has(rule.primaryKey)) alternativesByPrimary.set(rule.primaryKey, []);
                 alternativesByPrimary.get(rule.primaryKey)!.push(rule.alternativeKey);
                 alternativeKeys.add(rule.alternativeKey);
