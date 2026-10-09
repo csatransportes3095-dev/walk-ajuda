@@ -11,8 +11,10 @@ import {
   Trash2,
 } from "lucide-react";
 import { Link } from "wouter";
-import { MONTADORAS_VIN, gerarMultiplosVINs } from "@/lib/vinGenerator";
+import { gerarMultiplosVINs } from "@/lib/vinGenerator";
 import { trpc } from "@/lib/trpc";
+
+const FIPE_BASE = "https://fipe.parallelum.com.br/api/v2/cars";
 
 const ANOS_GERADOR_PUBLICO = [
   { code: "G", ano: 2016 },
@@ -28,37 +30,27 @@ const ANOS_GERADOR_PUBLICO = [
   { code: "T", ano: 2026 },
 ];
 
+type FipeBrand = {
+  code: string;
+  name: string;
+};
+
+type FipeYear = {
+  code: string;
+  name: string;
+};
+
+type FipeModel = {
+  code: string;
+  name: string;
+};
+
 type ResultadoVIN = {
   vin: string;
   key: string;
   marca: string;
   modelo: string;
   ano: number;
-};
-
-const MODELOS_TRANSPORTE: Record<string, string[]> = {
-  "Volkswagen Brasil": ["Gol", "Voyage", "Polo", "Virtus", "T-Cross", "Nivus", "Fox", "SpaceFox", "Jetta"],
-  "Ford Brasil": ["Ka", "Ka Sedan", "EcoSport", "Territory"],
-  "GM Chevrolet Brasil": ["Onix", "Onix Plus", "Prisma", "Cobalt", "Spin", "Tracker", "Cruze", "Joy", "Montana"],
-  "Fiat Brasil": ["Argo", "Cronos", "Mobi", "Grand Siena", "Siena", "Palio", "Uno", "Pulse", "Fastback", "Idea"],
-  "Toyota Brasil": ["Etios", "Etios Sedan", "Yaris", "Yaris Sedan", "Corolla", "Corolla Cross"],
-  "Honda Brasil": ["City", "City Hatch", "Fit", "WR-V", "HR-V", "Civic"],
-  "Jeep Brasil (FCA)": ["Renegade", "Compass", "Commander"],
-  "Hyundai Brasil": ["HB20", "HB20S", "Creta", "Tucson", "Kona Hybrid"],
-  "Renault Brasil": ["Kwid", "Sandero", "Logan", "Duster", "Captur", "Kardian"],
-  "Nissan Brasil": ["Versa", "March", "Kicks", "Sentra"],
-  "BYD (China/Brasil)": ["Dolphin", "Dolphin Mini", "King", "Song Plus", "Yuan Plus", "Seal", "Han", "Tan"],
-  "Caoa Chery Brasil": ["Arrizo 5", "Arrizo 6", "Tiggo 3X", "Tiggo 5X", "Tiggo 7", "Tiggo 8"],
-  "Peugeot Brasil (Stellantis)": ["208", "2008", "3008", "408", "Expert"],
-  "Citroën Brasil (Stellantis)": ["C3", "C4 Cactus", "Aircross", "Basalt", "Jumpy"],
-  "Mitsubishi Brasil": ["ASX", "Eclipse Cross", "Outlander", "Lancer", "Pajero Sport"],
-  "Kia (Coreia do Sul)": ["Cerato", "Rio", "Soul", "Sportage", "Stonic", "Niro", "Carnival"],
-  "GWM/Haval (China)": ["Haval H6", "Haval H6 GT", "Ora 03", "Tank 300"],
-  "JAC Motors (China)": ["J3", "J3 Turin", "J5", "T40", "T50", "T60", "iEV40", "e-JS1", "e-JS4"],
-  "RAM Brasil (Stellantis)": ["RAM 700", "RAM 1500", "RAM 2500", "ProMaster"],
-  "Subaru (Japão)": ["Impreza", "XV", "Forester", "Outback"],
-  "Suzuki (Japão)": ["Swift", "Vitara", "S-Cross", "Baleno"],
-  "Audi (Alemanha)": ["A3 Sedan", "A4", "Q3", "Q5", "e-tron"],
 };
 
 function codigoModeloSintetico(marca: string, modelo: string): { wmi: string; vds: string } {
@@ -79,7 +71,7 @@ function codigoModeloSintetico(marca: string, modelo: string): { wmi: string; vd
   }
 
   // "Q" é deliberado: I, O e Q não são usados em VINs reais.
-  // Isso mantém cada perfil identificável como dado sintético de teste.
+  // O perfil permanece identificável como dado sintético de teste.
   return {
     wmi: `Q${chars[0]}${chars[1]}`,
     vds: `${chars[2]}${chars[3]}TST`,
@@ -112,70 +104,185 @@ export default function GeradorChassiPublico() {
   const { data: settings } = trpc.settings.getAll.useQuery();
   const logoUrl = settings?.login_image_url || "";
 
-  const ultimoAno = ANOS_GERADOR_PUBLICO[ANOS_GERADOR_PUBLICO.length - 1];
-  const [montadoraIdx, setMontadoraIdx] = useState(0);
-  const [buscaMontadora, setBuscaMontadora] = useState("");
+  const [marcas, setMarcas] = useState<FipeBrand[]>([]);
+  const [marcaCode, setMarcaCode] = useState("59");
+  const [buscaMarca, setBuscaMarca] = useState("");
+  const [modelos, setModelos] = useState<FipeModel[]>([]);
   const [modelo, setModelo] = useState("");
   const [anoCode, setAnoCode] = useState("G");
   const [quantidade, setQuantidade] = useState(1);
   const [resultados, setResultados] = useState<ResultadoVIN[]>([]);
   const [copiados, setCopiados] = useState<Set<string>>(new Set());
   const [detalhesAbertos, setDetalhesAbertos] = useState(false);
+  const [carregandoMarcas, setCarregandoMarcas] = useState(true);
+  const [carregandoModelos, setCarregandoModelos] = useState(false);
+  const [erroCatalogo, setErroCatalogo] = useState("");
 
-  const montadora = MONTADORAS_VIN[montadoraIdx] || MONTADORAS_VIN[0];
-  const anoInfo = ANOS_GERADOR_PUBLICO.find((a) => a.code === anoCode) || ANOS_GERADOR_PUBLICO[0];
-  const modelosDaMarca = MODELOS_TRANSPORTE[montadora?.nome] || montadora?.modelos || [];
+  const anoInfo =
+    ANOS_GERADOR_PUBLICO.find((item) => item.code === anoCode) ||
+    ANOS_GERADOR_PUBLICO[0];
 
-  const montadorasFiltradas = useMemo(() => {
-    const termo = buscaMontadora.trim().toLowerCase();
-    if (!termo) {
-      return MONTADORAS_VIN.map((item, index) => ({ item, index }));
+  const marca = marcas.find((item) => item.code === marcaCode);
+
+  const marcasFiltradas = useMemo(() => {
+    const termo = buscaMarca.trim().toLowerCase();
+    if (!termo) return marcas;
+
+    return marcas.filter((item) => item.name.toLowerCase().includes(termo));
+  }, [buscaMarca, marcas]);
+
+  useEffect(() => {
+    let cancelado = false;
+
+    async function carregarMarcas() {
+      setCarregandoMarcas(true);
+      setErroCatalogo("");
+
+      try {
+        const resposta = await fetch(`${FIPE_BASE}/brands`);
+        if (!resposta.ok) throw new Error("Falha ao consultar marcas");
+
+        const dados = (await resposta.json()) as FipeBrand[];
+        if (cancelado) return;
+
+        const ordenadas = [...dados].sort((a, b) =>
+          a.name.localeCompare(b.name, "pt-BR"),
+        );
+
+        setMarcas(ordenadas);
+
+        if (!ordenadas.some((item) => item.code === marcaCode)) {
+          const volkswagen = ordenadas.find((item) =>
+            item.name.toLowerCase().includes("volkswagen"),
+          );
+          setMarcaCode(volkswagen?.code || ordenadas[0]?.code || "");
+        }
+      } catch {
+        if (!cancelado) {
+          setErroCatalogo("Não foi possível carregar o catálogo FIPE agora.");
+          setMarcas([]);
+        }
+      } finally {
+        if (!cancelado) setCarregandoMarcas(false);
+      }
     }
 
-    return MONTADORAS_VIN
-      .map((item, index) => ({ item, index }))
-      .filter(({ item }) =>
-        [item.nome, item.wmi, ...item.modelos]
-          .join(" ")
-          .toLowerCase()
-          .includes(termo),
-      );
-  }, [buscaMontadora]);
+    carregarMarcas();
+    return () => {
+      cancelado = true;
+    };
+  }, []);
 
   useEffect(() => {
     if (
-      montadorasFiltradas.length > 0 &&
-      !montadorasFiltradas.some(({ index }) => index === montadoraIdx)
+      marcasFiltradas.length > 0 &&
+      !marcasFiltradas.some((item) => item.code === marcaCode)
     ) {
-      setMontadoraIdx(montadorasFiltradas[0].index);
+      setMarcaCode(marcasFiltradas[0].code);
     }
-  }, [montadorasFiltradas, montadoraIdx]);
+  }, [marcasFiltradas, marcaCode]);
 
   useEffect(() => {
-    if (modelosDaMarca.length > 0 && !modelosDaMarca.includes(modelo)) {
-      setModelo(modelosDaMarca[0]);
-    }
-  }, [modelosDaMarca, modelo]);
-
-  const gerar = () => {
-    if (!montadora || !anoInfo) {
-      toast.error("Não foi possível carregar os dados do gerador.");
+    if (!marcaCode || !anoInfo) {
+      setModelos([]);
+      setModelo("");
       return;
     }
 
-    const perfilTeste = codigoModeloSintetico(
-      montadora.nome,
-      modelo || modelosDaMarca[0] || "Modelo de teste",
+    let cancelado = false;
+
+    async function carregarModelosDoAno() {
+      setCarregandoModelos(true);
+      setErroCatalogo("");
+      setModelos([]);
+      setModelo("");
+
+      try {
+        const respostaAnos = await fetch(
+          `${FIPE_BASE}/brands/${encodeURIComponent(marcaCode)}/years`,
+        );
+        if (!respostaAnos.ok) throw new Error("Falha ao consultar anos");
+
+        const anos = (await respostaAnos.json()) as FipeYear[];
+        const anosDoVeiculo = anos.filter((item) => {
+          const ano = Number.parseInt(item.name, 10);
+          return ano === anoInfo.ano;
+        });
+
+        if (anosDoVeiculo.length === 0) {
+          if (!cancelado) {
+            setModelos([]);
+            setModelo("");
+          }
+          return;
+        }
+
+        const respostas = await Promise.all(
+          anosDoVeiculo.map(async (item) => {
+            const resposta = await fetch(
+              `${FIPE_BASE}/brands/${encodeURIComponent(marcaCode)}/years/${encodeURIComponent(item.code)}/models`,
+            );
+            if (!resposta.ok) return [] as FipeModel[];
+            return (await resposta.json()) as FipeModel[];
+          }),
+        );
+
+        if (cancelado) return;
+
+        const unicos = new Map<string, FipeModel>();
+        respostas.flat().forEach((item) => {
+          const chave = item.name.trim().toLocaleLowerCase("pt-BR");
+          if (!unicos.has(chave)) unicos.set(chave, item);
+        });
+
+        const ordenados = [...unicos.values()].sort((a, b) =>
+          a.name.localeCompare(b.name, "pt-BR", { numeric: true }),
+        );
+
+        setModelos(ordenados);
+        setModelo(ordenados[0]?.name || "");
+      } catch {
+        if (!cancelado) {
+          setErroCatalogo("Não foi possível carregar os modelos desta marca/ano.");
+          setModelos([]);
+          setModelo("");
+        }
+      } finally {
+        if (!cancelado) setCarregandoModelos(false);
+      }
+    }
+
+    carregarModelosDoAno();
+
+    return () => {
+      cancelado = true;
+    };
+  }, [marcaCode, anoInfo.ano]);
+
+  const gerar = () => {
+    if (!marca || !modelo || !anoInfo) {
+      toast.error("Selecione marca, ano e modelo antes de gerar.");
+      return;
+    }
+
+    const perfilTeste = codigoModeloSintetico(marca.name, modelo);
+    const vins = gerarMultiplosVINs(
+      perfilTeste.wmi,
+      perfilTeste.vds,
+      anoCode,
+      quantidade,
     );
-    const vins = gerarMultiplosVINs(perfilTeste.wmi, perfilTeste.vds, anoCode, quantidade);
+
     const agora = Date.now();
-    setResultados(vins.map((vin, i) => ({
-      vin,
-      key: `${vin}-${i}-${agora}`,
-      marca: montadora.nome,
-      modelo: modelo || modelosDaMarca[0] || "Modelo de teste",
-      ano: anoInfo.ano,
-    })));
+    setResultados(
+      vins.map((vin, i) => ({
+        vin,
+        key: `${vin}-${i}-${agora}`,
+        marca: marca.name,
+        modelo,
+        ano: anoInfo.ano,
+      })),
+    );
     setCopiados(new Set());
   };
 
@@ -188,6 +295,7 @@ export default function GeradorChassiPublico() {
 
     toast.success("Chassi copiado.");
     setCopiados((prev) => new Set(prev).add(key));
+
     window.setTimeout(() => {
       setCopiados((prev) => {
         const proximo = new Set(prev);
@@ -204,13 +312,18 @@ export default function GeradorChassiPublico() {
       return;
     }
 
-    toast.success(`${resultados.length} chassi${resultados.length > 1 ? "s" : ""} copiado${resultados.length > 1 ? "s" : ""}.`);
+    toast.success(
+      `${resultados.length} chassi${resultados.length > 1 ? "s" : ""} copiado${resultados.length > 1 ? "s" : ""}.`,
+    );
   };
 
   return (
     <div
       className="min-h-screen text-white"
-      style={{ background: "radial-gradient(ellipse at top, #1a0a2e 0%, #0d0d1a 40%, #050508 100%)" }}
+      style={{
+        background:
+          "radial-gradient(ellipse at top, #1a0a2e 0%, #0d0d1a 40%, #050508 100%)",
+      }}
     >
       <header className="sticky top-0 z-10 border-b border-purple-900/40 bg-black/50 backdrop-blur-md">
         <div className="mx-auto flex max-w-3xl items-center gap-3 px-4 py-3">
@@ -238,8 +351,12 @@ export default function GeradorChassiPublico() {
             )}
 
             <div className="min-w-0">
-              <h1 className="truncate text-sm font-bold text-white sm:text-base">Gerador de Chassi — VIN</h1>
-              <p className="text-xs text-zinc-500">Gere números fictícios para testes</p>
+              <h1 className="truncate text-sm font-bold text-white sm:text-base">
+                Gerador de Chassi — VIN
+              </h1>
+              <p className="text-xs text-zinc-500">
+                Catálogo de veículos a partir de 2016
+              </p>
             </div>
           </div>
         </div>
@@ -250,100 +367,152 @@ export default function GeradorChassiPublico() {
           <div className="flex items-start gap-3">
             <Info className="mt-0.5 h-4 w-4 shrink-0 text-yellow-300" />
             <div className="space-y-1 text-xs leading-relaxed text-yellow-100/80">
-              <p><strong className="text-yellow-100">Uso para testes.</strong> Cada marca/modelo usa um perfil sintético fixo e o ano selecionado é refletido no identificador.</p>
-              <p className="text-yellow-200/60">O marcador sintético impede que o resultado seja confundido com VIN real. Não representa veículo cadastrado em DETRAN/SENATRAN.</p>
+              <p>
+                <strong className="text-yellow-100">Catálogo FIPE.</strong>{" "}
+                Marca, ano e modelo são carregados da base de veículos.
+              </p>
+              <p className="text-yellow-200/60">
+                O chassi gerado continua sintético para testes e não representa veículo real cadastrado.
+              </p>
             </div>
           </div>
         </section>
 
         <section className="space-y-5 rounded-2xl border border-zinc-700/50 bg-zinc-900/80 p-4 sm:p-5">
           <div>
-            <p className="text-xs font-semibold uppercase tracking-[0.18em] text-cyan-400">Configuração</p>
-            <h2 className="mt-1 text-lg font-bold text-white">Gerar VIN fictício para testes</h2>
+            <p className="text-xs font-semibold uppercase tracking-[0.18em] text-cyan-400">
+              Configuração
+            </p>
+            <h2 className="mt-1 text-lg font-bold text-white">
+              Marca → Ano → Modelo
+            </h2>
           </div>
 
           <div className="space-y-4">
             <div>
-              <label className="mb-1.5 block text-xs font-semibold text-zinc-300">Buscar montadora</label>
+              <label className="mb-1.5 block text-xs font-semibold text-zinc-300">
+                Buscar marca
+              </label>
               <div className="relative">
                 <Search className="pointer-events-none absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 text-zinc-500" />
                 <input
-                  value={buscaMontadora}
-                  onChange={(e) => setBuscaMontadora(e.target.value)}
-                  placeholder="Ex.: Chevrolet, Volkswagen, BYD..."
+                  value={buscaMarca}
+                  onChange={(e) => setBuscaMarca(e.target.value)}
+                  placeholder="Ex.: Ford, Chevrolet, Volkswagen, BYD..."
                   className="w-full rounded-xl border border-zinc-700 bg-zinc-800 py-2.5 pl-9 pr-3 text-sm text-white outline-none transition-colors placeholder:text-zinc-600 focus:border-cyan-500"
                 />
               </div>
             </div>
 
             <div>
-              <label className="mb-1.5 block text-xs font-semibold text-zinc-300">Montadora</label>
+              <label className="mb-1.5 block text-xs font-semibold text-zinc-300">
+                Marca
+              </label>
               <select
-                value={montadoraIdx}
-                onChange={(e) => setMontadoraIdx(Number(e.target.value))}
-                className="w-full rounded-xl border border-zinc-700 bg-zinc-800 px-3 py-2.5 text-sm text-white outline-none transition-colors focus:border-cyan-500"
+                value={marcaCode}
+                onChange={(e) => setMarcaCode(e.target.value)}
+                disabled={carregandoMarcas || marcasFiltradas.length === 0}
+                className="w-full rounded-xl border border-zinc-700 bg-zinc-800 px-3 py-2.5 text-sm text-white outline-none transition-colors focus:border-cyan-500 disabled:opacity-50"
               >
-                {montadorasFiltradas.map(({ item, index }) => (
-                  <option key={`${item.wmi}-${index}`} value={index}>{item.nome}</option>
-                ))}
-              </select>
-              {montadorasFiltradas.length === 0 && (
-                <p className="mt-1.5 text-xs text-red-300">Nenhuma montadora encontrada. Limpe a busca para ver todas.</p>
-              )}
-            </div>
-
-            <div>
-              <label className="mb-1.5 block text-xs font-semibold text-zinc-300">Modelo</label>
-              <select
-                value={modelo}
-                onChange={(e) => setModelo(e.target.value)}
-                className="w-full rounded-xl border border-zinc-700 bg-zinc-800 px-3 py-2.5 text-sm text-white outline-none transition-colors focus:border-cyan-500"
-              >
-                {modelosDaMarca.map((nomeModelo) => (
-                  <option key={nomeModelo} value={nomeModelo}>{nomeModelo}</option>
+                {marcasFiltradas.map((item) => (
+                  <option key={item.code} value={item.code}>
+                    {item.name}
+                  </option>
                 ))}
               </select>
               <p className="mt-1.5 text-xs text-zinc-500">
-                Selecione o modelo individualmente. A lista é de referência para uso em testes.
+                {carregandoMarcas
+                  ? "Carregando marcas..."
+                  : `${marcas.length} marcas disponíveis no catálogo.`}
               </p>
             </div>
 
-            <div className="grid grid-cols-1 gap-4 sm:grid-cols-2">
-              <div>
-                <label className="mb-1.5 block text-xs font-semibold text-zinc-300">Ano do veículo</label>
-                <select
-                  value={anoCode}
-                  onChange={(e) => setAnoCode(e.target.value)}
-                  className="w-full rounded-xl border border-zinc-700 bg-zinc-800 px-3 py-2.5 text-sm text-white outline-none transition-colors focus:border-cyan-500"
-                >
-                  {ANOS_GERADOR_PUBLICO.map((a) => (
-                    <option key={a.code} value={a.code}>{a.ano}</option>
-                  ))}
-                </select>
-              </div>
+            <div>
+              <label className="mb-1.5 block text-xs font-semibold text-zinc-300">
+                Ano do veículo
+              </label>
+              <select
+                value={anoCode}
+                onChange={(e) => setAnoCode(e.target.value)}
+                className="w-full rounded-xl border border-zinc-700 bg-zinc-800 px-3 py-2.5 text-sm text-white outline-none transition-colors focus:border-cyan-500"
+              >
+                {ANOS_GERADOR_PUBLICO.map((item) => (
+                  <option key={item.code} value={item.code}>
+                    {item.ano}
+                  </option>
+                ))}
+              </select>
+            </div>
 
-              <div>
-                <label className="mb-1.5 block text-xs font-semibold text-zinc-300">Quantidade</label>
-                <select
-                  value={quantidade}
-                  onChange={(e) => setQuantidade(Number(e.target.value))}
-                  className="w-full rounded-xl border border-zinc-700 bg-zinc-800 px-3 py-2.5 text-sm text-white outline-none transition-colors focus:border-cyan-500"
-                >
-                  {[1, 2, 3, 5, 10].map((n) => (
-                    <option key={n} value={n}>{n} chassi{n > 1 ? "s" : ""}</option>
-                  ))}
-                </select>
+            <div>
+              <label className="mb-1.5 block text-xs font-semibold text-zinc-300">
+                Modelo / versão
+              </label>
+              <select
+                value={modelo}
+                onChange={(e) => setModelo(e.target.value)}
+                disabled={carregandoModelos || modelos.length === 0}
+                className="w-full rounded-xl border border-zinc-700 bg-zinc-800 px-3 py-2.5 text-sm text-white outline-none transition-colors focus:border-cyan-500 disabled:opacity-50"
+              >
+                {modelos.length === 0 && (
+                  <option value="">
+                    {carregandoModelos
+                      ? "Carregando modelos..."
+                      : "Nenhum modelo encontrado neste ano"}
+                  </option>
+                )}
+                {modelos.map((item) => (
+                  <option key={`${item.code}-${item.name}`} value={item.name}>
+                    {item.name}
+                  </option>
+                ))}
+              </select>
+              <p className="mt-1.5 text-xs text-zinc-500">
+                {carregandoModelos
+                  ? "Consultando os modelos disponíveis para a marca e o ano..."
+                  : `${modelos.length} opções encontradas para ${anoInfo.ano}.`}
+              </p>
+            </div>
+
+            {erroCatalogo && (
+              <div className="rounded-xl border border-red-500/30 bg-red-950/30 px-3 py-2.5 text-xs text-red-200">
+                {erroCatalogo}
               </div>
+            )}
+
+            <div>
+              <label className="mb-1.5 block text-xs font-semibold text-zinc-300">
+                Quantidade
+              </label>
+              <select
+                value={quantidade}
+                onChange={(e) => setQuantidade(Number(e.target.value))}
+                className="w-full rounded-xl border border-zinc-700 bg-zinc-800 px-3 py-2.5 text-sm text-white outline-none transition-colors focus:border-cyan-500"
+              >
+                {[1, 2, 3, 5, 10].map((n) => (
+                  <option key={n} value={n}>
+                    {n} chassi{n > 1 ? "s" : ""}
+                  </option>
+                ))}
+              </select>
             </div>
           </div>
 
           <button
             type="button"
             onClick={gerar}
-            disabled={montadorasFiltradas.length === 0}
+            disabled={
+              carregandoMarcas ||
+              carregandoModelos ||
+              !marca ||
+              !modelo ||
+              modelos.length === 0
+            }
             className="flex w-full items-center justify-center gap-2 rounded-xl bg-gradient-to-r from-cyan-600 to-blue-600 py-3.5 text-base font-bold text-white shadow-lg transition-all hover:opacity-90 active:scale-[0.99] disabled:cursor-not-allowed disabled:opacity-40"
           >
-            <RefreshCw className="h-5 w-5" />
+            <RefreshCw
+              className={`h-5 w-5 ${carregandoModelos ? "animate-spin" : ""}`}
+            />
             Gerar {quantidade > 1 ? `${quantidade} chassis` : "chassi"}
           </button>
 
@@ -353,21 +522,50 @@ export default function GeradorChassiPublico() {
               onClick={() => setDetalhesAbertos((aberto) => !aberto)}
               className="flex w-full items-center justify-between gap-3 px-4 py-3 text-left"
             >
-              <span className="text-xs font-semibold text-zinc-300">Ver detalhes do VIN</span>
-              <ChevronDown className={`h-4 w-4 text-zinc-500 transition-transform ${detalhesAbertos ? "rotate-180" : ""}`} />
+              <span className="text-xs font-semibold text-zinc-300">
+                Ver detalhes do VIN
+              </span>
+              <ChevronDown
+                className={`h-4 w-4 text-zinc-500 transition-transform ${detalhesAbertos ? "rotate-180" : ""}`}
+              />
             </button>
 
-            {detalhesAbertos && montadora && anoInfo && (
+            {detalhesAbertos && marca && modelo && (
               <div className="grid gap-2 border-t border-zinc-800 px-4 py-3 text-xs text-zinc-400 sm:grid-cols-2">
-                <p>Perfil de marca: <span className="font-mono text-cyan-300">{codigoModeloSintetico(montadora.nome, modelo).wmi}</span></p>
-                <p>Perfil de modelo: <span className="font-mono text-purple-300">{codigoModeloSintetico(montadora.nome, modelo).vds}</span></p>
-                <p>Dígito verificador: <span className="text-zinc-200">posição 9</span></p>
-                <p>Ano: <span className="text-zinc-200">{anoInfo.ano} ({anoCode})</span></p>
-                <p>Fábrica: <span className="text-zinc-200">posição 11</span></p>
-                <p>Sequencial: <span className="text-zinc-200">posições 12–17</span></p>
-                <p>Modelo selecionado: <span className="text-zinc-200">{modelo}</span></p>
-                <p>Modelos disponíveis: <span className="text-zinc-300">{modelosDaMarca.length}</span></p>
-                <p className="sm:col-span-2 text-zinc-500">O perfil é fixo para cada marca/modelo e usa marcador sintético deliberadamente inválido para VIN real. Serve apenas para testes internos e não representa codificação oficial do fabricante.</p>
+                <p>
+                  Marca: <span className="text-zinc-200">{marca.name}</span>
+                </p>
+                <p>
+                  Ano: <span className="text-zinc-200">{anoInfo.ano}</span>
+                </p>
+                <p className="sm:col-span-2">
+                  Modelo: <span className="text-zinc-200">{modelo}</span>
+                </p>
+                <p>
+                  Perfil sintético:{" "}
+                  <span className="font-mono text-cyan-300">
+                    {codigoModeloSintetico(marca.name, modelo).wmi}
+                  </span>
+                </p>
+                <p>
+                  Código de teste:{" "}
+                  <span className="font-mono text-purple-300">
+                    {codigoModeloSintetico(marca.name, modelo).vds}
+                  </span>
+                </p>
+                <p>
+                  Dígito verificador:{" "}
+                  <span className="text-zinc-200">posição 9</span>
+                </p>
+                <p>
+                  Ano VIN:{" "}
+                  <span className="text-zinc-200">
+                    posição 10 ({anoCode})
+                  </span>
+                </p>
+                <p className="sm:col-span-2 text-zinc-500">
+                  Marca/modelo/ano vêm do catálogo FIPE. O identificador gerado usa perfil sintético deliberadamente incompatível com VIN real.
+                </p>
               </div>
             )}
           </div>
@@ -377,9 +575,13 @@ export default function GeradorChassiPublico() {
           <section className="space-y-4 rounded-2xl border border-zinc-700/50 bg-zinc-900/80 p-4 sm:p-5">
             <div className="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
               <div>
-                <p className="text-xs font-semibold uppercase tracking-[0.18em] text-cyan-400">Resultados</p>
+                <p className="text-xs font-semibold uppercase tracking-[0.18em] text-cyan-400">
+                  Resultados
+                </p>
                 <h2 className="mt-1 text-base font-bold text-white">
-                  {resultados.length} chassi{resultados.length > 1 ? "s" : ""} gerado{resultados.length > 1 ? "s" : ""}
+                  {resultados.length} chassi
+                  {resultados.length > 1 ? "s" : ""} gerado
+                  {resultados.length > 1 ? "s" : ""}
                 </h2>
               </div>
 
@@ -407,19 +609,21 @@ export default function GeradorChassiPublico() {
             </div>
 
             <div className="space-y-3">
-              {resultados.map(({ vin, key, marca, modelo: modeloGerado, ano }) => (
+              {resultados.map(({ vin, key, marca: marcaResultado, modelo: modeloResultado, ano }) => (
                 <article
                   key={key}
                   className={`rounded-xl border p-4 transition-all ${copiados.has(key) ? "border-cyan-500/40 bg-cyan-950/30" : "border-zinc-700/50 bg-zinc-800/60"}`}
                 >
                   <div className="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
                     <div className="min-w-0">
-                      <p className="text-[10px] font-semibold uppercase tracking-[0.18em] text-zinc-500">Chassi gerado</p>
+                      <p className="text-[10px] font-semibold uppercase tracking-[0.18em] text-zinc-500">
+                        Chassi gerado
+                      </p>
                       <p className="mt-1 break-all font-mono text-base font-bold tracking-[0.08em] text-white sm:text-lg sm:tracking-[0.14em]">
                         {vin}
                       </p>
                       <p className="mt-1 text-xs text-zinc-500">
-                        {marca} • {modeloGerado} • {ano} • 17 caracteres
+                        {marcaResultado} • {modeloResultado} • {ano} • 17 caracteres
                       </p>
                     </div>
 
@@ -428,7 +632,11 @@ export default function GeradorChassiPublico() {
                       onClick={() => copiarUm(key, vin)}
                       className={`flex w-full shrink-0 items-center justify-center gap-2 rounded-xl px-4 py-2.5 text-xs font-bold transition-colors sm:w-auto ${copiados.has(key) ? "bg-cyan-500/10 text-cyan-300" : "bg-zinc-700/70 text-zinc-200 hover:bg-zinc-700"}`}
                     >
-                      {copiados.has(key) ? <CheckCheck className="h-4 w-4" /> : <Copy className="h-4 w-4" />}
+                      {copiados.has(key) ? (
+                        <CheckCheck className="h-4 w-4" />
+                      ) : (
+                        <Copy className="h-4 w-4" />
+                      )}
                       {copiados.has(key) ? "Copiado" : "Copiar chassi"}
                     </button>
                   </div>
@@ -439,7 +647,10 @@ export default function GeradorChassiPublico() {
         )}
 
         <section className="rounded-2xl border border-zinc-800/60 bg-zinc-900/40 p-4 text-xs leading-relaxed text-zinc-500">
-          <p><strong className="text-zinc-300">VIN</strong> é o número de identificação veicular com 17 caracteres. Nesta ferramenta, o dígito verificador é calculado matematicamente para testes de formato.</p>
+          <p>
+            <strong className="text-zinc-300">Fonte do catálogo:</strong>{" "}
+            Tabela FIPE via API pública. O gerador usa os nomes de veículos para organizar os testes; o VIN produzido não é um chassi oficial.
+          </p>
         </section>
 
         <div className="pb-5" />
