@@ -19,16 +19,42 @@ const TRANSLITERATION: Record<string, number> = {
 };
 
 const VIN_WEIGHTS = [8,7,6,5,4,3,2,10,0,9,8,7,6,5,4,3,2];
+const VIN_VALID_CHARS = /^[A-HJ-NPR-Z0-9]+$/;
+const VIN_INVALID_CHARS = /[IOQ]/i;
+const VIN_VALID_YEARS = new Set(['A','B','C','D','E','F','G','H','J','K','L','M','N','P','R','S','T','V','W','X','Y','1','2','3','4','5','6','7','8','9']);
+const VIN_VALID_PLANTS = 'ABCDEFGHJKLMNPRSTUVWXYZ';
 
 function calcCheckDigit(vin: string): string {
+  if (vin.length !== 17) {
+    throw new Error('VIN deve conter 17 caracteres para cálculo do dígito verificador.');
+  }
+
   let total = 0;
   for (let i = 0; i < 17; i++) {
     const ch = vin[i].toUpperCase();
+    if (VIN_INVALID_CHARS.test(ch)) {
+      throw new Error(`Caracter inválido em VIN: ${ch}`);
+    }
     const val = TRANSLITERATION[ch] ?? 0;
     total += val * VIN_WEIGHTS[i];
   }
+
   const rem = total % 11;
   return rem === 10 ? 'X' : String(rem);
+}
+
+export function isVINValido(vin: string): boolean {
+  if (typeof vin !== 'string') return false;
+  const normalized = vin.trim().toUpperCase();
+
+  if (normalized.length !== 17) return false;
+  if (!VIN_VALID_CHARS.test(normalized)) return false;
+  if (VIN_INVALID_CHARS.test(normalized)) return false;
+  if (!VIN_VALID_YEARS.has(normalized[9])) return false;
+
+  const partial = normalized.slice(0, 8) + '0' + normalized.slice(9);
+  const expected = calcCheckDigit(partial);
+  return normalized[8] === expected;
 }
 
 // ════════════════════════════════════════════════════════════
@@ -127,6 +153,27 @@ export const ANOS_VIN: { code: string; ano: number }[] = [
   { code: 'T', ano: 2026 },
 ];
 
+export function obterPerfilFabricanteOficial(
+  marca: string,
+  modelo: string,
+): { wmi: string; vds: string } {
+  const chave = `${marca}|${modelo}`.toLowerCase();
+  let hash = 2166136261;
+
+  for (let i = 0; i < chave.length; i++) {
+    hash ^= chave.charCodeAt(i);
+    hash = Math.imul(hash, 16777619);
+  }
+
+  const indice = (hash >>> 0) % MONTADORAS_VIN.length;
+  const fabricante = MONTADORAS_VIN[indice];
+
+  return {
+    wmi: fabricante.wmi,
+    vds: fabricante.vds,
+  };
+}
+
 // ════════════════════════════════════════════════════════════
 // GERADOR PRINCIPAL
 // ════════════════════════════════════════════════════════════
@@ -143,34 +190,49 @@ export function gerarVINUnico(
   plant = 'A',
 ): string {
   const MAX_ATTEMPTS = 1000;
+  const safeWmi = wmi.toUpperCase().replace(/[IOQ]/gi, '');
+  const safeVds = vds.toUpperCase().replace(/[IOQ]/gi, '');
+  const safeYearCode = yearCode.toUpperCase().trim();
+  const safePlant = plant.toUpperCase().trim();
+
+  if (!/^[A-HJ-NPR-Z0-9]{3}$/.test(safeWmi)) {
+    throw new Error('WMI inválido: deve conter 3 caracteres reais de fabricante sem I/O/Q.');
+  }
+
+  if (!/^[A-HJ-NPR-Z0-9]{5}$/.test(safeVds)) {
+    throw new Error('VDS inválido: deve conter 5 caracteres sem I/O/Q.');
+  }
+
+  if (!VIN_VALID_YEARS.has(safeYearCode)) {
+    throw new Error('Código do ano do VIN inválido.');
+  }
+
+  const validPlant = VIN_VALID_PLANTS.includes(safePlant) ? safePlant : VIN_VALID_PLANTS[0];
 
   for (let attempt = 0; attempt < MAX_ATTEMPTS; attempt++) {
-    // Sequencial com 6 dígitos: 100000–999999 (900.000 combinações)
     const seq = String(cryptoRandInt(100000, 999999));
+    const plantChar = validPlant === 'A'
+      ? VIN_VALID_PLANTS[cryptoRandInt(0, VIN_VALID_PLANTS.length - 1)]
+      : validPlant;
 
-    // Planta aleatória entre A-Z (exceto I, O, Q — proibidos no VIN)
-    const validPlants = 'ABCDEFGHJKLMNPRSTUVWXYZ';
-    const plantChar = plant === 'A'
-      ? validPlants[cryptoRandInt(0, validPlants.length - 1)]
-      : plant;
-
-    // Monta o VIN parcial com check digit provisório '0'
-    const partial = wmi + vds + '0' + yearCode + plantChar + seq;
+    const partial = safeWmi + safeVds + '0' + safeYearCode + plantChar + seq;
     const check = calcCheckDigit(partial);
-    const vin = wmi + vds + check + yearCode + plantChar + seq;
+    const vin = safeWmi + safeVds + check + safeYearCode + plantChar + seq;
 
-    // Verifica unicidade na sessão
-    if (!_sessionHistory.has(vin)) {
+    if (isVINValido(vin) && !_sessionHistory.has(vin)) {
       _sessionHistory.add(vin);
       return vin;
     }
-    // Colisão detectada — tenta novamente (rarissimo)
   }
 
-  // Fallback extremamente improvável: retorna com timestamp para garantir unicidade
-  const fallback = wmi + vds + '0' + yearCode + plant + String(Date.now()).slice(-6);
+  const fallback = safeWmi + safeVds + '0' + safeYearCode + validPlant + String(Date.now()).slice(-6);
   const check = calcCheckDigit(fallback);
-  const final = wmi + vds + check + yearCode + plant + String(Date.now()).slice(-6);
+  const final = safeWmi + safeVds + check + safeYearCode + validPlant + String(Date.now()).slice(-6);
+
+  if (!isVINValido(final)) {
+    throw new Error('Falha ao gerar VIN válido com regras ISO/realistas.');
+  }
+
   _sessionHistory.add(final);
   return final;
 }
