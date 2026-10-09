@@ -157,16 +157,22 @@ export function obterPerfilFabricanteOficial(
   marca: string,
   modelo: string,
 ): { wmi: string; vds: string } {
-  const chave = `${marca}|${modelo}`.toLowerCase();
-  let hash = 2166136261;
+  const marcaNormalizada = marca.trim().toLowerCase();
+  const modeloNormalizado = modelo.trim().toLowerCase();
 
-  for (let i = 0; i < chave.length; i++) {
-    hash ^= chave.charCodeAt(i);
-    hash = Math.imul(hash, 16777619);
-  }
+  const fabricante = MONTADORAS_VIN.find((item) => {
+    const nomeFabricante = item.nome.toLowerCase();
+    const marcaCoincide = nomeFabricante.includes(marcaNormalizada)
+      || marcaNormalizada.includes(nomeFabricante);
 
-  const indice = (hash >>> 0) % MONTADORAS_VIN.length;
-  const fabricante = MONTADORAS_VIN[indice];
+    const modeloCoincide = item.modelos.some((nomeModelo) =>
+      nomeModelo.toLowerCase() === modeloNormalizado
+      || nomeModelo.toLowerCase().includes(modeloNormalizado)
+      || modeloNormalizado.includes(nomeModelo.toLowerCase())
+    );
+
+    return marcaCoincide || modeloCoincide;
+  }) ?? MONTADORAS_VIN.find((item) => item.nome.toLowerCase().includes(marcaNormalizada)) ?? MONTADORAS_VIN[0];
 
   return {
     wmi: fabricante.wmi,
