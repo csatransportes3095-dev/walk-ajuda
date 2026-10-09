@@ -5124,9 +5124,6 @@ export default function AdminOrders() {
                         if (order.latestStatus === "foto_reprovada") {
                           counts.foto_reprovada = (counts.foto_reprovada || 0) + 1;
                         }
-                        if (order.latestStatus === "aguardando_ativa" || order.latestStatus === "aguardando_ficar_ativa") {
-                          counts.aguardando_ativa = (counts.aguardando_ativa || 0) + 1;
-                        }
                         if (!viewedOrders.has(getOrderKey(order))) counts.novo += 1;
                       }
                       return (
