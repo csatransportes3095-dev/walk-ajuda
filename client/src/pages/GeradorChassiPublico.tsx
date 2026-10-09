@@ -61,6 +61,31 @@ const MODELOS_TRANSPORTE: Record<string, string[]> = {
   "Audi (Alemanha)": ["A3 Sedan", "A4", "Q3", "Q5", "e-tron"],
 };
 
+function codigoModeloSintetico(marca: string, modelo: string): { wmi: string; vds: string } {
+  const fonte = `${marca}|${modelo}`;
+  const alfabeto = "ABCDEFGHJKLMNPRSTUVWXYZ0123456789";
+
+  let hash = 2166136261;
+  for (let i = 0; i < fonte.length; i++) {
+    hash ^= fonte.charCodeAt(i);
+    hash = Math.imul(hash, 16777619);
+  }
+
+  const chars: string[] = [];
+  let valor = hash >>> 0;
+  for (let i = 0; i < 4; i++) {
+    chars.push(alfabeto[valor % alfabeto.length]);
+    valor = Math.floor(valor / alfabeto.length) || ((hash >>> (i + 1)) >>> 0);
+  }
+
+  // "Q" é deliberado: I, O e Q não são usados em VINs reais.
+  // Isso mantém cada perfil identificável como dado sintético de teste.
+  return {
+    wmi: `Q${chars[0]}${chars[1]}`,
+    vds: `${chars[2]}${chars[3]}TST`,
+  };
+}
+
 async function copiarTexto(texto: string): Promise<boolean> {
   try {
     if (navigator.clipboard?.writeText) {
@@ -138,7 +163,11 @@ export default function GeradorChassiPublico() {
       return;
     }
 
-    const vins = gerarMultiplosVINs(montadora.wmi, montadora.vds, anoCode, quantidade);
+    const perfilTeste = codigoModeloSintetico(
+      montadora.nome,
+      modelo || modelosDaMarca[0] || "Modelo de teste",
+    );
+    const vins = gerarMultiplosVINs(perfilTeste.wmi, perfilTeste.vds, anoCode, quantidade);
     const agora = Date.now();
     setResultados(vins.map((vin, i) => ({
       vin,
@@ -221,8 +250,8 @@ export default function GeradorChassiPublico() {
           <div className="flex items-start gap-3">
             <Info className="mt-0.5 h-4 w-4 shrink-0 text-yellow-300" />
             <div className="space-y-1 text-xs leading-relaxed text-yellow-100/80">
-              <p><strong className="text-yellow-100">Uso para testes.</strong> Os números gerados têm 17 caracteres e dígito verificador calculado.</p>
-              <p className="text-yellow-200/60">Não representam veículo real e não confirmam cadastro em DETRAN/SENATRAN.</p>
+              <p><strong className="text-yellow-100">Uso para testes.</strong> Cada marca/modelo usa um perfil sintético fixo e o ano selecionado é refletido no identificador.</p>
+              <p className="text-yellow-200/60">O marcador sintético impede que o resultado seja confundido com VIN real. Não representa veículo cadastrado em DETRAN/SENATRAN.</p>
             </div>
           </div>
         </section>
@@ -330,15 +359,15 @@ export default function GeradorChassiPublico() {
 
             {detalhesAbertos && montadora && anoInfo && (
               <div className="grid gap-2 border-t border-zinc-800 px-4 py-3 text-xs text-zinc-400 sm:grid-cols-2">
-                <p>WMI: <span className="font-mono text-cyan-300">{montadora.wmi}</span></p>
-                <p>VDS: <span className="font-mono text-purple-300">{montadora.vds}</span></p>
+                <p>Perfil de marca: <span className="font-mono text-cyan-300">{codigoModeloSintetico(montadora.nome, modelo).wmi}</span></p>
+                <p>Perfil de modelo: <span className="font-mono text-purple-300">{codigoModeloSintetico(montadora.nome, modelo).vds}</span></p>
                 <p>Dígito verificador: <span className="text-zinc-200">posição 9</span></p>
                 <p>Ano: <span className="text-zinc-200">{anoInfo.ano} ({anoCode})</span></p>
                 <p>Fábrica: <span className="text-zinc-200">posição 11</span></p>
                 <p>Sequencial: <span className="text-zinc-200">posições 12–17</span></p>
                 <p>Modelo selecionado: <span className="text-zinc-200">{modelo}</span></p>
                 <p>Modelos disponíveis: <span className="text-zinc-300">{modelosDaMarca.length}</span></p>
-                <p className="sm:col-span-2 text-zinc-500">A associação de WMI/VDS nesta ferramenta é uma base interna de teste e não deve ser interpretada como consulta oficial.</p>
+                <p className="sm:col-span-2 text-zinc-500">O perfil é fixo para cada marca/modelo e usa marcador sintético deliberadamente inválido para VIN real. Serve apenas para testes internos e não representa codificação oficial do fabricante.</p>
               </div>
             )}
           </div>
