@@ -157,26 +157,35 @@ export function obterPerfilFabricanteOficial(
   marca: string,
   modelo: string,
 ): { wmi: string; vds: string } {
-  const marcaNormalizada = marca.trim().toLowerCase();
-  const modeloNormalizado = modelo.trim().toLowerCase();
+  const normalizarTexto = (valor: string) => valor.normalize("NFD").replace(/[\u0300-\u036f]/g, "").trim().toLowerCase();
 
-  const fabricante = MONTADORAS_VIN.find((item) => {
-    const nomeFabricante = item.nome.toLowerCase();
-    const marcaCoincide = nomeFabricante.includes(marcaNormalizada)
-      || marcaNormalizada.includes(nomeFabricante);
+  const marcaNormalizada = normalizarTexto(marca);
+  const modeloNormalizado = normalizarTexto(modelo);
 
-    const modeloCoincide = item.modelos.some((nomeModelo) =>
-      nomeModelo.toLowerCase() === modeloNormalizado
-      || nomeModelo.toLowerCase().includes(modeloNormalizado)
-      || modeloNormalizado.includes(nomeModelo.toLowerCase())
-    );
+  const fabricanteDireto = MONTADORAS_VIN.find((item) => {
+    const nomeFabricante = normalizarTexto(item.nome);
+    return nomeFabricante === marcaNormalizada || nomeFabricante.includes(marcaNormalizada);
+  });
 
-    return marcaCoincide || modeloCoincide;
-  }) ?? MONTADORAS_VIN.find((item) => item.nome.toLowerCase().includes(marcaNormalizada)) ?? MONTADORAS_VIN[0];
+  if (fabricanteDireto) {
+    return {
+      wmi: fabricanteDireto.wmi,
+      vds: fabricanteDireto.vds,
+    };
+  }
+
+  const fabricantePeloModelo = MONTADORAS_VIN.find((item) =>
+    item.modelos.some((nomeModelo) => {
+      const modeloCatalogo = normalizarTexto(nomeModelo);
+      return modeloCatalogo === modeloNormalizado || modeloCatalogo.includes(modeloNormalizado);
+    }),
+  );
+
+  const fabricanteFinal = fabricantePeloModelo ?? MONTADORAS_VIN[0];
 
   return {
-    wmi: fabricante.wmi,
-    vds: fabricante.vds,
+    wmi: fabricanteFinal.wmi,
+    vds: fabricanteFinal.vds,
   };
 }
 
