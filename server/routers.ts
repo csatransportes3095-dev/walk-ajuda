@@ -157,7 +157,7 @@ import {
   addOrderFile, getOrderFiles, getOrderFilesByPhone, getOrderFilesByPhoneGrouped, deleteOrderFile,
   getStatusLabelFromDb,
   getStatusInfoFromDb,
-  listOrderStatusTypes, setGlobalOrderProgressSequence,
+  listOrderStatusTypes, setGlobalOrderProgressSequence, getGlobalOrderProgressAlternativeRules, setGlobalOrderProgressAlternativeRules,
   generateOrderNumber,
   updateLastOrderStatus,
   completeOpenAppointmentsForOrder,
@@ -6587,13 +6587,21 @@ export const appRouter = router({
     getProgressSequence: publicProcedure.query(async () => {
       const statuses = await listOrderStatusTypes();
       const enabled = (await getSetting("order_progress_global_enabled")) === "1";
-      return { enabled, keys: enabled ? getConfiguredGlobalProgressKeys(statuses) : [] };
+      const keys = enabled ? getConfiguredGlobalProgressKeys(statuses) : [];
+      const alternativeRules = enabled ? await getGlobalOrderProgressAlternativeRules() : [];
+      return { enabled, keys, alternativeRules };
     }),
 
     // Salva a sequência inteira como uma única operação. Não altera sortOrder,
     // latestStatus, scheduleStatus, Arquivo, RG/CNH, grupos ou filtros operacionais.
     setProgressSequence: adminProcedure
-      .input(z.object({ statusKeys: z.array(z.string().min(1).max(64)).min(1).max(64) }))
+      .input(z.object({
+        statusKeys: z.array(z.string().min(1).max(64)).min(1).max(64),
+        alternativeRules: z.array(z.object({
+          primaryKey: z.string().min(1).max(64),
+          alternativeKey: z.string().min(1).max(64),
+        })).max(64).optional(),
+      }))
       .mutation(async ({ input }) => {
         const statuses = await listOrderStatusTypes();
         const statusKeys = sanitizeGlobalProgressKeys(statuses, input.statusKeys);
@@ -6601,8 +6609,9 @@ export const appRouter = router({
           throw new TRPCError({ code: "BAD_REQUEST", message: "Selecione pelo menos um status ativo para o progresso do cliente." });
         }
         await setGlobalOrderProgressSequence(statusKeys);
+        await setGlobalOrderProgressAlternativeRules(statusKeys, input.alternativeRules ?? []);
         await upsertSetting("order_progress_global_enabled", "1");
-        return { success: true, keys: statusKeys };
+        return { success: true, keys: statusKeys, alternativeRules: input.alternativeRules ?? [] };
       }),
     scopeReport: adminProcedure.query(async () => {
       const { getDb, ensureOrderStatusFlowTables } = await import('./db');
