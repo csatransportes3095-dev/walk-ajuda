@@ -823,7 +823,11 @@ export default function AdminOrders() {
   const statusTypesQuery = trpc.statusTypes.list.useQuery();
   const dynamicStatuses = statusTypesQuery.data ?? [];
   const statusFlowOrderMapQuery = trpc.statusFlows.orderMap.useQuery(undefined, { staleTime: 0, refetchInterval: 15_000, refetchOnWindowFocus: true });
-  const statusFlowOrderMap = (statusFlowOrderMapQuery.data ?? {}) as Record<string, { isDefault: number; statusKeys: string[] }>;
+  const statusFlowOrderMap = (statusFlowOrderMapQuery.data ?? {}) as Record<string, {
+    isDefault: number;
+    statusKeys: string[];
+    alternativeRules?: Array<{ primaryKey: string; alternativeKey: string }>;
+  }>;
   const statusFlowDefinitionsQuery = trpc.statusFlows.list.useQuery(undefined, { staleTime: 0, refetchInterval: 15_000, refetchOnWindowFocus: true });
   const statusFlowDefinitions = (statusFlowDefinitionsQuery.data ?? []) as Array<{
     id: number;
@@ -831,6 +835,7 @@ export default function AdminOrders() {
     isActive: number;
     statusKeys: string[];
     productNames?: string[];
+    alternativeRules?: Array<{ primaryKey: string; alternativeKey: string }>;
   }>;
 
   // Agendamentos confirmados do dia: usados para destacar o CARD INTEIRO no painel.
@@ -960,6 +965,31 @@ export default function AdminOrders() {
           description: (s as any).description ?? '',
         }]))
       : STATUS_CONFIG as Record<string, { label: string; color: string; bg: string; icon: React.ReactNode; description?: string }>;
+
+  const getVisualStatusConfigForOrder = (order: any, statusKey: string | null | undefined) => {
+    if (!statusKey) return null;
+    const actual = ACTIVE_STATUS_CONFIG[statusKey];
+    if (!actual) return null;
+
+    const flow = resolveConfiguredFlowForOrder(order);
+    const rules = flow && flow.isDefault !== 1
+      ? (flow.alternativeRules ?? [])
+      : (globalProgressSequenceQuery.data?.alternativeRules ?? []);
+    const relation = rules.find((rule: any) => rule.alternativeKey === statusKey);
+    if (!relation) return actual;
+
+    const primary = ACTIVE_STATUS_CONFIG[relation.primaryKey];
+    if (!primary) return actual;
+
+    // Status alternativo mantém identidade própria, mas usa o mesmo padrão visual
+    // da etapa principal para não criar um estilo novo no painel.
+    return {
+      ...primary,
+      label: actual.label,
+      icon: actual.icon,
+      description: actual.description,
+    };
+  };
 
   const normalizeStatusLabel = (value: unknown): string =>
     String(value || '')
@@ -5427,7 +5457,7 @@ export default function AdminOrders() {
                       const isCartGroup = !cgId.startsWith('__single__');
                       const order = isCartGroup ? cgItems[0] : cgItems[0]; // primaryOrder = primeiro item
                       const latestStatus = order.latestStatus as string | null;
-                      const statusCfg = latestStatus ? ACTIVE_STATUS_CONFIG[latestStatus] : null;
+                      const statusCfg = latestStatus ? getVisualStatusConfigForOrder(order, latestStatus) : null;
                       const isExpanded = expandedId === getOrderKey(order);
                       const name = order.customerName || order.codeClientName || "Cliente";
                       const tab = getTab(getOrderKey(order));
@@ -6134,7 +6164,7 @@ export default function AdminOrders() {
                       <p className="text-xs font-medium text-muted-foreground">Atualizar status do pedido</p>
                       <div className="grid grid-cols-2 gap-2">
                         {getStatusOrderForOrder(order).filter(isManualSelectableStatus).map(s => {
-                          const cfg = ACTIVE_STATUS_CONFIG[s];
+                          const cfg = getVisualStatusConfigForOrder(order, s);
                           if (!cfg) return null;
                           const isSel = (selectedStatus[getOrderKey(order)] || latestStatus) === s;
                           // Buscar data/hora em que este status foi aplicado
