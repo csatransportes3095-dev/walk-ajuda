@@ -1,243 +1,338 @@
-import { useState } from "react";
+import { useMemo, useState } from "react";
 import { toast } from "sonner";
-import { Copy, RefreshCw, Trash2, CheckCheck, ArrowLeft } from "lucide-react";
+import {
+  ArrowLeft,
+  CheckCheck,
+  ChevronDown,
+  Copy,
+  Info,
+  RefreshCw,
+  Search,
+  Trash2,
+} from "lucide-react";
 import { Link } from "wouter";
-import { MONTADORAS_VIN, ANOS_VIN, gerarMultiplosVINs, getSessionHistorySize } from "@/lib/vinGenerator";
+import { ANOS_VIN, MONTADORAS_VIN, gerarMultiplosVINs } from "@/lib/vinGenerator";
 import { trpc } from "@/lib/trpc";
 
-// ════════════════════════════════════════════════════════════
-// COMPONENTE PRINCIPAL
-// ════════════════════════════════════════════════════════════
+type ResultadoVIN = {
+  vin: string;
+  key: string;
+};
+
+async function copiarTexto(texto: string): Promise<boolean> {
+  try {
+    if (navigator.clipboard?.writeText) {
+      await navigator.clipboard.writeText(texto);
+      return true;
+    }
+
+    const textarea = document.createElement("textarea");
+    textarea.value = texto;
+    textarea.setAttribute("readonly", "");
+    textarea.style.position = "fixed";
+    textarea.style.opacity = "0";
+    document.body.appendChild(textarea);
+    textarea.select();
+    const copiado = document.execCommand("copy");
+    document.body.removeChild(textarea);
+    return copiado;
+  } catch {
+    return false;
+  }
+}
+
 export default function GeradorChassiPublico() {
   const { data: settings } = trpc.settings.getAll.useQuery();
-  const logoUrl = settings?.login_image_url || '';
-  const [montadoraIdx, setMontadoraIdx] = useState(0);
-  const [anoCode, setAnoCode] = useState('S');
-  const [quantidade, setQuantidade] = useState(1);
-  const [resultados, setResultados] = useState<{ vin: string; key: string }[]>([]);
-  const [copiados, setCopiados] = useState<Set<string>>(new Set());
+  const logoUrl = settings?.login_image_url || "";
 
-  const montadora = MONTADORAS_VIN[montadoraIdx];
-  const anoInfo = ANOS_VIN.find(a => a.code === anoCode)!;
+  const ultimoAno = ANOS_VIN[ANOS_VIN.length - 1];
+  const [montadoraIdx, setMontadoraIdx] = useState(0);
+  const [buscaMontadora, setBuscaMontadora] = useState("");
+  const [anoCode, setAnoCode] = useState(ultimoAno?.code || "T");
+  const [quantidade, setQuantidade] = useState(1);
+  const [resultados, setResultados] = useState<ResultadoVIN[]>([]);
+  const [copiados, setCopiados] = useState<Set<string>>(new Set());
+  const [detalhesAbertos, setDetalhesAbertos] = useState(false);
+
+  const montadora = MONTADORAS_VIN[montadoraIdx] || MONTADORAS_VIN[0];
+  const anoInfo = ANOS_VIN.find((a) => a.code === anoCode) || ultimoAno;
+
+  const montadorasFiltradas = useMemo(() => {
+    const termo = buscaMontadora.trim().toLowerCase();
+    if (!termo) {
+      return MONTADORAS_VIN.map((item, index) => ({ item, index }));
+    }
+
+    return MONTADORAS_VIN
+      .map((item, index) => ({ item, index }))
+      .filter(({ item }) =>
+        [item.nome, item.wmi, ...item.modelos]
+          .join(" ")
+          .toLowerCase()
+          .includes(termo),
+      );
+  }, [buscaMontadora]);
 
   const gerar = () => {
+    if (!montadora || !anoInfo) {
+      toast.error("Não foi possível carregar os dados do gerador.");
+      return;
+    }
+
     const vins = gerarMultiplosVINs(montadora.wmi, montadora.vds, anoCode, quantidade);
-    const novos = vins.map((vin, i) => ({ vin, key: `${vin}-${i}-${Date.now()}` }));
-    setResultados(novos);
+    const agora = Date.now();
+    setResultados(vins.map((vin, i) => ({ vin, key: `${vin}-${i}-${agora}` })));
     setCopiados(new Set());
   };
 
-  const copiarUm = (key: string, vin: string) => {
-    navigator.clipboard.writeText(vin);
-    toast.success(`Chassi copiado: ${vin}`);
-    setCopiados(prev => { const s = new Set(prev); s.add(key); return s; });
-    setTimeout(() => setCopiados(prev => { const s = new Set(prev); s.delete(key); return s; }), 2000);
+  const copiarUm = async (key: string, vin: string) => {
+    const copiado = await copiarTexto(vin);
+    if (!copiado) {
+      toast.error("O navegador bloqueou a cópia. Selecione o chassi manualmente.");
+      return;
+    }
+
+    toast.success("Chassi copiado.");
+    setCopiados((prev) => new Set(prev).add(key));
+    window.setTimeout(() => {
+      setCopiados((prev) => {
+        const proximo = new Set(prev);
+        proximo.delete(key);
+        return proximo;
+      });
+    }, 2000);
   };
 
-  const copiarTodos = () => {
-    navigator.clipboard.writeText(resultados.map(r => r.vin).join('\n'));
-    toast.success(`${resultados.length} chassi${resultados.length > 1 ? 's' : ''} copiado${resultados.length > 1 ? 's' : ''}!`);
+  const copiarTodos = async () => {
+    const copiado = await copiarTexto(resultados.map((r) => r.vin).join("\n"));
+    if (!copiado) {
+      toast.error("O navegador bloqueou a cópia dos chassis.");
+      return;
+    }
+
+    toast.success(`${resultados.length} chassi${resultados.length > 1 ? "s" : ""} copiado${resultados.length > 1 ? "s" : ""}.`);
   };
 
   return (
-    <div className="min-h-screen text-white" style={{ background: 'radial-gradient(ellipse at top, #1a0a2e 0%, #0d0d1a 40%, #050508 100%)' }}>
-      {/* Header */}
-      <div className="border-b border-purple-900/40 bg-black/40 backdrop-blur-sm sticky top-0 z-10">
-        <div className="max-w-2xl mx-auto px-4 py-3 flex items-center gap-3">
+    <div
+      className="min-h-screen text-white"
+      style={{ background: "radial-gradient(ellipse at top, #1a0a2e 0%, #0d0d1a 40%, #050508 100%)" }}
+    >
+      <header className="sticky top-0 z-10 border-b border-purple-900/40 bg-black/50 backdrop-blur-md">
+        <div className="mx-auto flex max-w-3xl items-center gap-3 px-4 py-3">
           <Link href="/">
-            <button className="p-2 rounded-xl hover:bg-white/10 transition-colors text-zinc-400 hover:text-white">
-              <ArrowLeft className="w-5 h-5" />
+            <button
+              type="button"
+              aria-label="Voltar"
+              className="rounded-xl p-2 text-zinc-400 transition-colors hover:bg-white/10 hover:text-white"
+            >
+              <ArrowLeft className="h-5 w-5" />
             </button>
           </Link>
-          <div className="flex items-center gap-3">
+
+          <div className="flex min-w-0 items-center gap-3">
             {logoUrl ? (
-              <img src={logoUrl} alt="Logo" className="w-10 h-10 rounded-xl object-cover shadow-lg shadow-purple-900/40" />
+              <img
+                src={logoUrl}
+                alt="H2 Colombiano"
+                className="h-10 w-10 shrink-0 rounded-xl object-cover shadow-lg shadow-purple-900/40"
+              />
             ) : (
-              <div className="w-10 h-10 rounded-xl bg-purple-500/20 border border-purple-500/30 flex items-center justify-center">
+              <div className="flex h-10 w-10 shrink-0 items-center justify-center rounded-xl border border-purple-500/30 bg-purple-500/20">
                 <span className="text-lg">🚗</span>
               </div>
             )}
-            <div>
-              <h1 className="text-sm font-bold text-white">Gerador de Chassi VIN</h1>
-              <p className="text-xs text-zinc-500">Fictício — apenas para testes</p>
+
+            <div className="min-w-0">
+              <h1 className="truncate text-sm font-bold text-white sm:text-base">Gerador de Chassi — VIN</h1>
+              <p className="text-xs text-zinc-500">Gere números fictícios para testes</p>
             </div>
           </div>
         </div>
-      </div>
+      </header>
 
-      <div className="max-w-2xl mx-auto px-4 py-6 space-y-5">
-
-        {/* Aviso */}
-        <div className="bg-yellow-900/20 border border-yellow-500/30 rounded-2xl px-4 py-3 flex items-start gap-3">
-          <span className="text-lg mt-0.5">⚠️</span>
-          <p className="text-xs text-yellow-200/80 leading-relaxed">
-            Os chassi gerados são <strong>fictícios</strong> e válidos apenas no formato (dígito verificador calculado pelo algoritmo ISO 3779).
-            Use somente para testes — não representam veículos reais.
-          </p>
-        </div>
-
-        {/* Card principal */}
-        <div className="bg-zinc-900/80 border border-zinc-700/50 rounded-2xl p-5 space-y-5">
-
-          {/* Título */}
-          <div className="flex items-center gap-2">
-            <span className="text-xl">🚗</span>
-            <div>
-              <span className="text-base font-bold text-white">Gerar Chassi (VIN) Válido</span>
-              <p className="text-xs text-zinc-500 mt-0.5">Algoritmo ISO 3779 — dígito verificador calculado automaticamente</p>
+      <main className="mx-auto max-w-3xl space-y-5 px-3 py-5 sm:px-4 sm:py-6">
+        <section className="rounded-2xl border border-yellow-500/25 bg-yellow-900/15 px-4 py-3">
+          <div className="flex items-start gap-3">
+            <Info className="mt-0.5 h-4 w-4 shrink-0 text-yellow-300" />
+            <div className="space-y-1 text-xs leading-relaxed text-yellow-100/80">
+              <p><strong className="text-yellow-100">Uso para testes.</strong> Os números gerados têm 17 caracteres e dígito verificador calculado.</p>
+              <p className="text-yellow-200/60">Não representam veículo real e não confirmam cadastro em DETRAN/SENATRAN.</p>
             </div>
           </div>
+        </section>
 
-          {/* Configurações */}
+        <section className="space-y-5 rounded-2xl border border-zinc-700/50 bg-zinc-900/80 p-4 sm:p-5">
+          <div>
+            <p className="text-xs font-semibold uppercase tracking-[0.18em] text-cyan-400">Configuração</p>
+            <h2 className="mt-1 text-lg font-bold text-white">Gerar VIN fictício para testes</h2>
+          </div>
+
           <div className="space-y-4">
-            {/* Montadora */}
             <div>
-              <label className="text-xs text-zinc-400 font-semibold mb-1.5 block">Montadora</label>
+              <label className="mb-1.5 block text-xs font-semibold text-zinc-300">Buscar montadora</label>
+              <div className="relative">
+                <Search className="pointer-events-none absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 text-zinc-500" />
+                <input
+                  value={buscaMontadora}
+                  onChange={(e) => setBuscaMontadora(e.target.value)}
+                  placeholder="Ex.: Chevrolet, Volkswagen, BYD..."
+                  className="w-full rounded-xl border border-zinc-700 bg-zinc-800 py-2.5 pl-9 pr-3 text-sm text-white outline-none transition-colors placeholder:text-zinc-600 focus:border-cyan-500"
+                />
+              </div>
+            </div>
+
+            <div>
+              <label className="mb-1.5 block text-xs font-semibold text-zinc-300">Montadora</label>
               <select
                 value={montadoraIdx}
-                onChange={e => setMontadoraIdx(Number(e.target.value))}
-                className="w-full px-3 py-2.5 bg-zinc-800 border border-zinc-700 rounded-xl text-white text-sm focus:outline-none focus:border-cyan-500 transition-colors"
+                onChange={(e) => setMontadoraIdx(Number(e.target.value))}
+                className="w-full rounded-xl border border-zinc-700 bg-zinc-800 px-3 py-2.5 text-sm text-white outline-none transition-colors focus:border-cyan-500"
               >
-                {MONTADORAS_VIN.map((m, i) => (
-                  <option key={m.wmi} value={i}>{m.nome}</option>
+                {montadorasFiltradas.map(({ item, index }) => (
+                  <option key={`${item.wmi}-${index}`} value={index}>{item.nome}</option>
                 ))}
               </select>
-              <p className="text-xs text-zinc-500 mt-1.5">
-                Código WMI: <span className="font-mono text-cyan-400">{montadora.wmi}</span>
-                <span className="mx-2 text-zinc-700">|</span>
-                Modelos: {montadora.modelos.join(', ')}
-              </p>
+              {montadorasFiltradas.length === 0 && (
+                <p className="mt-1.5 text-xs text-red-300">Nenhuma montadora encontrada. Limpe a busca para ver todas.</p>
+              )}
             </div>
 
-            {/* Ano + Quantidade */}
-            <div className="grid grid-cols-2 gap-4">
+            <div className="grid grid-cols-1 gap-4 sm:grid-cols-2">
               <div>
-                <label className="text-xs text-zinc-400 font-semibold mb-1.5 block">Ano do Veículo</label>
+                <label className="mb-1.5 block text-xs font-semibold text-zinc-300">Ano do veículo</label>
                 <select
                   value={anoCode}
-                  onChange={e => setAnoCode(e.target.value)}
-                  className="w-full px-3 py-2.5 bg-zinc-800 border border-zinc-700 rounded-xl text-white text-sm focus:outline-none focus:border-cyan-500 transition-colors"
+                  onChange={(e) => setAnoCode(e.target.value)}
+                  className="w-full rounded-xl border border-zinc-700 bg-zinc-800 px-3 py-2.5 text-sm text-white outline-none transition-colors focus:border-cyan-500"
                 >
-                  {ANOS_VIN.map(a => (
+                  {ANOS_VIN.map((a) => (
                     <option key={a.code} value={a.code}>{a.ano}</option>
                   ))}
                 </select>
-                <p className="text-xs text-zinc-500 mt-1.5">Posição 10: <span className="font-mono text-cyan-400">{anoCode}</span></p>
               </div>
+
               <div>
-                <label className="text-xs text-zinc-400 font-semibold mb-1.5 block">Quantidade</label>
+                <label className="mb-1.5 block text-xs font-semibold text-zinc-300">Quantidade</label>
                 <select
                   value={quantidade}
-                  onChange={e => setQuantidade(Number(e.target.value))}
-                  className="w-full px-3 py-2.5 bg-zinc-800 border border-zinc-700 rounded-xl text-white text-sm focus:outline-none focus:border-cyan-500 transition-colors"
+                  onChange={(e) => setQuantidade(Number(e.target.value))}
+                  className="w-full rounded-xl border border-zinc-700 bg-zinc-800 px-3 py-2.5 text-sm text-white outline-none transition-colors focus:border-cyan-500"
                 >
-                  {[1,2,3,5,10].map(n => (
-                    <option key={n} value={n}>{n} chassi{n > 1 ? 's' : ''}</option>
+                  {[1, 2, 3, 5, 10].map((n) => (
+                    <option key={n} value={n}>{n} chassi{n > 1 ? "s" : ""}</option>
                   ))}
                 </select>
               </div>
             </div>
           </div>
 
-          {/* Estrutura explicativa */}
-          <div className="bg-zinc-800/50 border border-zinc-700/40 rounded-xl p-3">
-            <p className="text-xs text-zinc-400 font-semibold mb-2">📐 Estrutura do VIN (17 caracteres)</p>
-            <div className="flex flex-wrap gap-1.5 font-mono text-xs">
-              <span className="px-2 py-1 bg-cyan-900/50 border border-cyan-500/30 rounded text-cyan-300">{montadora.wmi} = Montadora</span>
-              <span className="px-2 py-1 bg-purple-900/50 border border-purple-500/30 rounded text-purple-300">{montadora.vds} = Modelo/Motor</span>
-              <span className="px-2 py-1 bg-yellow-900/50 border border-yellow-500/30 rounded text-yellow-300">? = Check digit</span>
-              <span className="px-2 py-1 bg-green-900/50 border border-green-500/30 rounded text-green-300">{anoCode} = Ano {anoInfo.ano}</span>
-              <span className="px-2 py-1 bg-orange-900/50 border border-orange-500/30 rounded text-orange-300">A = Fábrica</span>
-              <span className="px-2 py-1 bg-zinc-700/80 border border-zinc-600/30 rounded text-zinc-300">XXXXXX = Sequencial</span>
-            </div>
-          </div>
-
-          {/* Botão gerar */}
           <button
+            type="button"
             onClick={gerar}
-            className="w-full py-4 bg-gradient-to-r from-cyan-600 to-blue-600 hover:opacity-90 active:scale-[0.98] text-white font-bold rounded-xl flex items-center justify-center gap-2 transition-all shadow-lg text-base"
+            disabled={montadorasFiltradas.length === 0}
+            className="flex w-full items-center justify-center gap-2 rounded-xl bg-gradient-to-r from-cyan-600 to-blue-600 py-3.5 text-base font-bold text-white shadow-lg transition-all hover:opacity-90 active:scale-[0.99] disabled:cursor-not-allowed disabled:opacity-40"
           >
-            <RefreshCw className="w-5 h-5" />
-            Gerar {quantidade > 1 ? `${quantidade} Chassi` : 'Chassi'}
+            <RefreshCw className="h-5 w-5" />
+            Gerar {quantidade > 1 ? `${quantidade} chassis` : "chassi"}
           </button>
-        </div>
 
-        {/* Resultados */}
+          <div className="overflow-hidden rounded-xl border border-zinc-700/50 bg-zinc-950/35">
+            <button
+              type="button"
+              onClick={() => setDetalhesAbertos((aberto) => !aberto)}
+              className="flex w-full items-center justify-between gap-3 px-4 py-3 text-left"
+            >
+              <span className="text-xs font-semibold text-zinc-300">Ver detalhes do VIN</span>
+              <ChevronDown className={`h-4 w-4 text-zinc-500 transition-transform ${detalhesAbertos ? "rotate-180" : ""}`} />
+            </button>
+
+            {detalhesAbertos && montadora && anoInfo && (
+              <div className="grid gap-2 border-t border-zinc-800 px-4 py-3 text-xs text-zinc-400 sm:grid-cols-2">
+                <p>WMI: <span className="font-mono text-cyan-300">{montadora.wmi}</span></p>
+                <p>VDS: <span className="font-mono text-purple-300">{montadora.vds}</span></p>
+                <p>Dígito verificador: <span className="text-zinc-200">posição 9</span></p>
+                <p>Ano: <span className="text-zinc-200">{anoInfo.ano} ({anoCode})</span></p>
+                <p>Fábrica: <span className="text-zinc-200">posição 11</span></p>
+                <p>Sequencial: <span className="text-zinc-200">posições 12–17</span></p>
+                <p className="sm:col-span-2">Modelos cadastrados como referência: <span className="text-zinc-300">{montadora.modelos.join(", ")}</span></p>
+                <p className="sm:col-span-2 text-zinc-500">A associação de WMI/VDS nesta ferramenta é uma base interna de teste e não deve ser interpretada como consulta oficial.</p>
+              </div>
+            )}
+          </div>
+        </section>
+
         {resultados.length > 0 && (
-          <div className="bg-zinc-900/80 border border-zinc-700/50 rounded-2xl p-5 space-y-3">
-            <div className="flex items-center justify-between">
-              <h3 className="text-sm font-bold text-white">
-                {resultados.length} chassi{resultados.length > 1 ? 's' : ''} gerado{resultados.length > 1 ? 's' : ''}
-              </h3>
-              <div className="flex gap-2">
+          <section className="space-y-4 rounded-2xl border border-zinc-700/50 bg-zinc-900/80 p-4 sm:p-5">
+            <div className="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
+              <div>
+                <p className="text-xs font-semibold uppercase tracking-[0.18em] text-cyan-400">Resultados</p>
+                <h2 className="mt-1 text-base font-bold text-white">
+                  {resultados.length} chassi{resultados.length > 1 ? "s" : ""} gerado{resultados.length > 1 ? "s" : ""}
+                </h2>
+              </div>
+
+              <div className="grid grid-cols-2 gap-2 sm:flex">
                 {resultados.length > 1 && (
                   <button
+                    type="button"
                     onClick={copiarTodos}
-                    className="flex items-center gap-1.5 px-3 py-1.5 bg-cyan-600/20 border border-cyan-500/30 hover:bg-cyan-600/30 text-cyan-300 rounded-lg text-xs font-bold transition-colors"
+                    className="flex items-center justify-center gap-1.5 rounded-lg border border-cyan-500/30 bg-cyan-600/20 px-3 py-2 text-xs font-bold text-cyan-300 transition-colors hover:bg-cyan-600/30"
                   >
-                    <CheckCheck className="w-3.5 h-3.5" /> Copiar todos
+                    <CheckCheck className="h-3.5 w-3.5" /> Copiar todos
                   </button>
                 )}
                 <button
-                  onClick={() => setResultados([])}
-                  className="flex items-center gap-1.5 px-3 py-1.5 bg-red-600/20 border border-red-500/30 hover:bg-red-600/30 text-red-300 rounded-lg text-xs font-bold transition-colors"
+                  type="button"
+                  onClick={() => {
+                    setResultados([]);
+                    setCopiados(new Set());
+                  }}
+                  className="flex items-center justify-center gap-1.5 rounded-lg border border-red-500/30 bg-red-600/20 px-3 py-2 text-xs font-bold text-red-300 transition-colors hover:bg-red-600/30"
                 >
-                  <Trash2 className="w-3.5 h-3.5" /> Limpar
+                  <Trash2 className="h-3.5 w-3.5" /> Limpar
                 </button>
               </div>
             </div>
 
-            <div className="space-y-2">
+            <div className="space-y-3">
               {resultados.map(({ vin, key }) => (
-                <div
+                <article
                   key={key}
-                  className={`flex items-center justify-between px-4 py-3.5 rounded-xl border transition-all ${
-                    copiados.has(key)
-                      ? 'bg-cyan-950/40 border-cyan-500/40'
-                      : 'bg-zinc-800/60 border-zinc-700/50 hover:border-zinc-600'
-                  }`}
+                  className={`rounded-xl border p-4 transition-all ${copiados.has(key) ? "border-cyan-500/40 bg-cyan-950/30" : "border-zinc-700/50 bg-zinc-800/60"}`}
                 >
-                  <div>
-                    <p className="font-mono font-bold text-base tracking-widest">
-                      <span className="text-cyan-400">{vin.slice(0,3)}</span>
-                      <span className="text-purple-400">{vin.slice(3,8)}</span>
-                      <span className="text-yellow-400">{vin[8]}</span>
-                      <span className="text-green-400">{vin[9]}</span>
-                      <span className="text-orange-400">{vin[10]}</span>
-                      <span className="text-zinc-300">{vin.slice(11)}</span>
-                    </p>
-                    <p className="text-zinc-500 text-xs mt-0.5">
-                      {montadora.nome} — {anoInfo.ano} — Check digit: <span className="text-yellow-400 font-mono font-bold">{vin[8]}</span>
-                    </p>
+                  <div className="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
+                    <div className="min-w-0">
+                      <p className="text-[10px] font-semibold uppercase tracking-[0.18em] text-zinc-500">Chassi gerado</p>
+                      <p className="mt-1 break-all font-mono text-base font-bold tracking-[0.08em] text-white sm:text-lg sm:tracking-[0.14em]">
+                        {vin}
+                      </p>
+                      <p className="mt-1 text-xs text-zinc-500">
+                        {montadora.nome} • {anoInfo?.ano} • 17 caracteres
+                      </p>
+                    </div>
+
+                    <button
+                      type="button"
+                      onClick={() => copiarUm(key, vin)}
+                      className={`flex w-full shrink-0 items-center justify-center gap-2 rounded-xl px-4 py-2.5 text-xs font-bold transition-colors sm:w-auto ${copiados.has(key) ? "bg-cyan-500/10 text-cyan-300" : "bg-zinc-700/70 text-zinc-200 hover:bg-zinc-700"}`}
+                    >
+                      {copiados.has(key) ? <CheckCheck className="h-4 w-4" /> : <Copy className="h-4 w-4" />}
+                      {copiados.has(key) ? "Copiado" : "Copiar chassi"}
+                    </button>
                   </div>
-                  <button
-                    onClick={() => copiarUm(key, vin)}
-                    className={`p-2.5 rounded-xl transition-colors ${
-                      copiados.has(key)
-                        ? 'text-cyan-400 bg-cyan-500/10'
-                        : 'text-zinc-400 hover:text-white hover:bg-zinc-700'
-                    }`}
-                  >
-                    {copiados.has(key) ? <CheckCheck className="w-5 h-5" /> : <Copy className="w-5 h-5" />}
-                  </button>
-                </div>
+                </article>
               ))}
             </div>
-          </div>
+          </section>
         )}
 
-        {/* Rodapé informativo */}
-        <div className="bg-zinc-900/40 border border-zinc-800/50 rounded-2xl p-4 space-y-3">
-          <p className="text-xs text-zinc-400 font-semibold">ℹ️ Como funciona o VIN</p>
-          <div className="space-y-1.5 text-xs text-zinc-500 leading-relaxed">
-            <p>O <strong className="text-zinc-300">VIN (Vehicle Identification Number)</strong> é o número de chassi padrão internacional com 17 caracteres, definido pela norma ISO 3779.</p>
-            <p>O <strong className="text-zinc-300">dígito verificador</strong> (posição 9) é calculado matematicamente: cada caractere tem um valor numérico e um peso por posição. A soma é dividida por 11 e o resto determina o dígito.</p>
-            <p>Os chassi gerados aqui passam na validação de formato, mas são <strong className="text-zinc-300">fictícios</strong> — não correspondem a veículos reais cadastrados no DETRAN ou DENATRAN.</p>
-          </div>
-        </div>
+        <section className="rounded-2xl border border-zinc-800/60 bg-zinc-900/40 p-4 text-xs leading-relaxed text-zinc-500">
+          <p><strong className="text-zinc-300">VIN</strong> é o número de identificação veicular com 17 caracteres. Nesta ferramenta, o dígito verificador é calculado matematicamente para testes de formato.</p>
+        </section>
 
-        <div className="pb-6" />
-      </div>
+        <div className="pb-5" />
+      </main>
     </div>
   );
 }
