@@ -1721,6 +1721,18 @@ export async function ensureOrderStatusFlowTables(): Promise<void> {
         ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4
       `));
       await db.execute(sql.raw(`
+        CREATE TABLE IF NOT EXISTS orderStatusFlowAlternatives (
+          id INT AUTO_INCREMENT PRIMARY KEY,
+          flowId INT NOT NULL,
+          primaryStatusKey VARCHAR(64) NOT NULL,
+          alternativeStatusKey VARCHAR(64) NOT NULL,
+          sortOrder INT NOT NULL DEFAULT 0,
+          createdAt TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP,
+          UNIQUE KEY uq_status_flow_alternative (flowId, primaryStatusKey, alternativeStatusKey),
+          INDEX idx_status_flow_alternatives_flow (flowId, primaryStatusKey, sortOrder)
+        ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4
+      `));
+      await db.execute(sql.raw(`
         CREATE TABLE IF NOT EXISTS productStatusFlows (
           id INT AUTO_INCREMENT PRIMARY KEY,
           productId INT NOT NULL,
@@ -1809,6 +1821,18 @@ export async function getOrderStatusFlowDefinition(flowId: number) {
         ORDER BY i.sortOrder ASC, i.id ASC
       `);
   const itemRows = (itemResult as any)[0] as Array<{ statusKey: string; catalogueId?: number; isActive?: number }>;
+  const alternativeResult = Number(flow.isDefault) === 1
+    ? null
+    : await db.execute(sql`
+        SELECT primaryStatusKey, alternativeStatusKey, sortOrder
+        FROM orderStatusFlowAlternatives
+        WHERE flowId = ${flowId}
+        ORDER BY primaryStatusKey ASC, sortOrder ASC, id ASC
+      `);
+  const alternativeRows = alternativeResult
+    ? ((alternativeResult as any)[0] as Array<{ primaryStatusKey: string; alternativeStatusKey: string; sortOrder: number }>)
+    : [];
+
   return {
     id: Number(flow.id),
     name: String(flow.name),
@@ -1819,6 +1843,10 @@ export async function getOrderStatusFlowDefinition(flowId: number) {
     statusKeys: (itemRows || []).map((row) => String(row.statusKey)),
     unavailableKeys: Number(flow.isDefault) === 1 ? [] : (itemRows || [])
       .filter(row => !row.catalogueId || Number(row.isActive) !== 1).map(row => String(row.statusKey)),
+    alternativeRules: (alternativeRows || []).map((row) => ({
+      primaryKey: String(row.primaryStatusKey),
+      alternativeKey: String(row.alternativeStatusKey),
+    })),
   };
 }
 
@@ -2032,9 +2060,11 @@ async function normalizeCustomFlowStatusKeys(statusKeys: string[], tx: any) {
   catch (error) { throw new TRPCError({ code: 'BAD_REQUEST', message: error instanceof Error ? error.message : 'Revise as etapas.' }); }
 }
 
+type StatusFlowAlternativeRule = { primaryKey: string; alternativeKey: string };
+
 type StatusFlowConfigInput = {
   id: number; name?: string; description?: string | null; statusKeys?: string[];
-  productIds?: number[]; isActive?: number;
+  productIds?: number[]; isActive?: number; alternativeRules?: StatusFlowAlternativeRule[];
 };
 
 async function writeOrderStatusFlowConfig(tx: any, data: StatusFlowConfigInput) {
@@ -2048,7 +2078,8 @@ async function writeOrderStatusFlowConfig(tx: any, data: StatusFlowConfigInput) 
   const keys = data.statusKeys === undefined ? undefined : await normalizeCustomFlowStatusKeys(data.statusKeys, tx);
   const previousItems = scopeRows(await tx.execute(sql`SELECT statusKey, sortOrder FROM orderStatusFlowItems WHERE flowId = ${data.id} ORDER BY sortOrder, id`));
   const previousProducts = scopeRows(await tx.execute(sql`SELECT productId FROM productStatusFlows WHERE flowId = ${data.id}`));
-  await archiveScopeDefinition(tx, 'flow', String(data.id), { flow, items: previousItems, products: previousProducts }, 'before-save');
+  const previousAlternatives = scopeRows(await tx.execute(sql`SELECT primaryStatusKey, alternativeStatusKey, sortOrder FROM orderStatusFlowAlternatives WHERE flowId = ${data.id} ORDER BY primaryStatusKey, sortOrder, id`));
+  await archiveScopeDefinition(tx, 'flow', String(data.id), { flow, items: previousItems, products: previousProducts, alternatives: previousAlternatives }, 'before-save');
   if (data.name !== undefined) await tx.execute(sql`UPDATE orderStatusFlows SET name = ${data.name} WHERE id = ${data.id}`);
   if (data.description !== undefined) await tx.execute(sql`UPDATE orderStatusFlows SET description = ${data.description ?? null} WHERE id = ${data.id}`);
   if (data.isActive !== undefined) await tx.execute(sql`UPDATE orderStatusFlows SET isActive = ${data.isActive} WHERE id = ${data.id}`);
@@ -2058,6 +2089,36 @@ async function writeOrderStatusFlowConfig(tx: any, data: StatusFlowConfigInput) 
       await tx.execute(sql`INSERT INTO orderStatusFlowItems (flowId, statusKey, sortOrder) VALUES (${data.id}, ${keys[index]}, ${index})`);
     }
   }
+  if (data.alternativeRules !== undefined && !isDefault) {
+    const activeKeys = new Set(keys ?? scopeRows(await tx.execute(sql`SELECT statusKey FROM orderStatusFlowItems WHERE flowId = ${data.id}`)).map((row: any) => String(row.statusKey)));
+    const cleanRules = data.alternativeRules
+      .map(rule => ({ primaryKey: String(rule.primaryKey || '').trim(), alternativeKey: String(rule.alternativeKey || '').trim() }))
+      .filter(rule => rule.primaryKey && rule.alternativeKey && rule.primaryKey !== rule.alternativeKey);
+
+    for (const rule of cleanRules) {
+      if (!activeKeys.has(rule.primaryKey) || !activeKeys.has(rule.alternativeKey)) {
+        throw new TRPCError({ code: 'BAD_REQUEST', message: 'Status principal e alternativo precisam pertencer a esta sequencia.' });
+      }
+    }
+
+    const seenAlternatives = new Set<string>();
+    for (const rule of cleanRules) {
+      if (seenAlternatives.has(rule.alternativeKey)) {
+        throw new TRPCError({ code: 'BAD_REQUEST', message: 'Um status alternativo nao pode pertencer a dois grupos na mesma sequencia.' });
+      }
+      seenAlternatives.add(rule.alternativeKey);
+    }
+
+    await tx.execute(sql`DELETE FROM orderStatusFlowAlternatives WHERE flowId = ${data.id}`);
+    const groupedOrder = new Map<string, number>();
+    for (const rule of cleanRules) {
+      const order = groupedOrder.get(rule.primaryKey) ?? 0;
+      await tx.execute(sql`INSERT INTO orderStatusFlowAlternatives (flowId, primaryStatusKey, alternativeStatusKey, sortOrder)
+        VALUES (${data.id}, ${rule.primaryKey}, ${rule.alternativeKey}, ${order})`);
+      groupedOrder.set(rule.primaryKey, order + 1);
+    }
+  }
+
   if (data.productIds !== undefined && !isDefault) {
     await tx.execute(sql`DELETE FROM productStatusFlows WHERE flowId = ${data.id}`);
     for (const productId of Array.from(new Set(data.productIds))) {
@@ -2069,6 +2130,7 @@ async function writeOrderStatusFlowConfig(tx: any, data: StatusFlowConfigInput) 
 
 export async function createOrderStatusFlowConfig(data: {
   name: string; description?: string | null; statusKeys: string[]; productIds: number[];
+  alternativeRules?: StatusFlowAlternativeRule[];
 }) {
   await ensureOrderStatusFlowTables();
   const db = await getDb();
