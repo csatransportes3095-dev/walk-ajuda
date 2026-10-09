@@ -1,29 +1,25 @@
 (() => {
   'use strict';
 
-  const UNUSED = ['Sem Agendamento', 'Ag. Ficar Ativa'];
-  let timer = 0;
-
-  function hideUnusedFilters() {
+  // LEGADO DESATIVADO.
+  // Este arquivo permanece apenas para compatibilidade com HTML antigo que ainda
+  // possa referencia-lo. Nao esconde mais nenhum filtro de /admin/orders.
+  function restoreLegacyHiddenFilters() {
     if (!location.pathname.startsWith('/admin/orders')) return;
-    document.querySelectorAll('button').forEach((button) => {
-      const text = (button.textContent || '').replace(/\s+/g, ' ').trim();
-      if (UNUSED.some(label => text.includes(label))) {
-        button.style.setProperty('display', 'none', 'important');
-        button.setAttribute('aria-hidden', 'true');
-        button.setAttribute('data-h2-hidden-unused-filter', '1');
-      }
+
+    document.querySelectorAll('[data-h2-hidden-unused-filter="1"]').forEach((element) => {
+      if (!(element instanceof HTMLElement)) return;
+      element.style.removeProperty('display');
+      element.removeAttribute('aria-hidden');
+      element.removeAttribute('data-h2-hidden-unused-filter');
     });
   }
 
-  function schedule() {
-    clearTimeout(timer);
-    timer = window.setTimeout(hideUnusedFilters, 40);
+  if (document.readyState === 'loading') {
+    document.addEventListener('DOMContentLoaded', restoreLegacyHiddenFilters, { once: true });
+  } else {
+    restoreLegacyHiddenFilters();
   }
 
-  new MutationObserver(schedule).observe(document.documentElement, { childList: true, subtree: true });
-  window.addEventListener('popstate', schedule);
-  window.addEventListener('load', schedule);
-  document.addEventListener('DOMContentLoaded', schedule);
-  schedule();
+  window.addEventListener('load', restoreLegacyHiddenFilters, { once: true });
 })();
