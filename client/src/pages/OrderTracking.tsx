@@ -1148,14 +1148,11 @@ export default function OrderTracking() {
                   ? (globalProgressSequenceQuery.data.keys ?? [])
                   : (progressConfigPublicQuery?.data ?? [])).filter((key: string) => allowedGlobal.has(key));
 
-              // Status alternativos são uma regra exclusiva da sequência personalizada.
-              // Antes da decisão, somente a etapa principal aparece ao cliente.
-              // Se o ADM selecionar uma alternativa, ela ocupa a mesma posição visual
-              // da principal. O histórico permanece intacto e decide qual foi a escolha
-              // mais recente do grupo.
+              // Status alternativos funcionam tanto em sequências personalizadas
+              // quanto no Padrão H2 global.
               const alternativeRules = customFlow
                 ? (statusFlowForOrderQuery.data?.alternativeRules ?? [])
-                : [];
+                : (globalProgressSequenceQuery.data?.alternativeRules ?? []);
               const alternativesByPrimary = new Map<string, string[]>();
               const alternativeKeys = new Set<string>();
               for (const rule of alternativeRules as Array<{ primaryKey: string; alternativeKey: string }>) {
@@ -1164,20 +1161,18 @@ export default function OrderTracking() {
                 alternativeKeys.add(rule.alternativeKey);
               }
 
-              const resolvedCustomKeys = customFlow
-                ? configuredKeys.flatMap((key: string) => {
-                    if (alternativeKeys.has(key)) return [];
-                    const alternatives = alternativesByPrimary.get(key) ?? [];
-                    if (alternatives.length === 0) return [key];
+              const resolvedConfiguredKeys = configuredKeys.flatMap((key: string) => {
+                if (alternativeKeys.has(key)) return [];
+                const alternatives = alternativesByPrimary.get(key) ?? [];
+                if (alternatives.length === 0) return [key];
 
-                    const groupKeys = new Set([key, ...alternatives]);
-                    const latestDecision = history.find((entry: any) => groupKeys.has(entry.status))?.status;
-                    return [latestDecision && groupKeys.has(latestDecision) ? latestDecision : key];
-                  })
-                : configuredKeys;
+                const groupKeys = new Set([key, ...alternatives]);
+                const latestDecision = history.find((entry: any) => groupKeys.has(entry.status))?.status;
+                return [latestDecision && groupKeys.has(latestDecision) ? latestDecision : key];
+              });
 
               // A custom flow, even empty, never inherits unrelated global stages.
-              const progressKeys = customFlow || resolvedCustomKeys.length > 0 ? resolvedCustomKeys : globalStatuses.map(status => status.key);
+              const progressKeys = customFlow || resolvedConfiguredKeys.length > 0 ? resolvedConfiguredKeys : globalStatuses.map(status => status.key);
               const progressSteps = progressKeys
                 .map((key: string) => dynamicStatuses.find((status: any) => status.key === key))
                 .filter(Boolean);
