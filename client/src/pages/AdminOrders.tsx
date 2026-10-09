@@ -196,6 +196,7 @@ function GlobalProgressSequenceModal({
   onClose,
   statuses,
   savedKeys,
+  savedAlternativeRules,
   enabled,
   onSave,
   isSaving,
@@ -205,8 +206,9 @@ function GlobalProgressSequenceModal({
   onClose: () => void;
   statuses: any[];
   savedKeys: string[];
+  savedAlternativeRules: Array<{ primaryKey: string; alternativeKey: string }>;
   enabled: boolean;
-  onSave: (keys: string[]) => void;
+  onSave: (keys: string[], alternativeRules: Array<{ primaryKey: string; alternativeKey: string }>) => void;
   isSaving: boolean;
   statusConfig: Record<string, { label: string; color: string; bg: string; icon: React.ReactNode }>;
 }) {
@@ -216,13 +218,28 @@ function GlobalProgressSequenceModal({
     return configured.length > 0 ? configured : getDefaultGlobalProgressKeys(statuses);
   }, [enabled, savedKeys.join(','), statuses]);
   const [localKeys, setLocalKeys] = useState<string[]>(initialKeys);
+  const [localAlternativeRules, setLocalAlternativeRules] = useState<Array<{ primaryKey: string; alternativeKey: string }>>(savedAlternativeRules ?? []);
 
-  useEffect(() => { if (open) setLocalKeys(initialKeys); }, [open, initialKeys.join(',')]);
+  useEffect(() => {
+    if (open) {
+      setLocalKeys(initialKeys);
+      setLocalAlternativeRules(savedAlternativeRules ?? []);
+    }
+  }, [open, initialKeys.join(','), JSON.stringify(savedAlternativeRules ?? [])]);
   if (!open) return null;
 
   const available = statuses.filter((s: any) => s.isActive === 1 && isGlobalStatus(s) && s.key !== 'cancelado');
   const add = (key: string) => setLocalKeys(prev => prev.includes(key) ? prev : [...prev, key]);
-  const remove = (key: string) => setLocalKeys(prev => prev.filter(k => k !== key));
+  const remove = (key: string) => {
+    setLocalKeys(prev => prev.filter(k => k !== key));
+    setLocalAlternativeRules(prev => prev.filter(rule => rule.primaryKey !== key && rule.alternativeKey !== key));
+  };
+  const setAlternativeForStatus = (alternativeKey: string, primaryKey: string) => {
+    setLocalAlternativeRules(prev => {
+      const rest = prev.filter(rule => rule.alternativeKey !== alternativeKey);
+      return primaryKey ? [...rest, { primaryKey, alternativeKey }] : rest;
+    });
+  };
   const move = (idx: number, delta: number) => setLocalKeys(prev => {
     const target = idx + delta;
     if (target < 0 || target >= prev.length) return prev;
@@ -258,7 +275,22 @@ function GlobalProgressSequenceModal({
                 <div key={key} className={`flex items-center gap-2 rounded-xl border border-white/10 p-2.5 ${cfg.bg}`}>
                   <span className="w-6 text-center text-xs font-black text-white/50">{idx + 1}</span>
                   <span className="scale-90">{cfg.icon}</span>
-                  <span className={`min-w-0 flex-1 text-sm font-bold ${cfg.color}`}>{cfg.label}</span>
+                  <div className="min-w-0 flex-1">
+                    <span className={`text-sm font-bold ${cfg.color}`}>{cfg.label}</span>
+                    {idx > 0 && (
+                      <select
+                        value={localAlternativeRules.find(rule => rule.alternativeKey === key)?.primaryKey ?? ""}
+                        onChange={(e) => setAlternativeForStatus(key, e.target.value)}
+                        className="mt-1 block w-full max-w-sm rounded-md border border-white/10 bg-black/30 px-2 py-1 text-[10px] text-white/70"
+                      >
+                        <option value="">Etapa normal</option>
+                        {localKeys.slice(0, idx).map(candidate => {
+                          const candidateCfg = statusConfig[candidate];
+                          return <option key={candidate} value={candidate}>Alternativa de: {candidateCfg?.label ?? candidate}</option>;
+                        })}
+                      </select>
+                    )}
+                  </div>
                   <button onClick={() => move(idx, -1)} disabled={idx === 0} className="rounded-lg p-1.5 text-white/50 hover:bg-white/10 disabled:opacity-20"><ArrowUp className="h-4 w-4" /></button>
                   <button onClick={() => move(idx, 1)} disabled={idx === localKeys.length - 1} className="rounded-lg p-1.5 text-white/50 hover:bg-white/10 disabled:opacity-20"><ArrowDown className="h-4 w-4" /></button>
                   <button onClick={() => remove(key)} className="rounded-lg p-1.5 text-red-400/70 hover:bg-red-500/15 hover:text-red-300"><X className="h-4 w-4" /></button>
@@ -277,7 +309,7 @@ function GlobalProgressSequenceModal({
             </div>
           </div>
           <button
-            onClick={() => onSave(localKeys)}
+            onClick={() => onSave(localKeys, localAlternativeRules)}
             disabled={isSaving || localKeys.length === 0}
             className="w-full rounded-xl bg-purple-600 px-4 py-3 text-sm font-black text-white hover:bg-purple-500 disabled:cursor-not-allowed disabled:opacity-40"
           >
@@ -2654,8 +2686,9 @@ export default function AdminOrders() {
         onClose={() => setShowGlobalProgressSequence(false)}
         statuses={dynamicStatuses as any[]}
         savedKeys={globalProgressSequenceQuery.data?.keys ?? []}
+        savedAlternativeRules={globalProgressSequenceQuery.data?.alternativeRules ?? []}
         enabled={globalProgressSequenceQuery.data?.enabled === true}
-        onSave={(keys) => saveGlobalProgressSequence.mutate({ statusKeys: keys })}
+        onSave={(keys, alternativeRules) => saveGlobalProgressSequence.mutate({ statusKeys: keys, alternativeRules })}
         isSaving={saveGlobalProgressSequence.isPending}
         statusConfig={ACTIVE_STATUS_CONFIG}
       />
