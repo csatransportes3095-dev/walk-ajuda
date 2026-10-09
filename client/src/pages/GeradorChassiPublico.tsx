@@ -1,4 +1,4 @@
-import { useMemo, useState } from "react";
+import { useEffect, useMemo, useState } from "react";
 import { toast } from "sonner";
 import {
   ArrowLeft,
@@ -72,6 +72,15 @@ export default function GeradorChassiPublico() {
           .includes(termo),
       );
   }, [buscaMontadora]);
+
+  useEffect(() => {
+    if (
+      montadorasFiltradas.length > 0 &&
+      !montadorasFiltradas.some(({ index }) => index === montadoraIdx)
+    ) {
+      setMontadoraIdx(montadorasFiltradas[0].index);
+    }
+  }, [montadorasFiltradas, montadoraIdx]);
 
   const gerar = () => {
     if (!montadora || !anoInfo) {
