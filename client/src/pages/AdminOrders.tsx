@@ -236,8 +236,19 @@ function GlobalProgressSequenceModal({
   };
   const setAlternativeForStatus = (alternativeKey: string, primaryKey: string) => {
     setLocalAlternativeRules(prev => {
-      const rest = prev.filter(rule => rule.alternativeKey !== alternativeKey);
-      return primaryKey ? [...rest, { primaryKey, alternativeKey }] : rest;
+      const withoutCurrent = prev.filter(rule => rule.alternativeKey !== alternativeKey);
+      if (!primaryKey) return withoutCurrent;
+
+      // Impede cadeia: um status alternativo nao pode ser principal de outro grupo.
+      const primaryAlreadyAlternative = withoutCurrent.some(rule => rule.alternativeKey === primaryKey);
+      if (primaryAlreadyAlternative) {
+        toast.error("Esse status ja e alternativa de outra etapa e nao pode virar principal.");
+        return withoutCurrent;
+      }
+
+      // Se o status que esta virando alternativa era principal, remove seus filhos.
+      const withoutChildren = withoutCurrent.filter(rule => rule.primaryKey !== alternativeKey);
+      return [...withoutChildren, { primaryKey, alternativeKey }];
     });
   };
   const move = (idx: number, delta: number) => setLocalKeys(prev => {
@@ -284,10 +295,13 @@ function GlobalProgressSequenceModal({
                         className="mt-1 block w-full max-w-sm rounded-md border border-white/10 bg-black/30 px-2 py-1 text-[10px] text-white/70"
                       >
                         <option value="">Etapa normal</option>
-                        {localKeys.slice(0, idx).map(candidate => {
-                          const candidateCfg = statusConfig[candidate];
-                          return <option key={candidate} value={candidate}>Alternativa de: {candidateCfg?.label ?? candidate}</option>;
-                        })}
+                        {localKeys
+                          .slice(0, idx)
+                          .filter(candidate => !localAlternativeRules.some(rule => rule.alternativeKey === candidate))
+                          .map(candidate => {
+                            const candidateCfg = statusConfig[candidate];
+                            return <option key={candidate} value={candidate}>Alternativa de: {candidateCfg?.label ?? candidate}</option>;
+                          })}
                       </select>
                     )}
                   </div>
