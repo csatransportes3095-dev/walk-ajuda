@@ -11,7 +11,10 @@ import {
   Trash2,
 } from "lucide-react";
 import { Link } from "wouter";
-import { gerarMultiplosVINs } from "@/lib/vinGenerator";
+import {
+  gerarMultiplosVINs,
+  obterPerfilFabricanteOficial,
+} from "@/lib/vinGenerator";
 import { trpc } from "@/lib/trpc";
 
 const FIPE_BASE = "https://fipe.parallelum.com.br/api/v2/cars";
@@ -52,31 +55,6 @@ type ResultadoVIN = {
   modelo: string;
   ano: number;
 };
-
-function codigoModeloSintetico(marca: string, modelo: string): { wmi: string; vds: string } {
-  const fonte = `${marca}|${modelo}`;
-  const alfabeto = "ABCDEFGHJKLMNPRSTUVWXYZ0123456789";
-
-  let hash = 2166136261;
-  for (let i = 0; i < fonte.length; i++) {
-    hash ^= fonte.charCodeAt(i);
-    hash = Math.imul(hash, 16777619);
-  }
-
-  const chars: string[] = [];
-  let valor = hash >>> 0;
-  for (let i = 0; i < 4; i++) {
-    chars.push(alfabeto[valor % alfabeto.length]);
-    valor = Math.floor(valor / alfabeto.length) || ((hash >>> (i + 1)) >>> 0);
-  }
-
-  // "Q" é deliberado: I, O e Q não são usados em VINs reais.
-  // O perfil permanece identificável como dado sintético de teste.
-  return {
-    wmi: `Q${chars[0]}${chars[1]}`,
-    vds: `${chars[2]}${chars[3]}TST`,
-  };
-}
 
 async function copiarTexto(texto: string): Promise<boolean> {
   try {
@@ -265,25 +243,30 @@ export default function GeradorChassiPublico() {
       return;
     }
 
-    const perfilTeste = codigoModeloSintetico(marca.name, modelo);
-    const vins = gerarMultiplosVINs(
-      perfilTeste.wmi,
-      perfilTeste.vds,
-      anoCode,
-      quantidade,
-    );
+    try {
+      const perfilTeste = obterPerfilFabricanteOficial(marca.name, modelo);
+      const vins = gerarMultiplosVINs(
+        perfilTeste.wmi,
+        perfilTeste.vds,
+        anoCode,
+        quantidade,
+      );
 
-    const agora = Date.now();
-    setResultados(
-      vins.map((vin, i) => ({
-        vin,
-        key: `${vin}-${i}-${agora}`,
-        marca: marca.name,
-        modelo,
-        ano: anoInfo.ano,
-      })),
-    );
-    setCopiados(new Set());
+      const agora = Date.now();
+      setResultados(
+        vins.map((vin, i) => ({
+          vin,
+          key: `${vin}-${i}-${agora}`,
+          marca: marca.name,
+          modelo,
+          ano: anoInfo.ano,
+        })),
+      );
+      setCopiados(new Set());
+    } catch (error) {
+      const mensagem = error instanceof Error ? error.message : "Não foi possível gerar VIN válido.";
+      toast.error(mensagem);
+    }
   };
 
   const copiarUm = async (key: string, vin: string) => {
@@ -372,7 +355,7 @@ export default function GeradorChassiPublico() {
                 Marca, ano e modelo são carregados da base de veículos.
               </p>
               <p className="text-yellow-200/60">
-                O chassi gerado continua sintético para testes e não representa veículo real cadastrado.
+                O chassi gerado segue o padrão internacional de VIN e não representa veículo real cadastrado.
               </p>
             </div>
           </div>
@@ -542,15 +525,15 @@ export default function GeradorChassiPublico() {
                   Modelo: <span className="text-zinc-200">{modelo}</span>
                 </p>
                 <p>
-                  Perfil sintético:{" "}
+                  WMI do fabricante:{" "}
                   <span className="font-mono text-cyan-300">
-                    {codigoModeloSintetico(marca.name, modelo).wmi}
+                    {obterPerfilFabricanteOficial(marca.name, modelo).wmi}
                   </span>
                 </p>
                 <p>
-                  Código de teste:{" "}
+                  VDS do fabricante:{" "}
                   <span className="font-mono text-purple-300">
-                    {codigoModeloSintetico(marca.name, modelo).vds}
+                    {obterPerfilFabricanteOficial(marca.name, modelo).vds}
                   </span>
                 </p>
                 <p>
@@ -564,7 +547,7 @@ export default function GeradorChassiPublico() {
                   </span>
                 </p>
                 <p className="sm:col-span-2 text-zinc-500">
-                  Marca/modelo/ano vêm do catálogo FIPE. O identificador gerado usa perfil sintético deliberadamente incompatível com VIN real.
+                  Marca/modelo/ano vêm do catálogo FIPE. O identificador usa WMI/VDS de fabricante válido para manter o padrão técnico do VIN sem inserir caracteres inválidos.
                 </p>
               </div>
             )}
