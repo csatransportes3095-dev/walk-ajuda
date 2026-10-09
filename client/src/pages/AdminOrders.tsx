@@ -5245,7 +5245,7 @@ export default function AdminOrders() {
                           const badgeColor = folderBadgeMap[r.folderType] || folderBadgeMap.active;
                           return (
                             <div key={`emg-${r.registrationId}-${r.subOrderIndex ?? 0}`}
-                              className={`bg-card border rounded-xl overflow-hidden transition-all ${cardBorder}`}
+                              className={`bg-card border rounded-xl overflow-hidden transition-all ${statusCfg?.color ?? "text-foreground"} [&_.text-foreground]:!text-current [&_.text-muted-foreground]:!text-current/70 ${cardBorder}`}
                             >
                               {/* Faixa da pasta */}
                               <div className={`px-3 py-1 border-b border-white/5 flex items-center gap-1.5 ${
