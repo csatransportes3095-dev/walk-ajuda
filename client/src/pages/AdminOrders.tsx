@@ -5109,9 +5109,9 @@ export default function AdminOrders() {
                         { id: "em_analise",             label: "Em Análise",        desc: "Foto em análise",        icon: Search,       glow: "#38bdf8", ab: "linear-gradient(135deg,#0c4a6e,#075985)", ac: "#38bdf8", at: "#bae6fd" },
                         { id: "foto_aprovada",          label: "Foto Aprovada",      desc: "Foto de perfil aprovada", icon: FileCheck,    glow: "#f97316", ab: "linear-gradient(135deg,#7c2d12,#9a3412)", ac: "#f97316", at: "#fed7aa" },
                         { id: "foto_reprovada",         label: "Foto Reprovada",     desc: "Foto reprovada",           icon: XCircle,      glow: "#ef4444", ab: "linear-gradient(135deg,#7f1d1d,#991b1b)", ac: "#ef4444", at: "#fecaca" },
+                        { id: "aguardando_ativa",       label: "Ag. Ficar Ativa",   desc: "Aguardando ficar ativa", icon: Zap,          glow: "#84cc16", ab: "linear-gradient(135deg,#1a2e05,#365314)", ac: "#84cc16", at: "#bef264" },
                         { id: "doc_veiculo_teste",       label: "Doc em Teste",       desc: "DOC VEÍCULO EM TESTE",   icon: Search,       glow: "#60a5fa", ab: "linear-gradient(135deg,#1e3a8a,#1d4ed8)", ac: "#60a5fa", at: "#dbeafe" },
                         { id: "novo",                   label: "Novos",             desc: "Não visualizados",       icon: Star,         glow: "#6366f1", ab: "linear-gradient(135deg,#1e1b4b,#312e81)", ac: "#6366f1", at: "#a5b4fc" },
-                        { id: "aguardando_ativa",       label: "Ag. Ficar Ativa",   desc: "Aguardando ficar ativa", icon: Zap,          glow: "#84cc16", ab: "linear-gradient(135deg,#1a2e05,#365314)", ac: "#84cc16", at: "#bef264" },
                         { id: "conta_ativa",            label: "Conta Ativa",       desc: "Conta já ativa",         icon: UserCheck,    glow: "#10b981", ab: "linear-gradient(135deg,#022c22,#064e3b)", ac: "#10b981", at: "#6ee7b7" },
                       ] as const;
                       const counts: Record<string, number> = { all: group.orders.length, novo: 0 };
