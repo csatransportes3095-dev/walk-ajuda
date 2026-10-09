@@ -13,6 +13,7 @@ import {
 import { Link } from "wouter";
 import {
   gerarMultiplosVINs,
+  gerarVINsDeTestePorChassiOriginal,
   obterPerfilFabricanteOficial,
 } from "@/lib/vinGenerator";
 import { trpc } from "@/lib/trpc";
@@ -89,6 +90,8 @@ export default function GeradorChassiPublico() {
   const [buscaModelo, setBuscaModelo] = useState("");
   const [modelo, setModelo] = useState("");
   const [anoCode, setAnoCode] = useState("G");
+  const [usarChassiOriginal, setUsarChassiOriginal] = useState(false);
+  const [chassiOriginal, setChassiOriginal] = useState("");
   const [quantidade, setQuantidade] = useState(1);
   const [resultados, setResultados] = useState<ResultadoVIN[]>([]);
   const [copiados, setCopiados] = useState<Set<string>>(new Set());
@@ -265,13 +268,26 @@ export default function GeradorChassiPublico() {
     }
 
     try {
-      const perfilTeste = obterPerfilFabricanteOficial(marca.name, modelo);
-      const vins = gerarMultiplosVINs(
-        perfilTeste.wmi,
-        perfilTeste.vds,
-        anoCode,
-        quantidade,
-      );
+      const chassiBase = chassiOriginal.toUpperCase().replace(/[\s-]/g, "");
+      let vins: string[];
+
+      if (usarChassiOriginal) {
+        if (chassiBase[9] !== anoCode) {
+          toast.error("O ano selecionado precisa ser o mesmo do chassi original.");
+          return;
+        }
+
+        vins = gerarVINsDeTestePorChassiOriginal(chassiBase, quantidade);
+      } else {
+        const perfilTeste = obterPerfilFabricanteOficial(marca.name, modelo);
+        vins = gerarMultiplosVINs(
+          perfilTeste.wmi,
+          perfilTeste.vds,
+          anoCode,
+          quantidade,
+          perfilTeste.plant,
+        );
+      }
 
       const agora = Date.now();
       setResultados(
@@ -376,7 +392,7 @@ export default function GeradorChassiPublico() {
                 Marca, ano e modelo são carregados da base de veículos.
               </p>
               <p className="text-yellow-200/60">
-                O chassi gerado segue o padrão internacional de VIN e não representa veículo real cadastrado.
+                O VIN gerado é sintético para testes; seu serial não é emitido pela montadora. Use o modo por chassi original para preservar o descritor do veículo.
               </p>
             </div>
           </div>
@@ -392,7 +408,46 @@ export default function GeradorChassiPublico() {
             </h2>
           </div>
 
+          <div className="grid grid-cols-2 gap-1 rounded-xl bg-zinc-950 p-1">
+            <button
+              type="button"
+              aria-pressed={!usarChassiOriginal}
+              onClick={() => setUsarChassiOriginal(false)}
+              className={`rounded-lg px-3 py-2 text-xs font-semibold transition-colors ${usarChassiOriginal ? "text-zinc-400 hover:text-white" : "bg-zinc-700 text-white"}`}
+            >
+              Perfil FIPE
+            </button>
+            <button
+              type="button"
+              aria-pressed={usarChassiOriginal}
+              onClick={() => setUsarChassiOriginal(true)}
+              className={`rounded-lg px-3 py-2 text-xs font-semibold transition-colors ${usarChassiOriginal ? "bg-cyan-700 text-white" : "text-zinc-400 hover:text-white"}`}
+            >
+              Chassi original
+            </button>
+          </div>
+
           <div className="space-y-4">
+            {usarChassiOriginal && (
+              <div>
+                <label className="mb-1.5 block text-xs font-semibold text-zinc-300">
+                  Chassi original para usar como perfil
+                </label>
+                <input
+                  value={chassiOriginal}
+                  onChange={(event) =>
+                    setChassiOriginal(event.target.value.toUpperCase().replace(/[\s-]/g, ""))
+                  }
+                  maxLength={17}
+                  placeholder="Ex.: 9BRB29BT0J2189102"
+                  className="w-full rounded-xl border border-zinc-700 bg-zinc-800 px-3 py-2.5 font-mono text-sm text-white outline-none transition-colors placeholder:text-zinc-600 focus:border-cyan-500"
+                />
+                <p className="mt-1.5 text-xs leading-relaxed text-zinc-500">
+                  Preserva as posições 1–8, 10 e 11; troca o serial 12–17 e recalcula a posição 9. Selecione abaixo a mesma marca, modelo e ano do original.
+                </p>
+              </div>
+            )}
+
             <div>
               <label className="mb-1.5 block text-xs font-semibold text-zinc-300">
                 Buscar marca
@@ -530,7 +585,8 @@ export default function GeradorChassiPublico() {
               carregandoModelos ||
               !marca ||
               !modelo ||
-              modelosFiltrados.length === 0
+              modelosFiltrados.length === 0 ||
+              (usarChassiOriginal && chassiOriginal.length !== 17)
             }
             className="flex w-full items-center justify-center gap-2 rounded-xl bg-gradient-to-r from-cyan-600 to-blue-600 py-3.5 text-base font-bold text-white shadow-lg transition-all hover:opacity-90 active:scale-[0.99] disabled:cursor-not-allowed disabled:opacity-40"
           >
@@ -566,13 +622,13 @@ export default function GeradorChassiPublico() {
                   Modelo: <span className="text-zinc-200">{modelo}</span>
                 </p>
                 <p>
-                  WMI do fabricante:{" "}
+                  WMI da marca (referência):{" "}
                   <span className="font-mono text-cyan-300">
                     {obterPerfilFabricanteOficial(marca.name, modelo).wmi}
                   </span>
                 </p>
                 <p>
-                  VDS do fabricante:{" "}
+                  VDS de teste:{" "}
                   <span className="font-mono text-purple-300">
                     {obterPerfilFabricanteOficial(marca.name, modelo).vds}
                   </span>
@@ -588,7 +644,9 @@ export default function GeradorChassiPublico() {
                   </span>
                 </p>
                 <p className="sm:col-span-2 text-zinc-500">
-                  Marca/modelo/ano vêm do catálogo FIPE. O identificador usa WMI/VDS de fabricante válido para manter o padrão técnico do VIN sem inserir caracteres inválidos.
+                  {usarChassiOriginal
+                    ? "O padrão do VIN original é preservado para manter a identificação do modelo no decodificador; o serial gerado é sintético e serve somente para testes."
+                    : "Marca, modelo e ano são referências do catálogo FIPE. A sequência gerada é sintética e não confirma um veículo real nem seus dados no decodificador."}
                 </p>
               </div>
             )}

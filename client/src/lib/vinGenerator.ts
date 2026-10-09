@@ -22,7 +22,7 @@ const VIN_WEIGHTS = [8,7,6,5,4,3,2,10,0,9,8,7,6,5,4,3,2];
 const VIN_VALID_CHARS = /^[A-HJ-NPR-Z0-9]+$/;
 const VIN_INVALID_CHARS = /[IOQ]/i;
 const VIN_VALID_YEARS = new Set(['A','B','C','D','E','F','G','H','J','K','L','M','N','P','R','S','T','V','W','X','Y','1','2','3','4','5','6','7','8','9']);
-const VIN_VALID_PLANTS = 'ABCDEFGHJKLMNPRSTUVWXYZ';
+const VIN_VALID_PLANTS = 'ABCDEFGHJKLMNPRSTUVWXYZ0123456789';
 
 function calcCheckDigit(vin: string): string {
   if (vin.length !== 17) {
@@ -113,6 +113,7 @@ export function clearSessionHistory(): void {
 export interface Montadora {
   wmi: string;
   vds: string;
+  plant?: string;
   nome: string;
   modelos: string[];
 }
@@ -122,7 +123,7 @@ export const MONTADORAS_VIN: Montadora[] = [
   { wmi: '9BF', vds: 'ZAA5G', nome: 'Ford Brasil',          modelos: ['Ka', 'EcoSport', 'Territory', 'Ranger'] },
   { wmi: '9BG', vds: 'RB48Y', nome: 'GM Chevrolet Brasil',  modelos: ['Onix', 'Tracker', 'S10', 'Montana'] },
   { wmi: '9BS', vds: 'A3ANA', nome: 'Fiat Brasil',          modelos: ['Strada', 'Pulse', 'Toro', 'Argo'] },
-  { wmi: '8AF', vds: 'ZFH4D', nome: 'Toyota Brasil',        modelos: ['Corolla', 'Hilux', 'SW4', 'Yaris'] },
+  { wmi: '9BR', vds: 'B29BT', plant: '2', nome: 'Toyota Brasil', modelos: ['Etios', 'Etios Cross', 'Corolla', 'Hilux', 'SW4', 'Yaris'] },
   { wmi: '93H', vds: 'GEG75', nome: 'Honda Brasil',         modelos: ['Civic', 'HR-V', 'CR-V', 'City'] },
   { wmi: '9BD', vds: 'X5ANA', nome: 'Jeep Brasil (FCA)',    modelos: ['Renegade', 'Compass', 'Commander'] },
   { wmi: '9BH', vds: 'ZA3A4', nome: 'Hyundai Brasil',       modelos: ['HB20', 'Creta', 'Tucson', 'Santa Fe'] },
@@ -132,7 +133,7 @@ export const MONTADORAS_VIN: Montadora[] = [
   { wmi: '9BK', vds: 'AA3B5', nome: 'Caoa Chery Brasil',          modelos: ['Tiggo 2', 'Tiggo 5x', 'Tiggo 7', 'Tiggo 8', 'Arrizo 6'] },
   { wmi: '935', vds: 'ZAA4G', nome: 'Peugeot Brasil (Stellantis)', modelos: ['208', '2008', '3008', '408', 'Expert'] },
   { wmi: '935', vds: 'ZBB3H', nome: 'Citroën Brasil (Stellantis)', modelos: ['C3', 'C4 Cactus', 'Aircross', 'Jumpy'] },
-  { wmi: '9BR', vds: 'AA5A3', nome: 'Mitsubishi Brasil',           modelos: ['L200 Triton', 'Pajero Sport', 'Eclipse Cross', 'Outlander'] },
+  { wmi: '93X', vds: 'AA5A3', nome: 'Mitsubishi Brasil',           modelos: ['L200 Triton', 'Pajero Sport', 'Eclipse Cross', 'Outlander'] },
   { wmi: 'KNA', vds: 'GM4A5', nome: 'Kia (Coreia do Sul)',         modelos: ['Sportage', 'Sorento', 'Stinger', 'EV6', 'Carnival'] },
   { wmi: 'LGW', vds: 'CE3BB', nome: 'GWM/Haval (China)',           modelos: ['Haval H6', 'Haval H2', 'Ora 03', 'Tank 300', 'Poer'] },
   { wmi: 'LB1', vds: 'AA1B3', nome: 'JAC Motors (China)',          modelos: ['J3', 'J5', 'T40', 'T60', 'iEV40', 'e-JS4'] },
@@ -155,8 +156,8 @@ export const ANOS_VIN: { code: string; ano: number }[] = [
 
 export function obterPerfilFabricanteOficial(
   marca: string,
-  modelo: string,
-): { wmi: string; vds: string } {
+  _modelo: string,
+): { wmi: string; vds: string; plant?: string } {
   const normalizarTexto = (valor: string) =>
     valor
       .normalize("NFD")
@@ -180,17 +181,11 @@ export function obterPerfilFabricanteOficial(
     return {
       wmi: fabricanteDireto.wmi,
       vds: fabricanteDireto.vds,
+      plant: fabricanteDireto.plant,
     };
   }
 
-  const fallback = MONTADORAS_VIN.find((item) =>
-    normalizarTexto(item.nome).includes(marcaNormalizada.slice(0, 6)),
-  ) ?? MONTADORAS_VIN[0];
-
-  return {
-    wmi: fallback.wmi,
-    vds: fallback.vds,
-  };
+  throw new Error(`Não há WMI confirmado para a marca ${marca}.`);
 }
 
 // ════════════════════════════════════════════════════════════
@@ -264,10 +259,59 @@ export function gerarMultiplosVINs(
   vds: string,
   yearCode: string,
   quantidade: number,
+  plant = 'A',
 ): string[] {
   const results: string[] = [];
   for (let i = 0; i < quantidade; i++) {
-    results.push(gerarVINUnico(wmi, vds, yearCode));
+    results.push(gerarVINUnico(wmi, vds, yearCode, plant));
   }
+  return results;
+}
+
+export function gerarVINsDeTestePorChassiOriginal(
+  chassiOriginal: string,
+  quantidade: number,
+): string[] {
+  const original = chassiOriginal.toUpperCase().replace(/[\s-]/g, '');
+
+  if (original.length !== 17 || !VIN_VALID_CHARS.test(original)) {
+    throw new Error('Informe um chassi original com 17 caracteres válidos, sem I, O ou Q.');
+  }
+
+  if (!VIN_VALID_YEARS.has(original[9])) {
+    throw new Error('O código de ano na posição 10 do chassi original não é válido.');
+  }
+
+  if (!Number.isInteger(quantidade) || quantidade < 1 || quantidade > 10) {
+    throw new Error('A quantidade deve estar entre 1 e 10 chassis.');
+  }
+
+  const prefixoDescricao = original.slice(0, 8);
+  const anoEPlanta = original.slice(9, 11);
+  const results: string[] = [];
+
+  for (let index = 0; index < quantidade; index++) {
+    let generated = '';
+
+    for (let attempt = 0; attempt < 1000; attempt++) {
+      const serial = String(cryptoRandInt(0, 999999)).padStart(6, '0');
+      const partial = `${prefixoDescricao}0${anoEPlanta}${serial}`;
+      const checkDigit = calcCheckDigit(partial);
+      const candidate = `${prefixoDescricao}${checkDigit}${anoEPlanta}${serial}`;
+
+      if (candidate !== original && !_sessionHistory.has(candidate)) {
+        generated = candidate;
+        _sessionHistory.add(candidate);
+        break;
+      }
+    }
+
+    if (!generated) {
+      throw new Error('Não foi possível gerar um serial de teste único.');
+    }
+
+    results.push(generated);
+  }
+
   return results;
 }
