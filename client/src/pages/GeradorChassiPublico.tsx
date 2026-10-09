@@ -23,26 +23,28 @@ type ResultadoVIN = {
 };
 
 const MODELOS_TRANSPORTE: Record<string, string[]> = {
-  "9BW": ["Gol", "Voyage", "Polo", "Virtus", "T-Cross", "Nivus", "Fox", "SpaceFox", "Jetta"],
-  "9BF": ["Ka", "Ka Sedan", "EcoSport", "Territory"],
-  "9BG": ["Onix", "Onix Plus", "Prisma", "Cobalt", "Spin", "Tracker", "Cruze", "Joy", "Montana"],
-  "9BS": ["Argo", "Cronos", "Mobi", "Grand Siena", "Siena", "Palio", "Uno", "Pulse", "Fastback", "Idea"],
-  "8AF": ["Etios", "Etios Sedan", "Yaris", "Yaris Sedan", "Corolla", "Corolla Cross"],
-  "93H": ["City", "City Hatch", "Fit", "WR-V", "HR-V", "Civic"],
-  "9BD": ["Renegade", "Compass", "Commander"],
-  "9BH": ["HB20", "HB20S", "Creta", "Tucson", "Kona Hybrid"],
-  "9BM": ["Kwid", "Sandero", "Logan", "Duster", "Captur", "Kardian"],
-  "9BN": ["Versa", "March", "Kicks", "Sentra"],
-  "LGX": ["Dolphin", "Dolphin Mini", "King", "Song Plus", "Yuan Plus", "Seal", "Han", "Tan"],
-  "9BK": ["Arrizo 5", "Arrizo 6", "Tiggo 3X", "Tiggo 5X", "Tiggo 7", "Tiggo 8"],
-  "935": ["208", "2008", "C3", "C4 Cactus", "Aircross", "Basalt"],
-  "9BR": ["ASX", "Eclipse Cross", "Outlander", "Lancer"],
-  "KNA": ["Cerato", "Rio", "Soul", "Sportage", "Stonic", "Niro"],
-  "LGW": ["Haval H6", "Haval H6 GT", "Ora 03"],
-  "LB1": ["J3", "J3 Turin", "T40", "T50", "iEV40", "e-JS1", "e-JS4"],
-  "JF2": ["Impreza", "XV", "Forester", "Outback"],
-  "JS2": ["Swift", "Vitara", "S-Cross"],
-  "WAU": ["A3 Sedan", "A4", "Q3", "Q5", "e-tron"],
+  "Volkswagen Brasil": ["Gol", "Voyage", "Polo", "Virtus", "T-Cross", "Nivus", "Fox", "SpaceFox", "Jetta"],
+  "Ford Brasil": ["Ka", "Ka Sedan", "EcoSport", "Territory"],
+  "GM Chevrolet Brasil": ["Onix", "Onix Plus", "Prisma", "Cobalt", "Spin", "Tracker", "Cruze", "Joy", "Montana"],
+  "Fiat Brasil": ["Argo", "Cronos", "Mobi", "Grand Siena", "Siena", "Palio", "Uno", "Pulse", "Fastback", "Idea"],
+  "Toyota Brasil": ["Etios", "Etios Sedan", "Yaris", "Yaris Sedan", "Corolla", "Corolla Cross"],
+  "Honda Brasil": ["City", "City Hatch", "Fit", "WR-V", "HR-V", "Civic"],
+  "Jeep Brasil (FCA)": ["Renegade", "Compass", "Commander"],
+  "Hyundai Brasil": ["HB20", "HB20S", "Creta", "Tucson", "Kona Hybrid"],
+  "Renault Brasil": ["Kwid", "Sandero", "Logan", "Duster", "Captur", "Kardian"],
+  "Nissan Brasil": ["Versa", "March", "Kicks", "Sentra"],
+  "BYD (China/Brasil)": ["Dolphin", "Dolphin Mini", "King", "Song Plus", "Yuan Plus", "Seal", "Han", "Tan"],
+  "Caoa Chery Brasil": ["Arrizo 5", "Arrizo 6", "Tiggo 3X", "Tiggo 5X", "Tiggo 7", "Tiggo 8"],
+  "Peugeot Brasil (Stellantis)": ["208", "2008", "3008", "408", "Expert"],
+  "Citroën Brasil (Stellantis)": ["C3", "C4 Cactus", "Aircross", "Basalt", "Jumpy"],
+  "Mitsubishi Brasil": ["ASX", "Eclipse Cross", "Outlander", "Lancer", "Pajero Sport"],
+  "Kia (Coreia do Sul)": ["Cerato", "Rio", "Soul", "Sportage", "Stonic", "Niro", "Carnival"],
+  "GWM/Haval (China)": ["Haval H6", "Haval H6 GT", "Ora 03", "Tank 300"],
+  "JAC Motors (China)": ["J3", "J3 Turin", "J5", "T40", "T50", "T60", "iEV40", "e-JS1", "e-JS4"],
+  "RAM Brasil (Stellantis)": ["RAM 700", "RAM 1500", "RAM 2500", "ProMaster"],
+  "Subaru (Japão)": ["Impreza", "XV", "Forester", "Outback"],
+  "Suzuki (Japão)": ["Swift", "Vitara", "S-Cross", "Baleno"],
+  "Audi (Alemanha)": ["A3 Sedan", "A4", "Q3", "Q5", "e-tron"],
 };
 
 async function copiarTexto(texto: string): Promise<boolean> {
@@ -83,7 +85,7 @@ export default function GeradorChassiPublico() {
 
   const montadora = MONTADORAS_VIN[montadoraIdx] || MONTADORAS_VIN[0];
   const anoInfo = ANOS_VIN.find((a) => a.code === anoCode) || ultimoAno;
-  const modelosDaMarca = MODELOS_TRANSPORTE[montadora?.wmi] || montadora?.modelos || [];
+  const modelosDaMarca = MODELOS_TRANSPORTE[montadora?.nome] || montadora?.modelos || [];
 
   const montadorasFiltradas = useMemo(() => {
     const termo = buscaMontadora.trim().toLowerCase();
