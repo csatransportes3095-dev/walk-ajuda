@@ -17,6 +17,32 @@ import { trpc } from "@/lib/trpc";
 type ResultadoVIN = {
   vin: string;
   key: string;
+  marca: string;
+  modelo: string;
+  ano: number;
+};
+
+const MODELOS_TRANSPORTE: Record<string, string[]> = {
+  "9BW": ["Gol", "Voyage", "Polo", "Virtus", "T-Cross", "Nivus", "Fox", "SpaceFox", "Jetta"],
+  "9BF": ["Ka", "Ka Sedan", "EcoSport", "Territory"],
+  "9BG": ["Onix", "Onix Plus", "Prisma", "Cobalt", "Spin", "Tracker", "Cruze", "Joy", "Montana"],
+  "9BS": ["Argo", "Cronos", "Mobi", "Grand Siena", "Siena", "Palio", "Uno", "Pulse", "Fastback", "Idea"],
+  "8AF": ["Etios", "Etios Sedan", "Yaris", "Yaris Sedan", "Corolla", "Corolla Cross"],
+  "93H": ["City", "City Hatch", "Fit", "WR-V", "HR-V", "Civic"],
+  "9BD": ["Renegade", "Compass", "Commander"],
+  "9BH": ["HB20", "HB20S", "Creta", "Tucson", "Kona Hybrid"],
+  "9BM": ["Kwid", "Sandero", "Logan", "Duster", "Captur", "Kardian"],
+  "9BN": ["Versa", "March", "Kicks", "Sentra"],
+  "LGX": ["Dolphin", "Dolphin Mini", "King", "Song Plus", "Yuan Plus", "Seal", "Han", "Tan"],
+  "9BK": ["Arrizo 5", "Arrizo 6", "Tiggo 3X", "Tiggo 5X", "Tiggo 7", "Tiggo 8"],
+  "935": ["208", "2008", "C3", "C4 Cactus", "Aircross", "Basalt"],
+  "9BR": ["ASX", "Eclipse Cross", "Outlander", "Lancer"],
+  "KNA": ["Cerato", "Rio", "Soul", "Sportage", "Stonic", "Niro"],
+  "LGW": ["Haval H6", "Haval H6 GT", "Ora 03"],
+  "LB1": ["J3", "J3 Turin", "T40", "T50", "iEV40", "e-JS1", "e-JS4"],
+  "JF2": ["Impreza", "XV", "Forester", "Outback"],
+  "JS2": ["Swift", "Vitara", "S-Cross"],
+  "WAU": ["A3 Sedan", "A4", "Q3", "Q5", "e-tron"],
 };
 
 async function copiarTexto(texto: string): Promise<boolean> {
@@ -48,6 +74,7 @@ export default function GeradorChassiPublico() {
   const ultimoAno = ANOS_VIN[ANOS_VIN.length - 1];
   const [montadoraIdx, setMontadoraIdx] = useState(0);
   const [buscaMontadora, setBuscaMontadora] = useState("");
+  const [modelo, setModelo] = useState("");
   const [anoCode, setAnoCode] = useState(ultimoAno?.code || "T");
   const [quantidade, setQuantidade] = useState(1);
   const [resultados, setResultados] = useState<ResultadoVIN[]>([]);
@@ -56,6 +83,7 @@ export default function GeradorChassiPublico() {
 
   const montadora = MONTADORAS_VIN[montadoraIdx] || MONTADORAS_VIN[0];
   const anoInfo = ANOS_VIN.find((a) => a.code === anoCode) || ultimoAno;
+  const modelosDaMarca = MODELOS_TRANSPORTE[montadora?.wmi] || montadora?.modelos || [];
 
   const montadorasFiltradas = useMemo(() => {
     const termo = buscaMontadora.trim().toLowerCase();
@@ -82,6 +110,12 @@ export default function GeradorChassiPublico() {
     }
   }, [montadorasFiltradas, montadoraIdx]);
 
+  useEffect(() => {
+    if (modelosDaMarca.length > 0 && !modelosDaMarca.includes(modelo)) {
+      setModelo(modelosDaMarca[0]);
+    }
+  }, [modelosDaMarca, modelo]);
+
   const gerar = () => {
     if (!montadora || !anoInfo) {
       toast.error("Não foi possível carregar os dados do gerador.");
@@ -90,7 +124,13 @@ export default function GeradorChassiPublico() {
 
     const vins = gerarMultiplosVINs(montadora.wmi, montadora.vds, anoCode, quantidade);
     const agora = Date.now();
-    setResultados(vins.map((vin, i) => ({ vin, key: `${vin}-${i}-${agora}` })));
+    setResultados(vins.map((vin, i) => ({
+      vin,
+      key: `${vin}-${i}-${agora}`,
+      marca: montadora.nome,
+      modelo: modelo || modelosDaMarca[0] || "Modelo de teste",
+      ano: anoInfo.ano,
+    })));
     setCopiados(new Set());
   };
 
@@ -207,6 +247,22 @@ export default function GeradorChassiPublico() {
               )}
             </div>
 
+            <div>
+              <label className="mb-1.5 block text-xs font-semibold text-zinc-300">Modelo</label>
+              <select
+                value={modelo}
+                onChange={(e) => setModelo(e.target.value)}
+                className="w-full rounded-xl border border-zinc-700 bg-zinc-800 px-3 py-2.5 text-sm text-white outline-none transition-colors focus:border-cyan-500"
+              >
+                {modelosDaMarca.map((nomeModelo) => (
+                  <option key={nomeModelo} value={nomeModelo}>{nomeModelo}</option>
+                ))}
+              </select>
+              <p className="mt-1.5 text-xs text-zinc-500">
+                Selecione o modelo individualmente. A lista é de referência para uso em testes.
+              </p>
+            </div>
+
             <div className="grid grid-cols-1 gap-4 sm:grid-cols-2">
               <div>
                 <label className="mb-1.5 block text-xs font-semibold text-zinc-300">Ano do veículo</label>
@@ -264,7 +320,8 @@ export default function GeradorChassiPublico() {
                 <p>Ano: <span className="text-zinc-200">{anoInfo.ano} ({anoCode})</span></p>
                 <p>Fábrica: <span className="text-zinc-200">posição 11</span></p>
                 <p>Sequencial: <span className="text-zinc-200">posições 12–17</span></p>
-                <p className="sm:col-span-2">Modelos cadastrados como referência: <span className="text-zinc-300">{montadora.modelos.join(", ")}</span></p>
+                <p>Modelo selecionado: <span className="text-zinc-200">{modelo}</span></p>
+                <p>Modelos disponíveis: <span className="text-zinc-300">{modelosDaMarca.length}</span></p>
                 <p className="sm:col-span-2 text-zinc-500">A associação de WMI/VDS nesta ferramenta é uma base interna de teste e não deve ser interpretada como consulta oficial.</p>
               </div>
             )}
@@ -305,7 +362,7 @@ export default function GeradorChassiPublico() {
             </div>
 
             <div className="space-y-3">
-              {resultados.map(({ vin, key }) => (
+              {resultados.map(({ vin, key, marca, modelo: modeloGerado, ano }) => (
                 <article
                   key={key}
                   className={`rounded-xl border p-4 transition-all ${copiados.has(key) ? "border-cyan-500/40 bg-cyan-950/30" : "border-zinc-700/50 bg-zinc-800/60"}`}
@@ -317,7 +374,7 @@ export default function GeradorChassiPublico() {
                         {vin}
                       </p>
                       <p className="mt-1 text-xs text-zinc-500">
-                        {montadora.nome} • {anoInfo?.ano} • 17 caracteres
+                        {marca} • {modeloGerado} • {ano} • 17 caracteres
                       </p>
                     </div>
 
