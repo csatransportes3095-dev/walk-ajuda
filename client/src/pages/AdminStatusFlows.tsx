@@ -10,6 +10,11 @@ import { Textarea } from "@/components/ui/textarea";
 import { trpc } from "@/lib/trpc";
 import { useAdminAuth } from "@/hooks/useAdminAuth";
 
+type AlternativeRule = {
+  primaryKey: string;
+  alternativeKey: string;
+};
+
 type Flow = {
   id: number;
   name: string;
@@ -19,6 +24,7 @@ type Flow = {
   statusKeys: string[];
   productIds: number[];
   productNames: string[];
+  alternativeRules?: AlternativeRule[];
 };
 
 export default function AdminStatusFlows() {
@@ -39,6 +45,7 @@ export default function AdminStatusFlows() {
   const [name, setName] = useState("");
   const [description, setDescription] = useState("");
   const [statusKeys, setStatusKeys] = useState<string[]>([]);
+  const [alternativeRules, setAlternativeRules] = useState<AlternativeRule[]>([]);
   const [productIds, setProductIds] = useState<number[]>([]);
 
   const reset = () => {
@@ -46,6 +53,7 @@ export default function AdminStatusFlows() {
     setName("");
     setDescription("");
     setStatusKeys([]);
+    setAlternativeRules([]);
     setProductIds([]);
   };
 
@@ -54,6 +62,7 @@ export default function AdminStatusFlows() {
     setName("");
     setDescription("");
     setStatusKeys([initialKey]);
+    setAlternativeRules([]);
     setProductIds([]);
   };
 
@@ -62,6 +71,7 @@ export default function AdminStatusFlows() {
     setName(flow.name);
     setDescription(flow.description ?? "");
     setStatusKeys(flow.statusKeys.length ? flow.statusKeys : [initialKey]);
+    setAlternativeRules(flow.alternativeRules ?? []);
     setProductIds(flow.productIds ?? []);
   };
 
@@ -72,6 +82,15 @@ export default function AdminStatusFlows() {
   const removeStatus = (key: string) => {
     if (key === initialKey) return;
     setStatusKeys((prev) => prev.filter((k) => k !== key));
+    setAlternativeRules((prev) => prev.filter((rule) => rule.primaryKey !== key && rule.alternativeKey !== key));
+  };
+
+  const setAlternativeForStatus = (alternativeKey: string, primaryKey: string) => {
+    setAlternativeRules((prev) => {
+      const withoutCurrent = prev.filter((rule) => rule.alternativeKey !== alternativeKey);
+      if (!primaryKey) return withoutCurrent;
+      return [...withoutCurrent, { primaryKey, alternativeKey }];
+    });
   };
 
   const moveStatus = (index: number, direction: -1 | 1) => {
@@ -122,6 +141,7 @@ export default function AdminStatusFlows() {
         description: description.trim() || null,
         statusKeys: orderedKeys,
         productIds,
+        alternativeRules,
       });
     } else if (typeof editingId === "number") {
       updateMut.mutate({
@@ -130,6 +150,7 @@ export default function AdminStatusFlows() {
         description: description.trim() || null,
         statusKeys: orderedKeys,
         productIds,
+        alternativeRules,
       });
     }
   };
@@ -185,7 +206,7 @@ export default function AdminStatusFlows() {
               <p className="text-sm font-semibold mb-2">Etapas desta sequência</p>
               <p className="text-xs text-white/40 mb-3">
                 Esta sequência tem ordem própria. Use as setas para definir exatamente a ordem que o ADM e o cliente devem seguir.
-                O primeiro status é universal e fica travado na posição 1.
+                O primeiro status é universal e fica travado na posição 1. Para desvios como APROVADO / REPROVADO, marque o status de exceção como alternativa de uma etapa anterior.
               </p>
 
               <div className="space-y-2">
@@ -206,6 +227,36 @@ export default function AdminStatusFlows() {
                         <p className="truncate text-sm font-semibold text-cyan-50">{status.label}</p>
                         {unavailable && <p className="text-xs text-amber-300">{existing ? "Cadastro inativo - reative pelo catalogo." : "Cadastro ausente - vinculo preservado."}</p>}
                         {locked && <p className="text-[10px] uppercase tracking-wide text-cyan-200/45">Inicial universal</p>}
+                        {!locked && (
+                          <div className="mt-2">
+                            <label className="mb-1 block text-[10px] font-semibold uppercase tracking-wide text-white/35">
+                              Comportamento no cliente
+                            </label>
+                            <select
+                              value={alternativeRules.find((rule) => rule.alternativeKey === key)?.primaryKey ?? ""}
+                              onChange={(e) => setAlternativeForStatus(key, e.target.value)}
+                              className="w-full rounded-lg border border-white/10 bg-[#0b0b18] px-2 py-1.5 text-xs text-white/75 outline-none focus:border-cyan-400/40"
+                            >
+                              <option value="">Etapa normal</option>
+                              {statusKeys
+                                .slice(1, index)
+                                .filter((candidate) => candidate !== key)
+                                .map((candidate) => {
+                                  const candidateStatus: any = (statusesQuery.data ?? []).find((s: any) => s.key === candidate);
+                                  return (
+                                    <option key={candidate} value={candidate}>
+                                      Alternativa de: {candidateStatus?.label ?? candidate}
+                                    </option>
+                                  );
+                                })}
+                            </select>
+                            {alternativeRules.some((rule) => rule.alternativeKey === key) && (
+                              <p className="mt-1 text-[10px] text-amber-200/70">
+                                Só aparece ao cliente se este status for selecionado pelo ADM.
+                              </p>
+                            )}
+                          </div>
+                        )}
                       </div>
                       <button
                         type="button"
@@ -312,6 +363,16 @@ export default function AdminStatusFlows() {
                       return <span key={key} className="rounded-md border border-white/10 bg-black/15 px-2 py-1 text-[11px] text-white/65">{st?.label ?? key}{!st ? " - CADASTRO AUSENTE" : st.isActive !== 1 ? " - INATIVO" : ""}</span>;
                     })}
                   </div>
+                  {!!flow.alternativeRules?.length && (
+                    <div className="mt-3 rounded-lg border border-amber-400/20 bg-amber-500/5 px-3 py-2 text-xs text-amber-100/80">
+                      <span className="font-semibold">Desvios do cliente:</span>{" "}
+                      {flow.alternativeRules.map((rule) => {
+                        const primary: any = (statusesQuery.data ?? []).find((s: any) => s.key === rule.primaryKey);
+                        const alternative: any = (statusesQuery.data ?? []).find((s: any) => s.key === rule.alternativeKey);
+                        return `${alternative?.label ?? rule.alternativeKey} → alternativa de ${primary?.label ?? rule.primaryKey}`;
+                      }).join(" • ")}
+                    </div>
+                  )}
                   <p className="mt-3 text-xs text-white/40">
                     {flow.isDefault === 1
                       ? "Usada por todos os produtos sem sequência personalizada."
