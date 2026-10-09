@@ -14,6 +14,20 @@ import { Link } from "wouter";
 import { ANOS_VIN, MONTADORAS_VIN, gerarMultiplosVINs } from "@/lib/vinGenerator";
 import { trpc } from "@/lib/trpc";
 
+const ANOS_GERADOR_PUBLICO = [
+  { code: "G", ano: 2016 },
+  { code: "H", ano: 2017 },
+  { code: "J", ano: 2018 },
+  { code: "K", ano: 2019 },
+  { code: "L", ano: 2020 },
+  { code: "M", ano: 2021 },
+  { code: "N", ano: 2022 },
+  { code: "P", ano: 2023 },
+  { code: "R", ano: 2024 },
+  { code: "S", ano: 2025 },
+  { code: "T", ano: 2026 },
+];
+
 type ResultadoVIN = {
   vin: string;
   key: string;
@@ -73,18 +87,18 @@ export default function GeradorChassiPublico() {
   const { data: settings } = trpc.settings.getAll.useQuery();
   const logoUrl = settings?.login_image_url || "";
 
-  const ultimoAno = ANOS_VIN[ANOS_VIN.length - 1];
+  const ultimoAno = ANOS_GERADOR_PUBLICO[ANOS_GERADOR_PUBLICO.length - 1];
   const [montadoraIdx, setMontadoraIdx] = useState(0);
   const [buscaMontadora, setBuscaMontadora] = useState("");
   const [modelo, setModelo] = useState("");
-  const [anoCode, setAnoCode] = useState(ultimoAno?.code || "T");
+  const [anoCode, setAnoCode] = useState("G");
   const [quantidade, setQuantidade] = useState(1);
   const [resultados, setResultados] = useState<ResultadoVIN[]>([]);
   const [copiados, setCopiados] = useState<Set<string>>(new Set());
   const [detalhesAbertos, setDetalhesAbertos] = useState(false);
 
   const montadora = MONTADORAS_VIN[montadoraIdx] || MONTADORAS_VIN[0];
-  const anoInfo = ANOS_VIN.find((a) => a.code === anoCode) || ultimoAno;
+  const anoInfo = ANOS_GERADOR_PUBLICO.find((a) => a.code === anoCode) || ANOS_GERADOR_PUBLICO[0];
   const modelosDaMarca = MODELOS_TRANSPORTE[montadora?.nome] || montadora?.modelos || [];
 
   const montadorasFiltradas = useMemo(() => {
@@ -273,7 +287,7 @@ export default function GeradorChassiPublico() {
                   onChange={(e) => setAnoCode(e.target.value)}
                   className="w-full rounded-xl border border-zinc-700 bg-zinc-800 px-3 py-2.5 text-sm text-white outline-none transition-colors focus:border-cyan-500"
                 >
-                  {ANOS_VIN.map((a) => (
+                  {ANOS_GERADOR_PUBLICO.map((a) => (
                     <option key={a.code} value={a.code}>{a.ano}</option>
                   ))}
                 </select>
