@@ -5108,6 +5108,7 @@ export default function AdminOrders() {
                         { id: "agendamento",            label: "Aguardando",        desc: "Aguardando confirmação", icon: Clock,        glow: "#eab308", ab: "linear-gradient(135deg,#713f12,#854d0e)", ac: "#eab308", at: "#fef08a" },
                         { id: "em_analise",             label: "Em Análise",        desc: "Foto em análise",        icon: Search,       glow: "#38bdf8", ab: "linear-gradient(135deg,#0c4a6e,#075985)", ac: "#38bdf8", at: "#bae6fd" },
                         { id: "foto_aprovada",          label: "Foto Aprovada",      desc: "Foto de perfil aprovada", icon: FileCheck,    glow: "#f97316", ab: "linear-gradient(135deg,#7c2d12,#9a3412)", ac: "#f97316", at: "#fed7aa" },
+                        { id: "foto_reprovada",         label: "Foto Reprovada",     desc: "Foto reprovada",           icon: XCircle,      glow: "#ef4444", ab: "linear-gradient(135deg,#7f1d1d,#991b1b)", ac: "#ef4444", at: "#fecaca" },
                         { id: "doc_veiculo_teste",       label: "Doc em Teste",       desc: "DOC VEÍCULO EM TESTE",   icon: Search,       glow: "#60a5fa", ab: "linear-gradient(135deg,#1e3a8a,#1d4ed8)", ac: "#60a5fa", at: "#dbeafe" },
                         { id: "novo",                   label: "Novos",             desc: "Não visualizados",       icon: Star,         glow: "#6366f1", ab: "linear-gradient(135deg,#1e1b4b,#312e81)", ac: "#6366f1", at: "#a5b4fc" },
                         { id: "aguardando_ativa",       label: "Ag. Ficar Ativa",   desc: "Aguardando ficar ativa", icon: Zap,          glow: "#84cc16", ab: "linear-gradient(135deg,#1a2e05,#365314)", ac: "#84cc16", at: "#bef264" },
@@ -5119,6 +5120,12 @@ export default function AdminOrders() {
                         counts[bucket] = (counts[bucket] || 0) + 1;
                         if (isDocVehicleTestStatus(order.latestStatus)) {
                           counts.doc_veiculo_teste = (counts.doc_veiculo_teste || 0) + 1;
+                        }
+                        if (order.latestStatus === "foto_reprovada") {
+                          counts.foto_reprovada = (counts.foto_reprovada || 0) + 1;
+                        }
+                        if (order.latestStatus === "aguardando_ativa" || order.latestStatus === "aguardando_ficar_ativa") {
+                          counts.aguardando_ativa = (counts.aguardando_ativa || 0) + 1;
                         }
                         if (!viewedOrders.has(getOrderKey(order))) counts.novo += 1;
                       }
@@ -5418,6 +5425,8 @@ export default function AdminOrders() {
                         const filtered = group.orders.filter((o: any) => {
                           if (todosQuickFilter === "novo") return !viewedOrders.has(getOrderKey(o));
                           if (todosQuickFilter === "doc_veiculo_teste") return isDocVehicleTestStatus(o.latestStatus);
+                          if (todosQuickFilter === "foto_reprovada") return o.latestStatus === "foto_reprovada";
+                          if (todosQuickFilter === "aguardando_ativa") return o.latestStatus === "aguardando_ativa" || o.latestStatus === "aguardando_ficar_ativa";
                           if (todosQuickFilter !== "all") return getOperationalBucket(o) === todosQuickFilter;
                           return true;
                         });
