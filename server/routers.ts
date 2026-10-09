@@ -6696,6 +6696,10 @@ export const appRouter = router({
         description: z.string().nullable().optional(),
         statusKeys: z.array(z.string().min(1).max(64)).max(64),
         productIds: z.array(z.number().int().positive()).max(300),
+        alternativeRules: z.array(z.object({
+          primaryKey: z.string().min(1).max(64),
+          alternativeKey: z.string().min(1).max(64),
+        })).max(64).optional(),
       }))
       .mutation(async ({ input }) => {
         const { createOrderStatusFlowConfig } = await import('./db');
@@ -6708,6 +6712,10 @@ export const appRouter = router({
         description: z.string().nullable().optional(),
         statusKeys: z.array(z.string().min(1).max(64)).max(64).optional(),
         productIds: z.array(z.number().int().positive()).max(300).optional(),
+        alternativeRules: z.array(z.object({
+          primaryKey: z.string().min(1).max(64),
+          alternativeKey: z.string().min(1).max(64),
+        })).max(64).optional(),
         isActive: z.number().int().min(0).max(1).optional(),
       }))
       .mutation(async ({ input }) => {
