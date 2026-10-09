@@ -1675,6 +1675,39 @@ export async function setGlobalOrderProgressSequence(statusKeys: string[]): Prom
   });
 }
 
+function sanitizeStatusAlternativeRules(
+  statusKeys: string[],
+  rules: Array<{ primaryKey: string; alternativeKey: string }>,
+): Array<{ primaryKey: string; alternativeKey: string }> {
+  const allowed = new Set(statusKeys.map(key => String(key || '').trim()).filter(Boolean));
+  const normalized = rules
+    .map(rule => ({
+      primaryKey: String(rule.primaryKey || '').trim(),
+      alternativeKey: String(rule.alternativeKey || '').trim(),
+    }))
+    .filter(rule =>
+      rule.primaryKey &&
+      rule.alternativeKey &&
+      rule.primaryKey !== rule.alternativeKey &&
+      allowed.has(rule.primaryKey) &&
+      allowed.has(rule.alternativeKey)
+    );
+
+  // A mesma alternativa só pode pertencer a um grupo.
+  const unique: Array<{ primaryKey: string; alternativeKey: string }> = [];
+  const seenAlternatives = new Set<string>();
+  for (const rule of normalized) {
+    if (seenAlternatives.has(rule.alternativeKey)) continue;
+    seenAlternatives.add(rule.alternativeKey);
+    unique.push(rule);
+  }
+
+  // Cadeias não são permitidas. Se um status é alternativa de outro grupo,
+  // ele não pode ser principal. Preservamos o grupo mais específico (filho).
+  const primaryKeys = new Set(unique.map(rule => rule.primaryKey));
+  return unique.filter(rule => !primaryKeys.has(rule.alternativeKey));
+}
+
 export async function getGlobalOrderProgressAlternativeRules(): Promise<Array<{ primaryKey: string; alternativeKey: string }>> {
   await ensureOrderStatusFlowTables();
   const db = await getDb();
@@ -1687,10 +1720,32 @@ export async function getGlobalOrderProgressAlternativeRules(): Promise<Array<{ 
     ORDER BY primaryStatusKey ASC, sortOrder ASC, id ASC
   `);
   const rows = (result as any)[0] as Array<{ primaryStatusKey: string; alternativeStatusKey: string }>;
-  return (rows || []).map((row) => ({
+  const statusResult = await db.execute(sql`
+    SELECT \`key\` FROM orderStatusTypes
+    WHERE isActive = 1 AND isGlobal = 1
+    ORDER BY progressOrder ASC, sortOrder ASC, id ASC
+  `);
+  const statusRows = (statusResult as any)[0] as Array<{ key: string }>;
+  const rawRules = (rows || []).map((row) => ({
     primaryKey: String(row.primaryStatusKey),
     alternativeKey: String(row.alternativeStatusKey),
   }));
+  const cleanRules = sanitizeStatusAlternativeRules((statusRows || []).map(row => String(row.key)), rawRules);
+
+  if (cleanRules.length !== rawRules.length) {
+    await db.execute(sql`DELETE FROM orderStatusFlowAlternatives WHERE flowId = ${defaultFlowId}`);
+    const groupedOrder = new Map<string, number>();
+    for (const rule of cleanRules) {
+      const order = groupedOrder.get(rule.primaryKey) ?? 0;
+      await db.execute(sql`
+        INSERT INTO orderStatusFlowAlternatives (flowId, primaryStatusKey, alternativeStatusKey, sortOrder)
+        VALUES (${defaultFlowId}, ${rule.primaryKey}, ${rule.alternativeKey}, ${order})
+      `);
+      groupedOrder.set(rule.primaryKey, order + 1);
+    }
+  }
+
+  return cleanRules;
 }
 
 export async function setGlobalOrderProgressAlternativeRules(
@@ -1703,24 +1758,38 @@ export async function setGlobalOrderProgressAlternativeRules(
   const defaultFlowId = await getDefaultOrderStatusFlowId();
 
   await withStatusScopeLock(db, async tx => {
-    const allowed = new Set(statusKeys);
-    const cleanRules = rules
+    const normalizedRules = rules
       .map((rule) => ({
         primaryKey: String(rule.primaryKey || '').trim(),
         alternativeKey: String(rule.alternativeKey || '').trim(),
       }))
       .filter((rule) => rule.primaryKey && rule.alternativeKey && rule.primaryKey !== rule.alternativeKey);
 
-    const seenAlternatives = new Set<string>();
-    for (const rule of cleanRules) {
+    const allowed = new Set(statusKeys);
+    for (const rule of normalizedRules) {
       if (!allowed.has(rule.primaryKey) || !allowed.has(rule.alternativeKey)) {
         throw new TRPCError({ code: 'BAD_REQUEST', message: 'A alternativa precisa usar status presentes na sequência global.' });
       }
+    }
+
+    const seenAlternatives = new Set<string>();
+    for (const rule of normalizedRules) {
       if (seenAlternatives.has(rule.alternativeKey)) {
         throw new TRPCError({ code: 'BAD_REQUEST', message: 'Um status alternativo não pode pertencer a dois grupos.' });
       }
       seenAlternatives.add(rule.alternativeKey);
     }
+
+    const primaryKeys = new Set(normalizedRules.map(rule => rule.primaryKey));
+    const chained = normalizedRules.find(rule => primaryKeys.has(rule.alternativeKey));
+    if (chained) {
+      throw new TRPCError({
+        code: 'BAD_REQUEST',
+        message: 'Sequência inválida: um status alternativo não pode ser principal de outro grupo.',
+      });
+    }
+
+    const cleanRules = sanitizeStatusAlternativeRules(statusKeys, normalizedRules);
 
     await tx.execute(sql`DELETE FROM orderStatusFlowAlternatives WHERE flowId = ${defaultFlowId}`);
     const groupedOrder = new Map<string, number>();
@@ -1903,10 +1972,13 @@ export async function getOrderStatusFlowDefinition(flowId: number) {
     statusKeys: (itemRows || []).map((row) => String(row.statusKey)),
     unavailableKeys: Number(flow.isDefault) === 1 ? [] : (itemRows || [])
       .filter(row => !row.catalogueId || Number(row.isActive) !== 1).map(row => String(row.statusKey)),
-    alternativeRules: (alternativeRows || []).map((row) => ({
-      primaryKey: String(row.primaryStatusKey),
-      alternativeKey: String(row.alternativeStatusKey),
-    })),
+    alternativeRules: sanitizeStatusAlternativeRules(
+      (itemRows || []).map((row) => String(row.statusKey)),
+      (alternativeRows || []).map((row) => ({
+        primaryKey: String(row.primaryStatusKey),
+        alternativeKey: String(row.alternativeStatusKey),
+      })),
+    ),
   };
 }
 
@@ -2150,24 +2222,36 @@ async function writeOrderStatusFlowConfig(tx: any, data: StatusFlowConfigInput) 
     }
   }
   if (data.alternativeRules !== undefined && !isDefault) {
-    const activeKeys = new Set(keys ?? scopeRows(await tx.execute(sql`SELECT statusKey FROM orderStatusFlowItems WHERE flowId = ${data.id}`)).map((row: any) => String(row.statusKey)));
-    const cleanRules = data.alternativeRules
+    const activeKeyList = keys ?? scopeRows(await tx.execute(sql`SELECT statusKey FROM orderStatusFlowItems WHERE flowId = ${data.id}`)).map((row: any) => String(row.statusKey));
+    const activeKeys = new Set(activeKeyList);
+    const normalizedRules = data.alternativeRules
       .map(rule => ({ primaryKey: String(rule.primaryKey || '').trim(), alternativeKey: String(rule.alternativeKey || '').trim() }))
       .filter(rule => rule.primaryKey && rule.alternativeKey && rule.primaryKey !== rule.alternativeKey);
 
-    for (const rule of cleanRules) {
+    for (const rule of normalizedRules) {
       if (!activeKeys.has(rule.primaryKey) || !activeKeys.has(rule.alternativeKey)) {
         throw new TRPCError({ code: 'BAD_REQUEST', message: 'Status principal e alternativo precisam pertencer a esta sequencia.' });
       }
     }
 
     const seenAlternatives = new Set<string>();
-    for (const rule of cleanRules) {
+    for (const rule of normalizedRules) {
       if (seenAlternatives.has(rule.alternativeKey)) {
         throw new TRPCError({ code: 'BAD_REQUEST', message: 'Um status alternativo nao pode pertencer a dois grupos na mesma sequencia.' });
       }
       seenAlternatives.add(rule.alternativeKey);
     }
+
+    const primaryKeys = new Set(normalizedRules.map(rule => rule.primaryKey));
+    const chained = normalizedRules.find(rule => primaryKeys.has(rule.alternativeKey));
+    if (chained) {
+      throw new TRPCError({
+        code: 'BAD_REQUEST',
+        message: 'Sequencia invalida: um status alternativo nao pode ser principal de outro grupo.',
+      });
+    }
+
+    const cleanRules = sanitizeStatusAlternativeRules(activeKeyList, normalizedRules);
 
     await tx.execute(sql`DELETE FROM orderStatusFlowAlternatives WHERE flowId = ${data.id}`);
     const groupedOrder = new Map<string, number>();
