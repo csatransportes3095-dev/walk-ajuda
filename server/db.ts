@@ -1675,6 +1675,66 @@ export async function setGlobalOrderProgressSequence(statusKeys: string[]): Prom
   });
 }
 
+export async function getGlobalOrderProgressAlternativeRules(): Promise<Array<{ primaryKey: string; alternativeKey: string }>> {
+  await ensureOrderStatusFlowTables();
+  const db = await getDb();
+  if (!db) return [];
+  const defaultFlowId = await getDefaultOrderStatusFlowId();
+  const result = await db.execute(sql`
+    SELECT primaryStatusKey, alternativeStatusKey
+    FROM orderStatusFlowAlternatives
+    WHERE flowId = ${defaultFlowId}
+    ORDER BY primaryStatusKey ASC, sortOrder ASC, id ASC
+  `);
+  const rows = (result as any)[0] as Array<{ primaryStatusKey: string; alternativeStatusKey: string }>;
+  return (rows || []).map((row) => ({
+    primaryKey: String(row.primaryStatusKey),
+    alternativeKey: String(row.alternativeStatusKey),
+  }));
+}
+
+export async function setGlobalOrderProgressAlternativeRules(
+  statusKeys: string[],
+  rules: Array<{ primaryKey: string; alternativeKey: string }>,
+): Promise<void> {
+  await ensureOrderStatusFlowTables();
+  const db = await getDb();
+  if (!db) throw new Error("Database not available");
+  const defaultFlowId = await getDefaultOrderStatusFlowId();
+
+  await withStatusScopeLock(db, async tx => {
+    const allowed = new Set(statusKeys);
+    const cleanRules = rules
+      .map((rule) => ({
+        primaryKey: String(rule.primaryKey || '').trim(),
+        alternativeKey: String(rule.alternativeKey || '').trim(),
+      }))
+      .filter((rule) => rule.primaryKey && rule.alternativeKey && rule.primaryKey !== rule.alternativeKey);
+
+    const seenAlternatives = new Set<string>();
+    for (const rule of cleanRules) {
+      if (!allowed.has(rule.primaryKey) || !allowed.has(rule.alternativeKey)) {
+        throw new TRPCError({ code: 'BAD_REQUEST', message: 'A alternativa precisa usar status presentes na sequência global.' });
+      }
+      if (seenAlternatives.has(rule.alternativeKey)) {
+        throw new TRPCError({ code: 'BAD_REQUEST', message: 'Um status alternativo não pode pertencer a dois grupos.' });
+      }
+      seenAlternatives.add(rule.alternativeKey);
+    }
+
+    await tx.execute(sql`DELETE FROM orderStatusFlowAlternatives WHERE flowId = ${defaultFlowId}`);
+    const groupedOrder = new Map<string, number>();
+    for (const rule of cleanRules) {
+      const order = groupedOrder.get(rule.primaryKey) ?? 0;
+      await tx.execute(sql`
+        INSERT INTO orderStatusFlowAlternatives (flowId, primaryStatusKey, alternativeStatusKey, sortOrder)
+        VALUES (${defaultFlowId}, ${rule.primaryKey}, ${rule.alternativeKey}, ${order})
+      `);
+      groupedOrder.set(rule.primaryKey, order + 1);
+    }
+  });
+}
+
 export async function deleteOrderStatusType(id: number): Promise<void> {
   await ensureOrderStatusFlowTables();
   const db = await getDb();
