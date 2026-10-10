@@ -251,7 +251,7 @@ export default function OrderH2AdsBrowserShortcut({ registrationId, subOrderInde
     <button type="button" onClick={() => setCreating(false)} className="px-1 text-xs text-slate-300">CANCELAR</button>
   </span> : <button type="button" onClick={event => { event.stopPropagation(); setNewNote(""); setCreating(true); }} disabled={pending} className="inline-flex items-center gap-1 rounded-full border border-violet-400/35 bg-violet-400/15 px-2 py-1 text-[9px] font-black text-violet-200"><Plus className="h-3 w-3" />CRIAR</button>;
 
-  if (!shortcut && repairCandidate) {
+  if (!shortcut && repairCandidate && !linkedIds.length) {
     const sourceTitle = repairCandidate.linkedOrderNumber
       ? `Instância compatível vinculada ao pedido #${repairCandidate.linkedOrderNumber}. Clique em VINCULAR para revisar e confirmar a transferência.`
       : "Instância compatível vinculada a outro pedido/subpedido. Clique em VINCULAR para revisar e confirmar a transferência.";
