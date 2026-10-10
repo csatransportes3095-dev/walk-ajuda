@@ -44,11 +44,12 @@ export default function OrderH2AdsBrowserShortcut({ registrationId, subOrderInde
   }) ?? null;
 
   const linkedIds = (linksQuery.data ?? []).filter(link => link.registrationId === registrationId && link.subOrderIndex === subOrderIndex).map(link => link.instanceId);
-  const activeInstanceId = linkedIds.includes(selectedInstanceId ?? -1) ? selectedInstanceId : linkedIds[0] ?? null;
+  const activeInstanceId = linkedIds.includes(selectedInstanceId ?? -1) ? selectedInstanceId : linkedIds.length === 1 ? linkedIds[0] : null;
   const shortcut = resolveH2AdsOrderBrowserShortcutState({
     registrationId,
     subOrderIndex,
-    links: (linksQuery.data ?? []).filter(link => link.instanceId === activeInstanceId) as any[],
+    links: (linksQuery.data ?? []) as any[],
+    instanceId: activeInstanceId ?? undefined,
     instances: (dashboard?.instances ?? []) as any[],
     assignments: (dashboard?.instanceWorkerAssignments ?? []) as any[],
     workers: (dashboard?.browserWorkers ?? []) as any[],
