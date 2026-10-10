@@ -21,10 +21,14 @@ export function resolveH2AdsOrderBrowserShortcutState(input: {
   assignments: H2AdsAssignmentLike[];
   workers: H2AdsWorkerLike[];
   runs: H2AdsBrowserRunLike[];
+  instanceId?: number;
 }): H2AdsOrderBrowserShortcutState | null {
   // ABRIR/FECHAR nunca deve adivinhar. O controle direto exige o vínculo exato
   // entre o pedido/subpedido exibido no ADM e a instância H2ADS.
-  const link = input.links.find(item => item.registrationId === input.registrationId && item.subOrderIndex === input.subOrderIndex);
+  const matches = input.links.filter(item => item.registrationId === input.registrationId && item.subOrderIndex === input.subOrderIndex);
+  // Fail closed: multiple instances require an explicit selection; never silently pick the first.
+  if (matches.length > 1 && input.instanceId === undefined) return null;
+  const link = matches.find(item => input.instanceId === undefined || item.instanceId === input.instanceId);
   if (!link) return null;
 
   const instance = input.instances.find(item => item.id === link.instanceId);
