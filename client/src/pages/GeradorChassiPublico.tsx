@@ -94,6 +94,8 @@ export default function GeradorChassiPublico() {
   const [chassiOriginal, setChassiOriginal] = useState("");
   const [quantidade, setQuantidade] = useState(1);
   const [resultados, setResultados] = useState<ResultadoVIN[]>([]);
+  const [verificandoUnicidade, setVerificandoUnicidade] = useState(false);
+  const reserveVins = trpc.vinRegistry.reserve.useMutation();
   const [copiados, setCopiados] = useState<Set<string>>(new Set());
   const [detalhesAbertos, setDetalhesAbertos] = useState(false);
   const [carregandoMarcas, setCarregandoMarcas] = useState(true);
@@ -261,48 +263,50 @@ export default function GeradorChassiPublico() {
     };
   }, [marcaCode, anoInfo.ano]);
 
-  const gerar = () => {
+  const gerar = async () => {
+    if (verificandoUnicidade) return;
     if (!marca || !modelo || !anoInfo) {
       toast.error("Selecione marca, ano e modelo antes de gerar.");
       return;
     }
 
+    setVerificandoUnicidade(true);
     try {
       const chassiBase = chassiOriginal.toUpperCase().replace(/[\s-]/g, "");
-      let vins: string[];
+      if (usarChassiOriginal && chassiBase[9] !== anoCode) {
+        toast.error("O ano selecionado precisa ser o mesmo do chassi original.");
+        return;
+      }
 
-      if (usarChassiOriginal) {
-        if (chassiBase[9] !== anoCode) {
-          toast.error("O ano selecionado precisa ser o mesmo do chassi original.");
-          return;
-        }
+      const perfilTeste = usarChassiOriginal ? null : obterPerfilFabricanteOficial(marca.name, modelo);
+      const accepted: string[] = [];
+      let attempts = 0;
 
-        vins = gerarVINsDeTestePorChassiOriginal(chassiBase, quantidade);
-      } else {
-        const perfilTeste = obterPerfilFabricanteOficial(marca.name, modelo);
-        vins = gerarMultiplosVINs(
-          perfilTeste.wmi,
-          perfilTeste.vds,
-          anoCode,
-          quantidade,
-          perfilTeste.plant,
-        );
+      // O motor VIN permanece intacto. Persistência atômica apenas na saída.
+      while (accepted.length < quantidade && attempts < 20) {
+        attempts += 1;
+        const missing = quantidade - accepted.length;
+        const candidates = usarChassiOriginal
+          ? gerarVINsDeTestePorChassiOriginal(chassiBase, missing)
+          : gerarMultiplosVINs(perfilTeste!.wmi, perfilTeste!.vds, anoCode, missing, perfilTeste!.plant);
+        const reservation = await reserveVins.mutateAsync({ vins: candidates });
+        accepted.push(...reservation.reserved);
+        if (reservation.duplicates.length === 0 && reservation.reserved.length === missing) break;
+      }
+
+      if (accepted.length !== quantidade) {
+        throw new Error("Não foi possível reservar chassis exclusivos. Tente novamente.");
       }
 
       const agora = Date.now();
-      setResultados(
-        vins.map((vin, i) => ({
-          vin,
-          key: `${vin}-${i}-${agora}`,
-          marca: marca.name,
-          modelo,
-          ano: anoInfo.ano,
-        })),
-      );
+      setResultados(accepted.map((vin, i) => ({
+        vin, key: `${vin}-${i}-${agora}`, marca: marca.name, modelo, ano: anoInfo.ano,
+      })));
       setCopiados(new Set());
     } catch (error) {
-      const mensagem = error instanceof Error ? error.message : "Não foi possível gerar VIN válido.";
-      toast.error(mensagem);
+      toast.error(error instanceof Error ? error.message : "Não foi possível verificar a exclusividade dos chassis.");
+    } finally {
+      setVerificandoUnicidade(false);
     }
   };
 
@@ -581,6 +585,7 @@ export default function GeradorChassiPublico() {
             type="button"
             onClick={gerar}
             disabled={
+              verificandoUnicidade ||
               carregandoMarcas ||
               carregandoModelos ||
               !marca ||

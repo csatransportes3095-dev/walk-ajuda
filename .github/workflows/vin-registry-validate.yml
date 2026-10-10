@@ -1,0 +1,66 @@
+name: VIN registry validation
+
+on:
+  pull_request:
+    branches:
+      - recovery/organizar-salvos-2026-08-24
+    paths:
+      - "client/src/pages/GeradorChassiPublico.tsx"
+      - "client/src/lib/vinGenerator.ts"
+      - "server/vinRegistry*"
+      - "server/routers/vinRegistry.ts"
+      - "server/routers.ts"
+      - "drizzle/0147_generated_vin_registry.sql"
+      - "scripts/apply-generated-vin-registry-migration.ts"
+      - "scripts/render-start.sh"
+      - ".github/workflows/vin-registry-validate.yml"
+  push:
+    branches:
+      - feature/vin-registry-protecao-unicidade-20261010
+    paths:
+      - "client/src/pages/GeradorChassiPublico.tsx"
+      - "server/vinRegistry*"
+      - "server/routers/vinRegistry.ts"
+      - "server/routers.ts"
+      - "drizzle/0147_generated_vin_registry.sql"
+      - "scripts/apply-generated-vin-registry-migration.ts"
+      - "scripts/render-start.sh"
+      - ".github/workflows/vin-registry-validate.yml"
+
+permissions:
+  contents: read
+
+jobs:
+  validate:
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+    services:
+      mysql:
+        image: mysql:8.0
+        env:
+          MYSQL_ROOT_PASSWORD: testpassword
+          MYSQL_DATABASE: vin_registry_test
+        ports:
+          - 3306:3306
+        options: >-
+          --health-cmd="mysqladmin ping -h 127.0.0.1 -uroot -ptestpassword"
+          --health-interval=5s
+          --health-timeout=5s
+          --health-retries=20
+    env:
+      VIN_TEST_DATABASE_URL: mysql://root:testpassword@127.0.0.1:3306/vin_registry_test
+    steps:
+      - uses: actions/checkout@v4
+      - uses: pnpm/action-setup@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+          cache: pnpm
+      - name: Install
+        run: pnpm install --frozen-lockfile
+      - name: VIN registry unit and concurrency tests
+        run: pnpm vitest run server/vinRegistry.test.ts
+      - name: MySQL unique key, concurrency and transaction integration
+        run: pnpm vitest run server/vinRegistryMysql.test.ts
+      - name: Production bundle
+        run: pnpm run build
