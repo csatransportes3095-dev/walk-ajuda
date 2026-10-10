@@ -10,6 +10,8 @@ export default function OrderH2AdsBrowserShortcut({ registrationId, subOrderInde
   const [selectedInstanceId, setSelectedInstanceId] = useState<number | null>(null);
   const [creating, setCreating] = useState(false);
   const [newNote, setNewNote] = useState("");
+  const [newName, setNewName] = useState("");
+  const [newGroupId, setNewGroupId] = useState<number | null>(null);
   const [editingNote, setEditingNote] = useState(false);
   const [noteDraft, setNoteDraft] = useState("");
   const linksQuery = trpc.h2Ads.listOrderLinks.useQuery(undefined, {
@@ -88,7 +90,7 @@ export default function OrderH2AdsBrowserShortcut({ registrationId, subOrderInde
       return;
     }
 
-    let group = automaticGroup;
+    let group = newGroupId ? activeGroups.find(item => item.id === newGroupId) ?? null : automaticGroup;
     if (!group) {
       const options = activeGroups.map((item, index) => `${index + 1} - ${item.name}`).join("\n");
       const choice = window.prompt(`Não foi possível definir o grupo automaticamente.\n\nEscolha o grupo digitando o número:\n\n${options}`);
@@ -103,7 +105,7 @@ export default function OrderH2AdsBrowserShortcut({ registrationId, subOrderInde
 
     const prefix = currentOrder.customerNumber ? `*${currentOrder.customerNumber}` : customerNumber ? `*${customerNumber}` : `#${currentOrder.orderNumber || registrationId}`;
     const customerName = String(currentOrder.customerName || currentOrder.codeClientName || "CLIENTE").trim().replace(/\s+/g, " ").toLocaleUpperCase("pt-BR");
-    const name = `${prefix} ${customerName}`.slice(0, 128);
+    const name = (newName.trim() || `${prefix} ${customerName}`).slice(0, 128);
     const confirmed = window.confirm(`Criar a instância H2ADS:\n\n${name}\n\nGrupo: ${group.name}\n\nEla será vinculada automaticamente a este pedido.`);
     if (!confirmed) return;
 
@@ -122,6 +124,8 @@ export default function OrderH2AdsBrowserShortcut({ registrationId, subOrderInde
       else if (provision.status === "worker_unavailable") toast.warning(provision.message);
       else toast.error(provision.message);
       setNewNote("");
+      setNewName("");
+      setNewGroupId(null);
       setCreating(false);
       setSelectedInstanceId(created.id);
       await refresh();
@@ -246,7 +250,12 @@ export default function OrderH2AdsBrowserShortcut({ registrationId, subOrderInde
     }
   };
 
-  const createPanel = creating ? <span className="inline-flex items-center gap-1" onClick={event => event.stopPropagation()}>
+  const createPanel = creating ? <span className="inline-flex flex-wrap items-center gap-1" onClick={event => event.stopPropagation()}>
+    <input value={newName} onChange={event => setNewName(event.target.value)} maxLength={128} placeholder="Nome (automático)" aria-label="Nome da nova instância" className="w-36 rounded border border-violet-400/40 bg-slate-950 px-2 py-1 text-xs text-white" />
+    <select aria-label="Grupo da nova instância" value={newGroupId ?? automaticGroup?.id ?? ""} onChange={event => setNewGroupId(Number(event.target.value))} className="max-w-36 rounded border border-violet-400/40 bg-slate-950 px-2 py-1 text-xs text-white">
+      <option value="" disabled>Escolha o grupo</option>
+      {activeGroups.map(group => <option key={group.id} value={group.id}>{group.name}</option>)}
+    </select>
     <input value={newNote} onChange={event => setNewNote(event.target.value)} maxLength={150} placeholder="OBS: TESTE DOC" aria-label="OBS da nova instância" className="w-32 rounded border border-violet-400/40 bg-slate-950 px-2 py-1 text-xs text-white" />
     <button type="button" onClick={createLinkedInstance} disabled={pending} className="rounded bg-violet-500/25 px-2 py-1 text-xs text-violet-100">CONFIRMAR</button>
     <button type="button" onClick={() => setCreating(false)} className="px-1 text-xs text-slate-300">CANCELAR</button>
