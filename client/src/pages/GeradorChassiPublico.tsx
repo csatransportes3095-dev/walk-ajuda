@@ -272,7 +272,7 @@ export default function GeradorChassiPublico() {
 
     setVerificandoUnicidade(true);
     try {
-      const chassiBase = chassiOriginal.toUpperCase().replace(/[\\s-]/g, "");
+      const chassiBase = chassiOriginal.toUpperCase().replace(/[\s-]/g, "");
       if (usarChassiOriginal && chassiBase[9] !== anoCode) {
         toast.error("O ano selecionado precisa ser o mesmo do chassi original.");
         return;
