@@ -46,6 +46,7 @@ run_boot_step "db-migrate-h2ads-browser-workers" pnpm run db:migrate:h2ads-brows
 run_boot_step "db-migrate-h2ads-browser-preparation" pnpm run db:migrate:h2ads-browser-preparation
 run_boot_step "db-migrate-h2ads-browser-manual-commands" pnpm run db:migrate:h2ads-browser-manual-commands
 run_boot_step "db-migrate-h2ads-order-links" pnpm run db:migrate:h2ads-order-links
+run_boot_step "db-migrate-h2ads-multi-instance" pnpm run db:migrate:h2ads-multi-instance
 run_boot_step "db-migrate-h2ads-group-card-color" pnpm run db:migrate:h2ads-group-card-color
 run_boot_step "db-migrate-h2ads-proxy-pool" pnpm run db:migrate:h2ads-proxy-pool
 run_boot_step "vehicle-question-catalog-2016" pnpm exec tsx scripts/apply-vehicle-question-catalog-2016.ts
