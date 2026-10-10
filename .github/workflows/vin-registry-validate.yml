@@ -1,0 +1,49 @@
+name: VIN registry validation
+
+on:
+  pull_request:
+    branches:
+      - recovery/organizar-salvos-2026-08-24
+    paths:
+      - "client/src/pages/GeradorChassiPublico.tsx"
+      - "client/src/lib/vinGenerator.ts"
+      - "server/vinRegistry*"
+      - "server/routers/vinRegistry.ts"
+      - "server/routers.ts"
+      - "drizzle/0147_generated_vin_registry.sql"
+      - "scripts/apply-generated-vin-registry-migration.ts"
+      - "scripts/render-start.sh"
+      - ".github/workflows/vin-registry-validate.yml"
+  push:
+    branches:
+      - feature/vin-registry-protecao-unicidade-20261010
+    paths:
+      - "client/src/pages/GeradorChassiPublico.tsx"
+      - "server/vinRegistry*"
+      - "server/routers/vinRegistry.ts"
+      - "server/routers.ts"
+      - "drizzle/0147_generated_vin_registry.sql"
+      - "scripts/apply-generated-vin-registry-migration.ts"
+      - "scripts/render-start.sh"
+      - ".github/workflows/vin-registry-validate.yml"
+
+permissions:
+  contents: read
+
+jobs:
+  validate:
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+    steps:
+      - uses: actions/checkout@v4
+      - uses: pnpm/action-setup@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+          cache: pnpm
+      - name: Install
+        run: pnpm install --frozen-lockfile
+      - name: VIN registry unit and concurrency tests
+        run: pnpm vitest run server/vinRegistry.test.ts
+      - name: Production bundle
+        run: pnpm run build
