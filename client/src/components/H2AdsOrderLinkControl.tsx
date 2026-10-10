@@ -98,7 +98,6 @@ export default function H2AdsOrderLinkControl({ instanceId, currentGroupId, grou
   const appointmentSort = h2AdsAppointmentSortValue(currentAppointment);
   const normalizedSearch = normalizeH2AdsOrderSearch(search);
   const exactCustomerNumber = getExactH2AdsCustomerNumberSearch(search);
-  const ownerByOrder = useMemo(() => new Map(links.map(link => [keyFor(link.registrationId, link.subOrderIndex), link.instanceId])), [links]);
   const selectableOrders = useMemo(() => orders.filter(order => {
     const sub = order.subOrderIndex ?? 0;
     const key = keyFor(order.id, sub);
@@ -196,14 +195,13 @@ export default function H2AdsOrderLinkControl({ instanceId, currentGroupId, grou
       {searchResults.length === 0 ? <p className="px-3 py-3 text-[11px] font-semibold text-slate-500">Nenhum cliente encontrado para “{search}”.</p> : searchResults.map(order => {
         const subOrderIndex = order.subOrderIndex ?? 0;
         const key = keyFor(order.id, subOrderIndex);
-        const owner = ownerByOrder.get(key);
-        const unavailable = owner !== undefined && owner !== instanceId;
+        const linkedCount = links.filter(link => keyFor(link.registrationId, link.subOrderIndex) === key).length;
         const isExactCustomerSearch = exactCustomerNumber !== null;
         if (isExactCustomerSearch) {
           return <button
             key={key}
             type="button"
-            disabled={setLink.isPending || unavailable}
+            disabled={setLink.isPending}
             onClick={() => { void update(key); }}
             className="flex w-full items-center gap-3 px-3 py-3 text-left hover:bg-violet-400/10 disabled:cursor-not-allowed disabled:opacity-45"
           >
@@ -214,14 +212,14 @@ export default function H2AdsOrderLinkControl({ instanceId, currentGroupId, grou
               <p className="text-[11px] font-black text-violet-200">*{order.customerNumber}</p>
               <p className="mt-0.5 break-words text-xs font-black leading-4 text-white">{order.customerName || "Cliente sem nome"}</p>
             </div>
-            {unavailable && <span className="shrink-0 text-[9px] font-black uppercase text-amber-300">já vinculado</span>}
+            {linkedCount > 0 && <span className="shrink-0 text-[9px] font-black uppercase text-amber-300">{linkedCount} vinculada(s)</span>}
           </button>;
         }
         const displayNumber = order.orderNumber ?? order.customerNumber ?? order.id;
         return <button
           key={key}
           type="button"
-          disabled={setLink.isPending || unavailable}
+          disabled={setLink.isPending}
           onClick={() => { void update(key); }}
           className="block w-full border-b border-white/8 px-3 py-2.5 text-left last:border-b-0 hover:bg-violet-400/10 disabled:cursor-not-allowed disabled:opacity-45"
         >
@@ -230,7 +228,7 @@ export default function H2AdsOrderLinkControl({ instanceId, currentGroupId, grou
               <p className="truncate text-[11px] font-black text-white">#{displayNumber} · {order.customerName || "Cliente"}</p>
               <p className="mt-0.5 truncate text-[10px] font-medium text-slate-400">{[order.phone, order.serviceName, order.serviceOption].filter(Boolean).join(" · ") || "Sem detalhes"}</p>
             </div>
-            <span className={`shrink-0 text-[9px] font-black uppercase ${unavailable ? "text-amber-300" : "text-emerald-300"}`}>{unavailable ? "já vinculado" : statusLabel(order.latestStatus)}</span>
+            <span className={`shrink-0 text-[9px] font-black uppercase ${linkedCount ? "text-amber-300" : "text-emerald-300"}`}>{linkedCount ? `${linkedCount} vinculada(s)` : statusLabel(order.latestStatus)}</span>
           </div>
         </button>;
       })}
@@ -241,11 +239,10 @@ export default function H2AdsOrderLinkControl({ instanceId, currentGroupId, grou
       {selectableOrders.map(order => {
         const subOrderIndex = order.subOrderIndex ?? 0;
         const key = keyFor(order.id, subOrderIndex);
-        const owner = ownerByOrder.get(key);
-        const unavailable = owner !== undefined && owner !== instanceId;
+        const linkedCount = links.filter(link => keyFor(link.registrationId, link.subOrderIndex) === key).length;
         const detail = [order.serviceName, order.serviceOption].filter(Boolean).join(" · ");
         const displayNumber = order.orderNumber ?? order.customerNumber ?? order.id;
-        return <option key={key} value={key} disabled={unavailable}>#{displayNumber} · {order.customerName || "Cliente"}{subOrderIndex > 0 ? ` · item ${subOrderIndex + 1}` : ""}{detail ? ` · ${detail}` : ""}{unavailable ? " · já vinculado" : ""}</option>;
+        return <option key={key} value={key} >#{displayNumber} · {order.customerName || "Cliente"}{subOrderIndex > 0 ? ` · item ${subOrderIndex + 1}` : ""}{detail ? ` · ${detail}` : ""}{linkedCount ? ` · ${linkedCount} vinculada(s)` : ""}</option>;
       })}
     </select>
     <p className="mt-2 text-[10px] leading-4 text-slate-500">Código com * é exclusivo: *451 busca somente o cadastro 451. Nas outras buscas, aceita nome, telefone, número do pedido e cadastro. O H2ADS apenas lê os dados do pedido.</p>

@@ -111,10 +111,6 @@ export async function searchH2AdsCustomersForNewInstance(search: string): Promis
   }
 
   const initialStatus = await getInitialOrderStatus();
-  const linkedRows = rowsFrom(await db.execute(sql`
-    SELECT registrationId, subOrderIndex FROM h2ads_order_links
-  `));
-  const linkedKeys = new Set(linkedRows.map(row => `${Number(row.registrationId)}:${Number(row.subOrderIndex || 0)}`));
   const candidates: Array<{ result: H2AdsCustomerOrderSearchResult; sortAt: number }> = [];
 
   for (const customer of customerRows) {
@@ -144,7 +140,6 @@ export async function searchH2AdsCustomersForNewInstance(search: string): Promis
         const latest = segment[segment.length - 1];
         if (!latest || latest.status === "cancelado") continue;
         const key = `${registrationId}:${subOrderIndex}`;
-        if (linkedKeys.has(key)) continue;
 
         const latestWith = (field: string): unknown => {
           for (let index = segment.length - 1; index >= 0; index -= 1) {
@@ -210,14 +205,6 @@ export async function setH2AdsOrderLink(instanceId: number, registrationId: numb
   await requireOrderSubOrder(registrationId, subOrderIndex);
   try {
     await db.transaction(async tx => {
-      const owner = rowsFrom(await tx.execute(sql`
-        SELECT instanceId FROM h2ads_order_links
-        WHERE registrationId = ${registrationId} AND subOrderIndex = ${subOrderIndex}
-        LIMIT 1
-      `))[0];
-      if (owner && Number(owner.instanceId) !== instanceId) {
-        throw new Error("Este pedido/subpedido já está vinculado a outra instância.");
-      }
       await tx.execute(sql`DELETE FROM h2ads_order_links WHERE instanceId = ${instanceId}`);
       await tx.execute(sql`
         INSERT INTO h2ads_order_links (instanceId, registrationId, subOrderIndex)
@@ -226,7 +213,7 @@ export async function setH2AdsOrderLink(instanceId: number, registrationId: numb
     });
   } catch (error) {
     const message = error instanceof Error ? error.message : "Não foi possível vincular o pedido à instância.";
-    if (/duplicate|unique/i.test(message)) throw new Error("Este pedido/subpedido já está vinculado a outra instância.");
+    if (/duplicate|unique/i.test(message)) throw new Error("Esta instância já possui um vínculo. Tente novamente.");
     throw error;
   }
 }
