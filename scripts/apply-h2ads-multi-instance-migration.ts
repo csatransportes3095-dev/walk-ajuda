@@ -17,7 +17,7 @@ async function main() {
       "SELECT INDEX_NAME, NON_UNIQUE, COLUMN_NAME, SEQ_IN_INDEX FROM information_schema.STATISTICS WHERE TABLE_SCHEMA = DATABASE() AND TABLE_NAME = 'h2ads_order_links' ORDER BY INDEX_NAME, SEQ_IN_INDEX"
     );
     const columnsFor = (name: string) => indexes.filter(row => row.INDEX_NAME === name).map(row => String(row.COLUMN_NAME));
-    if (columnsFor("h2ads_order_links_instance_unique").join(",") !== "instanceId") {
+    if (columnsFor("h2ads_order_links_instance_unique").join(",") !== "instanceId" || indexes.some(row => row.INDEX_NAME === "h2ads_order_links_instance_unique" && Number(row.NON_UNIQUE) !== 0)) {
       throw new Error("Índice único por instância inesperado; nenhuma alteração aplicada.");
     }
     if (columnsFor("h2ads_order_links_order_idx").join(",") !== "registrationId,subOrderIndex") {
@@ -31,6 +31,10 @@ async function main() {
     if (orderUnique.some(row => Number(row.NON_UNIQUE) !== 0) || columnsFor("h2ads_order_links_order_unique").join(",") !== "registrationId,subOrderIndex") {
       throw new Error("Índice único por pedido inesperado; nenhuma alteração aplicada.");
     }
+    const [duplicateLinks] = await connection.query<any[]>(
+      "SELECT instanceId, COUNT(*) AS total FROM h2ads_order_links GROUP BY instanceId HAVING COUNT(*) > 1 LIMIT 1"
+    );
+    if (duplicateLinks.length) throw new Error("Há instância vinculada mais de uma vez; migração interrompida.");
     await connection.query("ALTER TABLE `h2ads_order_links` DROP INDEX `h2ads_order_links_order_unique`");
     console.log("[H2ADS] Multi-instância por pedido habilitada.");
   } finally {
