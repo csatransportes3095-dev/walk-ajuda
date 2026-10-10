@@ -6,6 +6,10 @@ on:
       - recovery/organizar-salvos-2026-08-24
     paths:
       - "server/h2ads*"
+      - "shared/h2adsOrderBrowserShortcut.ts"
+      - "client/src/components/OrderH2AdsBrowserShortcut.tsx"
+      - "drizzle/0146_h2ads_multi_instance_order.sql"
+      - "scripts/apply-h2ads-multi-instance-migration.ts"
       - "workers/windows/**"
       - "drizzle/0140_h2ads_browser_workers.sql"
       - "drizzle/0141_h2ads_browser_preparation.sql"
@@ -55,7 +59,7 @@ jobs:
           node --check workers/windows/browser-session.mjs
 
       - name: Run H2 Ads tests
-        run: pnpm vitest run server/h2adsWorkerRoute.test.ts server/h2adsWorkerFoundation.test.ts server/h2adsWorkerErrorGuard.test.ts
+        run: pnpm vitest run server/h2adsWorkerRoute.test.ts server/h2adsWorkerFoundation.test.ts server/h2adsWorkerErrorGuard.test.ts server/h2adsOrderBrowserShortcut.test.ts
 
       - name: Build production bundle
         run: pnpm build

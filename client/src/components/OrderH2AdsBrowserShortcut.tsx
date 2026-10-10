@@ -1,4 +1,4 @@
-import type { MouseEvent } from "react";
+import { useState, type MouseEvent } from "react";
 import { Play, Plus, RefreshCw, Square, Trash2 } from "lucide-react";
 import { toast } from "sonner";
 import { trpc } from "@/lib/trpc";
@@ -7,6 +7,13 @@ import { normalizeH2AdsRoutingText, resolveH2AdsAutomaticGroup } from "@shared/h
 
 export default function OrderH2AdsBrowserShortcut({ registrationId, subOrderIndex, customerNumber, serviceName, serviceOption }: { registrationId: number; subOrderIndex: number; customerNumber?: number | null; serviceName?: string | null; serviceOption?: string | null }) {
   const utils = trpc.useUtils();
+  const [selectedInstanceId, setSelectedInstanceId] = useState<number | null>(null);
+  const [creating, setCreating] = useState(false);
+  const [newNote, setNewNote] = useState("");
+  const [newName, setNewName] = useState("");
+  const [newGroupId, setNewGroupId] = useState<number | null>(null);
+  const [editingNote, setEditingNote] = useState(false);
+  const [noteDraft, setNoteDraft] = useState("");
   const linksQuery = trpc.h2Ads.listOrderLinks.useQuery(undefined, {
     staleTime: 0,
     refetchInterval: 2_000,
@@ -38,10 +45,13 @@ export default function OrderH2AdsBrowserShortcut({ registrationId, subOrderInde
     return name === "entregue" || name === "entregues" || name === "grupo entregue" || name === "grupo entregues";
   }) ?? null;
 
+  const linkedIds = (linksQuery.data ?? []).filter(link => link.registrationId === registrationId && link.subOrderIndex === subOrderIndex).map(link => link.instanceId);
+  const activeInstanceId = linkedIds.includes(selectedInstanceId ?? -1) ? selectedInstanceId : linkedIds.length === 1 ? linkedIds[0] : null;
   const shortcut = resolveH2AdsOrderBrowserShortcutState({
     registrationId,
     subOrderIndex,
     links: (linksQuery.data ?? []) as any[],
+    instanceId: activeInstanceId ?? undefined,
     instances: (dashboard?.instances ?? []) as any[],
     assignments: (dashboard?.instanceWorkerAssignments ?? []) as any[],
     workers: (dashboard?.browserWorkers ?? []) as any[],
@@ -80,7 +90,7 @@ export default function OrderH2AdsBrowserShortcut({ registrationId, subOrderInde
       return;
     }
 
-    let group = automaticGroup;
+    let group = newGroupId ? activeGroups.find(item => item.id === newGroupId) ?? null : automaticGroup;
     if (!group) {
       const options = activeGroups.map((item, index) => `${index + 1} - ${item.name}`).join("\n");
       const choice = window.prompt(`Não foi possível definir o grupo automaticamente.\n\nEscolha o grupo digitando o número:\n\n${options}`);
@@ -95,7 +105,7 @@ export default function OrderH2AdsBrowserShortcut({ registrationId, subOrderInde
 
     const prefix = currentOrder.customerNumber ? `*${currentOrder.customerNumber}` : customerNumber ? `*${customerNumber}` : `#${currentOrder.orderNumber || registrationId}`;
     const customerName = String(currentOrder.customerName || currentOrder.codeClientName || "CLIENTE").trim().replace(/\s+/g, " ").toLocaleUpperCase("pt-BR");
-    const name = `${prefix} ${customerName}`.slice(0, 128);
+    const name = (newName.trim() || `${prefix} ${customerName}`).slice(0, 128);
     const confirmed = window.confirm(`Criar a instância H2ADS:\n\n${name}\n\nGrupo: ${group.name}\n\nEla será vinculada automaticamente a este pedido.`);
     if (!confirmed) return;
 
@@ -103,7 +113,7 @@ export default function OrderH2AdsBrowserShortcut({ registrationId, subOrderInde
       const created = await createInstanceLinkedOrderAuto.mutateAsync({
         groupId: group.id,
         name,
-        notes: null,
+        notes: newNote.trim() || null,
         status: "draft",
         registrationId,
         subOrderIndex,
@@ -113,6 +123,11 @@ export default function OrderH2AdsBrowserShortcut({ registrationId, subOrderInde
       else if (provision.status === "awaiting_proxy") toast.warning("Instância criada, mas a fila de proxies está vazia.");
       else if (provision.status === "worker_unavailable") toast.warning(provision.message);
       else toast.error(provision.message);
+      setNewNote("");
+      setNewName("");
+      setNewGroupId(null);
+      setCreating(false);
+      setSelectedInstanceId(created.id);
       await refresh();
     } catch (error) {
       toast.error(error instanceof Error ? error.message : "Não foi possível criar a instância H2ADS.");
@@ -222,7 +237,42 @@ export default function OrderH2AdsBrowserShortcut({ registrationId, subOrderInde
     }
   };
 
-  if (!shortcut && repairCandidate) {
+  const saveNote = async (event: MouseEvent<HTMLButtonElement>) => {
+    event.stopPropagation();
+    if (!shortcut || pending) return;
+    try {
+      await updateInstance.mutateAsync({ id: shortcut.instanceId, notes: noteDraft.trim() || null });
+      setEditingNote(false);
+      toast.success("OBS atualizada.");
+      await refresh();
+    } catch (error) {
+      toast.error(error instanceof Error ? error.message : "Não foi possível salvar a OBS.");
+    }
+  };
+
+  const createPanel = creating ? <span className="inline-flex flex-wrap items-center gap-1" onClick={event => event.stopPropagation()}>
+    <input value={newName} onChange={event => setNewName(event.target.value)} maxLength={128} placeholder="Nome (automático)" aria-label="Nome da nova instância" className="w-36 rounded border border-violet-400/40 bg-slate-950 px-2 py-1 text-xs text-white" />
+    <select aria-label="Grupo da nova instância" value={newGroupId ?? automaticGroup?.id ?? ""} onChange={event => setNewGroupId(Number(event.target.value))} className="max-w-36 rounded border border-violet-400/40 bg-slate-950 px-2 py-1 text-xs text-white">
+      <option value="" disabled>Escolha o grupo</option>
+      {activeGroups.map(group => <option key={group.id} value={group.id}>{group.name}</option>)}
+    </select>
+    <input value={newNote} onChange={event => setNewNote(event.target.value)} maxLength={150} placeholder="OBS: TESTE DOC" aria-label="OBS da nova instância" className="w-32 rounded border border-violet-400/40 bg-slate-950 px-2 py-1 text-xs text-white" />
+    <button type="button" onClick={createLinkedInstance} disabled={pending} className="rounded bg-violet-500/25 px-2 py-1 text-xs text-violet-100">CONFIRMAR</button>
+    <button type="button" onClick={() => setCreating(false)} className="px-1 text-xs text-slate-300">CANCELAR</button>
+  </span> : <button type="button" onClick={event => { event.stopPropagation(); setNewNote(""); setCreating(true); }} disabled={pending} className="inline-flex items-center gap-1 rounded-full border border-violet-400/35 bg-violet-400/15 px-2 py-1 text-[9px] font-black text-violet-200"><Plus className="h-3 w-3" />CRIAR</button>;
+
+  if (!shortcut && linkedIds.length > 1) {
+    return <span className="inline-flex items-center gap-1 rounded border border-cyan-500/40 p-1" onClick={event => event.stopPropagation()}>
+      <span className="text-[10px] text-cyan-200">H2ADS: {linkedIds.length} instâncias</span>
+      <select aria-label="Escolher instância H2ADS" value="" onChange={event => { event.stopPropagation(); setSelectedInstanceId(Number(event.target.value)); setEditingNote(false); }} className="rounded bg-slate-950 p-1 text-[10px] text-white">
+        <option value="" disabled>SELECIONE</option>
+        {linkedIds.map(id => <option key={id} value={id}>{(dashboard?.instances ?? []).find(item => item.id === id)?.name || `Instância #${id}`}</option>)}
+      </select>
+      {createPanel}
+    </span>;
+  }
+
+  if (!shortcut && repairCandidate && !linkedIds.length) {
     const sourceTitle = repairCandidate.linkedOrderNumber
       ? `Instância compatível vinculada ao pedido #${repairCandidate.linkedOrderNumber}. Clique em VINCULAR para revisar e confirmar a transferência.`
       : "Instância compatível vinculada a outro pedido/subpedido. Clique em VINCULAR para revisar e confirmar a transferência.";
@@ -235,15 +285,7 @@ export default function OrderH2AdsBrowserShortcut({ registrationId, subOrderInde
   if (!shortcut) {
     return <span className="inline-flex items-center gap-1 rounded-full border border-violet-500/35 bg-violet-500/10 p-0.5" title="Criar uma instância H2ADS já vinculada a este pedido" onClick={event => event.stopPropagation()}>
       <span className="px-1 text-[9px] font-black uppercase tracking-wide text-violet-300">H2ADS</span>
-      <button
-        type="button"
-        onClick={createLinkedInstance}
-        disabled={pending || dashboardQuery.isLoading || ordersQuery.isLoading}
-        className="inline-flex items-center gap-1 rounded-full border border-violet-400/35 bg-violet-400/15 px-2 py-1 text-[9px] font-black text-violet-200 transition hover:bg-violet-400/25 disabled:cursor-not-allowed disabled:opacity-30"
-        title={automaticGroup ? `Criar e vincular no grupo ${automaticGroup.name}` : "Criar e vincular escolhendo o grupo"}
-      >
-        <Plus className="h-3 w-3" />CRIAR
-      </button>
+      {createPanel}
     </span>;
   }
 
@@ -257,6 +299,10 @@ export default function OrderH2AdsBrowserShortcut({ registrationId, subOrderInde
 
   return <span className="inline-flex items-center gap-1 rounded-full border border-cyan-500/35 bg-cyan-500/10 p-0.5" title={statusTitle} onClick={event => event.stopPropagation()}>
     <span className="px-1 text-[9px] font-black uppercase tracking-wide text-cyan-300">H2ADS</span>
+    {linkedIds.length > 1 && <select aria-label="Selecionar instância H2ADS" value={activeInstanceId ?? ""} onChange={event => { event.stopPropagation(); setSelectedInstanceId(Number(event.target.value)); setEditingNote(false); }} className="max-w-32 rounded border border-cyan-400/30 bg-slate-950 px-1 py-1 text-[10px] text-white">{linkedIds.map(id => { const item = (dashboard?.instances ?? []).find(instance => instance.id === id); return <option key={id} value={id}>{item?.name || `Instância #${id}`}</option>; })}</select>}
+    {linkedInstance && <span className="max-w-40 truncate px-1 text-[9px] text-slate-300" title={linkedInstance.notes || ""}>OBS: {linkedInstance.notes || "—"}</span>}
+    {editingNote ? <span className="inline-flex items-center gap-1"><input value={noteDraft} onChange={event => setNoteDraft(event.target.value)} maxLength={150} aria-label="Editar OBS H2ADS" className="w-28 rounded border border-cyan-400/30 bg-slate-950 px-1 py-1 text-[10px] text-white" /><button type="button" onClick={saveNote} disabled={pending} className="text-[9px] text-emerald-300">SALVAR</button><button type="button" onClick={event => {event.stopPropagation();setEditingNote(false);}} className="text-[9px] text-slate-300">X</button></span> : <button type="button" onClick={event => {event.stopPropagation();setNoteDraft(linkedInstance?.notes || "");setEditingNote(true);}} className="text-[9px] text-cyan-200">EDITAR OBS</button>}
+    {createPanel}
     <button
       type="button"
       onClick={openBrowser}

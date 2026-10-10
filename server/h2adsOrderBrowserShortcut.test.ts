@@ -35,6 +35,24 @@ describe("H2ADS order browser shortcut", () => {
     expect(result).toBeNull();
   });
 
+  it("exige seleção explícita quando duas instâncias pertencem ao mesmo pedido", () => {
+    const multi = {
+      ...base,
+      links: [
+        { instanceId: 9, registrationId: 100, subOrderIndex: 2 },
+        { instanceId: 10, registrationId: 100, subOrderIndex: 2 },
+      ],
+      instances: [{ id: 9, status: "draft" }, { id: 10, status: "draft" }],
+      assignments: [{ instanceId: 9, workerId: 7 }, { instanceId: 10, workerId: 8 }],
+      workers: [{ id: 7, connectionStatus: "online" }, { id: 8, connectionStatus: "offline" }],
+      runs: [{ instanceId: 9, state: "closed" }, { instanceId: 10, state: "closed" }],
+    };
+    expect(resolveH2AdsOrderBrowserShortcutState(multi)).toBeNull();
+    expect(resolveH2AdsOrderBrowserShortcutState({ ...multi, instanceId: 9 })?.canOpen).toBe(true);
+    expect(resolveH2AdsOrderBrowserShortcutState({ ...multi, instanceId: 10 })?.canOpen).toBe(false);
+    expect(resolveH2AdsOrderBrowserShortcutState({ ...multi, instanceId: 999 })).toBeNull();
+  });
+
   it("libera abrir quando o perfil está pronto ou fechado", () => {
     expect(resolveH2AdsOrderBrowserShortcutState({ ...base, runs: [{ instanceId: 9, state: "proxy_verified" }] })?.canOpen).toBe(true);
     expect(resolveH2AdsOrderBrowserShortcutState({ ...base, runs: [{ instanceId: 9, state: "closed" }] })?.canOpen).toBe(true);
