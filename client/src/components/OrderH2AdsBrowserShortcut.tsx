@@ -252,6 +252,17 @@ export default function OrderH2AdsBrowserShortcut({ registrationId, subOrderInde
     <button type="button" onClick={() => setCreating(false)} className="px-1 text-xs text-slate-300">CANCELAR</button>
   </span> : <button type="button" onClick={event => { event.stopPropagation(); setNewNote(""); setCreating(true); }} disabled={pending} className="inline-flex items-center gap-1 rounded-full border border-violet-400/35 bg-violet-400/15 px-2 py-1 text-[9px] font-black text-violet-200"><Plus className="h-3 w-3" />CRIAR</button>;
 
+  if (!shortcut && linkedIds.length > 1) {
+    return <span className="inline-flex items-center gap-1 rounded border border-cyan-500/40 p-1" onClick={event => event.stopPropagation()}>
+      <span className="text-[10px] text-cyan-200">H2ADS: {linkedIds.length} instâncias</span>
+      <select aria-label="Escolher instância H2ADS" value="" onChange={event => { event.stopPropagation(); setSelectedInstanceId(Number(event.target.value)); setEditingNote(false); }} className="rounded bg-slate-950 p-1 text-[10px] text-white">
+        <option value="" disabled>SELECIONE</option>
+        {linkedIds.map(id => <option key={id} value={id}>{(dashboard?.instances ?? []).find(item => item.id === id)?.name || `Instância #${id}`}</option>)}
+      </select>
+      {createPanel}
+    </span>;
+  }
+
   if (!shortcut && repairCandidate && !linkedIds.length) {
     const sourceTitle = repairCandidate.linkedOrderNumber
       ? `Instância compatível vinculada ao pedido #${repairCandidate.linkedOrderNumber}. Clique em VINCULAR para revisar e confirmar a transferência.`
