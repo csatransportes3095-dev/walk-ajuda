@@ -92,10 +92,13 @@ function generateFullAccount(existingEmails: string[], domain: string, registrat
   if (!username) {
     firstName = pick(FIRST_NAMES); lastName = pick(LAST_NAMES);
     if (registrationId) {
-      let attempt = 1;
+      let attempt = 0;
       username = ensureOrderRegistrationSuffix("cliente", registrationId);
       while (existingAddresses.has(`${username}@${normalizedDomain}`)) {
-        username = ensureOrderRegistrationSuffix(`cliente${attempt++}`, registrationId);
+        const letter = String.fromCharCode(97 + (attempt % 26));
+        const round = Math.floor(attempt / 26);
+        username = ensureOrderRegistrationSuffix(`cliente${letter}${round || ""}`, registrationId);
+        attempt += 1;
       }
     } else {
       let suffix = Date.now().toString(36).slice(-6);
@@ -530,6 +533,7 @@ export default function AdminEmail() {
                     createMutation.mutate({
                       ...form,
                       username: finalUsername,
+                      registrationId: orderRegistrationId ?? undefined,
                       serverId: selectedServer?.serverId,
                     } as any);
                   }
