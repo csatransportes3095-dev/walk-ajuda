@@ -425,7 +425,7 @@ export const scheduleRouter = router({
 
       // Reconciliação segura: somente o agendamento EXATO deste pedido/subpedido
       // pode corrigir o status principal. Nunca usa o fallback por telefone para isso.
-      if (appt && appt.status === 'confirmed' && isAnalysis) {
+      if (appt && appt.status === 'confirmed' && (!currentStatusKey || isAnalysis)) {
         try {
           const confirmedStatusKey = await resolveConfirmedScheduleOrderStatusKey();
           const statusResult = await updateLastOrderStatus({

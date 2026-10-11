@@ -981,7 +981,16 @@ export default function AdminOrders() {
       : STATUS_CONFIG as Record<string, { label: string; color: string; bg: string; icon: React.ReactNode; description?: string }>;
 
   const getVisualStatusConfigForOrder = (order: any, statusKey: string | null | undefined) => {
-    if (!statusKey) return null;
+    if (!statusKey) {
+      if (getOperationalBucket(order) === 'agendamento_confirmado') {
+        const confirmed = dynamicStatuses.find((s: any) =>
+          normalizeStatusLabel(s.label) === 'agendamento confirmado'
+          || ['agendamento_p_foto_confirmado', 'agendamento_confirmado'].includes(String(s.key))
+        );
+        return confirmed ? ACTIVE_STATUS_CONFIG[confirmed.key] ?? null : null;
+      }
+      return null;
+    }
     const actual = ACTIVE_STATUS_CONFIG[statusKey];
     if (!actual) return null;
 
@@ -5477,7 +5486,7 @@ export default function AdminOrders() {
                       const isCartGroup = !cgId.startsWith('__single__');
                       const order = isCartGroup ? cgItems[0] : cgItems[0]; // primaryOrder = primeiro item
                       const latestStatus = order.latestStatus as string | null;
-                      const statusCfg = latestStatus ? getVisualStatusConfigForOrder(order, latestStatus) : null;
+                      const statusCfg = getVisualStatusConfigForOrder(order, latestStatus);
                       const isExpanded = expandedId === getOrderKey(order);
                       const name = order.customerName || order.codeClientName || "Cliente";
                       const tab = getTab(getOrderKey(order));
