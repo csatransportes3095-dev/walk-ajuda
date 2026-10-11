@@ -45,3 +45,16 @@ describe('visual refinado da vitrine', () => {
     expect(card).toContain('border-[3px] border-red-500');
   });
 });
+
+
+describe('layout desktop da vitrine', () => {
+  it('limita a grade a tres colunas e mantem proporcoes compactas no desktop', () => {
+    const home = fs.readFileSync('client/src/pages/Home.tsx', 'utf8');
+    const card = fs.readFileSync('client/src/components/StorefrontProductCard.tsx', 'utf8');
+
+    expect(home).toContain('lg:!grid-cols-3 xl:!grid-cols-3 2xl:!grid-cols-3');
+    expect(card).toContain('lg:grid-cols-[minmax(0,1fr)_108px]');
+    expect(card).toContain('lg:text-[36px]');
+    expect(card).toContain('lg:text-[32px]');
+  });
+});
