@@ -158,6 +158,7 @@ import {
   addOrderFile, getOrderFiles, getOrderFilesByPhone, getOrderFilesByPhoneGrouped, deleteOrderFile,
   getStatusLabelFromDb,
   getStatusInfoFromDb,
+  resolveConfirmedScheduleOrderStatusKey,
   listOrderStatusTypes, setGlobalOrderProgressSequence, getGlobalOrderProgressAlternativeRules, setGlobalOrderProgressAlternativeRules,
   generateOrderNumber,
   updateLastOrderStatus,
@@ -4265,22 +4266,35 @@ export const appRouter = router({
         return formatWarrantyTier(matchedTiers[0]);
       };
 
-      // Adicionar flag hasNewDocResponse, hasNewTrackingAnswer, pasta e garantia em cada pedido
-      const finalOrdersWithFlag = finalOrders.map((o: any) => {
-        const folderInfo = folderByKey.get(`${o.id}_${o.subOrderIndex}`) ?? null;
-        return {
+      // Adicionar flag hasNewDocResponse, hasNewTrackingAnswer, pasta e garantia em cada pedido.
+      // Se o agendamento está confirmado mas o histórico ainda não refletiu o status,
+      // o backend projeta a chave REAL cadastrada para evitar "Sem status" no ADM.
+      const finalOrdersWithFlag: any[] = [];
+      for (const o of finalOrders) {
+        const orderKey = `${o.id}_${o.subOrderIndex}`;
+        const folderInfo = folderByKey.get(orderKey) ?? null;
+        const scheduleStatus = scheduleStatusMap.get(orderKey) ?? null;
+        let effectiveLatestStatus = o.latestStatus ?? null;
+
+        if (scheduleStatus === 'confirmed' && !effectiveLatestStatus) {
+          const confirmedKey = await resolveConfirmedScheduleOrderStatusKey(o.id, o.orderNumber ?? null);
+          if (confirmedKey) effectiveLatestStatus = confirmedKey;
+        }
+
+        finalOrdersWithFlag.push({
           ...o,
+          latestStatus: effectiveLatestStatus,
           hasNewDocResponse: answeredDocReqIds.has(Number(o.id)),
           hasNewTrackingAnswer: answeredAssignmentIds.has(Number(o.id)),
           folderName: folderInfo?.folderName ?? null,
           folderIcon: folderInfo?.folderIcon ?? null,
-          scheduleStatus: scheduleStatusMap.get(`${o.id}_${o.subOrderIndex}`) ?? null,
-          scheduleSlotDate: scheduleSlotMap.get(`${o.id}_${o.subOrderIndex}`)?.slotDate ?? null,
-          scheduleSlotTime: scheduleSlotMap.get(`${o.id}_${o.subOrderIndex}`)?.slotTime ?? null,
-          scheduleConfirmedAt: scheduleSlotMap.get(`${o.id}_${o.subOrderIndex}`)?.confirmedAt ?? null,
+          scheduleStatus,
+          scheduleSlotDate: scheduleSlotMap.get(orderKey)?.slotDate ?? null,
+          scheduleSlotTime: scheduleSlotMap.get(orderKey)?.slotTime ?? null,
+          scheduleConfirmedAt: scheduleSlotMap.get(orderKey)?.confirmedAt ?? null,
           warrantyDisplay: resolveOrderWarranty(o),
-        };
-      });
+        });
+      }
 
       return finalOrdersWithFlag.sort((a: any, b: any) => {
         const dateA = new Date(a.latestStatusAt || a.accessedAt).getTime();

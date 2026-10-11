@@ -66,4 +66,17 @@ describe("independência entre status do pedido e agendamento", () => {
     expect(source).toContain("!resolvedScheduleKeys.has(`${o.id}_${o.subOrderIndex}`)");
     expect(source).toContain("fallbackStatus !== 'cancelled' && fallbackStatus !== 'completed'");
   });
+
+  it("não grava chave fixa antiga para agendamento confirmado", async () => {
+    const source = await readFile(new URL("./routers/schedule.ts", import.meta.url), "utf8");
+    expect(source).toContain("resolveConfirmedScheduleOrderStatusKey(appt.registrationId, null)");
+    expect(source).not.toContain("return 'agendamento_p_foto_confirmado'");
+  });
+
+  it("projeta no admin a chave real quando a agenda está confirmada e o histórico ainda está vazio", async () => {
+    const source = await routerSource();
+    expect(source).toContain("scheduleStatus === 'confirmed' && !effectiveLatestStatus");
+    expect(source).toContain("resolveConfirmedScheduleOrderStatusKey(o.id, o.orderNumber ?? null)");
+    expect(source).toContain("latestStatus: effectiveLatestStatus");
+  });
 });
