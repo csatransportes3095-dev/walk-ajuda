@@ -19,4 +19,12 @@ describe("agendamento público — desmarcar e remarcar", () => {
     expect(pageSource).toContain("Desmarcar e escolher novo horário");
     expect(pageSource).toContain("Horário liberado. Escolha uma nova data e horário.");
   });
+
+  it("fecha definitivamente o modo de troca depois que o novo horário é confirmado", () => {
+    expect(pageSource).toContain("onSuccess: async () => {");
+    expect(pageSource).toContain("setShowChangeDate(false)");
+    expect(pageSource).toContain("setSelectedDate(null)");
+    expect(pageSource).toContain("setSelectedSlot(null)");
+    expect(pageSource).not.toContain("setShowChangeDate(true);\n      utils.schedule.getByToken.invalidate");
+  });
 });

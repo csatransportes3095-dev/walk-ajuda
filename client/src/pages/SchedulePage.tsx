@@ -124,7 +124,18 @@ export default function SchedulePage() {
   const [showMidnightWarning, setShowMidnightWarning] = useState(false);
 
   const confirmMut = trpc.schedule.confirm.useMutation({
-    onSuccess: () => { toast.success("Horário agendado com sucesso!"); utils.schedule.getByToken.invalidate({ token, accessToken }); },
+    onSuccess: async () => {
+      // A confirmação encerra qualquer modo local de troca. Sem este reset,
+      // o appointment volta como "confirmed", mas showChangeDate continua true
+      // e a tela reabre indevidamente o seletor de nova data/hora.
+      setShowChangeDate(false);
+      setSelectedDate(null);
+      setSelectedSlot(null);
+      setPeriodFilter('all');
+      setShowMidnightWarning(false);
+      toast.success("Horário agendado com sucesso!");
+      await utils.schedule.getByToken.invalidate({ token, accessToken });
+    },
     onError: (e) => {
       toast.error(e.message);
       utils.schedule.getByToken.invalidate({ token, accessToken });
@@ -137,7 +148,9 @@ export default function SchedulePage() {
       setSelectedDate(null);
       setSelectedSlot(null);
       setPeriodFilter('all');
-      setShowChangeDate(true);
+      // Depois de liberar o horário o appointment passa a pending e usa a tela
+      // normal de escolha. Não manter o modal de troca armado para a próxima confirmação.
+      setShowChangeDate(false);
       utils.schedule.getByToken.invalidate({ token, accessToken });
     },
     onError: (error) => toast.error(error.message || "Não foi possível liberar este horário."),
