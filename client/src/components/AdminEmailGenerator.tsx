@@ -147,6 +147,12 @@ function randomNumber() {
   return randomInt(10 ** (length - 1), 10 ** length - 1);
 }
 
+function normalizeCustomerNumber(value: string | null): number | null {
+  if (!value) return null;
+  const parsed = Number(value.replace(/\D/g, ""));
+  return Number.isSafeInteger(parsed) && parsed > 0 ? parsed : null;
+}
+
 function formatDate(value: string) {
   const date = new Date(value);
   return Number.isNaN(date.getTime()) ? "" : date.toLocaleString("pt-BR");
@@ -172,6 +178,19 @@ export default function AdminEmailGenerator({ onBack }: { onBack: () => void }) 
   const [search, setSearch] = useState("");
   const [historyDomain, setHistoryDomain] = useState("all");
 
+  const orderParams = useMemo(() => {
+    if (typeof window === "undefined") {
+      return { fromOrder: false, customerNumber: null as number | null, registrationId: null as number | null, customerName: "", orderNumber: null as number | null };
+    }
+    const params = new URLSearchParams(window.location.search);
+    const fromOrder = params.get("from") === "pedido";
+    const customerNumber = normalizeCustomerNumber(params.get("customerNumber"));
+    const registrationId = normalizeCustomerNumber(params.get("registrationId"));
+    const customerName = String(params.get("customerName") || "").trim();
+    const orderNumber = normalizeCustomerNumber(params.get("orderNumber"));
+    return { fromOrder, customerNumber, registrationId, customerName, orderNumber };
+  }, []);
+
   useEffect(() => {
     if (hydrated.current || !configQuery.data) return;
     setConfig(parseConfig(configQuery.data[CONFIG_KEY]));
@@ -185,7 +204,8 @@ export default function AdminEmailGenerator({ onBack }: { onBack: () => void }) 
 
   const activeDomain = config.domains.includes(config.activeDomain) ? config.activeDomain : config.domains[0];
   const safePrefix = normalizePrefix(config.prefix) || DEFAULT_CONFIG.prefix;
-  const formatExample = `${safePrefix}.${randomName()}.${randomNumber()}@${activeDomain}`;
+  const fixedOrderSuffix = orderParams.fromOrder ? orderParams.customerNumber : null;
+  const formatExample = `${safePrefix}.${randomName()}.${fixedOrderSuffix ?? randomNumber()}@${activeDomain}`;
 
   const filteredHistory = useMemo(() => {
     const term = search.trim().toLowerCase();
@@ -256,8 +276,14 @@ export default function AdminEmailGenerator({ onBack }: { onBack: () => void }) 
     const used = new Set(history.map(item => item.email.toLowerCase()));
     const generated: HistoryItem[] = [];
 
+    if (orderParams.fromOrder && !orderParams.customerNumber) {
+      toast.error("Código do cliente não recebido do pedido. Volte ao pedido e abra o Gerar H2 novamente.");
+      return;
+    }
+
     while (generated.length < count) {
-      const email = `${safePrefix}.${randomName()}.${randomNumber()}@${activeDomain}`.toLowerCase();
+      const suffix = orderParams.fromOrder ? orderParams.customerNumber! : randomNumber();
+      const email = `${safePrefix}.${randomName()}.${suffix}@${activeDomain}`.toLowerCase();
       if (used.has(email)) continue;
       used.add(email);
       generated.push({
@@ -346,6 +372,22 @@ export default function AdminEmailGenerator({ onBack }: { onBack: () => void }) 
             Salvar configurações
           </button>
         </div>
+
+        {orderParams.fromOrder && (
+          <div className={`mb-5 rounded-2xl border p-4 ${orderParams.customerNumber ? "border-lime-400/35 bg-lime-500/10 text-lime-100" : "border-red-400/40 bg-red-500/10 text-red-100"}`}>
+            <p className="text-xs font-black uppercase tracking-[0.12em]">Gerador vinculado ao pedido</p>
+            <p className="mt-1 text-sm font-bold">
+              {orderParams.customerName || "Cliente"}
+              {orderParams.customerNumber ? ` · Código *${orderParams.customerNumber}` : " · Código do cliente não recebido"}
+              {orderParams.orderNumber ? ` · Pedido #${orderParams.orderNumber}` : ""}
+            </p>
+            <p className="mt-1 text-xs opacity-80">
+              {orderParams.customerNumber
+                ? `Todo e-mail gerado neste acesso terminará em .${orderParams.customerNumber}@${activeDomain}.`
+                : "A geração está bloqueada para evitar criar um e-mail com número errado."}
+            </p>
+          </div>
+        )}
 
         <div className="grid gap-5 lg:grid-cols-[0.9fr_1.4fr]">
           <section className="space-y-5">

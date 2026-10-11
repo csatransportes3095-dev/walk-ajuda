@@ -119,6 +119,21 @@ function generateOrderLoginPassword(length = 10): string {
   return value;
 }
 
+function buildH2EmailGeneratorUrl(order: any): string {
+  const params = new URLSearchParams({ from: "pedido" });
+  const registrationId = Number(order?.registrationId ?? order?.id ?? 0);
+  const customerNumber = Number(order?.customerNumber ?? 0);
+  const customerName = String(order?.customerName ?? order?.codeClientName ?? "").trim();
+  const orderNumber = Number(order?.orderNumber ?? 0);
+
+  if (registrationId > 0) params.set("registrationId", String(registrationId));
+  if (customerNumber > 0) params.set("customerNumber", String(customerNumber));
+  if (customerName) params.set("customerName", customerName);
+  if (orderNumber > 0) params.set("orderNumber", String(orderNumber));
+
+  return `/admin/gerador-emails?${params.toString()}`;
+}
+
 
 type EditData = {
   name: string;
@@ -4315,7 +4330,8 @@ export default function AdminOrders() {
                                                   </p>
                                                   <div className="order-login-generator-actions flex flex-wrap items-center gap-1.5">
                                                     <button type="button" onClick={() => window.open('/admin/telefone', '_blank', 'noopener,noreferrer')} className="inline-flex min-h-8 items-center gap-1 rounded-lg border border-cyan-400/30 bg-cyan-500/10 px-2.5 py-1.5 text-[11px] font-bold text-cyan-200 hover:bg-cyan-500/20" title="Abrir gerador de telefone">⚡ Telefone</button>
-                                                    <button type="button" onClick={() => window.open(`/admin/email?registrationId=${ar.registrationId}`, '_blank', 'noopener,noreferrer')} className="inline-flex min-h-8 items-center gap-1 rounded-lg border border-blue-400/30 bg-blue-500/10 px-2.5 py-1.5 text-[11px] font-bold text-blue-200 hover:bg-blue-500/20" title="Abrir gerador de e-mail">✉️ Email</button>
+                                                    <button type="button" onClick={() => window.open('/admin/email', '_blank', 'noopener,noreferrer')} className="inline-flex min-h-8 items-center gap-1 rounded-lg border border-blue-400/30 bg-blue-500/10 px-2.5 py-1.5 text-[11px] font-bold text-blue-200 hover:bg-blue-500/20" title="Abrir gerador de e-mail">✉️ Email</button>
+                                                    <button type="button" onClick={() => window.open(buildH2EmailGeneratorUrl(ar), '_blank', 'noopener,noreferrer')} className="inline-flex min-h-8 items-center gap-1 rounded-lg border border-lime-400/30 bg-lime-500/10 px-2.5 py-1.5 text-[11px] font-bold text-lime-200 hover:bg-lime-500/20" title="Gerar e-mail H2 vinculado ao código do cliente">⚡ Gerar H2</button>
                                                     <button type="button" onClick={() => setField('loginPassword', generateOrderLoginPassword())} className="inline-flex min-h-8 items-center gap-1 rounded-lg border border-amber-400/30 bg-amber-500/10 px-2.5 py-1.5 text-[11px] font-bold text-amber-200 hover:bg-amber-500/20" title="Gerar senha segura e preencher o campo">🔐 Senha</button>
                                                   </div>
                                                 </div>
@@ -4756,7 +4772,8 @@ export default function AdminOrders() {
                                                               </p>
                                                               <div className="order-login-generator-actions flex flex-wrap items-center gap-1.5">
                                                                 <button type="button" onClick={() => window.open('/admin/telefone', '_blank', 'noopener,noreferrer')} className="inline-flex min-h-8 items-center gap-1 rounded-lg border border-cyan-400/30 bg-cyan-500/10 px-2.5 py-1.5 text-[11px] font-bold text-cyan-200 hover:bg-cyan-500/20" title="Abrir gerador de telefone">⚡ Telefone</button>
-                                                                <button type="button" onClick={() => window.open(`/admin/email?registrationId=${ar.registrationId}`, '_blank', 'noopener,noreferrer')} className="inline-flex min-h-8 items-center gap-1 rounded-lg border border-blue-400/30 bg-blue-500/10 px-2.5 py-1.5 text-[11px] font-bold text-blue-200 hover:bg-blue-500/20" title="Abrir gerador de e-mail">✉️ Email</button>
+                                                                <button type="button" onClick={() => window.open('/admin/email', '_blank', 'noopener,noreferrer')} className="inline-flex min-h-8 items-center gap-1 rounded-lg border border-blue-400/30 bg-blue-500/10 px-2.5 py-1.5 text-[11px] font-bold text-blue-200 hover:bg-blue-500/20" title="Abrir gerador de e-mail">✉️ Email</button>
+                                                    <button type="button" onClick={() => window.open(buildH2EmailGeneratorUrl(ar), '_blank', 'noopener,noreferrer')} className="inline-flex min-h-8 items-center gap-1 rounded-lg border border-lime-400/30 bg-lime-500/10 px-2.5 py-1.5 text-[11px] font-bold text-lime-200 hover:bg-lime-500/20" title="Gerar e-mail H2 vinculado ao código do cliente">⚡ Gerar H2</button>
                                                                 <button type="button" onClick={() => setField('loginPassword', generateOrderLoginPassword())} className="inline-flex min-h-8 items-center gap-1 rounded-lg border border-amber-400/30 bg-amber-500/10 px-2.5 py-1.5 text-[11px] font-bold text-amber-200 hover:bg-amber-500/20" title="Gerar senha segura e preencher o campo">🔐 Senha</button>
                                                               </div>
                                                             </div>
@@ -6687,7 +6704,8 @@ export default function AdminOrders() {
                               </p>
                               <div className="order-login-generator-actions flex flex-wrap items-center gap-1.5">
                                 <button type="button" onClick={() => window.open('/admin/telefone', '_blank', 'noopener,noreferrer')} className="inline-flex min-h-8 items-center gap-1 rounded-lg border border-cyan-400/30 bg-cyan-500/10 px-2.5 py-1.5 text-[11px] font-bold text-cyan-200 hover:bg-cyan-500/20" title="Abrir gerador de telefone">⚡ Telefone</button>
-                                <button type="button" onClick={() => window.open(`/admin/email?registrationId=${ar.registrationId}`, '_blank', 'noopener,noreferrer')} className="inline-flex min-h-8 items-center gap-1 rounded-lg border border-blue-400/30 bg-blue-500/10 px-2.5 py-1.5 text-[11px] font-bold text-blue-200 hover:bg-blue-500/20" title="Abrir gerador de e-mail">✉️ Email</button>
+                                <button type="button" onClick={() => window.open('/admin/email', '_blank', 'noopener,noreferrer')} className="inline-flex min-h-8 items-center gap-1 rounded-lg border border-blue-400/30 bg-blue-500/10 px-2.5 py-1.5 text-[11px] font-bold text-blue-200 hover:bg-blue-500/20" title="Abrir gerador de e-mail">✉️ Email</button>
+                                                    <button type="button" onClick={() => window.open(buildH2EmailGeneratorUrl(ar), '_blank', 'noopener,noreferrer')} className="inline-flex min-h-8 items-center gap-1 rounded-lg border border-lime-400/30 bg-lime-500/10 px-2.5 py-1.5 text-[11px] font-bold text-lime-200 hover:bg-lime-500/20" title="Gerar e-mail H2 vinculado ao código do cliente">⚡ Gerar H2</button>
                                 <button type="button" onClick={() => setField('loginPassword', generateOrderLoginPassword())} className="inline-flex min-h-8 items-center gap-1 rounded-lg border border-amber-400/30 bg-amber-500/10 px-2.5 py-1.5 text-[11px] font-bold text-amber-200 hover:bg-amber-500/20" title="Gerar senha segura e preencher o campo">🔐 Senha</button>
                               </div>
                             </div>
