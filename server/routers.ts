@@ -6908,31 +6908,22 @@ export const appRouter = router({
     resolveOrderCustomerNumber: adminProcedure
       .input(z.object({ registrationId: z.number().int().positive() }))
       .query(async ({ input }) => {
-        const { getDb } = await import('./db');
-        const db = await getDb();
-        if (!db) throw new TRPCError({ code: 'INTERNAL_SERVER_ERROR', message: 'Banco indisponível.' });
-        const result = await (db as any).execute(sql`
-          SELECT
-            c.customerNumber AS customerNumber,
-            c.name AS customerName,
-            osh.orderNumber AS orderNumber
-          FROM orderStatusHistory osh
-          LEFT JOIN accessCodePhones acp ON acp.id = osh.registrationId
-          LEFT JOIN customers c
-            ON RIGHT(REGEXP_REPLACE(COALESCE(c.phone, ''), '[^0-9]', ''), 11)
-             = RIGHT(REGEXP_REPLACE(COALESCE(acp.phone, osh.customerPhone, ''), '[^0-9]', ''), 11)
-           AND c.deletedAt IS NULL
-          WHERE osh.registrationId = ${input.registrationId}
-          ORDER BY osh.createdAt DESC, osh.id DESC
-          LIMIT 1
-        `);
-        const row = Array.isArray((result as any)?.[0]) ? (result as any)[0]?.[0] : null;
+        const { resolveOrderMainCustomerIdentity } = await import('./h2OrderEmailGenerator');
+        const identity = await resolveOrderMainCustomerIdentity(input.registrationId);
         return {
-          customerNumber: row?.customerNumber == null ? null : Number(row.customerNumber),
-          customerName: row?.customerName == null ? null : String(row.customerName),
-          orderNumber: row?.orderNumber == null ? null : Number(row.orderNumber),
+          customerNumber: identity.customerNumber,
+          customerName: identity.customerName,
+          orderNumber: identity.orderNumber,
         };
       }),
+
+    generateOrderH2Email: adminProcedure
+      .input(z.object({ registrationId: z.number().int().positive() }))
+      .mutation(async ({ input }) => {
+        const { generateOrderH2Email } = await import('./h2OrderEmailGenerator');
+        return await generateOrderH2Email(input.registrationId);
+      }),
+
     setGlobalGroup: adminProcedure.input(globalOrderGroupSchema).mutation(async ({ input }) => {
       const db = await (await import('./db')).getDb();
       if (!db) throw new TRPCError({ code: 'INTERNAL_SERVER_ERROR', message: 'Banco indisponível.' });

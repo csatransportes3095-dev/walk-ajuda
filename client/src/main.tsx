@@ -14,7 +14,6 @@ import AdminHomeTopSettingsEnhancer from "./components/AdminHomeTopSettingsEnhan
 import SpreadsheetModulesEnhancer from "./components/SpreadsheetModulesEnhancer";
 import SpreadsheetLegacyModulesCleanup from "./components/SpreadsheetLegacyModulesCleanup";
 import AdminOrderLoginQuickEnhancer from "./components/AdminOrderLoginQuickEnhancer";
-import AdminOrderH2EmailQuickFix from "./components/AdminOrderH2EmailQuickFix";
 import AdminOrderLoginCopyEnhancer from "./components/AdminOrderLoginCopyEnhancer";
 import AdminOrderAuthenticatorSyncEnhancer from "./components/AdminOrderAuthenticatorSyncEnhancer";
 import AdminOrderTrackingPinRetirement from "./components/AdminOrderTrackingPinRetirement";
@@ -96,7 +95,7 @@ function RuntimeTree() {
     <>
       <GlobalDevToolsProtection /><AdminDevToolsTargetSelector /><AdminHomeTopSettingsEnhancer />
       <SpreadsheetModulesEnhancer /><SpreadsheetLegacyModulesCleanup />
-      <AdminOrderLoginQuickEnhancer /><AdminOrderH2EmailQuickFix /><AdminOrderLoginCopyEnhancer /><AdminOrderAuthenticatorSyncEnhancer /><AdminOrderTrackingPinRetirement />
+      <AdminOrderLoginQuickEnhancer /><AdminOrderLoginCopyEnhancer /><AdminOrderAuthenticatorSyncEnhancer /><AdminOrderTrackingPinRetirement />
       <RafflePhotoIntegrityEnhancer /><AdminProductsQuestionUXEnhancer /><AdminQuestionEditOptionsEnhancer /><AdminQuestionTreeOrderEnhancer />
       <QuestionBlockingRulesManager /><QuestionBlockingManifestGuard /><ProductManifestGuard /><OrderWhatsappQuestionTreeEnhancer /><PublicQuestionFlowEnhancer /><RegistrationReferralFirstGate />
       <H2WelcomePremium /><HomeTopRuntimeEnhancer /><H2AdsScheduleFlatView />

@@ -457,7 +457,8 @@ export default function AdminOrderLoginQuickEnhancer() {
       labels.forEach(label => {
         const text = normalizeText(label.textContent);
         if (text.includes("LOGIN 1") && text.includes("TELEFONE")) injectPhoneButton(label);
-        else if (text.includes("LOGIN 2") && text.includes("EMAIL")) injectEmailButton(label);
+        // O e-mail H2 do pedido é gerado exclusivamente pelo botão nativo "Gerar H2"
+        // em AdminOrders, que usa o backend autoritativo ligado ao cadastro principal.
         else if (text === "CODIGO AUTENTICADOR" || text.startsWith("CODIGO AUTENTICADOR ")) bindQrAutoGeneration(label);
       });
       bindDeleteAutoSave();
