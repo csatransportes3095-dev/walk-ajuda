@@ -64,47 +64,21 @@ const LAST_NAMES = ["Silva","Santos","Oliveira","Souza","Lima","Pereira","Costa"
 
 function pick<T>(arr: T[]): T { return arr[Math.floor(Math.random() * arr.length)]; }
 
-function normalizeOrderRegistrationId(value: string | number | null | undefined): number | null {
-  const parsed = Number(value);
-  return Number.isSafeInteger(parsed) && parsed > 0 ? parsed : null;
-}
-
-function ensureOrderRegistrationSuffix(username: string, registrationId: number | null): string {
-  const normalized = String(username || "").trim().toLowerCase().replace(/\s+/g, ".");
-  if (!registrationId) return normalized;
-  const base = normalized.replace(/[._-]?\d+$/, "").replace(/[._-]+$/, "") || "cliente";
-  return `${base}.${registrationId}`;
-}
-
-function generateFullAccount(existingEmails: string[], domain: string, registrationId: number | null = null) {
+function generateFullAccount(existingEmails: string[], domain: string) {
   const existingAddresses = new Set(existingEmails.map((email) => String(email || "").trim().toLowerCase()));
   const normalizedDomain = String(domain || "walkajuda.com").trim().toLowerCase();
   let username = "", firstName = "", lastName = "";
   for (let i = 0; i < 100; i++) {
     firstName = pick(FIRST_NAMES); lastName = pick(LAST_NAMES);
-    const randomSuffix = Math.floor(Math.random() * 900) + 100;
-    const baseCandidate = registrationId
-      ? `${firstName.toLowerCase()}.${lastName.toLowerCase()}`
-      : `${firstName.toLowerCase()}.${lastName.toLowerCase()}${randomSuffix}`;
-    const candidate = ensureOrderRegistrationSuffix(baseCandidate, registrationId);
+    const num = Math.floor(Math.random() * 900) + 100;
+    const candidate = `${firstName.toLowerCase()}.${lastName.toLowerCase()}${num}`;
     if (!existingAddresses.has(`${candidate}@${normalizedDomain}`)) { username = candidate; break; }
   }
   if (!username) {
     firstName = pick(FIRST_NAMES); lastName = pick(LAST_NAMES);
-    if (registrationId) {
-      let attempt = 0;
-      username = ensureOrderRegistrationSuffix("cliente", registrationId);
-      while (existingAddresses.has(`${username}@${normalizedDomain}`)) {
-        const letter = String.fromCharCode(97 + (attempt % 26));
-        const round = Math.floor(attempt / 26);
-        username = ensureOrderRegistrationSuffix(`cliente${letter}${round || ""}`, registrationId);
-        attempt += 1;
-      }
-    } else {
-      let suffix = Date.now().toString(36).slice(-6);
-      while (existingAddresses.has(`user_${suffix}@${normalizedDomain}`)) suffix = `${suffix}${Math.floor(Math.random() * 10)}`;
-      username = `user_${suffix}`;
-    }
+    let suffix = Date.now().toString(36).slice(-6);
+    while (existingAddresses.has(`user_${suffix}@${normalizedDomain}`)) suffix = `${suffix}${Math.floor(Math.random() * 10)}`;
+    username = `user_${suffix}`;
   }
   return { username, firstName, lastName, displayName: `${firstName} ${lastName}`, password: "Walk@@3095" };
 }
@@ -121,9 +95,6 @@ type ModalStep = 'select-server' | 'fill-form';
 
 export default function AdminEmail() {
   const utils = trpc.useUtils();
-  const orderRegistrationId = typeof window === "undefined"
-    ? null
-    : normalizeOrderRegistrationId(new URLSearchParams(window.location.search).get("registrationId"));
   const { data: groups = [], isLoading, error: listError, refetch } = trpc.email.list.useQuery(undefined, { staleTime: 0, refetchInterval: 2_000, refetchIntervalInBackground: true, refetchOnWindowFocus: true });
 
   const [search, setSearch] = useState("");
@@ -149,10 +120,10 @@ export default function AdminEmail() {
 
   const handleGenerateUsername = useCallback(() => {
     setIsGeneratingUsername(true);
-    const generated = generateFullAccount(allEmails, selectedDomain, orderRegistrationId);
+    const generated = generateFullAccount(allEmails, selectedDomain);
     setForm(f => ({ ...f, ...generated }));
     setTimeout(() => setIsGeneratingUsername(false), 400);
-  }, [allEmails, selectedDomain, orderRegistrationId]);
+  }, [allEmails, selectedDomain]);
 
   // Abrir modal: selecionar servidor primeiro
   function handleOpenCreate() {
@@ -460,12 +431,6 @@ export default function AdminEmail() {
                 );
               })()}
 
-              {orderRegistrationId && (
-                <div className="rounded-lg border border-lime-400/35 bg-lime-500/10 px-3 py-2 text-sm text-lime-200">
-                  🔗 Vinculado ao cliente <strong>#{orderRegistrationId}</strong>. O e-mail criado terminará em <strong>.{orderRegistrationId}</strong>.
-                </div>
-              )}
-
               <div className="space-y-1">
                 <Label>Tipo *</Label>
                 <select value={form.type}
@@ -479,8 +444,7 @@ export default function AdminEmail() {
                 <Label>Usuário *</Label>
                 <div className="flex items-center gap-1">
                   <Input placeholder="nome.sobrenome" value={form.username}
-                    onChange={(e) => setForm(f => ({ ...f, username: e.target.value.toLowerCase().replace(/\s/g, ".") }))}
-                    onBlur={() => orderRegistrationId && setForm(f => ({ ...f, username: ensureOrderRegistrationSuffix(f.username, orderRegistrationId) }))} />
+                    onChange={(e) => setForm(f => ({ ...f, username: e.target.value.toLowerCase().replace(/\s/g, ".") }))} />
                   <Button variant="outline" size="icon" type="button" onClick={handleGenerateUsername}
                     title="Gerar usuário aleatório único" className="shrink-0">
                     <Shuffle className={`w-4 h-4 ${isGeneratingUsername ? "animate-spin" : ""}`} />
@@ -527,13 +491,9 @@ export default function AdminEmail() {
               <Button variant="outline" onClick={() => setModalStep(null)}>Cancelar</Button>
               <Button
                 onClick={() => {
-                  const finalUsername = ensureOrderRegistrationSuffix(form.username, orderRegistrationId);
-                  if (window.confirm(`A conta será criada no servidor ${selectedServer?.serverName?.toUpperCase()}:\n\n${finalUsername}@${selectedDomain}\n\nConfirmar?`)) {
-                    setForm(f => ({ ...f, username: finalUsername }));
+                  if (window.confirm(`A conta será criada no servidor ${selectedServer?.serverName?.toUpperCase()}:\n\n${form.username}@${selectedDomain}\n\nConfirmar?`)) {
                     createMutation.mutate({
                       ...form,
-                      username: finalUsername,
-                      registrationId: orderRegistrationId ?? undefined,
                       serverId: selectedServer?.serverId,
                     } as any);
                   }
