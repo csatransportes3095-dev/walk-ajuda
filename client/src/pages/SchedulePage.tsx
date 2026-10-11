@@ -49,13 +49,20 @@ function continuePostOrderScheduleFlow(currentToken: string) {
     return true;
   }
 
+  const whatsappUrl = typeof flow.saved?.whatsappUrl === 'string' ? flow.saved.whatsappUrl : '';
+  if (whatsappUrl.startsWith('https://wa.me/')) {
+    sessionStorage.removeItem(POST_ORDER_FLOW_KEY);
+    window.location.href = whatsappUrl;
+    return true;
+  }
+
   sessionStorage.setItem(POST_ORDER_FLOW_KEY, JSON.stringify({
     ...flow.saved,
     currentIndex: flow.index,
     completed: true,
     completedAt: Date.now(),
   }));
-  window.location.href = '/?postOrderReturn=1';
+  window.location.href = '/';
   return true;
 }
 
