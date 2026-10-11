@@ -422,6 +422,7 @@ export default function Home() {
     clientName: string;
     clientPhone: string;
     clientCity: string;
+    profilePhotoUrl?: string;
   } | null>(null);
 
   useEffect(() => {
@@ -1014,7 +1015,7 @@ export default function Home() {
   );
   const myProfileQuery = trpc.customers.getMyProfile.useQuery(
     { phone: clientPhoneFromSession },
-    { enabled: !!clientPhoneFromSession && showMyData }
+    { enabled: !!clientPhoneFromSession }
   );
   const customerCheck = trpc.customers.checkByPhone.useQuery(
     { phone: clientPhoneFromSession },
@@ -1810,6 +1811,7 @@ export default function Home() {
           clientName: clientName.trim() || 'Cliente',
           clientPhone: phone,
           clientCity: clientCity.trim(),
+          profilePhotoUrl: String(myProfileQuery.data?.profilePhotoUrl || '').trim() || undefined,
         });
         // Sessão VIP mantida até o cliente confirmar no WhatsApp
         setSuccessMessage(`${successCount} pedido(s) enviado(s) com sucesso!`);
@@ -1941,6 +1943,7 @@ export default function Home() {
           clientName: clientName.trim() || 'Cliente',
           clientPhone: phone,
           clientCity: clientCity.trim(),
+          profilePhotoUrl: String(myProfileQuery.data?.profilePhotoUrl || '').trim() || undefined,
         });
         // Sessão VIP mantida até o cliente confirmar no WhatsApp
         setSuccessMessage('Arquivos enviados com sucesso!');
@@ -2155,7 +2158,13 @@ export default function Home() {
 
   const buildPostOrderWhatsappUrl = () => {
     const od = submittedOrderData;
+    const profilePhotoUrl = String(od?.profilePhotoUrl || myProfileQuery.data?.profilePhotoUrl || '').trim();
     let msg = `NOVO PEDIDO - ${SITE_NAME}`;
+
+    if (profilePhotoUrl) {
+      msg += `\n\nFOTO DO CLIENTE:`;
+      msg += `\n${profilePhotoUrl}`;
+    }
 
     const rName = od?.referrerName || referrerName.trim();
     const rPhone = od?.referrerPhone || referrerPhone.trim();
@@ -4253,6 +4262,19 @@ export default function Home() {
               <p className="text-green-400 font-bold text-sm">Seus arquivos e comprovante foram recebidos!</p>
             </div>
 
+            {String(submittedOrderData?.profilePhotoUrl || myProfileQuery.data?.profilePhotoUrl || '').trim() && (
+              <div className="mb-5 rounded-2xl border border-cyan-400/35 bg-cyan-500/8 p-4">
+                <p className="mb-3 text-xs font-black uppercase tracking-wide text-cyan-200">📸 Foto do cadastro do cliente</p>
+                <div className="mx-auto h-24 w-24 overflow-hidden rounded-2xl border-2 border-cyan-300/40 bg-black/30 shadow-[0_0_20px_rgba(34,211,238,0.16)]">
+                  <img
+                    src={String(submittedOrderData?.profilePhotoUrl || myProfileQuery.data?.profilePhotoUrl || '').trim()}
+                    alt="Foto do cadastro do cliente"
+                    className="h-full w-full object-cover"
+                  />
+                </div>
+              </div>
+            )}
+
             {automaticScheduleLinks.length > 0 && postOrderScheduleDecision === 'choose' && (
               <div className="mb-5 rounded-2xl border-2 border-fuchsia-400/60 bg-gradient-to-br from-fuchsia-950/80 to-violet-950/70 p-5 text-center shadow-[0_0_28px_rgba(217,70,239,0.18)]">
                 <div className="mx-auto mb-3 flex h-14 w-14 items-center justify-center rounded-full border border-fuchsia-300/40 bg-fuchsia-400/15">
@@ -5663,6 +5685,7 @@ export default function Home() {
               clientName: data.clientName,
               clientPhone: data.clientPhone,
               clientCity: data.clientCity,
+              profilePhotoUrl: String(myProfileQuery.data?.profilePhotoUrl || '').trim() || undefined,
             });
             const botScheduleLinks = data.scheduleUrl ? [data.scheduleUrl] : [];
             setAutomaticScheduleLinks(botScheduleLinks);
