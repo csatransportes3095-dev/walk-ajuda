@@ -23,39 +23,11 @@ import {
   cancelAppointment, reopenAppointment, confirmAppointment, listAppointments, deleteAppointment, completeAppointment,
   getAppointmentById, manualConfirmAppointment, adminDismissScheduleAlert,
   getSetting, getLatestOrderStatus, getStatusLabelFromDb, getDb, updateLastOrderStatus,
+  resolveConfirmedScheduleOrderStatusKey,
 } from "../db";
 
 function makeToken(): string {
   return crypto.randomBytes(16).toString("hex");
-}
-
-async function resolveConfirmedScheduleOrderStatusKey(): Promise<string> {
-  try {
-    const db = await getDb() as any;
-    if (db) {
-      const result = await db.execute(sql`
-        SELECT \`key\`, label
-        FROM orderStatusTypes
-        WHERE isActive = 1
-          AND (
-            \`key\` IN ('agendamento_p_foto_confirmado', 'agendamento_confirmado')
-            OR LOWER(TRIM(label)) = 'agendamento confirmado'
-          )
-        ORDER BY
-          CASE
-            WHEN \`key\` = 'agendamento_p_foto_confirmado' THEN 0
-            WHEN LOWER(TRIM(label)) = 'agendamento confirmado' THEN 1
-            ELSE 2
-          END
-        LIMIT 1
-      `);
-      const row = (result?.[0] || [])[0] as { key?: string } | undefined;
-      if (row?.key) return String(row.key);
-    }
-  } catch (error) {
-    console.warn('[Schedule] Não foi possível resolver a chave de Agendamento Confirmado:', error);
-  }
-  return 'agendamento_p_foto_confirmado';
 }
 
 const SCHEDULE_ACCESS_DURATION_MS = 15 * 60 * 1000;
@@ -427,7 +399,8 @@ export const scheduleRouter = router({
       // pode corrigir o status principal. Nunca usa o fallback por telefone para isso.
       if (appt && appt.status === 'confirmed' && (!currentStatusKey || isAnalysis)) {
         try {
-          const confirmedStatusKey = await resolveConfirmedScheduleOrderStatusKey();
+          const confirmedStatusKey = await resolveConfirmedScheduleOrderStatusKey(input.registrationId, null);
+          if (!confirmedStatusKey) throw new Error('Status ativo de AGENDAMENTO CONFIRMADO não encontrado no catálogo/fluxo.');
           const statusResult = await updateLastOrderStatus({
             registrationId: input.registrationId,
             subOrderIndex: input.subOrderIndex,
@@ -905,7 +878,8 @@ export const scheduleRouter = router({
       // A confirmação da agenda já foi persistida; falha ao refletir o status
       // deve ser visível no log sem desfazer a reserva do horário.
       try {
-        const confirmedStatusKey = await resolveConfirmedScheduleOrderStatusKey();
+        const confirmedStatusKey = await resolveConfirmedScheduleOrderStatusKey(appt.registrationId, null);
+        if (!confirmedStatusKey) throw new Error('Status ativo de AGENDAMENTO CONFIRMADO não encontrado no catálogo/fluxo.');
         const statusResult = await updateLastOrderStatus({
           registrationId: appt.registrationId,
           subOrderIndex: appt.subOrderIndex ?? 0,
