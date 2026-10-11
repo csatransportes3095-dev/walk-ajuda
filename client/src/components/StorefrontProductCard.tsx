@@ -351,7 +351,10 @@ export function StorefrontProductCard({
                           <div className="flex flex-col items-center">
                             <div className="flex items-baseline justify-center gap-1 whitespace-nowrap">
                               <span className="text-[8px] font-black uppercase tracking-wide text-white/75 sm:text-[9px]">DE</span>
-                              <span className="text-[13px] font-black text-white line-through decoration-red-500 decoration-[3px] drop-shadow-[0_0_5px_rgba(255,255,255,.16)] sm:text-[15px]">{asMoney(model.originalPrice)}</span>
+                              <span className="relative inline-block text-[13px] font-black text-white drop-shadow-[0_0_5px_rgba(255,255,255,.16)] sm:text-[15px]">
+                                {asMoney(model.originalPrice)}
+                                <span aria-hidden="true" className="pointer-events-none absolute left-[2%] right-[2%] top-1/2 h-[2px] -translate-y-1/2 -rotate-[4deg] skew-x-[-14deg] rounded-[1px] bg-red-500/55 shadow-[0_0_4px_rgba(239,68,68,.28)]" />
+                              </span>
                             </div>
                             <span className={`mt-0.5 block text-[9px] font-black uppercase tracking-[0.08em] ${palette.text} sm:text-[10px]`}>POR</span>
                             <span className={`mt-0.5 block whitespace-nowrap text-[22px] font-black leading-none tracking-[-0.03em] text-emerald-300 drop-shadow-[0_0_14px_rgba(74,222,128,.58)] sm:text-[25px]`}>{asMoney(model.price)}</span>
@@ -413,7 +416,10 @@ export function StorefrontProductCard({
                 <div className="min-w-0">
                   <div className="flex items-baseline gap-2 whitespace-nowrap">
                     <span className="text-[13px] font-black uppercase tracking-[0.08em] text-white/80 sm:text-sm">DE</span>
-                    <span className="text-[24px] font-black leading-none text-white line-through decoration-red-500 decoration-[5px] drop-shadow-[0_0_10px_rgba(255,255,255,.18)] sm:text-[34px]">{asMoney(effectiveOriginalPrice)}</span>
+                    <span className="relative inline-block text-[24px] font-black leading-none text-white drop-shadow-[0_0_10px_rgba(255,255,255,.18)] sm:text-[34px]">
+                      {asMoney(effectiveOriginalPrice)}
+                      <span aria-hidden="true" className="pointer-events-none absolute left-[1%] right-[1%] top-[52%] h-[4px] -translate-y-1/2 -rotate-[4deg] skew-x-[-18deg] rounded-[1px] bg-red-500/60 shadow-[0_0_5px_rgba(239,68,68,.34)] sm:h-[5px]" />
+                    </span>
                   </div>
                   <div className="mt-2">
                     <span className="block text-[16px] font-black uppercase tracking-[0.08em] text-emerald-300 sm:text-lg">POR</span>
