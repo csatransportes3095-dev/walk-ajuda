@@ -20,6 +20,7 @@ import { uploadOrderFileReliably } from "@/lib/reliableOrderUpload";
 import { isPersistedOrderResult } from "@shared/orderSubmission";
 import { getVehicleModels, getVehicleQuestionKind, VEHICLE_BRANDS, VEHICLE_COLORS, VEHICLE_YEARS } from "@shared/vehicleCatalog";
 import { applyVipBenefitToPrice } from "@shared/vipPricing";
+import { publicSiteUrl } from "@shared/publicLinks";
 
 type Step = "home" | "registration" | "name-select" | "upload" | "pdf-upload" | "questions" | "cadastro" | "success";
 type FlowOrigin = "storefront" | "cart" | "legacy";
@@ -2159,12 +2160,12 @@ export default function Home() {
   const buildPostOrderWhatsappUrl = () => {
     const od = submittedOrderData;
     const profilePhotoUrl = String(od?.profilePhotoUrl || myProfileQuery.data?.profilePhotoUrl || '').trim();
-    let msg = `NOVO PEDIDO - ${SITE_NAME}`;
-
-    if (profilePhotoUrl) {
-      msg += `\n\nFOTO DO CLIENTE:`;
-      msg += `\n${profilePhotoUrl}`;
-    }
+    const profilePhotoPreviewUrl = profilePhotoUrl
+      ? publicSiteUrl(`/link/foto-cliente?src=${encodeURIComponent(profilePhotoUrl)}`)
+      : '';
+    let msg = profilePhotoPreviewUrl
+      ? `${profilePhotoPreviewUrl}\n\nNOVO PEDIDO - ${SITE_NAME}`
+      : `NOVO PEDIDO - ${SITE_NAME}`;
 
     const rName = od?.referrerName || referrerName.trim();
     const rPhone = od?.referrerPhone || referrerPhone.trim();
@@ -4261,19 +4262,6 @@ export default function Home() {
               </div>
               <p className="text-green-400 font-bold text-sm">Seus arquivos e comprovante foram recebidos!</p>
             </div>
-
-            {String(submittedOrderData?.profilePhotoUrl || myProfileQuery.data?.profilePhotoUrl || '').trim() && (
-              <div className="mb-5 rounded-2xl border border-cyan-400/35 bg-cyan-500/8 p-4">
-                <p className="mb-3 text-xs font-black uppercase tracking-wide text-cyan-200">📸 Foto do cadastro do cliente</p>
-                <div className="mx-auto h-24 w-24 overflow-hidden rounded-2xl border-2 border-cyan-300/40 bg-black/30 shadow-[0_0_20px_rgba(34,211,238,0.16)]">
-                  <img
-                    src={String(submittedOrderData?.profilePhotoUrl || myProfileQuery.data?.profilePhotoUrl || '').trim()}
-                    alt="Foto do cadastro do cliente"
-                    className="h-full w-full object-cover"
-                  />
-                </div>
-              </div>
-            )}
 
             {automaticScheduleLinks.length > 0 && postOrderScheduleDecision === 'choose' && (
               <div className="mb-5 rounded-2xl border-2 border-fuchsia-400/60 bg-gradient-to-br from-fuchsia-950/80 to-violet-950/70 p-5 text-center shadow-[0_0_28px_rgba(217,70,239,0.18)]">
