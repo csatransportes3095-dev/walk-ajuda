@@ -52,7 +52,22 @@ function continuePostOrderScheduleFlow(currentToken: string) {
   const whatsappUrl = typeof flow.saved?.whatsappUrl === 'string' ? flow.saved.whatsappUrl : '';
   if (whatsappUrl.startsWith('https://wa.me/')) {
     sessionStorage.removeItem(POST_ORDER_FLOW_KEY);
-    window.location.href = whatsappUrl;
+
+    // Abre o WhatsApp a partir do clique do usuário sem abandonar a página H2.
+    // A aba atual volta imediatamente para a página central, evitando ficar presa
+    // no intermediário wa.me quando o aplicativo WhatsApp assume o direcionamento.
+    const whatsappLink = document.createElement('a');
+    whatsappLink.href = whatsappUrl;
+    whatsappLink.target = '_blank';
+    whatsappLink.rel = 'noopener noreferrer';
+    whatsappLink.style.display = 'none';
+    document.body.appendChild(whatsappLink);
+    whatsappLink.click();
+    whatsappLink.remove();
+
+    window.setTimeout(() => {
+      window.location.replace('/');
+    }, 250);
     return true;
   }
 

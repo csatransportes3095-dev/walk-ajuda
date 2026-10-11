@@ -33,7 +33,8 @@ describe("fluxo pos-pedido: agendamento antes do WhatsApp", () => {
     expect(schedule).toContain("CONTINUAR PEDIDO");
     expect(schedule).toContain("CONTINUAR PARA O PRÓXIMO AGENDAMENTO");
     expect(schedule).toContain("const whatsappUrl = typeof flow.saved?.whatsappUrl === 'string'");
-    expect(schedule).toContain("window.location.href = whatsappUrl");
+    expect(schedule).toContain("whatsappLink.target = '_blank'");
+    expect(schedule).toContain("window.location.replace('/')");
     expect(schedule).toContain("sessionStorage.removeItem(POST_ORDER_FLOW_KEY)");
   });
 
