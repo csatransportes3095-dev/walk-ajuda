@@ -1715,6 +1715,8 @@ export default function AdminOrders() {
     });
   // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [loginDataQuery.data, expandedId]);
+  const generateOrderH2EmailMut = trpc.loginData.generateOrderH2Email.useMutation();
+
   const saveLoginDataMut = trpc.loginData.save.useMutation({
     onSuccess: (_result, variables) => {
       toast.success('Dados de login salvos!');
@@ -4331,7 +4333,22 @@ export default function AdminOrders() {
                                                   <div className="order-login-generator-actions flex flex-wrap items-center gap-1.5">
                                                     <button type="button" onClick={() => window.open('/admin/telefone', '_blank', 'noopener,noreferrer')} className="inline-flex min-h-8 items-center gap-1 rounded-lg border border-cyan-400/30 bg-cyan-500/10 px-2.5 py-1.5 text-[11px] font-bold text-cyan-200 hover:bg-cyan-500/20" title="Abrir gerador de telefone">⚡ Telefone</button>
                                                     <button type="button" onClick={() => window.open('/admin/email', '_blank', 'noopener,noreferrer')} className="inline-flex min-h-8 items-center gap-1 rounded-lg border border-blue-400/30 bg-blue-500/10 px-2.5 py-1.5 text-[11px] font-bold text-blue-200 hover:bg-blue-500/20" title="Abrir gerador de e-mail">✉️ Email</button>
-                                                    <button type="button" onClick={() => window.open(buildH2EmailGeneratorUrl(ar), '_blank', 'noopener,noreferrer')} className="inline-flex min-h-8 items-center gap-1 rounded-lg border border-lime-400/30 bg-lime-500/10 px-2.5 py-1.5 text-[11px] font-bold text-lime-200 hover:bg-lime-500/20" title="Gerar e-mail H2 vinculado ao código do cliente">⚡ Gerar H2</button>
+                                                    <button
+                                                      type="button"
+                                                      disabled={generateOrderH2EmailMut.isPending}
+                                                      onClick={async () => {
+                                                        try {
+                                                          const generated = await generateOrderH2EmailMut.mutateAsync({ registrationId: ar.registrationId });
+                                                          setField('loginEmail', generated.email);
+                                                          setField('loginPassword', 'fusca123');
+                                                          toast.success(`E-mail H2 gerado com o cadastro *${generated.customerNumber}: ${generated.email}`);
+                                                        } catch (error: any) {
+                                                          toast.error(error?.message || 'Não foi possível gerar o e-mail H2 deste pedido.');
+                                                        }
+                                                      }}
+                                                      className="inline-flex min-h-8 items-center gap-1 rounded-lg border border-lime-400/30 bg-lime-500/10 px-2.5 py-1.5 text-[11px] font-bold text-lime-200 hover:bg-lime-500/20 disabled:opacity-50"
+                                                      title="Gerar e-mail H2 usando exclusivamente o código do cadastro principal"
+                                                    >{generateOrderH2EmailMut.isPending ? 'Gerando...' : '⚡ Gerar H2'}</button>
                                                     <button type="button" onClick={() => setField('loginPassword', generateOrderLoginPassword())} className="inline-flex min-h-8 items-center gap-1 rounded-lg border border-amber-400/30 bg-amber-500/10 px-2.5 py-1.5 text-[11px] font-bold text-amber-200 hover:bg-amber-500/20" title="Gerar senha segura e preencher o campo">🔐 Senha</button>
                                                   </div>
                                                 </div>
@@ -4773,7 +4790,22 @@ export default function AdminOrders() {
                                                               <div className="order-login-generator-actions flex flex-wrap items-center gap-1.5">
                                                                 <button type="button" onClick={() => window.open('/admin/telefone', '_blank', 'noopener,noreferrer')} className="inline-flex min-h-8 items-center gap-1 rounded-lg border border-cyan-400/30 bg-cyan-500/10 px-2.5 py-1.5 text-[11px] font-bold text-cyan-200 hover:bg-cyan-500/20" title="Abrir gerador de telefone">⚡ Telefone</button>
                                                                 <button type="button" onClick={() => window.open('/admin/email', '_blank', 'noopener,noreferrer')} className="inline-flex min-h-8 items-center gap-1 rounded-lg border border-blue-400/30 bg-blue-500/10 px-2.5 py-1.5 text-[11px] font-bold text-blue-200 hover:bg-blue-500/20" title="Abrir gerador de e-mail">✉️ Email</button>
-                                                    <button type="button" onClick={() => window.open(buildH2EmailGeneratorUrl(ar), '_blank', 'noopener,noreferrer')} className="inline-flex min-h-8 items-center gap-1 rounded-lg border border-lime-400/30 bg-lime-500/10 px-2.5 py-1.5 text-[11px] font-bold text-lime-200 hover:bg-lime-500/20" title="Gerar e-mail H2 vinculado ao código do cliente">⚡ Gerar H2</button>
+                                                    <button
+                                                      type="button"
+                                                      disabled={generateOrderH2EmailMut.isPending}
+                                                      onClick={async () => {
+                                                        try {
+                                                          const generated = await generateOrderH2EmailMut.mutateAsync({ registrationId: ar.registrationId });
+                                                          setField('loginEmail', generated.email);
+                                                          setField('loginPassword', 'fusca123');
+                                                          toast.success(`E-mail H2 gerado com o cadastro *${generated.customerNumber}: ${generated.email}`);
+                                                        } catch (error: any) {
+                                                          toast.error(error?.message || 'Não foi possível gerar o e-mail H2 deste pedido.');
+                                                        }
+                                                      }}
+                                                      className="inline-flex min-h-8 items-center gap-1 rounded-lg border border-lime-400/30 bg-lime-500/10 px-2.5 py-1.5 text-[11px] font-bold text-lime-200 hover:bg-lime-500/20 disabled:opacity-50"
+                                                      title="Gerar e-mail H2 usando exclusivamente o código do cadastro principal"
+                                                    >{generateOrderH2EmailMut.isPending ? 'Gerando...' : '⚡ Gerar H2'}</button>
                                                                 <button type="button" onClick={() => setField('loginPassword', generateOrderLoginPassword())} className="inline-flex min-h-8 items-center gap-1 rounded-lg border border-amber-400/30 bg-amber-500/10 px-2.5 py-1.5 text-[11px] font-bold text-amber-200 hover:bg-amber-500/20" title="Gerar senha segura e preencher o campo">🔐 Senha</button>
                                                               </div>
                                                             </div>
@@ -6705,7 +6737,22 @@ export default function AdminOrders() {
                               <div className="order-login-generator-actions flex flex-wrap items-center gap-1.5">
                                 <button type="button" onClick={() => window.open('/admin/telefone', '_blank', 'noopener,noreferrer')} className="inline-flex min-h-8 items-center gap-1 rounded-lg border border-cyan-400/30 bg-cyan-500/10 px-2.5 py-1.5 text-[11px] font-bold text-cyan-200 hover:bg-cyan-500/20" title="Abrir gerador de telefone">⚡ Telefone</button>
                                 <button type="button" onClick={() => window.open('/admin/email', '_blank', 'noopener,noreferrer')} className="inline-flex min-h-8 items-center gap-1 rounded-lg border border-blue-400/30 bg-blue-500/10 px-2.5 py-1.5 text-[11px] font-bold text-blue-200 hover:bg-blue-500/20" title="Abrir gerador de e-mail">✉️ Email</button>
-                                                    <button type="button" onClick={() => window.open(buildH2EmailGeneratorUrl(order), '_blank', 'noopener,noreferrer')} className="inline-flex min-h-8 items-center gap-1 rounded-lg border border-lime-400/30 bg-lime-500/10 px-2.5 py-1.5 text-[11px] font-bold text-lime-200 hover:bg-lime-500/20" title="Gerar e-mail H2 vinculado ao código do cliente">⚡ Gerar H2</button>
+                                                    <button
+                                                      type="button"
+                                                      disabled={generateOrderH2EmailMut.isPending}
+                                                      onClick={async () => {
+                                                        try {
+                                                          const generated = await generateOrderH2EmailMut.mutateAsync({ registrationId: order.id });
+                                                          setField('loginEmail', generated.email);
+                                                          setField('loginPassword', 'fusca123');
+                                                          toast.success(`E-mail H2 gerado com o cadastro *${generated.customerNumber}: ${generated.email}`);
+                                                        } catch (error: any) {
+                                                          toast.error(error?.message || 'Não foi possível gerar o e-mail H2 deste pedido.');
+                                                        }
+                                                      }}
+                                                      className="inline-flex min-h-8 items-center gap-1 rounded-lg border border-lime-400/30 bg-lime-500/10 px-2.5 py-1.5 text-[11px] font-bold text-lime-200 hover:bg-lime-500/20 disabled:opacity-50"
+                                                      title="Gerar e-mail H2 usando exclusivamente o código do cadastro principal"
+                                                    >{generateOrderH2EmailMut.isPending ? 'Gerando...' : '⚡ Gerar H2'}</button>
                                 <button type="button" onClick={() => setField('loginPassword', generateOrderLoginPassword())} className="inline-flex min-h-8 items-center gap-1 rounded-lg border border-amber-400/30 bg-amber-500/10 px-2.5 py-1.5 text-[11px] font-bold text-amber-200 hover:bg-amber-500/20" title="Gerar senha segura e preencher o campo">🔐 Senha</button>
                               </div>
                             </div>
