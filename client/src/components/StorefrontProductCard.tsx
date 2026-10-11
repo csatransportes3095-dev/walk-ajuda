@@ -316,7 +316,7 @@ export function StorefrontProductCard({
             <div className="flex items-start gap-3">
               <Crown className="mt-0.5 h-7 w-7 shrink-0 fill-violet-500/30 text-violet-400" />
               <div>
-                <p className="text-[22px] font-black uppercase leading-none tracking-[-0.02em] text-white drop-shadow-[0_1px_0_rgba(255,255,255,.08)] sm:text-[28px]">Escolha sua garantia</p>
+                <p className="text-[22px] font-black uppercase leading-none tracking-[-0.02em] text-white drop-shadow-[0_1px_0_rgba(255,255,255,.08)] sm:text-[24px] lg:text-[22px] xl:text-[24px]">Escolha sua garantia</p>
                 <p className="mt-2 text-[11px] font-medium text-slate-400 sm:text-sm">Mais corridas, mais tempo, mais tranquilidade.</p>
               </div>
             </div>
@@ -343,22 +343,22 @@ export function StorefrontProductCard({
                       <span className="absolute left-1/2 top-0 -translate-x-1/2 -translate-y-[1px] whitespace-nowrap rounded-b-xl bg-cyan-400 px-3 py-1.5 text-[8px] font-black uppercase tracking-wide text-[#03111c] shadow-[0_0_16px_rgba(34,211,238,.38)] sm:text-[10px]">Mais escolhida</span>
                     ) : null}
                     <ShieldCheck className={`mx-auto h-6 w-6 ${palette.text}`} />
-                    <span className="mt-2.5 block text-[13px] font-black leading-4 tracking-[-0.02em] text-white sm:text-[17px]">{parts.title}</span>
-                    <span className={`mt-1 block text-[15px] font-black leading-none sm:text-[18px] ${palette.text}`}>{parts.subtitle}</span>
+                    <span className="mt-2.5 block text-[13px] font-black leading-4 tracking-[-0.02em] text-white sm:text-[15px] lg:text-[13px] xl:text-[14px]">{parts.title}</span>
+                    <span className={`mt-1 block text-[15px] font-black leading-none sm:text-[16px] lg:text-[15px] ${palette.text}`}>{parts.subtitle}</span>
                     <div className="mt-2.5 min-h-[68px] border-t border-white/20 pt-2">
                       {modelVipMode === 'all' ? (
                         modelHasDiscount && model.originalPrice ? (
                           <div className="flex flex-col items-center">
                             <div className="flex items-baseline justify-center gap-1 whitespace-nowrap">
                               <span className="text-[8px] font-black uppercase tracking-wide text-white/75 sm:text-[9px]">DE</span>
-                              <span className="relative inline-block text-[13px] font-black text-white drop-shadow-[0_0_5px_rgba(255,255,255,.16)] sm:text-[15px]">
+                              <span className="relative inline-block text-[13px] font-black text-white drop-shadow-[0_0_5px_rgba(255,255,255,.16)] sm:text-[14px] lg:text-[13px]">
                                 {asMoney(model.originalPrice)}
                                 <span aria-hidden="true" className="pointer-events-none absolute left-[2%] right-[2%] top-1/2 h-[2px] -translate-y-1/2 -rotate-[4deg] skew-x-[-14deg] rounded-[1px] bg-red-500/55 shadow-[0_0_4px_rgba(239,68,68,.28)]" />
                               </span>
                             </div>
                             <span className={`mt-0.5 block text-[9px] font-black uppercase tracking-[0.08em] ${palette.text} sm:text-[10px]`}>POR</span>
-                            <span className={`mt-0.5 block whitespace-nowrap text-[22px] font-black leading-none tracking-[-0.03em] text-emerald-300 drop-shadow-[0_0_14px_rgba(74,222,128,.58)] sm:text-[25px]`}>{asMoney(model.price)}</span>
-                            <span className="mt-1.5 inline-flex whitespace-nowrap rounded-full border border-emerald-300/70 bg-emerald-500/12 px-2.5 py-1 text-[8px] font-black uppercase tracking-[0.04em] text-emerald-200 shadow-[0_0_14px_rgba(16,185,129,.24)] sm:text-[10px]">Economize {modelDiscount}%</span>
+                            <span className={`mt-0.5 block whitespace-nowrap text-[22px] font-black leading-none tracking-[-0.03em] text-emerald-300 drop-shadow-[0_0_14px_rgba(74,222,128,.58)] sm:text-[23px] lg:text-[22px]`}>{asMoney(model.price)}</span>
+                            <span className="mt-1.5 inline-flex whitespace-nowrap rounded-full border border-emerald-300/70 bg-emerald-500/12 px-2.5 py-1 text-[8px] font-black uppercase tracking-[0.04em] text-emerald-200 shadow-[0_0_14px_rgba(16,185,129,.24)] sm:text-[9px] lg:text-[8px]">Economize {modelDiscount}%</span>
                           </div>
                         ) : (
                           <span className="block text-[13px] font-black text-white sm:text-base">{asMoney(model.price)}</span>
@@ -403,7 +403,7 @@ export function StorefrontProductCard({
           </label>
         )}
 
-        <div className="mt-5 rounded-[26px] border border-violet-400/70 bg-[radial-gradient(circle_at_18%_12%,rgba(76,29,149,.36),transparent_36%),radial-gradient(circle_at_86%_12%,rgba(30,64,175,.18),transparent_34%),linear-gradient(135deg,rgba(18,14,58,.98),rgba(6,10,31,.98)_58%,rgba(3,7,22,.99))] p-4 shadow-[0_0_0_1px_rgba(139,92,246,.10),0_0_30px_rgba(124,58,237,.16)] sm:p-5">
+        <div className="mt-5 rounded-[26px] border border-violet-400/70 bg-[radial-gradient(circle_at_18%_12%,rgba(76,29,149,.36),transparent_36%),radial-gradient(circle_at_86%_12%,rgba(30,64,175,.18),transparent_34%),linear-gradient(135deg,rgba(18,14,58,.98),rgba(6,10,31,.98)_58%,rgba(3,7,22,.99))] p-4 shadow-[0_0_0_1px_rgba(139,92,246,.10),0_0_30px_rgba(124,58,237,.16)] sm:p-5 lg:p-4">
           <div className="flex items-center gap-3">
             <div className="grid h-10 w-10 shrink-0 place-items-center rounded-xl bg-violet-600/25 text-violet-300"><Tag className="h-5 w-5" /></div>
             <p className="text-[14px] font-black uppercase tracking-[0.12em] text-violet-300 sm:text-base">Sua escolha</p>
@@ -412,24 +412,24 @@ export function StorefrontProductCard({
           <p className="mt-4 text-[14px] font-black uppercase leading-5 tracking-[0.02em] text-white sm:text-[17px]">{selectedParts ? `${item.option.label} • ${selectedParts.title} • ${selectedParts.subtitle}` : `${item.option.label} • escolha uma garantia`}</p>
           <div className="mt-4 border-t border-white/15 pt-4">
             {discount > 0 && !(selectedPriceModel && modelHasVipPrice) ? (
-              <div className="grid grid-cols-[minmax(0,1fr)_108px] items-center gap-2.5 sm:grid-cols-[minmax(0,1fr)_138px] sm:gap-4">
+              <div className="grid grid-cols-[minmax(0,1fr)_108px] items-center gap-2.5 sm:grid-cols-[minmax(0,1fr)_116px] sm:gap-3 lg:grid-cols-[minmax(0,1fr)_108px] lg:gap-2.5 xl:grid-cols-[minmax(0,1fr)_116px] xl:gap-3">
                 <div className="min-w-0">
                   <div className="flex items-baseline gap-2 whitespace-nowrap">
                     <span className="text-[13px] font-black uppercase tracking-[0.08em] text-white/80 sm:text-sm">DE</span>
-                    <span className="relative inline-block text-[24px] font-black leading-none text-white drop-shadow-[0_0_10px_rgba(255,255,255,.18)] sm:text-[34px]">
+                    <span className="relative inline-block text-[24px] font-black leading-none text-white drop-shadow-[0_0_10px_rgba(255,255,255,.18)] sm:text-[28px] lg:text-[24px] xl:text-[28px]">
                       {asMoney(effectiveOriginalPrice)}
                       <span aria-hidden="true" className="pointer-events-none absolute left-[1%] right-[1%] top-[52%] h-[4px] -translate-y-1/2 -rotate-[4deg] skew-x-[-18deg] rounded-[1px] bg-red-500/60 shadow-[0_0_5px_rgba(239,68,68,.34)] sm:h-[5px]" />
                     </span>
                   </div>
                   <div className="mt-2">
                     <span className="block text-[16px] font-black uppercase tracking-[0.08em] text-emerald-300 sm:text-lg">POR</span>
-                    <p className="mt-1 whitespace-nowrap text-[36px] font-black leading-[0.88] tracking-[-0.045em] text-emerald-300 drop-shadow-[0_0_26px_rgba(74,222,128,.62)] sm:text-[56px]">{effectivePrice ? asMoney(effectivePrice) : "Valor após a escolha"}</p>
+                    <p className="mt-1 whitespace-nowrap text-[36px] font-black leading-[0.88] tracking-[-0.045em] text-emerald-300 drop-shadow-[0_0_26px_rgba(74,222,128,.62)] sm:text-[42px] lg:text-[36px] xl:text-[40px]">{effectivePrice ? asMoney(effectivePrice) : "Valor após a escolha"}</p>
                   </div>
                 </div>
-                <div className="flex min-h-[118px] flex-col items-center justify-center rounded-[22px] border-[3px] border-red-500 bg-[radial-gradient(circle_at_50%_18%,rgba(249,115,22,.25),transparent_30%),linear-gradient(180deg,rgba(72,8,18,.98),rgba(24,3,9,.99))] px-2 text-center shadow-[0_0_8px_rgba(239,68,68,.75),0_0_26px_rgba(239,68,68,.48)]">
-                  <Flame className="h-10 w-10 fill-orange-500 text-orange-500 drop-shadow-[0_0_12px_rgba(249,115,22,.95)] sm:h-11 sm:w-11" />
-                  <span className="mt-1 text-[11px] font-black uppercase tracking-[0.04em] text-yellow-200 sm:text-[13px]">Economize</span>
-                  <span className="mt-0.5 text-[34px] font-black leading-none tracking-[-0.03em] text-yellow-300 drop-shadow-[0_0_12px_rgba(250,204,21,.35)] sm:text-[42px]">{discount}%</span>
+                <div className="flex min-h-[112px] flex-col items-center justify-center rounded-[22px] border-[3px] border-red-500 bg-[radial-gradient(circle_at_50%_18%,rgba(249,115,22,.25),transparent_30%),linear-gradient(180deg,rgba(72,8,18,.98),rgba(24,3,9,.99))] px-2 text-center shadow-[0_0_8px_rgba(239,68,68,.75),0_0_26px_rgba(239,68,68,.48)]">
+                  <Flame className="h-10 w-10 fill-orange-500 text-orange-500 drop-shadow-[0_0_12px_rgba(249,115,22,.95)] sm:h-10 sm:w-10 lg:h-9 lg:w-9 xl:h-10 xl:w-10" />
+                  <span className="mt-1 text-[11px] font-black uppercase tracking-[0.04em] text-yellow-200 sm:text-[12px] lg:text-[10px] xl:text-[11px]">Economize</span>
+                  <span className="mt-0.5 text-[34px] font-black leading-none tracking-[-0.03em] text-yellow-300 drop-shadow-[0_0_12px_rgba(250,204,21,.35)] sm:text-[36px] lg:text-[32px] xl:text-[34px]">{discount}%</span>
                 </div>
               </div>
             ) : (
@@ -459,8 +459,8 @@ export function StorefrontProductCard({
 
       <div className="mt-auto px-4 pb-5 sm:px-5">
         <div className="grid grid-cols-[1.22fr_.9fr] gap-3">
-          <button type="button" disabled={requiresPriceModelSelection && !selectedPriceModel} onClick={() => void runProtectedAction("buy")} className="inline-flex min-h-[60px] items-center justify-center gap-3 rounded-[20px] border border-white bg-gradient-to-b from-white to-slate-200 px-4 text-[16px] font-black text-[#090b21] shadow-[0_12px_32px_rgba(255,255,255,.18)] transition-all hover:brightness-105 active:scale-[0.98] disabled:cursor-not-allowed disabled:opacity-35 sm:text-lg"><ShoppingCart className="h-6 w-6" /> Comprar agora <span className="text-2xl leading-none">→</span></button>
-          <button type="button" disabled={requiresPriceModelSelection && !selectedPriceModel} onClick={() => void runProtectedAction("cart")} className="inline-flex min-h-[60px] items-center justify-center gap-2 rounded-[20px] border border-violet-400/90 bg-gradient-to-br from-violet-900/95 to-purple-950/85 px-3 text-[16px] font-black text-violet-100 shadow-[0_12px_32px_rgba(124,58,237,.22),inset_0_1px_0_rgba(255,255,255,.08)] transition-all hover:brightness-125 active:scale-[0.98] disabled:cursor-not-allowed disabled:opacity-35 sm:text-lg"><ShoppingCart className="h-5 w-5" /> Carrinho</button>
+          <button type="button" disabled={requiresPriceModelSelection && !selectedPriceModel} onClick={() => void runProtectedAction("buy")} className="inline-flex min-h-[60px] items-center justify-center gap-3 rounded-[20px] border border-white bg-gradient-to-b from-white to-slate-200 px-3 text-[16px] font-black text-[#090b21] lg:text-[14px] xl:text-[15px] shadow-[0_12px_32px_rgba(255,255,255,.18)] transition-all hover:brightness-105 active:scale-[0.98] disabled:cursor-not-allowed disabled:opacity-35 sm:text-lg"><ShoppingCart className="h-6 w-6" /> Comprar agora <span className="text-2xl leading-none">→</span></button>
+          <button type="button" disabled={requiresPriceModelSelection && !selectedPriceModel} onClick={() => void runProtectedAction("cart")} className="inline-flex min-h-[60px] items-center justify-center gap-2 rounded-[20px] border border-violet-400/90 bg-gradient-to-br from-violet-900/95 to-purple-950/85 px-3 text-[16px] font-black text-violet-100 lg:text-[14px] xl:text-[15px] shadow-[0_12px_32px_rgba(124,58,237,.22),inset_0_1px_0_rgba(255,255,255,.08)] transition-all hover:brightness-125 active:scale-[0.98] disabled:cursor-not-allowed disabled:opacity-35 sm:text-lg"><ShoppingCart className="h-5 w-5" /> Carrinho</button>
         </div>
 
         <div className="mt-5 flex items-center gap-3">
