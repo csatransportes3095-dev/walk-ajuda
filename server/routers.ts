@@ -1673,6 +1673,7 @@ export const appRouter = router({
                 clientName: input.clientName,
                 serviceName: input.service,
                 serviceOption: input.nameOption,
+                productId: input.productId ?? null,
                 pricePaid: input.price || null,
                 answers: input.answers,
               }, {
