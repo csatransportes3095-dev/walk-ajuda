@@ -9523,6 +9523,7 @@ export const appRouter = router({
         firstName: z.string().optional(),
         lastName: z.string().optional(),
         type: z.enum(['principal', 'membro']).default('membro'),
+        registrationId: z.number().int().positive().optional(),
         serverId: z.number().optional(),
       }))
       .mutation(async ({ input }) => {
@@ -9545,7 +9546,11 @@ export const appRouter = router({
             if (!emailDomain) throw new Error(`Não foi possível identificar o domínio real do servidor ${cfg.name}. Revise a configuração Zoho.`);
             selectedConfig = cfg;
           }
-          primaryEmailAddress = `${input.username.toLowerCase()}@${emailDomain}`.trim().toLowerCase();
+          const normalizedUsername = input.username.toLowerCase().trim();
+          const usernameForOrder = input.registrationId
+            ? `${normalizedUsername.replace(/[._-]?\d+$/, '').replace(/[._-]+$/, '') || 'cliente'}.${input.registrationId}`
+            : normalizedUsername;
+          primaryEmailAddress = `${usernameForOrder}@${emailDomain}`.trim().toLowerCase();
           const { reserveEmailAccount, releaseEmailAccountReservation, upsertEmailAccount } = await import('../server/db');
           const reserved = await reserveEmailAccount(primaryEmailAddress, input.type);
           if (!reserved) throw new Error(`O e-mail ${primaryEmailAddress} já está cadastrado ou em criação. Gere outro endereço.`);
