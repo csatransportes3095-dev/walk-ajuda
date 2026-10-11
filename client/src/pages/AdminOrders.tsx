@@ -122,12 +122,12 @@ function generateOrderLoginPassword(length = 10): string {
 function buildH2EmailGeneratorUrl(order: any): string {
   const params = new URLSearchParams({ from: "pedido" });
   const registrationId = Number(order?.registrationId ?? order?.id ?? 0);
-  const customerNumber = Number(order?.customerNumber ?? 0);
   const customerName = String(order?.customerName ?? order?.codeClientName ?? "").trim();
   const orderNumber = Number(order?.orderNumber ?? 0);
 
   if (registrationId > 0) params.set("registrationId", String(registrationId));
-  if (customerNumber > 0) params.set("customerNumber", String(customerNumber));
+  // O codigo do cliente NAO vem do card/objeto do pedido.
+  // O gerador consulta o cadastro principal pelo registrationId.
   if (customerName) params.set("customerName", customerName);
   if (orderNumber > 0) params.set("orderNumber", String(orderNumber));
 

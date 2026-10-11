@@ -6921,6 +6921,7 @@ export const appRouter = router({
           LEFT JOIN customers c
             ON RIGHT(REGEXP_REPLACE(COALESCE(c.phone, ''), '[^0-9]', ''), 11)
              = RIGHT(REGEXP_REPLACE(COALESCE(acp.phone, osh.customerPhone, ''), '[^0-9]', ''), 11)
+           AND c.deletedAt IS NULL
           WHERE osh.registrationId = ${input.registrationId}
           ORDER BY osh.createdAt DESC, osh.id DESC
           LIMIT 1

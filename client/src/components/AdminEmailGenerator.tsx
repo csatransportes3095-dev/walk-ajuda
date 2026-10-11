@@ -194,15 +194,22 @@ export default function AdminEmailGenerator({ onBack }: { onBack: () => void }) 
   const resolvedOrderIdentityQuery = trpc.loginData.resolveOrderCustomerNumber.useQuery(
     { registrationId: orderParams.registrationId || 0 },
     {
-      enabled: orderParams.fromOrder && !orderParams.customerNumber && Boolean(orderParams.registrationId),
+      // Quando aberto pelo pedido, a fonte da verdade e sempre o cadastro principal.
+      // Ignoramos customerNumber recebido pela URL/card para impedir sufixos incorretos.
+      enabled: orderParams.fromOrder && Boolean(orderParams.registrationId),
       staleTime: 0,
       refetchOnWindowFocus: false,
     }
   );
-  const resolvedCustomerNumber = orderParams.customerNumber
-    ?? (resolvedOrderIdentityQuery.data?.customerNumber ? Number(resolvedOrderIdentityQuery.data.customerNumber) : null);
-  const resolvedCustomerName = orderParams.customerName || resolvedOrderIdentityQuery.data?.customerName || "";
-  const resolvedOrderNumber = orderParams.orderNumber ?? resolvedOrderIdentityQuery.data?.orderNumber ?? null;
+  const resolvedCustomerNumber = orderParams.fromOrder
+    ? (resolvedOrderIdentityQuery.data?.customerNumber ? Number(resolvedOrderIdentityQuery.data.customerNumber) : null)
+    : orderParams.customerNumber;
+  const resolvedCustomerName = orderParams.fromOrder
+    ? (resolvedOrderIdentityQuery.data?.customerName || orderParams.customerName || "")
+    : orderParams.customerName;
+  const resolvedOrderNumber = orderParams.fromOrder
+    ? (resolvedOrderIdentityQuery.data?.orderNumber ?? orderParams.orderNumber ?? null)
+    : orderParams.orderNumber;
 
   useEffect(() => {
     if (hydrated.current || !configQuery.data) return;
