@@ -333,7 +333,7 @@ export function StorefrontProductCard({
                 const vipPreviewPrice = applyVipBenefitToPrice(model.price, model, true);
                 const vipSavings = Math.max(0, parseBrazilMoney(model.price) - parseBrazilMoney(vipPreviewPrice));
                 return (
-                  <button key={model.id} type="button" aria-pressed={isSelected} disabled={modelLocked} onClick={() => { if (!modelLocked) handlePriceModelSelect(model.id); }} style={priceModels.length === 1 ? { gridColumn: "1 / -1", width: "100%", maxWidth: "none" } : undefined} className={`relative w-full min-h-[205px] overflow-visible rounded-[18px] border bg-gradient-to-b px-2 pb-3 pt-7 text-center transition-all ${palette.border} ${palette.bg} ${palette.shadow} ${isSelected ? `-translate-y-1 ring-2 ${palette.ring}` : "hover:-translate-y-0.5"} ${modelPromotion?.active ? "outline outline-1 outline-amber-300/60" : ""} ${modelVipHighlighted ? "ring-1 ring-amber-300/70" : ""} ${modelLocked ? "cursor-not-allowed opacity-80 saturate-75" : ""}`}>
+                  <button key={model.id} type="button" aria-pressed={isSelected} disabled={modelLocked} onClick={() => { if (!modelLocked) handlePriceModelSelect(model.id); }} style={priceModels.length === 1 ? { gridColumn: "1 / -1", width: "100%", maxWidth: "none" } : undefined} className={`relative w-full min-h-[245px] overflow-visible rounded-[18px] border bg-gradient-to-b px-2 pb-3 pt-7 text-center transition-all ${palette.border} ${palette.bg} ${palette.shadow} ${isSelected ? `-translate-y-1 ring-2 ${palette.ring}` : "hover:-translate-y-0.5"} ${modelPromotion?.active ? "outline outline-1 outline-amber-300/60" : ""} ${modelVipHighlighted ? "ring-1 ring-amber-300/70" : ""} ${modelLocked ? "cursor-not-allowed opacity-80 saturate-75" : ""}`}>
                     {modelVipMode !== 'all' && <span className={`absolute -right-1 -top-2 z-20 rounded-full border px-2 py-1 text-[8px] font-black uppercase shadow-lg ${modelLocked ? 'border-rose-300/70 bg-rose-950 text-rose-200' : 'border-amber-300/70 bg-amber-400 text-amber-950'}`}>{modelLocked ? '🔒 SOMENTE VIP' : `👑 ${model.vipHighlightText || 'VIP'}`}</span>}
                     {modelPromotion?.active ? (
                       <span className="absolute left-1/2 top-0 -translate-x-1/2 -translate-y-[1px] whitespace-nowrap rounded-b-xl bg-gradient-to-r from-yellow-300 to-orange-400 px-2.5 py-1.5 text-[8px] font-black uppercase tracking-wide text-[#1a0d00] shadow-[0_0_16px_rgba(250,204,21,.45)] sm:text-[9px]">Oferta -{modelPromotion.discount}%</span>
@@ -343,9 +343,21 @@ export function StorefrontProductCard({
                     <ShieldCheck className={`mx-auto h-6 w-6 ${palette.text}`} />
                     <span className="mt-3 block text-[12px] font-black leading-4 text-white sm:text-base">{parts.title}</span>
                     <span className={`mt-1.5 block text-[13px] font-black sm:text-base ${palette.text}`}>{parts.subtitle}</span>
-                    <div className="mt-3 min-h-[50px] border-t border-white/10 pt-2">
+                    <div className="mt-3 min-h-[90px] border-t border-white/15 pt-2.5">
                       {modelVipMode === 'all' ? (
-                        <span className="block text-[11px] font-black text-white sm:text-sm">{asMoney(model.price)}</span>
+                        modelPromotion?.active && model.originalPrice ? (
+                          <div className="flex flex-col items-center">
+                            <div className="flex items-baseline justify-center gap-1.5 whitespace-nowrap">
+                              <span className="text-[9px] font-black uppercase tracking-wide text-white/70 sm:text-[10px]">DE</span>
+                              <span className="text-[13px] font-black text-white/85 line-through decoration-red-500 decoration-[3px] sm:text-[15px]">{asMoney(model.originalPrice)}</span>
+                            </div>
+                            <span className={`mt-1 block text-[9px] font-black uppercase tracking-[0.08em] ${palette.text} sm:text-[10px]`}>POR</span>
+                            <span className={`mt-0.5 block whitespace-nowrap text-[18px] font-black leading-none tracking-tight drop-shadow-[0_0_12px_rgba(45,212,191,.35)] sm:text-[20px] ${palette.text}`}>{asMoney(model.price)}</span>
+                            <span className="mt-2 inline-flex whitespace-nowrap rounded-full border border-emerald-300/60 bg-emerald-500/15 px-2 py-1 text-[8px] font-black uppercase tracking-wide text-emerald-200 shadow-[0_0_12px_rgba(16,185,129,.20)] sm:text-[9px]">Economize {modelPromotion.discount}%</span>
+                          </div>
+                        ) : (
+                          <span className="block text-[13px] font-black text-white sm:text-base">{asMoney(model.price)}</span>
+                        )
                       ) : modelHasVipBenefit ? (
                         <>
                           <span className="block text-[8px] font-bold uppercase text-slate-400 line-through">Normal {asMoney(model.price)}</span>
@@ -394,9 +406,24 @@ export function StorefrontProductCard({
           </div>
           <p className="mt-4 text-[13px] font-black uppercase leading-5 tracking-wide text-white sm:text-base">{selectedParts ? `${item.option.label} • ${selectedParts.title} • ${selectedParts.subtitle}` : `${item.option.label} • escolha uma garantia`}</p>
           <div className="mt-4 border-t border-white/15 pt-4">
-            {effectiveOriginalPrice && <p className={`text-[11px] font-extrabold line-through ${discount > 0 ? "text-red-300 decoration-red-500 decoration-2" : "text-slate-500"}`}>{asMoney(effectiveOriginalPrice)}</p>}
-            <p className={`break-words font-black leading-none tracking-tight ${effectivePrice ? "text-[30px] text-teal-300 drop-shadow-[0_0_18px_rgba(45,212,191,.35)] sm:text-[42px]" : "text-lg text-slate-400 sm:text-2xl"}`}>{effectivePrice ? asMoney(effectivePrice) : "Valor após a escolha"}</p>
-            {discount > 0 && <p className="mt-2 inline-flex rounded-full border border-emerald-400/45 bg-emerald-500/10 px-2.5 py-1 text-[10px] font-black uppercase tracking-wide text-emerald-300 shadow-[0_0_14px_rgba(16,185,129,.16)]">Economize {discount}%</p>}
+            {discount > 0 && !(selectedPriceModel && modelHasVipPrice) ? (
+              <div>
+                <div className="flex flex-wrap items-baseline gap-x-2 gap-y-1">
+                  <span className="text-[12px] font-black uppercase tracking-[0.08em] text-white/70 sm:text-sm">DE</span>
+                  <span className="text-[21px] font-black leading-none text-white/90 line-through decoration-red-500 decoration-[4px] sm:text-[28px]">{asMoney(effectiveOriginalPrice)}</span>
+                </div>
+                <div className="mt-2 flex flex-wrap items-end gap-x-3 gap-y-1">
+                  <span className="pb-1 text-[15px] font-black uppercase tracking-[0.08em] text-emerald-300 sm:text-lg">POR</span>
+                  <p className="break-words text-[40px] font-black leading-[0.95] tracking-tight text-teal-300 drop-shadow-[0_0_22px_rgba(45,212,191,.48)] sm:text-[52px]">{effectivePrice ? asMoney(effectivePrice) : "Valor após a escolha"}</p>
+                </div>
+                <p className="mt-3 inline-flex rounded-full border border-emerald-300/65 bg-emerald-500/15 px-4 py-2 text-[12px] font-black uppercase tracking-[0.08em] text-emerald-200 shadow-[0_0_18px_rgba(16,185,129,.24)] sm:text-sm">Economize {discount}%</p>
+              </div>
+            ) : (
+              <>
+                {effectiveOriginalPrice && <p className="text-[11px] font-extrabold text-slate-500 line-through">{asMoney(effectiveOriginalPrice)}</p>}
+                <p className={`break-words font-black leading-none tracking-tight ${effectivePrice ? "text-[30px] text-teal-300 drop-shadow-[0_0_18px_rgba(45,212,191,.35)] sm:text-[42px]" : "text-lg text-slate-400 sm:text-2xl"}`}>{effectivePrice ? asMoney(effectivePrice) : "Valor após a escolha"}</p>
+              </>
+            )}
             {selectedPriceModel && !isVipCustomer && hasVipBenefit(selectedPriceModel) && (() => {
               const vipPrice = applyVipBenefitToPrice(selectedPriceModel.price, selectedPriceModel, true);
               const saving = Math.max(0, parseBrazilMoney(selectedPriceModel.price) - parseBrazilMoney(vipPrice));
