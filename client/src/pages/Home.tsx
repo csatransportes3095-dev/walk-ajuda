@@ -26,6 +26,19 @@ type FlowOrigin = "storefront" | "cart" | "legacy";
 
 const BOT_PROGRESS_KEY = 'walk_bot_order_progress';
 const BOT_UPLOADED_FILES_KEY = 'walk_bot_uploaded_files';
+const POST_ORDER_FLOW_KEY = 'h2_post_order_schedule_flow_v1';
+
+type PostOrderScheduleDecision = 'choose' | 'now' | 'later' | 'completed';
+
+function scheduleTokenFromUrl(url: string): string {
+  try {
+    const parsed = new URL(url, window.location.origin);
+    const match = parsed.pathname.match(/^\/agendar\/([a-f0-9]{32,64})$/i);
+    return match?.[1] || '';
+  } catch {
+    return '';
+  }
+}
 
 type CartItem = {
   id: string; // unique key
@@ -398,6 +411,7 @@ export default function Home() {
 
   // ===== DADOS DO PEDIDO FINALIZADO (para mensagem WhatsApp) =====
   const [automaticScheduleLinks, setAutomaticScheduleLinks] = useState<string[]>([]);
+  const [postOrderScheduleDecision, setPostOrderScheduleDecision] = useState<PostOrderScheduleDecision>('completed');
   const [submittedOrderData, setSubmittedOrderData] = useState<{
     cartItems: Array<{ service: string; nameOption: string; price: string }>;
     answers: Array<{ question: string; answer: string }>;
@@ -409,6 +423,53 @@ export default function Home() {
     clientPhone: string;
     clientCity: string;
   } | null>(null);
+
+  const persistPostOrderScheduleFlow = useCallback((links: string[], currentIndex: number) => {
+    try {
+      sessionStorage.setItem(POST_ORDER_FLOW_KEY, JSON.stringify({
+        version: 1,
+        scheduleLinks: links,
+        currentIndex,
+        submittedOrderData,
+        createdAt: Date.now(),
+      }));
+    } catch {
+      // Se o storage estiver indisponível, o fluxo atual continua visível.
+    }
+  }, [submittedOrderData]);
+
+  const startPostOrderScheduleNow = useCallback(() => {
+    const validLinks = automaticScheduleLinks.filter(link => scheduleTokenFromUrl(link));
+    if (validLinks.length === 0) {
+      setPostOrderScheduleDecision('completed');
+      return;
+    }
+    setPostOrderScheduleDecision('now');
+    persistPostOrderScheduleFlow(validLinks, 0);
+    window.location.href = validLinks[0];
+  }, [automaticScheduleLinks, persistPostOrderScheduleFlow]);
+
+  useEffect(() => {
+    try {
+      const raw = sessionStorage.getItem(POST_ORDER_FLOW_KEY);
+      if (!raw) return;
+      const saved = JSON.parse(raw);
+      const links = Array.isArray(saved?.scheduleLinks)
+        ? saved.scheduleLinks.filter((link: unknown) => typeof link === 'string' && scheduleTokenFromUrl(link))
+        : [];
+      if (links.length === 0 || saved?.completed !== true) return;
+
+      setAutomaticScheduleLinks(links);
+      if (saved?.submittedOrderData && typeof saved.submittedOrderData === 'object') {
+        setSubmittedOrderData(saved.submittedOrderData);
+      }
+      setPostOrderScheduleDecision('completed');
+      setPostOrderReferralStep('done');
+      setStep('success');
+    } catch {
+      sessionStorage.removeItem(POST_ORDER_FLOW_KEY);
+    }
+  }, []);
 
   // ===== PROPAGANDA OBRIGATÓRIA =====
   const [adVisible, setAdVisible] = useState(false);
@@ -1755,7 +1816,9 @@ export default function Home() {
           return;
         }
         setCart([]);
-        setAutomaticScheduleLinks(Array.from(new Set(cartScheduleLinks)));
+        const uniqueScheduleLinks = Array.from(new Set(cartScheduleLinks));
+        setAutomaticScheduleLinks(uniqueScheduleLinks);
+        setPostOrderScheduleDecision(uniqueScheduleLinks.length > 0 ? 'choose' : 'completed');
         // Salvar dados do pedido para mensagem WhatsApp
         const cartTotalPago = cartTotalValue - (cartCouponDiscountValue || 0);
         setSubmittedOrderData({
@@ -1907,7 +1970,9 @@ export default function Home() {
         // Sessão VIP mantida até o cliente confirmar no WhatsApp
         setSuccessMessage('Arquivos enviados com sucesso!');
         const scheduleUrl = (result as any).scheduleUrl;
-        setAutomaticScheduleLinks(typeof scheduleUrl === 'string' && scheduleUrl ? [scheduleUrl] : []);
+        const nextScheduleLinks = typeof scheduleUrl === 'string' && scheduleUrl ? [scheduleUrl] : [];
+        setAutomaticScheduleLinks(nextScheduleLinks);
+        setPostOrderScheduleDecision(nextScheduleLinks.length > 0 ? 'choose' : 'completed');
         setIsSubmitting(false);
         setPostOrderReferralStep('done');
         setStep("success");
@@ -2049,7 +2114,8 @@ export default function Home() {
     setDocFiles({});
     setClientName(''); setClientPhone(''); setClientCity('');
     setReferrerName(''); setReferrerPhone('');
-    setSuccessMessage(''); setAutomaticScheduleLinks([]); setCouponCode(''); setCouponValid(null);
+    setSuccessMessage(''); setAutomaticScheduleLinks([]); setPostOrderScheduleDecision('completed'); setCouponCode(''); setCouponValid(null);
+    try { sessionStorage.removeItem(POST_ORDER_FLOW_KEY); } catch {}
     setCouponDiscount(null); setCouponMessage('');
     setPaymentProof(null); setPaymentProofPreview(null);
     setPixCopied(false); setIsSubmitting(false); setShowExamplePhoto(false);
@@ -4113,28 +4179,46 @@ export default function Home() {
               <p className="text-green-400 font-bold text-sm">Seus arquivos e comprovante foram recebidos!</p>
             </div>
 
-            {automaticScheduleLinks.length > 0 && (
+            {automaticScheduleLinks.length > 0 && postOrderScheduleDecision === 'choose' && (
               <div className="mb-5 rounded-2xl border-2 border-fuchsia-400/60 bg-gradient-to-br from-fuchsia-950/80 to-violet-950/70 p-5 text-center shadow-[0_0_28px_rgba(217,70,239,0.18)]">
                 <div className="mx-auto mb-3 flex h-14 w-14 items-center justify-center rounded-full border border-fuchsia-300/40 bg-fuchsia-400/15">
                   <CalendarDays className="h-7 w-7 text-fuchsia-200" />
                 </div>
-                <p className="text-sm font-black uppercase tracking-wide text-fuchsia-100">📸 Agendamento para foto liberado</p>
-                <p className="mt-2 text-xs leading-relaxed text-white/65">
-                  Escolha agora o dia e o horário disponível para realizar sua foto.
+                <p className="text-sm font-black uppercase tracking-wide text-fuchsia-100">📸 Agendamento para foto</p>
+                <p className="mt-2 text-xs leading-relaxed text-white/70">
+                  Deseja escolher agora o dia e o horário da sua foto?
                 </p>
-                <div className="mt-4 space-y-2">
-                  {automaticScheduleLinks.map((scheduleUrl, index) => (
-                    <a
-                      key={scheduleUrl}
-                      href={scheduleUrl}
-                      className="flex w-full items-center justify-center gap-2 rounded-xl bg-fuchsia-600 px-4 py-3 text-sm font-black text-white transition hover:bg-fuchsia-500 active:scale-[0.98]"
-                    >
-                      <CalendarDays className="h-5 w-5" />
-                      {automaticScheduleLinks.length > 1 ? `AGENDAR FOTO ${index + 1}` : 'AGENDAR DIA E HORÁRIO'}
-                    </a>
-                  ))}
+                <div className="mt-4 grid gap-2">
+                  <button
+                    type="button"
+                    onClick={startPostOrderScheduleNow}
+                    className="flex w-full items-center justify-center gap-2 rounded-xl bg-fuchsia-600 px-4 py-3.5 text-sm font-black text-white transition hover:bg-fuchsia-500 active:scale-[0.98]"
+                  >
+                    <CalendarDays className="h-5 w-5" />
+                    FAZER AGORA
+                  </button>
+                  <button
+                    type="button"
+                    onClick={() => {
+                      setPostOrderScheduleDecision('later');
+                      try { sessionStorage.removeItem(POST_ORDER_FLOW_KEY); } catch {}
+                    }}
+                    className="flex w-full items-center justify-center gap-2 rounded-xl border border-emerald-400/40 bg-emerald-500/15 px-4 py-3.5 text-sm font-black text-emerald-100 transition hover:bg-emerald-500/25 active:scale-[0.98]"
+                  >
+                    <MessageCircle className="h-5 w-5" />
+                    AGENDAR DEPOIS
+                  </button>
                 </div>
-                <p className="mt-3 text-[10px] text-white/40">O mesmo agendamento também fica disponível no menu da vitrine e em Acompanhar Pedido.</p>
+                <p className="mt-3 text-[10px] leading-relaxed text-white/45">
+                  Se escolher depois, o agendamento continuará disponível em Acompanhar Pedido e na sua vitrine.
+                </p>
+              </div>
+            )}
+
+            {automaticScheduleLinks.length > 0 && postOrderScheduleDecision === 'completed' && (
+              <div className="mb-5 rounded-2xl border border-emerald-400/40 bg-emerald-500/10 p-4 text-center">
+                <p className="text-sm font-black text-emerald-200">✅ AGENDAMENTO CONFIRMADO</p>
+                <p className="mt-1 text-xs text-white/60">Data e horário salvos. Agora conclua o envio pelo WhatsApp.</p>
               </div>
             )}
 
@@ -4147,7 +4231,7 @@ export default function Home() {
               // (useEffect abaixo cuida disso)
               null
             )}
-            {isNewCustomerOrder && postOrderReferralStep === 'question' && (
+            {(automaticScheduleLinks.length === 0 || postOrderScheduleDecision === 'later' || postOrderScheduleDecision === 'completed') && isNewCustomerOrder && postOrderReferralStep === 'question' && (
               <div className="relative overflow-hidden rounded-2xl mb-5"
                 style={{
                   background: 'linear-gradient(135deg, #7c3aed 0%, #4f46e5 50%, #7c3aed 100%)',
@@ -4207,7 +4291,7 @@ export default function Home() {
               </div>
             )}
 
-            {postOrderReferralStep === 'form' && (
+            {(automaticScheduleLinks.length === 0 || postOrderScheduleDecision === 'later' || postOrderScheduleDecision === 'completed') && postOrderReferralStep === 'form' && (
               <div className="bg-yellow-500/10 border-2 border-yellow-500/40 rounded-xl p-5 mb-5 space-y-4">
                 <div className="text-center">
                   <p className="text-yellow-300 font-black text-sm uppercase tracking-wide mb-1">🎁 Quem te indicou?</p>
@@ -4279,7 +4363,7 @@ export default function Home() {
               </div>
             )}
 
-            {postOrderReferralStep === 'done' && referrerPhone && postOrderReferralPhone && (
+            {(automaticScheduleLinks.length === 0 || postOrderScheduleDecision === 'later' || postOrderScheduleDecision === 'completed') && postOrderReferralStep === 'done' && referrerPhone && postOrderReferralPhone && (
               <div className="bg-gradient-to-r from-green-500/20 to-emerald-500/20 border-2 border-green-400/50 rounded-2xl p-4 mb-4">
                 <div className="flex items-center gap-3">
                   <span className="text-3xl">🎉</span>
@@ -4292,7 +4376,7 @@ export default function Home() {
             )}
 
             {/* Aviso e botão WhatsApp — só aparecem após responder a pergunta de indicação */}
-            {postOrderReferralStep === 'done' && (
+            {(automaticScheduleLinks.length === 0 || postOrderScheduleDecision === 'later' || postOrderScheduleDecision === 'completed') && postOrderReferralStep === 'done' && (
             <>
             {/* Aviso OBRIGATÓRIO */}
             <div className="bg-red-500/15 border-2 border-red-500/50 rounded-xl p-4 mb-5">
@@ -5571,7 +5655,9 @@ export default function Home() {
               clientPhone: data.clientPhone,
               clientCity: data.clientCity,
             });
-            setAutomaticScheduleLinks(data.scheduleUrl ? [data.scheduleUrl] : []);
+            const botScheduleLinks = data.scheduleUrl ? [data.scheduleUrl] : [];
+            setAutomaticScheduleLinks(botScheduleLinks);
+            setPostOrderScheduleDecision(botScheduleLinks.length > 0 ? 'choose' : 'completed');
             setSuccessMessage('Pedido enviado com sucesso!');
             setPostOrderReferralStep('done');
             setStep('success');

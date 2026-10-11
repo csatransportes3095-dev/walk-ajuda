@@ -5,6 +5,60 @@ import { toast } from "sonner";
 import { CalendarClock, CheckCircle2, AlertTriangle, Clock, CalendarDays, Loader2, ShieldAlert, MessageCircle, AlertCircle, ShieldCheck, UserRoundCog, Upload } from "lucide-react";
 import { isValidCPF, normalizeCpf } from "@shared/cpf";
 
+const POST_ORDER_FLOW_KEY = 'h2_post_order_schedule_flow_v1';
+
+function scheduleTokenFromFlowUrl(url: string): string {
+  try {
+    const parsed = new URL(url, window.location.origin);
+    const match = parsed.pathname.match(/^\/agendar\/([a-f0-9]{32,64})$/i);
+    return match?.[1] || '';
+  } catch {
+    return '';
+  }
+}
+
+function readPostOrderScheduleFlow(currentToken: string) {
+  try {
+    const raw = sessionStorage.getItem(POST_ORDER_FLOW_KEY);
+    if (!raw) return null;
+    const saved = JSON.parse(raw);
+    const links = Array.isArray(saved?.scheduleLinks)
+      ? saved.scheduleLinks.filter((link: unknown) => typeof link === 'string')
+      : [];
+    const index = Number(saved?.currentIndex || 0);
+    if (!Number.isInteger(index) || index < 0 || index >= links.length) return null;
+    if (scheduleTokenFromFlowUrl(links[index]) !== currentToken) return null;
+    return { saved, links, index };
+  } catch {
+    return null;
+  }
+}
+
+function continuePostOrderScheduleFlow(currentToken: string) {
+  const flow = readPostOrderScheduleFlow(currentToken);
+  if (!flow) return false;
+
+  const nextIndex = flow.index + 1;
+  if (nextIndex < flow.links.length) {
+    sessionStorage.setItem(POST_ORDER_FLOW_KEY, JSON.stringify({
+      ...flow.saved,
+      currentIndex: nextIndex,
+      completed: false,
+    }));
+    window.location.href = flow.links[nextIndex];
+    return true;
+  }
+
+  sessionStorage.setItem(POST_ORDER_FLOW_KEY, JSON.stringify({
+    ...flow.saved,
+    currentIndex: flow.index,
+    completed: true,
+    completedAt: Date.now(),
+  }));
+  window.location.href = '/?postOrderReturn=1';
+  return true;
+}
+
 export default function SchedulePage() {
   const params = useParams();
   const token = (params as any).token as string;
@@ -376,6 +430,7 @@ export default function SchedulePage() {
   const accent = data.config?.accentColor || "#8b5cf6";
   const appt = data.appointment;
   const cfg = data.config;
+  const postOrderFlow = readPostOrderScheduleFlow(token);
   const missingFields = data.profile?.missing || [];
   const profileUpdateRequired = data.profile?.updateRequired === true;
 
@@ -713,6 +768,26 @@ export default function SchedulePage() {
                 </div>
                 <p className="text-amber-100/80 text-sm leading-relaxed whitespace-pre-line">{processWarningText(cfg.noShowWarning)}</p>
               </div>
+            </div>
+          )}
+
+          {postOrderFlow && (
+            <div className="mb-4 rounded-2xl border-2 border-emerald-400/50 bg-emerald-500/10 p-4 text-center">
+              <p className="text-sm font-black text-emerald-200">✅ ETAPA DE AGENDAMENTO CONCLUÍDA</p>
+              <p className="mt-1 text-xs leading-relaxed text-white/60">
+                {postOrderFlow.index + 1 < postOrderFlow.links.length
+                  ? 'Ainda existe outro agendamento deste pedido para concluir.'
+                  : 'Volte para finalizar o pedido pelo WhatsApp.'}
+              </p>
+              <button
+                type="button"
+                onClick={() => continuePostOrderScheduleFlow(token)}
+                className="mt-3 w-full rounded-xl bg-emerald-500 px-4 py-3.5 text-sm font-black text-slate-950 transition hover:bg-emerald-400 active:scale-[0.98]"
+              >
+                {postOrderFlow.index + 1 < postOrderFlow.links.length
+                  ? 'CONTINUAR PARA O PRÓXIMO AGENDAMENTO'
+                  : 'CONTINUAR PEDIDO'}
+              </button>
             </div>
           )}
 
