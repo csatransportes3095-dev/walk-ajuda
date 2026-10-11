@@ -15,6 +15,14 @@ describe("status flows by product", () => {
     expect(schema).toContain('mysqlTable("orderStatusFlowAssignments"');
   });
 
+  it("always sends product and option ids when creating a public order", () => {
+    const home = read("client/src/pages/Home.tsx");
+    expect(home).toContain("productId: selectedProduct?.id");
+    expect(home).toContain("optionId: selectedOption?.id");
+    expect(home).toContain("productId: item.product?.id ?? selectedProduct?.id");
+    expect(home).not.toContain("productId: optionHasAudioQuestions ? selectedProduct?.id : undefined");
+  });
+
   it("freezes public orders and validates transitions in the backend", () => {
     const routers = read("server/routers.ts");
     expect(routers).toContain("assignOrderStatusFlow");
