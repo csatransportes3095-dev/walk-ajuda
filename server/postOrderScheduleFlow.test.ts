@@ -19,6 +19,8 @@ describe("fluxo pos-pedido: agendamento antes do WhatsApp", () => {
     expect(home).toContain("POST_ORDER_FLOW_KEY");
     expect(home).toContain("persistPostOrderScheduleFlow(validLinks, 0)");
     expect(home).toContain("window.location.href = validLinks[0]");
+    expect(home).toContain("whatsappUrl,");
+    expect(home).toContain("buildPostOrderWhatsappUrl");
   });
 
   it("agendar depois nao altera agenda nem chama mutation", () => {
@@ -30,8 +32,9 @@ describe("fluxo pos-pedido: agendamento antes do WhatsApp", () => {
     expect(schedule).toContain("continuePostOrderScheduleFlow(token)");
     expect(schedule).toContain("CONTINUAR PEDIDO");
     expect(schedule).toContain("CONTINUAR PARA O PRÓXIMO AGENDAMENTO");
-    expect(schedule).toContain("completed: true");
-    expect(schedule).toContain("window.location.href = '/?postOrderReturn=1'");
+    expect(schedule).toContain("const whatsappUrl = typeof flow.saved?.whatsappUrl === 'string'");
+    expect(schedule).toContain("window.location.href = whatsappUrl");
+    expect(schedule).toContain("sessionStorage.removeItem(POST_ORDER_FLOW_KEY)");
   });
 
   it("nao altera a mutation existente de confirmacao do horario", () => {
