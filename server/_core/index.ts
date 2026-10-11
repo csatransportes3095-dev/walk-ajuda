@@ -335,6 +335,79 @@ async function startServer() {
     next();
   });
 
+  // Preview público da foto do cadastro para WhatsApp.
+  // A URL original nunca é exposta em metadados sem validação e passa por proxy do domínio H2.
+  app.get("/link/foto-cliente", async (req, res) => {
+    const rawSrc = String(req.query.src || "").trim();
+    if (!rawSrc) { res.status(400).end(); return; }
+
+    let sourceUrl: URL;
+    try {
+      sourceUrl = new URL(rawSrc);
+    } catch {
+      res.status(400).end();
+      return;
+    }
+
+    if (sourceUrl.protocol !== "https:" || sourceUrl.hostname !== "midia.h2colombiano.com") {
+      res.status(400).end();
+      return;
+    }
+
+    const canonicalUrl = publicSiteUrl(`/link/foto-cliente?src=${encodeURIComponent(sourceUrl.toString())}`);
+    const imageProxyUrl = publicSiteUrl(`/link/foto-cliente-img?src=${encodeURIComponent(sourceUrl.toString())}`);
+    const title = "H2 COLOMBIANO";
+    const description = "Pedido recebido";
+
+    res.set("Content-Type", "text/html; charset=utf-8");
+    res.set("Cache-Control", "public, max-age=300, stale-while-revalidate=3600");
+    res.send(`<!DOCTYPE html><html lang="pt-BR"><head><meta charset="UTF-8"><meta name="viewport" content="width=device-width,initial-scale=1"><title>${title}</title><meta property="og:title" content="${title}"><meta property="og:description" content="${description}"><meta property="og:type" content="website"><meta property="og:url" content="${escapeHtml(canonicalUrl)}"><meta property="og:site_name" content="H2 COLOMBIANO"><meta property="og:image" content="${escapeHtml(imageProxyUrl)}"><meta property="og:image:type" content="image/jpeg"><meta property="og:image:width" content="512"><meta property="og:image:height" content="512"><meta name="twitter:card" content="summary_large_image"><meta name="twitter:image" content="${escapeHtml(imageProxyUrl)}"></head><body style="margin:0;background:#070711;color:#fff;font-family:system-ui,sans-serif;display:grid;place-items:center;min-height:100vh"><p>H2 COLOMBIANO</p></body></html>`);
+  });
+
+  app.get("/link/foto-cliente-img", async (req, res) => {
+    const rawSrc = String(req.query.src || "").trim();
+    if (!rawSrc) { res.status(400).end(); return; }
+
+    let sourceUrl: URL;
+    try {
+      sourceUrl = new URL(rawSrc);
+    } catch {
+      res.status(400).end();
+      return;
+    }
+
+    if (sourceUrl.protocol !== "https:" || sourceUrl.hostname !== "midia.h2colombiano.com") {
+      res.status(400).end();
+      return;
+    }
+
+    const abort = new AbortController();
+    const timeout = setTimeout(() => abort.abort(), 8_000);
+    try {
+      const upstream = await fetch(sourceUrl.toString(), { redirect: "follow", signal: abort.signal });
+      if (!upstream.ok) { res.status(502).end(); return; }
+      const contentType = upstream.headers.get("content-type") || "image/jpeg";
+      if (!contentType.toLowerCase().startsWith("image/")) { res.status(415).end(); return; }
+
+      const declaredLength = Number(upstream.headers.get("content-length") || "0");
+      const maxPreviewBytes = 5 * 1024 * 1024;
+      if (declaredLength > maxPreviewBytes) { res.status(413).end(); return; }
+
+      const buffer = Buffer.from(await upstream.arrayBuffer());
+      if (buffer.length === 0 || buffer.length > maxPreviewBytes) { res.status(413).end(); return; }
+
+      res.status(200);
+      res.set("Content-Type", contentType);
+      res.set("Content-Length", String(buffer.length));
+      res.set("Cache-Control", "public, max-age=86400, stale-while-revalidate=604800");
+      res.end(buffer);
+    } catch {
+      res.status(502).end();
+    } finally {
+      clearTimeout(timeout);
+    }
+  });
+
   // Link exclusivo de compartilhamento: força uma nova leitura do WhatsApp sem alterar o acesso real.
   app.get("/link/acompanhamento", async (_req, res) => {
     const canonicalUrl = publicSiteUrl("/link/acompanhamento");
