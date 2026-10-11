@@ -30,6 +30,27 @@ const baseInput = {
 };
 
 describe("persistPublicOrder", () => {
+  it("usa o status inicial resolvido para o produto", async () => {
+    const findInitialStatus = vi.fn().mockResolvedValue("pedido_recebido_produto");
+    const store = createStore({ findInitialStatus });
+    const addOrderStatus = vi.fn().mockResolvedValue({ id: 303 });
+
+    const result = await persistPublicOrder({
+      ...baseInput,
+      productId: 77,
+    }, {
+      store,
+      addOrderStatus,
+      generateOrderNumber: vi.fn().mockResolvedValue(404),
+    });
+
+    expect(findInitialStatus).toHaveBeenCalledWith(77);
+    expect(result.initialStatus).toBe("pedido_recebido_produto");
+    expect(addOrderStatus).toHaveBeenCalledWith(expect.objectContaining({
+      status: "pedido_recebido_produto",
+    }));
+  });
+
   it("materializa cpToken como acesso VIP, cria registrationId e grava status inicial", async () => {
     const store = createStore();
     const addOrderStatus = vi.fn().mockResolvedValue({ id: 303 });
