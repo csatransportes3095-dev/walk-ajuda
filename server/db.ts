@@ -1611,6 +1611,57 @@ export async function getStatusInfoFromDb(key: string): Promise<{ label: string;
   return { label: row?.label || key, description: row?.description || null };
 }
 
+function normalizeStatusSemantic(value: unknown): string {
+  return String(value ?? '')
+    .normalize('NFD')
+    .replace(/[\u0300-\u036f]/g, '')
+    .replace(/[_-]+/g, ' ')
+    .replace(/\s+/g, ' ')
+    .trim()
+    .toLowerCase();
+}
+
+export async function resolveConfirmedScheduleOrderStatusKey(
+  registrationId?: number | null,
+  orderNumber?: number | null,
+): Promise<string | null> {
+  const db = await getDb();
+  if (!db) return null;
+
+  const rows = await db.select({
+    key: orderStatusTypes.key,
+    label: orderStatusTypes.label,
+    sortOrder: orderStatusTypes.sortOrder,
+  }).from(orderStatusTypes)
+    .where(eq(orderStatusTypes.isActive, 1))
+    .orderBy(asc(orderStatusTypes.sortOrder), asc(orderStatusTypes.id));
+
+  const candidates = (rows || []).filter((row) => {
+    const label = normalizeStatusSemantic(row.label);
+    const key = normalizeStatusSemantic(row.key);
+    return label === 'agendamento confirmado'
+      || key === 'agendamento confirmado'
+      || (label.includes('agendamento') && label.includes('confirmado'))
+      || (key.includes('agendamento') && key.includes('confirmado'));
+  });
+
+  if (candidates.length === 0) return null;
+
+  if (registrationId) {
+    try {
+      const flow = await getOrderStatusFlowForOrder(registrationId, orderNumber ?? null);
+      const flowKeys = new Set((flow?.statusKeys ?? []).map(String));
+      const inFlow = candidates.find((row) => flowKeys.has(String(row.key)));
+      if (inFlow?.key) return String(inFlow.key);
+    } catch {
+      // Sem vínculo resolvido: usa o catálogo ativo abaixo.
+    }
+  }
+
+  const exactLabel = candidates.find((row) => normalizeStatusSemantic(row.label) === 'agendamento confirmado');
+  return String((exactLabel ?? candidates[0]).key);
+}
+
 export async function listOrderStatusTypes(): Promise<OrderStatusType[]> {
   const db = await getDb();
   if (!db) return [];
