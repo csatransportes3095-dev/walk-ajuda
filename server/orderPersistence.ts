@@ -12,6 +12,7 @@ export type PublicOrderPersistenceInput = {
   clientName?: string;
   serviceName?: string;
   serviceOption?: string;
+  productId?: number | null;
   pricePaid?: string | null;
   answers?: string;
 };
@@ -31,7 +32,7 @@ export type OrderPersistenceStore = {
   findRegistrationIdByCodeAndPhone(code: string, phone: string): Promise<number | undefined>;
   findRegistrationIdByCodeIdAndPhone(codeId: number, phone: string): Promise<number | undefined>;
   findRegistrationIdByPhone(phone: string): Promise<number | undefined>;
-  findInitialStatus(): Promise<string | undefined>;
+  findInitialStatus(productId?: number | null): Promise<string | undefined>;
   countOrderHistoryByPhone(phone: string): Promise<number>;
 };
 
@@ -152,7 +153,7 @@ export async function persistPublicOrder(
     throw new Error("registrationId não foi criado");
   }
 
-  const initialStatus = (await deps.store.findInitialStatus()) || "pedido_recebido";
+  const initialStatus = (await deps.store.findInitialStatus(input.productId ?? null)) || "pedido_recebido";
   let orderNumber: number | undefined;
   try {
     orderNumber = await deps.generateOrderNumber();
@@ -320,9 +321,26 @@ export function createSqlOrderPersistenceStore(db: { execute(query: unknown): Pr
         ORDER BY accessedAt DESC, id DESC LIMIT 1
       `));
     },
-    async findInitialStatus() {
+    async findInitialStatus(productId) {
+      if (productId) {
+        const flowRows = rowsFrom(await db.execute(sql`
+          SELECT i.statusKey AS \`key\`
+          FROM productStatusFlows pf
+          INNER JOIN orderStatusFlows f ON f.id = pf.flowId AND f.isActive = 1
+          INNER JOIN orderStatusFlowItems i ON i.flowId = pf.flowId
+          INNER JOIN orderStatusTypes st ON st.\`key\` = i.statusKey AND st.isActive = 1
+          WHERE pf.productId = ${productId}
+          ORDER BY i.sortOrder ASC, i.id ASC
+          LIMIT 1
+        `));
+        const flowKey = flowRows[0]?.key;
+        if (typeof flowKey === "string" && flowKey) return flowKey;
+      }
       const rows = rowsFrom(await db.execute(sql`
-        SELECT \`key\` FROM orderStatusTypes WHERE isActive = 1 ORDER BY sortOrder ASC LIMIT 1
+        SELECT \`key\` FROM orderStatusTypes
+        WHERE isActive = 1 AND isGlobal = 1
+        ORDER BY sortOrder ASC, id ASC
+        LIMIT 1
       `));
       const key = rows[0]?.key;
       return typeof key === "string" && key ? key : undefined;
