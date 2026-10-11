@@ -326,6 +326,8 @@ export function StorefrontProductCard({
                 const palette = OPTION_PALETTES[Math.min(index, OPTION_PALETTES.length - 1)];
                 const parts = splitModelLabel(model.label);
                 const modelPromotion = promotionByModel.get(model.id);
+                const modelDiscount = discountPercent(model.price, model.originalPrice);
+                const modelHasDiscount = modelDiscount > 0;
                 const modelLocked = isVipOnlyLocked(model, isVipCustomer);
                 const modelVipMode = normalizeVipAccessMode(model.vipAccessMode);
                 const modelVipHighlighted = isVipHighlighted(model);
@@ -333,27 +335,27 @@ export function StorefrontProductCard({
                 const vipPreviewPrice = applyVipBenefitToPrice(model.price, model, true);
                 const vipSavings = Math.max(0, parseBrazilMoney(model.price) - parseBrazilMoney(vipPreviewPrice));
                 return (
-                  <button key={model.id} type="button" aria-pressed={isSelected} disabled={modelLocked} onClick={() => { if (!modelLocked) handlePriceModelSelect(model.id); }} style={priceModels.length === 1 ? { gridColumn: "1 / -1", width: "100%", maxWidth: "none" } : undefined} className={`relative w-full min-h-[245px] overflow-visible rounded-[18px] border bg-gradient-to-b px-2 pb-3 pt-7 text-center transition-all ${palette.border} ${palette.bg} ${palette.shadow} ${isSelected ? `-translate-y-1 ring-2 ${palette.ring}` : "hover:-translate-y-0.5"} ${modelPromotion?.active ? "outline outline-1 outline-amber-300/60" : ""} ${modelVipHighlighted ? "ring-1 ring-amber-300/70" : ""} ${modelLocked ? "cursor-not-allowed opacity-80 saturate-75" : ""}`}>
+                  <button key={model.id} type="button" aria-pressed={isSelected} disabled={modelLocked} onClick={() => { if (!modelLocked) handlePriceModelSelect(model.id); }} style={priceModels.length === 1 ? { gridColumn: "1 / -1", width: "100%", maxWidth: "none" } : undefined} className={`relative w-full min-h-[214px] overflow-visible rounded-[18px] border bg-gradient-to-b px-2 pb-3 pt-6 text-center transition-all ${palette.border} ${palette.bg} ${palette.shadow} ${isSelected ? `-translate-y-1 ring-2 ${palette.ring}` : "hover:-translate-y-0.5"} ${modelPromotion?.active ? "outline outline-1 outline-amber-300/60" : ""} ${modelVipHighlighted ? "ring-1 ring-amber-300/70" : ""} ${modelLocked ? "cursor-not-allowed opacity-80 saturate-75" : ""}`}>
                     {modelVipMode !== 'all' && <span className={`absolute -right-1 -top-2 z-20 rounded-full border px-2 py-1 text-[8px] font-black uppercase shadow-lg ${modelLocked ? 'border-rose-300/70 bg-rose-950 text-rose-200' : 'border-amber-300/70 bg-amber-400 text-amber-950'}`}>{modelLocked ? '🔒 SOMENTE VIP' : `👑 ${model.vipHighlightText || 'VIP'}`}</span>}
-                    {modelPromotion?.active ? (
-                      <span className="absolute left-1/2 top-0 -translate-x-1/2 -translate-y-[1px] whitespace-nowrap rounded-b-xl bg-gradient-to-r from-yellow-300 to-orange-400 px-2.5 py-1.5 text-[8px] font-black uppercase tracking-wide text-[#1a0d00] shadow-[0_0_16px_rgba(250,204,21,.45)] sm:text-[9px]">Oferta -{modelPromotion.discount}%</span>
+                    {index === 0 && modelHasDiscount ? (
+                      <span className="absolute left-1/2 top-0 -translate-x-1/2 -translate-y-[1px] whitespace-nowrap rounded-b-xl bg-gradient-to-r from-red-500 via-orange-500 to-amber-400 px-2.5 py-1.5 text-[8px] font-black uppercase tracking-wide text-white shadow-[0_0_16px_rgba(249,115,22,.52)] sm:text-[9px]">Oferta -{modelDiscount}%</span>
                     ) : index === 1 ? (
                       <span className="absolute left-1/2 top-0 -translate-x-1/2 -translate-y-[1px] whitespace-nowrap rounded-b-xl bg-cyan-400 px-3 py-1.5 text-[8px] font-black uppercase tracking-wide text-[#03111c] shadow-[0_0_16px_rgba(34,211,238,.38)] sm:text-[10px]">Mais escolhida</span>
                     ) : null}
                     <ShieldCheck className={`mx-auto h-6 w-6 ${palette.text}`} />
                     <span className="mt-3 block text-[12px] font-black leading-4 text-white sm:text-base">{parts.title}</span>
                     <span className={`mt-1.5 block text-[13px] font-black sm:text-base ${palette.text}`}>{parts.subtitle}</span>
-                    <div className="mt-3 min-h-[90px] border-t border-white/15 pt-2.5">
+                    <div className="mt-3 min-h-[72px] border-t border-white/15 pt-2">
                       {modelVipMode === 'all' ? (
-                        modelPromotion?.active && model.originalPrice ? (
+                        modelHasDiscount && model.originalPrice ? (
                           <div className="flex flex-col items-center">
-                            <div className="flex items-baseline justify-center gap-1.5 whitespace-nowrap">
-                              <span className="text-[9px] font-black uppercase tracking-wide text-white/70 sm:text-[10px]">DE</span>
-                              <span className="text-[13px] font-black text-white/85 line-through decoration-red-500 decoration-[3px] sm:text-[15px]">{asMoney(model.originalPrice)}</span>
+                            <div className="flex items-baseline justify-center gap-1 whitespace-nowrap">
+                              <span className="text-[8px] font-black uppercase tracking-wide text-white/75 sm:text-[9px]">DE</span>
+                              <span className="text-[12px] font-black text-white/90 line-through decoration-red-500 decoration-[3px] sm:text-[14px]">{asMoney(model.originalPrice)}</span>
                             </div>
-                            <span className={`mt-1 block text-[9px] font-black uppercase tracking-[0.08em] ${palette.text} sm:text-[10px]`}>POR</span>
-                            <span className={`mt-0.5 block whitespace-nowrap text-[18px] font-black leading-none tracking-tight drop-shadow-[0_0_12px_rgba(45,212,191,.35)] sm:text-[20px] ${palette.text}`}>{asMoney(model.price)}</span>
-                            <span className="mt-2 inline-flex whitespace-nowrap rounded-full border border-emerald-300/60 bg-emerald-500/15 px-2 py-1 text-[8px] font-black uppercase tracking-wide text-emerald-200 shadow-[0_0_12px_rgba(16,185,129,.20)] sm:text-[9px]">Economize {modelPromotion.discount}%</span>
+                            <span className={`mt-0.5 block text-[9px] font-black uppercase tracking-[0.08em] ${palette.text} sm:text-[10px]`}>POR</span>
+                            <span className={`mt-0.5 block whitespace-nowrap text-[21px] font-black leading-none tracking-tight text-emerald-300 drop-shadow-[0_0_12px_rgba(74,222,128,.45)] sm:text-[23px]`}>{asMoney(model.price)}</span>
+                            <span className="mt-1.5 inline-flex whitespace-nowrap rounded-full border border-emerald-300/60 bg-emerald-500/15 px-2 py-0.5 text-[8px] font-black uppercase tracking-wide text-emerald-200 shadow-[0_0_12px_rgba(16,185,129,.20)] sm:text-[9px]">Economize {modelDiscount}%</span>
                           </div>
                         ) : (
                           <span className="block text-[13px] font-black text-white sm:text-base">{asMoney(model.price)}</span>
@@ -371,7 +373,7 @@ export function StorefrontProductCard({
                         </>
                       )}
                     </div>
-                    {isSelected ? <span className={`mx-auto mt-3 grid h-8 w-8 place-items-center rounded-full ${palette.badge} text-slate-950`}><Check className="h-4 w-4 stroke-[3]" /></span> : <span className="mx-auto mt-3 block h-8 w-8 rounded-full border-[3px] border-slate-500/75 bg-slate-950/60" />}
+                    {isSelected ? <span className={`mx-auto mt-2 grid h-8 w-8 place-items-center rounded-full ${palette.badge} text-slate-950`}><Check className="h-4 w-4 stroke-[3]" /></span> : <span className="mx-auto mt-2 block h-8 w-8 rounded-full border-[3px] border-slate-500/75 bg-slate-950/60" />}
                   </button>
                 );
               })}
@@ -407,16 +409,22 @@ export function StorefrontProductCard({
           <p className="mt-4 text-[13px] font-black uppercase leading-5 tracking-wide text-white sm:text-base">{selectedParts ? `${item.option.label} • ${selectedParts.title} • ${selectedParts.subtitle}` : `${item.option.label} • escolha uma garantia`}</p>
           <div className="mt-4 border-t border-white/15 pt-4">
             {discount > 0 && !(selectedPriceModel && modelHasVipPrice) ? (
-              <div>
-                <div className="flex flex-wrap items-baseline gap-x-2 gap-y-1">
-                  <span className="text-[12px] font-black uppercase tracking-[0.08em] text-white/70 sm:text-sm">DE</span>
-                  <span className="text-[21px] font-black leading-none text-white/90 line-through decoration-red-500 decoration-[4px] sm:text-[28px]">{asMoney(effectiveOriginalPrice)}</span>
+              <div className="grid grid-cols-[minmax(0,1fr)_116px] items-center gap-3 sm:grid-cols-[minmax(0,1fr)_132px]">
+                <div>
+                  <div className="flex flex-wrap items-baseline gap-x-2 gap-y-1">
+                    <span className="text-[13px] font-black uppercase tracking-[0.08em] text-white/75 sm:text-sm">DE</span>
+                    <span className="text-[26px] font-black leading-none text-white line-through decoration-red-500 decoration-[5px] drop-shadow-[0_0_10px_rgba(255,255,255,.16)] sm:text-[34px]">{asMoney(effectiveOriginalPrice)}</span>
+                  </div>
+                  <div className="mt-2 flex flex-wrap items-end gap-x-2 gap-y-1">
+                    <span className="pb-1 text-[16px] font-black uppercase tracking-[0.08em] text-emerald-300 sm:text-lg">POR</span>
+                    <p className="break-words whitespace-nowrap text-[44px] font-black leading-[0.9] tracking-tight text-emerald-300 drop-shadow-[0_0_24px_rgba(74,222,128,.52)] sm:text-[56px]">{effectivePrice ? asMoney(effectivePrice) : "Valor após a escolha"}</p>
+                  </div>
                 </div>
-                <div className="mt-2 flex flex-wrap items-end gap-x-3 gap-y-1">
-                  <span className="pb-1 text-[15px] font-black uppercase tracking-[0.08em] text-emerald-300 sm:text-lg">POR</span>
-                  <p className="break-words text-[40px] font-black leading-[0.95] tracking-tight text-teal-300 drop-shadow-[0_0_22px_rgba(45,212,191,.48)] sm:text-[52px]">{effectivePrice ? asMoney(effectivePrice) : "Valor após a escolha"}</p>
+                <div className="flex min-h-[104px] flex-col items-center justify-center rounded-[20px] border-2 border-red-500/90 bg-[linear-gradient(180deg,rgba(69,10,20,.92),rgba(24,3,9,.98))] px-2 text-center shadow-[0_0_22px_rgba(239,68,68,.48)]">
+                  <Flame className="h-9 w-9 fill-orange-500 text-orange-500 drop-shadow-[0_0_10px_rgba(249,115,22,.8)]" />
+                  <span className="mt-1 text-[10px] font-black uppercase tracking-[0.05em] text-amber-200 sm:text-xs">Economize</span>
+                  <span className="text-[30px] font-black leading-none text-yellow-300 sm:text-[36px]">{discount}%</span>
                 </div>
-                <p className="mt-3 inline-flex rounded-full border border-emerald-300/65 bg-emerald-500/15 px-4 py-2 text-[12px] font-black uppercase tracking-[0.08em] text-emerald-200 shadow-[0_0_18px_rgba(16,185,129,.24)] sm:text-sm">Economize {discount}%</p>
               </div>
             ) : (
               <>
