@@ -53,8 +53,20 @@ server = replaceOnce(
   'backend map all login emails'
 );
 
-server = replaceOnce(
-  server,
+if (!server.includes("loginSearchText: loginSearchTextByRegId.get(Number(o.id)) ?? null,")) {
+  const currentStatusProjection = `          latestStatus: effectiveLatestStatus,
+          hasNewDocResponse: answeredDocReqIds.has(Number(o.id)),`;
+
+  if (server.includes(currentStatusProjection)) {
+    server = server.replace(
+      currentStatusProjection,
+      `          latestStatus: effectiveLatestStatus,
+          loginSearchText: loginSearchTextByRegId.get(Number(o.id)) ?? null,
+          hasNewDocResponse: answeredDocReqIds.has(Number(o.id)),`,
+    );
+  } else {
+    server = replaceOnce(
+      server,
 `        return {
           ...o,
           hasNewDocResponse: answeredDocReqIds.has(Number(o.id)),`,
@@ -62,8 +74,10 @@ server = replaceOnce(
           ...o,
           loginSearchText: loginSearchTextByRegId.get(Number(o.id)) ?? null,
           hasNewDocResponse: answeredDocReqIds.has(Number(o.id)),`,
-  'backend expose login search text'
-);
+      'backend expose login search text'
+    );
+  }
+}
 
 fs.writeFileSync(serverPath, server);
 
