@@ -1720,13 +1720,28 @@ export const appRouter = router({
                 }
               }
               if (regId) {
-                // Buscar status inicial dinâmico do banco
+                // Buscar o status inicial da sequência correta do produto.
+                // Assim o pedido novo respeita a sequência personalizada mesmo após renomear/reordenar status.
                 let initialStatus = 'pedido_recebido';
                 try {
-                  const stRows = await db2.execute(`SELECT \`key\` FROM orderStatusTypes WHERE isActive = 1 ORDER BY sortOrder ASC LIMIT 1`);
-                  const stArr = (stRows[0] as unknown as Array<{ key: string }>);
-                  if (stArr && stArr.length > 0 && stArr[0].key) initialStatus = stArr[0].key;
-                } catch (e) { /* usa pedido_recebido como fallback */ }
+                  const { resolveOrderStatusFlowForProduct, getOrderStatusFlowDefinition } = await import('./db');
+                  const flowId = await resolveOrderStatusFlowForProduct(input.productId ?? null);
+                  const flow = await getOrderStatusFlowDefinition(flowId);
+                  if (flow.statusKeys.length > 0) {
+                    initialStatus = flow.statusKeys[0];
+                  } else {
+                    const stRows = await db2.execute("SELECT `key` FROM orderStatusTypes WHERE isActive = 1 ORDER BY sortOrder ASC LIMIT 1");
+                    const stArr = (stRows[0] as unknown as Array<{ key: string }>);
+                    if (stArr && stArr.length > 0 && stArr[0].key) initialStatus = stArr[0].key;
+                  }
+                } catch (e) {
+                  // Compatibilidade com instalações antigas ou sem configuração de fluxo.
+                  try {
+                    const stRows = await db2.execute("SELECT `key` FROM orderStatusTypes WHERE isActive = 1 ORDER BY sortOrder ASC LIMIT 1");
+                    const stArr = (stRows[0] as unknown as Array<{ key: string }>);
+                    if (stArr && stArr.length > 0 && stArr[0].key) initialStatus = stArr[0].key;
+                  } catch { /* usa pedido_recebido como fallback final */ }
+                }
                 // Gerar número de pedido único
                 let orderNum: number | undefined;
                 try { orderNum = await generateOrderNumber(); } catch (e) { console.error('[OrderNumber] Erro:', e); }
