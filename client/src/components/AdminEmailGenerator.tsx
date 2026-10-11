@@ -191,6 +191,19 @@ export default function AdminEmailGenerator({ onBack }: { onBack: () => void }) 
     return { fromOrder, customerNumber, registrationId, customerName, orderNumber };
   }, []);
 
+  const resolvedOrderIdentityQuery = trpc.loginData.resolveOrderCustomerNumber.useQuery(
+    { registrationId: orderParams.registrationId || 0 },
+    {
+      enabled: orderParams.fromOrder && !orderParams.customerNumber && Boolean(orderParams.registrationId),
+      staleTime: 0,
+      refetchOnWindowFocus: false,
+    }
+  );
+  const resolvedCustomerNumber = orderParams.customerNumber
+    ?? (resolvedOrderIdentityQuery.data?.customerNumber ? Number(resolvedOrderIdentityQuery.data.customerNumber) : null);
+  const resolvedCustomerName = orderParams.customerName || resolvedOrderIdentityQuery.data?.customerName || "";
+  const resolvedOrderNumber = orderParams.orderNumber ?? resolvedOrderIdentityQuery.data?.orderNumber ?? null;
+
   useEffect(() => {
     if (hydrated.current || !configQuery.data) return;
     setConfig(parseConfig(configQuery.data[CONFIG_KEY]));
@@ -204,7 +217,7 @@ export default function AdminEmailGenerator({ onBack }: { onBack: () => void }) 
 
   const activeDomain = config.domains.includes(config.activeDomain) ? config.activeDomain : config.domains[0];
   const safePrefix = normalizePrefix(config.prefix) || DEFAULT_CONFIG.prefix;
-  const fixedOrderSuffix = orderParams.fromOrder ? orderParams.customerNumber : null;
+  const fixedOrderSuffix = orderParams.fromOrder ? resolvedCustomerNumber : null;
   const formatExample = `${safePrefix}.${randomName()}.${fixedOrderSuffix ?? randomNumber()}@${activeDomain}`;
 
   const filteredHistory = useMemo(() => {
@@ -276,13 +289,17 @@ export default function AdminEmailGenerator({ onBack }: { onBack: () => void }) 
     const used = new Set(history.map(item => item.email.toLowerCase()));
     const generated: HistoryItem[] = [];
 
-    if (orderParams.fromOrder && !orderParams.customerNumber) {
-      toast.error("Código do cliente não recebido do pedido. Volte ao pedido e abra o Gerar H2 novamente.");
+    if (orderParams.fromOrder && !resolvedCustomerNumber) {
+      if (resolvedOrderIdentityQuery.isLoading) {
+        toast.info("Identificando o código do cliente pelo pedido...");
+      } else {
+        toast.error("Código do cliente não encontrado para este pedido. A geração foi bloqueada.");
+      }
       return;
     }
 
     while (generated.length < count) {
-      const suffix = orderParams.fromOrder ? orderParams.customerNumber! : randomNumber();
+      const suffix = orderParams.fromOrder ? resolvedCustomerNumber! : randomNumber();
       const email = `${safePrefix}.${randomName()}.${suffix}@${activeDomain}`.toLowerCase();
       if (used.has(email)) continue;
       used.add(email);
@@ -374,17 +391,19 @@ export default function AdminEmailGenerator({ onBack }: { onBack: () => void }) 
         </div>
 
         {orderParams.fromOrder && (
-          <div className={`mb-5 rounded-2xl border p-4 ${orderParams.customerNumber ? "border-lime-400/35 bg-lime-500/10 text-lime-100" : "border-red-400/40 bg-red-500/10 text-red-100"}`}>
+          <div className={`mb-5 rounded-2xl border p-4 ${resolvedCustomerNumber ? "border-lime-400/35 bg-lime-500/10 text-lime-100" : "border-red-400/40 bg-red-500/10 text-red-100"}`}>
             <p className="text-xs font-black uppercase tracking-[0.12em]">Gerador vinculado ao pedido</p>
             <p className="mt-1 text-sm font-bold">
-              {orderParams.customerName || "Cliente"}
-              {orderParams.customerNumber ? ` · Código *${orderParams.customerNumber}` : " · Código do cliente não recebido"}
-              {orderParams.orderNumber ? ` · Pedido #${orderParams.orderNumber}` : ""}
+              {resolvedCustomerName || "Cliente"}
+              {resolvedCustomerNumber ? ` · Código *${resolvedCustomerNumber}` : resolvedOrderIdentityQuery.isLoading ? " · Identificando código..." : " · Código do cliente não encontrado"}
+              {resolvedOrderNumber ? ` · Pedido #${resolvedOrderNumber}` : ""}
             </p>
             <p className="mt-1 text-xs opacity-80">
-              {orderParams.customerNumber
-                ? `Todo e-mail gerado neste acesso terminará em .${orderParams.customerNumber}@${activeDomain}.`
-                : "A geração está bloqueada para evitar criar um e-mail com número errado."}
+              {resolvedCustomerNumber
+                ? `Todo e-mail gerado neste acesso terminará em .${resolvedCustomerNumber}@${activeDomain}.`
+                : resolvedOrderIdentityQuery.isLoading
+                  ? "Consultando o cadastro do cliente..."
+                  : "A geração está bloqueada para evitar criar um e-mail com número errado."}
             </p>
           </div>
         )}

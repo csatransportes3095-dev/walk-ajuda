@@ -9,17 +9,19 @@ const generator = fs.readFileSync(path.resolve(root, "client/src/components/Admi
 describe("gerador H2 vinculado ao codigo do cliente", () => {
   it("abre o gerador H2 levando customerNumber do pedido", () => {
     expect(orders).toContain('params.set("customerNumber", String(customerNumber))');
+    expect(orders).toContain('window.open(buildH2EmailGeneratorUrl(order)');
     expect(orders).toContain('window.open(buildH2EmailGeneratorUrl(ar)');
   });
 
   it("usa customerNumber como sufixo final quando aberto pelo pedido", () => {
-    expect(generator).toContain('const fixedOrderSuffix = orderParams.fromOrder ? orderParams.customerNumber : null;');
-    expect(generator).toContain('const suffix = orderParams.fromOrder ? orderParams.customerNumber! : randomNumber();');
-    expect(generator).toContain('Todo e-mail gerado neste acesso terminará em .${orderParams.customerNumber}@${activeDomain}.');
+    expect(generator).toContain('const fixedOrderSuffix = orderParams.fromOrder ? resolvedCustomerNumber : null;');
+    expect(generator).toContain('const suffix = orderParams.fromOrder ? resolvedCustomerNumber! : randomNumber();');
+    expect(generator).toContain('resolveOrderCustomerNumber.useQuery');
+    expect(generator).toContain('Todo e-mail gerado neste acesso terminará em .${resolvedCustomerNumber}@${activeDomain}.');
   });
 
   it("bloqueia a geracao se o pedido nao enviar o codigo do cliente", () => {
-    expect(generator).toContain('Código do cliente não recebido do pedido');
+    expect(generator).toContain('Código do cliente não encontrado para este pedido. A geração foi bloqueada.');
     expect(generator).toContain('A geração está bloqueada para evitar criar um e-mail com número errado.');
   });
 });
