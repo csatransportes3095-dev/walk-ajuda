@@ -424,31 +424,6 @@ export default function Home() {
     clientCity: string;
   } | null>(null);
 
-  const persistPostOrderScheduleFlow = useCallback((links: string[], currentIndex: number) => {
-    try {
-      sessionStorage.setItem(POST_ORDER_FLOW_KEY, JSON.stringify({
-        version: 1,
-        scheduleLinks: links,
-        currentIndex,
-        submittedOrderData,
-        createdAt: Date.now(),
-      }));
-    } catch {
-      // Se o storage estiver indisponível, o fluxo atual continua visível.
-    }
-  }, [submittedOrderData]);
-
-  const startPostOrderScheduleNow = useCallback(() => {
-    const validLinks = automaticScheduleLinks.filter(link => scheduleTokenFromUrl(link));
-    if (validLinks.length === 0) {
-      setPostOrderScheduleDecision('completed');
-      return;
-    }
-    setPostOrderScheduleDecision('now');
-    persistPostOrderScheduleFlow(validLinks, 0);
-    window.location.href = validLinks[0];
-  }, [automaticScheduleLinks, persistPostOrderScheduleFlow]);
-
   useEffect(() => {
     try {
       const raw = sessionStorage.getItem(POST_ORDER_FLOW_KEY);
@@ -2177,6 +2152,105 @@ export default function Home() {
   const pixValue = vipInstallmentSelection.mode === "vip_installment" && vipCurrentPixCents > 0
     ? (vipCurrentPixCents / 100).toFixed(2).replace('.', ',')
     : cashPixValue;
+
+  const buildPostOrderWhatsappUrl = () => {
+    const od = submittedOrderData;
+    let msg = `NOVO PEDIDO - ${SITE_NAME}`;
+
+    const rName = od?.referrerName || referrerName.trim();
+    const rPhone = od?.referrerPhone || referrerPhone.trim();
+    if (rName || rPhone) {
+      msg += `\nQUEM INDICOU:`;
+      if (rName) msg += `\nNome: ${rName}`;
+      if (rPhone) msg += `\nTelefone: ${rPhone}`;
+    }
+
+    msg += `\nCLIENTE:`;
+    msg += `\nNome: ${od?.clientName || clientName}`;
+    msg += `\nTelefone: ${od?.clientPhone || clientPhone}`;
+    if (od?.clientCity || clientCity) msg += `\nCidade: ${od?.clientCity || clientCity}`;
+
+    const items = od?.cartItems || [];
+    if (items.length > 1) {
+      items.forEach((item, idx) => {
+        msg += `\n\n====== PEDIDO ${idx + 1} DE ${items.length} ======`;
+        msg += `\nServico: ${item.service}`;
+        msg += `\nOpcao: ${item.nameOption}`;
+        if (item.price) msg += `\nValor: ${item.price}`;
+      });
+      if (od?.totalValue) msg += `\n\nValor Total: ${od.totalValue}`;
+    } else if (items.length === 1) {
+      msg += `\n\nServico: ${items[0].service}`;
+      msg += `\nOpcao: ${items[0].nameOption}`;
+      if (items[0].price) msg += `\nValor: ${items[0].price}`;
+    } else {
+      msg += `\n\nServico: ${selectedProduct?.name || 'N/A'}`;
+      if (selectedOption?.label) msg += `\nOpcao: ${selectedOption.label}`;
+      msg += `\nValor: ${pixValue || (couponDiscount || hasResellerDiscount ? finalValue : originalValue)}`;
+    }
+
+    msg += `\nComprovante PIX: Enviado`;
+
+    const answers = od?.answers || [];
+    if (answers.length > 0) {
+      msg += `\n\nRESPOSTAS DO FORMULARIO:`;
+      answers.forEach(answer => {
+        msg += `\n-------------------------`;
+        msg += `\n*************************`;
+        msg += `\n${answer.question}`;
+        msg += `\n${answer.answer}`;
+      });
+      msg += `\n-------------------------`;
+      msg += `\n*************************`;
+    }
+
+    const docs = od?.docs || [];
+    if (docs.length > 0) {
+      msg += `\n\nARQUIVOS:`;
+      docs.forEach(doc => {
+        msg += `\n-------------------------`;
+        msg += `\n*************************`;
+        msg += `\n${doc.label}`;
+        msg += `\n${doc.url}`;
+      });
+      msg += `\n-------------------------`;
+      msg += `\n*************************`;
+    }
+
+    return `https://wa.me/${WHATSAPP_NUMBER}?text=${encodeWhatsappMessage(msg)}`;
+  };
+
+  const persistPostOrderScheduleFlow = (links: string[], currentIndex: number) => {
+    const whatsappUrl = buildPostOrderWhatsappUrl();
+    try {
+      sessionStorage.setItem(POST_ORDER_FLOW_KEY, JSON.stringify({
+        version: 2,
+        scheduleLinks: links,
+        currentIndex,
+        submittedOrderData,
+        whatsappUrl,
+        createdAt: Date.now(),
+      }));
+    } catch {
+      // O pedido continua salvo; apenas a retomada automática fica indisponível.
+    }
+  };
+
+  const startPostOrderScheduleNow = () => {
+    const validLinks = automaticScheduleLinks.filter(link => scheduleTokenFromUrl(link));
+    if (validLinks.length === 0) {
+      setPostOrderScheduleDecision('completed');
+      return;
+    }
+    const whatsappUrl = buildPostOrderWhatsappUrl();
+    if (!whatsappUrl) {
+      toast.error('Não foi possível preparar a mensagem do pedido para o WhatsApp.');
+      return;
+    }
+    setPostOrderScheduleDecision('now');
+    persistPostOrderScheduleFlow(validLinks, 0);
+    window.location.href = validLinks[0];
+  };
 
   useEffect(() => {
     if (profilePhoto) {
@@ -4394,76 +4468,11 @@ export default function Home() {
 
             {/* Botão GRANDE do WhatsApp */}
             <button onClick={() => {
-              const od = submittedOrderData;
-              let msg = `NOVO PEDIDO - ${SITE_NAME}`;
-
-              // Quem indicou (só se preenchido)
-              const rName = od?.referrerName || referrerName.trim();
-              const rPhone = od?.referrerPhone || referrerPhone.trim();
-              if (rName || rPhone) {
-                msg += `\nQUEM INDICOU:`;
-                if (rName) msg += `\nNome: ${rName}`;
-                if (rPhone) msg += `\nTelefone: ${rPhone}`;
+              const whatsappUrl = buildPostOrderWhatsappUrl();
+              if (!whatsappUrl) {
+                toast.error('Não foi possível preparar a mensagem do pedido para o WhatsApp.');
+                return;
               }
-
-              // Dados do cliente
-              msg += `\nCLIENTE:`;
-              msg += `\nNome: ${od?.clientName || clientName}`;
-              msg += `\nTelefone: ${od?.clientPhone || clientPhone}`;
-              if (od?.clientCity || clientCity) msg += `\nCidade: ${od?.clientCity || clientCity}`;
-
-              // Serviços
-              const items = od?.cartItems || [];
-              if (items.length > 1) {
-                items.forEach((item, idx) => {
-                  msg += `\n\n====== PEDIDO ${idx + 1} DE ${items.length} ======`;
-                  msg += `\nServico: ${item.service}`;
-                  msg += `\nOpcao: ${item.nameOption}`;
-                  if (item.price) msg += `\nValor: ${item.price}`;
-                });
-                if (od?.totalValue) msg += `\n\nValor Total: ${od.totalValue}`;
-              } else if (items.length === 1) {
-                msg += `\n\nServico: ${items[0].service}`;
-                msg += `\nOpcao: ${items[0].nameOption}`;
-                if (items[0].price) msg += `\nValor: ${items[0].price}`;
-              } else {
-                // fallback
-                msg += `\n\nServico: ${selectedProduct?.name || 'N/A'}`;
-                if (selectedOption?.label) msg += `\nOpcao: ${selectedOption.label}`;
-                msg += `\nValor: ${pixValue || (couponDiscount || hasResellerDiscount ? finalValue : originalValue)}`;
-              }
-
-              msg += `\nComprovante PIX: Enviado`;
-
-              // Respostas do formulário
-              const answers = od?.answers || [];
-              if (answers.length > 0) {
-                msg += `\n\nRESPOSTAS DO FORMULARIO:`;
-                answers.forEach(a => {
-                  msg += `\n-------------------------`;
-                  msg += `\n*************************`;
-                  msg += `\n${a.question}`;
-                  msg += `\n${a.answer}`;
-                });
-                msg += `\n-------------------------`;
-                msg += `\n*************************`;
-              }
-
-              // Documentos enviados
-              const docs = od?.docs || [];
-              if (docs.length > 0) {
-                msg += `\n\nARQUIVOS:`;
-                docs.forEach(d => {
-                  msg += `\n-------------------------`;
-                  msg += `\n*************************`;
-                  msg += `\n${d.label}`;
-                  msg += `\n${d.url}`;
-                });
-                msg += `\n-------------------------`;
-                msg += `\n*************************`;
-              }
-
-              const whatsappUrl = `https://wa.me/${WHATSAPP_NUMBER}?text=${encodeWhatsappMessage(msg)}`;
               window.open(whatsappUrl, '_blank');
               setWhatsappClicked(true);
             }}
