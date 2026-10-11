@@ -83,27 +83,27 @@ export type StorefrontCatalogItem = {
 const OPTION_PALETTES = [
   {
     border: "border-orange-500/90",
-    bg: "from-orange-950/60 via-[#160b0c] to-[#050816]",
+    bg: "from-orange-950/45 via-[#160b0c]/75 to-[#050816]/85",
     text: "text-orange-300",
     badge: "bg-orange-400",
     ring: "ring-orange-300/35",
-    shadow: "shadow-[0_0_26px_rgba(249,115,22,0.18)]",
+    shadow: "shadow-[inset_0_1px_0_rgba(255,255,255,0.18),inset_0_-1px_0_rgba(255,255,255,0.04),0_0_26px_rgba(249,115,22,0.22)]",
   },
   {
     border: "border-cyan-400",
-    bg: "from-cyan-950/80 via-[#06314d] to-[#050816]",
+    bg: "from-cyan-950/55 via-[#06314d]/72 to-[#050816]/85",
     text: "text-cyan-300",
     badge: "bg-cyan-400",
     ring: "ring-cyan-300/45",
-    shadow: "shadow-[0_0_36px_rgba(34,211,238,0.30)]",
+    shadow: "shadow-[inset_0_1px_0_rgba(255,255,255,0.20),inset_0_-1px_0_rgba(255,255,255,0.04),0_0_36px_rgba(34,211,238,0.32)]",
   },
   {
     border: "border-emerald-400/90",
-    bg: "from-emerald-950/70 via-[#07332c] to-[#050816]",
+    bg: "from-emerald-950/50 via-[#07332c]/72 to-[#050816]/85",
     text: "text-emerald-300",
     badge: "bg-emerald-400",
     ring: "ring-emerald-300/35",
-    shadow: "shadow-[0_0_26px_rgba(16,185,129,0.18)]",
+    shadow: "shadow-[inset_0_1px_0_rgba(255,255,255,0.18),inset_0_-1px_0_rgba(255,255,255,0.04),0_0_26px_rgba(16,185,129,0.22)]",
   },
 ] as const;
 
@@ -278,8 +278,9 @@ export function StorefrontProductCard({
   return (
     <article
       data-promo-active={hasActivePromotion ? "true" : "false"}
-      className={`relative flex h-full flex-col overflow-hidden rounded-[34px] bg-[radial-gradient(circle_at_50%_0%,rgba(38,74,180,.28),transparent_34%),radial-gradient(circle_at_16%_30%,rgba(124,58,237,.20),transparent_34%),linear-gradient(180deg,#071022_0%,#050916_48%,#080b1d_100%)] ${hasActivePromotion ? "border border-amber-300/95 shadow-[0_0_0_1px_rgba(250,204,21,.28),0_0_36px_rgba(245,158,11,.34),0_32px_90px_rgba(0,0,0,.66)]" : "border border-violet-500/85 shadow-[0_32px_90px_rgba(0,0,0,.66),0_0_42px_rgba(124,58,237,.25)]"}`}
+      className={`relative flex h-full flex-col overflow-hidden rounded-[34px] bg-[radial-gradient(circle_at_50%_0%,rgba(68,104,214,.24),transparent_34%),radial-gradient(circle_at_16%_30%,rgba(124,58,237,.18),transparent_34%),linear-gradient(180deg,rgba(7,16,34,.90)_0%,rgba(5,9,22,.91)_48%,rgba(8,11,29,.94)_100%)] font-semibold backdrop-blur-2xl ring-1 ring-white/[0.06] ${hasActivePromotion ? "border border-amber-300/95 shadow-[0_0_0_1px_rgba(250,204,21,.28),0_0_36px_rgba(245,158,11,.34),0_32px_90px_rgba(0,0,0,.66)]" : "border border-violet-500/85 shadow-[0_32px_90px_rgba(0,0,0,.66),0_0_42px_rgba(124,58,237,.25)]"}`}
     >
+      <span aria-hidden="true" className="pointer-events-none absolute inset-x-6 top-[1px] z-20 h-px bg-gradient-to-r from-transparent via-white/45 to-transparent opacity-80" />
       {hasActivePromotion && (
         <div className="relative z-30 flex min-h-[38px] flex-wrap items-center justify-center gap-x-2 gap-y-1 border-b border-amber-300/70 bg-gradient-to-r from-yellow-300 via-amber-400 to-orange-500 px-3 py-2 text-[10px] font-black uppercase tracking-[0.06em] text-[#1b1000] shadow-[0_5px_22px_rgba(245,158,11,.28)] sm:text-[11px]">
           <span className="inline-flex items-center gap-1"><Flame className="h-3.5 w-3.5 fill-orange-700/35" /> Promoção{maxPromotionDiscount > 0 ? ` • ${maxPromotionDiscount}% OFF` : ""}</span>
@@ -289,7 +290,7 @@ export function StorefrontProductCard({
 
       <div className={`pointer-events-none absolute inset-x-10 ${hasActivePromotion ? "top-[38px]" : "top-0"} h-px bg-gradient-to-r from-transparent via-violet-300 to-transparent shadow-[0_0_24px_rgba(167,139,250,.95)]`} />
 
-      <div className="relative overflow-hidden rounded-b-[28px] border-b border-violet-400/35 bg-[radial-gradient(circle_at_90%_25%,rgba(99,102,241,.22),transparent_28%),linear-gradient(135deg,rgba(76,29,149,.30),rgba(15,23,42,.30)_55%,rgba(2,6,23,.05))] px-5 py-5 sm:px-6 sm:py-6">
+      <div className="relative overflow-hidden rounded-b-[28px] border-b border-violet-300/40 bg-[radial-gradient(circle_at_90%_25%,rgba(129,140,248,.24),transparent_28%),linear-gradient(135deg,rgba(76,29,149,.28),rgba(15,23,42,.24)_55%,rgba(255,255,255,.025))] px-5 py-5 backdrop-blur-2xl shadow-[inset_0_1px_0_rgba(255,255,255,.18),inset_0_-1px_0_rgba(255,255,255,.04)] sm:px-6 sm:py-6">
         <div className="pointer-events-none absolute right-5 top-3 text-[56px] font-black tracking-tighter text-violet-300/[0.06] sm:text-[74px]">{item.category}</div>
         <div className="relative flex items-start gap-4 pr-1">
           <div className="grid h-[74px] w-[74px] shrink-0 place-items-center overflow-hidden rounded-[22px] border border-violet-300/55 bg-black/50 shadow-[0_0_24px_rgba(139,92,246,.45),inset_0_0_18px_rgba(255,255,255,.08)]">
@@ -302,7 +303,7 @@ export function StorefrontProductCard({
           </div>
         </div>
         <div className="relative mt-5 flex items-end justify-between gap-3">
-          <p className="max-w-[72%] text-[12px] font-semibold leading-5 text-violet-100/70 sm:text-sm">{productTagline(item)}</p>
+          <p className="max-w-[72%] text-[12px] font-bold leading-5 text-violet-100/75 sm:text-sm">{productTagline(item)}</p>
           <div className="flex shrink-0 items-center gap-2 rounded-2xl border border-violet-400/70 bg-violet-950/55 px-3 py-2 text-violet-200 shadow-[0_0_18px_rgba(139,92,246,.20)]">
             <Crown className="h-5 w-5" />
             <div className="text-[9px] font-black uppercase leading-3 tracking-wide"><span className="block">Qualidade</span><span className="text-violet-100">H2</span></div>
@@ -317,7 +318,7 @@ export function StorefrontProductCard({
               <Crown className="mt-0.5 h-7 w-7 shrink-0 fill-violet-500/30 text-violet-400" />
               <div>
                 <p className="text-[22px] font-black uppercase leading-none tracking-[-0.02em] text-white drop-shadow-[0_1px_0_rgba(255,255,255,.08)] sm:text-[24px] lg:text-[22px] xl:text-[24px]">Escolha sua garantia</p>
-                <p className="mt-2 text-[11px] font-medium text-slate-400 sm:text-sm">Mais corridas, mais tempo, mais tranquilidade.</p>
+                <p className="mt-2 text-[11px] font-semibold text-slate-300/80 sm:text-sm">Mais corridas, mais tempo, mais tranquilidade.</p>
               </div>
             </div>
             <div className={`mt-5 grid w-full gap-2 sm:gap-3 ${priceModels.length === 1 ? "grid-cols-1" : priceModels.length === 2 ? "grid-cols-2" : priceModels.length === 3 ? "grid-cols-3" : "grid-cols-2 sm:grid-cols-4"}`}>
@@ -335,7 +336,8 @@ export function StorefrontProductCard({
                 const vipPreviewPrice = applyVipBenefitToPrice(model.price, model, true);
                 const vipSavings = Math.max(0, parseBrazilMoney(model.price) - parseBrazilMoney(vipPreviewPrice));
                 return (
-                  <button key={model.id} type="button" aria-pressed={isSelected} disabled={modelLocked} onClick={() => { if (!modelLocked) handlePriceModelSelect(model.id); }} style={priceModels.length === 1 ? { gridColumn: "1 / -1", width: "100%", maxWidth: "none" } : undefined} className={`relative w-full min-h-[206px] overflow-visible rounded-[18px] border bg-gradient-to-b px-2 pb-2.5 pt-6 text-center transition-all ${palette.border} ${palette.bg} ${palette.shadow} shadow-[0_0_24px_rgba(0,0,0,.28)] ${isSelected ? `-translate-y-1 ring-2 ${palette.ring}` : "hover:-translate-y-0.5"} ${modelPromotion?.active ? "outline outline-1 outline-amber-300/60" : ""} ${modelVipHighlighted ? "ring-1 ring-amber-300/70" : ""} ${modelLocked ? "cursor-not-allowed opacity-80 saturate-75" : ""}`}>
+                  <button key={model.id} type="button" aria-pressed={isSelected} disabled={modelLocked} onClick={() => { if (!modelLocked) handlePriceModelSelect(model.id); }} style={priceModels.length === 1 ? { gridColumn: "1 / -1", width: "100%", maxWidth: "none" } : undefined} className={`relative w-full min-h-[206px] overflow-visible rounded-[18px] border bg-gradient-to-b px-2 pb-2.5 pt-6 text-center backdrop-blur-xl transition-all ${palette.border} ${palette.bg} ${palette.shadow} ${isSelected ? `-translate-y-1 ring-2 ${palette.ring}` : "hover:-translate-y-0.5"} ${modelPromotion?.active ? "outline outline-1 outline-amber-300/60" : ""} ${modelVipHighlighted ? "ring-1 ring-amber-300/70" : ""} ${modelLocked ? "cursor-not-allowed opacity-80 saturate-75" : ""}`}>
+                    <span aria-hidden="true" className="pointer-events-none absolute inset-x-3 top-[1px] h-px bg-gradient-to-r from-transparent via-white/55 to-transparent opacity-90" />
                     {modelVipMode !== 'all' && <span className={`absolute -right-1 -top-2 z-20 rounded-full border px-2 py-1 text-[8px] font-black uppercase shadow-lg ${modelLocked ? 'border-rose-300/70 bg-rose-950 text-rose-200' : 'border-amber-300/70 bg-amber-400 text-amber-950'}`}>{modelLocked ? '🔒 SOMENTE VIP' : `👑 ${model.vipHighlightText || 'VIP'}`}</span>}
                     {index === 0 && modelHasDiscount ? (
                       <span className="absolute left-1/2 top-0 -translate-x-1/2 -translate-y-[1px] whitespace-nowrap rounded-b-xl bg-gradient-to-r from-red-500 via-orange-500 to-amber-400 px-2.5 py-1.5 text-[8px] font-black uppercase tracking-wide text-white shadow-[0_0_16px_rgba(249,115,22,.52)] sm:text-[9px]">Oferta -{modelDiscount}%</span>
@@ -382,7 +384,7 @@ export function StorefrontProductCard({
               })}
             </div>
             {!isVipCustomer && priceModels.some((model) => normalizeVipAccessMode(model.vipAccessMode) !== 'all') && (
-              <a href={vipHref} className="mt-4 flex items-center gap-3 rounded-2xl border border-amber-300/45 bg-[linear-gradient(135deg,rgba(120,53,15,.22),rgba(76,29,149,.20))] p-4 shadow-[0_0_24px_rgba(251,191,36,.10)] transition-all hover:border-amber-200/70 hover:brightness-110">
+              <a href={vipHref} className="relative mt-4 flex items-center gap-3 overflow-hidden rounded-2xl border border-amber-200/45 bg-[linear-gradient(135deg,rgba(120,53,15,.18),rgba(76,29,149,.16),rgba(255,255,255,.025))] p-4 backdrop-blur-xl shadow-[inset_0_1px_0_rgba(255,255,255,.16),0_0_24px_rgba(251,191,36,.12)] transition-all hover:border-amber-200/70 hover:brightness-110">
                 <div className="grid h-11 w-11 shrink-0 place-items-center rounded-xl bg-amber-400/15 text-amber-300"><Crown className="h-6 w-6" /></div>
                 <div className="min-w-0 flex-1">
                   <p className="text-xs font-black uppercase tracking-wide text-amber-200">Seja VIP e pague menos</p>
@@ -395,7 +397,7 @@ export function StorefrontProductCard({
         )}
 
         {tiers.length > 0 && priceModels.length === 0 && (
-          <label className="mt-6 block rounded-2xl border border-violet-400/30 bg-violet-950/30 p-4">
+          <label className="mt-6 block rounded-2xl border border-violet-300/40 bg-violet-950/25 p-4 backdrop-blur-xl shadow-[inset_0_1px_0_rgba(255,255,255,.14),0_0_22px_rgba(124,58,237,.10)]">
             <span className="mb-2 block text-sm font-black uppercase text-violet-200">Escolha sua garantia</span>
             <select value={tierId ?? ""} onChange={(event) => setTierId(Number(event.target.value))} className="w-full rounded-xl border border-violet-300/30 bg-slate-950/70 px-3 py-3 text-sm font-semibold text-white outline-none focus:border-violet-300">
               {tiers.map((tier) => <option key={tier.id} value={tier.id}>{tier.warrantyLabel || `${tier.warrantyValue} ${tier.warrantyType}`} — {asMoney(tier.price)}</option>)}
@@ -403,14 +405,15 @@ export function StorefrontProductCard({
           </label>
         )}
 
-        <div className="mt-5 rounded-[26px] border border-violet-400/70 bg-[radial-gradient(circle_at_18%_12%,rgba(76,29,149,.36),transparent_36%),radial-gradient(circle_at_86%_12%,rgba(30,64,175,.18),transparent_34%),linear-gradient(135deg,rgba(18,14,58,.98),rgba(6,10,31,.98)_58%,rgba(3,7,22,.99))] p-4 shadow-[0_0_0_1px_rgba(139,92,246,.10),0_0_30px_rgba(124,58,237,.16)] sm:p-5 lg:p-4">
-          <div className="flex items-center gap-3">
+        <div className="relative mt-5 overflow-hidden rounded-[26px] border border-violet-300/75 bg-[radial-gradient(circle_at_18%_12%,rgba(124,58,237,.32),transparent_36%),radial-gradient(circle_at_86%_12%,rgba(59,130,246,.16),transparent_34%),linear-gradient(135deg,rgba(18,14,58,.82),rgba(6,10,31,.86)_58%,rgba(3,7,22,.91))] p-4 backdrop-blur-2xl shadow-[inset_0_1px_0_rgba(255,255,255,.20),inset_0_-1px_0_rgba(255,255,255,.04),0_0_0_1px_rgba(139,92,246,.10),0_0_34px_rgba(124,58,237,.20)] sm:p-5 lg:p-4">
+          <span aria-hidden="true" className="pointer-events-none absolute inset-x-5 top-[1px] h-px bg-gradient-to-r from-transparent via-white/55 to-transparent opacity-90" />
+          <div className="relative flex items-center gap-3">
             <div className="grid h-10 w-10 shrink-0 place-items-center rounded-xl bg-violet-600/25 text-violet-300"><Tag className="h-5 w-5" /></div>
             <p className="text-[14px] font-black uppercase tracking-[0.12em] text-violet-300 sm:text-base">Sua escolha</p>
             <span className="ml-auto rounded-full border border-violet-300/35 bg-white/[0.04] px-3 py-1 text-[9px] font-black uppercase text-violet-100 sm:text-[10px]">CONTA {categoryLabel}</span>
           </div>
-          <p className="mt-4 text-[14px] font-black uppercase leading-5 tracking-[0.02em] text-white sm:text-[17px]">{selectedParts ? `${item.option.label} • ${selectedParts.title} • ${selectedParts.subtitle}` : `${item.option.label} • escolha uma garantia`}</p>
-          <div className="mt-4 border-t border-white/15 pt-4">
+          <p className="relative mt-4 text-[14px] font-black uppercase leading-5 tracking-[0.02em] text-white sm:text-[17px]">{selectedParts ? `${item.option.label} • ${selectedParts.title} • ${selectedParts.subtitle}` : `${item.option.label} • escolha uma garantia`}</p>
+          <div className="relative mt-4 border-t border-white/20 pt-4">
             {discount > 0 && !(selectedPriceModel && modelHasVipPrice) ? (
               <div className="grid grid-cols-[minmax(0,1fr)_108px] items-center gap-2.5 sm:grid-cols-[minmax(0,1fr)_116px] sm:gap-3 lg:grid-cols-[minmax(0,1fr)_108px] lg:gap-2.5 xl:grid-cols-[minmax(0,1fr)_116px] xl:gap-3">
                 <div className="min-w-0">
@@ -470,7 +473,7 @@ export function StorefrontProductCard({
         </div>
 
         {detailsOpen && (
-          <div id={detailsId} className="mt-4 rounded-xl border border-white/10 bg-black/25 p-4 text-xs leading-5 text-slate-300">
+          <div id={detailsId} className="mt-4 rounded-xl border border-white/15 bg-white/[0.035] p-4 text-xs font-semibold leading-5 text-slate-300 backdrop-blur-xl shadow-[inset_0_1px_0_rgba(255,255,255,.12)]">
             <div className="grid gap-2">
               <p><strong className="text-white">Produto:</strong> {item.product.name}</p>
               <p><strong className="text-white">Opção:</strong> {item.option.label}</p>
@@ -482,7 +485,7 @@ export function StorefrontProductCard({
           </div>
         )}
 
-        <div className="mt-5 grid grid-cols-3 border-t border-white/10 pt-4 text-center text-[9px] font-medium text-slate-400 sm:text-[11px]">
+        <div className="mt-5 grid grid-cols-3 border-t border-white/10 pt-4 text-center text-[9px] font-semibold text-slate-300/75 sm:text-[11px]">
           <span className="inline-flex items-center justify-center gap-1.5 border-r border-white/10"><LockKeyhole className="h-4 w-4 text-violet-300" />Compra segura</span>
           <span className="inline-flex items-center justify-center gap-1.5 border-r border-white/10"><ShieldCheck className="h-4 w-4 text-violet-300" />Suporte H2</span>
           <span className="inline-flex items-center justify-center gap-1.5"><Zap className="h-4 w-4 text-violet-300" />Entrega garantida</span>
