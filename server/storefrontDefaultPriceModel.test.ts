@@ -32,3 +32,16 @@ describe('visual promocional da vitrine', () => {
     expect(card).toContain('<Flame className=');
   });
 });
+
+
+describe('visual refinado da vitrine', () => {
+  it('mantém o card promocional compacto e o resumo sem sobreposição', () => {
+    const card = fs.readFileSync('client/src/components/StorefrontProductCard.tsx', 'utf8');
+
+    expect(card).toContain('min-h-[206px]');
+    expect(card).toContain('grid-cols-[minmax(0,1fr)_108px]');
+    expect(card).toContain('min-h-[118px]');
+    expect(card).toContain('text-[36px]');
+    expect(card).toContain('border-[3px] border-red-500');
+  });
+});
