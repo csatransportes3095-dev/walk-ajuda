@@ -31,6 +31,12 @@ describe("sequências de status por produto", () => {
     expect(db).toContain("Padrão H2");
   });
 
+  it("usa o primeiro status da sequência do produto na criação automática do pedido", () => {
+    expect(routers).toContain("resolveOrderStatusFlowForProduct(input.productId ?? null)");
+    expect(routers).toContain("getOrderStatusFlowDefinition(flowId)");
+    expect(routers).toContain("initialStatus = flow.statusKeys[0]");
+  });
+
   it("filtra os botões do ADM e a timeline do cliente pela sequência do pedido", () => {
     expect(orders).toContain("statusFlowOrderMapQuery");
     expect(orders).toContain("getStatusOrderForOrder(order)");
