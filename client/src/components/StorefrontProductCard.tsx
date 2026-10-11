@@ -355,7 +355,6 @@ export function StorefrontProductCard({
                               <span className="text-[8px] font-black uppercase tracking-wide text-white/75 sm:text-[9px]">DE</span>
                               <span className="relative inline-block text-[13px] font-black text-white drop-shadow-[0_0_5px_rgba(255,255,255,.16)] sm:text-[14px] lg:text-[13px]">
                                 {asMoney(model.originalPrice)}
-                                <span aria-hidden="true" className="pointer-events-none absolute left-[2%] right-[2%] top-1/2 h-[2px] -translate-y-1/2 -rotate-[4deg] skew-x-[-14deg] rounded-[1px] bg-red-500/55 shadow-[0_0_4px_rgba(239,68,68,.28)]" />
                               </span>
                             </div>
                             <span className={`mt-0.5 block text-[9px] font-black uppercase tracking-[0.08em] ${palette.text} sm:text-[10px]`}>POR</span>
@@ -421,7 +420,6 @@ export function StorefrontProductCard({
                     <span className="text-[13px] font-black uppercase tracking-[0.08em] text-white/80 sm:text-sm">DE</span>
                     <span className="relative inline-block text-[24px] font-black leading-none text-white drop-shadow-[0_0_10px_rgba(255,255,255,.18)] sm:text-[28px] lg:text-[24px] xl:text-[28px]">
                       {asMoney(effectiveOriginalPrice)}
-                      <span aria-hidden="true" className="pointer-events-none absolute left-[1%] right-[1%] top-[52%] h-[4px] -translate-y-1/2 -rotate-[4deg] skew-x-[-18deg] rounded-[1px] bg-red-500/60 shadow-[0_0_5px_rgba(239,68,68,.34)] sm:h-[5px]" />
                     </span>
                   </div>
                   <div className="mt-2">
@@ -437,7 +435,7 @@ export function StorefrontProductCard({
               </div>
             ) : (
               <>
-                {effectiveOriginalPrice && <p className="text-[11px] font-extrabold text-slate-500 line-through">{asMoney(effectiveOriginalPrice)}</p>}
+                {effectiveOriginalPrice && <p className="text-[11px] font-extrabold text-slate-500">{asMoney(effectiveOriginalPrice)}</p>}
                 <p className={`break-words font-black leading-none tracking-tight ${effectivePrice ? "text-[30px] text-teal-300 drop-shadow-[0_0_18px_rgba(45,212,191,.35)] sm:text-[42px]" : "text-lg text-slate-400 sm:text-2xl"}`}>{effectivePrice ? asMoney(effectivePrice) : "Valor após a escolha"}</p>
               </>
             )}
