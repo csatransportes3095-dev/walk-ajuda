@@ -278,7 +278,7 @@ export function StorefrontProductCard({
   return (
     <article
       data-promo-active={hasActivePromotion ? "true" : "false"}
-      className={`relative flex h-full flex-col overflow-hidden rounded-[34px] bg-[radial-gradient(circle_at_13%_0%,rgba(124,58,237,.30),transparent_30%),radial-gradient(circle_at_100%_10%,rgba(79,70,229,.20),transparent_28%),linear-gradient(180deg,#090b21_0%,#06091a_55%,#080a22_100%)] ${hasActivePromotion ? "border border-amber-300/95 shadow-[0_0_0_1px_rgba(250,204,21,.24),0_0_34px_rgba(245,158,11,.32),0_32px_90px_rgba(0,0,0,.66)]" : "border border-violet-500/85 shadow-[0_32px_90px_rgba(0,0,0,.66),0_0_42px_rgba(124,58,237,.25)]"}`}
+      className={`relative flex h-full flex-col overflow-hidden rounded-[34px] bg-[radial-gradient(circle_at_50%_0%,rgba(38,74,180,.28),transparent_34%),radial-gradient(circle_at_16%_30%,rgba(124,58,237,.20),transparent_34%),linear-gradient(180deg,#071022_0%,#050916_48%,#080b1d_100%)] ${hasActivePromotion ? "border border-amber-300/95 shadow-[0_0_0_1px_rgba(250,204,21,.28),0_0_36px_rgba(245,158,11,.34),0_32px_90px_rgba(0,0,0,.66)]" : "border border-violet-500/85 shadow-[0_32px_90px_rgba(0,0,0,.66),0_0_42px_rgba(124,58,237,.25)]"}`}
     >
       {hasActivePromotion && (
         <div className="relative z-30 flex min-h-[38px] flex-wrap items-center justify-center gap-x-2 gap-y-1 border-b border-amber-300/70 bg-gradient-to-r from-yellow-300 via-amber-400 to-orange-500 px-3 py-2 text-[10px] font-black uppercase tracking-[0.06em] text-[#1b1000] shadow-[0_5px_22px_rgba(245,158,11,.28)] sm:text-[11px]">
@@ -316,7 +316,7 @@ export function StorefrontProductCard({
             <div className="flex items-start gap-3">
               <Crown className="mt-0.5 h-7 w-7 shrink-0 fill-violet-500/30 text-violet-400" />
               <div>
-                <p className="text-[21px] font-black uppercase leading-none tracking-tight text-white sm:text-[26px]">Escolha sua garantia</p>
+                <p className="text-[22px] font-black uppercase leading-none tracking-[-0.02em] text-white drop-shadow-[0_1px_0_rgba(255,255,255,.08)] sm:text-[28px]">Escolha sua garantia</p>
                 <p className="mt-2 text-[11px] font-medium text-slate-400 sm:text-sm">Mais corridas, mais tempo, mais tranquilidade.</p>
               </div>
             </div>
@@ -335,7 +335,7 @@ export function StorefrontProductCard({
                 const vipPreviewPrice = applyVipBenefitToPrice(model.price, model, true);
                 const vipSavings = Math.max(0, parseBrazilMoney(model.price) - parseBrazilMoney(vipPreviewPrice));
                 return (
-                  <button key={model.id} type="button" aria-pressed={isSelected} disabled={modelLocked} onClick={() => { if (!modelLocked) handlePriceModelSelect(model.id); }} style={priceModels.length === 1 ? { gridColumn: "1 / -1", width: "100%", maxWidth: "none" } : undefined} className={`relative w-full min-h-[214px] overflow-visible rounded-[18px] border bg-gradient-to-b px-2 pb-3 pt-6 text-center transition-all ${palette.border} ${palette.bg} ${palette.shadow} ${isSelected ? `-translate-y-1 ring-2 ${palette.ring}` : "hover:-translate-y-0.5"} ${modelPromotion?.active ? "outline outline-1 outline-amber-300/60" : ""} ${modelVipHighlighted ? "ring-1 ring-amber-300/70" : ""} ${modelLocked ? "cursor-not-allowed opacity-80 saturate-75" : ""}`}>
+                  <button key={model.id} type="button" aria-pressed={isSelected} disabled={modelLocked} onClick={() => { if (!modelLocked) handlePriceModelSelect(model.id); }} style={priceModels.length === 1 ? { gridColumn: "1 / -1", width: "100%", maxWidth: "none" } : undefined} className={`relative w-full min-h-[206px] overflow-visible rounded-[18px] border bg-gradient-to-b px-2 pb-2.5 pt-6 text-center transition-all ${palette.border} ${palette.bg} ${palette.shadow} shadow-[0_0_24px_rgba(0,0,0,.28)] ${isSelected ? `-translate-y-1 ring-2 ${palette.ring}` : "hover:-translate-y-0.5"} ${modelPromotion?.active ? "outline outline-1 outline-amber-300/60" : ""} ${modelVipHighlighted ? "ring-1 ring-amber-300/70" : ""} ${modelLocked ? "cursor-not-allowed opacity-80 saturate-75" : ""}`}>
                     {modelVipMode !== 'all' && <span className={`absolute -right-1 -top-2 z-20 rounded-full border px-2 py-1 text-[8px] font-black uppercase shadow-lg ${modelLocked ? 'border-rose-300/70 bg-rose-950 text-rose-200' : 'border-amber-300/70 bg-amber-400 text-amber-950'}`}>{modelLocked ? '🔒 SOMENTE VIP' : `👑 ${model.vipHighlightText || 'VIP'}`}</span>}
                     {index === 0 && modelHasDiscount ? (
                       <span className="absolute left-1/2 top-0 -translate-x-1/2 -translate-y-[1px] whitespace-nowrap rounded-b-xl bg-gradient-to-r from-red-500 via-orange-500 to-amber-400 px-2.5 py-1.5 text-[8px] font-black uppercase tracking-wide text-white shadow-[0_0_16px_rgba(249,115,22,.52)] sm:text-[9px]">Oferta -{modelDiscount}%</span>
@@ -343,19 +343,19 @@ export function StorefrontProductCard({
                       <span className="absolute left-1/2 top-0 -translate-x-1/2 -translate-y-[1px] whitespace-nowrap rounded-b-xl bg-cyan-400 px-3 py-1.5 text-[8px] font-black uppercase tracking-wide text-[#03111c] shadow-[0_0_16px_rgba(34,211,238,.38)] sm:text-[10px]">Mais escolhida</span>
                     ) : null}
                     <ShieldCheck className={`mx-auto h-6 w-6 ${palette.text}`} />
-                    <span className="mt-3 block text-[12px] font-black leading-4 text-white sm:text-base">{parts.title}</span>
-                    <span className={`mt-1.5 block text-[13px] font-black sm:text-base ${palette.text}`}>{parts.subtitle}</span>
-                    <div className="mt-3 min-h-[72px] border-t border-white/15 pt-2">
+                    <span className="mt-2.5 block text-[13px] font-black leading-4 tracking-[-0.02em] text-white sm:text-[17px]">{parts.title}</span>
+                    <span className={`mt-1 block text-[15px] font-black leading-none sm:text-[18px] ${palette.text}`}>{parts.subtitle}</span>
+                    <div className="mt-2.5 min-h-[68px] border-t border-white/20 pt-2">
                       {modelVipMode === 'all' ? (
                         modelHasDiscount && model.originalPrice ? (
                           <div className="flex flex-col items-center">
                             <div className="flex items-baseline justify-center gap-1 whitespace-nowrap">
                               <span className="text-[8px] font-black uppercase tracking-wide text-white/75 sm:text-[9px]">DE</span>
-                              <span className="text-[12px] font-black text-white/90 line-through decoration-red-500 decoration-[3px] sm:text-[14px]">{asMoney(model.originalPrice)}</span>
+                              <span className="text-[13px] font-black text-white line-through decoration-red-500 decoration-[3px] drop-shadow-[0_0_5px_rgba(255,255,255,.16)] sm:text-[15px]">{asMoney(model.originalPrice)}</span>
                             </div>
                             <span className={`mt-0.5 block text-[9px] font-black uppercase tracking-[0.08em] ${palette.text} sm:text-[10px]`}>POR</span>
-                            <span className={`mt-0.5 block whitespace-nowrap text-[21px] font-black leading-none tracking-tight text-emerald-300 drop-shadow-[0_0_12px_rgba(74,222,128,.45)] sm:text-[23px]`}>{asMoney(model.price)}</span>
-                            <span className="mt-1.5 inline-flex whitespace-nowrap rounded-full border border-emerald-300/60 bg-emerald-500/15 px-2 py-0.5 text-[8px] font-black uppercase tracking-wide text-emerald-200 shadow-[0_0_12px_rgba(16,185,129,.20)] sm:text-[9px]">Economize {modelDiscount}%</span>
+                            <span className={`mt-0.5 block whitespace-nowrap text-[22px] font-black leading-none tracking-[-0.03em] text-emerald-300 drop-shadow-[0_0_14px_rgba(74,222,128,.58)] sm:text-[25px]`}>{asMoney(model.price)}</span>
+                            <span className="mt-1.5 inline-flex whitespace-nowrap rounded-full border border-emerald-300/70 bg-emerald-500/12 px-2.5 py-1 text-[8px] font-black uppercase tracking-[0.04em] text-emerald-200 shadow-[0_0_14px_rgba(16,185,129,.24)] sm:text-[10px]">Economize {modelDiscount}%</span>
                           </div>
                         ) : (
                           <span className="block text-[13px] font-black text-white sm:text-base">{asMoney(model.price)}</span>
@@ -400,30 +400,30 @@ export function StorefrontProductCard({
           </label>
         )}
 
-        <div className="mt-6 rounded-[24px] border border-violet-400/45 bg-[linear-gradient(135deg,rgba(76,29,149,.30),rgba(9,12,35,.88)_48%,rgba(2,6,23,.92))] p-4 shadow-[0_0_28px_rgba(124,58,237,.13)] sm:p-5">
+        <div className="mt-5 rounded-[26px] border border-violet-400/70 bg-[radial-gradient(circle_at_18%_12%,rgba(76,29,149,.36),transparent_36%),radial-gradient(circle_at_86%_12%,rgba(30,64,175,.18),transparent_34%),linear-gradient(135deg,rgba(18,14,58,.98),rgba(6,10,31,.98)_58%,rgba(3,7,22,.99))] p-4 shadow-[0_0_0_1px_rgba(139,92,246,.10),0_0_30px_rgba(124,58,237,.16)] sm:p-5">
           <div className="flex items-center gap-3">
             <div className="grid h-10 w-10 shrink-0 place-items-center rounded-xl bg-violet-600/25 text-violet-300"><Tag className="h-5 w-5" /></div>
-            <p className="text-[12px] font-black uppercase tracking-[0.14em] text-violet-300 sm:text-sm">Sua escolha</p>
+            <p className="text-[14px] font-black uppercase tracking-[0.12em] text-violet-300 sm:text-base">Sua escolha</p>
             <span className="ml-auto rounded-full border border-violet-300/35 bg-white/[0.04] px-3 py-1 text-[9px] font-black uppercase text-violet-100 sm:text-[10px]">CONTA {categoryLabel}</span>
           </div>
-          <p className="mt-4 text-[13px] font-black uppercase leading-5 tracking-wide text-white sm:text-base">{selectedParts ? `${item.option.label} • ${selectedParts.title} • ${selectedParts.subtitle}` : `${item.option.label} • escolha uma garantia`}</p>
+          <p className="mt-4 text-[14px] font-black uppercase leading-5 tracking-[0.02em] text-white sm:text-[17px]">{selectedParts ? `${item.option.label} • ${selectedParts.title} • ${selectedParts.subtitle}` : `${item.option.label} • escolha uma garantia`}</p>
           <div className="mt-4 border-t border-white/15 pt-4">
             {discount > 0 && !(selectedPriceModel && modelHasVipPrice) ? (
-              <div className="grid grid-cols-[minmax(0,1fr)_116px] items-center gap-3 sm:grid-cols-[minmax(0,1fr)_132px]">
-                <div>
-                  <div className="flex flex-wrap items-baseline gap-x-2 gap-y-1">
-                    <span className="text-[13px] font-black uppercase tracking-[0.08em] text-white/75 sm:text-sm">DE</span>
-                    <span className="text-[26px] font-black leading-none text-white line-through decoration-red-500 decoration-[5px] drop-shadow-[0_0_10px_rgba(255,255,255,.16)] sm:text-[34px]">{asMoney(effectiveOriginalPrice)}</span>
+              <div className="grid grid-cols-[minmax(0,1fr)_108px] items-center gap-2.5 sm:grid-cols-[minmax(0,1fr)_138px] sm:gap-4">
+                <div className="min-w-0">
+                  <div className="flex items-baseline gap-2 whitespace-nowrap">
+                    <span className="text-[13px] font-black uppercase tracking-[0.08em] text-white/80 sm:text-sm">DE</span>
+                    <span className="text-[24px] font-black leading-none text-white line-through decoration-red-500 decoration-[5px] drop-shadow-[0_0_10px_rgba(255,255,255,.18)] sm:text-[34px]">{asMoney(effectiveOriginalPrice)}</span>
                   </div>
-                  <div className="mt-2 flex flex-wrap items-end gap-x-2 gap-y-1">
-                    <span className="pb-1 text-[16px] font-black uppercase tracking-[0.08em] text-emerald-300 sm:text-lg">POR</span>
-                    <p className="break-words whitespace-nowrap text-[44px] font-black leading-[0.9] tracking-tight text-emerald-300 drop-shadow-[0_0_24px_rgba(74,222,128,.52)] sm:text-[56px]">{effectivePrice ? asMoney(effectivePrice) : "Valor após a escolha"}</p>
+                  <div className="mt-2">
+                    <span className="block text-[16px] font-black uppercase tracking-[0.08em] text-emerald-300 sm:text-lg">POR</span>
+                    <p className="mt-1 whitespace-nowrap text-[36px] font-black leading-[0.88] tracking-[-0.045em] text-emerald-300 drop-shadow-[0_0_26px_rgba(74,222,128,.62)] sm:text-[56px]">{effectivePrice ? asMoney(effectivePrice) : "Valor após a escolha"}</p>
                   </div>
                 </div>
-                <div className="flex min-h-[104px] flex-col items-center justify-center rounded-[20px] border-2 border-red-500/90 bg-[linear-gradient(180deg,rgba(69,10,20,.92),rgba(24,3,9,.98))] px-2 text-center shadow-[0_0_22px_rgba(239,68,68,.48)]">
-                  <Flame className="h-9 w-9 fill-orange-500 text-orange-500 drop-shadow-[0_0_10px_rgba(249,115,22,.8)]" />
-                  <span className="mt-1 text-[10px] font-black uppercase tracking-[0.05em] text-amber-200 sm:text-xs">Economize</span>
-                  <span className="text-[30px] font-black leading-none text-yellow-300 sm:text-[36px]">{discount}%</span>
+                <div className="flex min-h-[118px] flex-col items-center justify-center rounded-[22px] border-[3px] border-red-500 bg-[radial-gradient(circle_at_50%_18%,rgba(249,115,22,.25),transparent_30%),linear-gradient(180deg,rgba(72,8,18,.98),rgba(24,3,9,.99))] px-2 text-center shadow-[0_0_8px_rgba(239,68,68,.75),0_0_26px_rgba(239,68,68,.48)]">
+                  <Flame className="h-10 w-10 fill-orange-500 text-orange-500 drop-shadow-[0_0_12px_rgba(249,115,22,.95)] sm:h-11 sm:w-11" />
+                  <span className="mt-1 text-[11px] font-black uppercase tracking-[0.04em] text-yellow-200 sm:text-[13px]">Economize</span>
+                  <span className="mt-0.5 text-[34px] font-black leading-none tracking-[-0.03em] text-yellow-300 drop-shadow-[0_0_12px_rgba(250,204,21,.35)] sm:text-[42px]">{discount}%</span>
                 </div>
               </div>
             ) : (
@@ -453,8 +453,8 @@ export function StorefrontProductCard({
 
       <div className="mt-auto px-4 pb-5 sm:px-5">
         <div className="grid grid-cols-[1.22fr_.9fr] gap-3">
-          <button type="button" disabled={requiresPriceModelSelection && !selectedPriceModel} onClick={() => void runProtectedAction("buy")} className="inline-flex min-h-[58px] items-center justify-center gap-3 rounded-2xl border border-white bg-gradient-to-b from-white to-slate-200 px-4 text-[15px] font-black text-[#090b21] shadow-[0_12px_32px_rgba(255,255,255,.18)] transition-all hover:brightness-105 active:scale-[0.98] disabled:cursor-not-allowed disabled:opacity-35 sm:text-lg"><ShoppingCart className="h-6 w-6" /> Comprar agora <span className="text-2xl leading-none">→</span></button>
-          <button type="button" disabled={requiresPriceModelSelection && !selectedPriceModel} onClick={() => void runProtectedAction("cart")} className="inline-flex min-h-[58px] items-center justify-center gap-2 rounded-2xl border border-violet-400/90 bg-gradient-to-br from-violet-950/90 to-purple-950/75 px-3 text-[15px] font-black text-violet-200 shadow-[0_12px_32px_rgba(124,58,237,.22),inset_0_1px_0_rgba(255,255,255,.08)] transition-all hover:brightness-125 active:scale-[0.98] disabled:cursor-not-allowed disabled:opacity-35 sm:text-lg"><ShoppingCart className="h-5 w-5" /> Carrinho</button>
+          <button type="button" disabled={requiresPriceModelSelection && !selectedPriceModel} onClick={() => void runProtectedAction("buy")} className="inline-flex min-h-[60px] items-center justify-center gap-3 rounded-[20px] border border-white bg-gradient-to-b from-white to-slate-200 px-4 text-[16px] font-black text-[#090b21] shadow-[0_12px_32px_rgba(255,255,255,.18)] transition-all hover:brightness-105 active:scale-[0.98] disabled:cursor-not-allowed disabled:opacity-35 sm:text-lg"><ShoppingCart className="h-6 w-6" /> Comprar agora <span className="text-2xl leading-none">→</span></button>
+          <button type="button" disabled={requiresPriceModelSelection && !selectedPriceModel} onClick={() => void runProtectedAction("cart")} className="inline-flex min-h-[60px] items-center justify-center gap-2 rounded-[20px] border border-violet-400/90 bg-gradient-to-br from-violet-900/95 to-purple-950/85 px-3 text-[16px] font-black text-violet-100 shadow-[0_12px_32px_rgba(124,58,237,.22),inset_0_1px_0_rgba(255,255,255,.08)] transition-all hover:brightness-125 active:scale-[0.98] disabled:cursor-not-allowed disabled:opacity-35 sm:text-lg"><ShoppingCart className="h-5 w-5" /> Carrinho</button>
         </div>
 
         <div className="mt-5 flex items-center gap-3">
