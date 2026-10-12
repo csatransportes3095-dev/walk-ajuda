@@ -105,6 +105,23 @@ describe("H2ADS legacy order link repair", () => {
     expect(result).toMatchObject({ instanceId: 9, linkedRegistrationId: 100, linkedSubOrderIndex: 0, linkedOrderNumber: 310000, serviceKey: "uber|nome_completo" });
   });
 
+  it("não sugere instância de pedido já entregue, mesmo com mesmo cliente e serviço", () => {
+    const input = {
+      registrationId: 200, subOrderIndex: 0, customerNumber: 2021,
+      serviceName: "UBER APP", serviceOption: "NOME COMPLETO",
+      links: [{ instanceId: 9, registrationId: 100, subOrderIndex: 0 }],
+      orders: [
+        { id: 100, subOrderIndex: 0, customerNumber: 2021, latestStatus: "pedido_entregue", serviceName: "UBER APP", serviceOption: "NOME COMPLETO" },
+        { id: 200, subOrderIndex: 0, customerNumber: 2021, latestStatus: "agendamento_confirmado", serviceName: "UBER APP", serviceOption: "NOME COMPLETO" },
+      ],
+      instances: [{ id: 9, groupId: 4 }],
+      groups: [{ id: 4, name: "NOME COMPLETO" }],
+    };
+    expect(resolveH2AdsOrderLinkRepairCandidate(input)).toBeNull();
+    expect(resolveH2AdsOrderLinkRepairCandidate({ ...input, orders: input.orders.map(o => ({ ...o, latestStatus: "em_analise" })), groups: [{ id: 4, name: "ENTREGUE" }] })).toBeNull();
+    expect(resolveH2AdsOrderLinkRepairCandidate({ ...input, orders: input.orders.map(o => ({ ...o, latestStatus: "em_analise" })) })?.instanceId).toBe(9);
+  });
+
   it("não oferece reparo quando há dois candidatos compatíveis", () => {
     const result = resolveH2AdsOrderLinkRepairCandidate({
       registrationId: 200,
