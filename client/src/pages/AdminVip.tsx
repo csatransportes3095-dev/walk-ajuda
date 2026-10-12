@@ -1,5 +1,5 @@
 import { useMemo, useState } from "react";
-import { CalendarDays, CheckCircle2, Clock3, Crown, ExternalLink, History, RefreshCw, Save, Search, Settings2, ShieldCheck, UserCheck, UserX, X } from "lucide-react";
+import { CalendarDays, CheckCircle2, CheckSquare, Clock3, Crown, ExternalLink, History, RefreshCw, Save, Search, Settings2, ShieldCheck, Square, UserCheck, UserX, Users, X } from "lucide-react";
 import { trpc } from "@/lib/trpc";
 import { toast } from "sonner";
 import AdminHeader from "@/components/AdminHeader";
@@ -23,6 +23,8 @@ function actionLabel(action: string) {
   if (action === "renew") return "VIP renovado";
   if (action === "set_expiry") return "Validade alterada";
   if (action === "cancel") return "VIP cancelado";
+  if (action === "bulk_activate") return "VIP ativado em massa";
+  if (action === "bulk_cancel") return "VIP desativado em massa";
   return action;
 }
 
@@ -35,6 +37,9 @@ export default function AdminVip() {
   const initialSearch = typeof window !== "undefined" ? new URLSearchParams(window.location.search).get("phone") || "" : "";
   const [search, setSearch] = useState(initialSearch);
   const [filter, setFilter] = useState<"all" | "active" | "expired" | "none" | "cancelled">("all");
+  const [orderFilter, setOrderFilter] = useState<"all" | "new" | "with" | "without">("all");
+  const [selectedIds, setSelectedIds] = useState<Set<number>>(new Set());
+  const [bulkPeriod, setBulkPeriod] = useState<"7" | "15" | "30" | "unlimited">("30");
   const [historyCustomerId, setHistoryCustomerId] = useState<number | null>(null);
   const [actionModal, setActionModal] = useState<{ mode: ActionMode; customer: any } | null>(null);
   const [daysInput, setDaysInput] = useState("30");
@@ -75,7 +80,16 @@ export default function AdminVip() {
   const renewMut = trpc.vipMemberships.renew.useMutation({ onSuccess: () => { toast.success("VIP renovado com sucesso!"); setActionModal(null); refreshAll(); }, onError: (e) => toast.error(e.message) });
   const expiryMut = trpc.vipMemberships.setExpiry.useMutation({ onSuccess: () => { toast.success("Validade alterada!"); setActionModal(null); refreshAll(); }, onError: (e) => toast.error(e.message) });
   const cancelMut = trpc.vipMemberships.cancel.useMutation({ onSuccess: () => { toast.success("VIP cancelado."); setActionModal(null); refreshAll(); }, onError: (e) => toast.error(e.message) });
-  const actionPending = activateMut.isPending || renewMut.isPending || expiryMut.isPending || cancelMut.isPending;
+  const bulkMut = trpc.vipMemberships.bulkApply.useMutation({
+    onSuccess: async (result) => {
+      toast.success(`${result.changed} cliente(s) atualizado(s) no VIP.`);
+      if (result.skipped) toast.info(`${result.skipped} cliente(s) não precisaram de alteração.`);
+      setSelectedIds(new Set());
+      await refreshAll();
+    },
+    onError: (e) => toast.error(e.message || "Erro na operação VIP em massa"),
+  });
+  const actionPending = activateMut.isPending || renewMut.isPending || expiryMut.isPending || cancelMut.isPending || bulkMut.isPending;
 
   const saveConfig = () => {
     update.mutate({ settings: {
@@ -92,7 +106,7 @@ export default function AdminVip() {
 
   const stats = useMemo(() => ({
     active: directory.filter((c) => c.active).length,
-    expiring: directory.filter((c) => c.active && Number(c.daysLeft || 0) <= 7).length,
+    expiring: directory.filter((c) => c.active && !c.unlimited && Number(c.daysLeft || 0) <= 7).length,
     expired: directory.filter((c) => c.status === "expired").length,
     total: directory.length,
   }), [directory]);
@@ -101,12 +115,55 @@ export default function AdminVip() {
     const q = search.trim().toLowerCase().replace(/\D/g, "");
     const raw = search.trim().toLowerCase();
     return directory.filter((c) => {
-      const matchesFilter = filter === "all" || c.status === filter;
-      if (!matchesFilter) return false;
+      const matchesVip = filter === "all" || c.status === filter;
+      if (!matchesVip) return false;
+      const matchesOrders =
+        orderFilter === "all" ||
+        (orderFilter === "new" && c.hasOpenOrders) ||
+        (orderFilter === "with" && c.hasOrders) ||
+        (orderFilter === "without" && !c.hasOrders);
+      if (!matchesOrders) return false;
       if (!raw) return true;
       return String(c.name || "").toLowerCase().includes(raw) || String(c.phone || "").replace(/\D/g, "").includes(q) || String(c.customerNumber || "").includes(raw.replace("*", ""));
     });
-  }, [directory, filter, search]);
+  }, [directory, filter, orderFilter, search]);
+
+  const visibleIds = useMemo(() => filtered.map((c) => Number(c.customerId)), [filtered]);
+  const allVisibleSelected = visibleIds.length > 0 && visibleIds.every((id) => selectedIds.has(id));
+
+  const toggleSelected = (customerId: number) => {
+    setSelectedIds((current) => {
+      const next = new Set(current);
+      if (next.has(customerId)) next.delete(customerId);
+      else next.add(customerId);
+      return next;
+    });
+  };
+
+  const selectVisible = () => {
+    setSelectedIds(allVisibleSelected ? new Set() : new Set(visibleIds));
+  };
+
+  const runBulk = (action: "activate" | "deactivate") => {
+    const ids = Array.from(selectedIds);
+    if (!ids.length) {
+      toast.error("Selecione pelo menos um cliente.");
+      return;
+    }
+    const periodLabel = bulkPeriod === "unlimited" ? "SEM VENCIMENTO" : `${bulkPeriod} DIAS`;
+    const message = action === "activate"
+      ? `Ativar VIP para ${ids.length} cliente(s) por ${periodLabel}? VIP já ativo com validade maior não será reduzido.`
+      : `Desativar o VIP de ${ids.length} cliente(s) selecionado(s)?`;
+    if (!window.confirm(message)) return;
+    bulkMut.mutate({
+      customerIds: ids,
+      action,
+      period: action === "activate" ? bulkPeriod : undefined,
+      notes: action === "activate"
+        ? `Operação em massa: ${periodLabel}`
+        : "Operação em massa: desativação VIP",
+    });
+  };
 
   const openAction = (mode: ActionMode, customer: any) => {
     setDaysInput(String(planDays));
@@ -164,11 +221,65 @@ export default function AdminVip() {
   <div className="rounded-2xl border border-rose-300/25 bg-rose-400/10 p-4"><p className="text-[10px] font-black uppercase tracking-wide text-rose-200">Expirados</p><p className="mt-1 text-3xl font-black text-rose-300">{stats.expired}</p></div>
   <div className="rounded-2xl border border-violet-300/25 bg-violet-400/10 p-4"><p className="text-[10px] font-black uppercase tracking-wide text-violet-200">Cadastros</p><p className="mt-1 text-3xl font-black text-violet-300">{stats.total}</p></div>
 </div>
-<div className="border-y border-white/10 bg-black/20 p-4 sm:p-5"><div className="relative"><Search className="absolute left-4 top-1/2 h-5 w-5 -translate-y-1/2 text-slate-500" /><input value={search} onChange={(e) => setSearch(e.target.value)} placeholder="Buscar cliente por nome, telefone ou número de cadastro" className="w-full rounded-2xl border border-white/10 bg-slate-950/75 py-3 pl-12 pr-4 text-sm font-semibold text-white outline-none focus:border-amber-300/60" /></div><div className="mt-3 flex flex-wrap gap-2">{([['all','Todos'],['active','VIP ativos'],['expired','Expirados'],['none','Sem VIP'],['cancelled','Cancelados']] as const).map(([key,label]) => <button key={key} onClick={() => setFilter(key)} className={`rounded-full border px-3 py-2 text-[10px] font-black uppercase ${filter === key ? 'border-amber-300 bg-amber-300 text-[#271700]' : 'border-white/10 bg-white/5 text-slate-300'}`}>{label}</button>)}</div></div>
+<div className="border-y border-white/10 bg-black/20 p-4 sm:p-5">
+  <div className="relative">
+    <Search className="absolute left-4 top-1/2 h-5 w-5 -translate-y-1/2 text-slate-500" />
+    <input
+      value={search}
+      onChange={(e) => { setSearch(e.target.value); setSelectedIds(new Set()); }}
+      placeholder="Buscar cliente por nome, telefone ou número de cadastro"
+      className="w-full rounded-2xl border border-white/10 bg-slate-950/75 py-3 pl-12 pr-4 text-sm font-semibold text-white outline-none focus:border-amber-300/60"
+    />
+  </div>
+  <div className="mt-3 flex flex-wrap gap-2">
+    {([['all','Todos'],['active','VIP ativos'],['expired','Expirados'],['none','Sem VIP'],['cancelled','Cancelados']] as const).map(([key,label]) => (
+      <button key={key} onClick={() => { setFilter(key); setSelectedIds(new Set()); }} className={`rounded-full border px-3 py-2 text-[10px] font-black uppercase ${filter === key ? 'border-amber-300 bg-amber-300 text-[#271700]' : 'border-white/10 bg-white/5 text-slate-300'}`}>{label}</button>
+    ))}
+  </div>
+
+  <div className="mt-4 rounded-2xl border border-cyan-400/20 bg-cyan-500/[0.04] p-4">
+    <div className="flex flex-wrap items-center justify-between gap-2">
+      <div className="flex items-center gap-2 text-cyan-200"><Users className="h-4 w-4" /><p className="text-xs font-black uppercase tracking-wide">Filtro por pedidos</p></div>
+      <span className="text-[10px] font-bold text-slate-400">{filtered.length} cliente(s) no filtro</span>
+    </div>
+    <div className="mt-3 flex flex-wrap gap-2">
+      {([['all','Todos clientes'],['new','Pedidos novos'],['with','Todos com pedidos'],['without','Sem pedidos']] as const).map(([key,label]) => (
+        <button key={key} onClick={() => { setOrderFilter(key); setSelectedIds(new Set()); }} className={`rounded-full border px-3 py-2 text-[10px] font-black uppercase ${orderFilter === key ? 'border-cyan-300 bg-cyan-300 text-slate-950' : 'border-cyan-400/20 bg-cyan-500/5 text-cyan-100'}`}>{label}</button>
+      ))}
+    </div>
+  </div>
+
+  <div className="mt-4 rounded-2xl border border-amber-300/25 bg-amber-400/[0.05] p-4">
+    <div className="flex flex-wrap items-center justify-between gap-3">
+      <button type="button" onClick={selectVisible} disabled={!visibleIds.length || bulkMut.isPending} className="inline-flex items-center gap-2 rounded-xl border border-white/15 bg-white/5 px-3 py-2 text-xs font-black text-white disabled:opacity-40">
+        {allVisibleSelected ? <CheckSquare className="h-4 w-4 text-amber-300" /> : <Square className="h-4 w-4" />}
+        {allVisibleSelected ? 'Desmarcar filtrados' : 'Selecionar filtrados'}
+      </button>
+      <p className="text-xs font-black text-amber-200">{selectedIds.size} selecionado(s)</p>
+    </div>
+
+    <div className="mt-4">
+      <p className="text-[10px] font-black uppercase tracking-wide text-slate-400">Período para ativação em massa</p>
+      <div className="mt-2 grid grid-cols-2 gap-2 sm:grid-cols-4">
+        {([['7','7 dias'],['15','15 dias'],['30','30 dias'],['unlimited','∞ Sem vencimento']] as const).map(([key,label]) => (
+          <button key={key} type="button" onClick={() => setBulkPeriod(key)} className={`rounded-xl border px-3 py-2.5 text-xs font-black uppercase ${bulkPeriod === key ? 'border-amber-300 bg-amber-300 text-[#251600]' : 'border-white/10 bg-white/5 text-slate-300'}`}>{label}</button>
+        ))}
+      </div>
+    </div>
+
+    <div className="mt-4 grid gap-2 sm:grid-cols-2">
+      <button type="button" onClick={() => runBulk("activate")} disabled={!selectedIds.size || bulkMut.isPending} className="min-h-[46px] rounded-xl bg-gradient-to-r from-amber-300 to-yellow-400 px-4 text-xs font-black uppercase text-[#251600] disabled:opacity-40">{bulkMut.isPending ? 'Processando...' : '👑 Ativar VIP selecionados'}</button>
+      <button type="button" onClick={() => runBulk("deactivate")} disabled={!selectedIds.size || bulkMut.isPending} className="min-h-[46px] rounded-xl border border-rose-400/35 bg-rose-500/10 px-4 text-xs font-black uppercase text-rose-200 disabled:opacity-40">Desativar VIP selecionados</button>
+    </div>
+  </div>
+</div>
 <div className="grid gap-3 p-4 sm:p-6">
   {directoryQuery.isLoading ? <div className="p-6 text-center text-slate-400">Carregando clientes...</div> : filtered.length === 0 ? <div className="p-6 text-center text-slate-500">Nenhum cliente encontrado.</div> : filtered.map((c) => (
-    <article key={c.customerId} className={`rounded-2xl border p-4 ${c.active ? 'border-amber-300/55 bg-[linear-gradient(135deg,rgba(120,53,15,.32),rgba(49,25,88,.32))] shadow-[0_0_28px_rgba(251,191,36,.10)]' : c.status === 'expired' ? 'border-rose-400/25 bg-rose-500/[0.04]' : 'border-white/10 bg-white/[0.025]'}`}>
-      <div className="flex flex-wrap items-center gap-4"><div className={`grid h-14 w-14 shrink-0 place-items-center overflow-hidden rounded-2xl border ${c.active ? 'border-amber-300/70 bg-amber-400/10' : 'border-white/10 bg-white/5'}`}>{c.profilePhotoUrl ? <img src={c.profilePhotoUrl} alt="" className="h-full w-full object-cover" /> : c.active ? <Crown className="h-7 w-7 fill-amber-300/20 text-amber-300" /> : <UserCheck className="h-6 w-6 text-slate-400" />}</div><div className="min-w-0 flex-1"><div className="flex flex-wrap items-center gap-2"><p className="truncate text-sm font-black text-white">{c.customerNumber ? `*${c.customerNumber} • ` : ''}{c.name}</p>{c.active && <span className="inline-flex items-center gap-1 rounded-full border border-amber-300/50 bg-amber-400/15 px-2 py-1 text-[9px] font-black uppercase text-amber-200"><Crown className="h-3 w-3 fill-amber-300/30" /> VIP ATIVO</span>}{c.status === 'expired' && <span className="rounded-full border border-rose-400/40 bg-rose-500/10 px-2 py-1 text-[9px] font-black uppercase text-rose-300">EXPIRADO</span>}{c.status === 'cancelled' && <span className="rounded-full border border-slate-400/30 bg-slate-500/10 px-2 py-1 text-[9px] font-black uppercase text-slate-400">CANCELADO</span>}</div><p className="mt-1 text-xs font-mono text-slate-400">{c.phone}</p>{c.active ? <div className="mt-2 flex flex-wrap gap-x-4 gap-y-1 text-[11px] font-bold"><span className="text-amber-200"><Clock3 className="mr-1 inline h-3.5 w-3.5" />{c.daysLeft} dia(s) restantes</span><span className="text-slate-400">Vence: {formatDate(c.expiresAtMs)}</span></div> : c.membershipId ? <p className="mt-2 text-[11px] text-slate-500">Última validade: {formatDate(c.expiresAtMs)}</p> : <p className="mt-2 text-[11px] text-slate-500">Ainda não possui assinatura VIP.</p>}</div>
+    <article key={c.customerId} className={`rounded-2xl border p-4 ${selectedIds.has(Number(c.customerId)) ? 'ring-2 ring-amber-300/70' : ''} ${c.active ? 'border-amber-300/55 bg-[linear-gradient(135deg,rgba(120,53,15,.32),rgba(49,25,88,.32))] shadow-[0_0_28px_rgba(251,191,36,.10)]' : c.status === 'expired' ? 'border-rose-400/25 bg-rose-500/[0.04]' : 'border-white/10 bg-white/[0.025]'}`}>
+      <div className="flex flex-wrap items-center gap-4">
+        <button type="button" onClick={() => toggleSelected(Number(c.customerId))} className={`grid h-9 w-9 shrink-0 place-items-center rounded-xl border ${selectedIds.has(Number(c.customerId)) ? 'border-amber-300 bg-amber-300 text-[#251600]' : 'border-white/15 bg-white/5 text-slate-400'}`} title="Selecionar cliente para ação em massa">
+          {selectedIds.has(Number(c.customerId)) ? <CheckSquare className="h-5 w-5" /> : <Square className="h-5 w-5" />}
+        </button><div className={`grid h-14 w-14 shrink-0 place-items-center overflow-hidden rounded-2xl border ${c.active ? 'border-amber-300/70 bg-amber-400/10' : 'border-white/10 bg-white/5'}`}>{c.profilePhotoUrl ? <img src={c.profilePhotoUrl} alt="" className="h-full w-full object-cover" /> : c.active ? <Crown className="h-7 w-7 fill-amber-300/20 text-amber-300" /> : <UserCheck className="h-6 w-6 text-slate-400" />}</div><div className="min-w-0 flex-1"><div className="flex flex-wrap items-center gap-2"><p className="truncate text-sm font-black text-white">{c.customerNumber ? `*${c.customerNumber} • ` : ''}{c.name}</p>{c.active && <span className="inline-flex items-center gap-1 rounded-full border border-amber-300/50 bg-amber-400/15 px-2 py-1 text-[9px] font-black uppercase text-amber-200"><Crown className="h-3 w-3 fill-amber-300/30" /> VIP ATIVO</span>}{c.status === 'expired' && <span className="rounded-full border border-rose-400/40 bg-rose-500/10 px-2 py-1 text-[9px] font-black uppercase text-rose-300">EXPIRADO</span>}{c.status === 'cancelled' && <span className="rounded-full border border-slate-400/30 bg-slate-500/10 px-2 py-1 text-[9px] font-black uppercase text-slate-400">CANCELADO</span>}</div><p className="mt-1 text-xs font-mono text-slate-400">{c.phone}</p><div className="mt-1 flex flex-wrap gap-1.5">{c.hasOpenOrders ? <span className="rounded-full border border-cyan-400/30 bg-cyan-500/10 px-2 py-0.5 text-[9px] font-black uppercase text-cyan-200">Pedido novo</span> : c.hasOrders ? <span className="rounded-full border border-violet-400/25 bg-violet-500/10 px-2 py-0.5 text-[9px] font-black uppercase text-violet-200">Com pedidos</span> : <span className="rounded-full border border-slate-400/20 bg-white/5 px-2 py-0.5 text-[9px] font-black uppercase text-slate-400">Sem pedidos</span>}</div>{c.active ? <div className="mt-2 flex flex-wrap gap-x-4 gap-y-1 text-[11px] font-bold">{c.unlimited ? <span className="text-amber-200"><Clock3 className="mr-1 inline h-3.5 w-3.5" />SEM VENCIMENTO</span> : <><span className="text-amber-200"><Clock3 className="mr-1 inline h-3.5 w-3.5" />{c.daysLeft} dia(s) restantes</span><span className="text-slate-400">Vence: {formatDate(c.expiresAtMs)}</span></>}</div> : c.membershipId ? <p className="mt-2 text-[11px] text-slate-500">Última validade: {formatDate(c.expiresAtMs)}</p> : <p className="mt-2 text-[11px] text-slate-500">Ainda não possui assinatura VIP.</p>}</div>
         <div className="flex w-full flex-wrap gap-2 sm:w-auto sm:justify-end">{c.active ? <><button onClick={() => openAction('renew', c)} className="rounded-xl bg-emerald-500 px-3 py-2 text-[10px] font-black uppercase text-emerald-950">Renovar</button><button onClick={() => openAction('expiry', c)} className="rounded-xl border border-cyan-400/35 bg-cyan-400/10 px-3 py-2 text-[10px] font-black uppercase text-cyan-200">Alterar validade</button><button onClick={() => openAction('cancel', c)} className="rounded-xl border border-rose-400/35 bg-rose-500/10 px-3 py-2 text-[10px] font-black uppercase text-rose-300">Cancelar</button></> : <button onClick={() => openAction('activate', c)} className="inline-flex items-center gap-1.5 rounded-xl bg-gradient-to-r from-amber-300 to-yellow-400 px-4 py-2 text-[10px] font-black uppercase text-[#251600]"><Crown className="h-4 w-4" /> {c.membershipId ? 'Reativar VIP' : 'Ativar VIP'}</button>}{c.membershipId && <button onClick={() => setHistoryCustomerId(c.customerId)} className="inline-flex items-center gap-1.5 rounded-xl border border-white/10 bg-white/5 px-3 py-2 text-[10px] font-black uppercase text-slate-300"><History className="h-4 w-4" /> Histórico</button>}</div></div>
     </article>
   ))}

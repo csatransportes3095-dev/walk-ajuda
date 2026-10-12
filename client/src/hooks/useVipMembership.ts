@@ -40,6 +40,7 @@ export function useVipMembership() {
   const membershipActive = query.data ? Boolean(query.data.active) : cachedActive;
   const expiresAt = query.data?.active ? Number(query.data.expiresAtMs || 0) || null : (membershipActive ? cachedExpires || null : legacy.expiresAt);
   const isVipCustomer = membershipActive || legacy.active;
+  const unlimited = Boolean(query.data?.unlimited);
 
   useEffect(() => {
     if (typeof window === "undefined" || !query.data) return;
@@ -56,6 +57,7 @@ export function useVipMembership() {
     isVipCustomer,
     membershipActive,
     expiresAt,
+    unlimited,
     daysLeft: query.data?.daysLeft ?? (membershipActive && expiresAt ? Math.max(0, Math.ceil((expiresAt - Date.now()) / 86400000)) : 0),
     status: query.data?.status ?? (membershipActive ? "active" : "none"),
     isLoading: query.isLoading,
