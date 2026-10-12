@@ -58,12 +58,6 @@ export default function VipInstallmentCheckoutBox(props: {
   });
 
   useEffect(() => {
-    if (mode === "vip_installment" && (props.disabledReason || eligibility.data?.eligible === false)) {
-      setMode("cash");
-    }
-  }, [mode, props.disabledReason, eligibility.data?.eligible]);
-
-  useEffect(() => {
     props.onSelectionChange({
       mode,
       installmentCount: count,
@@ -100,6 +94,21 @@ export default function VipInstallmentCheckoutBox(props: {
     || (!sessionReady ? "Entre no sistema para consultar o Parcelamento VIP." : null)
     || (eligibility.data?.eligible === false ? eligibility.data.reason : null);
 
+  // Só libera o Parcelamento VIP depois que o servidor confirmou explicitamente
+  // que este produto está habilitado e todas as regras foram atendidas.
+  const installmentAllowed =
+    sessionReady &&
+    itemReady &&
+    !props.disabledReason &&
+    eligibility.isSuccess &&
+    eligibility.data?.eligible === true;
+
+  useEffect(() => {
+    if (mode === "vip_installment" && !installmentAllowed) {
+      setMode("cash");
+    }
+  }, [mode, installmentAllowed]);
+
   return (
     <div className="rounded-2xl border border-violet-400/25 bg-violet-500/[0.06] p-4">
       <div className="flex items-start gap-3">
@@ -109,14 +118,24 @@ export default function VipInstallmentCheckoutBox(props: {
 
       <div className="mt-4 grid grid-cols-2 gap-2">
         <button type="button" onClick={() => setMode("cash")} className={`rounded-xl border px-3 py-3 text-sm font-black ${mode === "cash" ? "border-emerald-300 bg-emerald-400 text-emerald-950" : "border-white/10 bg-white/5 text-slate-300"}`}>À VISTA</button>
-        <button type="button" disabled={!!blockReason || eligibility.isLoading} onClick={() => setMode("vip_installment")} className={`rounded-xl border px-3 py-3 text-sm font-black disabled:cursor-not-allowed disabled:opacity-40 ${mode === "vip_installment" ? "border-violet-300 bg-violet-400 text-violet-950" : "border-white/10 bg-white/5 text-slate-300"}`}>
-          {eligibility.isLoading ? <Loader2 className="mx-auto h-4 w-4 animate-spin" /> : "PARCELAMENTO VIP"}
+        <button
+          type="button"
+          disabled={!installmentAllowed}
+          onClick={() => {
+            if (!installmentAllowed) return;
+            setMode("vip_installment");
+          }}
+          aria-disabled={!installmentAllowed}
+          title={!installmentAllowed ? (blockReason || "Parcelamento VIP indisponível para este produto.") : "Selecionar Parcelamento VIP"}
+          className={`rounded-xl border px-3 py-3 text-sm font-black transition disabled:cursor-not-allowed disabled:opacity-35 ${mode === "vip_installment" && installmentAllowed ? "border-violet-300 bg-violet-400 text-violet-950" : "border-white/10 bg-white/5 text-slate-300"}`}
+        >
+          {eligibility.isLoading ? <Loader2 className="mx-auto h-4 w-4 animate-spin" /> : installmentAllowed ? "PARCELAMENTO VIP" : <span className="inline-flex items-center justify-center gap-1.5"><LockKeyhole className="h-4 w-4" /> PARCELAMENTO VIP</span>}
         </button>
       </div>
 
       {blockReason && <div className="mt-3 rounded-xl border border-amber-400/20 bg-amber-500/10 p-3 text-xs font-bold text-amber-200"><div className="flex items-start gap-2"><LockKeyhole className="mt-0.5 h-4 w-4 shrink-0" /><span>{blockReason}{eligibility.data?.openPlan?.balanceCents ? ` Saldo pendente: ${money(eligibility.data.openPlan.balanceCents)}.` : ""}</span></div>{Number(eligibility.data?.openPlan?.balanceCents || 0) > 0 ? <button type="button" onClick={() => navigate("/parcelas-vip")} className="mt-3 w-full rounded-lg bg-amber-300 px-3 py-2 text-[11px] font-black text-amber-950">VER MINHAS PARCELAS VIP</button> : null}</div>}
 
-      {mode === "vip_installment" && !blockReason && (
+      {mode === "vip_installment" && installmentAllowed && !blockReason && (
         <div className="mt-4 space-y-3 border-t border-white/10 pt-4">
           <div className="grid grid-cols-2 gap-3">
             <label className="text-[10px] font-black uppercase text-slate-400">Parcelas<select value={count} onChange={(event) => setCount(Number(event.target.value))} className="mt-1.5 w-full rounded-xl border border-white/10 bg-slate-950 px-3 py-2.5 text-sm font-black text-white">{Array.from({ length: Math.max(0, effectiveMax - minCount + 1) }, (_, index) => minCount + index).map((value) => <option key={value} value={value}>{value}x</option>)}</select></label>
