@@ -298,14 +298,14 @@ function verdictFor(result: ComparisonResult) {
   if (result.referenceEngine) {
     if (shouldPulseSimilarity(result.similarity)) {
       return {
-        label: "✓ FOTO BOA PARA USAR",
-        detail: "Resultado H2 Face acima de 85,5%. A foto entrou na faixa destacada para uso.",
-        tone: "text-emerald-100 border-emerald-300/40 bg-emerald-500/10",
+        label: "ÍNDICE VISUAL DESTACADO",
+        detail: "Pontuação elevada segundo o modelo H2 Face. Ela não é uma probabilidade de identidade nem aprovação para autenticação.",
+        tone: "text-cyan-100 border-cyan-300/40 bg-cyan-500/10",
       };
     }
     return {
       label: "H2 FACE • RESULTADO",
-      detail: "Percentual calculado pelo H2 Face. Geometria e qualidade abaixo são diagnósticos auxiliares e não alteram esse percentual.",
+      detail: "Índice do motor H2 Face. Geometria e qualidade são diagnósticos auxiliares, não confirmam identidade nem mudam essa pontuação.",
       tone: "text-cyan-100 border-cyan-400/20 bg-cyan-500/5",
     };
   }
@@ -313,7 +313,7 @@ function verdictFor(result: ComparisonResult) {
   if (result.faceXGlobalScore !== undefined) {
     return {
       label: "ÍNDICE H2 • SEM APROVAÇÃO AUTOMÁTICA",
-      detail: "O índice mede a proximidade segundo o motor H2. Ele não confirma que a foto é adequada.",
+      detail: "Índice de proximidade visual do H2 Face, sem confirmação de identidade nem autorização para autenticação.",
       tone: "text-cyan-200 border-cyan-400/20 bg-cyan-500/5",
     };
   }
@@ -1107,7 +1107,7 @@ export default function AdminSimilarity() {
             <div className="min-w-0">
               <p className="text-[10px] font-black uppercase tracking-[0.28em] text-cyan-300 sm:text-xs">H2 COLOMBIANO</p>
               <h1 className="mt-1 text-2xl font-black tracking-tight text-white sm:text-3xl">Comparador de Similaridade Facial</h1>
-              <p className="mt-1 max-w-3xl text-xs leading-5 text-slate-400 sm:text-sm">Análise biofacial local com vetor facial, geometria e medidas estruturais.</p>
+              <p className="mt-1 max-w-3xl text-xs leading-5 text-slate-400 sm:text-sm">Relatório de aparência facial por regiões e proporções, com o motor H2 Face atual.</p>
             </div>
           </div>
         </header>
@@ -1119,7 +1119,7 @@ export default function AdminSimilarity() {
             <div>
               <h2 className="font-bold text-cyan-100">Processamento local</h2>
               <p className="mt-1 text-sm leading-6 text-slate-300">
-                As fotos são analisadas pelo H2 Face. O motor é carregado automaticamente e o usuário não precisa instalar ou selecionar nenhum arquivo técnico. O ranking usa uma única escala para não misturar resultados.
+                O H2 Face mantém seu motor atual e usa indicadores de aparência visual. Mesmo fotos com pontuações elevadas não provam que duas pessoas sejam a mesma.
               </p>
             </div>
           </div>
@@ -1364,7 +1364,7 @@ export default function AdminSimilarity() {
                 <div className="flex flex-col gap-1 sm:flex-row sm:items-end sm:justify-between">
                   <div>
                     <p className="text-xs font-bold uppercase tracking-[0.16em] text-cyan-300">Ranking</p>
-                    <h2 className="text-xl font-black">Resultados acima de 75%</h2>
+                    <h2 className="text-xl font-black">Relatório de semelhança visual</h2>
                   </div>
                   <span className="rounded-full border border-cyan-400/20 bg-cyan-400/5 px-3 py-1 text-xs font-bold text-cyan-200">Exibindo somente 75% ou mais</span>
                 </div>
@@ -1372,7 +1372,7 @@ export default function AdminSimilarity() {
                 {rankedResults.map((result, index) => (
                   <article
                     key={result.id}
-                    className={`overflow-hidden rounded-2xl border ${shouldPulseSimilarity(result.similarity) ? "h2-result-pulse border-emerald-300/60 bg-emerald-500/[0.07]" : "border-white/10 bg-white/[0.035]"}`}
+                    className={`overflow-hidden rounded-2xl border ${shouldPulseSimilarity(result.similarity) ? "h2-result-pulse border-cyan-300/60 bg-cyan-500/[0.07]" : "border-white/10 bg-white/[0.035]"}`}
                   >
                     <div className="flex flex-col gap-4 p-4 sm:flex-row">
                       <div className="relative h-32 w-full shrink-0 overflow-hidden rounded-xl bg-black/40 sm:h-28 sm:w-28">
@@ -1387,11 +1387,11 @@ export default function AdminSimilarity() {
                             <p className="text-4xl font-black tracking-tight text-cyan-300">
                               {formatScore(result.similarity)}
                             </p>
-                            <p className="text-xs font-bold uppercase tracking-wide text-slate-500">{result.referenceEngine ? "H2 Face • motor principal" : result.faceXGlobalScore !== undefined ? "Índice H2 • escala própria" : `${scoreLabel(result.similarity)} semelhança facial`}</p>
+                            <p className="text-xs font-bold uppercase tracking-wide text-slate-500">{result.referenceEngine ? "Índice visual H2 Face • motor principal" : result.faceXGlobalScore !== undefined ? "Índice visual H2 • escala própria" : `${scoreLabel(result.similarity)} semelhança facial`}</p>
                             {shouldPulseSimilarity(result.similarity) && (
-                              <div className="mt-2 inline-flex items-center gap-1.5 rounded-full border border-emerald-300/40 bg-emerald-400/10 px-3 py-1 text-[11px] font-black uppercase tracking-wide text-emerald-200">
+                              <div className="mt-2 inline-flex items-center gap-1.5 rounded-full border border-cyan-300/40 bg-cyan-400/10 px-3 py-1 text-[11px] font-black uppercase tracking-wide text-cyan-200">
                                 <ShieldCheck className="h-3.5 w-3.5" />
-                                FOTO BOA PARA USAR
+                                ÍNDICE VISUAL DESTACADO
                               </div>
                             )}
                           </div>
