@@ -39,6 +39,10 @@ export default function VipPage() {
     `Olá! Quero ativar o H2 VIP.\nPlano: ${durationDays} dias\nValor: ${priceLabel}${phone ? `\nMeu telefone: ${phone}` : ""}\nJá fiz o PIX e vou enviar o comprovante.`
   );
   const whatsappHref = `https://wa.me/${whatsapp}?text=${message}`;
+  const unavailableMessage = encodeURIComponent(
+    `Olá! Tenho interesse em contratar o H2 VIP.\nA contratação VIP está indisponível no site no momento.${phone ? `\nMeu telefone: ${phone}` : ""}\nGostaria de falar com um ADM para verificar a liberação.`
+  );
+  const unavailableWhatsappHref = `https://wa.me/${whatsapp}?text=${unavailableMessage}`;
 
   const copyPix = async () => {
     if (!pixKey) return;
@@ -91,6 +95,17 @@ export default function VipPage() {
     <div className="rounded-2xl border border-rose-400/35 bg-rose-500/10 p-5 text-center">
       <LockKeyhole className="mx-auto h-8 w-8 text-rose-300" />
       <p className="mt-3 font-black uppercase">VIP temporariamente indisponível</p>
+      <p className="mt-2 text-xs leading-5 text-rose-100/75">
+        Entre em contato com um ADM para verificar a disponibilidade da contratação.
+      </p>
+      <a
+        href={unavailableWhatsappHref}
+        target="_blank"
+        rel="noreferrer"
+        className="mt-4 inline-flex min-h-[54px] w-full items-center justify-center gap-2 rounded-2xl bg-gradient-to-r from-emerald-500 to-green-400 px-4 text-sm font-black uppercase text-[#052e1a] shadow-[0_0_24px_rgba(34,197,94,.18)] transition hover:brightness-105"
+      >
+        <MessageCircle className="h-5 w-5" /> Falar com ADM no WhatsApp
+      </a>
     </div>
   ) : (
     <>
