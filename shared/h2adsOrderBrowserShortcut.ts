@@ -1,3 +1,5 @@
+import { normalizeH2AdsRoutingText } from "./h2adsGroupRouting";
+
 export type H2AdsOrderLinkLike = { instanceId: number; registrationId: number; subOrderIndex: number };
 export type H2AdsInstanceLike = { id: number; status: string };
 export type H2AdsAssignmentLike = { instanceId: number; workerId: number };
@@ -55,7 +57,11 @@ export type H2AdsOrderRepairLike = {
   orderNumber?: number | null;
   serviceName?: string | null;
   serviceOption?: string | null;
+  latestStatus?: string | null;
 };
+
+export type H2AdsOrderRepairInstanceLike = { id: number; groupId?: number | null };
+export type H2AdsOrderRepairGroupLike = { id: number; name: string };
 
 export type H2AdsOrderLinkRepairCandidate = {
   instanceId: number;
@@ -74,6 +80,17 @@ function normalizeRepairText(value: unknown): string {
     .replace(/[^a-z0-9]+/g, " ")
     .trim()
     .replace(/\s+/g, " ");
+}
+
+/** Pedidos finalizados/cancelados nunca emprestam instâncias a novos pedidos. */
+export function isH2AdsFinalizedOrderStatus(status: unknown): boolean {
+  return ["entregue", "pedido entregue", "documento entregue", "login de acesso", "cancelado"]
+    .includes(normalizeH2AdsRoutingText(status));
+}
+
+/** O grupo ENTREGUE no H2ADS também significa que a instância pertence ao pedido anterior. */
+export function isH2AdsDeliveredGroupName(groupName: unknown): boolean {
+  return /^(?:grupo )?entregues?$/.test(normalizeH2AdsRoutingText(groupName));
 }
 
 export function canonicalH2AdsServiceKey(serviceName: unknown, serviceOption: unknown): string | null {
@@ -108,6 +125,8 @@ export function resolveH2AdsOrderLinkRepairCandidate(input: {
   serviceOption: string | null | undefined;
   links: H2AdsOrderLinkLike[];
   orders: H2AdsOrderRepairLike[];
+  instances?: H2AdsOrderRepairInstanceLike[];
+  groups?: H2AdsOrderRepairGroupLike[];
 }): H2AdsOrderLinkRepairCandidate | null {
   // Se o vínculo já é exato, não existe nada para reparar.
   if (input.links.some(link => link.registrationId === input.registrationId && link.subOrderIndex === input.subOrderIndex)) return null;
@@ -124,6 +143,14 @@ export function resolveH2AdsOrderLinkRepairCandidate(input: {
   for (const link of input.links) {
     const linkedOrder = orderByKey.get(`${link.registrationId}:${link.subOrderIndex}`);
     if (!linkedOrder || Number(linkedOrder.customerNumber || 0) !== customerNumber) continue;
+
+    // Nunca sugerir transferência de uma instância pertencente a um pedido finalizado.
+    // A instância pode estar no grupo ENTREGUE mesmo que o status do pedido esteja desatualizado.
+    if (isH2AdsFinalizedOrderStatus(linkedOrder.latestStatus)) continue;
+    const instance = input.instances?.find(item => item.id === link.instanceId);
+    if (input.instances && !instance) continue;
+    const group = input.groups?.find(item => item.id === instance?.groupId);
+    if (isH2AdsDeliveredGroupName(group?.name)) continue;
 
     const linkedServiceKey = canonicalH2AdsServiceKey(linkedOrder.serviceName, linkedOrder.serviceOption);
     if (linkedServiceKey !== targetServiceKey) continue;
