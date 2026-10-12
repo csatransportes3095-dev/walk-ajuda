@@ -39,8 +39,16 @@ export default function VipPage() {
     `Olá! Quero ativar o H2 VIP.\nPlano: ${durationDays} dias\nValor: ${priceLabel}${phone ? `\nMeu telefone: ${phone}` : ""}\nJá fiz o PIX e vou enviar o comprovante.`
   );
   const whatsappHref = `https://wa.me/${whatsapp}?text=${message}`;
+  const productInterest = params.get("product")?.trim().slice(0, 120) || "";
+  const optionInterest = params.get("option")?.trim().slice(0, 120) || "";
   const unavailableMessage = encodeURIComponent(
-    `Olá! Tenho interesse em contratar o H2 VIP.\nA contratação VIP está indisponível no site no momento.${phone ? `\nMeu telefone: ${phone}` : ""}\nGostaria de falar com um ADM para verificar a liberação.`
+    [
+      "Olá! Tenho interesse em contratar o H2 VIP.",
+      "A contratação VIP está indisponível no site no momento.",
+      productInterest ? `Produto de interesse: ${productInterest}${optionInterest ? ` — ${optionInterest}` : ""}` : "",
+      phone ? `Meu telefone: ${phone}` : "",
+      "Gostaria de falar com um ADM para verificar a liberação.",
+    ].filter(Boolean).join("\n")
   );
   const unavailableWhatsappHref = `https://wa.me/${whatsapp}?text=${unavailableMessage}`;
 
