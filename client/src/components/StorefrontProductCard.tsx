@@ -1,4 +1,4 @@
-import { Check, ChevronDown, ChevronUp, Crown, Flame, LockKeyhole, ShieldCheck, ShoppingCart, Tag, Timer, Zap } from "lucide-react";
+import { Check, ChevronDown, ChevronUp, Crown, Flame, ShieldCheck, ShoppingCart, Tag, Timer } from "lucide-react";
 import { useEffect, useMemo, useState } from "react";
 import { requestProductManifest } from "@/lib/productManifest";
 import { useVipMembership } from "@/hooks/useVipMembership";
@@ -260,8 +260,6 @@ export function StorefrontProductCard({
         option: selectedPriceModel?.label || item.option.label,
       }).toString()}`
     : "/vip";
-  const vipSavingsValues = priceModels.map((model) => Math.max(0, parseBrazilMoney(model.price) - parseBrazilMoney(applyVipBenefitToPrice(model.price, model, true))));
-  const maxVipSavings = Math.max(0, ...vipSavingsValues);
 
   const handlePriceModelSelect = (nextId: number) => {
     setPriceModelId(nextId);
@@ -385,16 +383,6 @@ export function StorefrontProductCard({
                 );
               })}
             </div>
-            {!isVipCustomer && priceModels.some((model) => normalizeVipAccessMode(model.vipAccessMode) !== 'all') && (
-              <a href={vipHref} className="relative mt-3 flex items-center gap-2 overflow-hidden rounded-2xl border border-amber-200/45 bg-[linear-gradient(135deg,rgba(120,53,15,.18),rgba(76,29,149,.16),rgba(255,255,255,.025))] p-3 backdrop-blur-xl shadow-[inset_0_1px_0_rgba(255,255,255,.16),0_0_24px_rgba(251,191,36,.12)] transition-all hover:border-amber-200/70 hover:brightness-110">
-                <div className="grid h-9 w-9 shrink-0 place-items-center rounded-xl bg-amber-400/15 text-amber-300"><Crown className="h-6 w-6" /></div>
-                <div className="min-w-0 flex-1">
-                  <p className="text-xs font-black uppercase tracking-wide text-amber-200">Seja VIP e pague menos</p>
-                  <p className="mt-1 text-[11px] font-semibold text-slate-300">{maxVipSavings > 0 ? `Economize até ${formatBrazilMoney(maxVipSavings)} neste produto.` : 'Libere opções exclusivas e benefícios VIP.'}</p>
-                </div>
-                <span className="shrink-0 rounded-full bg-amber-300 px-2.5 py-1.5 text-[9px] font-black uppercase text-[#251600]">Quero VIP</span>
-              </a>
-            )}
           </div>
         )}
 
@@ -507,10 +495,19 @@ export function StorefrontProductCard({
           <button type="button" disabled={requiresPriceModelSelection && !selectedPriceModel} onClick={() => void runProtectedAction("cart")} className="inline-flex min-h-[50px] items-center justify-center gap-2 rounded-[20px] border border-violet-400/90 bg-gradient-to-br from-violet-900/95 to-purple-950/85 px-3 text-[16px] font-black text-violet-100 lg:text-[14px] xl:text-[15px] shadow-[0_12px_32px_rgba(124,58,237,.22),inset_0_1px_0_rgba(255,255,255,.08)] transition-all hover:brightness-125 active:scale-[0.98] disabled:cursor-not-allowed disabled:opacity-35 sm:text-lg"><ShoppingCart className="h-5 w-5" /> Carrinho</button>
         </div>
 
-        <div className="mt-3 flex items-center gap-3">
-          <div className="h-px flex-1 bg-white/15" />
-          <button type="button" aria-expanded={detailsOpen} aria-controls={detailsId} onClick={() => setDetailsOpen((open) => !open)} className="inline-flex items-center justify-center gap-2 text-xs font-bold text-white/90 transition-colors hover:text-white sm:text-sm">{detailsOpen ? "Ocultar detalhes" : "Ver detalhes"}{detailsOpen ? <ChevronUp className="h-4 w-4" /> : <ChevronDown className="h-4 w-4" />}</button>
-          <div className="h-px flex-1 bg-white/15" />
+        <div className="mt-3">
+          <button
+            type="button"
+            aria-expanded={detailsOpen}
+            aria-controls={detailsId}
+            onClick={() => setDetailsOpen((open) => !open)}
+            className={`group/details flex min-h-[52px] w-full items-center justify-between gap-3 rounded-2xl border px-4 py-3 text-left text-sm font-black uppercase tracking-[0.02em] backdrop-blur-xl shadow-[inset_0_1px_0_rgba(255,255,255,.16),0_8px_25px_rgba(124,58,237,.18)] transition-all duration-200 hover:brightness-110 active:scale-[0.99] focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-violet-300 ${detailsOpen ? "border-violet-300/80 bg-gradient-to-r from-violet-700/45 via-indigo-950/65 to-violet-900/50 text-white" : "border-violet-400/65 bg-gradient-to-r from-violet-800/35 via-slate-900/75 to-indigo-900/40 text-violet-100"}`}
+          >
+            <span>{detailsOpen ? "Ocultar detalhes" : "Ver detalhes"}</span>
+            <span className="grid h-7 w-7 shrink-0 place-items-center rounded-lg border border-violet-300/40 bg-violet-300/10">
+              {detailsOpen ? <ChevronUp className="h-5 w-5" /> : <ChevronDown className="h-5 w-5" />}
+            </span>
+          </button>
         </div>
 
         {detailsOpen && (
@@ -526,11 +523,6 @@ export function StorefrontProductCard({
           </div>
         )}
 
-        <div className="mt-3 grid grid-cols-3 border-t border-white/10 pt-3 text-center text-[9px] font-semibold text-slate-300/75 sm:text-[11px]">
-          <span className="inline-flex items-center justify-center gap-1.5 border-r border-white/10"><LockKeyhole className="h-4 w-4 text-violet-300" />Compra segura</span>
-          <span className="inline-flex items-center justify-center gap-1.5 border-r border-white/10"><ShieldCheck className="h-4 w-4 text-violet-300" />Suporte H2</span>
-          <span className="inline-flex items-center justify-center gap-1.5"><Zap className="h-4 w-4 text-violet-300" />Entrega garantida</span>
-        </div>
       </div>
     </article>
   );
