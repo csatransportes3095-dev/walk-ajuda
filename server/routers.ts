@@ -2685,6 +2685,7 @@ export const appRouter = router({
           vipStartedAt: vipMembership?.startsAtMs || null,
           vipExpiresAt: vipMembership?.expiresAtMs || null,
           vipDaysLeft: vipMembership?.daysLeft || 0,
+          vipUnlimited: Boolean(vipMembership?.unlimited),
           fixedPwdActive: Number(r.fixedPwdActive) === 1,
           isBlocked: Number(r.isBlocked) === 1,
           // Retornar timestamps como ms (absolutos, independente de fuso do servidor/TiDB)
