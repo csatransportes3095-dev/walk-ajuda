@@ -436,22 +436,49 @@ export function StorefrontProductCard({
               </>
             )}
             {selectedPriceModel && hasVipBenefit(selectedPriceModel) && (() => {
-              const vipPrice = applyVipBenefitToPrice(selectedPriceModel.price, selectedPriceModel, true);
-              const saving = Math.max(0, parseBrazilMoney(selectedPriceModel.price) - parseBrazilMoney(vipPrice));
+              const normalPrice = selectedPriceModel.price;
+              const vipPrice = applyVipBenefitToPrice(normalPrice, selectedPriceModel, true);
+              const saving = Math.max(0, parseBrazilMoney(normalPrice) - parseBrazilMoney(vipPrice));
               return (
-                <div className="mt-3 rounded-2xl border border-amber-300/45 bg-amber-400/[0.08] p-3">
-                  <p className="text-[9px] font-black uppercase tracking-[0.12em] text-amber-200">
-                    {isVipCustomer ? '👑 Você é VIP • paga' : '👑 Cliente VIP paga'}
-                  </p>
-                  <div className="mt-1 flex flex-wrap items-end justify-between gap-2">
-                    <p className="max-w-full overflow-hidden text-ellipsis whitespace-nowrap text-[clamp(20px,2vw,24px)] font-black text-amber-300">{asMoney(vipPrice)}</p>
-                    {saving > 0 && <p className="text-[10px] font-black uppercase text-emerald-300">Você economiza {formatBrazilMoney(saving)}</p>}
+                <div className="mt-4 overflow-hidden rounded-2xl border border-amber-300/35 bg-[linear-gradient(180deg,rgba(15,23,42,.72),rgba(17,12,28,.86))] shadow-[inset_0_1px_0_rgba(255,255,255,.05)]">
+                  <div className="grid grid-cols-1 divide-y divide-white/10 sm:grid-cols-2 sm:divide-x sm:divide-y-0">
+                    <div className="p-3.5">
+                      <p className="text-[9px] font-black uppercase tracking-[0.14em] text-slate-400">
+                        {isVipCustomer ? 'VALOR NORMAL' : '👤 VOCÊ NÃO É VIP • PAGA'}
+                      </p>
+                      <p className="mt-1 max-w-full overflow-hidden text-ellipsis whitespace-nowrap text-[clamp(22px,2.1vw,30px)] font-black text-white">
+                        {asMoney(normalPrice)}
+                      </p>
+                    </div>
+
+                    <div className="bg-amber-400/[0.06] p-3.5">
+                      <p className="text-[9px] font-black uppercase tracking-[0.14em] text-amber-200">
+                        {isVipCustomer ? '👑 VOCÊ É VIP • PAGA' : '👑 COM VIP • VOCÊ PAGA'}
+                      </p>
+                      <p className="mt-1 max-w-full overflow-hidden text-ellipsis whitespace-nowrap text-[clamp(22px,2.1vw,30px)] font-black text-amber-300">
+                        {asMoney(vipPrice)}
+                      </p>
+                      {saving > 0 && (
+                        <p className="mt-1 text-[10px] font-black uppercase text-emerald-300">
+                          {isVipCustomer ? 'Você economizou' : 'Você economiza'} {formatBrazilMoney(saving)}
+                        </p>
+                      )}
+                    </div>
                   </div>
-                  {!isVipCustomer && <a href={vipHref} className="mt-3 inline-flex min-h-[40px] w-full items-center justify-center rounded-xl bg-amber-300 px-3 text-[11px] font-black uppercase text-[#251600]">Quero ser VIP</a>}
+
+                  {!isVipCustomer && (
+                    <div className="border-t border-amber-300/20 p-3">
+                      <a
+                        href={vipHref}
+                        className="inline-flex min-h-[42px] w-full items-center justify-center rounded-xl bg-gradient-to-r from-amber-300 to-yellow-400 px-3 text-[11px] font-black uppercase text-[#251600] shadow-[0_8px_20px_rgba(251,191,36,.15)] transition hover:brightness-105"
+                      >
+                        Quero ser VIP
+                      </a>
+                    </div>
+                  )}
                 </div>
               );
             })()}
-            {selectedPriceModel && normalizeVipAccessMode(selectedPriceModel.vipAccessMode) !== 'all' && <p className="ml-2 mt-2 inline-flex rounded-full border border-amber-300/45 bg-amber-400/10 px-2.5 py-1 text-[10px] font-black uppercase tracking-wide text-amber-200">{isVipCustomer ? `👑 ${vipBenefitText(selectedPriceModel) || 'ACESSO VIP'}` : '👑 BENEFÍCIO VIP DISPONÍVEL'}</p>}
           </div>
         </div>
       </div>
