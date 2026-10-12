@@ -57,6 +57,149 @@ function formatDate(d: Date | string) {
   });
 }
 
+function getYoutubeVideoId(url: string): string | null {
+  const match = String(url || "").match(/(?:youtube\.com\/(?:watch\?v=|embed\/|shorts\/)|youtu\.be\/)([\w-]{11})/i);
+  return match?.[1] || null;
+}
+
+function canPreviewDirectVideo(url: string): boolean {
+  const value = String(url || "").trim();
+  if (!value) return false;
+  try {
+    const parsed = new URL(value, window.location.origin);
+    if (/\.(mp4|webm|m4v|mov)(?:$|[?#])/i.test(parsed.pathname)) return true;
+    if (/^(?:www\.)?h2colombiano\.com$/i.test(parsed.hostname) && /^\/video\/[^/]+/i.test(parsed.pathname)) return true;
+  } catch {
+    return false;
+  }
+  return false;
+}
+
+function GlobalVideoPreview({ url, title }: { url: string; title: string }) {
+  const youtubeId = getYoutubeVideoId(url);
+  const directVideo = !youtubeId && canPreviewDirectVideo(url);
+  const [started, setStarted] = useState(false);
+  const [finished, setFinished] = useState(false);
+
+  useEffect(() => {
+    setStarted(false);
+    setFinished(false);
+  }, [url]);
+
+  if (!youtubeId && !directVideo) return null;
+
+  if (youtubeId) {
+    return (
+      <div className="relative aspect-video w-full overflow-hidden border-y border-purple-500/20 bg-black">
+        {started && !finished ? (
+          <iframe
+            src={`https://www.youtube.com/embed/${youtubeId}?autoplay=1&controls=0&start=0&end=15&playsinline=1&rel=0&modestbranding=1`}
+            title={`Prévia de 15 segundos — ${title}`}
+            allow="autoplay; encrypted-media; picture-in-picture"
+            className="absolute inset-0 h-full w-full"
+            style={{ border: 0 }}
+          />
+        ) : (
+          <>
+            <img
+              src={`https://img.youtube.com/vi/${youtubeId}/hqdefault.jpg`}
+              alt=""
+              className="absolute inset-0 h-full w-full object-cover opacity-75"
+            />
+            <div className="absolute inset-0 bg-black/35" />
+            <button
+              type="button"
+              onClick={() => {
+                setFinished(false);
+                setStarted(true);
+                window.setTimeout(() => {
+                  setStarted(false);
+                  setFinished(true);
+                }, 15_250);
+              }}
+              className="absolute inset-0 flex flex-col items-center justify-center gap-2 text-white"
+            >
+              <span className="flex h-12 w-12 items-center justify-center rounded-full border border-white/30 bg-purple-600/90 text-xl shadow-lg">▶</span>
+              <span className="rounded-full bg-black/70 px-3 py-1 text-[11px] font-bold">
+                {finished ? 'Rever prévia de 15s' : 'Prévia de 15s'}
+              </span>
+            </button>
+          </>
+        )}
+        {started && !finished && (
+          <span className="pointer-events-none absolute left-2 top-2 rounded-full bg-black/75 px-2 py-1 text-[10px] font-bold text-white">
+            PRÉVIA • 15s
+          </span>
+        )}
+      </div>
+    );
+  }
+
+  return (
+    <div className="relative aspect-video w-full overflow-hidden border-y border-purple-500/20 bg-black">
+      <video
+        key={url}
+        src={url}
+        muted
+        playsInline
+        preload="metadata"
+        className="h-full w-full object-contain"
+        onClick={(event) => {
+          const media = event.currentTarget;
+          if (finished) {
+            media.currentTime = 0;
+            setFinished(false);
+          }
+          if (media.paused) {
+            void media.play().then(() => setStarted(true)).catch(() => {});
+          } else {
+            media.pause();
+            setStarted(false);
+          }
+        }}
+        onTimeUpdate={(event) => {
+          const media = event.currentTarget;
+          if (media.currentTime >= 15) {
+            media.pause();
+            media.currentTime = 0;
+            setStarted(false);
+            setFinished(true);
+          }
+        }}
+        onEnded={(event) => {
+          const media = event.currentTarget;
+          media.currentTime = 0;
+          setStarted(false);
+          setFinished(true);
+        }}
+      />
+      {!started && (
+        <button
+          type="button"
+          onClick={(event) => {
+            const media = event.currentTarget.parentElement?.querySelector('video');
+            if (!(media instanceof HTMLVideoElement)) return;
+            if (finished) media.currentTime = 0;
+            setFinished(false);
+            void media.play().then(() => setStarted(true)).catch(() => {});
+          }}
+          className="absolute inset-0 flex flex-col items-center justify-center gap-2 bg-black/30 text-white"
+        >
+          <span className="flex h-12 w-12 items-center justify-center rounded-full border border-white/30 bg-purple-600/90 text-xl shadow-lg">▶</span>
+          <span className="rounded-full bg-black/70 px-3 py-1 text-[11px] font-bold">
+            {finished ? 'Rever prévia de 15s' : 'Prévia de 15s'}
+          </span>
+        </button>
+      )}
+      {started && (
+        <span className="pointer-events-none absolute left-2 top-2 rounded-full bg-black/75 px-2 py-1 text-[10px] font-bold text-white">
+          PRÉVIA • MÁX. 15s • SEM ÁUDIO
+        </span>
+      )}
+    </div>
+  );
+}
+
 // Renderiza texto com URLs convertidas em links clicáveis
 function renderTextWithLinks(text: string): React.ReactNode {
   if (!text) return null;
@@ -1965,6 +2108,7 @@ export default function OrderTracking() {
                           <p className="mt-1.5 whitespace-pre-line text-xs leading-relaxed text-purple-100/70">{video.description}</p>
                         )}
                       </div>
+                      <GlobalVideoPreview url={video.url} title={video.title} />
                       <a
                         href={video.url}
                         target="_blank"
