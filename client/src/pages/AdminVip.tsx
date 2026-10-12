@@ -1,5 +1,5 @@
 import { useMemo, useState } from "react";
-import { CalendarDays, CheckCircle2, Clock3, Crown, ExternalLink, History, RefreshCw, Save, Search, Settings2, ShieldCheck, UserCheck, UserX, X } from "lucide-react";
+import { CalendarDays, CheckCircle2, CheckSquare, Clock3, Crown, ExternalLink, History, RefreshCw, Save, Search, Settings2, ShieldCheck, Square, UserCheck, UserX, Users, X } from "lucide-react";
 import { trpc } from "@/lib/trpc";
 import { toast } from "sonner";
 import AdminHeader from "@/components/AdminHeader";
@@ -23,6 +23,8 @@ function actionLabel(action: string) {
   if (action === "renew") return "VIP renovado";
   if (action === "set_expiry") return "Validade alterada";
   if (action === "cancel") return "VIP cancelado";
+  if (action === "bulk_activate") return "VIP ativado em massa";
+  if (action === "bulk_cancel") return "VIP desativado em massa";
   return action;
 }
 
@@ -35,6 +37,9 @@ export default function AdminVip() {
   const initialSearch = typeof window !== "undefined" ? new URLSearchParams(window.location.search).get("phone") || "" : "";
   const [search, setSearch] = useState(initialSearch);
   const [filter, setFilter] = useState<"all" | "active" | "expired" | "none" | "cancelled">("all");
+  const [orderFilter, setOrderFilter] = useState<"all" | "new" | "with" | "without">("all");
+  const [selectedIds, setSelectedIds] = useState<Set<number>>(new Set());
+  const [bulkPeriod, setBulkPeriod] = useState<"7" | "15" | "30" | "unlimited">("30");
   const [historyCustomerId, setHistoryCustomerId] = useState<number | null>(null);
   const [actionModal, setActionModal] = useState<{ mode: ActionMode; customer: any } | null>(null);
   const [daysInput, setDaysInput] = useState("30");
@@ -75,7 +80,16 @@ export default function AdminVip() {
   const renewMut = trpc.vipMemberships.renew.useMutation({ onSuccess: () => { toast.success("VIP renovado com sucesso!"); setActionModal(null); refreshAll(); }, onError: (e) => toast.error(e.message) });
   const expiryMut = trpc.vipMemberships.setExpiry.useMutation({ onSuccess: () => { toast.success("Validade alterada!"); setActionModal(null); refreshAll(); }, onError: (e) => toast.error(e.message) });
   const cancelMut = trpc.vipMemberships.cancel.useMutation({ onSuccess: () => { toast.success("VIP cancelado."); setActionModal(null); refreshAll(); }, onError: (e) => toast.error(e.message) });
-  const actionPending = activateMut.isPending || renewMut.isPending || expiryMut.isPending || cancelMut.isPending;
+  const bulkMut = trpc.vipMemberships.bulkApply.useMutation({
+    onSuccess: async (result) => {
+      toast.success(`${result.changed} cliente(s) atualizado(s) no VIP.`);
+      if (result.skipped) toast.info(`${result.skipped} cliente(s) não precisaram de alteração.`);
+      setSelectedIds(new Set());
+      await refreshAll();
+    },
+    onError: (e) => toast.error(e.message || "Erro na operação VIP em massa"),
+  });
+  const actionPending = activateMut.isPending || renewMut.isPending || expiryMut.isPending || cancelMut.isPending || bulkMut.isPending;
 
   const saveConfig = () => {
     update.mutate({ settings: {
@@ -92,7 +106,7 @@ export default function AdminVip() {
 
   const stats = useMemo(() => ({
     active: directory.filter((c) => c.active).length,
-    expiring: directory.filter((c) => c.active && Number(c.daysLeft || 0) <= 7).length,
+    expiring: directory.filter((c) => c.active && !c.unlimited && Number(c.daysLeft || 0) <= 7).length,
     expired: directory.filter((c) => c.status === "expired").length,
     total: directory.length,
   }), [directory]);
@@ -101,12 +115,55 @@ export default function AdminVip() {
     const q = search.trim().toLowerCase().replace(/\D/g, "");
     const raw = search.trim().toLowerCase();
     return directory.filter((c) => {
-      const matchesFilter = filter === "all" || c.status === filter;
-      if (!matchesFilter) return false;
+      const matchesVip = filter === "all" || c.status === filter;
+      if (!matchesVip) return false;
+      const matchesOrders =
+        orderFilter === "all" ||
+        (orderFilter === "new" && c.hasOpenOrders) ||
+        (orderFilter === "with" && c.hasOrders) ||
+        (orderFilter === "without" && !c.hasOrders);
+      if (!matchesOrders) return false;
       if (!raw) return true;
       return String(c.name || "").toLowerCase().includes(raw) || String(c.phone || "").replace(/\D/g, "").includes(q) || String(c.customerNumber || "").includes(raw.replace("*", ""));
     });
-  }, [directory, filter, search]);
+  }, [directory, filter, orderFilter, search]);
+
+  const visibleIds = useMemo(() => filtered.map((c) => Number(c.customerId)), [filtered]);
+  const allVisibleSelected = visibleIds.length > 0 && visibleIds.every((id) => selectedIds.has(id));
+
+  const toggleSelected = (customerId: number) => {
+    setSelectedIds((current) => {
+      const next = new Set(current);
+      if (next.has(customerId)) next.delete(customerId);
+      else next.add(customerId);
+      return next;
+    });
+  };
+
+  const selectVisible = () => {
+    setSelectedIds(allVisibleSelected ? new Set() : new Set(visibleIds));
+  };
+
+  const runBulk = (action: "activate" | "deactivate") => {
+    const ids = Array.from(selectedIds);
+    if (!ids.length) {
+      toast.error("Selecione pelo menos um cliente.");
+      return;
+    }
+    const periodLabel = bulkPeriod === "unlimited" ? "SEM VENCIMENTO" : `${bulkPeriod} DIAS`;
+    const message = action === "activate"
+      ? `Ativar VIP para ${ids.length} cliente(s) por ${periodLabel}? VIP já ativo com validade maior não será reduzido.`
+      : `Desativar o VIP de ${ids.length} cliente(s) selecionado(s)?`;
+    if (!window.confirm(message)) return;
+    bulkMut.mutate({
+      customerIds: ids,
+      action,
+      period: action === "activate" ? bulkPeriod : undefined,
+      notes: action === "activate"
+        ? `Operação em massa: ${periodLabel}`
+        : "Operação em massa: desativação VIP",
+    });
+  };
 
   const openAction = (mode: ActionMode, customer: any) => {
     setDaysInput(String(planDays));
