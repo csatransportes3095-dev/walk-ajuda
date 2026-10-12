@@ -299,7 +299,7 @@ export function StorefrontProductCard({
 
       <div className={`pointer-events-none absolute inset-x-10 ${hasActivePromotion ? "top-[38px]" : "top-0"} h-px bg-gradient-to-r from-transparent via-violet-300 to-transparent shadow-[0_0_24px_rgba(167,139,250,.95)]`} />
 
-      <div className="relative overflow-hidden rounded-b-[28px] border-b border-violet-300/40 bg-[radial-gradient(circle_at_90%_25%,rgba(129,140,248,.24),transparent_28%),linear-gradient(135deg,rgba(76,29,149,.28),rgba(15,23,42,.24)_55%,rgba(255,255,255,.025))] px-5 py-5 backdrop-blur-2xl shadow-[inset_0_1px_0_rgba(255,255,255,.18),inset_0_-1px_0_rgba(255,255,255,.04)] sm:px-6 sm:py-6">
+      <div className="relative overflow-hidden rounded-b-[28px] border-b border-violet-300/40 bg-[radial-gradient(circle_at_90%_25%,rgba(129,140,248,.24),transparent_28%),linear-gradient(135deg,rgba(76,29,149,.28),rgba(15,23,42,.24)_55%,rgba(255,255,255,.025))] px-4 py-4 backdrop-blur-2xl shadow-[inset_0_1px_0_rgba(255,255,255,.18),inset_0_-1px_0_rgba(255,255,255,.04)] sm:px-5 sm:py-4">
         <div className="pointer-events-none absolute right-5 top-3 text-[56px] font-black tracking-tighter text-violet-300/[0.06] sm:text-[74px]">{item.category}</div>
         <div className="relative flex min-w-0 items-start gap-[clamp(8px,1vw,16px)] pr-1">
           <div className="grid h-[clamp(54px,5vw,74px)] w-[clamp(54px,5vw,74px)] shrink-0 place-items-center overflow-hidden rounded-[22px] border border-violet-300/55 bg-black/50 shadow-[0_0_24px_rgba(139,92,246,.45),inset_0_0_18px_rgba(255,255,255,.08)]">
@@ -307,11 +307,11 @@ export function StorefrontProductCard({
           </div>
           <div className="min-w-0 flex-1">
             <span className="inline-flex max-w-full overflow-hidden text-ellipsis whitespace-nowrap rounded-full border border-violet-400/60 bg-violet-500/20 px-[clamp(7px,0.8vw,12px)] py-1 text-[clamp(8px,0.75vw,11px)] font-black uppercase tracking-[0.10em] text-violet-200 shadow-[0_0_16px_rgba(139,92,246,.16)]">{productPill}</span>
-            <h3 className="mt-2 max-w-full overflow-hidden text-ellipsis whitespace-nowrap text-[clamp(16px,1.7vw,30px)] font-black leading-[1.02] tracking-tight text-white">{item.option.label.trim()}</h3>
-            <span className="mt-3 inline-flex max-w-full overflow-hidden text-ellipsis whitespace-nowrap rounded-full border border-violet-300/40 bg-violet-500/10 px-[clamp(7px,0.8vw,12px)] py-1 text-[clamp(8px,0.7vw,10px)] font-black uppercase tracking-[0.13em] text-violet-200/90">TIPO DE CONTA</span>
+            <h3 className="mt-1.5 max-w-full overflow-hidden text-ellipsis whitespace-nowrap text-[clamp(16px,1.7vw,30px)] font-black leading-[1.02] tracking-tight text-white">{item.option.label.trim()}</h3>
+            <span className="mt-2 inline-flex max-w-full overflow-hidden text-ellipsis whitespace-nowrap rounded-full border border-violet-300/40 bg-violet-500/10 px-[clamp(7px,0.8vw,12px)] py-1 text-[clamp(8px,0.7vw,10px)] font-black uppercase tracking-[0.13em] text-violet-200/90">TIPO DE CONTA</span>
           </div>
         </div>
-        <div className="relative mt-5 flex items-end justify-between gap-3">
+        <div className="relative mt-3 flex items-end justify-between gap-2>
           <p className="min-w-0 max-w-[68%] text-[clamp(9px,0.8vw,14px)] font-bold leading-[1.35] text-violet-100/75">{productTagline(item)}</p>
           <div className="flex shrink-0 items-center gap-[clamp(4px,0.5vw,8px)] rounded-2xl border border-violet-400/70 bg-violet-950/55 px-[clamp(7px,0.8vw,12px)] py-[clamp(5px,0.55vw,8px)] text-violet-200 shadow-[0_0_18px_rgba(139,92,246,.20)]">
             <Crown className="h-5 w-5" />
@@ -320,17 +320,17 @@ export function StorefrontProductCard({
         </div>
       </div>
 
-      <div className="p-4 sm:p-5">
+      <div className="p-4 sm:p-4">
         {priceModels.length > 0 && (
           <div>
             <div className="flex items-start gap-3">
               <Crown className="mt-0.5 h-7 w-7 shrink-0 fill-violet-500/30 text-violet-400" />
               <div>
                 <p className="text-[clamp(15px,1.45vw,24px)] font-black uppercase leading-none tracking-[-0.02em] text-white drop-shadow-[0_1px_0_rgba(255,255,255,.08)]">Escolha sua garantia</p>
-                <p className="mt-2 text-[clamp(9px,0.8vw,14px)] font-semibold text-slate-300/80">Mais corridas, mais tempo, mais tranquilidade.</p>
+                <p className="mt-1 text-[clamp(9px,0.8vw,14px)] font-semibold text-slate-300/80">Mais corridas, mais tempo, mais tranquilidade.</p>
               </div>
             </div>
-            <div className={`mt-5 grid w-full gap-2 sm:gap-3 ${priceModels.length === 1 ? "grid-cols-1" : priceModels.length === 2 ? "grid-cols-2" : priceModels.length === 3 ? "grid-cols-3" : "grid-cols-2 sm:grid-cols-4"}`}>
+            <div className={`mt-3 grid w-full gap-2 sm:gap-2 ${priceModels.length === 1 ? "grid-cols-1" : priceModels.length === 2 ? "grid-cols-2" : priceModels.length === 3 ? "grid-cols-3" : "grid-cols-2 sm:grid-cols-4"}`}>
               {priceModels.map((model, index) => {
                 const isSelected = model.id === priceModelId;
                 const palette = OPTION_PALETTES[Math.min(index, OPTION_PALETTES.length - 1)];
@@ -345,7 +345,7 @@ export function StorefrontProductCard({
                 const vipPreviewPrice = applyVipBenefitToPrice(model.price, model, true);
                 const vipSavings = Math.max(0, parseBrazilMoney(model.price) - parseBrazilMoney(vipPreviewPrice));
                 return (
-                  <button key={model.id} type="button" aria-pressed={isSelected} disabled={modelLocked} onClick={() => { if (!modelLocked) handlePriceModelSelect(model.id); }} style={priceModels.length === 1 ? { gridColumn: "1 / -1", width: "100%", maxWidth: "none" } : undefined} className={`relative min-w-0 w-full min-h-[206px] overflow-hidden rounded-[18px] border bg-gradient-to-b px-2 pb-2.5 pt-6 text-center backdrop-blur-xl transition-all ${palette.border} ${palette.bg} ${palette.shadow} ${isSelected ? `-translate-y-1 ring-2 ${palette.ring}` : "hover:-translate-y-0.5"} ${modelPromotion?.active ? "outline outline-1 outline-amber-300/60" : ""} ${modelVipHighlighted ? "ring-1 ring-amber-300/70" : ""} ${modelLocked ? "cursor-not-allowed opacity-80 saturate-75" : ""}`}>
+                  <button key={model.id} type="button" aria-pressed={isSelected} disabled={modelLocked} onClick={() => { if (!modelLocked) handlePriceModelSelect(model.id); }} style={priceModels.length === 1 ? { gridColumn: "1 / -1", width: "100%", maxWidth: "none" } : undefined} className={`relative min-w-0 w-full min-h-[182px] overflow-hidden rounded-[18px] border bg-gradient-to-b px-2 pb-2 pt-5 text-center backdrop-blur-xl transition-all ${palette.border} ${palette.bg} ${palette.shadow} ${isSelected ? `-translate-y-1 ring-2 ${palette.ring}` : "hover:-translate-y-0.5"} ${modelPromotion?.active ? "outline outline-1 outline-amber-300/60" : ""} ${modelVipHighlighted ? "ring-1 ring-amber-300/70" : ""} ${modelLocked ? "cursor-not-allowed opacity-80 saturate-75" : ""}`}>
                     <span aria-hidden="true" className="pointer-events-none absolute inset-x-3 top-[1px] h-px bg-gradient-to-r from-transparent via-white/55 to-transparent opacity-90" />
                     {modelVipMode !== 'all' && <span className={`absolute right-1 top-1 z-20 max-w-[46%] overflow-hidden text-ellipsis whitespace-nowrap rounded-full border px-[clamp(4px,0.45vw,8px)] py-1 text-[clamp(6px,0.5vw,8px)] font-black uppercase shadow-lg ${modelLocked ? 'border-rose-300/70 bg-rose-950 text-rose-200' : 'border-amber-300/70 bg-amber-400 text-amber-950'}`}>{modelLocked ? '🔒 SOMENTE VIP' : `👑 ${model.vipHighlightText || 'VIP'}`}</span>}
                     {index === 0 && modelHasDiscount ? (
@@ -354,9 +354,9 @@ export function StorefrontProductCard({
                       <span className="absolute left-1 top-1 max-w-[52%] overflow-hidden text-ellipsis whitespace-nowrap rounded-lg bg-cyan-400 px-[clamp(4px,0.45vw,12px)] py-1 text-[clamp(6px,0.5vw,8px)] font-black uppercase tracking-wide text-[#03111c] shadow-[0_0_16px_rgba(34,211,238,.38)] sm:text-[10px]">Mais escolhida</span>
                     ) : null}
                     <ShieldCheck className={`mx-auto h-6 w-6 ${palette.text}`} />
-                    <span className="mt-2.5 block max-w-full overflow-hidden text-ellipsis whitespace-nowrap text-[clamp(9px,0.82vw,14px)] font-black leading-4 tracking-[-0.02em] text-white">{parts.title}</span>
+                    <span className="mt-1.5 block max-w-full overflow-hidden text-ellipsis whitespace-nowrap text-[clamp(9px,0.82vw,14px)] font-black leading-4 tracking-[-0.02em] text-white">{parts.title}</span>
                     <span className={`mt-1 block max-w-full overflow-hidden text-ellipsis whitespace-nowrap text-[clamp(10px,0.92vw,16px)] font-black leading-none ${palette.text}`}>{parts.subtitle}</span>
-                    <div className="mt-2.5 min-h-[68px] border-t border-white/20 pt-2">
+                    <div className="mt-2 min-h-[60px] border-t border-white/20 pt-1.5">
                       {modelVipMode === 'all' ? (
                         modelHasDiscount && model.originalPrice ? (
                           <div className="flex flex-col items-center">
@@ -380,26 +380,26 @@ export function StorefrontProductCard({
                         </>
                       )}
                     </div>
-                    {isSelected ? <span className={`mx-auto mt-2 grid h-8 w-8 place-items-center rounded-full ${palette.badge} text-slate-950`}><Check className="h-4 w-4 stroke-[3]" /></span> : <span className="mx-auto mt-2 block h-8 w-8 rounded-full border-[3px] border-slate-500/75 bg-slate-950/60" />}
+                    {isSelected ? <span className={`mx-auto mt-1.5 grid h-7 w-7 place-items-center rounded-full ${palette.badge} text-slate-950`}><Check className="h-4 w-4 stroke-[3]" /></span> : <span className="mx-auto mt-1.5 block h-7 w-7 rounded-full border-[3px] border-slate-500/75 bg-slate-950/60" />}
                   </button>
                 );
               })}
             </div>
             {!isVipCustomer && priceModels.some((model) => normalizeVipAccessMode(model.vipAccessMode) !== 'all') && (
-              <a href={vipHref} className="relative mt-4 flex items-center gap-3 overflow-hidden rounded-2xl border border-amber-200/45 bg-[linear-gradient(135deg,rgba(120,53,15,.18),rgba(76,29,149,.16),rgba(255,255,255,.025))] p-4 backdrop-blur-xl shadow-[inset_0_1px_0_rgba(255,255,255,.16),0_0_24px_rgba(251,191,36,.12)] transition-all hover:border-amber-200/70 hover:brightness-110">
-                <div className="grid h-11 w-11 shrink-0 place-items-center rounded-xl bg-amber-400/15 text-amber-300"><Crown className="h-6 w-6" /></div>
+              <a href={vipHref} className="relative mt-3 flex items-center gap-2 overflow-hidden rounded-2xl border border-amber-200/45 bg-[linear-gradient(135deg,rgba(120,53,15,.18),rgba(76,29,149,.16),rgba(255,255,255,.025))] p-3 backdrop-blur-xl shadow-[inset_0_1px_0_rgba(255,255,255,.16),0_0_24px_rgba(251,191,36,.12)] transition-all hover:border-amber-200/70 hover:brightness-110">
+                <div className="grid h-9 w-9 shrink-0 place-items-center rounded-xl bg-amber-400/15 text-amber-300"><Crown className="h-6 w-6" /></div>
                 <div className="min-w-0 flex-1">
                   <p className="text-xs font-black uppercase tracking-wide text-amber-200">Seja VIP e pague menos</p>
                   <p className="mt-1 text-[11px] font-semibold text-slate-300">{maxVipSavings > 0 ? `Economize até ${formatBrazilMoney(maxVipSavings)} neste produto.` : 'Libere opções exclusivas e benefícios VIP.'}</p>
                 </div>
-                <span className="shrink-0 rounded-full bg-amber-300 px-3 py-2 text-[9px] font-black uppercase text-[#251600]">Quero VIP</span>
+                <span className="shrink-0 rounded-full bg-amber-300 px-2.5 py-1.5 text-[9px] font-black uppercase text-[#251600]">Quero VIP</span>
               </a>
             )}
           </div>
         )}
 
         {tiers.length > 0 && priceModels.length === 0 && (
-          <label className="mt-6 block rounded-2xl border border-violet-300/40 bg-violet-950/25 p-4 backdrop-blur-xl shadow-[inset_0_1px_0_rgba(255,255,255,.14),0_0_22px_rgba(124,58,237,.10)]">
+          <label className="mt-4 block rounded-2xl border border-violet-300/40 bg-violet-950/25 p-3 backdrop-blur-xl shadow-[inset_0_1px_0_rgba(255,255,255,.14),0_0_22px_rgba(124,58,237,.10)]">
             <span className="mb-2 block text-sm font-black uppercase text-violet-200">Escolha sua garantia</span>
             <select value={tierId ?? ""} onChange={(event) => setTierId(Number(event.target.value))} className="w-full rounded-xl border border-violet-300/30 bg-slate-950/70 px-3 py-3 text-sm font-semibold text-white outline-none focus:border-violet-300">
               {tiers.map((tier) => <option key={tier.id} value={tier.id}>{tier.warrantyLabel || `${tier.warrantyValue} ${tier.warrantyType}`} — {asMoney(tier.price)}</option>)}
@@ -407,15 +407,15 @@ export function StorefrontProductCard({
           </label>
         )}
 
-        <div className="relative mt-5 overflow-hidden rounded-[26px] border border-violet-300/75 bg-[radial-gradient(circle_at_18%_12%,rgba(124,58,237,.32),transparent_36%),radial-gradient(circle_at_86%_12%,rgba(59,130,246,.16),transparent_34%),linear-gradient(135deg,rgba(18,14,58,.82),rgba(6,10,31,.86)_58%,rgba(3,7,22,.91))] p-4 backdrop-blur-2xl shadow-[inset_0_1px_0_rgba(255,255,255,.20),inset_0_-1px_0_rgba(255,255,255,.04),0_0_0_1px_rgba(139,92,246,.10),0_0_34px_rgba(124,58,237,.20)] sm:p-5 lg:p-4">
+        <div className="relative mt-3 overflow-hidden rounded-[22px] border border-violet-300/75 bg-[radial-gradient(circle_at_18%_12%,rgba(124,58,237,.32),transparent_36%),radial-gradient(circle_at_86%_12%,rgba(59,130,246,.16),transparent_34%),linear-gradient(135deg,rgba(18,14,58,.82),rgba(6,10,31,.86)_58%,rgba(3,7,22,.91))] p-3.5 backdrop-blur-2xl shadow-[inset_0_1px_0_rgba(255,255,255,.20),inset_0_-1px_0_rgba(255,255,255,.04),0_0_0_1px_rgba(139,92,246,.10),0_0_34px_rgba(124,58,237,.20)] sm:p-4 lg:p-3.5">
           <span aria-hidden="true" className="pointer-events-none absolute inset-x-5 top-[1px] h-px bg-gradient-to-r from-transparent via-white/55 to-transparent opacity-90" />
           <div className="relative flex items-center gap-3">
-            <div className="grid h-10 w-10 shrink-0 place-items-center rounded-xl bg-violet-600/25 text-violet-300"><Tag className="h-5 w-5" /></div>
+            <div className="grid h-9 w-9 shrink-0 place-items-center rounded-xl bg-violet-600/25 text-violet-300"><Tag className="h-5 w-5" /></div>
             <p className="text-[14px] font-black uppercase tracking-[0.12em] text-violet-300 sm:text-base">Sua escolha</p>
             <span className="ml-auto rounded-full border border-violet-300/35 bg-white/[0.04] px-3 py-1 text-[9px] font-black uppercase text-violet-100 sm:text-[10px]">CONTA {categoryLabel}</span>
           </div>
-          <p className="relative mt-4 text-[14px] font-black uppercase leading-5 tracking-[0.02em] text-white sm:text-[17px]">{selectedParts ? `${item.option.label} • ${selectedParts.title} • ${selectedParts.subtitle}` : `${item.option.label} • escolha uma garantia`}</p>
-          <div className="relative mt-4 border-t border-white/20 pt-4">
+          <p className="relative mt-3 text-[14px] font-black uppercase leading-5 tracking-[0.02em] text-white sm:text-[17px]">{selectedParts ? `${item.option.label} • ${selectedParts.title} • ${selectedParts.subtitle}` : `${item.option.label} • escolha uma garantia`}</p>
+          <div className="relative mt-3 border-t border-white/20 pt-3>
             {discount > 0 && !(selectedPriceModel && modelHasVipPrice) ? (
               <div className="grid grid-cols-[minmax(0,1fr)_108px] items-center gap-2.5 sm:grid-cols-[minmax(0,1fr)_116px] sm:gap-3 lg:grid-cols-[minmax(0,1fr)_108px] lg:gap-2.5 xl:grid-cols-[minmax(0,1fr)_116px] xl:gap-3">
                 <div className="min-w-0">
@@ -447,9 +447,9 @@ export function StorefrontProductCard({
               const vipPrice = applyVipBenefitToPrice(normalPrice, selectedPriceModel, true);
               const saving = Math.max(0, parseBrazilMoney(normalPrice) - parseBrazilMoney(vipPrice));
               return (
-                <div className="relative mt-4 overflow-hidden rounded-[22px] border border-amber-300/60 bg-[radial-gradient(circle_at_85%_0%,rgba(251,191,36,.20),transparent_44%),linear-gradient(155deg,rgba(40,19,74,.93),rgba(9,14,35,.97)_57%,rgba(29,16,45,.96))] shadow-[inset_0_1px_0_rgba(255,255,255,.16),0_0_28px_rgba(251,191,36,.17)]">
+                <div className="relative mt-3 overflow-hidden rounded-[20px] border border-amber-300/60 bg-[radial-gradient(circle_at_85%_0%,rgba(251,191,36,.20),transparent_44%),linear-gradient(155deg,rgba(40,19,74,.93),rgba(9,14,35,.97)_57%,rgba(29,16,45,.96))] shadow-[inset_0_1px_0_rgba(255,255,255,.16),0_0_28px_rgba(251,191,36,.17)]">
                   <span aria-hidden="true" className="pointer-events-none absolute inset-x-6 top-0 h-px bg-gradient-to-r from-transparent via-yellow-200/95 to-transparent" />
-                  <div className="flex flex-wrap items-center justify-between gap-2 border-b border-amber-300/25 px-3.5 py-2.5">
+                  <div className="flex flex-wrap items-center justify-between gap-1.5 border-b border-amber-300/25 px-3 py-2">
                     <span className="inline-flex min-w-0 items-center gap-1.5 text-[10px] font-black uppercase tracking-[0.12em] text-yellow-200">
                       <Crown aria-hidden="true" className="h-4 w-4 shrink-0 text-yellow-300" />
                       Benefício H2 VIP
@@ -459,7 +459,7 @@ export function StorefrontProductCard({
                     </span>
                   </div>
                   <div className="grid grid-cols-1 divide-y divide-amber-100/10 sm:grid-cols-2 sm:divide-x sm:divide-y-0">
-                    <div className="bg-slate-950/35 p-3.5">
+                    <div className="bg-slate-950/35 p-3">
                       <p className="text-[10px] font-black uppercase tracking-[0.08em] text-slate-300">
                         {isVipCustomer ? 'VALOR NORMAL' : '👤 VOCÊ NÃO É VIP • PAGA'}
                       </p>
@@ -467,7 +467,7 @@ export function StorefrontProductCard({
                         {asMoney(normalPrice)}
                       </p>
                     </div>
-                    <div className="relative bg-[linear-gradient(125deg,rgba(251,191,36,.17),rgba(139,92,246,.10))] p-3.5 shadow-[inset_0_1px_0_rgba(255,255,255,.07)]">
+                    <div className="relative bg-[linear-gradient(125deg,rgba(251,191,36,.17),rgba(139,92,246,.10))] p-3 shadow-[inset_0_1px_0_rgba(255,255,255,.07)]">
                       <p className="text-[10px] font-black uppercase tracking-[0.08em] text-yellow-100">
                         {isVipCustomer ? '👑 VOCÊ É VIP • PAGA' : '👑 COM VIP • VOCÊ PAGA'}
                       </p>
@@ -475,18 +475,18 @@ export function StorefrontProductCard({
                         {asMoney(vipPrice)}
                       </p>
                       {saving > 0 && (
-                        <p className="mt-1.5 text-[10px] font-black uppercase tracking-wide text-emerald-300">
+                        <p className="mt-1 text-[10px] font-black uppercase tracking-wide text-emerald-300>
                           {isVipCustomer ? 'Você economizou' : 'Você economiza'} {formatBrazilMoney(saving)}
                         </p>
                       )}
                     </div>
                   </div>
                   {!isVipCustomer && (
-                    <div className="border-t border-amber-300/25 bg-violet-950/20 p-3">
+                    <div className="border-t border-amber-300/25 bg-violet-950/20 p-2.5">
                       <a
                         href={vipHref}
                         aria-label="Quero ser VIP"
-                        className="group/vip inline-flex min-h-[52px] w-full items-center justify-center gap-2 rounded-2xl border border-yellow-100/65 bg-gradient-to-r from-[#fde68a] via-[#facc15] to-[#f59e0b] px-3 py-3 text-[13px] font-black uppercase tracking-[0.05em] text-[#291700] shadow-[inset_0_1px_0_rgba(255,255,255,.68),0_10px_26px_rgba(250,204,21,.30)] transition-all duration-200 hover:-translate-y-0.5 hover:brightness-110 hover:shadow-[0_14px_30px_rgba(250,204,21,.42)] focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-yellow-100 focus-visible:ring-offset-2 focus-visible:ring-offset-[#180f2c] active:translate-y-0 active:scale-[0.99]"
+                        className="group/vip inline-flex min-h-[44px] w-full items-center justify-center gap-1.5 rounded-xl border border-yellow-100/65 bg-gradient-to-r from-[#fde68a] via-[#facc15] to-[#f59e0b] px-3 py-2.5 text-[12px] font-black uppercase tracking-[0.05em] text-[#291700] shadow-[inset_0_1px_0_rgba(255,255,255,.68),0_10px_26px_rgba(250,204,21,.30)] transition-all duration-200 hover:-translate-y-0.5 hover:brightness-110 hover:shadow-[0_14px_30px_rgba(250,204,21,.42)] focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-yellow-100 focus-visible:ring-offset-2 focus-visible:ring-offset-[#180f2c] active:translate-y-0 active:scale-[0.99]"
                       >
                         <Crown aria-hidden="true" className="h-5 w-5 shrink-0" />
                         <span>Quero ser VIP</span>
@@ -501,20 +501,20 @@ export function StorefrontProductCard({
         </div>
       </div>
 
-      <div className="mt-auto px-4 pb-5 sm:px-5">
-        <div className="grid grid-cols-[1.22fr_.9fr] gap-3">
-          <button type="button" disabled={requiresPriceModelSelection && !selectedPriceModel} onClick={() => void runProtectedAction("buy")} className="inline-flex min-h-[60px] items-center justify-center gap-3 rounded-[20px] border border-white bg-gradient-to-b from-white to-slate-200 px-3 text-[16px] font-black text-[#090b21] lg:text-[14px] xl:text-[15px] shadow-[0_12px_32px_rgba(255,255,255,.18)] transition-all hover:brightness-105 active:scale-[0.98] disabled:cursor-not-allowed disabled:opacity-35 sm:text-lg"><ShoppingCart className="h-6 w-6" /> Comprar agora <span className="text-2xl leading-none">→</span></button>
-          <button type="button" disabled={requiresPriceModelSelection && !selectedPriceModel} onClick={() => void runProtectedAction("cart")} className="inline-flex min-h-[60px] items-center justify-center gap-2 rounded-[20px] border border-violet-400/90 bg-gradient-to-br from-violet-900/95 to-purple-950/85 px-3 text-[16px] font-black text-violet-100 lg:text-[14px] xl:text-[15px] shadow-[0_12px_32px_rgba(124,58,237,.22),inset_0_1px_0_rgba(255,255,255,.08)] transition-all hover:brightness-125 active:scale-[0.98] disabled:cursor-not-allowed disabled:opacity-35 sm:text-lg"><ShoppingCart className="h-5 w-5" /> Carrinho</button>
+      <div className="mt-auto px-4 pb-4 sm:px-4>
+        <div className="grid grid-cols-[1.22fr_.9fr] gap-2>
+          <button type="button" disabled={requiresPriceModelSelection && !selectedPriceModel} onClick={() => void runProtectedAction("buy")} className="inline-flex min-h-[50px] items-center justify-center gap-3 rounded-[20px] border border-white bg-gradient-to-b from-white to-slate-200 px-3 text-[16px] font-black text-[#090b21] lg:text-[14px] xl:text-[15px] shadow-[0_12px_32px_rgba(255,255,255,.18)] transition-all hover:brightness-105 active:scale-[0.98] disabled:cursor-not-allowed disabled:opacity-35 sm:text-lg"><ShoppingCart className="h-6 w-6" /> Comprar agora <span className="text-2xl leading-none">→</span></button>
+          <button type="button" disabled={requiresPriceModelSelection && !selectedPriceModel} onClick={() => void runProtectedAction("cart")} className="inline-flex min-h-[50px] items-center justify-center gap-2 rounded-[20px] border border-violet-400/90 bg-gradient-to-br from-violet-900/95 to-purple-950/85 px-3 text-[16px] font-black text-violet-100 lg:text-[14px] xl:text-[15px] shadow-[0_12px_32px_rgba(124,58,237,.22),inset_0_1px_0_rgba(255,255,255,.08)] transition-all hover:brightness-125 active:scale-[0.98] disabled:cursor-not-allowed disabled:opacity-35 sm:text-lg"><ShoppingCart className="h-5 w-5" /> Carrinho</button>
         </div>
 
-        <div className="mt-5 flex items-center gap-3">
+        <div className="mt-3 flex items-center gap-3>
           <div className="h-px flex-1 bg-white/15" />
           <button type="button" aria-expanded={detailsOpen} aria-controls={detailsId} onClick={() => setDetailsOpen((open) => !open)} className="inline-flex items-center justify-center gap-2 text-xs font-bold text-white/90 transition-colors hover:text-white sm:text-sm">{detailsOpen ? "Ocultar detalhes" : "Ver detalhes"}{detailsOpen ? <ChevronUp className="h-4 w-4" /> : <ChevronDown className="h-4 w-4" />}</button>
           <div className="h-px flex-1 bg-white/15" />
         </div>
 
         {detailsOpen && (
-          <div id={detailsId} className="mt-4 rounded-xl border border-white/15 bg-white/[0.035] p-4 text-xs font-semibold leading-5 text-slate-300 backdrop-blur-xl shadow-[inset_0_1px_0_rgba(255,255,255,.12)]">
+          <div id={detailsId} className="mt-3 rounded-xl border border-white/15 bg-white/[0.035] p-3 text-xs font-semibold leading-5 text-slate-300 backdrop-blur-xl shadow-[inset_0_1px_0_rgba(255,255,255,.12)]">
             <div className="grid gap-2">
               <p><strong className="text-white">Produto:</strong> {item.product.name}</p>
               <p><strong className="text-white">Opção:</strong> {item.option.label}</p>
@@ -526,7 +526,7 @@ export function StorefrontProductCard({
           </div>
         )}
 
-        <div className="mt-5 grid grid-cols-3 border-t border-white/10 pt-4 text-center text-[9px] font-semibold text-slate-300/75 sm:text-[11px]">
+        <div className="mt-3 grid grid-cols-3 border-t border-white/10 pt-3 text-center text-[9px] font-semibold text-slate-300/75 sm:text-[11px]">
           <span className="inline-flex items-center justify-center gap-1.5 border-r border-white/10"><LockKeyhole className="h-4 w-4 text-violet-300" />Compra segura</span>
           <span className="inline-flex items-center justify-center gap-1.5 border-r border-white/10"><ShieldCheck className="h-4 w-4 text-violet-300" />Suporte H2</span>
           <span className="inline-flex items-center justify-center gap-1.5"><Zap className="h-4 w-4 text-violet-300" />Entrega garantida</span>
