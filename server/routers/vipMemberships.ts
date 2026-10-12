@@ -251,7 +251,28 @@ export const vipMembershipsRouter = router({
         vm.startsAtMs,
         vm.expiresAtMs,
         vm.lastPaymentAmount,
-        vm.notes
+        vm.notes,
+        CASE WHEN EXISTS (
+          SELECT 1
+          FROM orderStatusHistory osh_any
+          WHERE RIGHT(REGEXP_REPLACE(COALESCE(osh_any.customerPhone, ''), '[^0-9]', ''), 11)
+              = RIGHT(REGEXP_REPLACE(COALESCE(c.phone, ''), '[^0-9]', ''), 11)
+        ) THEN 1 ELSE 0 END AS hasOrders,
+        CASE WHEN EXISTS (
+          SELECT 1
+          FROM orderStatusHistory osh_open
+          WHERE RIGHT(REGEXP_REPLACE(COALESCE(osh_open.customerPhone, ''), '[^0-9]', ''), 11)
+              = RIGHT(REGEXP_REPLACE(COALESCE(c.phone, ''), '[^0-9]', ''), 11)
+            AND osh_open.id = (
+              SELECT osh_latest.id
+              FROM orderStatusHistory osh_latest
+              WHERE osh_latest.registrationId = osh_open.registrationId
+                AND COALESCE(osh_latest.orderNumber, 0) = COALESCE(osh_open.orderNumber, 0)
+              ORDER BY osh_latest.createdAt DESC, osh_latest.id DESC
+              LIMIT 1
+            )
+            AND osh_open.status NOT IN ('pedido_entregue', 'entregue', 'documento_entregue', 'cancelado')
+        ) THEN 1 ELSE 0 END AS hasOpenOrders
       FROM customers c
       LEFT JOIN vipMemberships vm ON vm.customerId = c.id
       WHERE c.deletedAt IS NULL
@@ -260,7 +281,7 @@ export const vipMembershipsRouter = router({
     return rowsOf<any>(result).map((row) => {
       const membershipId = row.membershipId == null ? null : Number(row.membershipId);
       const expiresAtMs = Number(row.expiresAtMs || 0);
-      const derived = membershipId ? derivedStatus(row.membershipStatus, expiresAtMs, now) : { status: "none" as const, active: false, daysLeft: 0 };
+      const derived = membershipId ? derivedStatus(row.membershipStatus, expiresAtMs, now) : { status: "none" as const, active: false, unlimited: false, daysLeft: 0 };
       return {
         customerId: Number(row.customerId),
         name: String(row.name || ""),
@@ -270,6 +291,9 @@ export const vipMembershipsRouter = router({
         membershipId,
         status: derived.status,
         active: derived.active,
+        unlimited: derived.unlimited,
+        hasOrders: Number(row.hasOrders || 0) === 1,
+        hasOpenOrders: Number(row.hasOpenOrders || 0) === 1,
         startsAtMs: Number(row.startsAtMs || 0) || null,
         expiresAtMs: expiresAtMs || null,
         daysLeft: derived.daysLeft,
@@ -278,6 +302,138 @@ export const vipMembershipsRouter = router({
       };
     });
   }),
+
+  bulkApply: adminProcedure
+    .input(z.object({
+      customerIds: z.array(z.number().int().positive()).min(1).max(1000),
+      action: z.enum(["activate", "deactivate"]),
+      period: z.enum(["7", "15", "30", "unlimited"]).optional(),
+      notes: z.string().max(255).optional(),
+    }))
+    .mutation(async ({ input }) => {
+      await ensureVipMembershipInfrastructure();
+      const db = (await getDb()) as any;
+      if (!db) throw new TRPCError({ code: "INTERNAL_SERVER_ERROR", message: "Banco indisponível." });
+
+      const uniqueIds = Array.from(new Set(input.customerIds));
+      const wanted = new Set(uniqueIds);
+      const customerResult = await db.execute(sql`
+        SELECT id, name, phone
+        FROM customers
+        WHERE deletedAt IS NULL
+      `);
+      const customers = rowsOf<any>(customerResult)
+        .filter((row) => wanted.has(Number(row.id)))
+        .map((row) => ({ id: Number(row.id), name: String(row.name || ""), phone: normalizePhone(row.phone) }));
+      const customerMap = new Map(customers.map((row) => [row.id, row]));
+
+      const membershipResult = await db.execute(sql`
+        SELECT id, customerId, phone, status, startsAtMs, expiresAtMs, lastPaymentAmount, notes
+        FROM vipMemberships
+      `);
+      const membershipMap = new Map(rowsOf<any>(membershipResult).map((row) => [Number(row.customerId), row]));
+
+      const now = Date.now();
+      const days = input.period && input.period !== "unlimited" ? Number(input.period) : null;
+      const requestedExpiry = input.period === "unlimited"
+        ? VIP_UNLIMITED_EXPIRES_AT_MS
+        : days
+          ? now + days * 86400000
+          : null;
+
+      if (input.action === "activate" && requestedExpiry === null) {
+        throw new TRPCError({ code: "BAD_REQUEST", message: "Escolha 7, 15, 30 dias ou sem vencimento." });
+      }
+
+      let changed = 0;
+      let skipped = 0;
+      const missing: number[] = [];
+
+      for (const customerId of uniqueIds) {
+        const customer = customerMap.get(customerId);
+        if (!customer) {
+          missing.push(customerId);
+          continue;
+        }
+
+        const existing = membershipMap.get(customerId);
+
+        if (input.action === "deactivate") {
+          if (!existing || String(existing.status) === "cancelled") {
+            skipped += 1;
+            continue;
+          }
+          const previousExpiresAtMs = Number(existing.expiresAtMs || 0);
+          await db.execute(sql`
+            UPDATE vipMemberships
+            SET status='cancelled', phone=${customer.phone}, notes=${input.notes || existing.notes || null}
+            WHERE customerId=${customerId}
+          `);
+          await logHistory({
+            membershipId: Number(existing.id),
+            customerId,
+            phone: customer.phone,
+            action: "bulk_cancel",
+            previousExpiresAtMs,
+            newExpiresAtMs: previousExpiresAtMs,
+            notes: input.notes || "Desativação VIP em massa",
+          });
+          changed += 1;
+          continue;
+        }
+
+        const previousExpiresAtMs = existing ? Number(existing.expiresAtMs || 0) : null;
+        const existingActive = existing && String(existing.status) === "active" && Number(existing.expiresAtMs || 0) > now;
+        const expiresAtMs = existingActive
+          ? Math.max(Number(existing.expiresAtMs || 0), Number(requestedExpiry))
+          : Number(requestedExpiry);
+        const startsAtMs = existingActive && Number(existing.startsAtMs || 0) > 0
+          ? Number(existing.startsAtMs)
+          : now;
+
+        if (existing) {
+          await db.execute(sql`
+            UPDATE vipMemberships
+            SET phone=${customer.phone},
+                status='active',
+                startsAtMs=${startsAtMs},
+                expiresAtMs=${expiresAtMs},
+                notes=${input.notes || existing.notes || null}
+            WHERE customerId=${customerId}
+          `);
+        } else {
+          await db.execute(sql`
+            INSERT INTO vipMemberships
+              (customerId, phone, status, startsAtMs, expiresAtMs, lastPaymentAmount, notes)
+            VALUES
+              (${customerId}, ${customer.phone}, 'active', ${startsAtMs}, ${expiresAtMs}, NULL, ${input.notes || null})
+          `);
+        }
+
+        const membership = existing || await getMembershipByCustomerId(customerId);
+        await logHistory({
+          membershipId: Number(membership?.id || (await getMembershipByCustomerId(customerId))?.id),
+          customerId,
+          phone: customer.phone,
+          action: "bulk_activate",
+          days,
+          previousExpiresAtMs,
+          newExpiresAtMs: expiresAtMs,
+          notes: input.notes || (input.period === "unlimited" ? "Ativação VIP em massa sem vencimento" : `Ativação VIP em massa por ${days} dias`),
+        });
+        changed += 1;
+      }
+
+      return {
+        success: true,
+        action: input.action,
+        period: input.period ?? null,
+        requested: uniqueIds.length,
+        changed,
+        skipped,
+        missing,
+      };
+    }),
 
   history: adminProcedure
     .input(z.object({ customerId: z.number().int().positive() }))
