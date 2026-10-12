@@ -19,7 +19,7 @@ import { QuestionAudioRecorder, type AudioDraft } from "@/components/QuestionAud
 import { uploadOrderFileReliably } from "@/lib/reliableOrderUpload";
 import { isPersistedOrderResult } from "@shared/orderSubmission";
 import { getVehicleModels, getVehicleQuestionKind, VEHICLE_BRANDS, VEHICLE_COLORS, VEHICLE_YEARS } from "@shared/vehicleCatalog";
-import { applyVipBenefitToPrice } from "@shared/vipPricing";
+import { applyVipBenefitToPrice, formatBrazilMoney, parseBrazilMoney } from "@shared/vipPricing";
 import { publicSiteUrl } from "@shared/publicLinks";
 
 type Step = "home" | "registration" | "name-select" | "upload" | "pdf-upload" | "questions" | "cadastro" | "success";
