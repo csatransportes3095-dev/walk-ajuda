@@ -1,4 +1,4 @@
-import { Check, ChevronDown, ChevronUp, Crown, Flame, ShieldCheck, ShoppingCart, Tag, Timer } from "lucide-react";
+import { Check, ChevronDown, ChevronUp, CircleAlert, Crown, Flame, ShieldCheck, ShoppingCart, Tag, Timer } from "lucide-react";
 import { useEffect, useMemo, useState } from "react";
 import { requestProductManifest } from "@/lib/productManifest";
 import { useVipMembership } from "@/hooks/useVipMembership";
@@ -500,12 +500,41 @@ export function StorefrontProductCard({
             type="button"
             aria-expanded={detailsOpen}
             aria-controls={detailsId}
+            aria-label={detailsOpen ? "Ocultar detalhes do produto" : "Ver detalhes do produto"}
             onClick={() => setDetailsOpen((open) => !open)}
-            className={`group/details flex min-h-[52px] w-full items-center justify-between gap-3 rounded-2xl border px-4 py-3 text-left text-sm font-black uppercase tracking-[0.02em] backdrop-blur-xl shadow-[inset_0_1px_0_rgba(255,255,255,.16),0_8px_25px_rgba(124,58,237,.18)] transition-all duration-200 hover:brightness-110 active:scale-[0.99] focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-violet-300 ${detailsOpen ? "border-violet-300/80 bg-gradient-to-r from-violet-700/45 via-indigo-950/65 to-violet-900/50 text-white" : "border-violet-400/65 bg-gradient-to-r from-violet-800/35 via-slate-900/75 to-indigo-900/40 text-violet-100"}`}
+            className={[
+              "group/details relative isolate flex min-h-[56px] w-full items-center justify-between gap-3 overflow-hidden rounded-2xl border-2 px-3.5 py-2.5 text-left backdrop-blur-xl transition-all duration-200 hover:brightness-110 active:scale-[0.99] focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-offset-2 focus-visible:ring-offset-[#090c20] motion-reduce:transition-none",
+              detailsOpen
+                ? "border-violet-300/75 bg-gradient-to-r from-violet-700/45 via-indigo-950/65 to-violet-900/50 text-white shadow-[inset_0_1px_0_rgba(255,255,255,.16),0_8px_24px_rgba(124,58,237,.18)] focus-visible:ring-violet-300"
+                : "border-[#FF5267] bg-[linear-gradient(110deg,#380C1B,#160E2A)] text-white shadow-[inset_0_1px_0_rgba(255,255,255,.08),0_0_18px_rgba(244,63,94,.24)] focus-visible:ring-rose-300",
+            ].join(" ")}
           >
-            <span>{detailsOpen ? "Ocultar detalhes" : "Ver detalhes"}</span>
-            <span className="grid h-7 w-7 shrink-0 place-items-center rounded-lg border border-violet-300/40 bg-violet-300/10">
-              {detailsOpen ? <ChevronUp className="h-5 w-5" /> : <ChevronDown className="h-5 w-5" />}
+            {!detailsOpen && (
+              <span
+                aria-hidden="true"
+                className="pointer-events-none absolute inset-0 rounded-[14px] border-2 border-[#FF5267] shadow-[inset_0_0_16px_rgba(244,63,94,.20),0_0_18px_rgba(244,63,94,.58)] animate-pulse motion-reduce:animate-none"
+              />
+            )}
+            <span className="relative z-10 flex min-w-0 items-center gap-2.5">
+              <CircleAlert aria-hidden="true" className={detailsOpen ? "h-6 w-6 shrink-0 text-violet-300" : "h-6 w-6 shrink-0 text-[#FF5267]"} />
+              <span className="flex min-w-0 flex-col gap-0.5">
+                {!detailsOpen && (
+                  <span className="text-[10px] font-black uppercase leading-tight tracking-[0.05em] text-[#FF5267]">
+                    INFORMAÇÕES IMPORTANTES
+                  </span>
+                )}
+                <span className="text-[12px] font-black uppercase leading-tight tracking-[0.01em] text-white sm:text-sm">
+                  {detailsOpen ? "OCULTAR DETALHES" : "VER DETALHES DO PRODUTO"}
+                </span>
+                {!detailsOpen && (
+                  <span className="text-[10px] font-semibold leading-[1.2] text-rose-200/90 sm:text-[11px]">
+                    Toque para consultar garantia, prazo e informações.
+                  </span>
+                )}
+              </span>
+            </span>
+            <span className={detailsOpen ? "relative z-10 grid h-8 w-8 shrink-0 place-items-center rounded-lg border border-violet-300/40 bg-violet-300/10 text-violet-200" : "relative z-10 grid h-8 w-8 shrink-0 place-items-center rounded-lg border border-rose-400/55 bg-rose-400/10 text-[#FF5267]"}>
+              {detailsOpen ? <ChevronUp aria-hidden="true" className="h-5 w-5" /> : <ChevronDown aria-hidden="true" className="h-5 w-5" />}
             </span>
           </button>
         </div>
