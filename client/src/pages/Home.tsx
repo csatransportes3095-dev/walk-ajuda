@@ -2157,12 +2157,26 @@ export default function Home() {
     ? (vipCurrentPixCents / 100).toFixed(2).replace('.', ',')
     : cashPixValue;
 
-  const buildPostOrderWhatsappUrl = () => {
+  const getPostOrderCustomerPhotoPreviewUrls = () => {
     const od = submittedOrderData;
     const profilePhotoUrl = String(od?.profilePhotoUrl || myProfileQuery.data?.profilePhotoUrl || '').trim();
-    const profilePhotoPreviewUrl = profilePhotoUrl
-      ? publicSiteUrl(`/link/foto-cliente?src=${encodeURIComponent(profilePhotoUrl)}`)
-      : '';
+    if (!profilePhotoUrl) return { pageUrl: '', imageUrl: '' };
+    const encoded = encodeURIComponent(profilePhotoUrl);
+    return {
+      pageUrl: publicSiteUrl(`/link/foto-cliente?src=${encoded}`),
+      imageUrl: publicSiteUrl(`/link/foto-cliente-img?src=${encoded}`),
+    };
+  };
+
+  const prewarmPostOrderCustomerPhotoPreview = () => {
+    const { pageUrl, imageUrl } = getPostOrderCustomerPhotoPreviewUrls();
+    if (!pageUrl || !imageUrl) return;
+    void fetch(imageUrl, { method: 'GET', cache: 'force-cache', credentials: 'omit' }).catch(() => {});
+    void fetch(pageUrl, { method: 'GET', cache: 'force-cache', credentials: 'omit' }).catch(() => {});
+  };
+
+  const buildPostOrderWhatsappUrl = () => {
+    const { pageUrl: profilePhotoPreviewUrl } = getPostOrderCustomerPhotoPreviewUrls();
     let msg = profilePhotoPreviewUrl
       ? `${profilePhotoPreviewUrl}\n\nNOVO PEDIDO - ${SITE_NAME}`
       : `NOVO PEDIDO - ${SITE_NAME}`;
@@ -2230,6 +2244,15 @@ export default function Home() {
     return `https://wa.me/${WHATSAPP_NUMBER}?text=${encodeWhatsappMessage(msg)}`;
   };
 
+  useEffect(() => {
+    if (step !== 'success') return;
+    prewarmPostOrderCustomerPhotoPreview();
+  }, [
+    step,
+    submittedOrderData?.profilePhotoUrl,
+    myProfileQuery.data?.profilePhotoUrl,
+  ]);
+
   const persistPostOrderScheduleFlow = (links: string[], currentIndex: number) => {
     const whatsappUrl = buildPostOrderWhatsappUrl();
     try {
@@ -2247,6 +2270,7 @@ export default function Home() {
   };
 
   const startPostOrderScheduleNow = () => {
+    prewarmPostOrderCustomerPhotoPreview();
     const validLinks = automaticScheduleLinks.filter(link => scheduleTokenFromUrl(link));
     if (validLinks.length === 0) {
       setPostOrderScheduleDecision('completed');
@@ -4478,6 +4502,7 @@ export default function Home() {
 
             {/* Botão GRANDE do WhatsApp */}
             <button onClick={() => {
+              prewarmPostOrderCustomerPhotoPreview();
               const whatsappUrl = buildPostOrderWhatsappUrl();
               if (!whatsappUrl) {
                 toast.error('Não foi possível preparar a mensagem do pedido para o WhatsApp.');

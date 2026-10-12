@@ -137,6 +137,54 @@ function renderPublicPreviewTags(meta: Awaited<ReturnType<typeof getPublicPrevie
   return `<meta property="og:title" content="${title}"><meta property="og:description" content="${description}"><meta property="og:type" content="website"><meta property="og:url" content="${escapeHtml(meta.canonicalUrl)}"><meta property="og:site_name" content="H2 COLOMBIANO">${image}<meta name="twitter:card" content="summary_large_image"><meta name="twitter:title" content="${title}"><meta name="twitter:description" content="${description}">`;
 }
 
+const customerPhotoPreviewCache = new Map<string, {
+  buffer: Buffer;
+  contentType: string;
+  fetchedAt: number;
+}>();
+const CUSTOMER_PHOTO_PREVIEW_CACHE_TTL = 6 * 60 * 60 * 1000;
+const CUSTOMER_PHOTO_PREVIEW_CACHE_MAX = 200;
+
+function trimCustomerPhotoPreviewCache() {
+  if (customerPhotoPreviewCache.size <= CUSTOMER_PHOTO_PREVIEW_CACHE_MAX) return;
+  const oldest = [...customerPhotoPreviewCache.entries()]
+    .sort((a, b) => a[1].fetchedAt - b[1].fetchedAt)
+    .slice(0, customerPhotoPreviewCache.size - CUSTOMER_PHOTO_PREVIEW_CACHE_MAX);
+  for (const [key] of oldest) customerPhotoPreviewCache.delete(key);
+}
+
+async function getCustomerPhotoPreview(sourceUrl: URL) {
+  const key = sourceUrl.toString();
+  const cached = customerPhotoPreviewCache.get(key);
+  if (cached && Date.now() - cached.fetchedAt < CUSTOMER_PHOTO_PREVIEW_CACHE_TTL) {
+    return cached;
+  }
+
+  const abort = new AbortController();
+  const timeout = setTimeout(() => abort.abort(), 8_000);
+  try {
+    const upstream = await fetch(key, { redirect: "follow", signal: abort.signal });
+    if (!upstream.ok) return null;
+
+    const contentType = upstream.headers.get("content-type") || "image/jpeg";
+    if (!contentType.toLowerCase().startsWith("image/")) return null;
+
+    const declaredLength = Number(upstream.headers.get("content-length") || "0");
+    const maxPreviewBytes = 5 * 1024 * 1024;
+    if (declaredLength > maxPreviewBytes) return null;
+
+    const buffer = Buffer.from(await upstream.arrayBuffer());
+    if (buffer.length === 0 || buffer.length > maxPreviewBytes) return null;
+
+    const entry = { buffer, contentType, fetchedAt: Date.now() };
+    customerPhotoPreviewCache.set(key, entry);
+    trimCustomerPhotoPreviewCache();
+    return entry;
+  } finally {
+    clearTimeout(timeout);
+  }
+}
+
 async function startServer() {
   const app = express();
   const server = createServer(app);
@@ -381,30 +429,17 @@ async function startServer() {
       return;
     }
 
-    const abort = new AbortController();
-    const timeout = setTimeout(() => abort.abort(), 8_000);
     try {
-      const upstream = await fetch(sourceUrl.toString(), { redirect: "follow", signal: abort.signal });
-      if (!upstream.ok) { res.status(502).end(); return; }
-      const contentType = upstream.headers.get("content-type") || "image/jpeg";
-      if (!contentType.toLowerCase().startsWith("image/")) { res.status(415).end(); return; }
-
-      const declaredLength = Number(upstream.headers.get("content-length") || "0");
-      const maxPreviewBytes = 5 * 1024 * 1024;
-      if (declaredLength > maxPreviewBytes) { res.status(413).end(); return; }
-
-      const buffer = Buffer.from(await upstream.arrayBuffer());
-      if (buffer.length === 0 || buffer.length > maxPreviewBytes) { res.status(413).end(); return; }
+      const image = await getCustomerPhotoPreview(sourceUrl);
+      if (!image) { res.status(502).end(); return; }
 
       res.status(200);
-      res.set("Content-Type", contentType);
-      res.set("Content-Length", String(buffer.length));
+      res.set("Content-Type", image.contentType);
+      res.set("Content-Length", String(image.buffer.length));
       res.set("Cache-Control", "public, max-age=86400, stale-while-revalidate=604800");
-      res.end(buffer);
+      res.end(image.buffer);
     } catch {
       res.status(502).end();
-    } finally {
-      clearTimeout(timeout);
     }
   });
 

@@ -26,8 +26,16 @@ describe("foto principal do cliente no pos-pedido", () => {
   });
 
   it("proxy da imagem entrega content type e content length", () => {
-    expect(serverIndex).toContain('res.set("Content-Type", contentType)');
-    expect(serverIndex).toContain('res.set("Content-Length", String(buffer.length))');
+    expect(serverIndex).toContain('res.set("Content-Type", image.contentType)');
+    expect(serverIndex).toContain('res.set("Content-Length", String(image.buffer.length))');
     expect(serverIndex).toContain("maxPreviewBytes = 5 * 1024 * 1024");
+  });
+
+  it("preaquece e mantém a foto em cache antes do WhatsApp", () => {
+    expect(home).toContain("prewarmPostOrderCustomerPhotoPreview");
+    expect(home).toContain("fetch(imageUrl");
+    expect(serverIndex).toContain("customerPhotoPreviewCache");
+    expect(serverIndex).toContain("CUSTOMER_PHOTO_PREVIEW_CACHE_TTL");
+    expect(serverIndex).toContain("getCustomerPhotoPreview(sourceUrl)");
   });
 });
