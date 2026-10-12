@@ -1,5 +1,6 @@
 import { sql } from "drizzle-orm";
 import { getDb, getOrderStatusHistory } from "./db";
+import { isH2AdsDeliveredGroupName, isH2AdsFinalizedOrderStatus } from "../shared/h2adsOrderBrowserShortcut";
 
 export type H2AdsOrderLink = {
   instanceId: number;
@@ -203,6 +204,27 @@ export async function setH2AdsOrderLink(instanceId: number, registrationId: numb
     return;
   }
   await requireOrderSubOrder(registrationId, subOrderIndex);
+  // Não transferir instância vinculada a pedido já entregue (status ou grupo H2ADS).
+  const source = rowsFrom(await db.execute(sql`
+    SELECT l.registrationId, l.subOrderIndex, g.name AS groupName
+    FROM h2ads_order_links l
+    LEFT JOIN h2ads_instances i ON i.id = l.instanceId
+    LEFT JOIN h2ads_groups g ON g.id = i.groupId
+    WHERE l.instanceId = ${instanceId}
+    LIMIT 1
+  `))[0];
+  if (source && (Number(source.registrationId) !== registrationId || Number(source.subOrderIndex) !== subOrderIndex)) {
+    if (isH2AdsDeliveredGroupName(source.groupName)) {
+      throw new Error("Instância de pedido entregue não pode ser vinculada a outro pedido. Crie uma nova instância H2ADS.");
+    }
+    const history = await getOrderStatusHistory(Number(source.registrationId));
+    const initialStatus = await getInitialOrderStatus();
+    const segments = splitH2AdsOrderHistory(history, initialStatus);
+    const segment = segments[Number(source.subOrderIndex)];
+    if (!segment?.length || isH2AdsFinalizedOrderStatus(segment[segment.length - 1]?.status)) {
+      throw new Error("Instância de pedido finalizado não pode ser reaproveitada. Crie uma nova instância H2ADS.");
+    }
+  }
   try {
     await db.transaction(async tx => {
       await tx.execute(sql`DELETE FROM h2ads_order_links WHERE instanceId = ${instanceId}`);
