@@ -280,7 +280,7 @@ export function StorefrontProductCard({
   return (
     <article
       data-promo-active={hasActivePromotion ? "true" : "false"}
-      className={`relative flex h-full flex-col overflow-hidden rounded-[34px] bg-[radial-gradient(circle_at_50%_0%,rgba(68,104,214,.24),transparent_34%),radial-gradient(circle_at_16%_30%,rgba(124,58,237,.18),transparent_34%),linear-gradient(180deg,rgba(7,16,34,.90)_0%,rgba(5,9,22,.91)_48%,rgba(8,11,29,.94)_100%)] font-semibold backdrop-blur-2xl ring-1 ring-white/[0.06] ${hasActivePromotion ? "border border-amber-300/95 shadow-[0_0_0_1px_rgba(250,204,21,.28),0_0_36px_rgba(245,158,11,.34),0_32px_90px_rgba(0,0,0,.66)]" : "border border-violet-500/85 shadow-[0_32px_90px_rgba(0,0,0,.66),0_0_42px_rgba(124,58,237,.25)]"}`}
+      className={`relative min-w-0 flex h-full flex-col overflow-hidden rounded-[34px] bg-[radial-gradient(circle_at_50%_0%,rgba(68,104,214,.24),transparent_34%),radial-gradient(circle_at_16%_30%,rgba(124,58,237,.18),transparent_34%),linear-gradient(180deg,rgba(7,16,34,.90)_0%,rgba(5,9,22,.91)_48%,rgba(8,11,29,.94)_100%)] font-semibold backdrop-blur-2xl ring-1 ring-white/[0.06] ${hasActivePromotion ? "border border-amber-300/95 shadow-[0_0_0_1px_rgba(250,204,21,.28),0_0_36px_rgba(245,158,11,.34),0_32px_90px_rgba(0,0,0,.66)]" : "border border-violet-500/85 shadow-[0_32px_90px_rgba(0,0,0,.66),0_0_42px_rgba(124,58,237,.25)]"}`}
     >
       <span aria-hidden="true" className="pointer-events-none absolute inset-x-6 top-[1px] z-20 h-px bg-gradient-to-r from-transparent via-white/45 to-transparent opacity-80" />
       {hasActivePromotion && (
@@ -294,19 +294,19 @@ export function StorefrontProductCard({
 
       <div className="relative overflow-hidden rounded-b-[28px] border-b border-violet-300/40 bg-[radial-gradient(circle_at_90%_25%,rgba(129,140,248,.24),transparent_28%),linear-gradient(135deg,rgba(76,29,149,.28),rgba(15,23,42,.24)_55%,rgba(255,255,255,.025))] px-5 py-5 backdrop-blur-2xl shadow-[inset_0_1px_0_rgba(255,255,255,.18),inset_0_-1px_0_rgba(255,255,255,.04)] sm:px-6 sm:py-6">
         <div className="pointer-events-none absolute right-5 top-3 text-[56px] font-black tracking-tighter text-violet-300/[0.06] sm:text-[74px]">{item.category}</div>
-        <div className="relative flex items-start gap-4 pr-1">
-          <div className="grid h-[74px] w-[74px] shrink-0 place-items-center overflow-hidden rounded-[22px] border border-violet-300/55 bg-black/50 shadow-[0_0_24px_rgba(139,92,246,.45),inset_0_0_18px_rgba(255,255,255,.08)]">
-            {item.product.iconUrl ? <img src={item.product.iconUrl} alt="" loading="lazy" className="h-[58px] w-[58px] rounded-2xl object-contain" /> : <Tag className="h-7 w-7 text-violet-300" />}
+        <div className="relative flex min-w-0 items-start gap-[clamp(8px,1vw,16px)] pr-1">
+          <div className="grid h-[clamp(54px,5vw,74px)] w-[clamp(54px,5vw,74px)] shrink-0 place-items-center overflow-hidden rounded-[22px] border border-violet-300/55 bg-black/50 shadow-[0_0_24px_rgba(139,92,246,.45),inset_0_0_18px_rgba(255,255,255,.08)]">
+            {item.product.iconUrl ? <img src={item.product.iconUrl} alt="" loading="lazy" className="h-[clamp(42px,4vw,58px)] w-[clamp(42px,4vw,58px)] rounded-2xl object-contain" /> : <Tag className="h-7 w-7 text-violet-300" />}
           </div>
           <div className="min-w-0 flex-1">
-            <span className="inline-flex rounded-full border border-violet-400/60 bg-violet-500/20 px-3 py-1 text-[11px] font-black uppercase tracking-[0.14em] text-violet-200 shadow-[0_0_16px_rgba(139,92,246,.16)]">{productPill}</span>
-            <h3 className="mt-2 text-[24px] font-black leading-[1.02] tracking-tight text-white sm:text-[30px]">{item.option.label.trim()}</h3>
-            <span className="mt-3 inline-flex rounded-full border border-violet-300/40 bg-violet-500/10 px-3 py-1 text-[10px] font-black uppercase tracking-[0.13em] text-violet-200/90">TIPO DE CONTA</span>
+            <span className="inline-flex max-w-full overflow-hidden text-ellipsis whitespace-nowrap rounded-full border border-violet-400/60 bg-violet-500/20 px-[clamp(7px,0.8vw,12px)] py-1 text-[clamp(8px,0.75vw,11px)] font-black uppercase tracking-[0.10em] text-violet-200 shadow-[0_0_16px_rgba(139,92,246,.16)]">{productPill}</span>
+            <h3 className="mt-2 max-w-full overflow-hidden text-ellipsis whitespace-nowrap text-[clamp(16px,1.7vw,30px)] font-black leading-[1.02] tracking-tight text-white">{item.option.label.trim()}</h3>
+            <span className="mt-3 inline-flex max-w-full overflow-hidden text-ellipsis whitespace-nowrap rounded-full border border-violet-300/40 bg-violet-500/10 px-[clamp(7px,0.8vw,12px)] py-1 text-[clamp(8px,0.7vw,10px)] font-black uppercase tracking-[0.13em] text-violet-200/90">TIPO DE CONTA</span>
           </div>
         </div>
         <div className="relative mt-5 flex items-end justify-between gap-3">
-          <p className="max-w-[72%] text-[12px] font-bold leading-5 text-violet-100/75 sm:text-sm">{productTagline(item)}</p>
-          <div className="flex shrink-0 items-center gap-2 rounded-2xl border border-violet-400/70 bg-violet-950/55 px-3 py-2 text-violet-200 shadow-[0_0_18px_rgba(139,92,246,.20)]">
+          <p className="min-w-0 max-w-[68%] text-[clamp(9px,0.8vw,14px)] font-bold leading-[1.35] text-violet-100/75">{productTagline(item)}</p>
+          <div className="flex shrink-0 items-center gap-[clamp(4px,0.5vw,8px)] rounded-2xl border border-violet-400/70 bg-violet-950/55 px-[clamp(7px,0.8vw,12px)] py-[clamp(5px,0.55vw,8px)] text-violet-200 shadow-[0_0_18px_rgba(139,92,246,.20)]">
             <Crown className="h-5 w-5" />
             <div className="text-[9px] font-black uppercase leading-3 tracking-wide"><span className="block">Qualidade</span><span className="text-violet-100">H2</span></div>
           </div>
@@ -319,8 +319,8 @@ export function StorefrontProductCard({
             <div className="flex items-start gap-3">
               <Crown className="mt-0.5 h-7 w-7 shrink-0 fill-violet-500/30 text-violet-400" />
               <div>
-                <p className="text-[22px] font-black uppercase leading-none tracking-[-0.02em] text-white drop-shadow-[0_1px_0_rgba(255,255,255,.08)] sm:text-[24px] lg:text-[22px] xl:text-[24px]">Escolha sua garantia</p>
-                <p className="mt-2 text-[11px] font-semibold text-slate-300/80 sm:text-sm">Mais corridas, mais tempo, mais tranquilidade.</p>
+                <p className="text-[clamp(15px,1.45vw,24px)] font-black uppercase leading-none tracking-[-0.02em] text-white drop-shadow-[0_1px_0_rgba(255,255,255,.08)]">Escolha sua garantia</p>
+                <p className="mt-2 text-[clamp(9px,0.8vw,14px)] font-semibold text-slate-300/80">Mais corridas, mais tempo, mais tranquilidade.</p>
               </div>
             </div>
             <div className={`mt-5 grid w-full gap-2 sm:gap-3 ${priceModels.length === 1 ? "grid-cols-1" : priceModels.length === 2 ? "grid-cols-2" : priceModels.length === 3 ? "grid-cols-3" : "grid-cols-2 sm:grid-cols-4"}`}>
@@ -338,17 +338,17 @@ export function StorefrontProductCard({
                 const vipPreviewPrice = applyVipBenefitToPrice(model.price, model, true);
                 const vipSavings = Math.max(0, parseBrazilMoney(model.price) - parseBrazilMoney(vipPreviewPrice));
                 return (
-                  <button key={model.id} type="button" aria-pressed={isSelected} disabled={modelLocked} onClick={() => { if (!modelLocked) handlePriceModelSelect(model.id); }} style={priceModels.length === 1 ? { gridColumn: "1 / -1", width: "100%", maxWidth: "none" } : undefined} className={`relative w-full min-h-[206px] overflow-visible rounded-[18px] border bg-gradient-to-b px-2 pb-2.5 pt-6 text-center backdrop-blur-xl transition-all ${palette.border} ${palette.bg} ${palette.shadow} ${isSelected ? `-translate-y-1 ring-2 ${palette.ring}` : "hover:-translate-y-0.5"} ${modelPromotion?.active ? "outline outline-1 outline-amber-300/60" : ""} ${modelVipHighlighted ? "ring-1 ring-amber-300/70" : ""} ${modelLocked ? "cursor-not-allowed opacity-80 saturate-75" : ""}`}>
+                  <button key={model.id} type="button" aria-pressed={isSelected} disabled={modelLocked} onClick={() => { if (!modelLocked) handlePriceModelSelect(model.id); }} style={priceModels.length === 1 ? { gridColumn: "1 / -1", width: "100%", maxWidth: "none" } : undefined} className={`relative min-w-0 w-full min-h-[206px] overflow-hidden rounded-[18px] border bg-gradient-to-b px-2 pb-2.5 pt-6 text-center backdrop-blur-xl transition-all ${palette.border} ${palette.bg} ${palette.shadow} ${isSelected ? `-translate-y-1 ring-2 ${palette.ring}` : "hover:-translate-y-0.5"} ${modelPromotion?.active ? "outline outline-1 outline-amber-300/60" : ""} ${modelVipHighlighted ? "ring-1 ring-amber-300/70" : ""} ${modelLocked ? "cursor-not-allowed opacity-80 saturate-75" : ""}`}>
                     <span aria-hidden="true" className="pointer-events-none absolute inset-x-3 top-[1px] h-px bg-gradient-to-r from-transparent via-white/55 to-transparent opacity-90" />
-                    {modelVipMode !== 'all' && <span className={`absolute -right-1 -top-2 z-20 rounded-full border px-2 py-1 text-[8px] font-black uppercase shadow-lg ${modelLocked ? 'border-rose-300/70 bg-rose-950 text-rose-200' : 'border-amber-300/70 bg-amber-400 text-amber-950'}`}>{modelLocked ? '🔒 SOMENTE VIP' : `👑 ${model.vipHighlightText || 'VIP'}`}</span>}
+                    {modelVipMode !== 'all' && <span className={`absolute right-1 top-1 z-20 max-w-[46%] overflow-hidden text-ellipsis whitespace-nowrap rounded-full border px-[clamp(4px,0.45vw,8px)] py-1 text-[clamp(6px,0.5vw,8px)] font-black uppercase shadow-lg ${modelLocked ? 'border-rose-300/70 bg-rose-950 text-rose-200' : 'border-amber-300/70 bg-amber-400 text-amber-950'}`}>{modelLocked ? '🔒 SOMENTE VIP' : `👑 ${model.vipHighlightText || 'VIP'}`}</span>}
                     {index === 0 && modelHasDiscount ? (
-                      <span className="absolute left-1/2 top-0 -translate-x-1/2 -translate-y-[1px] whitespace-nowrap rounded-b-xl bg-gradient-to-r from-red-500 via-orange-500 to-amber-400 px-2.5 py-1.5 text-[8px] font-black uppercase tracking-wide text-white shadow-[0_0_16px_rgba(249,115,22,.52)] sm:text-[9px]">Oferta -{modelDiscount}%</span>
+                      <span className="absolute left-1 top-1 max-w-[52%] overflow-hidden text-ellipsis whitespace-nowrap rounded-lg bg-gradient-to-r from-red-500 via-orange-500 to-amber-400 px-[clamp(4px,0.45vw,10px)] py-1 text-[clamp(6px,0.5vw,8px)] font-black uppercase tracking-wide text-white shadow-[0_0_16px_rgba(249,115,22,.52)] sm:text-[9px]">Oferta -{modelDiscount}%</span>
                     ) : index === 1 ? (
-                      <span className="absolute left-1/2 top-0 -translate-x-1/2 -translate-y-[1px] whitespace-nowrap rounded-b-xl bg-cyan-400 px-3 py-1.5 text-[8px] font-black uppercase tracking-wide text-[#03111c] shadow-[0_0_16px_rgba(34,211,238,.38)] sm:text-[10px]">Mais escolhida</span>
+                      <span className="absolute left-1 top-1 max-w-[52%] overflow-hidden text-ellipsis whitespace-nowrap rounded-lg bg-cyan-400 px-[clamp(4px,0.45vw,12px)] py-1 text-[clamp(6px,0.5vw,8px)] font-black uppercase tracking-wide text-[#03111c] shadow-[0_0_16px_rgba(34,211,238,.38)] sm:text-[10px]">Mais escolhida</span>
                     ) : null}
                     <ShieldCheck className={`mx-auto h-6 w-6 ${palette.text}`} />
-                    <span className="mt-2.5 block text-[13px] font-black leading-4 tracking-[-0.02em] text-white sm:text-[15px] lg:text-[13px] xl:text-[14px]">{parts.title}</span>
-                    <span className={`mt-1 block text-[15px] font-black leading-none sm:text-[16px] lg:text-[15px] ${palette.text}`}>{parts.subtitle}</span>
+                    <span className="mt-2.5 block max-w-full overflow-hidden text-ellipsis whitespace-nowrap text-[clamp(9px,0.82vw,14px)] font-black leading-4 tracking-[-0.02em] text-white">{parts.title}</span>
+                    <span className={`mt-1 block max-w-full overflow-hidden text-ellipsis whitespace-nowrap text-[clamp(10px,0.92vw,16px)] font-black leading-none ${palette.text}`}>{parts.subtitle}</span>
                     <div className="mt-2.5 min-h-[68px] border-t border-white/20 pt-2">
                       {modelVipMode === 'all' ? (
                         modelHasDiscount && model.originalPrice ? (
@@ -360,16 +360,16 @@ export function StorefrontProductCard({
                               </span>
                             </div>
                             <span className={`mt-0.5 block text-[9px] font-black uppercase tracking-[0.08em] ${palette.text} sm:text-[10px]`}>POR</span>
-                            <span className={`mt-0.5 block whitespace-nowrap text-[22px] font-black leading-none tracking-[-0.03em] text-emerald-300 drop-shadow-[0_0_14px_rgba(74,222,128,.58)] sm:text-[23px] lg:text-[22px]`}>{asMoney(model.price)}</span>
+                            <span className={`mt-0.5 block max-w-full overflow-hidden text-ellipsis whitespace-nowrap text-[clamp(15px,1.3vw,23px)] font-black leading-none tracking-[-0.03em] text-emerald-300 drop-shadow-[0_0_14px_rgba(74,222,128,.58)] sm:text-[23px] lg:text-[22px]`}>{asMoney(model.price)}</span>
                             <span className="mt-1.5 inline-flex whitespace-nowrap rounded-full border border-emerald-300/70 bg-emerald-500/12 px-2.5 py-1 text-[8px] font-black uppercase tracking-[0.04em] text-emerald-200 shadow-[0_0_14px_rgba(16,185,129,.24)] sm:text-[9px] lg:text-[8px]">Economize {modelDiscount}%</span>
                           </div>
                         ) : (
-                          <span className="block text-[13px] font-black text-white sm:text-base">{asMoney(model.price)}</span>
+                          <span className="block max-w-full overflow-hidden text-ellipsis whitespace-nowrap text-[clamp(11px,1vw,16px)] font-black text-white">{asMoney(model.price)}</span>
                         )
                       ) : (
                         <>
                           <span className="block text-[8px] font-black uppercase tracking-[0.08em] text-slate-400">Valor normal</span>
-                          <span className="mt-1 block whitespace-nowrap text-[17px] font-black leading-none text-white sm:text-[18px]">{asMoney(model.price)}</span>
+                          <span className="mt-1 block max-w-full overflow-hidden text-ellipsis whitespace-nowrap text-[clamp(12px,1.05vw,18px)] font-black leading-none text-white">{asMoney(model.price)}</span>
                         </>
                       )}
                     </div>
@@ -432,7 +432,7 @@ export function StorefrontProductCard({
             ) : (
               <>
                 {effectiveOriginalPrice && <p className="text-[11px] font-extrabold text-slate-500">{asMoney(effectiveOriginalPrice)}</p>}
-                <p className={`break-words font-black leading-none tracking-tight ${effectivePrice ? "text-[30px] text-teal-300 drop-shadow-[0_0_18px_rgba(45,212,191,.35)] sm:text-[42px]" : "text-lg text-slate-400 sm:text-2xl"}`}>{effectivePrice ? asMoney(effectivePrice) : "Valor após a escolha"}</p>
+                <p className={`break-words font-black leading-none tracking-tight ${effectivePrice ? "text-[clamp(28px,3vw,42px)] text-teal-300 drop-shadow-[0_0_18px_rgba(45,212,191,.35)]" : "text-lg text-slate-400 sm:text-2xl"}`}>{effectivePrice ? asMoney(effectivePrice) : "Valor após a escolha"}</p>
               </>
             )}
             {selectedPriceModel && hasVipBenefit(selectedPriceModel) && (() => {
@@ -444,7 +444,7 @@ export function StorefrontProductCard({
                     {isVipCustomer ? '👑 Você é VIP • paga' : '👑 Cliente VIP paga'}
                   </p>
                   <div className="mt-1 flex flex-wrap items-end justify-between gap-2">
-                    <p className="text-2xl font-black text-amber-300">{asMoney(vipPrice)}</p>
+                    <p className="max-w-full overflow-hidden text-ellipsis whitespace-nowrap text-[clamp(20px,2vw,24px)] font-black text-amber-300">{asMoney(vipPrice)}</p>
                     {saving > 0 && <p className="text-[10px] font-black uppercase text-emerald-300">Você economiza {formatBrazilMoney(saving)}</p>}
                   </div>
                   {!isVipCustomer && <a href={vipHref} className="mt-3 inline-flex min-h-[40px] w-full items-center justify-center rounded-xl bg-amber-300 px-3 text-[11px] font-black uppercase text-[#251600]">Quero ser VIP</a>}
