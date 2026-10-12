@@ -454,51 +454,53 @@ export function StorefrontProductCard({
               const vipPrice = applyVipBenefitToPrice(normalPrice, selectedPriceModel, true);
               const saving = Math.max(0, parseBrazilMoney(normalPrice) - parseBrazilMoney(vipPrice));
               return (
-                <div className="mt-4 overflow-hidden rounded-2xl border border-amber-300/35 bg-[linear-gradient(180deg,rgba(15,23,42,.72),rgba(17,12,28,.86))] shadow-[inset_0_1px_0_rgba(255,255,255,.05)]">
-                  <div className="grid grid-cols-1 divide-y divide-white/10 sm:grid-cols-2 sm:divide-x sm:divide-y-0">
-                    <div className="p-3.5">
-                      <p className="text-[9px] font-black uppercase tracking-[0.14em] text-slate-400">
+                <div className="relative mt-4 overflow-hidden rounded-[22px] border border-amber-300/60 bg-[radial-gradient(circle_at_85%_0%,rgba(251,191,36,.20),transparent_44%),linear-gradient(155deg,rgba(40,19,74,.93),rgba(9,14,35,.97)_57%,rgba(29,16,45,.96))] shadow-[inset_0_1px_0_rgba(255,255,255,.16),0_0_28px_rgba(251,191,36,.17)]">
+                  <span aria-hidden="true" className="pointer-events-none absolute inset-x-6 top-0 h-px bg-gradient-to-r from-transparent via-yellow-200/95 to-transparent" />
+                  <div className="flex flex-wrap items-center justify-between gap-2 border-b border-amber-300/25 px-3.5 py-2.5">
+                    <span className="inline-flex min-w-0 items-center gap-1.5 text-[10px] font-black uppercase tracking-[0.12em] text-yellow-200">
+                      <Crown aria-hidden="true" className="h-4 w-4 shrink-0 text-yellow-300" />
+                      Benefício H2 VIP
+                    </span>
+                    <span className="rounded-full border border-yellow-300/40 bg-yellow-300/10 px-2.5 py-1 text-[9px] font-black uppercase tracking-[0.06em] text-yellow-200">
+                      Pague menos
+                    </span>
+                  </div>
+                  <div className="grid grid-cols-1 divide-y divide-amber-100/10 sm:grid-cols-2 sm:divide-x sm:divide-y-0">
+                    <div className="bg-slate-950/35 p-3.5">
+                      <p className="text-[10px] font-black uppercase tracking-[0.08em] text-slate-300">
                         {isVipCustomer ? 'VALOR NORMAL' : '👤 VOCÊ NÃO É VIP • PAGA'}
                       </p>
-                      <p className="mt-1 max-w-full overflow-hidden text-ellipsis whitespace-nowrap text-[clamp(22px,2.1vw,30px)] font-black text-white">
+                      <p className="mt-1 max-w-full overflow-hidden text-ellipsis whitespace-nowrap text-[clamp(21px,2.1vw,30px)] font-black tabular-nums text-white">
                         {asMoney(normalPrice)}
                       </p>
                     </div>
-
-                    <div className="bg-amber-400/[0.06] p-3.5">
-                      <p className="text-[9px] font-black uppercase tracking-[0.14em] text-amber-200">
+                    <div className="relative bg-[linear-gradient(125deg,rgba(251,191,36,.17),rgba(139,92,246,.10))] p-3.5 shadow-[inset_0_1px_0_rgba(255,255,255,.07)]">
+                      <p className="text-[10px] font-black uppercase tracking-[0.08em] text-yellow-100">
                         {isVipCustomer ? '👑 VOCÊ É VIP • PAGA' : '👑 COM VIP • VOCÊ PAGA'}
                       </p>
-                      <p className="mt-1 max-w-full overflow-hidden text-ellipsis whitespace-nowrap text-[clamp(22px,2.1vw,30px)] font-black text-amber-300">
+                      <p className="mt-1 max-w-full overflow-hidden text-ellipsis whitespace-nowrap text-[clamp(22px,2.1vw,31px)] font-black tabular-nums text-yellow-300 drop-shadow-[0_0_14px_rgba(250,204,21,.28)]">
                         {asMoney(vipPrice)}
                       </p>
                       {saving > 0 && (
-                        <p className="mt-1 text-[10px] font-black uppercase text-emerald-300">
+                        <p className="mt-1.5 text-[10px] font-black uppercase tracking-wide text-emerald-300">
                           {isVipCustomer ? 'Você economizou' : 'Você economiza'} {formatBrazilMoney(saving)}
                         </p>
                       )}
                     </div>
                   </div>
-
                   {!isVipCustomer && (
-                    <div className="border-t border-amber-300/20 p-3">
-                      {vipMembershipEnabled ? (
-                        <a
-                          href={vipHref}
-                          className="inline-flex min-h-[42px] w-full items-center justify-center rounded-xl bg-gradient-to-r from-amber-300 to-yellow-400 px-3 text-[11px] font-black uppercase text-[#251600] shadow-[0_8px_20px_rgba(251,191,36,.15)] transition hover:brightness-105"
-                        >
-                          Quero ser VIP
-                        </a>
-                      ) : (
-                        <a
-                          href={buildVipAdminWhatsappHref(selectedPriceModel)}
-                          target="_blank"
-                          rel="noreferrer"
-                          className="inline-flex min-h-[42px] w-full items-center justify-center gap-2 rounded-xl bg-gradient-to-r from-emerald-500 to-green-400 px-3 text-[11px] font-black uppercase text-[#052e1a] shadow-[0_8px_20px_rgba(34,197,94,.16)] transition hover:brightness-105"
-                        >
-                          Falar com ADM no WhatsApp
-                        </a>
-                      )}
+                    <div className="border-t border-amber-300/25 bg-violet-950/20 p-3">
+                      <a
+                        href={vipMembershipEnabled ? vipHref : buildVipAdminWhatsappHref(selectedPriceModel)}
+                        target={vipMembershipEnabled ? undefined : "_blank"}
+                        rel={vipMembershipEnabled ? undefined : "noopener noreferrer"}
+                        aria-label={vipMembershipEnabled ? "Quero ser VIP" : "Quero ser VIP pelo WhatsApp"}
+                        className="group/vip inline-flex min-h-[52px] w-full items-center justify-center gap-2 rounded-2xl border border-yellow-100/65 bg-gradient-to-r from-[#fde68a] via-[#facc15] to-[#f59e0b] px-3 py-3 text-[13px] font-black uppercase tracking-[0.05em] text-[#291700] shadow-[inset_0_1px_0_rgba(255,255,255,.68),0_10px_26px_rgba(250,204,21,.30)] transition-all duration-200 hover:-translate-y-0.5 hover:brightness-110 hover:shadow-[0_14px_30px_rgba(250,204,21,.42)] focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-yellow-100 focus-visible:ring-offset-2 focus-visible:ring-offset-[#180f2c] active:translate-y-0 active:scale-[0.99]"
+                      >
+                        <Crown aria-hidden="true" className="h-5 w-5 shrink-0" />
+                        <span>Quero ser VIP</span>
+                        <span aria-hidden="true" className="text-lg leading-none transition-transform group-hover/vip:translate-x-1">→</span>
+                      </a>
                     </div>
                   )}
                 </div>
