@@ -19,7 +19,7 @@ import { QuestionAudioRecorder, type AudioDraft } from "@/components/QuestionAud
 import { uploadOrderFileReliably } from "@/lib/reliableOrderUpload";
 import { isPersistedOrderResult } from "@shared/orderSubmission";
 import { getVehicleModels, getVehicleQuestionKind, VEHICLE_BRANDS, VEHICLE_COLORS, VEHICLE_YEARS } from "@shared/vehicleCatalog";
-import { applyVipBenefitToPrice } from "@shared/vipPricing";
+import { applyVipBenefitToPrice, formatBrazilMoney, parseBrazilMoney } from "@shared/vipPricing";
 import { publicSiteUrl } from "@shared/publicLinks";
 
 type Step = "home" | "registration" | "name-select" | "upload" | "pdf-upload" | "questions" | "cadastro" | "success";
@@ -1152,7 +1152,10 @@ export default function Home() {
   const hasDynamicDocs = dynamicDocs.length > 0;
 
   const { isVipCustomer } = useVipMembership();
+  // Valor efetivo usado na cobrança/pedido: aplica benefício VIP quando o cliente está ativo.
   const getPriceModelServiceValue = (model: OptionPriceModel | null | undefined): string => model ? applyVipBenefitToPrice(model.price, model, isVipCustomer) : '';
+  // Valor normal de referência: nunca recebe desconto VIP.
+  const getPriceModelNormalValue = (model: OptionPriceModel | null | undefined): string => model ? String(model.price || '') : '';
 
   // vip-checkout-reset: troca de produto/preço/cupom invalida qualquer reserva antiga.
   useEffect(() => {
@@ -1163,6 +1166,13 @@ export default function Home() {
   // Obter valor atual (usa benefício VIP do Modelo/Categoria quando configurado)
   const getCurrentServiceValue = (): string => {
     if (selectedPriceModel) return getPriceModelServiceValue(selectedPriceModel);
+    if (selectedTier) return selectedTier.price;
+    if (selectedOption) return selectedOption.price;
+    return "Consulte";
+  };
+
+  const getCurrentNormalServiceValue = (): string => {
+    if (selectedPriceModel) return getPriceModelNormalValue(selectedPriceModel);
     if (selectedTier) return selectedTier.price;
     if (selectedOption) return selectedOption.price;
     return "Consulte";
@@ -2130,24 +2140,44 @@ export default function Home() {
     });
   }, [flowOrigin, resetAllStates]);
 
+  // O valor efetivo continua sendo a fonte da cobrança. O valor normal existe apenas
+  // como referência para mostrar corretamente o desconto VIP ao cliente.
   const originalValue = getCurrentServiceValue();
+  const normalValue = getCurrentNormalServiceValue();
+  const normalValueNumber = parseBrazilMoney(normalValue);
+  const vipEffectiveValueNumber = parseBrazilMoney(originalValue);
+  const vipDiscountValue = isVipCustomer
+    ? Math.max(0, normalValueNumber - vipEffectiveValueNumber)
+    : 0;
+  const hasVipPriceDiscount = vipDiscountValue > 0;
+
   const hasResellerDiscount = getResellerDiscountAmount() > 0;
   const finalValue = (couponDiscount || hasResellerDiscount) ? calculateDiscountedValue(originalValue) : originalValue;
 
-  // Calcular valor total do carrinho (quando há múltiplos itens)
-  const cartTotal = useMemo(() => {
-    if (cart.length <= 1) return null;
-    let total = 0;
+  // Calcular totais do carrinho: normal para referência e efetivo VIP para cobrança.
+  const cartTotals = useMemo(() => {
+    if (cart.length <= 1) return { normal: null as number | null, effective: null as number | null };
+    let normal = 0;
+    let effective = 0;
     for (const item of cart) {
-      const price = getPriceModelServiceValue(item.priceModel) || item.option?.price || '0';
-      const num = parseFloat(price.replace('R$ ', '').replace('.', '').replace(',', '.'));
-      if (!isNaN(num)) total += num;
+      const normalPrice = getPriceModelNormalValue(item.priceModel) || item.option?.price || '0';
+      const effectivePrice = getPriceModelServiceValue(item.priceModel) || item.option?.price || '0';
+      normal += parseBrazilMoney(normalPrice);
+      effective += parseBrazilMoney(effectivePrice);
     }
-    return total;
-  }, [cart]);
+    return { normal, effective };
+  }, [cart, isVipCustomer]);
 
-  const cartTotalFormatted = cartTotal !== null ? `R$ ${cartTotal.toFixed(2).replace('.', ',')}` : null;
+  const cartTotal = cartTotals.effective;
+  const cartNormalTotal = cartTotals.normal;
+  const cartVipDiscountValue = isVipCustomer && cartNormalTotal !== null && cartTotal !== null
+    ? Math.max(0, cartNormalTotal - cartTotal)
+    : 0;
+  const cartHasVipPriceDiscount = cartVipDiscountValue > 0;
+  const cartNormalTotalFormatted = cartNormalTotal !== null ? formatBrazilMoney(cartNormalTotal) : null;
+  const cartTotalFormatted = cartTotal !== null ? formatBrazilMoney(cartTotal) : null;
   const cartTotalWithDiscount = (cartTotal !== null && (couponDiscount || hasResellerDiscount)) ? calculateDiscountedValue(cartTotalFormatted!) : cartTotalFormatted;
+
   // Valor a exibir no PIX: à vista mantém o cálculo atual; Parcelamento VIP cobra a entrada quando configurada.
   const cashPixValue = cart.length > 1 ? ((couponDiscount || hasResellerDiscount) ? cartTotalWithDiscount : cartTotalFormatted) : ((couponDiscount || hasResellerDiscount) ? finalValue : originalValue);
   const vipEntryCents = Number(vipInstallmentSelection.quote?.quote?.firstInstallmentAmountCents || 0);
@@ -4160,13 +4190,34 @@ export default function Home() {
                   {vipInstallmentSelection.mode === 'vip_installment' && <p className="text-violet-300 text-xs font-black">{vipEntryCents > 0 ? 'ENTRADA' : `PARCELA 1 DE ${vipInstallmentSelection.installmentCount}`}</p>}
                 </div>
                 {/* Valor + logo PIX */}
-                <div className="bg-black/60 border border-blue-500/30 rounded-xl p-4 mb-3 flex items-center justify-between">
-                  <div>
-                    <p className="text-white/60 text-xs tracking-widest mb-1">{vipInstallmentSelection.mode === 'vip_installment' && vipEntryCents > 0 ? 'VALOR DA ENTRADA' : 'VALOR A PAGAR'}</p>
-                    <p className="text-blue-300 font-black text-3xl drop-shadow-[0_0_10px_#3b82f6]">R$ {pixValue}</p>
-                  </div>
+                <div className="bg-black/60 border border-blue-500/30 rounded-xl p-4 mb-3">
+                  {vipInstallmentSelection.mode !== 'vip_installment' && (hasVipPriceDiscount || cartHasVipPriceDiscount) && (
+                    <div className="mb-3 space-y-2 rounded-xl border border-amber-400/25 bg-amber-500/[0.07] p-3">
+                      <div className="flex items-center justify-between gap-3">
+                        <span className="text-white/60 text-xs font-bold uppercase tracking-wide">Valor normal</span>
+                        <span className="text-white text-sm font-black">
+                          {cart.length > 1 ? (cartNormalTotalFormatted || 'R$ 0,00') : formatBrazilMoney(normalValueNumber)}
+                        </span>
+                      </div>
+                      <div className="flex items-center justify-between gap-3">
+                        <span className="text-amber-200 text-xs font-black uppercase tracking-wide">👑 Desconto VIP</span>
+                        <span className="text-emerald-300 text-sm font-black">
+                          -{formatBrazilMoney(cart.length > 1 ? cartVipDiscountValue : vipDiscountValue)}
+                        </span>
+                      </div>
+                    </div>
+                  )}
+                  <div className="flex items-center justify-between gap-3">
+                    <div>
+                      <p className="text-white/60 text-xs tracking-widest mb-1">{vipInstallmentSelection.mode === 'vip_installment' && vipEntryCents > 0 ? 'VALOR DA ENTRADA' : 'VALOR A PAGAR'}</p>
+                      <p className="text-blue-300 font-black text-3xl drop-shadow-[0_0_10px_#3b82f6]">R$ {pixValue}</p>
+                      {vipInstallmentSelection.mode !== 'vip_installment' && (hasVipPriceDiscount || cartHasVipPriceDiscount) && (
+                        <p className="mt-1 text-[10px] font-black uppercase tracking-wide text-emerald-300">Benefício VIP aplicado</p>
+                      )}
+                    </div>
                   <div className="pix-logo">
                     <svg width="32" height="32" viewBox="0 0 24 24" fill="#38bdf8"><path d="M12 2l3.09 6.26L22 9.27l-5 4.87 1.18 6.88L12 17.77l-6.18 3.25L7 14.14 2 9.27l6.91-1.01L12 2z"/></svg>
+                    </div>
                   </div>
                 </div>
                 {/* Chave PIX */}
