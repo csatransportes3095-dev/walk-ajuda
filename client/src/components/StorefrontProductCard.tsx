@@ -415,7 +415,7 @@ export function StorefrontProductCard({
             <span className="ml-auto rounded-full border border-violet-300/35 bg-white/[0.04] px-3 py-1 text-[9px] font-black uppercase text-violet-100 sm:text-[10px]">CONTA {categoryLabel}</span>
           </div>
           <p className="relative mt-3 text-[14px] font-black uppercase leading-5 tracking-[0.02em] text-white sm:text-[17px]">{selectedParts ? `${item.option.label} • ${selectedParts.title} • ${selectedParts.subtitle}` : `${item.option.label} • escolha uma garantia`}</p>
-          <div className="relative mt-3 border-t border-white/20 pt-3>
+          <div className="relative mt-3 border-t border-white/20 pt-3">
             {discount > 0 && !(selectedPriceModel && modelHasVipPrice) ? (
               <div className="grid grid-cols-[minmax(0,1fr)_108px] items-center gap-2.5 sm:grid-cols-[minmax(0,1fr)_116px] sm:gap-3 lg:grid-cols-[minmax(0,1fr)_108px] lg:gap-2.5 xl:grid-cols-[minmax(0,1fr)_116px] xl:gap-3">
                 <div className="min-w-0">
@@ -475,7 +475,7 @@ export function StorefrontProductCard({
                         {asMoney(vipPrice)}
                       </p>
                       {saving > 0 && (
-                        <p className="mt-1 text-[10px] font-black uppercase tracking-wide text-emerald-300>
+                        <p className="mt-1 text-[10px] font-black uppercase tracking-wide text-emerald-300">
                           {isVipCustomer ? 'Você economizou' : 'Você economiza'} {formatBrazilMoney(saving)}
                         </p>
                       )}
@@ -501,13 +501,13 @@ export function StorefrontProductCard({
         </div>
       </div>
 
-      <div className="mt-auto px-4 pb-4 sm:px-4>
-        <div className="grid grid-cols-[1.22fr_.9fr] gap-2>
+      <div className="mt-auto px-4 pb-4 sm:px-4">
+        <div className="grid grid-cols-[1.22fr_.9fr] gap-2">
           <button type="button" disabled={requiresPriceModelSelection && !selectedPriceModel} onClick={() => void runProtectedAction("buy")} className="inline-flex min-h-[50px] items-center justify-center gap-3 rounded-[20px] border border-white bg-gradient-to-b from-white to-slate-200 px-3 text-[16px] font-black text-[#090b21] lg:text-[14px] xl:text-[15px] shadow-[0_12px_32px_rgba(255,255,255,.18)] transition-all hover:brightness-105 active:scale-[0.98] disabled:cursor-not-allowed disabled:opacity-35 sm:text-lg"><ShoppingCart className="h-6 w-6" /> Comprar agora <span className="text-2xl leading-none">→</span></button>
           <button type="button" disabled={requiresPriceModelSelection && !selectedPriceModel} onClick={() => void runProtectedAction("cart")} className="inline-flex min-h-[50px] items-center justify-center gap-2 rounded-[20px] border border-violet-400/90 bg-gradient-to-br from-violet-900/95 to-purple-950/85 px-3 text-[16px] font-black text-violet-100 lg:text-[14px] xl:text-[15px] shadow-[0_12px_32px_rgba(124,58,237,.22),inset_0_1px_0_rgba(255,255,255,.08)] transition-all hover:brightness-125 active:scale-[0.98] disabled:cursor-not-allowed disabled:opacity-35 sm:text-lg"><ShoppingCart className="h-5 w-5" /> Carrinho</button>
         </div>
 
-        <div className="mt-3 flex items-center gap-3>
+        <div className="mt-3 flex items-center gap-3">
           <div className="h-px flex-1 bg-white/15" />
           <button type="button" aria-expanded={detailsOpen} aria-controls={detailsId} onClick={() => setDetailsOpen((open) => !open)} className="inline-flex items-center justify-center gap-2 text-xs font-bold text-white/90 transition-colors hover:text-white sm:text-sm">{detailsOpen ? "Ocultar detalhes" : "Ver detalhes"}{detailsOpen ? <ChevronUp className="h-4 w-4" /> : <ChevronDown className="h-4 w-4" />}</button>
           <div className="h-px flex-1 bg-white/15" />
