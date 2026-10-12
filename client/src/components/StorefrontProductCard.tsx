@@ -1,6 +1,7 @@
 import { Check, ChevronDown, ChevronUp, Crown, Flame, LockKeyhole, ShieldCheck, ShoppingCart, Tag, Timer, Zap } from "lucide-react";
 import { useEffect, useMemo, useState } from "react";
 import { requestProductManifest } from "@/lib/productManifest";
+import { trpc } from "@/lib/trpc";
 import { useVipMembership } from "@/hooks/useVipMembership";
 import { applyVipBenefitToPrice, formatBrazilMoney, hasVipBenefit, isVipHighlighted, isVipOnlyLocked, normalizeVipAccessMode, parseBrazilMoney, vipBenefitText } from "@shared/vipPricing";
 
@@ -253,6 +254,19 @@ export function StorefrontProductCard({
   const categoryLabel = item.category.toUpperCase();
   const productPill = item.product.name.toUpperCase();
   const vipHref = typeof window !== "undefined" ? `/vip?returnTo=${encodeURIComponent(window.location.pathname + window.location.search)}` : "/vip";
+  const vipSettingsQuery = trpc.settings.getAll.useQuery(undefined, { staleTime: 60_000 });
+  const vipMembershipEnabled = vipSettingsQuery.data?.vip_membership_enabled !== "0";
+  const vipWhatsappNumber = String(vipSettingsQuery.data?.whatsapp_number || "5511978307371").replace(/\D/g, "");
+  const buildVipAdminWhatsappHref = (model: StorefrontPriceModel | null) => {
+    const interest = model?.label || item.option.label;
+    const message = [
+      "Olá! Tenho interesse em contratar o H2 VIP.",
+      "A contratação VIP está indisponível no site no momento.",
+      `Produto de interesse: ${item.product.name} — ${interest}`,
+      "Gostaria de falar com um ADM para verificar a liberação.",
+    ].join("\n");
+    return `https://wa.me/${vipWhatsappNumber}?text=${encodeURIComponent(message)}`;
+  };
   const vipSavingsValues = priceModels.map((model) => Math.max(0, parseBrazilMoney(model.price) - parseBrazilMoney(applyVipBenefitToPrice(model.price, model, true))));
   const maxVipSavings = Math.max(0, ...vipSavingsValues);
 
@@ -468,12 +482,23 @@ export function StorefrontProductCard({
 
                   {!isVipCustomer && (
                     <div className="border-t border-amber-300/20 p-3">
-                      <a
-                        href={vipHref}
-                        className="inline-flex min-h-[42px] w-full items-center justify-center rounded-xl bg-gradient-to-r from-amber-300 to-yellow-400 px-3 text-[11px] font-black uppercase text-[#251600] shadow-[0_8px_20px_rgba(251,191,36,.15)] transition hover:brightness-105"
-                      >
-                        Quero ser VIP
-                      </a>
+                      {vipMembershipEnabled ? (
+                        <a
+                          href={vipHref}
+                          className="inline-flex min-h-[42px] w-full items-center justify-center rounded-xl bg-gradient-to-r from-amber-300 to-yellow-400 px-3 text-[11px] font-black uppercase text-[#251600] shadow-[0_8px_20px_rgba(251,191,36,.15)] transition hover:brightness-105"
+                        >
+                          Quero ser VIP
+                        </a>
+                      ) : (
+                        <a
+                          href={buildVipAdminWhatsappHref(selectedPriceModel)}
+                          target="_blank"
+                          rel="noreferrer"
+                          className="inline-flex min-h-[42px] w-full items-center justify-center gap-2 rounded-xl bg-gradient-to-r from-emerald-500 to-green-400 px-3 text-[11px] font-black uppercase text-[#052e1a] shadow-[0_8px_20px_rgba(34,197,94,.16)] transition hover:brightness-105"
+                        >
+                          Falar com ADM no WhatsApp
+                        </a>
+                      )}
                     </div>
                   )}
                 </div>
