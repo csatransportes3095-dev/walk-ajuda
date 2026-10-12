@@ -221,7 +221,58 @@ export default function AdminVip() {
   <div className="rounded-2xl border border-rose-300/25 bg-rose-400/10 p-4"><p className="text-[10px] font-black uppercase tracking-wide text-rose-200">Expirados</p><p className="mt-1 text-3xl font-black text-rose-300">{stats.expired}</p></div>
   <div className="rounded-2xl border border-violet-300/25 bg-violet-400/10 p-4"><p className="text-[10px] font-black uppercase tracking-wide text-violet-200">Cadastros</p><p className="mt-1 text-3xl font-black text-violet-300">{stats.total}</p></div>
 </div>
-<div className="border-y border-white/10 bg-black/20 p-4 sm:p-5"><div className="relative"><Search className="absolute left-4 top-1/2 h-5 w-5 -translate-y-1/2 text-slate-500" /><input value={search} onChange={(e) => setSearch(e.target.value)} placeholder="Buscar cliente por nome, telefone ou número de cadastro" className="w-full rounded-2xl border border-white/10 bg-slate-950/75 py-3 pl-12 pr-4 text-sm font-semibold text-white outline-none focus:border-amber-300/60" /></div><div className="mt-3 flex flex-wrap gap-2">{([['all','Todos'],['active','VIP ativos'],['expired','Expirados'],['none','Sem VIP'],['cancelled','Cancelados']] as const).map(([key,label]) => <button key={key} onClick={() => setFilter(key)} className={`rounded-full border px-3 py-2 text-[10px] font-black uppercase ${filter === key ? 'border-amber-300 bg-amber-300 text-[#271700]' : 'border-white/10 bg-white/5 text-slate-300'}`}>{label}</button>)}</div></div>
+<div className="border-y border-white/10 bg-black/20 p-4 sm:p-5">
+  <div className="relative">
+    <Search className="absolute left-4 top-1/2 h-5 w-5 -translate-y-1/2 text-slate-500" />
+    <input
+      value={search}
+      onChange={(e) => { setSearch(e.target.value); setSelectedIds(new Set()); }}
+      placeholder="Buscar cliente por nome, telefone ou número de cadastro"
+      className="w-full rounded-2xl border border-white/10 bg-slate-950/75 py-3 pl-12 pr-4 text-sm font-semibold text-white outline-none focus:border-amber-300/60"
+    />
+  </div>
+  <div className="mt-3 flex flex-wrap gap-2">
+    {([['all','Todos'],['active','VIP ativos'],['expired','Expirados'],['none','Sem VIP'],['cancelled','Cancelados']] as const).map(([key,label]) => (
+      <button key={key} onClick={() => { setFilter(key); setSelectedIds(new Set()); }} className={`rounded-full border px-3 py-2 text-[10px] font-black uppercase ${filter === key ? 'border-amber-300 bg-amber-300 text-[#271700]' : 'border-white/10 bg-white/5 text-slate-300'}`}>{label}</button>
+    ))}
+  </div>
+
+  <div className="mt-4 rounded-2xl border border-cyan-400/20 bg-cyan-500/[0.04] p-4">
+    <div className="flex flex-wrap items-center justify-between gap-2">
+      <div className="flex items-center gap-2 text-cyan-200"><Users className="h-4 w-4" /><p className="text-xs font-black uppercase tracking-wide">Filtro por pedidos</p></div>
+      <span className="text-[10px] font-bold text-slate-400">{filtered.length} cliente(s) no filtro</span>
+    </div>
+    <div className="mt-3 flex flex-wrap gap-2">
+      {([['all','Todos clientes'],['new','Pedidos novos'],['with','Todos com pedidos'],['without','Sem pedidos']] as const).map(([key,label]) => (
+        <button key={key} onClick={() => { setOrderFilter(key); setSelectedIds(new Set()); }} className={`rounded-full border px-3 py-2 text-[10px] font-black uppercase ${orderFilter === key ? 'border-cyan-300 bg-cyan-300 text-slate-950' : 'border-cyan-400/20 bg-cyan-500/5 text-cyan-100'}`}>{label}</button>
+      ))}
+    </div>
+  </div>
+
+  <div className="mt-4 rounded-2xl border border-amber-300/25 bg-amber-400/[0.05] p-4">
+    <div className="flex flex-wrap items-center justify-between gap-3">
+      <button type="button" onClick={selectVisible} disabled={!visibleIds.length || bulkMut.isPending} className="inline-flex items-center gap-2 rounded-xl border border-white/15 bg-white/5 px-3 py-2 text-xs font-black text-white disabled:opacity-40">
+        {allVisibleSelected ? <CheckSquare className="h-4 w-4 text-amber-300" /> : <Square className="h-4 w-4" />}
+        {allVisibleSelected ? 'Desmarcar filtrados' : 'Selecionar filtrados'}
+      </button>
+      <p className="text-xs font-black text-amber-200">{selectedIds.size} selecionado(s)</p>
+    </div>
+
+    <div className="mt-4">
+      <p className="text-[10px] font-black uppercase tracking-wide text-slate-400">Período para ativação em massa</p>
+      <div className="mt-2 grid grid-cols-2 gap-2 sm:grid-cols-4">
+        {([['7','7 dias'],['15','15 dias'],['30','30 dias'],['unlimited','∞ Sem vencimento']] as const).map(([key,label]) => (
+          <button key={key} type="button" onClick={() => setBulkPeriod(key)} className={`rounded-xl border px-3 py-2.5 text-xs font-black uppercase ${bulkPeriod === key ? 'border-amber-300 bg-amber-300 text-[#251600]' : 'border-white/10 bg-white/5 text-slate-300'}`}>{label}</button>
+        ))}
+      </div>
+    </div>
+
+    <div className="mt-4 grid gap-2 sm:grid-cols-2">
+      <button type="button" onClick={() => runBulk("activate")} disabled={!selectedIds.size || bulkMut.isPending} className="min-h-[46px] rounded-xl bg-gradient-to-r from-amber-300 to-yellow-400 px-4 text-xs font-black uppercase text-[#251600] disabled:opacity-40">{bulkMut.isPending ? 'Processando...' : '👑 Ativar VIP selecionados'}</button>
+      <button type="button" onClick={() => runBulk("deactivate")} disabled={!selectedIds.size || bulkMut.isPending} className="min-h-[46px] rounded-xl border border-rose-400/35 bg-rose-500/10 px-4 text-xs font-black uppercase text-rose-200 disabled:opacity-40">Desativar VIP selecionados</button>
+    </div>
+  </div>
+</div>
 <div className="grid gap-3 p-4 sm:p-6">
   {directoryQuery.isLoading ? <div className="p-6 text-center text-slate-400">Carregando clientes...</div> : filtered.length === 0 ? <div className="p-6 text-center text-slate-500">Nenhum cliente encontrado.</div> : filtered.map((c) => (
     <article key={c.customerId} className={`rounded-2xl border p-4 ${c.active ? 'border-amber-300/55 bg-[linear-gradient(135deg,rgba(120,53,15,.32),rgba(49,25,88,.32))] shadow-[0_0_28px_rgba(251,191,36,.10)]' : c.status === 'expired' ? 'border-rose-400/25 bg-rose-500/[0.04]' : 'border-white/10 bg-white/[0.025]'}`}>
