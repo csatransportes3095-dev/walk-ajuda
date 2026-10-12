@@ -40,6 +40,7 @@ type Customer = {
   vipStartedAt?: number | null;
   vipExpiresAt?: number | null;
   vipDaysLeft?: number;
+  vipUnlimited?: boolean;
 };
 
 // Apenas os objetos R2 recuperados precisam ignorar a cópia antiga marcada como imutável no navegador.
@@ -1323,7 +1324,7 @@ export default function AdminCustomers() {
                     </p>
                     {c.vipActive && (
   <a href={`/admin/vip?phone=${encodeURIComponent(c.phone.replace(/\D/g, ''))}`} onClick={(event) => event.stopPropagation()} className="mt-1 inline-flex items-center gap-1.5 rounded-full border border-amber-100 bg-gradient-to-r from-amber-300 via-yellow-300 to-amber-400 px-2.5 py-1 text-[9px] font-black uppercase tracking-wide text-amber-950 shadow-[0_0_20px_rgba(250,204,21,.48)] animate-pulse" title="Abrir gestão deste cliente VIP">
-    <Crown className="h-3.5 w-3.5 fill-current" /> VIP ATIVO • {c.vipDaysLeft || 0} DIAS
+    <Crown className="h-3.5 w-3.5 fill-current" /> VIP ATIVO • {c.vipUnlimited ? 'SEM VENCIMENTO' : `${c.vipDaysLeft || 0} DIAS`}
   </a>
 )}
 {/* Badge bloqueado */}
