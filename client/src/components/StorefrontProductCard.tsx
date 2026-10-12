@@ -311,7 +311,7 @@ export function StorefrontProductCard({
             <span className="mt-2 inline-flex max-w-full overflow-hidden text-ellipsis whitespace-nowrap rounded-full border border-violet-300/40 bg-violet-500/10 px-[clamp(7px,0.8vw,12px)] py-1 text-[clamp(8px,0.7vw,10px)] font-black uppercase tracking-[0.13em] text-violet-200/90">TIPO DE CONTA</span>
           </div>
         </div>
-        <div className="relative mt-3 flex items-end justify-between gap-2>
+        <div className="relative mt-3 flex items-end justify-between gap-2">
           <p className="min-w-0 max-w-[68%] text-[clamp(9px,0.8vw,14px)] font-bold leading-[1.35] text-violet-100/75">{productTagline(item)}</p>
           <div className="flex shrink-0 items-center gap-[clamp(4px,0.5vw,8px)] rounded-2xl border border-violet-400/70 bg-violet-950/55 px-[clamp(7px,0.8vw,12px)] py-[clamp(5px,0.55vw,8px)] text-violet-200 shadow-[0_0_18px_rgba(139,92,246,.20)]">
             <Crown className="h-5 w-5" />
