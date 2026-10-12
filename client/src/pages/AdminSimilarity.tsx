@@ -1500,28 +1500,57 @@ export default function AdminSimilarity() {
                     </div>
 
                     {result.regions && (
-                      <div className="grid grid-cols-2 gap-px border-t border-white/10 bg-white/10 sm:grid-cols-3 lg:grid-cols-4 xl:grid-cols-5 2xl:grid-cols-7">
-                        {[
-                          ["Global", result.regions.global],
-                          ["Olhos", result.regions.eyes],
-                          ["Sobrancelhas", result.regions.brows],
-                          ["Nariz", result.regions.nose],
-                          ["Oval facial", result.regions.oval],
-                          ["Bochechas", result.regions.cheeks],
-                          ["Maxilar", result.regions.jaw],
-                          ["Queixo", result.regions.chin],
-                          ["Boca", result.regions.mouth],
-                          ["Proporções", result.regions.proportions],
-                          ["Medidas exatas", result.regions.measurements],
-                          ["Simetria", result.regions.symmetry],
-                          ["Estrutura", result.regions.structure],
-                        ].map(([label, value]) => (
-                          <div key={String(label)} className="bg-[#0c0d14] px-3 py-3 text-center">
-                            <p className="text-[10px] uppercase text-slate-500">{label}</p>
-                            <p className="mt-1 text-sm font-black">{Number(value).toFixed(1)}%</p>
-                          </div>
-                        ))}
-                      </div>
+                      <section className="border-t border-cyan-400/15 bg-[#0a101b] px-3 py-4 sm:px-4" aria-label="Relatório visual de traços faciais">
+                        <h3 className="text-xs font-black uppercase tracking-[0.12em] text-cyan-300">Relatório visual de traços</h3>
+                        <p className="mb-3 mt-1 text-xs leading-5 text-slate-400">
+                          Os índices abaixo já eram calculados pelo H2 Face. Descrevem traços visuais e proporções,
+                          não representam probabilidade de identidade ou aprovação para autenticação.
+                        </p>
+                        <div className="grid gap-3 xl:grid-cols-2">
+                          {[
+                            {
+                              title: "Traços faciais",
+                              description: "Características e contorno do rosto",
+                              values: [
+                                ["Olhos", result.regions.eyes],
+                                ["Sobrancelhas", result.regions.brows],
+                                ["Nariz", result.regions.nose],
+                                ["Boca", result.regions.mouth],
+                                ["Oval facial", result.regions.oval],
+                                ["Bochechas", result.regions.cheeks],
+                                ["Maxilar", result.regions.jaw],
+                                ["Queixo", result.regions.chin],
+                              ],
+                            },
+                            {
+                              title: "Conjunto e proporções",
+                              description: "Indicadores auxiliares de geometria facial",
+                              values: [
+                                ["Global", result.regions.global],
+                                ["Proporções", result.regions.proportions],
+                                ["Medidas", result.regions.measurements],
+                                ["Simetria", result.regions.symmetry],
+                                ["Estrutura", result.regions.structure],
+                              ],
+                            },
+                          ].map((group) => (
+                            <div key={group.title} className="overflow-hidden rounded-xl border border-white/10 bg-black/20">
+                              <div className="border-b border-white/10 px-3 py-2.5">
+                                <h4 className="text-xs font-black uppercase text-slate-100">{group.title}</h4>
+                                <p className="mt-0.5 text-[11px] text-slate-400">{group.description}</p>
+                              </div>
+                              <div className="grid grid-cols-2 gap-px bg-white/10 sm:grid-cols-3">
+                                {group.values.map(([label, value]) => (
+                                  <div key={String(label)} className="bg-[#0c111b] px-2.5 py-3 text-center">
+                                    <p className="text-[10px] uppercase text-slate-400">{label}</p>
+                                    <p className="mt-1 text-sm font-black tabular-nums text-white">{Number(value).toFixed(1)}%</p>
+                                  </div>
+                                ))}
+                              </div>
+                            </div>
+                          ))}
+                        </div>
+                      </section>
                     )}
                   </article>
                 ))}
