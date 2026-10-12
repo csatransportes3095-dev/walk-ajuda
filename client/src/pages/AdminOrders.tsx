@@ -732,7 +732,7 @@ export default function AdminOrders() {
   const [deliveredPhoneFilter, setDeliveredPhoneFilter] = useState("");
   const [todosSortKey, setTodosSortKey] = useState<FolderSortKey>("date");
   const [todosSortDir, setTodosSortDir] = useState<FolderSortDir>("desc");
-  const [todosQuickFilter, setTodosQuickFilter] = useState<"all" | "sem_status" | "agendamento_confirmado" | "agendamento" | "em_analise" | "foto_aprovada" | "doc_veiculo_teste" | "novo" | "aguardando_ativa" | "conta_ativa">("all");
+  const [todosQuickFilter, setTodosQuickFilter] = useState<"all" | "h2_novo" | "sem_status" | "agendamento_confirmado" | "agendamento" | "em_analise" | "foto_aprovada" | "doc_veiculo_teste" | "novo" | "aguardando_ativa" | "conta_ativa">("all");
   // Estado para expandir cards individuais de ARQUIVO e RG/CNH
   const [expandedArchivedId, setExpandedArchivedId] = useState<string | null>(null);
   const [expandedRgCnhId, setExpandedRgCnhId] = useState<string | null>(null);
@@ -1088,6 +1088,18 @@ export default function AdminOrders() {
     }
   }
   // ─────────────────────────────────────────────────────────────────────────────
+
+  // Vínculo H2ADS exato por pedido e subpedido, compartilhado pelo cache tRPC.
+  const h2AdsOrderLinksQuery = trpc.h2Ads.listOrderLinks.useQuery(undefined, {
+    staleTime: 0,
+    refetchInterval: 2_000,
+    refetchIntervalInBackground: false,
+    refetchOnWindowFocus: true,
+  });
+  const h2AdsLinkedOrderKeys = useMemo(() => new Set(
+    (h2AdsOrderLinksQuery.data ?? []).map(link => `${link.registrationId}_${link.subOrderIndex}`)
+  ), [h2AdsOrderLinksQuery.data]);
+  const h2AdsLinksReady = h2AdsOrderLinksQuery.isSuccess && !h2AdsOrderLinksQuery.isError;
 
   const ordersQuery = trpc.orderStatus.listOrders.useQuery(undefined, {
     refetchInterval: 30000,
@@ -5161,6 +5173,7 @@ export default function AdminOrders() {
                     (() => {
                       const quickFilters = [
                         { id: "all",                   label: "Todos",             desc: "Todos os pedidos",       icon: Layers,       glow: "#f59e0b", ab: "linear-gradient(135deg,#78350f,#92400e)", ac: "#f59e0b", at: "#fde68a" },
+                        { id: "h2_novo",               label: "H2 NOVO",          desc: "Sem instância H2ADS",   icon: Plus,         glow: "#22d3ee", ab: "linear-gradient(135deg,#164e63,#155e75)", ac: "#22d3ee", at: "#cffafe" },
                         { id: "sem_status",            label: "Sem Agendamento",  desc: "Não agendados",          icon: Calendar,     glow: "#ef4444", ab: "linear-gradient(135deg,#7f1d1d,#991b1b)", ac: "#ef4444", at: "#fca5a5" },
                         { id: "agendamento_confirmado", label: "Agend. Confirmado", desc: "Agenda confirmada",       icon: CheckCircle2, glow: "#22c55e", ab: "linear-gradient(135deg,#14532d,#166534)", ac: "#22c55e", at: "#86efac" },
                         { id: "agendamento",            label: "Aguardando",        desc: "Aguardando confirmação", icon: Clock,        glow: "#eab308", ab: "linear-gradient(135deg,#713f12,#854d0e)", ac: "#eab308", at: "#fef08a" },
@@ -5183,6 +5196,7 @@ export default function AdminOrders() {
                           counts.foto_reprovada = (counts.foto_reprovada || 0) + 1;
                         }
                         if (!viewedOrders.has(getOrderKey(order))) counts.novo += 1;
+                        if (h2AdsLinksReady && !h2AdsLinkedOrderKeys.has(getOrderKey(order))) counts.h2_novo = (counts.h2_novo || 0) + 1;
                       }
                       return (
                         <div className="flex w-full min-w-0 items-stretch gap-1.5" aria-label="Navegação dos filtros operacionais de pedidos">
@@ -5207,16 +5221,19 @@ export default function AdminOrders() {
                           {quickFilters.map(f => {
                             const count = counts[f.id] || 0;
                             const active = todosQuickFilter === f.id;
+                            const h2NovoUnavailable = f.id === "h2_novo" && !h2AdsLinksReady;
                             const Icon = f.icon;
                             return (
                               <button
                                 key={f.id}
                                 type="button"
                                 onClick={() => setTodosQuickFilter(f.id)}
-                                title={`${f.label}: ${f.desc} (${count})`}
+                                disabled={h2NovoUnavailable}
+                                title={h2NovoUnavailable ? "Carregando vínculos H2ADS" : `${f.label}: ${f.desc} (${count})`}
                                 aria-pressed={active}
                                 style={active ? { background: f.ab, borderColor: f.ac, color: f.at, boxShadow: `0 0 14px ${f.glow}66` } : {}}
                                 className={`group shrink-0 snap-start min-w-[148px] sm:min-w-[158px] min-h-[58px] flex items-center gap-2.5 px-3.5 py-2 rounded-xl border transition-all duration-200 focus:outline-none focus-visible:ring-2 focus-visible:ring-white/70 ${
+                                  h2NovoUnavailable ? "cursor-wait bg-zinc-900/60 border-zinc-800 text-zinc-500" :
                                   active
                                     ? "scale-[1.015]"
                                     : f.id === "novo" && count === 0
@@ -5478,6 +5495,7 @@ export default function AdminOrders() {
                   {(!isAllTab || !isEmergencySearch) && (isAllTab
                     ? [{ name: "", orders: (() => {
                         const filtered = group.orders.filter((o: any) => {
+                          if (todosQuickFilter === "h2_novo") return h2AdsLinksReady && !h2AdsLinkedOrderKeys.has(getOrderKey(o));
                           if (todosQuickFilter === "novo") return !viewedOrders.has(getOrderKey(o));
                           if (todosQuickFilter === "doc_veiculo_teste") return isDocVehicleTestStatus(o.latestStatus);
                           if (todosQuickFilter === "foto_reprovada") return o.latestStatus === "foto_reprovada";
