@@ -7,7 +7,7 @@ import AdminHeader from "@/components/AdminHeader";
 import { Button } from "@/components/ui/button";
 
 type MessageType = 'text' | 'link' | 'banner' | 'group_invite' | 'promo';
-type TargetType = 'all' | 'withOrders' | 'withoutOrders' | 'byStatus' | 'selected';
+type TargetType = 'all' | 'withOrders' | 'withoutOrders' | 'vip' | 'byStatus' | 'selected';
 type SendMode = 'email' | 'whatsapp';
 type WaViewMode = 'single' | 'list';
 
@@ -158,6 +158,7 @@ export default function AdminBroadcast() {
     const targets = waTargetType === 'all' ? customers
     : waTargetType === 'withOrders' ? customers.filter(c => (c as any).hasOrder)
     : waTargetType === 'withoutOrders' ? customers.filter(c => !(c as any).hasOrder)
+    : waTargetType === 'vip' ? customers.filter(c => (c as any).isVip)
     : waTargetType === 'byStatus' ? customers.filter(c => waStatusFilter ? (c as any).lastOrderStatus === waStatusFilter : (c as any).hasOrder)
     : customers.filter(c => waSelectedPhones.includes(c.phone));
     if (targets.length === 0) { toast.error('Nenhum cliente selecionado'); return; }
@@ -232,10 +233,11 @@ export default function AdminBroadcast() {
         linkLabel: linkLabel || undefined,
         imageUrl: imageUrl || undefined,
         emailImageUrl: finalEmailImageUrl,
-        targetType: (targetType === 'withOrders' || targetType === 'withoutOrders' || targetType === 'byStatus') ? 'selected' : targetType,
+        targetType: (targetType === 'withOrders' || targetType === 'withoutOrders' || targetType === 'vip' || targetType === 'byStatus') ? 'selected' : targetType,
         targetPhones: targetType === 'selected' ? selectedPhones
           : targetType === 'withOrders' ? customers.filter(c => (c as any).hasOrder).map(c => c.phone)
           : targetType === 'withoutOrders' ? customers.filter(c => !(c as any).hasOrder).map(c => c.phone)
+          : targetType === 'vip' ? customers.filter(c => (c as any).isVip).map(c => c.phone)
           : targetType === 'byStatus' ? customers.filter(c => (c as any).lastOrderStatus === waStatusFilter).map(c => c.phone)
           : undefined,
       });
@@ -378,6 +380,12 @@ export default function AdminBroadcast() {
                   <Ban className="w-4 h-4" /> Sem Pedidos ({customers.filter(c => !(c as any).hasOrder).length})
                 </button>
                 <button
+                  onClick={() => { setWaTargetType('vip'); setWaLinks([]); }}
+                  className={`flex items-center gap-2 px-3 py-2 rounded-lg border text-sm font-bold transition-all ${waTargetType === 'vip' ? 'bg-amber-500/25 border-amber-400/55 text-amber-200' : 'bg-white/5 border-white/10 text-white/50 hover:bg-white/10'}`}
+                >
+                  <span aria-hidden="true">👑</span> Clientes VIP ({customers.filter(c => (c as any).isVip).length})
+                </button>
+                <button
                   onClick={() => { setWaTargetType('byStatus'); setWaLinks([]); }}
                   className={`flex items-center gap-2 px-3 py-2 rounded-lg border text-sm font-bold transition-all ${waTargetType === 'byStatus' ? 'bg-yellow-600/30 border-yellow-500/50 text-yellow-300' : 'bg-white/5 border-white/10 text-white/50 hover:bg-white/10'}`}
                 >
@@ -472,6 +480,7 @@ export default function AdminBroadcast() {
               const previewTargets = waTargetType === 'all' ? customers
                 : waTargetType === 'withOrders' ? customers.filter(c => (c as any).hasOrder)
                 : waTargetType === 'withoutOrders' ? customers.filter(c => !(c as any).hasOrder)
+                : waTargetType === 'vip' ? customers.filter(c => (c as any).isVip)
                 : waTargetType === 'byStatus' ? customers.filter(c => waStatusFilter ? (c as any).lastOrderStatus === waStatusFilter : (c as any).hasOrder)
                 : customers.filter(c => waSelectedPhones.includes(c.phone));
               if (previewTargets.length === 0) return null;
@@ -791,12 +800,18 @@ export default function AdminBroadcast() {
             {/* Destinatários */}
             <div>
               <label className="block text-sm text-white/70 mb-2">Destinatários</label>
-              <div className="flex gap-2 mb-3">
+              <div className="flex flex-wrap gap-2 mb-3">
                 <button
                   onClick={() => setTargetType('all')}
                   className={`flex items-center gap-2 px-4 py-2 rounded-lg border text-sm font-bold transition-all ${targetType === 'all' ? 'bg-blue-600/30 border-blue-500/50 text-blue-300' : 'bg-white/5 border-white/10 text-white/50 hover:bg-white/10'}`}
                 >
                   <Users className="w-4 h-4" /> Todos ({customers.length})
+                </button>
+                <button
+                  onClick={() => setTargetType('vip')}
+                  className={`flex items-center gap-2 px-4 py-2 rounded-lg border text-sm font-bold transition-all ${targetType === 'vip' ? 'bg-amber-500/25 border-amber-400/55 text-amber-200' : 'bg-white/5 border-white/10 text-white/50 hover:bg-white/10'}`}
+                >
+                  <span aria-hidden="true">👑</span> Clientes VIP ({customers.filter(c => (c as any).isVip).length})
                 </button>
                 <button
                   onClick={() => { setTargetType('selected'); setShowCustomerList(true); }}
@@ -805,6 +820,11 @@ export default function AdminBroadcast() {
                   <CheckCircle className="w-4 h-4" /> Individual {selectedPhones.length > 0 && `(${selectedPhones.length})`}
                 </button>
               </div>
+              {targetType === 'vip' && (
+                <div className="mb-3 rounded-xl border border-amber-400/25 bg-amber-500/[0.07] px-3 py-2 text-xs font-bold text-amber-200">
+                  👑 {customers.filter(c => (c as any).isVip).length} cliente(s) VIP ativo(s) selecionado(s). O envio por e-mail alcançará apenas os que possuem e-mail cadastrado.
+                </div>
+              )}
 
               {targetType === 'selected' && (
                 <div className="bg-black/30 border border-white/10 rounded-xl p-3 space-y-2">
