@@ -67,6 +67,8 @@ export default function OrderH2AdsBrowserShortcut({ registrationId, subOrderInde
     serviceOption,
     links: (linksQuery.data ?? []) as any[],
     orders,
+    instances: (dashboard?.instances ?? []) as any[],
+    groups: (dashboard?.groups ?? []) as any[],
   });
 
   const pending = launchBrowser.isPending || closeBrowser.isPending || updateInstance.isPending || setOrderLink.isPending || createInstanceLinkedOrderAuto.isPending || rotateProxyAuto.isPending || deleteInstance.isPending;
@@ -219,6 +221,7 @@ export default function OrderH2AdsBrowserShortcut({ registrationId, subOrderInde
   const repairLink = async (event: MouseEvent<HTMLButtonElement>) => {
     event.stopPropagation();
     if (!repairCandidate || pending) return;
+    // A confirmação usa a referência calculada; o servidor valida novamente o vínculo antes de transferir.
 
     const sourceLabel = repairCandidate.linkedOrderNumber
       ? `pedido #${repairCandidate.linkedOrderNumber}`
