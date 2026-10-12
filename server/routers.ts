@@ -7832,6 +7832,7 @@ export const appRouter = router({
       const dbConn = await getDbConn();
       const allCustomers = await listCustomers();
       const filtered = allCustomers.filter(c => !(c as any).blocked || (c as any).blocked === 0);
+      const vipMembershipMap = await getVipMembershipSnapshotMap();
       // Buscar quais telefones têm pedido e qual é o último status
       const phonesWithOrders = new Set<string>();
       const phoneLastStatus = new Map<string, string>(); // phone digits -> last status key
@@ -7861,6 +7862,8 @@ export const appRouter = router({
           id: c.id,
           name: c.name,
           phone: c.phone,
+          email: c.email || null,
+          isVip: Boolean(vipMembershipMap.get(Number(c.id))?.active),
           hasOrder: phonesWithOrders.has(digits),
           lastOrderStatus: phoneLastStatus.get(digits) || null,
         };
