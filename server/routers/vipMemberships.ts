@@ -10,12 +10,19 @@ export type VipMembershipSnapshot = {
   phone: string;
   status: "active" | "expired" | "cancelled";
   active: boolean;
+  unlimited: boolean;
   startsAtMs: number;
   expiresAtMs: number;
   daysLeft: number;
   lastPaymentAmount: string | null;
   notes: string | null;
 };
+
+const VIP_UNLIMITED_EXPIRES_AT_MS = Date.UTC(9999, 11, 31, 23, 59, 59, 999);
+
+function isUnlimitedExpiry(expiresAtMs: number) {
+  return expiresAtMs >= VIP_UNLIMITED_EXPIRES_AT_MS;
+}
 
 let infrastructurePromise: Promise<void> | null = null;
 
@@ -43,11 +50,17 @@ function normalizeAmount(value?: string | null): string | null {
 }
 
 function derivedStatus(stored: unknown, expiresAtMs: number, now = Date.now()) {
-  if (String(stored) === "cancelled") return { status: "cancelled" as const, active: false, daysLeft: 0 };
-  if (String(stored) === "active" && expiresAtMs > now) {
-    return { status: "active" as const, active: true, daysLeft: Math.max(1, Math.ceil((expiresAtMs - now) / 86400000)) };
+  if (String(stored) === "cancelled") return { status: "cancelled" as const, active: false, unlimited: false, daysLeft: 0 };
+  const unlimited = isUnlimitedExpiry(expiresAtMs);
+  if (String(stored) === "active" && (unlimited || expiresAtMs > now)) {
+    return {
+      status: "active" as const,
+      active: true,
+      unlimited,
+      daysLeft: unlimited ? 0 : Math.max(1, Math.ceil((expiresAtMs - now) / 86400000)),
+    };
   }
-  return { status: "expired" as const, active: false, daysLeft: 0 };
+  return { status: "expired" as const, active: false, unlimited: false, daysLeft: 0 };
 }
 
 export async function ensureVipMembershipInfrastructure() {
@@ -169,6 +182,7 @@ export async function getVipMembershipSnapshotMap(): Promise<Map<number, VipMemb
       phone: normalizePhone(row.phone),
       status: derived.status,
       active: derived.active,
+      unlimited: derived.unlimited,
       startsAtMs: Number(row.startsAtMs || 0),
       expiresAtMs,
       daysLeft: derived.daysLeft,
@@ -183,7 +197,7 @@ async function statusByPhone(phoneValue: string) {
   await refreshExpiredMemberships();
   const db = (await getDb()) as any;
   const phone = normalizePhone(phoneValue);
-  if (!db || phone.length < 10) return { active: false, status: "none" as const, startsAtMs: null, expiresAtMs: null, daysLeft: 0 };
+  if (!db || phone.length < 10) return { active: false, unlimited: false, status: "none" as const, startsAtMs: null, expiresAtMs: null, daysLeft: 0 };
   const result = await db.execute(sql`
     SELECT vm.id, vm.customerId, vm.phone, vm.status, vm.startsAtMs, vm.expiresAtMs
     FROM vipMemberships vm
@@ -193,11 +207,12 @@ async function statusByPhone(phoneValue: string) {
     LIMIT 1
   `);
   const row = rowsOf<any>(result)[0];
-  if (!row) return { active: false, status: "none" as const, startsAtMs: null, expiresAtMs: null, daysLeft: 0 };
+  if (!row) return { active: false, unlimited: false, status: "none" as const, startsAtMs: null, expiresAtMs: null, daysLeft: 0 };
   const expiresAtMs = Number(row.expiresAtMs || 0);
   const derived = derivedStatus(row.status, expiresAtMs);
   return {
     active: derived.active,
+    unlimited: derived.unlimited,
     status: derived.status,
     startsAtMs: Number(row.startsAtMs || 0) || null,
     expiresAtMs: expiresAtMs || null,
