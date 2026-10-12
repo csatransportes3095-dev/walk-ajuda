@@ -26,7 +26,7 @@ export default function VipPage() {
   const benefit1 = settings?.vip_membership_benefit_1 || "Preços especiais em modelos e categorias selecionados";
   const benefit2 = settings?.vip_membership_benefit_2 || "Acesso a opções exclusivas marcadas como SOMENTE VIP";
   const benefit3 = settings?.vip_membership_benefit_3 || "O valor VIP aparece antes da compra para você comparar";
-  const { isVipCustomer: isVip, expiresAt } = useVipMembership();
+  const { isVipCustomer: isVip, expiresAt, unlimited } = useVipMembership();
   const phone = typeof window !== "undefined" ? localStorage.getItem("walk_client_phone") || "" : "";
   const params = typeof window !== "undefined" ? new URLSearchParams(window.location.search) : new URLSearchParams();
   const requestedReturn = params.get("returnTo") || "/";
@@ -81,7 +81,9 @@ export default function VipPage() {
   {isVip && (
     <div className="mb-5 rounded-2xl border border-emerald-400/45 bg-emerald-500/10 p-4 text-center">
       <p className="text-sm font-black uppercase text-emerald-300">Seu VIP está ativo</p>
-      {expiresAt && <p className="mt-1 text-xs text-emerald-100/75">Validade atual: {new Date(expiresAt).toLocaleString("pt-BR")}</p>}
+      {unlimited
+        ? <p className="mt-1 text-xs font-bold text-emerald-100/80">SEM VENCIMENTO</p>
+        : expiresAt && <p className="mt-1 text-xs text-emerald-100/75">Validade atual: {new Date(expiresAt).toLocaleString("pt-BR")}</p>}
     </div>
   )}
 
