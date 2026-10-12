@@ -218,8 +218,10 @@ export function StorefrontProductCard({
   const requiresPriceModelSelection = priceModels.length > 0;
   const vipAdjustedModelPrice = selectedPriceModel ? applyVipBenefitToPrice(selectedPriceModel.price, selectedPriceModel, isVipCustomer) : null;
   const modelHasVipPrice = Boolean(selectedPriceModel && vipAdjustedModelPrice && vipAdjustedModelPrice !== selectedPriceModel.price);
-  const effectivePrice = requiresPriceModelSelection ? vipAdjustedModelPrice : (selectedTier?.price || item.option.price);
-  const effectiveOriginalPrice = requiresPriceModelSelection ? (modelHasVipPrice ? selectedPriceModel?.price : selectedPriceModel?.originalPrice) : (selectedTier?.originalPrice || item.option.originalPrice);
+  // Regra visual: o seletor e o valor principal de "Sua escolha" sempre exibem o valor normal.
+  // O benefício VIP aparece separado, sem substituir a referência de preço do produto.
+  const effectivePrice = requiresPriceModelSelection ? selectedPriceModel?.price : (selectedTier?.price || item.option.price);
+  const effectiveOriginalPrice = requiresPriceModelSelection ? selectedPriceModel?.originalPrice : (selectedTier?.originalPrice || item.option.originalPrice);
   const discount = useMemo(() => discountPercent(effectivePrice, effectiveOriginalPrice), [effectiveOriginalPrice, effectivePrice]);
 
   const promotionByModel = new Map(
@@ -364,16 +366,10 @@ export function StorefrontProductCard({
                         ) : (
                           <span className="block text-[13px] font-black text-white sm:text-base">{asMoney(model.price)}</span>
                         )
-                      ) : modelHasVipBenefit ? (
-                        <>
-                          <span className="block text-[8px] font-bold uppercase text-slate-400 line-through">Normal {asMoney(model.price)}</span>
-                          <span className="mt-0.5 block text-[11px] font-black text-amber-300 sm:text-sm">VIP {asMoney(vipPreviewPrice)}</span>
-                          {vipSavings > 0 && <span className="mt-1 block text-[8px] font-black uppercase text-emerald-300">Poupe {formatBrazilMoney(vipSavings)}</span>}
-                        </>
                       ) : (
                         <>
-                          <span className="block text-[8px] font-bold uppercase text-slate-400">Preço exclusivo</span>
-                          <span className="mt-0.5 block text-[11px] font-black text-amber-300 sm:text-sm">VIP {asMoney(model.price)}</span>
+                          <span className="block text-[8px] font-black uppercase tracking-[0.08em] text-slate-400">Valor normal</span>
+                          <span className="mt-1 block whitespace-nowrap text-[17px] font-black leading-none text-white sm:text-[18px]">{asMoney(model.price)}</span>
                         </>
                       )}
                     </div>
@@ -439,17 +435,19 @@ export function StorefrontProductCard({
                 <p className={`break-words font-black leading-none tracking-tight ${effectivePrice ? "text-[30px] text-teal-300 drop-shadow-[0_0_18px_rgba(45,212,191,.35)] sm:text-[42px]" : "text-lg text-slate-400 sm:text-2xl"}`}>{effectivePrice ? asMoney(effectivePrice) : "Valor após a escolha"}</p>
               </>
             )}
-            {selectedPriceModel && !isVipCustomer && hasVipBenefit(selectedPriceModel) && (() => {
+            {selectedPriceModel && hasVipBenefit(selectedPriceModel) && (() => {
               const vipPrice = applyVipBenefitToPrice(selectedPriceModel.price, selectedPriceModel, true);
               const saving = Math.max(0, parseBrazilMoney(selectedPriceModel.price) - parseBrazilMoney(vipPrice));
               return (
                 <div className="mt-3 rounded-2xl border border-amber-300/45 bg-amber-400/[0.08] p-3">
-                  <p className="text-[9px] font-black uppercase tracking-[0.12em] text-amber-200">👑 Cliente VIP paga</p>
+                  <p className="text-[9px] font-black uppercase tracking-[0.12em] text-amber-200">
+                    {isVipCustomer ? '👑 Você é VIP • paga' : '👑 Cliente VIP paga'}
+                  </p>
                   <div className="mt-1 flex flex-wrap items-end justify-between gap-2">
                     <p className="text-2xl font-black text-amber-300">{asMoney(vipPrice)}</p>
                     {saving > 0 && <p className="text-[10px] font-black uppercase text-emerald-300">Você economiza {formatBrazilMoney(saving)}</p>}
                   </div>
-                  <a href={vipHref} className="mt-3 inline-flex min-h-[40px] w-full items-center justify-center rounded-xl bg-amber-300 px-3 text-[11px] font-black uppercase text-[#251600]">Quero ser VIP</a>
+                  {!isVipCustomer && <a href={vipHref} className="mt-3 inline-flex min-h-[40px] w-full items-center justify-center rounded-xl bg-amber-300 px-3 text-[11px] font-black uppercase text-[#251600]">Quero ser VIP</a>}
                 </div>
               );
             })()}
