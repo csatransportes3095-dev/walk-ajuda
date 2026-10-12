@@ -1,7 +1,6 @@
 import { Check, ChevronDown, ChevronUp, Crown, Flame, LockKeyhole, ShieldCheck, ShoppingCart, Tag, Timer, Zap } from "lucide-react";
 import { useEffect, useMemo, useState } from "react";
 import { requestProductManifest } from "@/lib/productManifest";
-import { trpc } from "@/lib/trpc";
 import { useVipMembership } from "@/hooks/useVipMembership";
 import { applyVipBenefitToPrice, formatBrazilMoney, hasVipBenefit, isVipHighlighted, isVipOnlyLocked, normalizeVipAccessMode, parseBrazilMoney, vipBenefitText } from "@shared/vipPricing";
 
@@ -253,20 +252,14 @@ export function StorefrontProductCard({
   const detailsId = `product-details-${item.product.id}-${item.option.id}`;
   const categoryLabel = item.category.toUpperCase();
   const productPill = item.product.name.toUpperCase();
-  const vipHref = typeof window !== "undefined" ? `/vip?returnTo=${encodeURIComponent(window.location.pathname + window.location.search)}` : "/vip";
-  const vipSettingsQuery = trpc.settings.getAll.useQuery(undefined, { staleTime: 60_000 });
-  const vipMembershipEnabled = vipSettingsQuery.data?.vip_membership_enabled !== "0";
-  const vipWhatsappNumber = String(vipSettingsQuery.data?.whatsapp_number || "5511978307371").replace(/\D/g, "");
-  const buildVipAdminWhatsappHref = (model: StorefrontPriceModel | null) => {
-    const interest = model?.label || item.option.label;
-    const message = [
-      "Olá! Tenho interesse em contratar o H2 VIP.",
-      "A contratação VIP está indisponível no site no momento.",
-      `Produto de interesse: ${item.product.name} — ${interest}`,
-      "Gostaria de falar com um ADM para verificar a liberação.",
-    ].join("\n");
-    return `https://wa.me/${vipWhatsappNumber}?text=${encodeURIComponent(message)}`;
-  };
+  // Primeiro mostra a página VIP; quando o plano estiver indisponível, o contato com o ADM aparece lá.
+  const vipHref = typeof window !== "undefined"
+    ? `/vip?${new URLSearchParams({
+        returnTo: window.location.pathname + window.location.search,
+        product: item.product.name,
+        option: selectedPriceModel?.label || item.option.label,
+      }).toString()}`
+    : "/vip";
   const vipSavingsValues = priceModels.map((model) => Math.max(0, parseBrazilMoney(model.price) - parseBrazilMoney(applyVipBenefitToPrice(model.price, model, true))));
   const maxVipSavings = Math.max(0, ...vipSavingsValues);
 
@@ -491,10 +484,8 @@ export function StorefrontProductCard({
                   {!isVipCustomer && (
                     <div className="border-t border-amber-300/25 bg-violet-950/20 p-3">
                       <a
-                        href={vipMembershipEnabled ? vipHref : buildVipAdminWhatsappHref(selectedPriceModel)}
-                        target={vipMembershipEnabled ? undefined : "_blank"}
-                        rel={vipMembershipEnabled ? undefined : "noopener noreferrer"}
-                        aria-label={vipMembershipEnabled ? "Quero ser VIP" : "Quero ser VIP pelo WhatsApp"}
+                        href={vipHref}
+                        aria-label="Quero ser VIP"
                         className="group/vip inline-flex min-h-[52px] w-full items-center justify-center gap-2 rounded-2xl border border-yellow-100/65 bg-gradient-to-r from-[#fde68a] via-[#facc15] to-[#f59e0b] px-3 py-3 text-[13px] font-black uppercase tracking-[0.05em] text-[#291700] shadow-[inset_0_1px_0_rgba(255,255,255,.68),0_10px_26px_rgba(250,204,21,.30)] transition-all duration-200 hover:-translate-y-0.5 hover:brightness-110 hover:shadow-[0_14px_30px_rgba(250,204,21,.42)] focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-yellow-100 focus-visible:ring-offset-2 focus-visible:ring-offset-[#180f2c] active:translate-y-0 active:scale-[0.99]"
                       >
                         <Crown aria-hidden="true" className="h-5 w-5 shrink-0" />
