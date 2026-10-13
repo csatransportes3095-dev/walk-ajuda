@@ -1,3 +1,4 @@
+import { siteSecurityRouter } from "./siteSecurityRouter";
 import { vinRegistryRouter } from "./routers/vinRegistry";
 import { sql } from "drizzle-orm";
 import { cnhCodeSchema, globalOrderGroupSchema, resolveOrderGroupLink, loginOptionalFields, cleanLoginText, escapeLoginHtml } from '../shared/orderLoginPresentation';
@@ -434,6 +435,7 @@ async function withResolvedRaffleWinnerPhoto<T extends any>(raffle: T): Promise<
 }
 
 export const appRouter = router({
+  siteSecurity: siteSecurityRouter,
   vinRegistry: vinRegistryRouter,
   system: systemRouter,
   optionPriceModels: optionPriceModelsRouter,
