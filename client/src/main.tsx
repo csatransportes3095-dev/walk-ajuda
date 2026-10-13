@@ -35,6 +35,7 @@ import H2AdsScheduleFlatView from "./components/H2AdsScheduleFlatView";
 import { MaintenanceManifestGate } from "./components/MaintenanceManifestGate";
 import { isMaintenanceManifestActiveForPath } from "@shared/maintenanceManifest";
 import { isH2AdsPath } from "@shared/h2adsRoute";
+import { isChassisAdminPath } from "@shared/chassisRoute";
 import "./index.css";
 import "./welcome-neon-refresh.css";
 import "./admin-loans-mobile-fix.css";
@@ -106,7 +107,7 @@ function RuntimeTree() {
 
 function RootMaintenanceBoundary() {
   const pathname = typeof window !== "undefined" ? window.location.pathname.toLowerCase() : "/";
-  const bypassManifest = pathname.startsWith("/admin") || isH2AdsPath(pathname) || pathname === "/similaridade";
+  const bypassManifest = pathname.startsWith("/admin") || isChassisAdminPath(pathname) || isH2AdsPath(pathname) || pathname === "/similaridade";
 
   const manifestQuery = trpc.maintenanceManifest.get.useQuery(undefined, {
     enabled: !bypassManifest,

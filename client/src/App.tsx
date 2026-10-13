@@ -130,6 +130,7 @@ import { trpc } from "@/lib/trpc";
 import { MaintenanceManifestGate } from "@/components/MaintenanceManifestGate";
 import { isMaintenanceManifestActiveForPath } from "@shared/maintenanceManifest";
 import { isH2AdsPath } from "@shared/h2adsRoute";
+import { CHASSIS_ADMIN_PATH, isChassisAdminPath } from "@shared/chassisRoute";
 
 // Guard para rotas admin — redireciona para /admin/login se não autenticado
 function AdminGuard({ children }: { children: React.ReactNode }) {
@@ -363,7 +364,7 @@ function Router() {
       <Route path={"/cartoes/despesas"} component={CartaoPage} />
       <Route path={"/cartoes/historico/:id"} component={CartaoHistoricoPage} />
       <Route path={"/cartoes/mercado"} component={CartaoMercadoPage} />
-      <Route path={"/adm/chassis"}>
+      <Route path={CHASSIS_ADMIN_PATH}>
         <AdminGuard><GeradorChassiPublico /></AdminGuard>
       </Route>
       <Route path={"/ajuda"} component={Ajuda} />
@@ -390,7 +391,7 @@ function ClientInstallGate({ children }: { children: React.ReactNode }) {
 
 function AppContent() {
   const [location] = useLocation();
-  const isGeradorChassiRoute = ["/adm/chassis", "/gerador-chassi"].includes(location.toLowerCase().replace(/\/+$/, ""));
+  const isGeradorChassiRoute = isChassisAdminPath(location);
   const isAdminRoute = location.startsWith("/admin") || isGeradorChassiRoute;
   const isH2AdsRoute = isH2AdsPath(location);
   const isSimilarityRoute = location.toLowerCase() === "/similaridade";
@@ -491,9 +492,9 @@ function AppContent() {
   }, [isAdminRoute, isCartoesRoute, isH2AdsRoute, isLocadoraBrandRoute, isSimilarityRoute]);
 
   // Endereço administrativo canônico; links antigos preservam query e hash.
-  if (isGeradorChassiRoute && location !== "/adm/chassis") {
+  if (isGeradorChassiRoute && location !== CHASSIS_ADMIN_PATH) {
     const suffix = typeof window !== "undefined" ? `${window.location.search}${window.location.hash}` : "";
-    return <Redirect to={`/adm/chassis${suffix}`} />;
+    return <Redirect to={`${CHASSIS_ADMIN_PATH}${suffix}`} />;
   }
 
   // Redirect de rotas com maiúsculas para minúsculas (DEVE ficar após todos os hooks)

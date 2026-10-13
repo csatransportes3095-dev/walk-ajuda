@@ -1,6 +1,7 @@
 import { useEffect, useMemo, useState } from "react";
 import { createPortal } from "react-dom";
 import { trpc } from "@/lib/trpc";
+import { isChassisAdminPath } from "@shared/chassisRoute";
 
 const SETTING_KEY = "question_blocking_manifest_rules_v1";
 
@@ -147,7 +148,7 @@ export default function QuestionBlockingManifestGuard() {
 
   useEffect(() => {
     if (typeof window === "undefined") return;
-    if (window.location.pathname.toLowerCase().startsWith("/admin")) return;
+    if (window.location.pathname.toLowerCase().startsWith("/admin") || isChassisAdminPath(window.location.pathname)) return;
     if (questions.length === 0) return;
 
     const onClickCapture = (event: MouseEvent) => {
