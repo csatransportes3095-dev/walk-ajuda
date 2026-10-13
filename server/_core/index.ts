@@ -5,6 +5,7 @@ process.env.TZ = "UTC";
 import "dotenv/config";
 import express from "express";
 import { registerSiteIdentity } from "../siteAccessIdentity";
+import { createSiteAccessGateway } from "../siteAccessGateway";
 import { createServer } from "http";
 import { createExpressMiddleware } from "@trpc/server/adapters/express";
 import { registerStorageProxy } from "./storageProxy";
@@ -188,6 +189,8 @@ async function getCustomerPhotoPreview(sourceUrl: URL) {
 
 async function startServer() {
   const app = express();
+  // Keep gate before uploads, worker routes, storage proxies, tRPC and HTML fallback.
+  app.use(createSiteAccessGateway());
   const server = createServer(app);
   // Register upload route BEFORE body parsers so multer can handle multipart streams correctly
   // A camada de identidade deve estar pronta antes de qualquer rota aceitar cadastro ou login.
