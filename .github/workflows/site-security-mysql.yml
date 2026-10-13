@@ -5,6 +5,8 @@ on:
       - recovery/organizar-salvos-2026-08-24
     paths:
       - 'server/siteAccessMigration.ts'
+      - 'server/siteAccessBackupGate.ts'
+      - 'server/siteAccessBackupGate.test.ts'
       - 'scripts/apply-site-security-migration.ts'
       - 'scripts/test-site-security-migration.ts'
       - '.github/workflows/site-security-mysql.yml'
@@ -38,5 +40,7 @@ jobs:
           node-version: '22'
           cache: pnpm
       - run: pnpm install --frozen-lockfile
+      - name: Unit tests of verified backup requirement
+        run: pnpm exec vitest run server/siteAccessBackupGate.test.ts
       - name: Execute additive migration twice and check saved data
         run: pnpm exec tsx scripts/test-site-security-migration.ts
