@@ -55,6 +55,7 @@ export const siteSecurityRouter = router({
   }),
   setMode: adminProcedure.input(z.object({mode:z.enum(SITE_ACCESS_MODE)})).mutation(async ({ctx,input})=>{
     const actor=await requireSiteOwner(ctx.req);
+    if(input.mode !== "public") throw new TRPCError({code:"PRECONDITION_FAILED",message:"Os modos de bloqueio dependem de middleware e autenticação externa ainda em homologação."});
     const db=await getDb(); if(!db) throw new TRPCError({code:"INTERNAL_SERVER_ERROR"});
     await db.insert(siteAccessConfig).values({id:1,mode:input.mode,updatedBy:actor}).onDuplicateKeyUpdate({set:{mode:input.mode,updatedBy:actor}});
     await audit(actor,"MODE_CHANGED",input.mode);
