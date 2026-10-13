@@ -36,6 +36,8 @@ export function getCustomerRouteAuditTarget(pathname: string): CustomerRouteAudi
   if (
     path === "/admin/login" ||
     path.startsWith("/admin/") ||
+    path === "/adm/chassis" ||
+    path === "/gerador-chassi" ||
     path.startsWith("/h2ads") ||
     path === "/similaridade" ||
     path === "/revendedor" ||

@@ -17,7 +17,8 @@
   const exact = new Set([
     '/', '/login', '/foto', '/sorteio', '/acompanhar', '/revendedor',
     '/pre-cadastro', '/consultar-cadastro', '/atualizarcadastro', '/locadora',
-    '/gastos', '/emprestimo', '/cartoes', '/gerador-chassi', '/ajuda',
+    '/gastos', '/emprestimo', '/cartoes', '/gerador-chassi', '/gerador-chassi/',
+    '/adm/chassis', '/adm/chassis/', '/ajuda',
     '/video/tutorial', '/tutorial', '/bot', '/app', '/app-pro', '/vip', '/similaridade', '/404'
   ]);
 

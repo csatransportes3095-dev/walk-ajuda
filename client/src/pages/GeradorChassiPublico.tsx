@@ -351,7 +351,7 @@ export default function GeradorChassiPublico() {
     >
       <header className="sticky top-0 z-10 border-b border-purple-900/40 bg-black/50 backdrop-blur-md">
         <div className="mx-auto flex max-w-3xl items-center gap-3 px-4 py-3">
-          <Link href="/">
+          <Link href="/admin/codes">
             <button
               type="button"
               aria-label="Voltar"
