@@ -1,5 +1,6 @@
 import { useEffect, useMemo } from "react";
 import { trpc } from "@/lib/trpc";
+import { isChassisAdminPath } from "@shared/chassisRoute";
 
 type Q = {
   id: number;
@@ -144,7 +145,7 @@ export default function PublicQuestionFlowEnhancer() {
     const run = () => {
       cancelAnimationFrame(frame);
       frame = requestAnimationFrame(() => {
-        if (window.location.pathname.toLowerCase().startsWith("/admin")) return;
+        if (window.location.pathname.toLowerCase().startsWith("/admin") || isChassisAdminPath(window.location.pathname)) return;
         for (const candidate of candidates) {
           if (decorate(candidate)) break;
         }

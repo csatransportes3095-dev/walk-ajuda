@@ -31,6 +31,19 @@ describe("getCustomerRouteAuditTarget", () => {
     expect(getCustomerRouteAuditTarget("/revendedor").tracked).toBe(false);
   });
 
+  it("chassis é administrativo no endereço novo e no alias antigo", () => {
+    for (const route of ["/adm/chassis", "/ADM/CHASSIS/", "/adm/chassis?origem=adm#gerador", "/gerador-chassi", "/GERADOR-CHASSI/"]) {
+      expect(getCustomerRouteAuditTarget(route)).toEqual({
+        tracked: false,
+        routeKey: "",
+        areaName: "",
+      });
+    }
+    expect(getCustomerRouteAuditTarget("/adm/chassis-outro").tracked).toBe(true);
+    expect(getCustomerRouteAuditTarget("/adm/chassis/cliente").tracked).toBe(true);
+    expect(getCustomerRouteAuditTarget("/gerador-chassi-outro").tracked).toBe(true);
+  });
+
   it("normaliza maiúsculas, barra final, query e hash", () => {
     expect(getCustomerRouteAuditTarget("/Cartoes/123?token=secreto#section")).toEqual({
       tracked: true,

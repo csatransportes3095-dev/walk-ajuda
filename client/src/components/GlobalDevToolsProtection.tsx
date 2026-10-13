@@ -3,10 +3,11 @@ import { useLocation } from "wouter";
 import { trpc } from "@/lib/trpc";
 import { useDevToolsDetection } from "@/hooks/useDevToolsDetection";
 import { isH2AdsPath } from "@shared/h2adsRoute";
+import { isChassisAdminPath } from "@shared/chassisRoute";
 
 export default function GlobalDevToolsProtection() {
   const [location] = useLocation();
-  const excluded = location.startsWith("/admin") || isH2AdsPath(location) || location === "/similaridade" || location === "/acompanhar";
+  const excluded = location.startsWith("/admin") || isChassisAdminPath(location) || isH2AdsPath(location) || location === "/similaridade" || location === "/acompanhar";
   const settingsQuery = trpc.settings.getAll.useQuery(undefined, {
     enabled: !excluded,
     staleTime: 0,

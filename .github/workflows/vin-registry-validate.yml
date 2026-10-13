@@ -59,7 +59,7 @@ jobs:
       - name: Install
         run: pnpm install --frozen-lockfile
       - name: VIN registry unit and concurrency tests
-        run: pnpm vitest run server/vinRegistry.test.ts
+        run: pnpm vitest run server/vinRegistry.test.ts server/customerRouteAudit.test.ts
       - name: MySQL unique key, concurrency and transaction integration
         run: pnpm vitest run server/vinRegistryMysql.test.ts
       - name: Production bundle

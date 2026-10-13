@@ -130,6 +130,7 @@ import { trpc } from "@/lib/trpc";
 import { MaintenanceManifestGate } from "@/components/MaintenanceManifestGate";
 import { isMaintenanceManifestActiveForPath } from "@shared/maintenanceManifest";
 import { isH2AdsPath } from "@shared/h2adsRoute";
+import { CHASSIS_ADMIN_PATH, isChassisAdminPath } from "@shared/chassisRoute";
 
 // Guard para rotas admin — redireciona para /admin/login se não autenticado
 function AdminGuard({ children }: { children: React.ReactNode }) {
@@ -363,7 +364,7 @@ function Router() {
       <Route path={"/cartoes/despesas"} component={CartaoPage} />
       <Route path={"/cartoes/historico/:id"} component={CartaoHistoricoPage} />
       <Route path={"/cartoes/mercado"} component={CartaoMercadoPage} />
-      <Route path={"/gerador-chassi"}>
+      <Route path={CHASSIS_ADMIN_PATH}>
         <AdminGuard><GeradorChassiPublico /></AdminGuard>
       </Route>
       <Route path={"/ajuda"} component={Ajuda} />
@@ -390,13 +391,13 @@ function ClientInstallGate({ children }: { children: React.ReactNode }) {
 
 function AppContent() {
   const [location] = useLocation();
-  const isAdminRoute = location.startsWith("/admin");
+  const isGeradorChassiRoute = isChassisAdminPath(location);
+  const isAdminRoute = location.startsWith("/admin") || isGeradorChassiRoute;
   const isH2AdsRoute = isH2AdsPath(location);
   const isSimilarityRoute = location.toLowerCase() === "/similaridade";
   const isTrackingRoute = location === "/acompanhar";
   const isLoginRoute = location === "/login";
   const isRaffleRoute = location === "/sorteio";
-  const isGeradorChassiRoute = location === "/gerador-chassi";
   const isAppDownloadRoute = location === "/app" || location === "/app-pro";
   const isVipRoute = location.toLowerCase() === "/vip";
   const isFotoRoute = location === "/foto";
@@ -489,6 +490,12 @@ function AppContent() {
     favicons.forEach((link) => { link.href = link.sizes.value === "16x16" ? h2Favicon16 : h2Favicon32; });
     document.title = "H2 COLOMBIANO";
   }, [isAdminRoute, isCartoesRoute, isH2AdsRoute, isLocadoraBrandRoute, isSimilarityRoute]);
+
+  // Endereço administrativo canônico; links antigos preservam query e hash.
+  if (isGeradorChassiRoute && location !== CHASSIS_ADMIN_PATH) {
+    const suffix = typeof window !== "undefined" ? `${window.location.search}${window.location.hash}` : "";
+    return <Redirect to={`${CHASSIS_ADMIN_PATH}${suffix}`} />;
+  }
 
   // Redirect de rotas com maiúsculas para minúsculas (DEVE ficar após todos os hooks)
   if (location !== location.toLowerCase() && !isAdminRoute) {
@@ -608,11 +615,6 @@ function AppContent() {
 
   // Rota /sorteio é pública — não passa pelo PasswordGate do site
   // O próprio Raffle.tsx controla o acesso (livre ou com senha própria do sorteio)
-  // Rota /gerador-chassi é exclusiva do ADM.
-  if (isGeradorChassiRoute) {
-    return <Router />;
-  }
-
   if (isRaffleRoute || isFotoRoute) {
     return (
       <>
