@@ -38,6 +38,7 @@ import { ThemeProvider } from "./contexts/ThemeContext";
 import Home from "./pages/Home";
 import AdminCodes from "./pages/AdminCodes";
 import AdminSiteSecurity from "./pages/AdminSiteSecurity";
+import SiteAccess from "./pages/SiteAccess";
 import AdminGastosPage from "./pages/AdminGastosPage";
 import AdminUserAccessFilters from "./pages/AdminUserAccessFilters";
 import AdminCustomerPasswordPage from "./pages/AdminCustomerPasswordPage";
@@ -185,6 +186,7 @@ function Router() {
   
   return (
     <Switch>
+      <Route path={"/site-access"} component={SiteAccess} />
       <Route path={"/admin/login"} component={AdminLogin} />
       <Route path={"/h2ads"}>
         <H2AdsGuard><H2Ads /></H2AdsGuard>
