@@ -86,7 +86,7 @@ export default function VipPage() {
     <Crown className="h-7 w-7" />
   </div>
   <h1 className="relative mt-4 text-4xl font-black uppercase tracking-tight">{title}</h1>
-  <p className="relative mx-auto mt-3 max-w-md text-sm font-semibold leading-6 text-slate-300">{subtitle}</p>
+  <p className="relative mx-auto mt-3 max-w-md whitespace-pre-line text-sm font-semibold leading-6 text-slate-300">{subtitle}</p>
 </div>
 
 <div className="p-5 sm:p-7">
