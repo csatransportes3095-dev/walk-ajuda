@@ -10,7 +10,7 @@ export function isSecurityPublicPath(pathname: string): boolean {
   // No generic /api bypass: only exact minimal routes.
   if (pathname === "/api/ping") return true;
   if (pathname === "/site-access") return true;
-  if (pathname === "/api/site-access/request" || pathname === "/api/site-access/verify" || pathname === "/api/site-access/logout") return true;
+  if (pathname === "/api/site-access/request" || pathname === "/api/site-access/verify" || pathname === "/api/site-access/logout" || pathname === "/api/site-access/session") return true;
   if (/^\/api\/trpc\/adminAuth\.(login|check|setup|unlock|requestUnlock|logout)$/.test(pathname)) return true;
   // Scripts and worker APIs are governed by H2ADS' own existing authentication.
   if (pathname.startsWith("/api/h2ads/worker/")) return true;
