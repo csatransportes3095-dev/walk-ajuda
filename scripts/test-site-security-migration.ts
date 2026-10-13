@@ -1,6 +1,6 @@
 import "dotenv/config";
 import mysql from "mysql2/promise";
-import { applySiteAccessMigration, verifySiteAccessSchema } from "./siteAccessMigration";
+import { applySiteAccessMigration, verifySiteAccessSchema } from "../server/siteAccessMigration";
 
 async function main() {
   if (process.env.H2_SITE_SECURITY_MIGRATION_TARGET !== "test") throw new Error("Test-only database required");
