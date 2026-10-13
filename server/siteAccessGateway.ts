@@ -54,6 +54,13 @@ export function createSiteAccessGateway(deps: SiteGatewayDependencies = defaults
         return res.status(503).type("html").send(htmlPage("Acesso temporariamente indisponível", "Tente novamente em alguns instantes."));
       }
       if (mode === "public") return next();
+      // A release cannot safely flip the site into restrictions until the
+      // owner, mail signing secret and migration have all been verified.
+      if (!process.env.H2_SITE_SECURITY_OWNER?.trim() || (process.env.H2_SITE_ACCESS_SECRET || "").length < 32) {
+        console.error("[SiteGateway] restriction requested without protected configuration");
+        setNoStore(res);
+        return res.status(503).type("html").send(htmlPage("Acesso temporariamente indisponível","Configuração de segurança pendente."));
+      }
       let visitor = false;
       if (mode === "restricted") {
         try { visitor = await deps.visitor(req); }
