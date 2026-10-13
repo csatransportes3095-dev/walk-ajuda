@@ -12,6 +12,7 @@ on:
       - 'client/src/pages/AdminSiteSecurity.tsx'
       - 'client/src/pages/AdminCodes.tsx'
       - 'client/src/App.tsx'
+      - 'scripts/site-security-check-typecheck-delta.mjs'
       - 'scripts/apply-site-security-migration.ts'
       - '.github/workflows/site-security-validate.yml'
   workflow_dispatch:
@@ -25,12 +26,37 @@ jobs:
     timeout-minutes: 30
     steps:
       - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
       - uses: pnpm/action-setup@v4
       - uses: actions/setup-node@v4
         with:
           node-version: '22'
           cache: pnpm
       - run: pnpm install --frozen-lockfile
-      - run: pnpm check
-      - run: pnpm exec vitest run server/siteAccessPolicy.test.ts
-      - run: pnpm build
+      - name: Testes isolados de seguranca
+        run: pnpm exec vitest run server/siteAccessPolicy.test.ts
+      - name: Compilacao de producao
+        run: pnpm build
+      - name: Checagem TypeScript da branch
+        id: branch_check
+        shell: bash
+        run: |
+          set +e
+          pnpm check > /tmp/security-branch-tsc.log 2>&1
+          echo "exit_code=$?" >> "$GITHUB_OUTPUT"
+          set -e
+          tail -n 30 /tmp/security-branch-tsc.log
+      - name: Checagem TypeScript da base (sem alterar workspace)
+        shell: bash
+        run: |
+          set -eu
+          BASE_SHA="$(git rev-parse "origin/recovery/organizar-salvos-2026-08-24")"
+          git worktree add --detach /tmp/security-baseline "$BASE_SHA"
+          ln -s "$GITHUB_WORKSPACE/node_modules" /tmp/security-baseline/node_modules
+          set +e
+          (cd /tmp/security-baseline && "$GITHUB_WORKSPACE/node_modules/.bin/tsc" --noEmit) > /tmp/security-base-tsc.log 2>&1
+          set -e
+          tail -n 20 /tmp/security-base-tsc.log
+      - name: Reprovar somente novos erros TypeScript
+        run: node scripts/site-security-check-typecheck-delta.mjs /tmp/security-base-tsc.log /tmp/security-branch-tsc.log
