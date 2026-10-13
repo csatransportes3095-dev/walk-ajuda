@@ -1,0 +1,42 @@
+name: Site Security - MySQL migration validation
+on:
+  pull_request:
+    branches:
+      - recovery/organizar-salvos-2026-08-24
+    paths:
+      - 'server/siteAccessMigration.ts'
+      - 'scripts/apply-site-security-migration.ts'
+      - 'scripts/test-site-security-migration.ts'
+      - '.github/workflows/site-security-mysql.yml'
+  workflow_dispatch:
+permissions:
+  contents: read
+jobs:
+  mysql:
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    services:
+      mysql:
+        image: mysql:8.0
+        env:
+          MYSQL_ROOT_PASSWORD: test_only_root
+          MYSQL_DATABASE: h2_site_security_test
+        ports:
+          - 3306:3306
+        options: >-
+          --health-cmd="mysqladmin ping -h 127.0.0.1 -uroot -ptest_only_root"
+          --health-interval=5s --health-timeout=5s --health-retries=20
+    env:
+      DATABASE_URL: mysql://root:test_only_root@127.0.0.1:3306/h2_site_security_test
+      H2_SITE_SECURITY_MIGRATION_TARGET: test
+      H2_SECURITY_MIGRATION_APPROVED: yes
+    steps:
+      - uses: actions/checkout@v4
+      - uses: pnpm/action-setup@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '22'
+          cache: pnpm
+      - run: pnpm install --frozen-lockfile
+      - name: Execute additive migration twice and check saved data
+        run: pnpm exec tsx scripts/test-site-security-migration.ts
