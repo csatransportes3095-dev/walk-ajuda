@@ -1,4 +1,4 @@
-import { mysqlTable, int, varchar, timestamp } from "drizzle-orm/mysql-core";
+import { mysqlTable, int, varchar, timestamp, bigint } from "drizzle-orm/mysql-core";
 
 /** Controle global: permanece PUBLIC por padrão, sem migração destrutiva. */
 export const siteAccessConfig = mysqlTable("siteAccessConfig", {
@@ -38,4 +38,11 @@ export const siteAccessAudit = mysqlTable("siteAccessAudit", {
   action: varchar("action", { length: 48 }).notNull(),
   subject: varchar("subject", { length: 320 }),
   createdAt: timestamp("createdAt").defaultNow().notNull(),
+});
+
+/** Janela de limite de tentativas sem expor enderecos IP/identidades. */
+export const siteAccessRateLimits = mysqlTable("siteAccessRateLimits", {
+  limitKey: varchar("limitKey", { length: 80 }).primaryKey(),
+  windowStartedAt: bigint("windowStartedAt", { mode: "number" }).notNull(),
+  hits: int("hits").notNull().default(0),
 });
