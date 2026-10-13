@@ -1,4 +1,4 @@
-import type { RowDataPacket } from "mysql2";
+import type { Connection, RowDataPacket } from "mysql2/promise";
 
 export type BackupGateRecord = {
   id: string;
@@ -59,11 +59,11 @@ export function inspectSiteSecurityBackup(
 
 /** Safe read-only query on the existing backup registry; no secrets or payloads logged. */
 export async function readSiteSecurityBackup(
-  conn: { query: (statement: string, params: unknown[]) => Promise<[RowDataPacket[], unknown]> },
+  conn: Connection,
   id: string,
 ): Promise<BackupGateRecord | null> {
   if (!/^[a-f0-9]{48}$/i.test(id)) return null;
-  const [rows] = await conn.query(
+  const [rows] = await conn.query<RowDataPacket[]>(
     "SELECT id, status, completedAt, artifactKey, fileSize, archiveSha256, manifestJson FROM systemBackups WHERE id = ? LIMIT 1",
     [id],
   );
