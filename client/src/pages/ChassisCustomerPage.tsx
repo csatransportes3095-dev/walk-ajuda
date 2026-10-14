@@ -15,8 +15,6 @@ export default function ChassisCustomerPage() {
   const utils = trpc.useUtils();
   const me = trpc.chassisService.me.useQuery(undefined, { retry: false, refetchInterval: 10_000, refetchOnWindowFocus: true });
   const catalog = trpc.chassisService.catalog.useQuery(undefined, { refetchOnWindowFocus: true });
-  const { data: activePix } = trpc.pix.getActive.useQuery();
-  const { data: siteSettings } = trpc.settings.getAll.useQuery();
   const [pixCopied, setPixCopied] = useState(false);
   const [view, setView] = useState<"generate" | "packages" | "history">("generate");
   const [registering, setRegistering] = useState(false);
@@ -112,9 +110,9 @@ export default function ChassisCustomerPage() {
 
   const user = me.data;
   const config = catalog.data?.config;
-  const pixKey = activePix?.pixKey || siteSettings?.pix_key || "";
-  const pixName = activePix?.pixName || siteSettings?.pix_name || "";
-  const pixBank = activePix?.pixBank || siteSettings?.pix_bank || "";
+  const pixKey = config?.pixKey || "";
+  const pixName = config?.pixName || "";
+  const pixBank = config?.pixBank || "";
   async function copyPix() {
     if (!pixKey) { toast.error("Nenhuma chave PIX ativa foi configurada."); return; }
     try {
