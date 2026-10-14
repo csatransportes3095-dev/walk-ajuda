@@ -109,6 +109,8 @@ describe.skipIf(!url)("créditos e sessões com MySQL isolado", () => {
     const second = await account(1, "21998765432");
     await store.generate(first.user.id, first.tokenHash, generationInput());
     expect((await store.history(second.user.id)).generations).toHaveLength(0);
+    await store.updateUser({ userId: first.user.id, status: "active", accountType: "test" }, "test-admin");
+    expect((await store.resolveSession(first.token))?.user.accountType).toBe("test");
     await store.updateUser({ userId: first.user.id, status: "blocked", accountType: "paid" }, "test-admin");
     expect(await store.resolveSession(first.token)).toBeNull();
     await expect(store.generate(first.user.id, first.tokenHash, generationInput())).rejects.toThrow("bloqueado");

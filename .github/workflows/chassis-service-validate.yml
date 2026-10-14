@@ -42,6 +42,10 @@ jobs:
           cache: pnpm
       - name: Install
         run: pnpm install --frozen-lockfile
+      - name: Additive startup migration in isolated MySQL
+        run: |
+          DATABASE_URL="$CHASSIS_TEST_DATABASE_URL" pnpm exec tsx scripts/apply-chassis-service-migration.ts
+          DATABASE_URL="$CHASSIS_TEST_DATABASE_URL" pnpm exec tsx scripts/apply-chassis-service-migration.ts
       - name: Login and credit unit checks
         run: pnpm vitest run server/chassisServiceCore.test.ts server/chassisServiceRouter.test.ts
       - name: Type checks for service files

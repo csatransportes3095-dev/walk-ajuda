@@ -172,6 +172,7 @@ export class ChassisServiceStore {
         return { balance: user.balance, replayed: true };
       }
       const balance = user.balance + delta;
+      if (balance < 0) throw new ChassisServiceError("BAD_REQUEST", "A quantidade a remover supera o saldo disponível.");
       assertChassisCredits(balance);
       await connection.execute("UPDATE h2_chassis_users SET balance = ? WHERE id = ?", [balance, userId]);
       await this.ledger(connection, userId, "adjustment", delta, balance, actor, requestId, note);
@@ -180,9 +181,10 @@ export class ChassisServiceStore {
   }
   async updateUser(input: { userId: number; status: "active" | "blocked"; accountType: "test" | "paid" }, actor: string) {
     return this.transaction(async connection => {
-      await this.lockedUser(connection, input.userId);
-      await connection.execute("UPDATE h2_chassis_users SET status = ?, account_type = ?, session_version = session_version + 1 WHERE id = ?", [input.status, input.accountType, input.userId]);
-      await connection.execute("DELETE FROM h2_chassis_sessions WHERE user_id = ?", [input.userId]);
+      const previous = await this.lockedUser(connection, input.userId);
+      const revoke = input.status === "blocked" || previous.status !== input.status;
+      await connection.execute("UPDATE h2_chassis_users SET status = ?, account_type = ?, session_version = session_version + ? WHERE id = ?", [input.status, input.accountType, revoke ? 1 : 0, input.userId]);
+      if (revoke) await connection.execute("DELETE FROM h2_chassis_sessions WHERE user_id = ?", [input.userId]);
       await this.audit(connection, input.userId, input.status === "blocked" ? "block_user" : "update_user", actor);
       return { success: true };
     });

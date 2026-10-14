@@ -1,0 +1,33 @@
+name: Backup Core - recovery kit regression
+
+on:
+  pull_request:
+    branches:
+      - recovery/organizar-salvos-2026-08-24
+    paths:
+      - 'server/backupService.ts'
+      - 'server/backupService.test.ts'
+      - 'server/disasterRecoveryKit.ts'
+      - 'server/disasterRecoveryKit.test.ts'
+      - '.github/workflows/backup-core-recovery-validate.yml'
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  validate:
+    runs-on: ubuntu-latest
+    timeout-minutes: 30
+    steps:
+      - uses: actions/checkout@v4
+      - uses: pnpm/action-setup@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '22'
+          cache: pnpm
+      - run: pnpm install --frozen-lockfile
+      - name: Testes do Backup Core e do kit de recuperacao
+        run: pnpm exec vitest run server/backupService.test.ts server/disasterRecoveryKit.test.ts
+      - name: Compilacao de producao
+        run: pnpm build
