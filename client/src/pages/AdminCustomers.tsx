@@ -1,4 +1,4 @@
-import { useEffect, useState } from "react";
+import { useEffect, useMemo, useState } from "react";
 import { trpc } from "@/lib/trpc";
 import { toast } from "sonner";
 import { Pencil, Trash2, Download, Search, X, Users, Gift, Camera, KeyRound, RefreshCw, Eye, EyeOff, ShieldCheck, ShieldOff, Lock, Unlock, Clock, FileText, FolderOpen, CheckSquare, Square, ListChecks, ExternalLink, Link2, Copy, Plus, DollarSign, BadgePercent, FileCheck, File, FileArchive, FileCode, FileJson, Music, Video, Upload, Crown, Image as ImageIcon } from "lucide-react";
@@ -483,15 +483,22 @@ export default function AdminCustomers() {
     if ((digits.length === 12 || digits.length === 13) && digits.startsWith('55')) digits = digits.slice(2);
     return digits;
   };
+  const loanCustomerLookup = useMemo(() => {
+    const phones = new Set<string>();
+    const cpfs = new Set<string>();
+    for (const loanClient of (loanClientsForCardColorQuery.data || []) as any[]) {
+      if (Number(loanClient.totalLoans || 0) <= 0) continue;
+      const phone = normalizeLoanCardPhone(loanClient.phone);
+      const cpf = String(loanClient.cpf ?? '').replace(/\D/g, '');
+      if (phone) phones.add(phone);
+      if (cpf) cpfs.add(cpf);
+    }
+    return { phones, cpfs };
+  }, [loanClientsForCardColorQuery.data]);
   const hasLoanForCustomer = (customer: Customer) => {
     const phone = normalizeLoanCardPhone(customer.phone);
     const cpf = String(customer.cpf ?? '').replace(/\D/g, '');
-    return ((loanClientsForCardColorQuery.data || []) as any[]).some((loanClient: any) => {
-      if (Number(loanClient.totalLoans || 0) <= 0) return false;
-      const loanPhone = normalizeLoanCardPhone(loanClient.phone);
-      const loanCpf = String(loanClient.cpf ?? '').replace(/\D/g, '');
-      return (!!phone && !!loanPhone && phone === loanPhone) || (!!cpf && !!loanCpf && cpf === loanCpf);
-    });
+    return (!!phone && loanCustomerLookup.phones.has(phone)) || (!!cpf && loanCustomerLookup.cpfs.has(cpf));
   };
   const routeReleaseModesQuery = trpc.customers.routeReleaseModes.useQuery();
   const setRouteReleaseModeMut = trpc.customers.setRouteReleaseMode.useMutation({
@@ -727,12 +734,12 @@ export default function AdminCustomers() {
 
   const customers: Customer[] = (customersQuery.data || []) as unknown as Customer[];
 
-  const sortedCustomers = [...customers].sort((a, b) => {
+  const sortedCustomers = useMemo(() => [...customers].sort((a, b) => {
     if (sortOrder === "name") return a.name.localeCompare(b.name, 'pt-BR');
     if (sortOrder === "oldest") return new Date(a.createdAt).getTime() - new Date(b.createdAt).getTime();
     return new Date(b.createdAt).getTime() - new Date(a.createdAt).getTime(); // newest
-  });
-  const filtered = sortedCustomers.filter((c) => {
+  }), [customersQuery.data, sortOrder]);
+  const filtered = useMemo(() => sortedCustomers.filter((c) => {
     const rawTerm = searchTerm.trim();
     const term = rawTerm.toLowerCase();
     const isOrderSearch = rawTerm.startsWith("#");
@@ -776,7 +783,7 @@ export default function AdminCustomers() {
     if (showOnlyNoOrders) return matchSearch && !c.hasOrder;
     if (showOnlyBlocked) return matchSearch && c.blocked === 1;
     return matchSearch;
-  });
+  }), [sortedCustomers, searchTerm, showOnlyVip, showOnlyOrders, showOnlyNoOrders, showOnlyBlocked]);
 
   const startEdit = (c: Customer) => {
     setEditOriginal({
