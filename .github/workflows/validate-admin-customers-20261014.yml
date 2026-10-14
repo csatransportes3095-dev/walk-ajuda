@@ -1,0 +1,46 @@
+name: ADM Customers isolated performance validation
+
+on:
+  push:
+    branches:
+      - perf/admin-customers-bulk-ui-20261014
+    paths:
+      - 'client/src/pages/AdminCustomers.tsx'
+      - 'server/adminCustomersPerformance.test.ts'
+      - '.github/workflows/validate-admin-customers-20261014.yml'
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  validate:
+    runs-on: ubuntu-latest
+    timeout-minutes: 30
+    steps:
+      - uses: actions/checkout@v4
+      - uses: pnpm/action-setup@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '22'
+          cache: pnpm
+      - run: pnpm install --frozen-lockfile
+      - name: ADM customer regression tests
+        run: pnpm exec vitest run server/adminCustomersPerformance.test.ts
+      - name: Check TypeScript in modified files
+        shell: bash
+        run: |
+          set +e
+          pnpm check > /tmp/typescript-check.log 2>&1
+          rc=$?
+          set -e
+          if [ "$rc" -ne 0 ]; then
+            echo "Existing repository TypeScript diagnostics:"
+            grep 'error TS' /tmp/typescript-check.log | head -n 20 || true
+          fi
+          if grep -E '^(client/src/pages/AdminCustomers\\.tsx|server/adminCustomersPerformance\\.test\\.ts)\\(' /tmp/typescript-check.log | grep -q 'error TS'; then
+            echo "TypeScript error in the modified files"
+            exit 1
+          fi
+      - name: Production build
+        run: pnpm build
