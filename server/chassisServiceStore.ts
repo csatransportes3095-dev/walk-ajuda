@@ -182,11 +182,11 @@ export class ChassisServiceStore {
       return { balance, replayed: false };
     });
   }
-  async updateUser(input: { userId: number; status: "active" | "blocked"; accountType: "test" | "paid" }, actor: string) {
+  async updateUser(input: { userId: number; name: string; status: "active" | "blocked"; accountType: "test" | "paid" }, actor: string) {
     return this.transaction(async connection => {
       const previous = await this.lockedUser(connection, input.userId);
       const revoke = input.status === "blocked" || previous.status !== input.status;
-      await connection.execute("UPDATE h2_chassis_users SET status = ?, account_type = ?, session_version = session_version + ? WHERE id = ?", [input.status, input.accountType, revoke ? 1 : 0, input.userId]);
+      await connection.execute("UPDATE h2_chassis_users SET name = ?, status = ?, account_type = ?, session_version = session_version + ? WHERE id = ?", [input.name.trim().slice(0, 120), input.status, input.accountType, revoke ? 1 : 0, input.userId]);
       if (revoke) await connection.execute("DELETE FROM h2_chassis_sessions WHERE user_id = ?", [input.userId]);
       await this.audit(connection, input.userId, input.status === "blocked" ? "block_user" : "update_user", actor);
       return { success: true };
