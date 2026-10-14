@@ -634,7 +634,11 @@ export default function Home() {
       storefrontScrollY: storefrontScrollRef.current,
       savedAt: Date.now(),
     };
-    try { localStorage.setItem(PROGRESS_KEY, JSON.stringify(progress)); } catch {}
+    // Evitar stringify e escrita síncrona a cada tecla; manter flush ao desmontar/trocar etapa.
+    const timer = window.setTimeout(() => {
+      try { localStorage.setItem(PROGRESS_KEY, JSON.stringify(progress)); } catch {}
+    }, 250);
+    return () => window.clearTimeout(timer);
   }, [step, selectedProduct, selectedOption, selectedPriceModel, questionAnswers, questionAudioAnswers, questionAudioFlowId, clientName, clientPhone, clientCity, clientEmail, couponCode, carDocumentYear, cadastroSubStep, flowOrigin, vipInstallmentSelection.mode, vipInstallmentSelection.installmentCount, vipInstallmentSelection.frequency]);
 
   // Cada rascunho é retomado somente no canal onde foi iniciado.
@@ -3547,7 +3551,7 @@ export default function Home() {
               if (autoAdvance && value) {
                 const nextIdx = getNextIndex(nextAnswers);
                 const nextList = buildOrderedQs(nextAnswers);
-                setTimeout(() => { if (nextIdx < nextList.length) setCurrentQuestionIndex(nextIdx); }, 180);
+                setTimeout(() => { if (nextIdx < nextList.length) setCurrentQuestionIndex(nextIdx); }, 80);
               }
             };
 
@@ -3624,7 +3628,7 @@ export default function Home() {
                             const nextList = buildOrderedQs(newAnswers);
                             setTimeout(() => {
                               if (nextIdx < nextList.length) setCurrentQuestionIndex(nextIdx);
-                            }, 350);
+                            }, 100);
                           }
                         }}
                         className="w-full flex items-center gap-4 px-4 py-3.5 rounded-xl text-left transition-all duration-150"
