@@ -1,6 +1,7 @@
 -- Módulo independente. Não altera customers, pedidos, senhas ou sessões centrais.
 CREATE TABLE IF NOT EXISTS h2_chassis_users (
   id INT UNSIGNED NOT NULL AUTO_INCREMENT PRIMARY KEY,
+  name VARCHAR(120) NOT NULL DEFAULT '',
   phone VARCHAR(15) NOT NULL,
   password_hash VARCHAR(256) NOT NULL,
   account_type ENUM('test','paid') NOT NULL DEFAULT 'test',
