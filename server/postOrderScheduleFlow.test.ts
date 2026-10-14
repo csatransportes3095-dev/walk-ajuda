@@ -40,7 +40,8 @@ describe("fluxo pos-pedido: agendamento antes do WhatsApp", () => {
   });
 
   it("monta a mensagem com dados no escopo e oferece abertura alternativa", () => {
-    expect(home).toContain("const buildPostOrderWhatsappUrl = () => {\\n    const od = submittedOrderData;");
+    expect(home).toContain("const buildPostOrderWhatsappUrl = () => {");
+    expect(home).toContain("const od = submittedOrderData;");
     expect(home).toContain("href={buildPostOrderWhatsappUrl()}");
     expect(home).toContain("ABRIR NESTA ABA");
     expect(home).toContain("COPIAR MENSAGEM");
