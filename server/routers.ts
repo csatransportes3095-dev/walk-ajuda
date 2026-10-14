@@ -1,3 +1,4 @@
+import { siteSecurityRouter } from "./siteSecurityRouter";
 import { vinRegistryRouter } from "./routers/vinRegistry";
 import { chassisServiceRouter } from "./routers/chassisService";
 import { sql } from "drizzle-orm";
@@ -435,6 +436,7 @@ async function withResolvedRaffleWinnerPhoto<T extends any>(raffle: T): Promise<
 }
 
 export const appRouter = router({
+  siteSecurity: siteSecurityRouter,
   vinRegistry: vinRegistryRouter,
   chassisService: chassisServiceRouter,
   system: systemRouter,
