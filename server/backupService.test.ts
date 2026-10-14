@@ -4,7 +4,7 @@ import { chmod, mkdtemp, mkdir, readFile, rm, writeFile } from "node:fs/promises
 import os from "node:os";
 import path from "node:path";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
-import { BACKUP_ARCHIVE_AUTH_TAG_BYTES, BACKUP_ARCHIVE_HEADER_BYTES, BACKUP_STALE_AFTER_MS, concatenateDumplingSqlFiles, createEncryptedArchiveStream, DEFAULT_DUMPLING_CA_PATH, encryptedArchiveLength, getBackupRemoteVerification, isBackupStale, logProcessDiagnostic, measureTarArchiveBytes, orderDumplingSqlFiles, parseDatabaseUrl, resolveDumplingTlsPaths, safeBackupObjectPath, verifyEncryptedArchiveStreamContent } from "./backupService";
+import { BACKUP_ARCHIVE_AUTH_TAG_BYTES, BACKUP_ARCHIVE_HEADER_BYTES, BACKUP_STALE_AFTER_MS, concatenateDumplingSqlFiles, createEncryptedArchiveStream, DEFAULT_DUMPLING_CA_PATH, encryptedArchiveLength, getBackupRemoteVerification, isBackupStale, logProcessDiagnostic, measureTarArchiveBytes, orderDumplingSqlFiles, parseDatabaseUrl, resolveDumplingTlsPaths, safeBackupObjectPath, summaryFromManifest, verifyEncryptedArchiveStreamContent } from "./backupService";
 import { getBackupDownloadName } from "./routers/backup";
 
 const TEST_BACKUP_KEY = Buffer.alloc(32, 7).toString("hex");
@@ -145,6 +145,24 @@ describe("backupService", () => {
     } finally {
       await rm(directory, { recursive: true, force: true });
     }
+  });
+
+  it("preserva o indicador do kit novo no resumo sem expor segredos", () => {
+    const manifest = {
+      formatVersion: 1, backupId: "backup-test", generatedAt: new Date().toISOString(),
+      sourceCommit: "abc",
+      database: { dumpTool: "dumpling", databaseName: "test", tableCount: 1, dumpBytes: 10, dumpSha256: "a".repeat(64) },
+      r2: { objectCount: 0, totalBytes: 0 },
+      disasterRecovery: {
+        version: 1, environmentVariableCount: 7, missingCriticalVariables: [],
+        files: [{ path: "recovery/environment.json", role: "environment", bytes: 8, sha256: "b".repeat(64) }],
+        externalKeyRequired: true, backupEncryptionKeyStored: false,
+      },
+    };
+    const summary = JSON.parse(summaryFromManifest(manifest as any, 123, "c".repeat(64)));
+    expect(summary.disasterRecovery).toEqual({version: 1, environmentVariableCount: 7, missingCriticalVariables: []});
+    expect(JSON.stringify(summary)).not.toContain("recovery/environment.json");
+    expect(JSON.stringify(summary)).not.toContain("BACKUP_ENCRYPTION_KEY");
   });
 
   it("trata backups antigos sem verificação profunda como pendentes", () => {

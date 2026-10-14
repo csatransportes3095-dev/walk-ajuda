@@ -881,7 +881,7 @@ function withBackupRemoteVerification(manifestJson: string | null | undefined, v
   return JSON.stringify(parsed);
 }
 
-function summaryFromManifest(manifest: BackupManifest, archiveBytes: number, archiveSha256: string) {
+export function summaryFromManifest(manifest: BackupManifest, archiveBytes: number, archiveSha256: string) {
   return JSON.stringify({
     formatVersion: manifest.formatVersion,
     backupId: manifest.backupId,
@@ -900,6 +900,13 @@ function summaryFromManifest(manifest: BackupManifest, archiveBytes: number, arc
     },
     archiveBytes,
     archiveSha256,
+    // O cofre já existe no pacote cifrado. O resumo precisa conservar apenas
+    // indicadores não confidenciais para que o painel não o classifique como antigo.
+    disasterRecovery: {
+      version: manifest.disasterRecovery.version,
+      environmentVariableCount: manifest.disasterRecovery.environmentVariableCount,
+      missingCriticalVariables: manifest.disasterRecovery.missingCriticalVariables,
+    },
   });
 }
 
