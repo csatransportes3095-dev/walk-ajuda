@@ -41,10 +41,10 @@ describe("acesso independente do serviço", () => {
     expect(chassisGenerationHash({ ...input, requestId: randomUUID() })).toBe(chassisGenerationHash(input));
     expect(chassisGenerationHash({ ...input, quantity: 2 })).not.toBe(chassisGenerationHash(input));
   });
-  it("isola somente a rota e o subdomínio previstos", () => {
-    expect(isChassisCustomerLocation("/APP/CHASSIS/?x=1")).toBe(true);
+  it("isola somente a rota oficial do usuário e o suporte legado previsto", () => {
+    expect(isChassisCustomerLocation("/H2CHASSIS/?x=1")).toBe(true);
     expect(isChassisCustomerLocation("/", "app.h2colombiano.com")).toBe(true);
-    for (const path of ["/app", "/app-pro", "/app/chassis-outro", "/app/chassis/cliente", "/admin/login", "/login"]) expect(isChassisCustomerLocation(path)).toBe(false);
+    for (const path of ["/app", "/app-pro", "/app/chassis", "/h2chassis-outro", "/h2chassis/cliente", "/admin/login", "/login"]) expect(isChassisCustomerLocation(path)).toBe(false);
     expect(isChassisCustomerLocation("/", "app.h2colombiano.com.evil.example")).toBe(false);
     expect(isChassisCustomerLocation("/", "h2colombiano.com")).toBe(false);
   });
