@@ -239,8 +239,8 @@ export class ChassisServiceStore {
     return { success: true };
   }
   async listPurchases() {
-    const [rows] = await this.pool.query<Array<PurchaseRow & { phone: string }>>("SELECT p.*, u.phone FROM h2_chassis_purchases p JOIN h2_chassis_users u ON u.id = p.user_id ORDER BY p.created_at DESC LIMIT 100");
-    return rows.map(row => ({ ...publicPurchase(row), phone: row.phone }));
+    const [rows] = await this.pool.query<Array<PurchaseRow & { name: string; phone: string }>>("SELECT p.*, u.name, u.phone FROM h2_chassis_purchases p JOIN h2_chassis_users u ON u.id = p.user_id ORDER BY p.created_at DESC LIMIT 100");
+    return rows.map(row => ({ ...publicPurchase(row), name: row.name || "", phone: row.phone }));
   }
   async confirmPurchase(id: string, actor: string) {
     return this.transaction(async connection => {
