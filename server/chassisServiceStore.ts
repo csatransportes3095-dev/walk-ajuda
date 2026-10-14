@@ -71,13 +71,13 @@ export class ChassisServiceStore {
     const [rows] = await this.pool.execute<RowDataPacket[]>("SELECT * FROM h2_chassis_settings WHERE id = 1");
     const row = rows[0];
     if (!row) throw new ChassisServiceError("CONFLICT", "O serviço ainda não foi configurado pelo ADM.");
-    return { trialCredits: Number(row.trial_credits), registrationEnabled: Number(row.registration_enabled) === 1, supportPhone: String(row.support_phone || ""), paymentInstructions: String(row.payment_instructions || ""), paymentMode: "manual" as const };
+    return { trialCredits: Number(row.trial_credits), registrationEnabled: Number(row.registration_enabled) === 1, supportPhone: String(row.support_phone || ""), pixKey: String(row.pix_key || ""), pixName: String(row.pix_name || ""), pixBank: String(row.pix_bank || ""), paymentInstructions: String(row.payment_instructions || ""), paymentMode: "manual" as const };
   }
-  async setConfig(input: { trialCredits: number; registrationEnabled: boolean; supportPhone: string; paymentInstructions: string }, actor: string) {
+  async setConfig(input: { trialCredits: number; registrationEnabled: boolean; supportPhone: string; pixKey: string; pixName: string; pixBank: string; paymentInstructions: string }, actor: string) {
     assertChassisCredits(input.trialCredits);
     const supportPhone = input.supportPhone ? normalizeChassisPhone(input.supportPhone) : "";
     await this.transaction(async connection => {
-      await connection.execute("UPDATE h2_chassis_settings SET trial_credits = ?, registration_enabled = ?, support_phone = ?, payment_instructions = ? WHERE id = 1", [input.trialCredits, input.registrationEnabled, supportPhone, input.paymentInstructions]);
+      await connection.execute("UPDATE h2_chassis_settings SET trial_credits = ?, registration_enabled = ?, support_phone = ?, pix_key = ?, pix_name = ?, pix_bank = ?, payment_instructions = ? WHERE id = 1", [input.trialCredits, input.registrationEnabled, supportPhone, input.pixKey.trim().slice(0, 256), input.pixName.trim().slice(0, 160), input.pixBank.trim().slice(0, 120), input.paymentInstructions]);
       await this.audit(connection, null, "update_config", actor);
     });
     return this.getConfig();
