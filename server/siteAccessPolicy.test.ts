@@ -16,6 +16,12 @@ describe("Seguranca do Site - regras de servidor", () => {
     expect(decision("restricted","/acompanhar",false,true)).toBe("allow");
     expect(decision("blocked","/acompanhar",false,true)).toBe("deny");
   });
+  it("bloqueia portal e endpoints de autenticação do visitante no modo fechado",()=>{
+    for (const p of ["/site-access","/api/site-access/request","/api/site-access/verify","/api/site-access/session","/api/site-access/logout"]) {
+      expect(decision("blocked",p)).toBe("deny");
+      expect(decision("restricted",p)).toBe("allow");
+    }
+  });
   it("preserva emergencia do ADM com autenticação propria",()=>{
     expect(decision("blocked","/admin/login")).toBe("allow");
     expect(decision("blocked","/api/trpc/adminAuth.login")).toBe("allow");
