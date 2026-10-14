@@ -8,6 +8,7 @@ import { createRoot } from "react-dom/client";
 import { useEffect } from "react";
 import superjson from "superjson";
 import App from "./App";
+import SiteAccess from "./pages/SiteAccess";
 import H2WelcomePremium from "./components/H2WelcomePremium";
 import HomeTopRuntimeEnhancer from "./components/HomeTopRuntimeEnhancer";
 import AdminHomeTopSettingsEnhancer from "./components/AdminHomeTopSettingsEnhancer";
@@ -107,7 +108,8 @@ function RuntimeTree() {
 
 function RootMaintenanceBoundary() {
   const pathname = typeof window !== "undefined" ? window.location.pathname.toLowerCase() : "/";
-  const bypassManifest = pathname.startsWith("/admin") || isChassisAdminPath(pathname) || isH2AdsPath(pathname) || pathname === "/similaridade";
+  const isSiteAccessEntry = pathname === "/site-access";
+  const bypassManifest = isSiteAccessEntry || pathname.startsWith("/admin") || isChassisAdminPath(pathname) || isH2AdsPath(pathname) || pathname === "/similaridade";
 
   const manifestQuery = trpc.maintenanceManifest.get.useQuery(undefined, {
     enabled: !bypassManifest,
@@ -139,6 +141,11 @@ function RootMaintenanceBoundary() {
     config?.expectedReturnAt,
     manifestQuery.refetch,
   ]);
+
+  // A identificação do visitante é independente do manifesto de manutenção, que
+  // o gateway bloqueia para visitantes ainda não autenticados no modo Restrito.
+  // Renderizar só a tela de login também evita os gates globais de clientes.
+  if (isSiteAccessEntry) return <SiteAccess />;
 
   // ADM e H2 Ads ficam fora do bloqueio para permitir controle operacional.
   if (bypassManifest) return <RuntimeTree />;
