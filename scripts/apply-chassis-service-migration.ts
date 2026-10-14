@@ -17,13 +17,21 @@ async function main() {
     const [columns] = await connection.query<any[]>("SHOW COLUMNS FROM h2_chassis_purchases");
     const names = new Set(columns.map(column => String(column.Field)));
     const additions = [
+      ["pix_key", "ALTER TABLE h2_chassis_settings ADD COLUMN pix_key VARCHAR(256) NOT NULL DEFAULT '' AFTER support_phone"],
+      ["pix_name", "ALTER TABLE h2_chassis_settings ADD COLUMN pix_name VARCHAR(160) NOT NULL DEFAULT '' AFTER pix_key"],
+      ["pix_bank", "ALTER TABLE h2_chassis_settings ADD COLUMN pix_bank VARCHAR(120) NOT NULL DEFAULT '' AFTER pix_name"],
       ["proof_status", "ALTER TABLE h2_chassis_purchases ADD COLUMN proof_status ENUM('none','submitted','rejected') NOT NULL DEFAULT 'none' AFTER status"],
       ["proof_url", "ALTER TABLE h2_chassis_purchases ADD COLUMN proof_url VARCHAR(1024) NULL AFTER proof_status"],
       ["proof_key", "ALTER TABLE h2_chassis_purchases ADD COLUMN proof_key VARCHAR(512) NULL AFTER proof_url"],
       ["proof_mime", "ALTER TABLE h2_chassis_purchases ADD COLUMN proof_mime VARCHAR(100) NULL AFTER proof_key"],
       ["proof_submitted_at", "ALTER TABLE h2_chassis_purchases ADD COLUMN proof_submitted_at DATETIME NULL AFTER proof_mime"],
     ] as const;
-    for (const [column, ddl] of additions) if (!names.has(column)) await connection.query(ddl);
+    const [settingsColumns] = await connection.query<any[]>("SHOW COLUMNS FROM h2_chassis_settings");
+    const settingsNames = new Set(settingsColumns.map(column => String(column.Field)));
+    for (const [column, ddl] of additions) {
+      const target = column.startsWith("pix_") ? settingsNames : names;
+      if (!target.has(column)) await connection.query(ddl);
+    }
     console.log("[Chassis Service] Tabelas independentes e comprovante do módulo conferidos; cadastros e registros centrais preservados.");
   } finally { await connection.end(); }
 }

@@ -6,6 +6,8 @@ import { adminProcedure, publicProcedure, router } from "../_core/trpc";
 import { getAdminJwtSecret } from "../adminJwt";
 import { assertChassisSameOrigin, ChassisRateLimiter, ChassisServiceError } from "../chassisServiceCore";
 import { getChassisServiceStore } from "../chassisServiceStore";
+import { getSetting } from "../db";
+import { sendMailDirect } from "../_core/sendMailDirect";
 import { CHASSIS_SESSION_COOKIE, CHASSIS_YEARS } from "../../shared/chassisService";
 
 const limiter = new ChassisRateLimiter();
@@ -69,7 +71,17 @@ export const chassisServiceRouter = router({
   })),
   buy: authenticatedProcedure.input(z.object({ packageId: id, requestId: z.string().uuid() })).mutation(({ input, ctx }) => guarded(async () => {
     limiter.check(`buy:${ctx.chassis.user.id}`, 30, 60 * 60 * 1000);
-    return getChassisServiceStore().createPurchase(ctx.chassis.user.id, ctx.chassis.tokenHash, input.packageId, input.requestId);
+    const purchase = await getChassisServiceStore().createPurchase(ctx.chassis.user.id, ctx.chassis.tokenHash, input.packageId, input.requestId);
+    if (purchase.created) {
+      const emailTo = await getSetting("email_to") || "h2@h2colombiano.com";
+      const amount = (purchase.priceCents / 100).toLocaleString("pt-BR", { style: "currency", currency: "BRL" });
+      sendMailDirect({
+        to: emailTo,
+        subject: `H2 Chassis — nova compra de ${purchase.credits} créditos`,
+        html: `<div style="font-family:Arial,sans-serif;background:#0b0b16;color:#fff;padding:24px"><h2 style="margin:0 0 16px;color:#67e8f9">H2 Chassis — nova compra</h2><p><strong>Cliente:</strong> ${ctx.chassis.user.phone}</p><p><strong>Pacote:</strong> ${purchase.packageTitle}</p><p><strong>Créditos:</strong> ${purchase.credits}</p><p><strong>Valor:</strong> ${amount}</p><p><strong>Pedido:</strong> ${purchase.id}</p><p style="margin-top:20px;color:#cbd5e1">Acesse o card Chassis no ADM para acompanhar o comprovante e liberar os créditos somente após a conferência.</p></div>`
+      }).catch(error => console.error("[H2 Chassis] Falha ao enviar notificação de compra:", error));
+    }
+    return purchase;
   })),
   cancelPurchase: authenticatedProcedure.input(z.object({ id: z.string().uuid() })).mutation(({ input, ctx }) => guarded(() => getChassisServiceStore().cancelPurchase(ctx.chassis.user.id, input.id))),
   attachPaymentProof: authenticatedProcedure.input(z.object({ id: z.string().uuid(), url: z.string().url().max(1024), key: z.string().min(1).max(512), mime: z.string().min(1).max(100) })).mutation(({ input, ctx }) => guarded(() => getChassisServiceStore().attachPaymentProof(ctx.chassis.user.id, input.id, { url: input.url, key: input.key, mime: input.mime }))),
@@ -82,7 +94,7 @@ export const chassisServiceRouter = router({
   adminPackages: serviceAdminProcedure.query(() => guarded(() => getChassisServiceStore().listPackages(true))),
   adminSavePackage: serviceAdminProcedure.input(z.object({ id: id.optional(), title: z.string().trim().min(1).max(80), credits: credits.refine(value => value > 0), priceCents: z.number().int().min(1).max(100_000_000), active: z.boolean() })).mutation(({ input, ctx }) => guarded(() => getChassisServiceStore().savePackage(input, ctx.chassisActor))),
   adminConfig: serviceAdminProcedure.query(() => guarded(() => getChassisServiceStore().getConfig())),
-  adminSaveConfig: serviceAdminProcedure.input(z.object({ trialCredits: credits, registrationEnabled: z.boolean(), supportPhone: z.string().max(30), paymentInstructions: z.string().trim().max(3000) })).mutation(({ input, ctx }) => guarded(() => getChassisServiceStore().setConfig(input, ctx.chassisActor))),
+  adminSaveConfig: serviceAdminProcedure.input(z.object({ trialCredits: credits, registrationEnabled: z.boolean(), supportPhone: z.string().max(30), pixKey: z.string().trim().max(256), pixName: z.string().trim().max(160), pixBank: z.string().trim().max(120), paymentInstructions: z.string().trim().max(3000) })).mutation(({ input, ctx }) => guarded(() => getChassisServiceStore().setConfig(input, ctx.chassisActor))),
   adminPurchases: serviceAdminProcedure.query(() => guarded(() => getChassisServiceStore().listPurchases())),
   adminConfirmPurchase: serviceAdminProcedure.input(z.object({ id: z.string().uuid(), paymentConfirmed: z.literal(true) })).mutation(({ input, ctx }) => guarded(() => getChassisServiceStore().confirmPurchase(input.id, ctx.chassisActor))),
   adminRejectPurchaseProof: serviceAdminProcedure.input(z.object({ id: z.string().uuid() })).mutation(({ input, ctx }) => guarded(() => getChassisServiceStore().rejectPurchaseProof(input.id, ctx.chassisActor))),

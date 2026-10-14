@@ -27,6 +27,9 @@ CREATE TABLE IF NOT EXISTS h2_chassis_settings (
   trial_credits INT UNSIGNED NOT NULL DEFAULT 0,
   registration_enabled TINYINT(1) NOT NULL DEFAULT 1,
   support_phone VARCHAR(15) NOT NULL DEFAULT '',
+  pix_key VARCHAR(256) NOT NULL DEFAULT '',
+  pix_name VARCHAR(160) NOT NULL DEFAULT '',
+  pix_bank VARCHAR(120) NOT NULL DEFAULT '',
   payment_instructions TEXT NOT NULL
 ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;
 

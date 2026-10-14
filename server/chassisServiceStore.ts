@@ -71,13 +71,13 @@ export class ChassisServiceStore {
     const [rows] = await this.pool.execute<RowDataPacket[]>("SELECT * FROM h2_chassis_settings WHERE id = 1");
     const row = rows[0];
     if (!row) throw new ChassisServiceError("CONFLICT", "O serviço ainda não foi configurado pelo ADM.");
-    return { trialCredits: Number(row.trial_credits), registrationEnabled: Number(row.registration_enabled) === 1, supportPhone: String(row.support_phone || ""), paymentInstructions: String(row.payment_instructions || ""), paymentMode: "manual" as const };
+    return { trialCredits: Number(row.trial_credits), registrationEnabled: Number(row.registration_enabled) === 1, supportPhone: String(row.support_phone || ""), pixKey: String(row.pix_key || ""), pixName: String(row.pix_name || ""), pixBank: String(row.pix_bank || ""), paymentInstructions: String(row.payment_instructions || ""), paymentMode: "manual" as const };
   }
-  async setConfig(input: { trialCredits: number; registrationEnabled: boolean; supportPhone: string; paymentInstructions: string }, actor: string) {
+  async setConfig(input: { trialCredits: number; registrationEnabled: boolean; supportPhone: string; pixKey: string; pixName: string; pixBank: string; paymentInstructions: string }, actor: string) {
     assertChassisCredits(input.trialCredits);
     const supportPhone = input.supportPhone ? normalizeChassisPhone(input.supportPhone) : "";
     await this.transaction(async connection => {
-      await connection.execute("UPDATE h2_chassis_settings SET trial_credits = ?, registration_enabled = ?, support_phone = ?, payment_instructions = ? WHERE id = 1", [input.trialCredits, input.registrationEnabled, supportPhone, input.paymentInstructions]);
+      await connection.execute("UPDATE h2_chassis_settings SET trial_credits = ?, registration_enabled = ?, support_phone = ?, pix_key = ?, pix_name = ?, pix_bank = ?, payment_instructions = ? WHERE id = 1", [input.trialCredits, input.registrationEnabled, supportPhone, input.pixKey.trim().slice(0, 256), input.pixName.trim().slice(0, 160), input.pixBank.trim().slice(0, 120), input.paymentInstructions]);
       await this.audit(connection, null, "update_config", actor);
     });
     return this.getConfig();
@@ -209,16 +209,16 @@ export class ChassisServiceStore {
       const [existing] = await connection.execute<PurchaseRow[]>("SELECT * FROM h2_chassis_purchases WHERE id = ?", [requestId]);
       if (existing[0]) {
         if (existing[0].user_id !== userId || existing[0].package_id !== packageId) throw new ChassisServiceError("CONFLICT", "Esta solicitação já foi utilizada.");
-        return publicPurchase(existing[0]);
+        return { ...publicPurchase(existing[0]), created: false };
       }
       const [packages] = await connection.execute<PackageRow[]>("SELECT * FROM h2_chassis_packages WHERE id = ? AND active = 1", [packageId]);
       const selected = packages[0];
       if (!selected) throw new ChassisServiceError("NOT_FOUND", "Este pacote não está disponível.");
       const [pending] = await connection.execute<PurchaseRow[]>("SELECT * FROM h2_chassis_purchases WHERE user_id = ? AND package_id = ? AND status = 'pending' ORDER BY created_at DESC LIMIT 1", [userId, packageId]);
-      if (pending[0]) return publicPurchase(pending[0]);
+      if (pending[0]) return { ...publicPurchase(pending[0]), created: false };
       await connection.execute("INSERT INTO h2_chassis_purchases (id, user_id, package_id, package_title, credits, price_cents) VALUES (?, ?, ?, ?, ?, ?)", [requestId, userId, packageId, selected.title, selected.credits, selected.price_cents]);
       const [rows] = await connection.execute<PurchaseRow[]>("SELECT * FROM h2_chassis_purchases WHERE id = ?", [requestId]);
-      return publicPurchase(rows[0]);
+      return { ...publicPurchase(rows[0]), created: true };
     });
   }
   async attachPaymentProof(userId: number, id: string, proof: { url: string; key: string; mime: string }) {
