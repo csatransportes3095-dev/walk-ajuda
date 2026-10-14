@@ -300,10 +300,13 @@ export class ChassisServiceStore {
       if (purchase.status === "approved") return { balance: user.balance, replayed: true };
       const balance = user.balance + purchase.credits;
       assertChassisCredits(balance);
+      const validityDays = Math.max(1, Math.min(3650, Number(purchase.validity_days || 30)));
+      const expiresAt = new Date(Date.now() + validityDays * 24 * 60 * 60 * 1000);
       await connection.execute("UPDATE h2_chassis_users SET balance = ?, account_type = 'paid' WHERE id = ?", [balance, user.id]);
-      await connection.execute("UPDATE h2_chassis_purchases SET status = 'approved', confirmed_by = ?, confirmed_at = UTC_TIMESTAMP() WHERE id = ?", [actor.slice(0, 128), id]);
-      await this.ledger(connection, user.id, "purchase", purchase.credits, balance, actor, id, purchase.package_title);
-      return { balance, replayed: false };
+      await connection.execute("UPDATE h2_chassis_purchases SET status = 'approved', confirmed_by = ?, confirmed_at = UTC_TIMESTAMP(), credit_expires_at = ? WHERE id = ?", [actor.slice(0, 128), expiresAt, id]);
+      await connection.execute("INSERT INTO h2_chassis_credit_batches (user_id, purchase_id, credits_initial, credits_remaining, expires_at) VALUES (?, ?, ?, ?, ?)", [user.id, id, purchase.credits, purchase.credits, expiresAt]);
+      await this.ledger(connection, user.id, "purchase", purchase.credits, balance, actor, id, `${purchase.package_title} · validade ${validityDays} dias`);
+      return { balance, expiresAt, replayed: false };
     });
   }
   async rejectPurchaseProof(id: string, actor: string) {
@@ -353,6 +356,7 @@ export class ChassisServiceStore {
       }
       if (accepted.length !== input.quantity) throw new ChassisServiceError("CONFLICT", "Não foi possível reservar chassis exclusivos. Nenhum crédito foi descontado.");
       const balance = user.balance - accepted.length;
+      await this.consumePurchasedCredits(connection, userId, accepted.length);
       await connection.execute("UPDATE h2_chassis_users SET balance = ?, total_used = total_used + ? WHERE id = ?", [balance, accepted.length, userId]);
       await connection.execute("INSERT INTO h2_chassis_generations (id, user_id, input_hash, results, marca, modelo, year_code, quantity) VALUES (?, ?, ?, ?, ?, ?, ?, ?)", [input.requestId, userId, inputHash, JSON.stringify(accepted), input.marca, input.modelo, input.yearCode, accepted.length]);
       await this.ledger(connection, userId, "generation", -accepted.length, balance, `user:${userId}`, input.requestId);
