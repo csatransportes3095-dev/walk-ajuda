@@ -1,0 +1,47 @@
+name: Checkout performance isolated validation
+
+on:
+  push:
+    branches:
+      - perf/checkout-questions-20261014
+    paths:
+      - 'client/src/pages/Home.tsx'
+      - 'client/src/components/PublicQuestionFlowEnhancer.tsx'
+      - 'server/checkoutPerformance.test.ts'
+      - '.github/workflows/checkout-performance-validate-20261014.yml'
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  validate:
+    runs-on: ubuntu-latest
+    timeout-minutes: 30
+    steps:
+      - uses: actions/checkout@v4
+      - uses: pnpm/action-setup@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '22'
+          cache: pnpm
+      - run: pnpm install --frozen-lockfile
+      - name: Checkout performance and prior regression tests
+        run: pnpm exec vitest run server/checkoutPerformance.test.ts server/postOrderScheduleFlow.test.ts server/postOrderCustomerPhotoWhatsapp.test.ts
+      - name: TypeScript diagnostics on changed files
+        shell: bash
+        run: |
+          set +e
+          pnpm check > /tmp/ts-check.log 2>&1
+          rc=$?
+          set -e
+          if [ "$rc" -ne 0 ]; then
+            echo "Repository-wide diagnostics also include existing errors:"
+            grep 'error TS' /tmp/ts-check.log | head -n 20 || true
+          fi
+          if grep -E '^(client/src/(pages/Home|components/PublicQuestionFlowEnhancer)\\.tsx|server/checkoutPerformance\\.test\\.ts)\\(' /tmp/ts-check.log | grep -q 'error TS'; then
+            echo "TypeScript failure in changed files"
+            exit 1
+          fi
+      - name: Production build
+        run: pnpm build
