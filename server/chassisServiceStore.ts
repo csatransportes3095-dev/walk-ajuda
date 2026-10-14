@@ -209,16 +209,16 @@ export class ChassisServiceStore {
       const [existing] = await connection.execute<PurchaseRow[]>("SELECT * FROM h2_chassis_purchases WHERE id = ?", [requestId]);
       if (existing[0]) {
         if (existing[0].user_id !== userId || existing[0].package_id !== packageId) throw new ChassisServiceError("CONFLICT", "Esta solicitação já foi utilizada.");
-        return publicPurchase(existing[0]);
+        return { ...publicPurchase(existing[0]), created: false };
       }
       const [packages] = await connection.execute<PackageRow[]>("SELECT * FROM h2_chassis_packages WHERE id = ? AND active = 1", [packageId]);
       const selected = packages[0];
       if (!selected) throw new ChassisServiceError("NOT_FOUND", "Este pacote não está disponível.");
       const [pending] = await connection.execute<PurchaseRow[]>("SELECT * FROM h2_chassis_purchases WHERE user_id = ? AND package_id = ? AND status = 'pending' ORDER BY created_at DESC LIMIT 1", [userId, packageId]);
-      if (pending[0]) return publicPurchase(pending[0]);
+      if (pending[0]) return { ...publicPurchase(pending[0]), created: false };
       await connection.execute("INSERT INTO h2_chassis_purchases (id, user_id, package_id, package_title, credits, price_cents) VALUES (?, ?, ?, ?, ?, ?)", [requestId, userId, packageId, selected.title, selected.credits, selected.price_cents]);
       const [rows] = await connection.execute<PurchaseRow[]>("SELECT * FROM h2_chassis_purchases WHERE id = ?", [requestId]);
-      return publicPurchase(rows[0]);
+      return { ...publicPurchase(rows[0]), created: true };
     });
   }
   async attachPaymentProof(userId: number, id: string, proof: { url: string; key: string; mime: string }) {
