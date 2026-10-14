@@ -13,6 +13,8 @@ interface PackageRow extends RowDataPacket { id: number; title: string; credits:
 interface PurchaseRow extends RowDataPacket {
   id: string; user_id: number; package_id: number; package_title: string; credits: number;
   price_cents: number; status: "pending" | "approved" | "cancelled"; created_at: Date;
+  proof_status: "none" | "submitted" | "rejected"; proof_url: string | null; proof_key: string | null;
+  proof_mime: string | null; proof_submitted_at: Date | null;
 }
 interface GenerationRow extends RowDataPacket {
   id: string; user_id: number; input_hash: string; results: string | string[];
@@ -23,7 +25,7 @@ function publicUser(row: UserRow) {
   return { id: row.id, phone: row.phone, accountType: row.account_type, status: row.status, balance: row.balance, totalUsed: row.total_used, createdAt: row.created_at };
 }
 function publicPackage(row: PackageRow) { return { id: row.id, title: row.title, credits: row.credits, priceCents: row.price_cents, active: Number(row.active) === 1 }; }
-function publicPurchase(row: PurchaseRow) { return { id: row.id, userId: row.user_id, packageTitle: row.package_title, credits: row.credits, priceCents: row.price_cents, status: row.status, createdAt: row.created_at }; }
+function publicPurchase(row: PurchaseRow) { return { id: row.id, userId: row.user_id, packageTitle: row.package_title, credits: row.credits, priceCents: row.price_cents, status: row.status, proofStatus: row.proof_status || "none", proofUrl: row.proof_url || null, proofMime: row.proof_mime || null, proofSubmittedAt: row.proof_submitted_at || null, createdAt: row.created_at }; }
 function generationResult(row: GenerationRow, balance: number, replayed: boolean): ChassisGenerationResult {
   return { id: row.id, vins: typeof row.results === "string" ? JSON.parse(row.results) : row.results, marca: row.marca, modelo: row.modelo, yearCode: row.year_code, quantity: row.quantity, balance, replayed };
 }
@@ -219,6 +221,18 @@ export class ChassisServiceStore {
       return publicPurchase(rows[0]);
     });
   }
+  async attachPaymentProof(userId: number, id: string, proof: { url: string; key: string; mime: string }) {
+    return this.transaction(async connection => {
+      const [rows] = await connection.execute<PurchaseRow[]>("SELECT * FROM h2_chassis_purchases WHERE id = ? AND user_id = ? FOR UPDATE", [id, userId]);
+      const purchase = rows[0];
+      if (!purchase) throw new ChassisServiceError("NOT_FOUND", "Compra não encontrada.");
+      if (purchase.status !== "pending") throw new ChassisServiceError("CONFLICT", "Esta compra não aceita novo comprovante.");
+      await connection.execute("UPDATE h2_chassis_purchases SET proof_status = 'submitted', proof_url = ?, proof_key = ?, proof_mime = ?, proof_submitted_at = UTC_TIMESTAMP() WHERE id = ?", [proof.url, proof.key, proof.mime, id]);
+      await this.audit(connection, userId, "submit_payment_proof", `user:${userId}`);
+      const [updated] = await connection.execute<PurchaseRow[]>("SELECT * FROM h2_chassis_purchases WHERE id = ?", [id]);
+      return publicPurchase(updated[0]);
+    });
+  }
   async cancelPurchase(userId: number, id: string) {
     await this.pool.execute("UPDATE h2_chassis_purchases SET status = 'cancelled' WHERE id = ? AND user_id = ? AND status = 'pending'", [id, userId]);
     return { success: true };
@@ -233,6 +247,7 @@ export class ChassisServiceStore {
       const purchase = purchases[0];
       if (!purchase) throw new ChassisServiceError("NOT_FOUND", "Compra não encontrada.");
       if (purchase.status === "cancelled") throw new ChassisServiceError("CONFLICT", "A compra foi cancelada.");
+      if (purchase.proof_status !== "submitted" || !purchase.proof_url) throw new ChassisServiceError("PRECONDITION_FAILED", "O cliente ainda não enviou um comprovante para conferência.");
       const user = await this.lockedUser(connection, purchase.user_id);
       if (purchase.status === "approved") return { balance: user.balance, replayed: true };
       const balance = user.balance + purchase.credits;
@@ -241,6 +256,18 @@ export class ChassisServiceStore {
       await connection.execute("UPDATE h2_chassis_purchases SET status = 'approved', confirmed_by = ?, confirmed_at = UTC_TIMESTAMP() WHERE id = ?", [actor.slice(0, 128), id]);
       await this.ledger(connection, user.id, "purchase", purchase.credits, balance, actor, id, purchase.package_title);
       return { balance, replayed: false };
+    });
+  }
+  async rejectPurchaseProof(id: string, actor: string) {
+    return this.transaction(async connection => {
+      const [rows] = await connection.execute<PurchaseRow[]>("SELECT * FROM h2_chassis_purchases WHERE id = ? FOR UPDATE", [id]);
+      const purchase = rows[0];
+      if (!purchase) throw new ChassisServiceError("NOT_FOUND", "Compra não encontrada.");
+      if (purchase.status !== "pending") throw new ChassisServiceError("CONFLICT", "Esta compra já foi encerrada.");
+      if (!purchase.proof_url) throw new ChassisServiceError("PRECONDITION_FAILED", "Não há comprovante para recusar.");
+      await connection.execute("UPDATE h2_chassis_purchases SET proof_status = 'rejected' WHERE id = ?", [id]);
+      await this.audit(connection, purchase.user_id, "reject_payment_proof", actor);
+      return { success: true };
     });
   }
   async history(userId: number) {
