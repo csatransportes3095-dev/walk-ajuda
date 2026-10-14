@@ -247,7 +247,7 @@ export class ChassisServiceStore {
       const purchase = purchases[0];
       if (!purchase) throw new ChassisServiceError("NOT_FOUND", "Compra não encontrada.");
       if (purchase.status === "cancelled") throw new ChassisServiceError("CONFLICT", "A compra foi cancelada.");
-      if (purchase.proof_status !== "submitted" || !purchase.proof_url) throw new ChassisServiceError("PRECONDITION_FAILED", "O cliente ainda não enviou um comprovante para conferência.");
+      if (purchase.proof_status !== "submitted" || !purchase.proof_url) throw new ChassisServiceError("CONFLICT", "O cliente ainda não enviou um comprovante para conferência.");
       const user = await this.lockedUser(connection, purchase.user_id);
       if (purchase.status === "approved") return { balance: user.balance, replayed: true };
       const balance = user.balance + purchase.credits;
@@ -264,7 +264,7 @@ export class ChassisServiceStore {
       const purchase = rows[0];
       if (!purchase) throw new ChassisServiceError("NOT_FOUND", "Compra não encontrada.");
       if (purchase.status !== "pending") throw new ChassisServiceError("CONFLICT", "Esta compra já foi encerrada.");
-      if (!purchase.proof_url) throw new ChassisServiceError("PRECONDITION_FAILED", "Não há comprovante para recusar.");
+      if (!purchase.proof_url) throw new ChassisServiceError("CONFLICT", "Não há comprovante para recusar.");
       await connection.execute("UPDATE h2_chassis_purchases SET proof_status = 'rejected' WHERE id = ?", [id]);
       await this.audit(connection, purchase.user_id, "reject_payment_proof", actor);
       return { success: true };
