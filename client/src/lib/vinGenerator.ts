@@ -168,7 +168,20 @@ export function obterPerfilFabricanteOficial(
       .trim()
       .toLowerCase();
 
-  const marcaNormalizada = normalizarTexto(marca);
+  const aliasesMarca: Array<[RegExp, string]> = [
+    [/^(vw|volkswagen)(\s+volkswagen)?$/i, "volkswagen"],
+    [/^(gm\s+)?chevrolet$/i, "chevrolet"],
+    [/^caoa\s+chery$/i, "chery"],
+    [/^gwm(\s+haval)?$/i, "gwm"],
+  ];
+
+  let marcaNormalizada = normalizarTexto(marca);
+  for (const [padrao, alias] of aliasesMarca) {
+    if (padrao.test(marcaNormalizada)) {
+      marcaNormalizada = alias;
+      break;
+    }
+  }
 
   const fabricanteDireto = MONTADORAS_VIN.find((item) => {
     const nomeFabricante = normalizarTexto(item.nome);
