@@ -9,10 +9,10 @@ interface UserRow extends RowDataPacket {
   id: number; name: string; phone: string; password_hash: string; account_type: "test" | "paid";
   status: "active" | "blocked"; balance: number; total_used: number; session_version: number; created_at: Date;
 }
-interface PackageRow extends RowDataPacket { id: number; title: string; credits: number; price_cents: number; active: number; }
+interface PackageRow extends RowDataPacket { id: number; title: string; credits: number; price_cents: number; validity_days: number; active: number; }
 interface PurchaseRow extends RowDataPacket {
   id: string; user_id: number; package_id: number; package_title: string; credits: number;
-  price_cents: number; status: "pending" | "approved" | "cancelled"; created_at: Date;
+  price_cents: number; validity_days: number; credit_expires_at: Date | null; status: "pending" | "approved" | "cancelled"; created_at: Date;
   proof_status: "none" | "submitted" | "rejected"; proof_url: string | null; proof_key: string | null;
   proof_mime: string | null; proof_submitted_at: Date | null;
 }
@@ -24,8 +24,8 @@ interface GenerationRow extends RowDataPacket {
 function publicUser(row: UserRow) {
   return { id: row.id, name: row.name || "", phone: row.phone, accountType: row.account_type, status: row.status, balance: row.balance, totalUsed: row.total_used, createdAt: row.created_at };
 }
-function publicPackage(row: PackageRow) { return { id: row.id, title: row.title, credits: row.credits, priceCents: row.price_cents, active: Number(row.active) === 1 }; }
-function publicPurchase(row: PurchaseRow) { return { id: row.id, userId: row.user_id, packageTitle: row.package_title, credits: row.credits, priceCents: row.price_cents, status: row.status, proofStatus: row.proof_status || "none", proofUrl: row.proof_url || null, proofMime: row.proof_mime || null, proofSubmittedAt: row.proof_submitted_at || null, createdAt: row.created_at }; }
+function publicPackage(row: PackageRow) { return { id: row.id, title: row.title, credits: row.credits, priceCents: row.price_cents, validityDays: Number(row.validity_days || 30), active: Number(row.active) === 1 }; }
+function publicPurchase(row: PurchaseRow) { return { id: row.id, userId: row.user_id, packageTitle: row.package_title, credits: row.credits, priceCents: row.price_cents, validityDays: Number(row.validity_days || 30), creditExpiresAt: row.credit_expires_at || null, status: row.status, proofStatus: row.proof_status || "none", proofUrl: row.proof_url || null, proofMime: row.proof_mime || null, proofSubmittedAt: row.proof_submitted_at || null, createdAt: row.created_at }; }
 function generationResult(row: GenerationRow, balance: number, replayed: boolean): ChassisGenerationResult {
   return { id: row.id, vins: typeof row.results === "string" ? JSON.parse(row.results) : row.results, marca: row.marca, modelo: row.modelo, yearCode: row.year_code, quantity: row.quantity, balance, replayed };
 }
