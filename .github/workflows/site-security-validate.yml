@@ -35,7 +35,7 @@ jobs:
           cache: pnpm
       - run: pnpm install --frozen-lockfile
       - name: Testes isolados de seguranca
-        run: pnpm exec vitest run server/siteAccessPolicy.test.ts
+        run: pnpm exec vitest run server/siteAccessPolicy.test.ts server/siteAccessActivation.test.ts server/siteAccessGateway.http.test.ts
       - name: Compilacao de producao
         run: pnpm build
       - name: Checagem TypeScript da branch
