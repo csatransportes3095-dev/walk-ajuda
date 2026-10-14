@@ -6,7 +6,7 @@ import { assertChassisCredits, chassisGenerationHash, chassisTokenHash, ChassisS
 import type { ChassisGenerationInput, ChassisGenerationResult } from "../shared/chassisService";
 
 interface UserRow extends RowDataPacket {
-  id: number; phone: string; password_hash: string; account_type: "test" | "paid";
+  id: number; name: string; phone: string; password_hash: string; account_type: "test" | "paid";
   status: "active" | "blocked"; balance: number; total_used: number; session_version: number; created_at: Date;
 }
 interface PackageRow extends RowDataPacket { id: number; title: string; credits: number; price_cents: number; active: number; }
@@ -22,7 +22,7 @@ interface GenerationRow extends RowDataPacket {
 }
 
 function publicUser(row: UserRow) {
-  return { id: row.id, phone: row.phone, accountType: row.account_type, status: row.status, balance: row.balance, totalUsed: row.total_used, createdAt: row.created_at };
+  return { id: row.id, name: row.name || "", phone: row.phone, accountType: row.account_type, status: row.status, balance: row.balance, totalUsed: row.total_used, createdAt: row.created_at };
 }
 function publicPackage(row: PackageRow) { return { id: row.id, title: row.title, credits: row.credits, priceCents: row.price_cents, active: Number(row.active) === 1 }; }
 function publicPurchase(row: PurchaseRow) { return { id: row.id, userId: row.user_id, packageTitle: row.package_title, credits: row.credits, priceCents: row.price_cents, status: row.status, proofStatus: row.proof_status || "none", proofUrl: row.proof_url || null, proofMime: row.proof_mime || null, proofSubmittedAt: row.proof_submitted_at || null, createdAt: row.created_at }; }
@@ -101,9 +101,9 @@ export class ChassisServiceStore {
     });
   }
 
-  private async insertUser(connection: PoolConnection, phone: string, passwordHash: string, accountType: "test" | "paid", credits: number, actor: string) {
+  private async insertUser(connection: PoolConnection, name: string, phone: string, passwordHash: string, accountType: "test" | "paid", credits: number, actor: string) {
     try {
-      const [result] = await connection.execute<ResultSetHeader>("INSERT INTO h2_chassis_users (phone, password_hash, account_type, balance) VALUES (?, ?, ?, ?)", [phone, passwordHash, accountType, credits]);
+      const [result] = await connection.execute<ResultSetHeader>("INSERT INTO h2_chassis_users (name, phone, password_hash, account_type, balance) VALUES (?, ?, ?, ?, ?)", [name.trim().slice(0, 120), phone, passwordHash, accountType, credits]);
       await this.ledger(connection, result.insertId, accountType === "test" ? "trial" : "initial", credits, credits, actor);
       await this.audit(connection, result.insertId, "create_user", actor);
       const [rows] = await connection.execute<UserRow[]>("SELECT * FROM h2_chassis_users WHERE id = ?", [result.insertId]);
@@ -113,20 +113,20 @@ export class ChassisServiceStore {
       throw error;
     }
   }
-  async register(phoneInput: string, password: string) {
+  async register(name: string, phoneInput: string, password: string) {
     const phone = normalizeChassisPhone(phoneInput);
     const passwordHash = await hashChassisPassword(password);
     return this.transaction(async connection => {
       const [rows] = await connection.execute<RowDataPacket[]>("SELECT trial_credits, registration_enabled FROM h2_chassis_settings WHERE id = 1 FOR UPDATE");
       if (!rows[0] || Number(rows[0].registration_enabled) !== 1) throw new ChassisServiceError("FORBIDDEN", "Novos acessos são cadastrados pelo ADM. Entre em contato.");
-      return this.insertUser(connection, phone, passwordHash, "test", Number(rows[0].trial_credits), "self-registration");
+      return this.insertUser(connection, name, phone, passwordHash, "test", Number(rows[0].trial_credits), "self-registration");
     });
   }
-  async createUser(input: { phone: string; password: string; accountType: "test" | "paid"; credits: number }, actor: string) {
+  async createUser(input: { name: string; phone: string; password: string; accountType: "test" | "paid"; credits: number }, actor: string) {
     assertChassisCredits(input.credits);
     const phone = normalizeChassisPhone(input.phone);
     const hash = await hashChassisPassword(input.password);
-    return this.transaction(connection => this.insertUser(connection, phone, hash, input.accountType, input.credits, actor));
+    return this.transaction(connection => this.insertUser(connection, input.name, phone, hash, input.accountType, input.credits, actor));
   }
   async login(phoneInput: string, password: string) {
     const phone = normalizeChassisPhone(phoneInput);
@@ -160,8 +160,9 @@ export class ChassisServiceStore {
     if (!rows.length) throw new ChassisServiceError("UNAUTHORIZED", "Entre novamente na conta do serviço.");
   }
   async listUsers(search = "", offset = 0) {
-    const phone = search.replace(/\D/g, "");
-    const [rows] = await this.pool.query<UserRow[]>("SELECT id, phone, account_type, status, balance, total_used, created_at FROM h2_chassis_users WHERE phone LIKE ? ORDER BY id DESC LIMIT 50 OFFSET ?", [`%${phone}%`, offset]);
+    const term = search.trim();
+    const phone = term.replace(/\D/g, "");
+    const [rows] = await this.pool.query<UserRow[]>("SELECT id, name, phone, account_type, status, balance, total_used, created_at FROM h2_chassis_users WHERE name LIKE ? OR phone LIKE ? ORDER BY id DESC LIMIT 50 OFFSET ?", [`%${term}%`, `%${phone}%`, offset]);
     return rows.map(publicUser);
   }
   async adjustCredits(userId: number, delta: number, note: string, actor: string, requestId: string) {
