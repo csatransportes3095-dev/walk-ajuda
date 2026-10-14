@@ -1,0 +1,38 @@
+name: ADM Customers batched SQL validation
+on:
+  push:
+    branches:
+      - perf/admin-customers-sql-batch-20261014
+  workflow_dispatch:
+permissions:
+  contents: read
+jobs:
+  validate:
+    runs-on: ubuntu-latest
+    timeout-minutes: 30
+    steps:
+      - uses: actions/checkout@v4
+      - uses: pnpm/action-setup@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '22'
+          cache: pnpm
+      - run: pnpm install --frozen-lockfile
+      - name: Batched ADM regression tests
+        run: pnpm exec vitest run server/adminCustomersSqlPerformance.test.ts
+      - name: Changed-file TypeScript diagnostics
+        shell: bash
+        run: |
+          set +e
+          pnpm check > /tmp/typecheck.log 2>&1
+          rc=$?
+          set -e
+          if [ "$rc" -ne 0 ]; then
+            grep 'error TS' /tmp/typecheck.log | head -n 20 || true
+          fi
+          if grep -E '^(server/(db|routers|customerProfileUpdatePolicy|adminCustomersSqlPerformance.test)\\.ts)\\(' /tmp/typecheck.log | grep -q 'error TS'; then
+            echo 'Changed-file TypeScript errors'
+            exit 1
+          fi
+      - name: Production build
+        run: pnpm build
