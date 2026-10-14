@@ -5,7 +5,7 @@ import {
   isAnalysisOrderStatusSemantic,
   isScheduleClosedStatusInFlow,
 } from "../shared/scheduleOrderLifecycle";
-import { eq, asc, desc, sql, and, gte, inArray, gt } from "drizzle-orm";
+import { eq, asc, desc, sql, and, gte, inArray, gt, like, or } from "drizzle-orm";
 import { drizzle } from "drizzle-orm/mysql2";
 import { isValidCPF, normalizeCpf } from "@shared/cpf";
 import { generateNextCustomerNumber } from "./customerNumberSequence";
@@ -866,6 +866,22 @@ export async function getSetting(key: string): Promise<string | null> {
   return result.length > 0 ? result[0].settingValue : null;
 }
 
+// Consulta única para as políticas de atualização cadastral, em vez de duas buscas por cliente.
+export async function getSettingsByPrefixes(prefixes: string[]): Promise<Record<string, string>> {
+  if (!prefixes.length) return {};
+  const db = await getDb();
+  if (!db) return {};
+  const rows = await db.select({
+    key: siteSettings.settingKey,
+    value: siteSettings.settingValue,
+  }).from(siteSettings).where(or(...prefixes.map(prefix => like(siteSettings.settingKey, `${prefix}%`))));
+  const result: Record<string, string> = {};
+  for (const row of rows) {
+    // LIKE trata '_' como curinga; garantir as chaves exatas dos prefixos solicitados.
+    if (prefixes.some(prefix => row.key.startsWith(prefix))) result[row.key] = row.value || '';
+  }
+  return result;
+}
 export async function getSettings(keys: string[]): Promise<Record<string, string>> {
   const db = await getDb();
   if (!db) return {};
