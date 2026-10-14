@@ -9,6 +9,9 @@ import { useEffect } from "react";
 import superjson from "superjson";
 import App from "./App";
 import SiteAccess from "./pages/SiteAccess";
+import ChassisCustomerPage from "./pages/ChassisCustomerPage";
+import { isChassisCustomerLocation } from "@shared/chassisService";
+import { useLocation } from "wouter";
 import H2WelcomePremium from "./components/H2WelcomePremium";
 import HomeTopRuntimeEnhancer from "./components/HomeTopRuntimeEnhancer";
 import AdminHomeTopSettingsEnhancer from "./components/AdminHomeTopSettingsEnhancer";
@@ -93,6 +96,9 @@ function fetchWithTimeout(timeoutMs: number) {
 const trpcClient = trpc.createClient({ links: [splitLink({ condition(op) { return op.type === "mutation"; }, true: httpBatchLink({ url: "/api/trpc", transformer: superjson, fetch: fetchWithTimeout(150000) }), false: httpBatchLink({ url: "/api/trpc", transformer: superjson, fetch: fetchWithTimeout(30000) }) })] });
 
 function RuntimeTree() {
+  const [servicePath] = useLocation();
+  // A rota /h2chassis usa conta e créditos próprios, fora dos cadastros centrais.
+  if (isChassisCustomerLocation(servicePath, window.location.hostname)) return <ChassisCustomerPage />;
   return (
     <>
       <GlobalDevToolsProtection /><AdminDevToolsTargetSelector /><AdminHomeTopSettingsEnhancer />
@@ -109,7 +115,7 @@ function RuntimeTree() {
 function RootMaintenanceBoundary() {
   const pathname = typeof window !== "undefined" ? window.location.pathname.toLowerCase() : "/";
   const isSiteAccessEntry = pathname === "/site-access";
-  const bypassManifest = isSiteAccessEntry || pathname.startsWith("/admin") || isChassisAdminPath(pathname) || isH2AdsPath(pathname) || pathname === "/similaridade";
+  const bypassManifest = isSiteAccessEntry || pathname.startsWith("/admin") || isChassisAdminPath(pathname) || isChassisCustomerLocation(pathname, window.location.hostname) || isH2AdsPath(pathname) || pathname === "/similaridade";
 
   const manifestQuery = trpc.maintenanceManifest.get.useQuery(undefined, {
     enabled: !bypassManifest,
