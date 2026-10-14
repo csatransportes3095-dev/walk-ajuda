@@ -1,0 +1,35 @@
+name: Validate Render patch chain for optimized ADM customers
+on:
+  push:
+    branches:
+      - fix/render-admin-customers-optimized-patches-20261014
+  workflow_dispatch:
+permissions:
+  contents: read
+jobs:
+  render-patch-chain:
+    runs-on: ubuntu-latest
+    timeout-minutes: 25
+    steps:
+      - uses: actions/checkout@v4
+      - uses: pnpm/action-setup@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '22'
+          cache: pnpm
+      - run: pnpm install --frozen-lockfile
+      - name: Execute exactly the patch chain from Dockerfile, then build
+        run: |
+          python3 - <<'PY'
+          from pathlib import Path
+          import subprocess, re
+          docker = Path('Dockerfile').read_text()
+          start = docker.index('RUN npm install -g pnpm@10.4.1')
+          end = docker.index('\n\nENV NODE_ENV', start)
+          chain = docker[start:end].replace('\\\n', ' ').strip()
+          marker = '&& node scripts/'
+          assert marker in chain, 'Dockerfile patch commands not found'
+          chain = 'node scripts/' + chain.split(marker, 1)[1]
+          print('Testing all Dockerfile patches and production build in order', flush=True)
+          subprocess.run(chain, shell=True, check=True)
+          PY
