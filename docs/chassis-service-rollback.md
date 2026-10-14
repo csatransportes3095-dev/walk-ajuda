@@ -20,7 +20,7 @@ A migração `scripts/apply-chassis-service-migration.ts` cria somente tabelas c
 O motor `client/src/lib/vinGenerator.ts` permanece intacto. O comprador recebe os resultados pelo servidor; geração, reserva, registro e desconto ficam na mesma transação.
 O ADM continua usando o gerador livre em `/adm/chassis`. A reserva livre exige a sessão ADM.
 
-O acesso do comprador é `/app/chassis`, independente dos gates de cadastro central. A raiz de `app.h2colombiano.com` aponta para a mesma tela quando o subdomínio for associado ao serviço existente no Render e o DNS estiver configurado. Nenhum domínio ou DNS foi modificado nesta etapa.
+O acesso do comprador é `/h2chassis`, independente dos gates de cadastro central. Essa é a rota oficial do usuário no domínio principal e não depende de subdomínio ou DNS adicional. O suporte legado à raiz de `app.h2colombiano.com` pode permanecer no código sem ser necessário para o funcionamento da rota principal.
 Cada domínio utiliza seu próprio cookie `h2_chassis_session`, sem atributo Domain e sem compartilhamento com o login central/ADM.
 Cadastros novos começam com zero créditos de teste. O ADM define a quantidade desejada, os pacotes, preços, WhatsApp e instruções de pagamento. Não foram inventados preços ou configuradas cobranças reais.
 Compras guardam quantidade e preço no momento da solicitação. A confirmação manual do pagamento pelo ADM libera a quantidade guardada uma única vez; o comprador não confirma o próprio pagamento.
