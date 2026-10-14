@@ -33,6 +33,7 @@ const ADMIN_SHORTCUTS: AdminShortcut[] = [
   { id: 'similaridade', href: '/similaridade', label: 'Similaridade', icon: ScanFace, tone: 'bg-cyan-600/20 border-cyan-500/35 hover:bg-cyan-600/30', iconTone: 'text-cyan-300' },
   { id: 'h2bico', href: '/admin/h2bico', label: 'H2BICO', icon: DatabaseZap, tone: 'bg-emerald-600/20 border-emerald-500/35 hover:bg-emerald-600/30', iconTone: 'text-emerald-300' },
   { id: 'banners', href: '/admin/banners', label: 'Banners', icon: Bell, tone: 'bg-teal-600/20 border-teal-500/30 hover:bg-teal-600/30', iconTone: 'text-teal-400' },
+  { id: 'site-security', href: '/admin/site-security', label: 'Segurança do Site', icon: ShieldCheck, tone: 'bg-amber-600/20 border-amber-500/40 hover:bg-amber-600/30', iconTone: 'text-amber-300' },
   { id: 'ip-block', href: '/admin/ip-block', label: 'Bloquear IP', icon: Shield, tone: 'bg-red-600/20 border-red-500/30 hover:bg-red-600/30', iconTone: 'text-red-400' },
   { id: 'authenticator', href: '/admin/authenticator', label: 'Autenticador', icon: Lock, tone: 'bg-cyan-600/20 border-cyan-500/30 hover:bg-cyan-600/30', iconTone: 'text-cyan-300' },
   { id: 'referrer-bypass', href: '/admin/referrer-bypass', label: 'Bypass Indicador', icon: KeyRound, tone: 'bg-indigo-600/20 border-indigo-500/30 hover:bg-indigo-600/30', iconTone: 'text-indigo-400' },
