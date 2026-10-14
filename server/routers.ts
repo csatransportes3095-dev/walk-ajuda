@@ -1,5 +1,6 @@
 import { siteSecurityRouter } from "./siteSecurityRouter";
 import { vinRegistryRouter } from "./routers/vinRegistry";
+import { chassisServiceRouter } from "./routers/chassisService";
 import { sql } from "drizzle-orm";
 import { cnhCodeSchema, globalOrderGroupSchema, resolveOrderGroupLink, loginOptionalFields, cleanLoginText, escapeLoginHtml } from '../shared/orderLoginPresentation';
 import { readOrderLoginDefaults, saveOrderGroupDefault, canReadOrderLoginExtras } from './orderLoginDefaults';
@@ -437,6 +438,7 @@ async function withResolvedRaffleWinnerPhoto<T extends any>(raffle: T): Promise<
 export const appRouter = router({
   siteSecurity: siteSecurityRouter,
   vinRegistry: vinRegistryRouter,
+  chassisService: chassisServiceRouter,
   system: systemRouter,
   optionPriceModels: optionPriceModelsRouter,
   vipMemberships: vipMembershipsRouter,

@@ -17,6 +17,7 @@ import {
   obterPerfilFabricanteOficial,
 } from "@/lib/vinGenerator";
 import { trpc } from "@/lib/trpc";
+import type { ChassisGenerationInput } from "@shared/chassisService";
 
 const FIPE_BASE = "https://fipe.parallelum.com.br/api/v2/cars";
 
@@ -79,8 +80,11 @@ async function copiarTexto(texto: string): Promise<boolean> {
   }
 }
 
-export default function GeradorChassiPublico() {
-  const { data: settings } = trpc.settings.getAll.useQuery();
+export default function GeradorChassiPublico({ embedded = false, customer }: {
+  embedded?: boolean;
+  customer?: { balance: number; onGenerate: (input: Omit<ChassisGenerationInput, "requestId">) => Promise<string[]> };
+} = {}) {
+  const { data: settings } = trpc.settings.getAll.useQuery(undefined, { enabled: !customer });
   const logoUrl = settings?.login_image_url || "";
 
   const [marcas, setMarcas] = useState<FipeBrand[]>([]);
@@ -278,6 +282,15 @@ export default function GeradorChassiPublico() {
         return;
       }
 
+      if (customer) {
+        if (customer.balance < quantidade) throw new Error("Saldo insuficiente. Escolha uma quantidade menor ou recarregue.");
+        const vins = await customer.onGenerate({ marca: marca.name, modelo, yearCode: anoCode as ChassisGenerationInput["yearCode"], quantity: quantidade, ...(usarChassiOriginal ? { originalVin: chassiBase } : {}) });
+        const agora = Date.now();
+        setResultados(vins.map((vin, i) => ({ vin, key: `${vin}-${i}-${agora}`, marca: marca.name, modelo, ano: anoInfo.ano })));
+        setCopiados(new Set());
+        return;
+      }
+
       const perfilTeste = usarChassiOriginal ? null : obterPerfilFabricanteOficial(marca.name, modelo);
       const accepted: string[] = [];
       let attempts = 0;
@@ -349,7 +362,7 @@ export default function GeradorChassiPublico() {
           "radial-gradient(ellipse at top, #1a0a2e 0%, #0d0d1a 40%, #050508 100%)",
       }}
     >
-      <header className="sticky top-0 z-10 border-b border-purple-900/40 bg-black/50 backdrop-blur-md">
+      {!embedded && <header className="sticky top-0 z-10 border-b border-purple-900/40 bg-black/50 backdrop-blur-md">
         <div className="mx-auto flex max-w-3xl items-center gap-3 px-4 py-3">
           <Link href="/admin/codes">
             <button
@@ -384,7 +397,7 @@ export default function GeradorChassiPublico() {
             </div>
           </div>
         </div>
-      </header>
+      </header>}
 
       <main className="mx-auto max-w-3xl space-y-5 px-3 py-5 sm:px-4 sm:py-6">
         <section className="rounded-2xl border border-yellow-500/25 bg-yellow-900/15 px-4 py-3">
@@ -585,6 +598,7 @@ export default function GeradorChassiPublico() {
             type="button"
             onClick={gerar}
             disabled={
+              (customer !== undefined && customer.balance < quantidade) ||
               verificandoUnicidade ||
               carregandoMarcas ||
               carregandoModelos ||
@@ -600,6 +614,8 @@ export default function GeradorChassiPublico() {
             />
             Gerar {quantidade > 1 ? `${quantidade} chassis` : "chassi"}
           </button>
+
+          {customer && customer.balance > 0 && customer.balance < quantidade && <p role="status" className="text-sm text-amber-300">Você tem {customer.balance} créditos. Escolha uma quantidade menor ou compre um pacote.</p>}
 
           <div className="overflow-hidden rounded-xl border border-zinc-700/50 bg-zinc-950/35">
             <button
@@ -745,3 +761,4 @@ export default function GeradorChassiPublico() {
     </div>
   );
 }
+
