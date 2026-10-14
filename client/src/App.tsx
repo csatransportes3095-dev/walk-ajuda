@@ -47,6 +47,7 @@ import AdminProducts from "./pages/AdminProducts";
 import AdminSettings from "./pages/AdminSettings";
 import AdminVip from "./pages/AdminVip";
 import AdminBackup from "./pages/AdminBackup";
+import AdminChassisPage from "./pages/AdminChassisPage";
 import AdminCustomers from "./pages/AdminCustomers";
 import AdminRaffles from "./pages/AdminRaffles";
 import AdminLogin from "./pages/AdminLogin";
@@ -108,7 +109,6 @@ import AppProDownloadPage from "./pages/AppProDownloadPage";
 import VipPage from "./pages/VipPage";
 import VipInstallmentPayments from "./pages/VipInstallmentPayments";
 import Ajuda from "./pages/Ajuda";
-import GeradorChassiPublico from "./pages/GeradorChassiPublico";
 import ProtectedPhotoPage from "./pages/ProtectedPhotoPage";
 import ResellerLogin from "./pages/ResellerLogin";
 import ResellerDashboard from "./pages/ResellerDashboard";
@@ -365,7 +365,7 @@ function Router() {
       <Route path={"/cartoes/historico/:id"} component={CartaoHistoricoPage} />
       <Route path={"/cartoes/mercado"} component={CartaoMercadoPage} />
       <Route path={CHASSIS_ADMIN_PATH}>
-        <AdminGuard><GeradorChassiPublico /></AdminGuard>
+        <AdminGuard><AdminChassisPage /></AdminGuard>
       </Route>
       <Route path={"/ajuda"} component={Ajuda} />
       <Route path={"/video/tutorial"} component={VideoTutorial} />
@@ -653,3 +653,4 @@ function App() {
 
 
 export default App;
+
