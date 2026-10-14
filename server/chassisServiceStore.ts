@@ -126,15 +126,15 @@ export class ChassisServiceStore {
     const [rows] = await this.pool.execute<PackageRow[]>(`SELECT * FROM h2_chassis_packages ${includeInactive ? "" : "WHERE active = 1"} ORDER BY credits, id`);
     return rows.map(publicPackage);
   }
-  async savePackage(input: { id?: number; title: string; credits: number; priceCents: number; active: boolean }, actor: string) {
+  async savePackage(input: { id?: number; title: string; credits: number; priceCents: number; validityDays: number; active: boolean }, actor: string) {
     assertChassisCredits(input.credits, false);
     if (!Number.isSafeInteger(input.priceCents) || input.priceCents < 1 || input.priceCents > 100_000_000) throw new ChassisServiceError("BAD_REQUEST", "Informe um preço válido para o pacote.");
     return this.transaction(async connection => {
       if (input.id) {
-        const [result] = await connection.execute<ResultSetHeader>("UPDATE h2_chassis_packages SET title = ?, credits = ?, price_cents = ?, active = ? WHERE id = ?", [input.title, input.credits, input.priceCents, input.active, input.id]);
+        const [result] = await connection.execute<ResultSetHeader>("UPDATE h2_chassis_packages SET title = ?, credits = ?, price_cents = ?, validity_days = ?, active = ? WHERE id = ?", [input.title, input.credits, input.priceCents, input.validityDays, input.active, input.id]);
         if (result.affectedRows === 0) throw new ChassisServiceError("NOT_FOUND", "Pacote não encontrado.");
       } else {
-        await connection.execute("INSERT INTO h2_chassis_packages (title, credits, price_cents, active) VALUES (?, ?, ?, ?)", [input.title, input.credits, input.priceCents, input.active]);
+        await connection.execute("INSERT INTO h2_chassis_packages (title, credits, price_cents, validity_days, active) VALUES (?, ?, ?, ?, ?)", [input.title, input.credits, input.priceCents, input.validityDays, input.active]);
       }
       await this.audit(connection, null, input.id ? "edit_package" : "create_package", actor);
       return { success: true };
@@ -257,7 +257,7 @@ export class ChassisServiceStore {
       if (!selected) throw new ChassisServiceError("NOT_FOUND", "Este pacote não está disponível.");
       const [pending] = await connection.execute<PurchaseRow[]>("SELECT * FROM h2_chassis_purchases WHERE user_id = ? AND package_id = ? AND status = 'pending' ORDER BY created_at DESC LIMIT 1", [userId, packageId]);
       if (pending[0]) return { ...publicPurchase(pending[0]), created: false };
-      await connection.execute("INSERT INTO h2_chassis_purchases (id, user_id, package_id, package_title, credits, price_cents) VALUES (?, ?, ?, ?, ?, ?)", [requestId, userId, packageId, selected.title, selected.credits, selected.price_cents]);
+      await connection.execute("INSERT INTO h2_chassis_purchases (id, user_id, package_id, package_title, credits, price_cents, validity_days) VALUES (?, ?, ?, ?, ?, ?, ?)", [requestId, userId, packageId, selected.title, selected.credits, selected.price_cents, selected.validity_days]);
       const [rows] = await connection.execute<PurchaseRow[]>("SELECT * FROM h2_chassis_purchases WHERE id = ?", [requestId]);
       return { ...publicPurchase(rows[0]), created: true };
     });
