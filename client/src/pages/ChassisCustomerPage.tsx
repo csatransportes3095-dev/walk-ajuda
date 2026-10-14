@@ -3,6 +3,7 @@ import { toast } from "sonner";
 import { trpc } from "@/lib/trpc";
 import GeradorChassiPublico from "./GeradorChassiPublico";
 import type { ChassisGenerationInput } from "@shared/chassisService";
+import { prepareOrderUploadFile } from "@/lib/reliableOrderUpload";
 
 const money = (cents: number) => (cents / 100).toLocaleString("pt-BR", { style: "currency", currency: "BRL" });
 const date = (value: Date | string) => new Date(value).toLocaleString("pt-BR");
@@ -20,6 +21,8 @@ export default function ChassisCustomerPage() {
   const [password, setPassword] = useState("");
   const [selected, setSelected] = useState<number | null>(null);
   const [purchaseId, setPurchaseId] = useState<string | null>(null);
+  const [proofFile, setProofFile] = useState<File | null>(null);
+  const [proofUploading, setProofUploading] = useState(false);
   const generating = useRef(false);
   const history = trpc.chassisService.history.useQuery(undefined, { enabled: Boolean(me.data) && view !== "generate", retry: false, refetchInterval: view === "packages" ? 10_000 : false });
   const login = trpc.chassisService.login.useMutation();
@@ -70,10 +73,38 @@ export default function ChassisCustomerPage() {
     if (selected === null || buy.isPending) return;
     try {
       const purchase = await buy.mutateAsync({ packageId: selected, requestId: crypto.randomUUID() });
-      setPurchaseId(purchase.id); setSelected(null);
+      setPurchaseId(purchase.id); setSelected(null); setProofFile(null);
       await history.refetch();
-      toast.success("Solicitação criada. Os créditos entram após confirmação do pagamento pelo ADM.");
+      toast.success("Solicitação criada. Envie o comprovante para o ADM conferir.");
     } catch (error) { toast.error(error instanceof Error ? error.message : "Não foi possível solicitar o pacote."); }
+  }
+
+  async function uploadPaymentProof() {
+    if (!purchase || !proofFile || proofUploading) return;
+    setProofUploading(true);
+    try {
+      const prepared = await prepareOrderUploadFile(proofFile);
+      if (prepared.size > 15 * 1024 * 1024) throw new Error("Arquivo muito grande. Máximo 15MB.");
+      const data = await new Promise<string>((resolve, reject) => {
+        const reader = new FileReader();
+        reader.onload = () => resolve(String(reader.result || ""));
+        reader.onerror = () => reject(new Error("Não foi possível ler o comprovante."));
+        reader.readAsDataURL(prepared);
+      });
+      const response = await fetch("/api/upload/chassis-payment-proof", {
+        method: "POST",
+        credentials: "include",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ purchaseId: purchase.id, data, mimeType: prepared.type || proofFile.type || "image/jpeg", filename: prepared.name || proofFile.name }),
+      });
+      const body = await response.json().catch(() => ({}));
+      if (!response.ok) throw new Error(body?.error || "Não foi possível enviar o comprovante.");
+      setProofFile(null);
+      await history.refetch();
+      toast.success("Comprovante enviado. Aguarde a conferência do ADM.");
+    } catch (error) {
+      toast.error(error instanceof Error ? error.message : "Não foi possível enviar o comprovante.");
+    } finally { setProofUploading(false); }
   }
 
   const user = me.data;
@@ -113,7 +144,7 @@ export default function ChassisCustomerPage() {
             {!catalog.data?.packages.length && <p className="mt-5 text-sm text-zinc-400">Os pacotes ainda não estão disponíveis. Entre em contato com o ADM.</p>}
             {selected !== null && <div className="mt-5 rounded-xl border border-cyan-400/30 p-4"><p className="text-sm">{catalog.data?.packages.find(item => item.id === selected)?.title} · {money(catalog.data?.packages.find(item => item.id === selected)?.priceCents || 0)}</p><button className={`${button} mt-3`} disabled={buy.isPending} onClick={() => void requestPackage()}>{buy.isPending ? "Aguarde..." : "Solicitar este pacote"}</button></div>}
           </section>
-          {purchase && <section className={panel}><h3 className="font-bold">Compra {purchase.status === "approved" ? "confirmada" : purchase.status === "cancelled" ? "cancelada" : "aguardando pagamento"}</h3><p className="mt-2">{purchase.credits} créditos · {money(purchase.priceCents)}</p><p className="mt-2 break-all font-mono text-xs text-zinc-500">Pedido: {purchase.id}</p>{purchase.status === "pending" && <><p className="mt-4 whitespace-pre-line text-sm leading-6 text-zinc-300">{config?.paymentInstructions || "Entre em contato com o ADM para receber as instruções de pagamento."}</p>{whatsapp && <a href={whatsapp} target="_blank" rel="noopener noreferrer" className={`${button} mt-4 inline-block bg-green-700`}>Falar com o ADM</a>}<button className="mt-4 block text-xs text-zinc-400" disabled={cancel.isPending} onClick={() => { void cancel.mutateAsync({ id: purchase.id }).then(() => history.refetch()).catch(error => toast.error(error.message)); }}>Cancelar solicitação</button></>}</section>}
+          {purchase && <section className={panel}><h3 className="font-bold">Compra {purchase.status === "approved" ? "confirmada" : purchase.status === "cancelled" ? "cancelada" : purchase.proofStatus === "submitted" ? "comprovante em análise" : purchase.proofStatus === "rejected" ? "comprovante recusado" : "aguardando pagamento"}</h3><p className="mt-2">{purchase.credits} créditos · {money(purchase.priceCents)}</p><p className="mt-2 break-all font-mono text-xs text-zinc-500">Pedido: {purchase.id}</p>{purchase.status === "pending" && <><p className="mt-4 whitespace-pre-line text-sm leading-6 text-zinc-300">{config?.paymentInstructions || "Faça o pagamento e envie o comprovante abaixo."}</p>{purchase.proofStatus === "submitted" ? <div className="mt-4 rounded-xl border border-green-400/30 bg-green-400/10 p-3 text-sm text-green-200">✅ Comprovante enviado. Aguardando conferência do ADM.{purchase.proofUrl && <a className="mt-2 block text-cyan-300 underline" href={purchase.proofUrl} target="_blank" rel="noopener noreferrer">Ver comprovante enviado</a>}</div> : <div className="mt-4 rounded-xl border border-cyan-400/25 bg-black/20 p-4"><p className="text-sm font-bold">{purchase.proofStatus === "rejected" ? "O ADM recusou o comprovante. Envie outro arquivo." : "Enviar comprovante"}</p><input className="mt-3 block w-full text-sm text-zinc-300" type="file" accept="image/jpeg,image/png,image/webp,application/pdf,.jpg,.jpeg,.png,.webp,.pdf" onChange={event => setProofFile(event.target.files?.[0] || null)} /><button className={`${button} mt-3`} disabled={!proofFile || proofUploading} onClick={() => void uploadPaymentProof()}>{proofUploading ? "Enviando..." : "Enviar comprovante"}</button></div>}{whatsapp && <a href={whatsapp} target="_blank" rel="noopener noreferrer" className={`${button} mt-4 inline-block bg-green-700`}>Falar com o ADM</a>}<button className="mt-4 block text-xs text-zinc-400" disabled={cancel.isPending || purchase.proofStatus === "submitted"} onClick={() => { void cancel.mutateAsync({ id: purchase.id }).then(() => history.refetch()).catch(error => toast.error(error.message)); }}>Cancelar solicitação</button></>}</section>}
         </> : <>
           <section className={panel}><h2 className="text-lg font-bold">Movimentações de créditos</h2>{history.isLoading ? <p className="mt-4">Carregando...</p> : history.error ? <p className="mt-4 text-amber-300">Entre novamente para consultar seu histórico.</p> : history.data?.ledger.map(item => <div key={item.id} className="flex justify-between gap-3 border-b border-white/10 py-3 text-sm"><div><p>{item.kind === "generation" ? "Geração" : item.kind === "purchase" ? "Compra de pacote" : item.kind === "trial" ? "Créditos de teste" : "Ajuste de créditos"}</p><p className="mt-1 text-xs text-zinc-500">{date(item.createdAt)}{item.note ? ` · ${item.note}` : ""}</p></div><div className="text-right"><p className={item.delta < 0 ? "text-amber-300" : "text-green-300"}>{item.delta > 0 ? "+" : ""}{item.delta}</p><p className="text-xs text-zinc-500">Saldo: {item.balanceAfter}</p></div></div>)}</section>
           <section className={panel}><h2 className="text-lg font-bold">Números já gerados</h2><p className="mt-2 text-xs text-zinc-400">Consultar ou copiar novamente não utiliza créditos.</p>{history.data?.generations.map(item => <div key={item.id} className="mt-4 rounded-xl bg-black/30 p-3"><p className="text-xs text-zinc-400">{item.marca} · {item.modelo} · {date(item.createdAt)}</p><pre className="mt-3 overflow-x-auto font-mono text-sm text-cyan-300">{item.vins.join("\n")}</pre><button className="mt-3 text-xs text-purple-300" onClick={() => { void navigator.clipboard.writeText(item.vins.join("\n")).then(() => toast.success("Números copiados.")).catch(() => toast.error("Não foi possível copiar.")); }}>Copiar números</button></div>)}{!history.isLoading && !history.data?.generations.length && <p className="mt-4 text-sm text-zinc-500">Nenhuma geração registrada.</p>}</section>

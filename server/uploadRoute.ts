@@ -24,6 +24,8 @@ import { and, eq, sql } from "drizzle-orm";
 import { ENV } from "./_core/env";
 import { getAdminJwtSecret } from "./adminJwt";
 import { getCustomerSessionTokenFromRequest, requireCustomerSession } from "./customerSession";
+import { getChassisServiceStore } from "./chassisServiceStore";
+import { CHASSIS_SESSION_COOKIE } from "../shared/chassisService";
 
 const jsonParser = express.json({ limit: "2mb" });
 // Limite maior para upload base64 (imagem comprimida ~base64 cresce ~33%)
@@ -2402,6 +2404,37 @@ export function registerUploadRoute(app: Express) {
     } catch (err: any) {
       console.error("[UploadRoute] pre-registration-photo error:", err?.message || err);
       res.status(500).json({ error: "Não foi possível enviar a foto. Tente novamente." });
+    }
+  });
+
+  // ─── H2 CHASSIS: comprovante isolado do serviço ───────────────────────────
+  app.post("/api/upload/chassis-payment-proof", jsonParserBig, async (req: Request, res: Response) => {
+    try {
+      const cookies = parseCookieHeader(req.headers.cookie || "");
+      const session = await getChassisServiceStore().resolveSession(cookies[CHASSIS_SESSION_COOKIE]);
+      if (!session) { res.status(401).json({ error: "Entre novamente na conta do Chassis." }); return; }
+
+      const { purchaseId, data, mimeType, filename } = req.body || {};
+      if (!purchaseId || typeof purchaseId !== "string") { res.status(400).json({ error: "Compra inválida." }); return; }
+      if (!data || typeof data !== "string") { res.status(400).json({ error: "Selecione o comprovante." }); return; }
+
+      const base64 = data.includes(",") ? data.slice(data.indexOf(",") + 1) : data;
+      const buffer = Buffer.from(base64, "base64");
+      if (!buffer.length) { res.status(400).json({ error: "Arquivo vazio." }); return; }
+      if (buffer.length > 15 * 1024 * 1024) { res.status(400).json({ error: "Arquivo muito grande. Máximo 15MB." }); return; }
+
+      const resolved = resolveFileExt(String(mimeType || "image/jpeg"), String(filename || ""));
+      if (!["image/jpeg", "image/png", "image/webp", "application/pdf"].includes(resolved.contentType)) {
+        res.status(400).json({ error: "Envie JPG, PNG, WEBP ou PDF." }); return;
+      }
+      const randomSuffix = Math.random().toString(36).slice(2, 10);
+      const fileKey = `chassis-comprovantes/${session.user.id}/${purchaseId}-${randomSuffix}.${resolved.ext}`;
+      const { url } = await r2PutObject(fileKey, buffer, resolved.contentType);
+      await getChassisServiceStore().attachPaymentProof(session.user.id, purchaseId, { url, key: fileKey, mime: resolved.contentType });
+      res.json({ success: true, fileUrl: url, fileKey, mimeType: resolved.contentType });
+    } catch (err: any) {
+      const status = err?.code === "UNAUTHORIZED" ? 401 : err?.code === "FORBIDDEN" ? 403 : err?.code === "NOT_FOUND" ? 404 : err?.code === "CONFLICT" ? 409 : 500;
+      res.status(status).json({ error: err?.message || "Não foi possível enviar o comprovante." });
     }
   });
 

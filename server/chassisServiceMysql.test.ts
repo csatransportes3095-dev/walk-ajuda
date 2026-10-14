@@ -99,6 +99,9 @@ describe.skipIf(!url)("créditos e sessões com MySQL isolado", () => {
     expect(purchase.priceCents).toBe(1234); expect(purchase.credits).toBe(25);
     expect((await store.listUsers())[0].balance).toBe(0);
     await store.savePackage({ ...selected, credits: 50, priceCents: 9999 }, "test-admin");
+    await expect(store.confirmPurchase(purchase.id, "test-admin")).rejects.toThrow("comprovante");
+    await store.attachPaymentProof(user.id, purchase.id, { url: "https://example.test/proof.jpg", key: "chassis-comprovantes/test.jpg", mime: "image/jpeg" });
+    expect((await store.history(user.id)).purchases[0].proofStatus).toBe("submitted");
     await Promise.all([store.confirmPurchase(purchase.id, "test-admin"), store.confirmPurchase(purchase.id, "test-admin")]);
     expect((await store.listUsers())[0].balance).toBe(25);
     expect((await store.history(user.id)).ledger.filter(item => item.kind === "purchase")).toHaveLength(1);
