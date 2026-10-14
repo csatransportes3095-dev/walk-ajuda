@@ -368,6 +368,7 @@ export default function AdminCustomers() {
   // O resumo dos cards fica compacto; dados operacionais continuam disponíveis ao expandir o cliente.
   const [expandedCustomerIds, setExpandedCustomerIds] = useState<Set<number>>(new Set());
   const [showOnlyOrders, setShowOnlyOrders] = useState(false);
+  const [showOnlyNoOrders, setShowOnlyNoOrders] = useState(false);
   const [showOnlyBlocked, setShowOnlyBlocked] = useState(false);
   const [sortOrder, setSortOrder] = useState<"newest" | "oldest" | "name">("newest");
   const { fmt: formatDateBR } = useTimezone();
@@ -696,6 +697,7 @@ export default function AdminCustomers() {
         (c.referredByPhone || "").includes(term);
     }
     if (showOnlyOrders) return matchSearch && !!c.hasOrder;
+    if (showOnlyNoOrders) return matchSearch && !c.hasOrder;
     if (showOnlyBlocked) return matchSearch && c.blocked === 1;
     return matchSearch;
   });
@@ -824,18 +826,28 @@ export default function AdminCustomers() {
 
   const selectAllWithOrders = () => {
     setShowOnlyOrders(true);
+    setShowOnlyNoOrders(false);
+    setShowOnlyBlocked(false);
     const withOrders = customers.filter(c => c.hasOrder).map(c => c.id);
     setSelectedIds(new Set(withOrders));
+  };
+
+  const showCustomersWithoutOrders = () => {
+    setShowOnlyNoOrders(true);
+    setShowOnlyOrders(false);
+    setShowOnlyBlocked(false);
+    setSelectedIds(new Set());
   };
 
   const selectAllBlocked = () => {
     setShowOnlyBlocked(true);
     setShowOnlyOrders(false);
+    setShowOnlyNoOrders(false);
     const blocked = customers.filter(c => c.blocked === 1).map(c => c.id);
     setSelectedIds(new Set(blocked));
   };
 
-  const clearSelection = () => { setSelectedIds(new Set()); setShowOnlyOrders(false); setShowOnlyBlocked(false); };
+  const clearSelection = () => { setSelectedIds(new Set()); setShowOnlyOrders(false); setShowOnlyNoOrders(false); setShowOnlyBlocked(false); };
 
   const toggleCustomerDetails = (id: number) => {
     setExpandedCustomerIds((previous) => {
@@ -1039,9 +1051,9 @@ export default function AdminCustomers() {
         </div>
 
         {/* Barra de Seleção em Massa */}
-        {(customers.some(c => c.hasOrder) || customers.some(c => c.blocked === 1) || selectedIds.size > 0) && (
+        {(customers.some(c => c.hasOrder) || customers.some(c => !c.hasOrder) || customers.some(c => c.blocked === 1) || selectedIds.size > 0) && (
         <div className="flex flex-wrap items-center gap-2">
-          {!showOnlyOrders && customers.some(c => c.hasOrder) && (
+          {!showOnlyOrders && !showOnlyNoOrders && customers.some(c => c.hasOrder) && (
           <button
             onClick={selectAllWithOrders}
             className="flex items-center gap-1.5 px-3 py-1.5 bg-green-600/20 border border-green-500/30 text-green-400 rounded-lg text-xs font-medium hover:bg-green-600/30 transition-colors"
@@ -1050,7 +1062,16 @@ export default function AdminCustomers() {
             Selecionar todos com pedidos ({customers.filter(c => c.hasOrder).length})
           </button>
           )}
-          {!showOnlyBlocked && customers.some(c => c.blocked === 1) && (
+          {!showOnlyNoOrders && customers.some(c => !c.hasOrder) && (
+          <button
+            onClick={showCustomersWithoutOrders}
+            className="flex items-center gap-1.5 px-3 py-1.5 bg-slate-600/20 border border-slate-400/30 text-slate-300 rounded-lg text-xs font-medium hover:bg-slate-600/30 transition-colors"
+          >
+            <ListChecks className="w-3.5 h-3.5" />
+            Sem pedidos ({customers.filter(c => !c.hasOrder).length})
+          </button>
+          )}
+          {!showOnlyBlocked && !showOnlyNoOrders && customers.some(c => c.blocked === 1) && (
           <button
             onClick={selectAllBlocked}
             className="flex items-center gap-1.5 px-3 py-1.5 bg-red-600/20 border border-red-500/30 text-red-400 rounded-lg text-xs font-medium hover:bg-red-600/30 transition-colors"
@@ -1069,6 +1090,12 @@ export default function AdminCustomers() {
           <span className="flex items-center gap-1.5 px-3 py-1.5 bg-green-600/30 border border-green-500/50 text-green-300 rounded-lg text-xs font-medium">
             <ListChecks className="w-3.5 h-3.5" />
             Mostrando {filtered.length} com pedidos
+          </span>
+          )}
+          {showOnlyNoOrders && (
+          <span className="flex items-center gap-1.5 px-3 py-1.5 bg-slate-600/30 border border-slate-400/50 text-slate-200 rounded-lg text-xs font-medium">
+            <ListChecks className="w-3.5 h-3.5" />
+            Mostrando {filtered.length} sem pedidos
           </span>
           )}
           {selectedIds.size > 0 && (
