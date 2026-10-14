@@ -69,7 +69,7 @@ import { backupRouter } from "./routers/backup";
 import { MAINTENANCE_ROUTE_OPTIONS, parseMaintenanceManifest } from "../shared/maintenanceManifest";
 import { getConfiguredGlobalProgressKeys, sanitizeGlobalProgressKeys } from "../shared/orderProgressSequence";
 import { isRecoveredCustomerName } from "../shared/customerProfile";
-import { getCustomerProfileUpdatePolicy, getCustomerProfileUpdateState, hasCustomerProfilePhotoSubmission, markCustomerProfilePhotoSubmitted, markCustomerProfileUpdateCompleted, saveCustomerProfileUpdatePolicy } from "./customerProfileUpdatePolicy";
+import { getCustomerProfileUpdatePolicy, getCustomerProfileUpdateState, getCustomerProfileUpdateStatesBatch, hasCustomerProfilePhotoSubmission, markCustomerProfilePhotoSubmitted, markCustomerProfileUpdateCompleted, saveCustomerProfileUpdatePolicy } from "./customerProfileUpdatePolicy";
 import { isLoanEditPasswordValid } from "./loanEditAuthorization";
 import bcrypt from "bcryptjs";
 import nodemailer from "nodemailer";
@@ -2676,11 +2676,13 @@ export const appRouter = router({
           registrationId: Number(row.registrationId),
         });
       }
-      return await Promise.all((rows[0] as unknown as Array<Record<string, unknown>>).map(async r => {
+      const customerRows = rows[0] as unknown as Array<Record<string, unknown>>;
+      const profileStates = await getCustomerProfileUpdateStatesBatch(customerRows);
+      return customerRows.map(r => {
         const cleanPhone = String(r.phone || '').replace(/[^0-9]/g, '');
         const openOrders = openOrdersByPhone[cleanPhone] || [];
         const vipMembership = vipMembershipMap.get(Number(r.id));
-        const profileUpdatePolicy = await getCustomerProfileUpdateState(r);
+        const profileUpdatePolicy = profileStates.get(Number(r.id));
         return {
           ...r,
           hasOrder: Number(r.hasOrder) === 1,
@@ -2699,7 +2701,7 @@ export const appRouter = router({
           openOrders,
           profileUpdatePolicy,
         };
-      }));
+      });
     }),
 
     update: adminProcedure
