@@ -41,6 +41,7 @@ CREATE TABLE IF NOT EXISTS h2_chassis_packages (
   title VARCHAR(80) NOT NULL,
   credits INT UNSIGNED NOT NULL,
   price_cents INT UNSIGNED NOT NULL,
+  validity_days INT UNSIGNED NOT NULL DEFAULT 30,
   active TINYINT(1) NOT NULL DEFAULT 1,
   created_at TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP
 ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;
@@ -52,6 +53,8 @@ CREATE TABLE IF NOT EXISTS h2_chassis_purchases (
   package_title VARCHAR(80) NOT NULL,
   credits INT UNSIGNED NOT NULL,
   price_cents INT UNSIGNED NOT NULL,
+  validity_days INT UNSIGNED NOT NULL DEFAULT 30,
+  credit_expires_at DATETIME NULL,
   status ENUM('pending','approved','cancelled') NOT NULL DEFAULT 'pending',
   proof_status ENUM('none','submitted','rejected') NOT NULL DEFAULT 'none',
   proof_url VARCHAR(1024) NULL,
@@ -63,6 +66,19 @@ CREATE TABLE IF NOT EXISTS h2_chassis_purchases (
   confirmed_at DATETIME NULL,
   KEY chassis_purchase_user (user_id, created_at),
   KEY chassis_purchase_status (status, created_at)
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;
+
+CREATE TABLE IF NOT EXISTS h2_chassis_credit_batches (
+  id BIGINT UNSIGNED NOT NULL AUTO_INCREMENT PRIMARY KEY,
+  user_id INT UNSIGNED NOT NULL,
+  purchase_id CHAR(36) NOT NULL,
+  credits_initial INT UNSIGNED NOT NULL,
+  credits_remaining INT UNSIGNED NOT NULL,
+  expires_at DATETIME NOT NULL,
+  expired_at DATETIME NULL,
+  created_at TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP,
+  UNIQUE KEY chassis_credit_batch_purchase (purchase_id),
+  KEY chassis_credit_batch_user_expiry (user_id, expires_at)
 ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;
 
 CREATE TABLE IF NOT EXISTS h2_chassis_generations (
