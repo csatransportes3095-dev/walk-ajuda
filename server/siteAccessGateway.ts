@@ -1,5 +1,8 @@
 import type { Request, RequestHandler } from "express";
-import { isAdminJwtValid } from "./_core/trpc";
+import jwt from "jsonwebtoken";
+import { parse as parseCookieHeader } from "cookie";
+import { getAdminJwtSecret } from "./adminJwt";
+
 import { authorizedSiteVisitor } from "./siteAccessIdentity";
 import { readSiteAccessMode } from "./siteSecurityRouter";
 import { isAdministrationPath, isPublicFrontendAsset, isSecurityPublicPath, safeReturnUrl, siteAccessDecision, type SiteAccessMode } from "./siteAccessPolicy";
@@ -18,7 +21,16 @@ export interface SiteGatewayDependencies {
 const defaults: SiteGatewayDependencies = {
   enabled: () => process.env.H2_SITE_ACCESS_ENFORCE === "true",
   mode: readSiteAccessMode,
-  isAdmin: req => isAdminJwtValid(req as Parameters<typeof isAdminJwtValid>[0]),
+  isAdmin: req => {
+    try {
+      const owner = process.env.H2_SITE_SECURITY_OWNER?.trim();
+      const secret = getAdminJwtSecret();
+      const token = parseCookieHeader(req.headers.cookie || "").admin_token;
+      if (!owner || !secret || !token) return false;
+      const payload = jwt.verify(token, secret, {algorithms:["HS256"]}) as {sub?:string;role?:string};
+      return payload.role === "admin" && payload.sub === owner;
+    } catch { return false; }
+  },
   visitor: authorizedSiteVisitor,
 };
 function setNoStore(res: Parameters<RequestHandler>[1]) {
@@ -41,7 +53,7 @@ export function createSiteAccessGateway(deps: SiteGatewayDependencies = defaults
       if (!deps.enabled()) return next();
       const pathname = req.path;
       // These are explicitly public or independently authenticated routes.
-      if (isAdministrationPath(pathname) || isSecurityPublicPath(pathname) || isPublicFrontendAsset(pathname)) return next();
+      if (isAdministrationPath(pathname) || isPublicFrontendAsset(pathname)) return next();
       const admin = deps.isAdmin(req);
       if (admin) return next();
 
@@ -54,6 +66,8 @@ export function createSiteAccessGateway(deps: SiteGatewayDependencies = defaults
         return res.status(503).type("html").send(htmlPage("Acesso temporariamente indisponível", "Tente novamente em alguns instantes."));
       }
       if (mode === "public") return next();
+      const publicDecision = siteAccessDecision({mode,pathname,hasAdminSession:false,hasAuthorizedSession:false});
+      if (publicDecision === "allow") return next();
       // A release cannot safely flip the site into restrictions until the
       // owner, mail signing secret and migration have all been verified.
       if (!process.env.H2_SITE_SECURITY_OWNER?.trim() || (process.env.H2_SITE_ACCESS_SECRET || "").length < 32) {
