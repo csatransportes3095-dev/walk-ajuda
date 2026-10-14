@@ -1,4 +1,4 @@
-export const CHASSIS_CUSTOMER_PATH = "/app/chassis";
+export const CHASSIS_CUSTOMER_PATH = "/h2chassis";
 export const CHASSIS_CUSTOMER_HOST = "app.h2colombiano.com";
 export const CHASSIS_SESSION_COOKIE = "h2_chassis_session";
 export const CHASSIS_YEARS = ["G", "H", "J", "K", "L", "M", "N", "P", "R", "S", "T"] as const;
