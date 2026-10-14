@@ -10,10 +10,10 @@ const url = process.env.CHASSIS_TEST_DATABASE_URL;
 describe.skipIf(!url)("créditos e sessões com MySQL isolado", () => {
   let pool: Pool;
   let store: ChassisServiceStore;
-  const tables = ["h2_chassis_audit_log", "h2_chassis_credit_ledger", "h2_chassis_generations", "h2_chassis_purchases", "h2_chassis_packages", "h2_chassis_sessions", "h2_chassis_users"];
+  const tables = ["h2_chassis_audit_log", "h2_chassis_credit_ledger", "h2_chassis_credit_batches", "h2_chassis_generations", "h2_chassis_purchases", "h2_chassis_packages", "h2_chassis_sessions", "h2_chassis_users"];
   const generationInput = () => ({ requestId: randomUUID(), marca: "Toyota", modelo: "Corolla", yearCode: "T" as const, quantity: 1 });
   async function account(credits: number, phone = "11998765432") {
-    const user = await store.createUser({ phone, password: "chassis-test-123", accountType: "paid", credits }, "test-admin");
+    const user = await store.createUser({ name: "Cliente Teste", phone, password: "chassis-test-123", accountType: "paid", credits }, "test-admin");
     const login = await store.login(phone, "chassis-test-123");
     return { user, token: login.token, tokenHash: chassisTokenHash(login.token) };
   }
@@ -49,9 +49,9 @@ describe.skipIf(!url)("créditos e sessões com MySQL isolado", () => {
   });
   it("concede o teste uma única vez por telefone, sem recarga ao entrar novamente", async () => {
     await pool.query("UPDATE h2_chassis_settings SET trial_credits = 3 WHERE id = 1");
-    const user = await store.register("+55 11 99876-5432", "chassis-test-123");
+    const user = await store.register("Cliente Teste", "+55 11 99876-5432", "chassis-test-123");
     expect(user.balance).toBe(3);
-    await expect(store.register("11998765432", "chassis-test-123")).rejects.toThrow("já possui");
+    await expect(store.register("Cliente Teste", "11998765432", "chassis-test-123")).rejects.toThrow("já possui");
     expect((await store.login(user.phone, "chassis-test-123")).user.balance).toBe(3);
   });
   it("duas abas não gastam além do saldo", async () => {
@@ -93,7 +93,7 @@ describe.skipIf(!url)("créditos e sessões com MySQL isolado", () => {
   });
   it("guarda preço e quantidade da compra e libera uma única vez após confirmação", async () => {
     const { user, tokenHash } = await account(0);
-    await store.savePackage({ title: "Pacote de teste", credits: 25, priceCents: 1234, active: true }, "test-admin");
+    await store.savePackage({ title: "Pacote de teste", credits: 25, priceCents: 1234, validityDays: 30, active: true }, "test-admin");
     const selected = (await store.listPackages())[0];
     const purchase = await store.createPurchase(user.id, tokenHash, selected.id, randomUUID());
     expect(purchase.priceCents).toBe(1234); expect(purchase.credits).toBe(25);
@@ -107,14 +107,27 @@ describe.skipIf(!url)("créditos e sessões com MySQL isolado", () => {
     expect((await store.history(user.id)).ledger.filter(item => item.kind === "purchase")).toHaveLength(1);
     expect((await store.listUsers())[0].accountType).toBe("paid");
   });
+  it("zera automaticamente créditos comprados quando a validade vence", async () => {
+    const { user, token, tokenHash } = await account(0);
+    await store.savePackage({ title: "Pacote 15 dias", credits: 5, priceCents: 5000, validityDays: 15, active: true }, "test-admin");
+    const selected = (await store.listPackages())[0];
+    const purchase = await store.createPurchase(user.id, tokenHash, selected.id, randomUUID());
+    await store.attachPaymentProof(user.id, purchase.id, { url: "https://example.test/proof.jpg", key: "chassis-comprovantes/expiry.jpg", mime: "image/jpeg" });
+    await store.confirmPurchase(purchase.id, "test-admin");
+    expect((await store.resolveSession(token))?.user.balance).toBe(5);
+    await pool.query("UPDATE h2_chassis_credit_batches SET expires_at = DATE_SUB(UTC_TIMESTAMP(), INTERVAL 1 SECOND) WHERE purchase_id = ?", [purchase.id]);
+    expect((await store.resolveSession(token))?.user.balance).toBe(0);
+    expect((await store.history(user.id)).ledger.some(item => item.kind === "expiry")).toBe(true);
+  });
+
   it("bloqueia e invalida sessões, e mantém o histórico limitado ao dono", async () => {
     const first = await account(2);
     const second = await account(1, "21998765432");
     await store.generate(first.user.id, first.tokenHash, generationInput());
     expect((await store.history(second.user.id)).generations).toHaveLength(0);
-    await store.updateUser({ userId: first.user.id, status: "active", accountType: "test" }, "test-admin");
+    await store.updateUser({ userId: first.user.id, name: first.user.name, status: "active", accountType: "test" }, "test-admin");
     expect((await store.resolveSession(first.token))?.user.accountType).toBe("test");
-    await store.updateUser({ userId: first.user.id, status: "blocked", accountType: "paid" }, "test-admin");
+    await store.updateUser({ userId: first.user.id, name: first.user.name, status: "blocked", accountType: "paid" }, "test-admin");
     expect(await store.resolveSession(first.token)).toBeNull();
     await expect(store.generate(first.user.id, first.tokenHash, generationInput())).rejects.toThrow("bloqueado");
     expect((await store.listUsers()).find(item => item.id === first.user.id)?.balance).toBe(1);
