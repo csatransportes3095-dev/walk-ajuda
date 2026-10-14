@@ -31,8 +31,8 @@ replaceRequired(
 );
 
 replaceRequired(
-  `  }, [searchTerm, sortOrder, showOnlyVip, showOnlyOrders, showOnlyBlocked]);`,
-  `  }, [searchTerm, sortOrder, showOnlyVip, showOnlyOrders, showOnlyBlocked, referrerFilter]);`,
+  `  }, [searchTerm, sortOrder, showOnlyVip, showOnlyOrders, showOnlyNoOrders, showOnlyBlocked]);`,
+  `  }, [searchTerm, sortOrder, showOnlyVip, showOnlyOrders, showOnlyNoOrders, showOnlyBlocked, referrerFilter]);`,
   'reset da lista ao mudar indicador'
 );
 
