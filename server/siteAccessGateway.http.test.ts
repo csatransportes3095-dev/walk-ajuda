@@ -1,11 +1,16 @@
-import { afterEach, describe, expect, it } from "vitest";
+import { afterEach, beforeEach, describe, expect, it } from "vitest";
 import express from "express";
 import { createServer, type Server } from "node:http";
 import { createSiteAccessGateway, type SiteGatewayDependencies } from "./siteAccessGateway";
 import type { SiteAccessMode } from "./siteAccessPolicy";
 
 const servers: Server[] = [];
+const previousOwner=process.env.H2_SITE_SECURITY_OWNER;
+const previousSecret=process.env.H2_SITE_ACCESS_SECRET;
+beforeEach(()=>{process.env.H2_SITE_SECURITY_OWNER="ci-only-owner";process.env.H2_SITE_ACCESS_SECRET="ci-only-dedicated-isolated-test-key-123456789012345";});
 afterEach(async () => {
+  if (previousOwner === undefined) delete process.env.H2_SITE_SECURITY_OWNER; else process.env.H2_SITE_SECURITY_OWNER=previousOwner;
+  if (previousSecret === undefined) delete process.env.H2_SITE_ACCESS_SECRET; else process.env.H2_SITE_ACCESS_SECRET=previousSecret;
   await Promise.all(servers.splice(0).map(server => new Promise<void>(resolve => server.close(() => resolve()))));
 });
 
