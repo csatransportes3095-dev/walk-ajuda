@@ -18,6 +18,8 @@ async function main() {
     const names = new Set(columns.map(column => String(column.Field)));
     const [userColumns] = await connection.query<any[]>("SHOW COLUMNS FROM h2_chassis_users");
     const userNames = new Set(userColumns.map(column => String(column.Field)));
+    const [packageColumns] = await connection.query<any[]>("SHOW COLUMNS FROM h2_chassis_packages");
+    const packageNames = new Set(packageColumns.map(column => String(column.Field)));
     const additions = [
       ["pix_key", "ALTER TABLE h2_chassis_settings ADD COLUMN pix_key VARCHAR(256) NOT NULL DEFAULT '' AFTER support_phone"],
       ["pix_name", "ALTER TABLE h2_chassis_settings ADD COLUMN pix_name VARCHAR(160) NOT NULL DEFAULT '' AFTER pix_key"],
@@ -28,12 +30,16 @@ async function main() {
       ["proof_mime", "ALTER TABLE h2_chassis_purchases ADD COLUMN proof_mime VARCHAR(100) NULL AFTER proof_key"],
       ["proof_submitted_at", "ALTER TABLE h2_chassis_purchases ADD COLUMN proof_submitted_at DATETIME NULL AFTER proof_mime"],
       ["name", "ALTER TABLE h2_chassis_users ADD COLUMN name VARCHAR(120) NOT NULL DEFAULT '' AFTER id"],
+      ["package_validity_days", "ALTER TABLE h2_chassis_packages ADD COLUMN validity_days INT UNSIGNED NOT NULL DEFAULT 30 AFTER price_cents"],
+      ["purchase_validity_days", "ALTER TABLE h2_chassis_purchases ADD COLUMN validity_days INT UNSIGNED NOT NULL DEFAULT 30 AFTER price_cents"],
+      ["credit_expires_at", "ALTER TABLE h2_chassis_purchases ADD COLUMN credit_expires_at DATETIME NULL AFTER validity_days"],
     ] as const;
     const [settingsColumns] = await connection.query<any[]>("SHOW COLUMNS FROM h2_chassis_settings");
     const settingsNames = new Set(settingsColumns.map(column => String(column.Field)));
     for (const [column, ddl] of additions) {
-      const target = column === "name" ? userNames : column.startsWith("pix_") ? settingsNames : names;
-      if (!target.has(column)) await connection.query(ddl);
+      const target = column === "name" ? userNames : column === "package_validity_days" ? packageNames : column.startsWith("pix_") ? settingsNames : names;
+      const actualColumn = column === "package_validity_days" || column === "purchase_validity_days" ? "validity_days" : column;
+      if (!target.has(actualColumn)) await connection.query(ddl);
     }
     console.log("[Chassis Service] Tabelas independentes e comprovante do módulo conferidos; cadastros e registros centrais preservados.");
   } finally { await connection.end(); }
