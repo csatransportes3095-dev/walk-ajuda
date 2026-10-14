@@ -64,8 +64,22 @@ const loanLookupAfter = `  const normalizeLoanCardPhone = (value: unknown) => {
     return (!!phone && loanCardIndex.phones.has(phone)) || (!!cpf && loanCardIndex.cpfs.has(cpf));
   };`;
 
-replaceRequired(loanLookupBefore, loanLookupAfter, 'índice de empréstimos');
+// O PR #307 já usa um índice equivalente (loanCustomerLookup).
+// Manter o índice novo sem refazer a implementação; preservar o patch legado nas demais versões.
+if (!source.includes('const loanCustomerLookup = useMemo(')) {
+  replaceRequired(loanLookupBefore, loanLookupAfter, 'índice de empréstimos');
+}
 
+if (source.includes('const filtered = useMemo(')) {
+  // A versão otimizada já encerra a filtragem em useMemo, com dependências explícitas.
+  // Inserir a paginação fora do memo sem alterar o pipeline dos filtros.
+  const before = '  }), [sortedCustomers, searchTerm, showOnlyVip, showOnlyOrders, showOnlyNoOrders, showOnlyBlocked]);\n\n  const startEdit = (c: Customer) => {';
+  const after = before.replace(
+    '\n\n  const startEdit = (c: Customer) => {',
+    '\n\n  const visibleCustomers = filtered.slice(0, visibleCustomerLimit);\n\n  useEffect(() => {\n    setVisibleCustomerLimit(24);\n  }, [searchTerm, sortOrder, showOnlyVip, showOnlyOrders, showOnlyNoOrders, showOnlyBlocked]);\n\n  const startEdit = (c: Customer) => {'
+  );
+  replaceRequired(before, after, 'lista visível incremental (useMemo)');
+} else {
 replaceRequired(
   `    if (showOnlyNoOrders) return matchSearch && !c.hasOrder;
     if (showOnlyBlocked) return matchSearch && c.blocked === 1;
@@ -88,6 +102,7 @@ replaceRequired(
   const startEdit = (c: Customer) => {`,
   'lista visível incremental'
 );
+}
 
 replaceRequired(
   '          {filtered.map((c) => (',
