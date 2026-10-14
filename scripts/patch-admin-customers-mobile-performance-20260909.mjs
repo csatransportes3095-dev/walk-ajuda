@@ -67,12 +67,14 @@ const loanLookupAfter = `  const normalizeLoanCardPhone = (value: unknown) => {
 replaceRequired(loanLookupBefore, loanLookupAfter, 'índice de empréstimos');
 
 replaceRequired(
-  `    if (showOnlyBlocked) return matchSearch && c.blocked === 1;
+  `    if (showOnlyNoOrders) return matchSearch && !c.hasOrder;
+    if (showOnlyBlocked) return matchSearch && c.blocked === 1;
     return matchSearch;
   });
 
   const startEdit = (c: Customer) => {`,
-  `    if (showOnlyBlocked) return matchSearch && c.blocked === 1;
+  `    if (showOnlyNoOrders) return matchSearch && !c.hasOrder;
+    if (showOnlyBlocked) return matchSearch && c.blocked === 1;
     return matchSearch;
   });
 
@@ -81,7 +83,7 @@ replaceRequired(
   useEffect(() => {
     // Ao mudar busca/filtro, volta ao primeiro lote para a tela responder imediatamente.
     setVisibleCustomerLimit(24);
-  }, [searchTerm, sortOrder, showOnlyVip, showOnlyOrders, showOnlyBlocked]);
+  }, [searchTerm, sortOrder, showOnlyVip, showOnlyOrders, showOnlyNoOrders, showOnlyBlocked]);
 
   const startEdit = (c: Customer) => {`,
   'lista visível incremental'
