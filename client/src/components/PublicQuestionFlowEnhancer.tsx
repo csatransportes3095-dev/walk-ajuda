@@ -39,13 +39,35 @@ function visible(element: HTMLElement): boolean {
   return style.display !== "none" && style.visibility !== "hidden" && rect.width > 0 && rect.height > 0;
 }
 
-function findSmallestQuestionElement(question: string): HTMLElement | null {
-  const wanted = normalize(question);
-  const candidates = Array.from(document.querySelectorAll<HTMLElement>("h1,h2,h3,h4,p,label,span,div"))
-    .filter(visible)
-    .filter((el) => normalize(el.textContent || "") === wanted)
-    .sort((a, b) => a.childElementCount - b.childElementCount);
-  return candidates[0] || null;
+// Procura todas as perguntas em uma única varredura do DOM (antes: uma varredura por pergunta).
+function findFirstVisibleQuestion(candidates: Candidate[]): { candidate: Candidate; target: HTMLElement } | null {
+  const byText = new Map<string, number[]>();
+  let longestQuestion = 0;
+  for (let index = 0; index < candidates.length; index++) {
+    const label = normalize(candidates[index].question.question);
+    const matches = byText.get(label) || [];
+    matches.push(index);
+    byText.set(label, matches);
+    longestQuestion = Math.max(longestQuestion, label.length);
+  }
+  const found = new Map<number, HTMLElement>();
+  for (const element of document.querySelectorAll<HTMLElement>("h1,h2,h3,h4,p,label,span,div")) {
+    // Ignora a descrição inserida pelo próprio componente.
+    if (element.closest(".h2-public-question-path")) continue;
+    const text = element.textContent || "";
+    if (!text || text.length > longestQuestion + 12) continue;
+    const indices = byText.get(normalize(text));
+    if (!indices || !visible(element)) continue;
+    for (const index of indices) {
+      const previous = found.get(index);
+      if (!previous || element.childElementCount < previous.childElementCount) found.set(index, element);
+    }
+  }
+  for (let index = 0; index < candidates.length; index++) {
+    const target = found.get(index);
+    if (target) return { candidate: candidates[index], target };
+  }
+  return null;
 }
 
 function findQuestionCard(element: HTMLElement): HTMLElement {
@@ -71,9 +93,7 @@ function chainFor(question: Q, byId: Map<number, Q>): Q[] {
   return chain;
 }
 
-function decorate(candidate: Candidate) {
-  const target = findSmallestQuestionElement(candidate.question.question);
-  if (!target) return false;
+function decorate(candidate: Candidate, target: HTMLElement) {
   const card = findQuestionCard(target);
   const chain = chainFor(candidate.question, candidate.byId);
   const level = Math.max(0, chain.length - 1);
@@ -106,10 +126,22 @@ function decorate(candidate: Candidate) {
     else card.prepend(path);
   }
 
-  const parent = chain[chain.length - 2];
   const trigger = candidate.question.triggerOption;
   const breadcrumb = chain.slice(0, -1).map((q) => q.question).join(" → ");
-  path.innerHTML = `<strong>Continuação de:</strong> ${breadcrumb}${trigger ? `<br><span class="h2-trigger">Ativada pela resposta: ${trigger}</span>` : ""}${parent ? "" : ""}`;
+  const signature = JSON.stringify([breadcrumb, trigger]);
+  // Nunca recriar o HTML se a pergunta não mudou: evita o ciclo MutationObserver -> render -> MutationObserver.
+  if (path.dataset.h2PathSignature !== signature) {
+    path.dataset.h2PathSignature = signature;
+    const bold = document.createElement("strong");
+    bold.textContent = "Continuação de:";
+    path.replaceChildren(bold, document.createTextNode(" " + breadcrumb));
+    if (trigger) {
+      const triggerText = document.createElement("span");
+      triggerText.className = "h2-trigger";
+      triggerText.textContent = "Ativada pela resposta: " + trigger;
+      path.append(document.createElement("br"), triggerText);
+    }
+  }
   return true;
 }
 
@@ -143,24 +175,32 @@ export default function PublicQuestionFlowEnhancer() {
 
     let frame = 0;
     const run = () => {
-      cancelAnimationFrame(frame);
+      // Uma solicitação por frame; eventos de DOM muito frequentes não geram dezenas de buscas.
+      if (frame) return;
       frame = requestAnimationFrame(() => {
+        frame = 0;
         if (window.location.pathname.toLowerCase().startsWith("/admin") || isChassisAdminPath(window.location.pathname)) return;
-        for (const candidate of candidates) {
-          if (decorate(candidate)) break;
-        }
+        const match = findFirstVisibleQuestion(candidates);
+        if (match) decorate(match.candidate, match.target);
       });
     };
 
     run();
-    const observer = new MutationObserver(run);
+    const observer = new MutationObserver((mutations) => {
+      // Alterações apenas dentro do caminho que nós renderizamos não justificam nova varredura.
+      if (mutations.every(mutation => {
+        const target = mutation.target;
+        return target instanceof Element && !!target.closest(".h2-public-question-path");
+      })) return;
+      run();
+    });
     observer.observe(document.body, { childList: true, subtree: true, characterData: true });
     window.addEventListener("popstate", run);
 
     return () => {
       observer.disconnect();
       window.removeEventListener("popstate", run);
-      cancelAnimationFrame(frame);
+      if (frame) cancelAnimationFrame(frame);
     };
   }, [candidates]);
 
