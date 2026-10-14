@@ -49,9 +49,16 @@ function continuePostOrderScheduleFlow(currentToken: string) {
     return true;
   }
 
+  // Manter a confirmação recuperável mesmo se o navegador não abrir o WhatsApp.
+  sessionStorage.setItem(POST_ORDER_FLOW_KEY, JSON.stringify({
+    ...flow.saved,
+    currentIndex: flow.index,
+    completed: true,
+    completedAt: Date.now(),
+  }));
+
   const whatsappUrl = typeof flow.saved?.whatsappUrl === 'string' ? flow.saved.whatsappUrl : '';
   if (whatsappUrl.startsWith('https://wa.me/')) {
-    sessionStorage.removeItem(POST_ORDER_FLOW_KEY);
 
     // Abre o WhatsApp a partir do clique do usuário sem abandonar a página H2.
     // A aba atual volta imediatamente para a página central, evitando ficar presa
@@ -71,12 +78,6 @@ function continuePostOrderScheduleFlow(currentToken: string) {
     return true;
   }
 
-  sessionStorage.setItem(POST_ORDER_FLOW_KEY, JSON.stringify({
-    ...flow.saved,
-    currentIndex: flow.index,
-    completed: true,
-    completedAt: Date.now(),
-  }));
   window.location.href = '/';
   return true;
 }

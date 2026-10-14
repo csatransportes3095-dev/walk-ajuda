@@ -28,6 +28,7 @@ type FlowOrigin = "storefront" | "cart" | "legacy";
 const BOT_PROGRESS_KEY = 'walk_bot_order_progress';
 const BOT_UPLOADED_FILES_KEY = 'walk_bot_uploaded_files';
 const POST_ORDER_FLOW_KEY = 'h2_post_order_schedule_flow_v1';
+const POST_ORDER_CONFIRMATION_KEY = 'h2_post_order_whatsapp_confirmation_v1';
 
 type PostOrderScheduleDecision = 'choose' | 'now' | 'later' | 'completed';
 
@@ -426,6 +427,31 @@ export default function Home() {
     profilePhotoUrl?: string;
   } | null>(null);
 
+  // Um pedido já gravado deve poder retomar a confirmação, sem refazer a compra.
+  useEffect(() => {
+    try {
+      const raw = sessionStorage.getItem(POST_ORDER_CONFIRMATION_KEY);
+      if (!raw) return;
+      const saved = JSON.parse(raw);
+      const elapsed = Date.now() - Number(saved?.savedAt);
+      if (!saved?.submittedOrderData || !Number.isFinite(elapsed) || elapsed < 0 || elapsed > 24 * 60 * 60 * 1000) {
+        sessionStorage.removeItem(POST_ORDER_CONFIRMATION_KEY);
+        return;
+      }
+      const links = Array.isArray(saved.scheduleLinks)
+        ? saved.scheduleLinks.filter((link: unknown) => typeof link === 'string' && !!scheduleTokenFromUrl(link))
+        : [];
+      const decision = saved.scheduleDecision;
+      setSubmittedOrderData(saved.submittedOrderData);
+      setAutomaticScheduleLinks(links);
+      setPostOrderScheduleDecision(links.length > 0 && (decision === 'choose' || decision === 'later' || decision === 'completed')
+        ? decision : 'completed');
+      setPostOrderReferralStep('done');
+      setStep('success');
+    } catch {
+      try { sessionStorage.removeItem(POST_ORDER_CONFIRMATION_KEY); } catch {}
+    }
+  }, []);
   useEffect(() => {
     try {
       const raw = sessionStorage.getItem(POST_ORDER_FLOW_KEY);
@@ -447,6 +473,19 @@ export default function Home() {
       sessionStorage.removeItem(POST_ORDER_FLOW_KEY);
     }
   }, []);
+
+  // Persistir apenas nesta aba a etapa pós-compra, para recuperar WhatsApp/agendamento.
+  useEffect(() => {
+    if (step !== 'success' || !submittedOrderData) return;
+    try {
+      sessionStorage.setItem(POST_ORDER_CONFIRMATION_KEY, JSON.stringify({
+        savedAt: Date.now(),
+        submittedOrderData,
+        scheduleLinks: automaticScheduleLinks,
+        scheduleDecision: postOrderScheduleDecision === 'now' ? 'choose' : postOrderScheduleDecision,
+      }));
+    } catch { /* O pedido permanece gravado no servidor. */ }
+  }, [step, submittedOrderData, automaticScheduleLinks, postOrderScheduleDecision]);
 
   // ===== PROPAGANDA OBRIGATÓRIA =====
   const [adVisible, setAdVisible] = useState(false);
@@ -2105,6 +2144,7 @@ export default function Home() {
     setReferrerName(''); setReferrerPhone('');
     setSuccessMessage(''); setAutomaticScheduleLinks([]); setPostOrderScheduleDecision('completed'); setCouponCode(''); setCouponValid(null);
     try { sessionStorage.removeItem(POST_ORDER_FLOW_KEY); } catch {}
+    try { sessionStorage.removeItem(POST_ORDER_CONFIRMATION_KEY); } catch {}
     setCouponDiscount(null); setCouponMessage('');
     setPaymentProof(null); setPaymentProofPreview(null);
     setPixCopied(false); setIsSubmitting(false); setShowExamplePhoto(false);
@@ -2206,6 +2246,7 @@ export default function Home() {
   };
 
   const buildPostOrderWhatsappUrl = () => {
+    const od = submittedOrderData;
     const { pageUrl: profilePhotoPreviewUrl } = getPostOrderCustomerPhotoPreviewUrls();
     let msg = profilePhotoPreviewUrl
       ? `${profilePhotoPreviewUrl}\n\nNOVO PEDIDO - ${SITE_NAME}`
@@ -4551,28 +4592,73 @@ export default function Home() {
               </p>
             </div>
 
-            {/* Botão GRANDE do WhatsApp */}
-            <button onClick={() => {
-              prewarmPostOrderCustomerPhotoPreview();
-              const whatsappUrl = buildPostOrderWhatsappUrl();
-              if (!whatsappUrl) {
-                toast.error('Não foi possível preparar a mensagem do pedido para o WhatsApp.');
-                return;
-              }
-              window.open(whatsappUrl, '_blank');
-              setWhatsappClicked(true);
-            }}
+            {/* Link nativo: abre pelo gesto do cliente, sem bloqueio de popup por window.open. */}
+            <a
+              href={buildPostOrderWhatsappUrl()}
+              target="_blank"
+              rel="noopener noreferrer"
+              onClick={() => {
+                prewarmPostOrderCustomerPhotoPreview();
+                setWhatsappClicked(true);
+              }}
               data-tour="whatsapp-confirmar"
-              className={`w-full px-6 py-5 text-white font-black text-xl rounded-xl transition-all duration-300 flex items-center justify-center gap-3 transform hover:scale-105 shadow-lg mb-4 ${whatsappClicked ? 'bg-gradient-to-r from-green-700 to-green-600 shadow-green-600/20' : 'bg-gradient-to-r from-green-600 to-green-500 hover:from-green-500 hover:to-green-400 shadow-green-500/30 animate-bounce'}`}
-              style={{ animationDuration: '2s' }}>
+              className={`w-full px-6 py-5 text-white font-black text-xl rounded-xl transition-all duration-300 flex items-center justify-center gap-3 transform hover:scale-105 shadow-lg mb-4 ${whatsappClicked ? 'bg-gradient-to-r from-green-700 to-green-600 shadow-green-600/20' : 'bg-gradient-to-r from-green-600 to-green-500 hover:from-green-500 to-green-400 shadow-green-500/30 animate-bounce'}`}
+              style={{ animationDuration: '2s' }}
+            >
               <MessageCircle className="w-7 h-7" />
               {whatsappClicked ? 'ABRIR WHATSAPP NOVAMENTE' : 'CONFIRMAR NO WHATSAPP'}
-            </button>
+            </a>
 
+            {/* Alternativas para navegadores que não abrem WhatsApp em outra aba. */}
+            <div className="mb-4 grid grid-cols-1 gap-2 sm:grid-cols-2">
+              <a
+                href={buildPostOrderWhatsappUrl()}
+                target="_self"
+                onClick={() => setWhatsappClicked(true)}
+                className="flex min-h-[48px] items-center justify-center rounded-lg border border-green-400/50 bg-green-500/15 px-3 py-2 text-center text-sm font-bold text-green-200"
+              >
+                ABRIR NESTA ABA
+              </a>
+              <button
+                type="button"
+                onClick={async () => {
+                  try {
+                    const message = new URL(buildPostOrderWhatsappUrl()).searchParams.get('text') || '';
+                    if (!message) throw new Error('Mensagem vazia');
+                    if (navigator.clipboard?.writeText) {
+                      await navigator.clipboard.writeText(message);
+                    } else {
+                      const field = document.createElement('textarea');
+                      field.value = message;
+                      field.style.position = 'fixed';
+                      field.style.opacity = '0';
+                      document.body.appendChild(field);
+                      field.select();
+                      const copied = document.execCommand('copy');
+                      field.remove();
+                      if (!copied) throw new Error('Cópia indisponível');
+                    }
+                    toast.success('Mensagem copiada! Cole no atendimento do WhatsApp.');
+                  } catch {
+                    toast.error('Não foi possível copiar. Use ABRIR NESTA ABA para enviar.');
+                  }
+                }}
+                className="flex min-h-[48px] items-center justify-center rounded-lg border border-white/30 bg-white/10 px-3 py-2 text-center text-sm font-bold text-white"
+              >
+                COPIAR MENSAGEM
+              </button>
+            </div>
+
+            {automaticScheduleLinks.length === 0 && (
+              <p className="mb-4 text-xs text-white/60">
+                Se este serviço precisar de foto agendada, consulte a liberação em{' '}
+                <a href="/acompanhar" className="font-bold text-fuchsia-200 underline">Acompanhar Pedido</a>.
+              </p>
+            )}
             {whatsappClicked ? (
               <>
                 <p className="text-green-400 text-xs mb-3 font-semibold">
-                  WhatsApp aberto! Envie a mensagem e clique em Concluir.
+                  Se o WhatsApp abriu, envie a mensagem. Se não abriu, use ABRIR NESTA ABA ou COPIAR MENSAGEM. Conclua apenas após enviar.
                 </p>
                 <button onClick={() => {
                   // Logout completo ao confirmar envio no WhatsApp
