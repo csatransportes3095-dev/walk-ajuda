@@ -1,0 +1,50 @@
+name: Validate PR308 against live Render Docker
+on:
+  push:
+    branches:
+      - validation/pr308-on-2c6e292-docker-20261014
+  workflow_dispatch:
+permissions:
+  contents: read
+jobs:
+  check:
+    runs-on: ubuntu-latest
+    timeout-minutes: 35
+    steps:
+      - uses: actions/checkout@v4
+      - uses: pnpm/action-setup@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '22'
+          cache: pnpm
+      - run: pnpm install --frozen-lockfile
+      - name: PR308 regression tests
+        run: pnpm exec vitest run server/adminCustomersSqlPerformance.test.ts
+      - name: TypeScript on changed files
+        shell: bash
+        run: |
+          set +e
+          pnpm check > /tmp/types.log 2>&1
+          rc=$?
+          set -e
+          if [ "$rc" -ne 0 ]; then
+            grep 'error TS' /tmp/types.log | head -n 20 || true
+          fi
+          if grep -E '^(server/(db|routers|customerProfileUpdatePolicy|adminCustomersSqlPerformance.test)\\.ts)\\(' /tmp/types.log | grep -q 'error TS'; then
+            echo 'Changed-file TypeScript failure'
+            exit 1
+          fi
+      - name: Execute every Dockerfile patch in order and build
+        run: |
+          python3 - <<'PY'
+          from pathlib import Path
+          import subprocess
+          docker = Path('Dockerfile').read_text()
+          start = docker.index('RUN npm install -g pnpm@10.4.1')
+          end = docker.index('\n\nENV NODE_ENV', start)
+          chain = docker[start:end].replace('\\\n', ' ').strip()
+          marker = '&& node scripts/'
+          assert marker in chain
+          chain = 'node scripts/' + chain.split(marker, 1)[1]
+          subprocess.run(chain, shell=True, check=True)
+          PY
