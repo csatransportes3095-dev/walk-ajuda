@@ -162,7 +162,7 @@ export function obterPerfilFabricanteOficial(
     valor
       .normalize("NFD")
       .replace(/[\u0300-\u036f]/g, "")
-      .replace(/\s*(s\.?a\.?|sa|do|da|de|del|e)\s*/gi, " ")
+      .replace(/\s*\b(s\.?a\.?|sa|do|da|de|del|e)\b\s*/gi, " ")
       .replace(/[^a-z0-9]/gi, " ")
       .replace(/\s+/g, " ")
       .trim()
