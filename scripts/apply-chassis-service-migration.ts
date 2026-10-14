@@ -14,7 +14,17 @@ async function main() {
   const connection = await createConnection(process.env.DATABASE_URL);
   try {
     for (const statement of statements) await connection.query(statement);
-    console.log("[Chassis Service] Tabelas independentes criadas; cadastros e registros centrais preservados.");
+    const [columns] = await connection.query<any[]>("SHOW COLUMNS FROM h2_chassis_purchases");
+    const names = new Set(columns.map(column => String(column.Field)));
+    const additions = [
+      ["proof_status", "ALTER TABLE h2_chassis_purchases ADD COLUMN proof_status ENUM('none','submitted','rejected') NOT NULL DEFAULT 'none' AFTER status"],
+      ["proof_url", "ALTER TABLE h2_chassis_purchases ADD COLUMN proof_url VARCHAR(1024) NULL AFTER proof_status"],
+      ["proof_key", "ALTER TABLE h2_chassis_purchases ADD COLUMN proof_key VARCHAR(512) NULL AFTER proof_url"],
+      ["proof_mime", "ALTER TABLE h2_chassis_purchases ADD COLUMN proof_mime VARCHAR(100) NULL AFTER proof_key"],
+      ["proof_submitted_at", "ALTER TABLE h2_chassis_purchases ADD COLUMN proof_submitted_at DATETIME NULL AFTER proof_mime"],
+    ] as const;
+    for (const [column, ddl] of additions) if (!names.has(column)) await connection.query(ddl);
+    console.log("[Chassis Service] Tabelas independentes e comprovante do módulo conferidos; cadastros e registros centrais preservados.");
   } finally { await connection.end(); }
 }
 main().catch(error => {
