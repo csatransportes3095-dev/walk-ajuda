@@ -33,6 +33,7 @@ const ANOS_GERADOR_PUBLICO = [
   { code: "R", ano: 2024 },
   { code: "S", ano: 2025 },
   { code: "T", ano: 2026 },
+  { code: "V", ano: 2027 },
 ];
 
 type FipeBrand = {
