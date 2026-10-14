@@ -189,7 +189,13 @@ export class ChassisServiceStore {
     if (!token || !/^[A-Za-z0-9_-]{43}$/.test(token)) return null;
     const hash = chassisTokenHash(token);
     const [rows] = await this.pool.execute<UserRow[]>("SELECT u.* FROM h2_chassis_sessions s JOIN h2_chassis_users u ON u.id = s.user_id WHERE s.token_hash = ? AND s.expires_at > UTC_TIMESTAMP() AND s.session_version = u.session_version AND u.status = 'active'", [hash]);
-    return rows[0] ? { user: publicUser(rows[0]), tokenHash: hash } : null;
+    if (!rows[0]) return null;
+    const fresh = await this.transaction(async connection => {
+      await this.expirePurchasedCredits(connection, rows[0].id);
+      const [updated] = await connection.execute<UserRow[]>("SELECT u.* FROM h2_chassis_sessions s JOIN h2_chassis_users u ON u.id = s.user_id WHERE s.token_hash = ? AND s.expires_at > UTC_TIMESTAMP() AND s.session_version = u.session_version AND u.status = 'active'", [hash]);
+      return updated[0] || null;
+    });
+    return fresh ? { user: publicUser(fresh), tokenHash: hash } : null;
   }
   async logout(token: string | undefined) {
     if (token) await this.pool.execute("DELETE FROM h2_chassis_sessions WHERE token_hash = ?", [chassisTokenHash(token)]);
@@ -217,6 +223,7 @@ export class ChassisServiceStore {
       const balance = user.balance + delta;
       if (balance < 0) throw new ChassisServiceError("BAD_REQUEST", "A quantidade a remover supera o saldo disponível.");
       assertChassisCredits(balance);
+      if (delta < 0) await this.consumePurchasedCredits(connection, userId, Math.abs(delta));
       await connection.execute("UPDATE h2_chassis_users SET balance = ? WHERE id = ?", [balance, userId]);
       await this.ledger(connection, userId, "adjustment", delta, balance, actor, requestId, note);
       return { balance, replayed: false };
