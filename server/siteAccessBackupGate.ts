@@ -35,13 +35,23 @@ export function inspectSiteSecurityBackup(
   if (!Number.isFinite(completed) || completed > now + 2 * 60_000 ||
       now - completed > BACKUP_MAX_AGE_MS) errors.push("Backup não foi concluído nas últimas 24 horas");
   let verified: Record<string, unknown> | undefined;
+  let recovery: Record<string, unknown> | undefined;
   try {
     const manifest = JSON.parse(record.manifestJson || "{}") as Record<string, unknown>;
     const remote = manifest.remoteVerification;
     if (remote && typeof remote === "object" && !Array.isArray(remote)) {
       verified = remote as Record<string, unknown>;
     }
+    const kit = manifest.disasterRecovery;
+    if (kit && typeof kit === "object" && !Array.isArray(kit)) {
+      recovery = kit as Record<string, unknown>;
+    }
   } catch { errors.push("Manifesto do backup inválido"); }
+  if (recovery?.version !== 1 || !Array.isArray(recovery?.missingCriticalVariables)) {
+    errors.push("Kit de recuperação cifrado não comprovado neste backup");
+  } else if (recovery.missingCriticalVariables.length > 0) {
+    errors.push("Kit de recuperação sem todas as configurações essenciais");
+  }
   if (verified?.status !== "verified") errors.push("Integridade profunda do backup não verificada");
   if (!Number.isFinite(Number(verified?.bytes)) || Number(verified?.bytes) !== size) {
     errors.push("Tamanho da verificação remota não confere");
