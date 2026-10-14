@@ -7,6 +7,7 @@ on:
       - 'server/routers/chassisService.ts'
       - 'server/routers/vinRegistry.ts'
       - 'server/routers.ts'
+      - 'server/uploadRoute.ts'
       - 'shared/chassisService.ts'
       - 'drizzle/chassis-service.sql'
       - 'client/src/pages/*Chassis*'
