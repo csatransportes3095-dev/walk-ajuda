@@ -18,6 +18,7 @@ export default function ChassisCustomerPage() {
   const [pixCopied, setPixCopied] = useState(false);
   const [view, setView] = useState<"generate" | "packages" | "history">("generate");
   const [registering, setRegistering] = useState(false);
+  const [name, setName] = useState("");
   const [phone, setPhone] = useState("");
   const [password, setPassword] = useState("");
   const [selected, setSelected] = useState<number | null>(null);
@@ -36,9 +37,10 @@ export default function ChassisCustomerPage() {
   async function authenticate(event: React.FormEvent) {
     event.preventDefault();
     try {
-      if (registering) await register.mutateAsync({ phone, password });
+      if (registering) await register.mutateAsync({ name, phone, password });
       await login.mutateAsync({ phone, password });
       setPassword("");
+      if (registering) setName("");
       await utils.chassisService.history.reset();
       await me.refetch();
       toast.success(registering ? "Seu acesso foi criado." : "Bem-vindo ao serviço.");
@@ -134,18 +136,19 @@ export default function ChassisCustomerPage() {
     {!user ? <main className="mx-auto max-w-md space-y-5 px-4 py-8">
       <section className={panel}><h2 className="text-xl font-bold">{registering ? "Crie seu acesso" : "Entre no serviço"}</h2><p className="mt-2 text-sm text-zinc-400">Use seu telefone com DDD e sua senha deste serviço.</p>
         <form className="mt-5 space-y-4" onSubmit={event => void authenticate(event)}>
+          {registering && <label className="block text-sm">Nome<input className={`${field} mt-2`} type="text" autoComplete="name" minLength={2} maxLength={120} value={name} onChange={event => setName(event.target.value)} required /></label>}
           <label className="block text-sm">Telefone<input className={`${field} mt-2`} type="tel" inputMode="tel" autoComplete="username" value={phone} onChange={event => setPhone(event.target.value)} required /></label>
           <label className="block text-sm">Senha<input className={`${field} mt-2`} type="password" autoComplete={registering ? "new-password" : "current-password"} minLength={registering ? 8 : 1} maxLength={128} value={password} onChange={event => setPassword(event.target.value)} required /></label>
           <button type="submit" className={`${button} w-full`} disabled={login.isPending || register.isPending}>{login.isPending || register.isPending ? "Aguarde..." : registering ? "Criar acesso" : "Entrar"}</button>
         </form>
-        {(config?.registrationEnabled || registering) && <button className="mt-4 w-full text-sm text-cyan-300" onClick={() => { setRegistering(!registering); setPassword(""); }}>{registering ? "Já tenho acesso" : "Criar acesso com telefone e senha"}</button>}
+        {(config?.registrationEnabled || registering) && <button className="mt-4 w-full text-sm text-cyan-300" onClick={() => { setRegistering(!registering); setName(""); setPassword(""); }}>{registering ? "Já tenho acesso" : "Criar acesso com nome, telefone e senha"}</button>}
         {registering && <p className="mt-4 text-xs text-zinc-400">Seu acesso começa com {config?.trialCredits || 0} créditos de teste. O benefício é concedido uma única vez por telefone.</p>}
         {whatsapp && <a href={whatsapp} target="_blank" rel="noopener noreferrer" className="mt-4 block text-center text-sm text-green-300">Preciso de ajuda com o acesso</a>}
       </section>
       <p className="text-center text-xs leading-5 text-zinc-500">Os números gerados são sintéticos e destinados a testes. Não representam chassis oficiais de veículos.</p>
     </main> : <>
       <div className="mx-auto max-w-3xl space-y-4 px-3 pt-5 sm:px-4">
-        <section className={panel}><div className="flex flex-wrap items-center justify-between gap-3"><div><p className="text-sm text-zinc-400">{user.phone} · {user.accountType === "test" ? "Acesso de teste" : "Acesso pago"}</p><p className="mt-1 text-2xl font-bold text-cyan-300">{user.balance} créditos disponíveis</p></div><p className="text-sm text-zinc-400">{user.totalUsed} utilizados</p></div>
+        <section className={panel}><div className="flex flex-wrap items-center justify-between gap-3"><div><p className="text-sm text-zinc-400">{user.name ? `${user.name} · ` : ""}{user.phone} · {user.accountType === "test" ? "Acesso de teste" : "Acesso pago"}</p><p className="mt-1 text-2xl font-bold text-cyan-300">{user.balance} créditos disponíveis</p></div><p className="text-sm text-zinc-400">{user.totalUsed} utilizados</p></div>
           {user.balance === 0 && <div role="status" className="mt-4 rounded-xl border border-amber-400/30 bg-amber-400/10 p-3 text-sm text-amber-100">Seus créditos acabaram. Escolha um pacote para continuar.<button onClick={() => setView("packages")} className="mt-2 block font-bold text-cyan-300">Ver pacotes</button></div>}
         </section>
         <nav className="grid grid-cols-3 gap-2" aria-label="Serviço de chassis">{([["generate", "Gerador"], ["packages", "Comprar créditos"], ["history", "Histórico"]] as const).map(([key, label]) => <button key={key} onClick={() => setView(key)} aria-pressed={view === key} className={`rounded-xl px-2 py-3 text-xs font-bold sm:text-sm ${view === key ? "bg-purple-700" : "bg-zinc-900 text-zinc-400"}`}>{label}</button>)}</nav>
