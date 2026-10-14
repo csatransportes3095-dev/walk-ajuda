@@ -1,5 +1,5 @@
 import { z } from "zod";
-import { getSetting, upsertSetting } from "./db";
+import { getSetting, getSettingsByPrefixes, upsertSetting } from "./db";
 import {
   CUSTOMER_PROFILE_UPDATE_FIELD_OPTIONS,
   getEffectiveCustomerProfileUpdateFields,
@@ -179,6 +179,39 @@ export function evaluateCustomerProfileUpdateState(
     updatedAt: policy.updatedAt === new Date(0).toISOString() ? null : policy.updatedAt,
     updatedBy: policy.updatedBy,
   };
+}
+
+// Pré-carrega políticas e revisões do ADM em lote, sem mudar os estados do cliente.
+// Políticas antigas já concluídas continuam usando a rotina de reparo existente.
+export async function getCustomerProfileUpdateStatesBatch(customers: any[]): Promise<Map<number, CustomerProfileUpdateState>> {
+  const results = new Map<number, CustomerProfileUpdateState>();
+  if (!customers.length) return results;
+  const settings = await getSettingsByPrefixes([POLICY_PREFIX, COMPLETION_PREFIX]);
+  await Promise.all(customers.map(async customer => {
+    const id = Number(customer?.id) || 0;
+    let policy = defaultPolicy();
+    const rawPolicy = settings[policyKey(id)];
+    if (rawPolicy) {
+      try {
+        const parsed = policySchema.safeParse(JSON.parse(rawPolicy));
+        if (parsed.success) policy = { ...parsed.data, fields: normalizeCustomerProfileUpdateFields(parsed.data.fields) };
+      } catch { /* manter os mesmos padrões da consulta individual */ }
+    }
+    let completedRevision = 0;
+    const rawCompletion = settings[completionKey(id)];
+    if (rawCompletion) {
+      try {
+        const parsed = completionSchema.safeParse(JSON.parse(rawCompletion));
+        if (parsed.success) completedRevision = parsed.data.revision;
+      } catch { /* manter revisão padrão */ }
+    }
+    // Compatibilidade: o reparo histórico só grava quando há conclusão pendente.
+    if (policy.enabled && completedRevision >= policy.revision) {
+      policy = await closeCompletedPolicy(id, policy, completedRevision);
+    }
+    results.set(id, evaluateCustomerProfileUpdateState(customer, policy, completedRevision));
+  }));
+  return results;
 }
 
 export async function getCustomerProfileUpdateState(customer: any): Promise<CustomerProfileUpdateState> {
