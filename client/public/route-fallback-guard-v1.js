@@ -18,7 +18,7 @@
     '/', '/login', '/foto', '/sorteio', '/acompanhar', '/revendedor',
     '/pre-cadastro', '/consultar-cadastro', '/atualizarcadastro', '/locadora',
     '/gastos', '/emprestimo', '/cartoes', '/gerador-chassi', '/gerador-chassi/',
-    '/adm/chassis', '/adm/chassis/', '/app/chassis', '/app/chassis/', '/ajuda',
+    '/adm/chassis', '/adm/chassis/', '/h2chassis', '/h2chassis/', '/ajuda',
     '/video/tutorial', '/tutorial', '/bot', '/app', '/app-pro', '/vip', '/similaridade', '/404'
   ]);
 
