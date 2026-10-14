@@ -12,6 +12,7 @@ import { CHASSIS_SESSION_COOKIE, CHASSIS_YEARS } from "../../shared/chassisServi
 
 const limiter = new ChassisRateLimiter();
 const cookieOptions = (secure: boolean) => ({ httpOnly: true, sameSite: "lax" as const, secure, path: "/", maxAge: 14 * 24 * 60 * 60 * 1000 });
+const name = z.string().trim().min(2).max(120);
 const phone = z.string().min(10).max(30);
 const password = z.string().min(8).max(128);
 const id = z.number().int().positive();
@@ -47,9 +48,9 @@ async function guarded<T>(fn: () => Promise<T>): Promise<T> {
 export const chassisServiceRouter = router({
   catalog: serviceProcedure.query(() => guarded(async () => ({ config: await getChassisServiceStore().getConfig(), packages: await getChassisServiceStore().listPackages() }))),
   me: serviceProcedure.query(({ ctx }) => guarded(async () => (await getChassisServiceStore().resolveSession(parseCookies(ctx.req.headers.cookie || "")[CHASSIS_SESSION_COOKIE]))?.user || null)),
-  register: serviceProcedure.input(z.object({ phone, password })).mutation(({ input, ctx }) => guarded(async () => {
+  register: serviceProcedure.input(z.object({ name, phone, password })).mutation(({ input, ctx }) => guarded(async () => {
     limiter.check(`register:${ctx.req.ip || ctx.req.socket.remoteAddress || "unknown"}`, 5, 60 * 60 * 1000);
-    return getChassisServiceStore().register(input.phone, input.password);
+    return getChassisServiceStore().register(input.name, input.phone, input.password);
   })),
   login: serviceProcedure.input(z.object({ phone, password: z.string().min(1).max(128) })).mutation(({ input, ctx }) => guarded(async () => {
     limiter.check(`login-ip:${ctx.req.ip || ctx.req.socket.remoteAddress || "unknown"}`, 20, 15 * 60 * 1000);
@@ -87,7 +88,7 @@ export const chassisServiceRouter = router({
   attachPaymentProof: authenticatedProcedure.input(z.object({ id: z.string().uuid(), url: z.string().url().max(1024), key: z.string().min(1).max(512), mime: z.string().min(1).max(100) })).mutation(({ input, ctx }) => guarded(() => getChassisServiceStore().attachPaymentProof(ctx.chassis.user.id, input.id, { url: input.url, key: input.key, mime: input.mime }))),
   adminUsers: serviceAdminProcedure.input(z.object({ search: z.string().max(30).default(""), offset: z.number().int().min(0).max(1_000_000).default(0) })).query(({ input }) => guarded(() => getChassisServiceStore().listUsers(input.search, input.offset))),
   adminHistory: serviceAdminProcedure.input(z.object({ userId: id })).query(({ input }) => guarded(() => getChassisServiceStore().adminHistory(input.userId))),
-  adminCreateUser: serviceAdminProcedure.input(z.object({ phone, password, accountType: z.enum(["test", "paid"]), credits })).mutation(({ input, ctx }) => guarded(() => getChassisServiceStore().createUser(input, ctx.chassisActor))),
+  adminCreateUser: serviceAdminProcedure.input(z.object({ name, phone, password, accountType: z.enum(["test", "paid"]), credits })).mutation(({ input, ctx }) => guarded(() => getChassisServiceStore().createUser(input, ctx.chassisActor))),
   adminAdjust: serviceAdminProcedure.input(z.object({ userId: id, delta: z.number().int().min(-1_000_000).max(1_000_000).refine(value => value !== 0), note: z.string().trim().max(300), requestId: z.string().uuid() })).mutation(({ input, ctx }) => guarded(() => getChassisServiceStore().adjustCredits(input.userId, input.delta, input.note, ctx.chassisActor, input.requestId))),
   adminUpdateUser: serviceAdminProcedure.input(z.object({ userId: id, status: z.enum(["active", "blocked"]), accountType: z.enum(["test", "paid"]) })).mutation(({ input, ctx }) => guarded(() => getChassisServiceStore().updateUser(input, ctx.chassisActor))),
   adminResetPassword: serviceAdminProcedure.input(z.object({ userId: id, password })).mutation(({ input, ctx }) => guarded(() => getChassisServiceStore().resetPassword(input.userId, input.password, ctx.chassisActor))),
