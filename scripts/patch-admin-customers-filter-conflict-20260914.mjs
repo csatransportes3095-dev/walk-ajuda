@@ -27,8 +27,8 @@ replaceOnce(
 
 // Todo filtro que muda a lista reinicia a paginação incremental.
 source = source.replace(
-  `  }, [searchTerm, sortOrder, showOnlyVip, showOnlyOrders, showOnlyBlocked, referrerFilter]);`,
-  `  }, [searchTerm, sortOrder, showOnlyVip, showOnlyOrders, showOnlyBlocked, referrerFilter, customerListFilter]);`,
+  `  }, [searchTerm, sortOrder, showOnlyVip, showOnlyOrders, showOnlyNoOrders, showOnlyBlocked, referrerFilter]);`,
+  `  }, [searchTerm, sortOrder, showOnlyVip, showOnlyOrders, showOnlyNoOrders, showOnlyBlocked, referrerFilter, customerListFilter]);`,
 );
 
 const searchRow = `        <div className="flex gap-2">\n        <div className="relative flex-1">`;
