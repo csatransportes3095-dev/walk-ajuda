@@ -35,7 +35,23 @@ describe("fluxo pos-pedido: agendamento antes do WhatsApp", () => {
     expect(schedule).toContain("const whatsappUrl = typeof flow.saved?.whatsappUrl === 'string'");
     expect(schedule).toContain("whatsappLink.target = '_blank'");
     expect(schedule).toContain("window.location.replace('/')");
-    expect(schedule).toContain("sessionStorage.removeItem(POST_ORDER_FLOW_KEY)");
+    expect(schedule).toContain("sessionStorage.setItem(POST_ORDER_FLOW_KEY, JSON.stringify({");
+    expect(schedule).toContain("completed: true");
+  });
+
+  it("monta a mensagem com dados no escopo e oferece abertura alternativa", () => {
+    expect(home).toContain("const buildPostOrderWhatsappUrl = () => {\\n    const od = submittedOrderData;");
+    expect(home).toContain("href={buildPostOrderWhatsappUrl()}");
+    expect(home).toContain("ABRIR NESTA ABA");
+    expect(home).toContain("COPIAR MENSAGEM");
+    expect(home).not.toContain("window.open(whatsappUrl, '_blank')");
+  });
+
+  it("retoma confirmacao do pedido depois de atualizar a aba", () => {
+    expect(home).toContain("POST_ORDER_CONFIRMATION_KEY");
+    expect(home).toContain("sessionStorage.getItem(POST_ORDER_CONFIRMATION_KEY)");
+    expect(home).toContain("sessionStorage.setItem(POST_ORDER_CONFIRMATION_KEY");
+    expect(home).toContain("setStep('success')");
   });
 
   it("nao altera a mutation existente de confirmacao do horario", () => {
