@@ -37,6 +37,8 @@ import ErrorBoundary from "./components/ErrorBoundary";
 import { ThemeProvider } from "./contexts/ThemeContext";
 import Home from "./pages/Home";
 import AdminCodes from "./pages/AdminCodes";
+import AdminSiteSecurity from "./pages/AdminSiteSecurity";
+import SiteAccess from "./pages/SiteAccess";
 import AdminGastosPage from "./pages/AdminGastosPage";
 import AdminUserAccessFilters from "./pages/AdminUserAccessFilters";
 import AdminCustomerPasswordPage from "./pages/AdminCustomerPasswordPage";
@@ -47,7 +49,6 @@ import AdminProducts from "./pages/AdminProducts";
 import AdminSettings from "./pages/AdminSettings";
 import AdminVip from "./pages/AdminVip";
 import AdminBackup from "./pages/AdminBackup";
-import AdminChassisPage from "./pages/AdminChassisPage";
 import AdminCustomers from "./pages/AdminCustomers";
 import AdminRaffles from "./pages/AdminRaffles";
 import AdminLogin from "./pages/AdminLogin";
@@ -109,6 +110,8 @@ import AppProDownloadPage from "./pages/AppProDownloadPage";
 import VipPage from "./pages/VipPage";
 import VipInstallmentPayments from "./pages/VipInstallmentPayments";
 import Ajuda from "./pages/Ajuda";
+import GeradorChassiPublico from "./pages/GeradorChassiPublico";
+import AdminChassisPage from "./pages/AdminChassisPage";
 import ProtectedPhotoPage from "./pages/ProtectedPhotoPage";
 import ResellerLogin from "./pages/ResellerLogin";
 import ResellerDashboard from "./pages/ResellerDashboard";
@@ -185,6 +188,7 @@ function Router() {
   
   return (
     <Switch>
+      <Route path={"/site-access"} component={SiteAccess} />
       <Route path={"/admin/login"} component={AdminLogin} />
       <Route path={"/h2ads"}>
         <H2AdsGuard><H2Ads /></H2AdsGuard>
@@ -203,6 +207,9 @@ function Router() {
       </Route>
       <Route path={"/admin/access-filters"}>
         <AdminGuard><AdminUserAccessFilters /></AdminGuard>
+      </Route>
+      <Route path={"/admin/site-security"}>
+        <AdminGuard><AdminSiteSecurity /></AdminGuard>
       </Route>
       <Route path={"/admin/codes"}>
         <AdminGuard><AdminCodes /></AdminGuard>
@@ -653,4 +660,3 @@ function App() {
 
 
 export default App;
-
