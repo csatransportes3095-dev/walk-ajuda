@@ -400,7 +400,7 @@ export default function GeradorChassiPublico({ embedded = false, customer }: {
       </header>}
 
       <main className="mx-auto max-w-3xl space-y-5 px-3 py-5 sm:px-4 sm:py-6">
-        <section className="rounded-2xl border border-yellow-500/25 bg-yellow-900/15 px-4 py-3">
+        {!customer && <section className="rounded-2xl border border-yellow-500/25 bg-yellow-900/15 px-4 py-3">
           <div className="flex items-start gap-3">
             <Info className="mt-0.5 h-4 w-4 shrink-0 text-yellow-300" />
             <div className="space-y-1 text-xs leading-relaxed text-yellow-100/80">
@@ -413,7 +413,7 @@ export default function GeradorChassiPublico({ embedded = false, customer }: {
               </p>
             </div>
           </div>
-        </section>
+        </section>}
 
         <section className="space-y-5 rounded-2xl border border-zinc-700/50 bg-zinc-900/80 p-4 sm:p-5">
           <div>
@@ -459,9 +459,9 @@ export default function GeradorChassiPublico({ embedded = false, customer }: {
                   placeholder="Ex.: 9BRB29BT0J2189102"
                   className="w-full rounded-xl border border-zinc-700 bg-zinc-800 px-3 py-2.5 font-mono text-sm text-white outline-none transition-colors placeholder:text-zinc-600 focus:border-cyan-500"
                 />
-                <p className="mt-1.5 text-xs leading-relaxed text-zinc-500">
+                {!customer && <p className="mt-1.5 text-xs leading-relaxed text-zinc-500">
                   Preserva as posições 1–8, 10 e 11; troca o serial 12–17 e recalcula a posição 9. Selecione abaixo a mesma marca, modelo e ano do original.
-                </p>
+                </p>}
               </div>
             )}
 
@@ -749,12 +749,12 @@ export default function GeradorChassiPublico({ embedded = false, customer }: {
           </section>
         )}
 
-        <section className="rounded-2xl border border-zinc-800/60 bg-zinc-900/40 p-4 text-xs leading-relaxed text-zinc-500">
+        {!customer && <section className="rounded-2xl border border-zinc-800/60 bg-zinc-900/40 p-4 text-xs leading-relaxed text-zinc-500">
           <p>
             <strong className="text-zinc-300">Fonte do catálogo:</strong>{" "}
             Tabela FIPE via API pública. O gerador usa os nomes de veículos para organizar os testes; o VIN produzido não é um chassi oficial.
           </p>
-        </section>
+        </section>}
 
         <div className="pb-5" />
       </main>
