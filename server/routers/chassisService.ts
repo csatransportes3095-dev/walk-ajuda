@@ -72,6 +72,7 @@ export const chassisServiceRouter = router({
     return getChassisServiceStore().createPurchase(ctx.chassis.user.id, ctx.chassis.tokenHash, input.packageId, input.requestId);
   })),
   cancelPurchase: authenticatedProcedure.input(z.object({ id: z.string().uuid() })).mutation(({ input, ctx }) => guarded(() => getChassisServiceStore().cancelPurchase(ctx.chassis.user.id, input.id))),
+  attachPaymentProof: authenticatedProcedure.input(z.object({ id: z.string().uuid(), url: z.string().url().max(1024), key: z.string().min(1).max(512), mime: z.string().min(1).max(100) })).mutation(({ input, ctx }) => guarded(() => getChassisServiceStore().attachPaymentProof(ctx.chassis.user.id, input.id, { url: input.url, key: input.key, mime: input.mime }))),
   adminUsers: serviceAdminProcedure.input(z.object({ search: z.string().max(30).default(""), offset: z.number().int().min(0).max(1_000_000).default(0) })).query(({ input }) => guarded(() => getChassisServiceStore().listUsers(input.search, input.offset))),
   adminHistory: serviceAdminProcedure.input(z.object({ userId: id })).query(({ input }) => guarded(() => getChassisServiceStore().adminHistory(input.userId))),
   adminCreateUser: serviceAdminProcedure.input(z.object({ phone, password, accountType: z.enum(["test", "paid"]), credits })).mutation(({ input, ctx }) => guarded(() => getChassisServiceStore().createUser(input, ctx.chassisActor))),
@@ -84,4 +85,5 @@ export const chassisServiceRouter = router({
   adminSaveConfig: serviceAdminProcedure.input(z.object({ trialCredits: credits, registrationEnabled: z.boolean(), supportPhone: z.string().max(30), paymentInstructions: z.string().trim().max(3000) })).mutation(({ input, ctx }) => guarded(() => getChassisServiceStore().setConfig(input, ctx.chassisActor))),
   adminPurchases: serviceAdminProcedure.query(() => guarded(() => getChassisServiceStore().listPurchases())),
   adminConfirmPurchase: serviceAdminProcedure.input(z.object({ id: z.string().uuid(), paymentConfirmed: z.literal(true) })).mutation(({ input, ctx }) => guarded(() => getChassisServiceStore().confirmPurchase(input.id, ctx.chassisActor))),
+  adminRejectPurchaseProof: serviceAdminProcedure.input(z.object({ id: z.string().uuid() })).mutation(({ input, ctx }) => guarded(() => getChassisServiceStore().rejectPurchaseProof(input.id, ctx.chassisActor))),
 });
