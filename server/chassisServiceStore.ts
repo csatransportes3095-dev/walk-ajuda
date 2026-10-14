@@ -53,7 +53,47 @@ export class ChassisServiceStore {
     } catch (error) { await connection.rollback(); throw error; }
     finally { connection.release(); }
   }
+  private async expirePurchasedCredits(connection: PoolConnection, userId: number) {
+    const [expired] = await connection.execute<RowDataPacket[]>(
+      "SELECT id, credits_remaining FROM h2_chassis_credit_batches WHERE user_id = ? AND expired_at IS NULL AND expires_at <= UTC_TIMESTAMP() AND credits_remaining > 0 FOR UPDATE",
+      [userId],
+    );
+    if (!expired.length) return 0;
+    const expiredCredits = expired.reduce((sum, row) => sum + Number(row.credits_remaining || 0), 0);
+    const [users] = await connection.execute<UserRow[]>("SELECT * FROM h2_chassis_users WHERE id = ? FOR UPDATE", [userId]);
+    const user = users[0];
+    if (!user) return 0;
+    const deducted = Math.min(user.balance, expiredCredits);
+    const balance = user.balance - deducted;
+    await connection.execute("UPDATE h2_chassis_credit_batches SET credits_remaining = 0, expired_at = UTC_TIMESTAMP() WHERE user_id = ? AND expired_at IS NULL AND expires_at <= UTC_TIMESTAMP()", [userId]);
+    if (deducted > 0) {
+      await connection.execute("UPDATE h2_chassis_users SET balance = ? WHERE id = ?", [balance, userId]);
+      await this.ledger(connection, userId, "expiry", -deducted, balance, "system:expiry", null, "Créditos de pacote vencidos");
+      await this.audit(connection, userId, "expire_package_credits", "system:expiry");
+    }
+    return deducted;
+  }
+
+  private async consumePurchasedCredits(connection: PoolConnection, userId: number, amount: number) {
+    if (amount <= 0) return;
+    const [batches] = await connection.execute<RowDataPacket[]>(
+      "SELECT id, credits_remaining FROM h2_chassis_credit_batches WHERE user_id = ? AND expired_at IS NULL AND expires_at > UTC_TIMESTAMP() AND credits_remaining > 0 ORDER BY expires_at ASC, id ASC FOR UPDATE",
+      [userId],
+    );
+    let remaining = amount;
+    for (const batch of batches) {
+      if (remaining <= 0) break;
+      const available = Number(batch.credits_remaining || 0);
+      const used = Math.min(available, remaining);
+      if (used > 0) {
+        await connection.execute("UPDATE h2_chassis_credit_batches SET credits_remaining = credits_remaining - ? WHERE id = ?", [used, Number(batch.id)]);
+        remaining -= used;
+      }
+    }
+  }
+
   private async lockedUser(connection: PoolConnection, id: number, active = false): Promise<UserRow> {
+    await this.expirePurchasedCredits(connection, id);
     const [rows] = await connection.execute<UserRow[]>("SELECT * FROM h2_chassis_users WHERE id = ? FOR UPDATE", [id]);
     const user = rows[0];
     if (!user) throw new ChassisServiceError("NOT_FOUND", "Usuário do serviço não encontrado.");
