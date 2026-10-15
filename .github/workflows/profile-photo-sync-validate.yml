@@ -28,10 +28,30 @@ jobs:
           node-version: '22'
           cache: pnpm
       - name: Apply scoped source changes
-        run: node scripts/apply-profile-photo-sync-20261015.mjs
-      - run: pnpm install --frozen-lockfile
+        run: |
+          node scripts/apply-profile-photo-sync-20261015.mjs
+          grep -n -A 4 -B 2 'photoPersistence' server/routers.ts
+      - name: Dependencies
+        run: pnpm install --frozen-lockfile > /tmp/photo-install.log 2>&1 || { tail -n 30 /tmp/photo-install.log; exit 1; }
       - name: Photo persistence and profile policy regression tests
-        run: pnpm exec vitest run server/customerProfilePhoto.test.ts server/customerProfileUpdateGates.test.ts server/customerProfileRequirements.test.ts
+        run: |
+          pnpm exec vitest run server/customerProfilePhoto.test.ts server/customerProfileUpdateGates.test.ts server/customerProfileRequirements.test.ts --reporter=json --outputFile=/tmp/photo-tests.json > /tmp/photo-tests.log 2>&1 || status=$?
+          python3 - <<'PY'
+          import json
+          from pathlib import Path
+          p=Path('/tmp/photo-tests.json')
+          if not p.exists():
+            print(Path('/tmp/photo-tests.log').read_text()[-3000:]); raise SystemExit(1)
+          r=json.loads(p.read_text())
+          print('PHOTO_TEST_SUMMARY',r.get('numPassedTests'), 'passed;',r.get('numFailedTests'),'failed')
+          for suite in r.get('testResults',[]):
+            for test in suite.get('assertionResults',[]):
+              if test['status'] != 'passed':
+                print('FAILED_TEST',test.get('fullName'))
+                for message in test.get('failureMessages',[]):
+                  print(message[:700]); print(message[-500:])
+          if not r.get('success'): raise SystemExit(1)
+          PY
       - name: Preserve published notes autosave
         run: node --experimental-strip-types --test scripts/test-order-notes-autosave.mjs
       - name: Compare TypeScript diagnostics to production baseline
@@ -45,8 +65,8 @@ jobs:
           pnpm check > /tmp/photo-after.log 2>&1
           after=$?
           set -e
-          if [ "$before" -ne 0 ] && ! grep -q 'error TS' /tmp/photo-before.log; then cat /tmp/photo-before.log; exit 1; fi
-          if [ "$after" -ne 0 ] && ! grep -q 'error TS' /tmp/photo-after.log; then cat /tmp/photo-after.log; exit 1; fi
+          if [ "$before" -ne 0 ] && ! grep -q 'error TS' /tmp/photo-before.log; then tail -n 30 /tmp/photo-before.log; exit 1; fi
+          if [ "$after" -ne 0 ] && ! grep -q 'error TS' /tmp/photo-after.log; then tail -n 30 /tmp/photo-after.log; exit 1; fi
           python3 - <<'PY'
           import re
           from pathlib import Path
