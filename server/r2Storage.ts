@@ -266,6 +266,37 @@ export async function r2DeleteObjects(keys: string[]) {
   await client.send(command);
 }
 
+// Deletes only a fully-qualified per-instance H2ADS prefix. Lists are repeated
+// from page one (<=1000 keys) to cover any number of objects and verify emptiness.
+// A partial S3 DeleteObjects response cannot be reported as a successful purge.
+export async function r2DeleteH2AdsInstanceSnapshotsVerified(instanceId: number): Promise<void> {
+  if (!Number.isSafeInteger(instanceId) || instanceId < 1 || instanceId > 2147483647)
+    throw new Error("Identificador de instância inválido.");
+  const prefix = `h2ads-profile-snapshots/instance-${instanceId}/`;
+  const client = getR2Client();
+  let rounds = 0;
+  while (rounds++ < 10000) {
+    const listed = await client.send(new ListObjectsV2Command({
+      Bucket: ENV.r2BucketName.trim(), Prefix: prefix, MaxKeys: 1000,
+    }));
+    const keys = (listed.Contents || []).map(item => item.Key).filter((key): key is string => Boolean(key));
+    if (keys.some(key => !key.startsWith(prefix))) throw new Error("Lista R2 fora do escopo da instância.");
+    if (keys.length === 0) {
+      // Verify a second listing to avoid a false success from a transient page.
+      const confirmed = await client.send(new ListObjectsV2Command({
+        Bucket: ENV.r2BucketName.trim(), Prefix: prefix, MaxKeys: 1,
+      }));
+      if (!(confirmed.Contents || []).length && !confirmed.IsTruncated) return;
+      continue;
+    }
+    const deleted = await client.send(new DeleteObjectsCommand({
+      Bucket: ENV.r2BucketName.trim(), Delete: { Objects: keys.map(Key => ({ Key })), Quiet: false },
+    }));
+    if (deleted.Errors?.length) throw new Error("Falha na exclusão de um ou mais objetos R2.");
+  }
+  throw new Error("Verificação de exclusão R2 excedeu o limite de segurança.");
+}
+
 export async function r2ListObjects(prefix: string): Promise<string[]> {
   const client = getR2Client();
   const normalizedPrefix = normalizeKey(prefix);
