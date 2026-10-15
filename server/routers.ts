@@ -2953,10 +2953,25 @@ export const appRouter = router({
         };
       }),
 
+    // Recuperacao somente pelo ADM; listar nao altera dados e a escolha e explicita.
+    getProfilePhotoRecoveryCandidates: adminProcedure
+      .input(z.object({ customerId: z.number().int().positive() }))
+      .query(async ({ input }) => {
+        const { listRecoverableProfilePhotos } = await import('./customerProfilePhoto');
+        return listRecoverableProfilePhotos(input.customerId);
+      }),
+    restoreProfilePhoto: adminProcedure
+      .input(z.object({ customerId: z.number().int().positive(), key: z.string().min(1).max(512), expectedPhotoUrl: z.string().max(2048).nullable() }))
+      .mutation(async ({ input }) => {
+        const { restoreCustomerProfilePhoto } = await import('./customerProfilePhoto');
+        return restoreCustomerProfilePhoto(input);
+      }),
+
     uploadProfilePhoto: publicProcedure
       .input(z.object({
         imageBase64: z.string().min(100, 'Imagem muito pequena ou invalida'),
         phone: z.string(),
+        requireExisting: z.boolean().optional(),
       }))
       .mutation(async ({ input }) => {
         if (!input.imageBase64 || input.imageBase64.length === 0) {
@@ -2985,12 +3000,16 @@ export const appRouter = router({
 
         const mime = isJpeg ? 'image/jpeg' : isPng ? 'image/png' : 'image/webp';
         const ext = isJpeg ? 'jpg' : isPng ? 'png' : 'webp';
-        const fileKey = `profile-photos/${input.phone}-${Date.now()}.${ext}`;
+        const { resolveProfilePhotoCustomer, persistCustomerProfilePhoto } = await import('./customerProfilePhoto');
+        const { phone: normalizedPhotoPhone, customer } = await resolveProfilePhotoCustomer(input.phone, input.requireExisting === true);
+        const { randomUUID } = await import('node:crypto');
+        const fileKey = `profile-photos/${normalizedPhotoPhone}-${Date.now()}-${randomUUID()}.${ext}`;
         const { url } = await storagePut(fileKey, buffer, mime);
-        // Salvar a URL direta do CloudFront (pública, não expira)
-        const customer = await getCustomerByPhone(input.phone);
+        // Storage atual: confirmar a gravacao no cadastro ativo antes de informar sucesso.
+        const photoPersistence = customer
+          ? await persistCustomerProfilePhoto(customer, url)
+          : { saved: false, customerId: null };
         if (customer) {
-          await updateCustomer(customer.id, { profilePhotoUrl: url });
           const profileUpdateState = await getCustomerProfileUpdateState(customer);
           await markCustomerProfilePhotoSubmitted(Number(customer.id), profileUpdateState.revision);
         }
@@ -3021,7 +3040,7 @@ export const appRouter = router({
           console.error('Email inicio cadastro:', e); 
          }
         })();
-        return { success: true, url };
+        return { success: true, url, ...photoPersistence };
       }),
 
     // Admin: definir/atualizar senha fixa de um cliente

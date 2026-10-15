@@ -1,3 +1,4 @@
+import { ProfilePhotoRecovery } from "@/components/ProfilePhotoRecovery";
 import { useEffect, useMemo, useState } from "react";
 import { trpc } from "@/lib/trpc";
 import { toast } from "sonner";
@@ -376,6 +377,7 @@ function LoginHistoryColumn({ phone, formatDate }: { phone: string; formatDate: 
 
 
 export default function AdminCustomers() {
+  const profilePhotoUtils = trpc.useUtils();
   const [searchTerm, setSearchTerm] = useState("");
   const [editingId, setEditingId] = useState<number | null>(null);
   const [editName, setEditName] = useState("");
@@ -401,7 +403,7 @@ export default function AdminCustomers() {
   const [photoModal, setPhotoModal] = useState<{ url: string; name: string } | null>(null);
   const [uploadingPhotoFor, setUploadingPhotoFor] = useState<number | null>(null);
   // Estado apenas de interface: nunca substitui nem remove profilePhotoUrl no banco.
-  const [failedProfilePhotoIds, setFailedProfilePhotoIds] = useState<Set<number>>(() => new Set());
+  const [failedProfilePhotoIds, setFailedProfilePhotoIds] = useState<Map<number, string>>(() => new Map());
   const [fixedPwdModal, setFixedPwdModal] = useState<Customer | null>(null);
   const [fixedPwdInput, setFixedPwdInput] = useState("");
   const [fixedPwdActive, setFixedPwdActive] = useState(false);
@@ -694,9 +696,23 @@ export default function AdminCustomers() {
     }
   };
 
+  const handleProfilePhotoSaved = (id: number, url: string) => {
+    setFailedProfilePhotoIds(previous => { const next = new Map(previous); next.delete(id); return next; });
+    if (editingId === id) {
+      setEditProfilePhotoUrl(url);
+      setEditOriginal(previous => previous ? { ...previous, profilePhotoUrl: url } : previous);
+    }
+    void customersQuery.refetch();
+    void profilePhotoUtils.orderStatus.listOrders.invalidate();
+  };
   const uploadPhotoMut = trpc.customers.uploadProfilePhoto.useMutation({
-    onSuccess: () => { customersQuery.refetch(); toast.success("Foto atualizada!"); setUploadingPhotoFor(null); },
-    onError: () => { toast.error("Erro ao enviar foto"); setUploadingPhotoFor(null); },
+    onSuccess: data => {
+      setUploadingPhotoFor(null);
+      if (!data.saved || !data.customerId) { toast.error("Imagem enviada, mas não vinculada ao cadastro. Atualize a tela e confira o cliente."); return; }
+      handleProfilePhotoSaved(data.customerId, data.url);
+      toast.success("Foto salva no cadastro!");
+    },
+    onError: error => { toast.error(error.message || "Erro ao enviar foto"); setUploadingPhotoFor(null); },
   });
 
   const handlePhotoUpload = (customer: Customer, file: File) => {
@@ -706,8 +722,9 @@ export default function AdminCustomers() {
     const reader = new FileReader();
     reader.onload = () => {
       const base64 = (reader.result as string).split(',')[1];
-      uploadPhotoMut.mutate({ imageBase64: base64, phone: customer.phone });
+      uploadPhotoMut.mutate({ imageBase64: base64, phone: customer.phone, requireExisting: true });
     };
+    reader.onerror = () => { setUploadingPhotoFor(null); toast.error("Não foi possível ler a foto."); };
     reader.readAsDataURL(file);
   };
 
@@ -1320,13 +1337,13 @@ export default function AdminCustomers() {
                         title="Telefone na lista negra do sistema"
                       />
                     )}
-                    {c.profilePhotoUrl && !failedProfilePhotoIds.has(c.id) ? (
+                    {c.profilePhotoUrl && failedProfilePhotoIds.get(c.id) !== c.profilePhotoUrl ? (
                       <img
                         src={getProfilePhotoDisplayUrl(c.profilePhotoUrl)}
                         alt=""
                         aria-label={`Foto de ${c.name}`}
                         className={`w-16 h-16 rounded-full object-cover shadow cursor-pointer hover:opacity-90 transition-opacity ${c.isBlocked ? 'border-2 border-red-500/60' : c.vipActive ? 'border-[3px] border-amber-300 shadow-[0_0_18px_rgba(250,204,21,.38)]' : 'border-2 border-primary/30'}`}
-                        onError={() => setFailedProfilePhotoIds((previous) => new Set(previous).add(c.id))}
+                        onError={() => setFailedProfilePhotoIds((previous) => new Map(previous).set(c.id, c.profilePhotoUrl!))}
                         onClick={() => setPhotoModal({ url: getProfilePhotoDisplayUrl(c.profilePhotoUrl!), name: c.name })}
                         title="Clique para ampliar a foto"
                       />
@@ -1674,7 +1691,8 @@ export default function AdminCustomers() {
                   <div><label className="text-xs text-muted-foreground">Rua / Logradouro</label><input type="text" value={editStreet} onChange={(e) => setEditStreet(e.target.value)} className="w-full px-2 py-1.5 bg-background border border-border rounded-lg text-sm mt-0.5" /></div>
                   <div><label className="text-xs text-muted-foreground">Bairro</label><input type="text" value={editNeighborhood} onChange={(e) => setEditNeighborhood(e.target.value)} className="w-full px-2 py-1.5 bg-background border border-border rounded-lg text-sm mt-0.5" /></div>
                   <div><label className="text-xs text-muted-foreground">Complemento</label><input type="text" value={editAddressComplement} onChange={(e) => setEditAddressComplement(e.target.value)} className="w-full px-2 py-1.5 bg-background border border-border rounded-lg text-sm mt-0.5" /></div>
-                  <div><label className="text-xs text-muted-foreground">URL da foto de perfil</label><input type="text" value={editProfilePhotoUrl} onChange={(e) => setEditProfilePhotoUrl(e.target.value)} className="w-full px-2 py-1.5 bg-background border border-border rounded-lg text-sm mt-0.5" placeholder="Pode deixar vazio para exigir nova foto" /></div>
+                  <div><label className="text-xs text-muted-foreground">URL da foto de perfil</label>
+                        <ProfilePhotoRecovery customerId={c.id} onSaved={handleProfilePhotoSaved} /><input type="text" value={editProfilePhotoUrl} onChange={(e) => setEditProfilePhotoUrl(e.target.value)} className="w-full px-2 py-1.5 bg-background border border-border rounded-lg text-sm mt-0.5" placeholder="Pode deixar vazio para exigir nova foto" /></div>
                   <div className="grid grid-cols-2 gap-2">
                     <div>
                       <label className="text-xs text-muted-foreground">Cidade</label>
