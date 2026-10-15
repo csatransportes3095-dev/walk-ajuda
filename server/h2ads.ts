@@ -1,3 +1,6 @@
+import { beginH2AdsInstanceDeletion, assertH2AdsInstanceNotDeleting, getH2AdsDeletionRequest, finishH2AdsDeletionRequest } from "./h2adsDeletionState";
+import { r2DeleteH2AdsInstanceSnapshotsVerified } from "./r2Storage";
+import { deleteH2AdsIpHistory } from "./h2adsIpHistory";
 import { createHash, randomBytes, timingSafeEqual } from "node:crypto";
 import { and, asc, desc, eq, gt, isNull, sql } from "drizzle-orm";
 import { h2AdsBrowserWorkers, h2AdsGroups, h2AdsInstanceBrowserRuns, h2AdsInstanceNetworkProfiles, h2AdsInstanceProxyCredentials, h2AdsInstances, h2AdsInstanceWorkerAssignments, h2AdsProxyPool, h2AdsWorkerBrowserCommands, h2AdsWorkerCommands, h2AdsWorkerPairingCodes, type H2AdsBrowserWorker, type H2AdsGroup, type H2AdsInstance, type H2AdsInstanceBrowserRun, type H2AdsInstanceNetworkProfile, type H2AdsInstanceWorkerAssignment } from "../drizzle/schema";
@@ -158,6 +161,37 @@ export async function updateH2AdsInstance(id: number, input: Partial<Pick<H2AdsI
   if (Object.keys(input).length === 0) return false;
   const result = await db.update(h2AdsInstances).set(input).where(eq(h2AdsInstances.id, id));
   return Number(result[0].affectedRows) > 0;
+}
+
+export async function requestH2AdsInstancePermanentDeletion(id: number) {
+  return beginH2AdsInstanceDeletion(id);
+}
+
+// Must only run after an authenticated Windows Worker confirms that local
+// Chrome/profile/queue files have gone, or for a never-prepared instance.
+export async function finalizeH2AdsInstancePermanentDeletion(id: number): Promise<boolean> {
+  const request = await getH2AdsDeletionRequest(id);
+  if (!request || request.state !== "local_removed") return false;
+  await r2DeleteH2AdsInstanceSnapshotsVerified(id);
+  await deleteH2AdsIpHistory(id);
+  const db = await requireH2AdsDb();
+  await db.transaction(async tx => {
+    const found = await tx.execute(sql`SELECT id FROM h2ads_instance_deletion_requests
+      WHERE instanceId = ${id} AND state = 'local_removed' FOR UPDATE`);
+    if (!(found[0] as unknown as Array<{id:number}>)[0]) throw new Error("Exclusão ainda não confirmada pelo Worker.");
+    await tx.delete(h2AdsWorkerBrowserCommands).where(eq(h2AdsWorkerBrowserCommands.instanceId,id));
+    await tx.delete(h2AdsWorkerCommands).where(eq(h2AdsWorkerCommands.instanceId,id));
+    await tx.delete(h2AdsInstanceBrowserRuns).where(eq(h2AdsInstanceBrowserRuns.instanceId,id));
+    await tx.delete(h2AdsInstanceWorkerAssignments).where(eq(h2AdsInstanceWorkerAssignments.instanceId,id));
+    await tx.delete(h2AdsInstanceProxyCredentials).where(eq(h2AdsInstanceProxyCredentials.instanceId,id));
+    await tx.delete(h2AdsInstanceNetworkProfiles).where(eq(h2AdsInstanceNetworkProfiles.instanceId,id));
+    await tx.update(h2AdsProxyPool).set({status:"used",consumedAt:new Date(),assignedInstanceId:null})
+      .where(eq(h2AdsProxyPool.assignedInstanceId,id));
+    await tx.execute(sql`DELETE FROM h2ads_order_links WHERE instanceId = ${id}`);
+    await tx.delete(h2AdsInstances).where(eq(h2AdsInstances.id,id));
+    await tx.execute(sql`DELETE FROM h2ads_instance_deletion_requests WHERE instanceId = ${id}`);
+  });
+  return true;
 }
 
 export async function deleteH2AdsInstance(id: number): Promise<boolean> {
@@ -326,6 +360,7 @@ async function upsertH2AdsBrowserRun(instanceId: number, workerId: number, input
 }
 
 export async function requestH2AdsBrowserPreparation(instanceId: number): Promise<H2AdsBrowserPreparationRequest> {
+  await assertH2AdsInstanceNotDeleting(instanceId);
   const db = await requireH2AdsDb();
   const assignments = await db.select().from(h2AdsInstanceWorkerAssignments).where(eq(h2AdsInstanceWorkerAssignments.instanceId, instanceId)).limit(1);
   const assignment = assignments[0];
@@ -408,6 +443,7 @@ async function getAssignedOnlineWorker(instanceId: number) {
 }
 
 export async function requestH2AdsBrowserLaunch(instanceId: number): Promise<{ commandId: number; instanceId: number; workerId: number }> {
+  await assertH2AdsInstanceNotDeleting(instanceId);
   const { db, assignment, worker } = await getAssignedOnlineWorker(instanceId);
   if (assignment.profileState !== "local_only" && assignment.profileState !== "snapshot_ready") throw new Error("O perfil local precisa estar preparado antes da abertura.");
   const runs = await db.select().from(h2AdsInstanceBrowserRuns).where(and(eq(h2AdsInstanceBrowserRuns.instanceId, instanceId), eq(h2AdsInstanceBrowserRuns.workerId, worker.id))).limit(1);
