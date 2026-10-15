@@ -1,4 +1,5 @@
 import { useState, useRef, useEffect, useCallback } from "react";
+import { useOrderNoteAutosave } from "@/hooks/useOrderNoteAutosave";
 import { trpc } from "@/lib/trpc";
 import { toast } from "sonner";
 import { Plus, Trash2, Edit2, Check, X, ImageIcon, Loader2, Maximize2 } from "lucide-react";
@@ -67,7 +68,12 @@ function NoteContent({
 }
 
 export function NotesTab({ registrationId }: NotesTabProps) {
+  return <NotesTabContent key={registrationId} registrationId={registrationId} />;
+}
+
+function NotesTabContent({ registrationId }: NotesTabProps) {
   const utils = trpc.useUtils();
+  const autosave = useOrderNoteAutosave(registrationId);
 
   const blocksQuery = trpc.orderNotes.getAll.useQuery(
     { registrationId },
@@ -79,31 +85,20 @@ export function NotesTab({ registrationId }: NotesTabProps) {
     onError: () => toast.error("Erro ao criar bloco"),
   });
 
-  const saveBlockMut = trpc.orderNotes.saveBlock.useMutation({
-    onSuccess: () => {
-      toast.success("Anotação salva!");
-      utils.orderNotes.getAll.invalidate({ registrationId });
-    },
-    onError: () => toast.error("Erro ao salvar anotação"),
-  });
-
   const renameBlockMut = trpc.orderNotes.renameBlock.useMutation({
     onSuccess: () => { utils.orderNotes.getAll.invalidate({ registrationId }); },
     onError: () => toast.error("Erro ao renomear bloco"),
   });
 
   const deleteBlockMut = trpc.orderNotes.deleteBlock.useMutation({
-    onSuccess: () => {
+    onSuccess: (_data, variables) => {
+      autosave.discard(variables.id);
       toast.success("Bloco removido!");
       utils.orderNotes.getAll.invalidate({ registrationId });
     },
     onError: () => toast.error("Erro ao remover bloco"),
   });
 
-  // Estado local: texto editado por bloco (id -> texto)
-  const [localTexts, setLocalTexts] = useState<Record<number, string>>({});
-  // Uploading state por bloco
-  const [uploadingIds, setUploadingIds] = useState<Set<number>>(new Set());
   // Estado de renomear
   const [renamingId, setRenamingId] = useState<number | null>(null);
   const [renameValue, setRenameValue] = useState("");
@@ -129,12 +124,7 @@ export function NotesTab({ registrationId }: NotesTabProps) {
       registrationId,
       blockName: `Bloco ${nextNum}`,
       content: "",
-    });
-  };
-
-  const handleSave = (id: number, content: string) => {
-    if (!content.trim()) return;
-    saveBlockMut.mutate({ id, content });
+    }).catch(() => undefined);
   };
 
   const handleStartRename = (id: number, currentName: string) => {
@@ -200,31 +190,25 @@ export function NotesTab({ registrationId }: NotesTabProps) {
       const blob = imageItem.getAsFile();
       if (!blob) return;
 
-      setUploadingIds((prev) => new Set(prev).add(blockId));
+      const original = blocks.find(b => b.id === blockId)?.content ?? "";
+      if (!autosave.beginUpload(blockId, original)) return;
+      // Capture cursor and order before the asynchronous upload / possible tab change.
+      const current = autosave.text(blockId, original);
+      const start = e.currentTarget.selectionStart ?? current.length;
+      const end = e.currentTarget.selectionEnd ?? current.length;
       try {
         const url = await uploadImage(blob);
-        // Insere marcador [img:URL] no cursor ou no final do texto
-        setLocalTexts((prev) => {
-          const current = prev[blockId] ?? (blocks.find((b) => b.id === blockId)?.content ?? "");
-          const textarea = e.target as HTMLTextAreaElement;
-          const start = textarea.selectionStart ?? current.length;
-          const end = textarea.selectionEnd ?? current.length;
-          const marker = `[img:${url}]`;
-          const newText = current.slice(0, start) + (start > 0 && current[start - 1] !== "\n" ? "\n" : "") + marker + "\n" + current.slice(end);
-          return { ...prev, [blockId]: newText };
-        });
-        toast.success("Imagem colada com sucesso!");
+        if (autosave.isRemoved(blockId)) return;
+        const marker = `[img:${url}]`;
+        const newText = current.slice(0, start) + (start > 0 && current[start - 1] !== "\n" ? "\n" : "") + marker + "\n" + current.slice(end);
+        autosave.change(blockId, newText, original, true);
       } catch (err: any) {
         toast.error("Erro ao fazer upload da imagem: " + (err?.message || ""));
       } finally {
-        setUploadingIds((prev) => {
-          const next = new Set(prev);
-          next.delete(blockId);
-          return next;
-        });
+        autosave.endUpload(blockId);
       }
     },
-    [uploadImage, blocks]
+    [uploadImage, blocks, autosave]
   );
 
   if (blocksQuery.isLoading) {
@@ -269,11 +253,13 @@ export function NotesTab({ registrationId }: NotesTabProps) {
           </div>
         ) : (
           blocks.map((block) => {
-            const localText = localTexts[block.id] ?? block.content;
-            const isDirty = localText !== block.content;
+            const localText = autosave.text(block.id, block.content);
+            const saveStatus = autosave.status(block.id);
+            const isSaving = saveStatus === "saving";
+            const isDirty = saveStatus === "pending" || saveStatus === "error";
             const isRenaming = renamingId === block.id;
             const isConfirmDelete = confirmDeleteId === block.id;
-            const isUploading = uploadingIds.has(block.id);
+            const isUploading = autosave.uploading(block.id);
 
             // Verifica se o conteúdo tem imagens para mostrar preview
             const hasImages = IMG_MARKER_RE.test(localText);
@@ -331,7 +317,7 @@ export function NotesTab({ registrationId }: NotesTabProps) {
                       <button
                         type="button"
                         onClick={() => handleDeleteBlock(block.id)}
-                        disabled={deleteBlockMut.isPending}
+                        disabled={deleteBlockMut.isPending || isUploading || isSaving}
                         className={`p-1 transition-colors flex-shrink-0 ${
                           isConfirmDelete
                             ? "text-red-400 animate-pulse"
@@ -359,7 +345,8 @@ export function NotesTab({ registrationId }: NotesTabProps) {
                     <textarea
                       rows={5}
                       value={localText}
-                      onChange={e => setLocalTexts(prev => ({ ...prev, [block.id]: e.target.value }))}
+                      onChange={e => autosave.change(block.id, e.target.value, block.content)}
+                      onBlur={() => { void autosave.flush(block.id); }}
                       onPaste={e => handlePaste(e, block.id)}
                       placeholder="Escreva aqui ou cole uma imagem (Ctrl+V)..."
                       disabled={isUploading}
@@ -378,9 +365,17 @@ export function NotesTab({ registrationId }: NotesTabProps) {
                   {/* Dica de paste */}
                   <p className="text-[10px] text-muted-foreground/50 flex items-center gap-1">
                     <ImageIcon className="w-3 h-3" />
-                    Cole imagens diretamente com Ctrl+V
+                    Texto e imagens são salvos automaticamente. Cole imagens com Ctrl+V.
                   </p>
 
+                  <p role="status" aria-live="polite" className={`text-xs ${saveStatus === "error" ? "text-red-400" : "text-muted-foreground"}`}>
+                    {isUploading ? "Enviando imagem..."
+                      : isSaving ? "Salvando..."
+                      : saveStatus === "pending" ? "Aguardando salvar..."
+                      : saveStatus === "error" ? "Não foi salvo. Verifique a conexão e clique em Tentar novamente."
+                      : saveStatus === "saved" ? "Salvo automaticamente"
+                      : "Salvamento automático ativado"}
+                  </p>
                   <div className="flex items-center justify-between">
                     <span className="text-[10px] text-muted-foreground">
                       {block.updatedAt
@@ -389,15 +384,15 @@ export function NotesTab({ registrationId }: NotesTabProps) {
                     </span>
                     <button
                       type="button"
-                      onClick={() => handleSave(block.id, localText)}
-                      disabled={saveBlockMut.isPending || !localText.trim() || isUploading}
+                      onClick={() => { void autosave.flush(block.id); }}
+                      disabled={isSaving || !isDirty || isUploading}
                       className={`px-4 py-1.5 text-xs font-semibold rounded-lg transition-colors disabled:opacity-40 disabled:cursor-not-allowed ${
                         isDirty
                           ? "bg-primary text-primary-foreground hover:bg-primary/90"
                           : "bg-muted/30 border border-border text-muted-foreground hover:bg-muted/50"
                       }`}
                     >
-                      {saveBlockMut.isPending ? "Salvando..." : isDirty ? "Salvar Anotação ●" : "Salvar Anotação"}
+                      {isSaving ? "Salvando..." : saveStatus === "error" ? "Tentar novamente" : isDirty ? "Salvar agora" : "Salvo"}
                     </button>
                   </div>
                 </div>
