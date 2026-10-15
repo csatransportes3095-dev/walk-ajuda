@@ -2,47 +2,88 @@ name: Profile photo synchronization validation
 on:
   push:
     branches: [fix/profile-photo-sync-20261015]
-    paths: ['.github/workflows/profile-photo-sync-validate.yml']
+    paths:
+      - '.github/workflows/profile-photo-sync-validate.yml'
+      - 'scripts/apply-profile-photo-sync-20261015.mjs'
+      - 'server/customerProfilePhoto*'
+      - 'shared/profilePhotoIdentity.ts'
+      - 'client/src/components/ProfilePhotoRecovery.tsx'
   workflow_dispatch:
 permissions:
-  contents: read
+  contents: write
+concurrency:
+  group: profile-photo-sync-validation
+  cancel-in-progress: true
 jobs:
-  inspect:
+  validate:
     runs-on: ubuntu-latest
-    timeout-minutes: 5
+    timeout-minutes: 20
     steps:
       - uses: actions/checkout@v4
         with:
-          persist-credentials: false
-      - name: Photo code locations
+          fetch-depth: 0
+      - uses: pnpm/action-setup@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '22'
+          cache: pnpm
+      - name: Apply scoped source changes
+        run: node scripts/apply-profile-photo-sync-20261015.mjs
+      - run: pnpm install --frozen-lockfile
+      - name: Photo persistence and profile policy regression tests
+        run: pnpm exec vitest run server/customerProfilePhoto.test.ts server/customerProfileUpdateGates.test.ts server/customerProfileRequirements.test.ts
+      - name: Preserve published notes autosave
+        run: node --experimental-strip-types --test scripts/test-order-notes-autosave.mjs
+      - name: Compare TypeScript diagnostics to production baseline
+        shell: bash
         run: |
+          git worktree add --detach /tmp/photo-baseline b6563d94178e888eea45dabae354558200040918
+          ln -s "$PWD/node_modules" /tmp/photo-baseline/node_modules
+          set +e
+          (cd /tmp/photo-baseline && pnpm check) > /tmp/photo-before.log 2>&1
+          before=$?
+          pnpm check > /tmp/photo-after.log 2>&1
+          after=$?
+          set -e
+          if [ "$before" -ne 0 ] && ! grep -q 'error TS' /tmp/photo-before.log; then cat /tmp/photo-before.log; exit 1; fi
+          if [ "$after" -ne 0 ] && ! grep -q 'error TS' /tmp/photo-after.log; then cat /tmp/photo-after.log; exit 1; fi
           python3 - <<'PY'
-          from pathlib import Path
           import re
-          files = ['server/routers.ts','server/db.ts','server/uploadRoute.ts','client/src/pages/AdminCustomers.tsx','client/src/pages/AdminOrders.tsx','server/_core/index.ts']
-          for name in files:
-            p=Path(name)
-            if not p.exists(): continue
-            lines=p.read_text().splitlines()
-            hits=[i for i,s in enumerate(lines) if re.search(r'uploadProfilePhoto|profilePhotoUrl|syncCustomersFrom|customer-photo-preview',s)]
-            print('\nFILE',name,'LINES',len(lines))
-            for i in hits: print(f'{i+1}: {lines[i]}')
-          print('\nPHOTO RELATED FILES')
-          for folder in ['server','shared','client/src/lib','scripts']:
-            for p in Path(folder).glob('*'):
-              if re.search(r'photo|Photo|customerProfile|customerIdentity|mediaRecovery',p.name): print(p)
-          print('\nWORKFLOW CONNECTION IDENTIFIERS')
-          for p in Path('.github/workflows').glob('*.yml'):
-            names=sorted(set(re.findall(r'secrets\.([A-Za-z0-9_]+)',p.read_text())))
-            if names: print(p.name, ','.join(names))
+          from pathlib import Path
+          def diagnostics(name):
+            lines=Path(name).read_text().splitlines()
+            return {re.sub(r'\(\d+,\d+\)', '', line) for line in lines if 'error TS' in line}
+          before=diagnostics('/tmp/photo-before.log')
+          after=diagnostics('/tmp/photo-after.log')
+          added=after-before
+          print('Baseline diagnostics:', len(before), 'Candidate:',len(after), 'New:',len(added))
+          for line in sorted(added): print(line)
+          if added: raise SystemExit(1)
           PY
-      - name: Legacy media hostname reachability (no customer data)
+      - name: Validate actual Render patch chain and build in a disposable copy
         run: |
-          node --input-type=module <<'JS'
-          for (const host of ['d2xsxph8kpxj0f.cloudfront.net','midia.h2colombiano.com']) {
-            try {
-              const r=await fetch('https://'+host+'/',{method:'HEAD',signal:AbortSignal.timeout(15000)});
-              console.log(JSON.stringify({host,status:r.status,type:r.headers.get('content-type')}));
-            } catch(e) { console.log(JSON.stringify({host,error:e.cause?.code||e.name})); }
-          }
-          JS
+          mkdir -p /tmp/photo-production
+          tar --exclude=.git --exclude=node_modules -cf - . | tar -xf - -C /tmp/photo-production
+          ln -s "$PWD/node_modules" /tmp/photo-production/node_modules
+          python3 - <<'PY'
+          import re,subprocess
+          from pathlib import Path
+          root=Path('/tmp/photo-production')
+          docker=(root/'Dockerfile').read_text()
+          scripts=re.findall(r'&& node (scripts/[^\s\\]+\.mjs)',docker)
+          for script in scripts:
+            print('Render patch:',script,flush=True)
+            subprocess.run(['node',script],cwd=root,check=True)
+          subprocess.run(['pnpm','build'],cwd=root,check=True)
+          PY
+      - name: Commit only tested source wiring to this isolated branch
+        run: |
+          git diff --check
+          git config user.name 'github-actions[bot]'
+          git config user.email '41898282+github-actions[bot]@users.noreply.github.com'
+          git add server/routers.ts client/src/pages/AdminCustomers.tsx client/src/pages/AdminOrders.tsx
+          if ! git diff --cached --quiet; then
+            git commit -m 'fix(photo): wire active profile saves and explicit recovery after regression validation'
+            git push origin HEAD:fix/profile-photo-sync-20261015
+          fi
+          echo "Validated source commit: $(git rev-parse HEAD)"
