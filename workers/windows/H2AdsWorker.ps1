@@ -353,6 +353,60 @@ function Complete-LocalCommandFailure([object]$Config, [object]$Payload, [string
   } catch { }
 }
 
+function Invoke-H2AdsPendingInstanceDeletion([object]$Config) {
+  $headers = Get-WorkerHeaders $Config
+  try {
+    $response = Invoke-WebRequest -UseBasicParsing -Method Get -Uri "$($Config.panelUrl)/api/h2ads/worker/deletions/next" -Headers $headers -TimeoutSec 12
+  } catch { return }
+  if ($response.StatusCode -eq 204 -or [string]::IsNullOrWhiteSpace($response.Content)) { return }
+  $request = $response.Content | ConvertFrom-Json
+  $instanceId = [int]$request.instanceId
+  if ($instanceId -le 0) { return }
+  if ($request.state -eq "pending") {
+    $profile = Join-Path $ProfilesDirectory "instance-$instanceId"
+    $sessionFile = Join-Path $profile "h2ads-browser-session.json"
+    $lockFile = Join-Path $profile "h2ads-session-runner.lock"
+    if (Test-Path -LiteralPath $lockFile) {
+      try {
+        $locked = Get-Content -Raw -LiteralPath $lockFile | ConvertFrom-Json
+        if ($locked.pid -and (Get-Process -Id ([int]$locked.pid) -ErrorAction SilentlyContinue)) { return }
+      } catch { return }
+    }
+    if (Test-Path -LiteralPath $sessionFile) {
+      try {
+        $session = Get-Content -Raw -LiteralPath $sessionFile | ConvertFrom-Json
+        foreach ($pidToCheck in @($session.nodePid, $session.browserPid)) {
+          if ($pidToCheck -and (Get-Process -Id ([int]$pidToCheck) -ErrorAction SilentlyContinue)) { return }
+        }
+      } catch { return }
+    }
+    try {
+      $all = @(Get-CimInstance Win32_Process -Filter "Name = 'chrome.exe' OR Name = 'node.exe'" -ErrorAction Stop)
+      foreach ($proc in $all) {
+        $line = [string]$proc.CommandLine
+        if ([string]::IsNullOrWhiteSpace($line)) { return }
+        if ($line.IndexOf($profile, [StringComparison]::OrdinalIgnoreCase) -ge 0) { return }
+      }
+    } catch { return }
+    # The snapshot process has an exclusive queue mutex; do not delete files
+    # while any processor is alive or can be writing a snapshot.
+    $queueWorker = @(Get-CimInstance Win32_Process -Filter "Name = 'powershell.exe' OR Name = 'pwsh.exe'" -ErrorAction Stop |
+      Where-Object { $_.CommandLine -match '(?i)-SnapshotQueueWorker\b' })
+    if ($queueWorker.Count -gt 0) { return }
+    $files = @(Get-ChildItem -LiteralPath $SnapshotQueueDirectory -File -ErrorAction SilentlyContinue |
+      Where-Object { $_.Name -match "^(?:\d+-)?instance-$instanceId(?:-|\.)" })
+    foreach ($file in $files) { Remove-Item -LiteralPath $file.FullName -Force -ErrorAction Stop }
+    if (Test-Path -LiteralPath $profile) { Remove-Item -LiteralPath $profile -Force -Recurse -ErrorAction Stop }
+    if (Test-Path -LiteralPath $profile) { return }
+    $remaining = @(Get-ChildItem -LiteralPath $SnapshotQueueDirectory -File -ErrorAction SilentlyContinue |
+      Where-Object { $_.Name -match "^(?:\d+-)?instance-$instanceId(?:-|\.)" })
+    if ($remaining.Count -gt 0) { return }
+  }
+  try {
+    Invoke-WebRequest -UseBasicParsing -Method Post -Uri "$($Config.panelUrl)/api/h2ads/worker/deletions/$instanceId/local-removed" -Headers $headers -TimeoutSec 15 | Out-Null
+  } catch { }
+}
+
 function Invoke-PendingBrowserCommand([object]$Config) {
   $headers = Get-WorkerHeaders $Config
   $payload = $null
@@ -576,6 +630,7 @@ if ($Run) {
         try { Start-H2AdsSnapshotQueueWorker } catch { }
         $nextSnapshotQueueCheckAt = $now.AddMinutes(2)
       }
+      try { Invoke-H2AdsPendingInstanceDeletion $config } catch { }
       try { Invoke-PendingBrowserCommand $config } catch { }
       Start-Sleep -Seconds 2
     }
