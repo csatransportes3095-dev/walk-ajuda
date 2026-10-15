@@ -471,11 +471,8 @@ function Invoke-H2AdsPendingInstanceDeletion([object]$Config) {
         if ($line.IndexOf($profile, [StringComparison]::OrdinalIgnoreCase) -ge 0) { return }
       }
     } catch { return }
-    # The snapshot process has an exclusive queue mutex; do not delete files
-    # while any processor is alive or can be writing a snapshot.
-    $queueWorker = @(Get-CimInstance Win32_Process -Filter "Name = 'powershell.exe' OR Name = 'pwsh.exe'" -ErrorAction Stop |
-      Where-Object { $_.CommandLine -match '(?i)-SnapshotQueueWorker\b' })
-    if ($queueWorker.Count -gt 0) { return }
+    # Mutex below is shared with the snapshot process. A running but idle
+    # snapshot worker is safe; it cannot overlap this cleanup.
     $safeWorkerKey = ([string]$Config.workerKey) -replace '[^A-Za-z0-9_-]', '_'
     $createdNew = $false
     $queueMutex = New-Object System.Threading.Mutex($true, "Local\H2AdsSnapshotQueue-$safeWorkerKey", [ref]$createdNew)
