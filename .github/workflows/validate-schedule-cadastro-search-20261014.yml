@@ -1,0 +1,44 @@
+name: Validate appointment cadastro search
+on:
+  push:
+    branches:
+      - fix/admin-schedule-search-cadastro-code-20261014
+  workflow_dispatch:
+permissions:
+  contents: read
+jobs:
+  validate:
+    runs-on: ubuntu-latest
+    timeout-minutes: 30
+    steps:
+      - uses: actions/checkout@v4
+      - uses: pnpm/action-setup@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '22'
+          cache: pnpm
+      - run: pnpm install --frozen-lockfile
+      - name: Appointment search regression tests
+        run: pnpm exec vitest run server/adminScheduleCadastroSearch.test.ts
+      - name: TypeScript diagnostics for modified files
+        run: |
+          set +e
+          pnpm check > /tmp/typecheck.log 2>&1
+          set -e
+          if grep -E '^(client/src/(lib/adminScheduleAppointmentFilter\.ts|pages/AdminSchedule\.tsx)|server/adminScheduleCadastroSearch\.test\.ts)\(' /tmp/typecheck.log | grep -q 'error TS'; then
+            echo 'TypeScript errors in changed files'
+            exit 1
+          fi
+      - name: All Docker patches and build
+        run: |
+          python3 - <<'PY'
+          from pathlib import Path
+          import subprocess
+          text = Path('Dockerfile').read_text()
+          begin = text.index('RUN npm install -g pnpm@10.4.1')
+          end = text.index('\n\nENV NODE_ENV', begin)
+          chain = text[begin:end].replace('\\\n', ' ')
+          marker = '&& node scripts/'
+          assert marker in chain
+          subprocess.run('node scripts/' + chain.split(marker, 1)[1], shell=True, check=True)
+          PY

@@ -1,4 +1,5 @@
 import { encodeWhatsappMessage } from "@shared/whatsappMessageText";
+import { filterAdminScheduleAppointments } from "@/lib/adminScheduleAppointmentFilter";
 import { trpc } from "@/lib/trpc";
 import React, { useState, useMemo, useEffect, useCallback, useRef } from "react";
 import { toast } from "sonner";
@@ -1010,25 +1011,8 @@ function AppointmentsTab() {
 
   // Group appointments by date, then by time
   const groupedByDate = useMemo(() => {
-    // Exclude completed and cancelled appointments — completed belong to FinalizadosTab, cancelled should not show
-    const rawList = (appts || []).filter((a: any) => a.status !== 'completed' && a.status !== 'cancelled');
-    // Apply search filter
-    const q = searchTerm.trim().toLowerCase();
-    const qDigits = q.replace(/\D/g, '');
-    const list = q
-      ? rawList.filter((a: any) => {
-          const name = (a.customerName || '').toLowerCase();
-          const phone = (a.customerPhone || '').replace(/\D/g, '');
-          const regId = String(a.registrationId || '');
-          const service = (a.serviceName || '').toLowerCase();
-          const orderNum = String(a.orderNumber || '');
-          // Para telefone: se o termo tem 8+ dígitos, usar igualdade exata (não includes)
-          const phoneMatch = qDigits.length >= 8
-            ? phone === qDigits || phone.endsWith(qDigits) || qDigits.endsWith(phone)
-            : (qDigits.length >= 4 && phone.includes(qDigits));
-          return name.includes(q) || phoneMatch || regId === q || orderNum === q || service.includes(q);
-        })
-      : rawList;
+    // Filtra por nome, telefone, serviço, *código do cadastro ou #pedido.
+    const list = filterAdminScheduleAppointments(appts || [], searchTerm);
     const groups: { [key: string]: typeof list } = {};
     
     // Ordena: data menor (mais próxima) primeiro; sem data por último; mesmo dia: horário mais cedo primeiro
@@ -1142,7 +1126,7 @@ function AppointmentsTab() {
           type="text"
           value={searchTerm}
           onChange={e => setSearchTerm(e.target.value)}
-          placeholder="Buscar por nome, telefone, #pedido ou serviço..."
+          placeholder="Buscar nome, telefone, *cadastro, #pedido ou serviço..."
           className="w-full bg-white/5 border border-white/15 rounded-xl pl-9 pr-9 py-2 text-sm placeholder:text-white/30 focus:outline-none focus:border-fuchsia-500/60 transition-colors"
         />
         {searchTerm && (
