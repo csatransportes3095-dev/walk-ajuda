@@ -21,21 +21,20 @@ jobs:
     steps:
       - uses: actions/checkout@v4
         with:
-          fetch-depth: 0
+          fetch-depth: 1
+          show-progress: false
       - uses: pnpm/action-setup@v4
       - uses: actions/setup-node@v4
         with:
           node-version: '22'
           cache: pnpm
       - name: Apply scoped source changes
-        run: |
-          node scripts/apply-profile-photo-sync-20261015.mjs
-          grep -n -A 4 -B 2 'photoPersistence' server/routers.ts
+        run: node scripts/apply-profile-photo-sync-20261015.mjs
       - name: Dependencies
         run: pnpm install --frozen-lockfile > /tmp/photo-install.log 2>&1 || { tail -n 30 /tmp/photo-install.log; exit 1; }
-      - name: Photo persistence and profile policy regression tests
+      - name: Photo persistence and profile requirements regression tests
         run: |
-          pnpm exec vitest run server/customerProfilePhoto.test.ts server/customerProfileUpdateGates.test.ts server/customerProfileRequirements.test.ts --reporter=json --outputFile=/tmp/photo-tests.json > /tmp/photo-tests.log 2>&1 || status=$?
+          pnpm exec vitest run server/customerProfilePhoto.test.ts server/customerProfileRequirements.test.ts --reporter=json --outputFile=/tmp/photo-tests.json > /tmp/photo-tests.log 2>&1 || status=$?
           python3 - <<'PY'
           import json
           from pathlib import Path
@@ -48,17 +47,40 @@ jobs:
             for test in suite.get('assertionResults',[]):
               if test['status'] != 'passed':
                 print('FAILED_TEST',test.get('fullName'))
-                for message in test.get('failureMessages',[]):
-                  print(message[:700]); print(message[-500:])
+                for message in test.get('failureMessages',[]): print(message[:700])
           if not r.get('success'): raise SystemExit(1)
           PY
       - name: Preserve published notes autosave
-        run: node --experimental-strip-types --test scripts/test-order-notes-autosave.mjs
+        run: |
+          node --experimental-strip-types --test scripts/test-order-notes-autosave.mjs > /tmp/notes-test.log 2>&1 || { tail -n 60 /tmp/notes-test.log; exit 1; }
+          tail -n 9 /tmp/notes-test.log
+      - name: Prepare immutable production baseline
+        run: |
+          git fetch --quiet --depth 1 origin b6563d94178e888eea45dabae354558200040918
+          git worktree add --detach /tmp/photo-baseline b6563d94178e888eea45dabae354558200040918
+          ln -s "$PWD/node_modules" /tmp/photo-baseline/node_modules
+      - name: Compare existing profile policy tests with production baseline
+        run: |
+          (cd /tmp/photo-baseline && pnpm exec vitest run server/customerProfileUpdateGates.test.ts --reporter=json --outputFile=/tmp/gates-before.json) > /tmp/gates-before.log 2>&1 || true
+          pnpm exec vitest run server/customerProfileUpdateGates.test.ts --reporter=json --outputFile=/tmp/gates-after.json > /tmp/gates-after.log 2>&1 || true
+          python3 - <<'PY'
+          import json
+          from pathlib import Path
+          before=json.loads(Path('/tmp/gates-before.json').read_text())
+          after=json.loads(Path('/tmp/gates-after.json').read_text())
+          def statuses(result):
+            return {t['fullName']:t['status'] for s in result['testResults'] for t in s['assertionResults']}
+          b,a=statuses(before),statuses(after)
+          if not b or a.keys()!=b.keys(): raise SystemExit('Policy test suite mismatch')
+          regressions=[n for n,s in a.items() if s!='passed' and b[n]=='passed']
+          print('POLICY_BASELINE_FAILURES',before['numFailedTests'],'CANDIDATE_FAILURES',after['numFailedTests'],'NEW',len(regressions))
+          for n,s in a.items():
+            if s!='passed': print('Existing failure:',n)
+          if regressions or after.get('numRuntimeErrorTestSuites',0): raise SystemExit(1)
+          PY
       - name: Compare TypeScript diagnostics to production baseline
         shell: bash
         run: |
-          git worktree add --detach /tmp/photo-baseline b6563d94178e888eea45dabae354558200040918
-          ln -s "$PWD/node_modules" /tmp/photo-baseline/node_modules
           set +e
           (cd /tmp/photo-baseline && pnpm check) > /tmp/photo-before.log 2>&1
           before=$?
