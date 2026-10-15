@@ -5521,6 +5521,18 @@ export const appRouter = router({
         let scheduleUrl: string | null = null;
         if (productChanged && input.customerPhone) {
           try {
+            // A edição de dados não pode cancelar uma reserva CONFIRMADA.
+            // Reagendar exige a ação explícita de agenda, nunca salvar o pedido.
+            const { getAppointmentByOrder } = await import('./db');
+            const currentSchedule = await getAppointmentByOrder(input.registrationId, input.subOrderIndex);
+            if (currentSchedule?.status === 'confirmed') {
+              console.info('[AutoSchedule][order-edit] Agendamento confirmado preservado:', {
+                registrationId: input.registrationId,
+                subOrderIndex: input.subOrderIndex,
+                appointmentId: currentSchedule.id,
+              });
+              return { success: true, productChanged, scheduleCreated: false, scheduleUrl: null, schedulePreserved: true };
+            }
             const schedule = await regenerateAutomaticScheduleForOrder({
               registrationId: input.registrationId,
               subOrderIndex: input.subOrderIndex,
