@@ -1,4 +1,4 @@
-import { createHash } from "node:crypto";
+import { createHash, randomUUID } from "node:crypto";
 import { execFile, spawn } from "node:child_process";
 import { createReadStream, existsSync, mkdirSync, mkdtempSync, readFileSync, rmSync, statSync, unlinkSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
@@ -24,6 +24,8 @@ const profileDirectory = process.env.H2ADS_PROFILE_DIRECTORY;
 const browserExecutable = process.env.H2ADS_BROWSER_EXECUTABLE;
 const proxy = JSON.parse(process.env.H2ADS_PROXY_JSON);
 const sessionPath = join(profileDirectory, "h2ads-browser-session.json");
+const runnerLockPath = join(profileDirectory, "h2ads-session-runner.lock");
+const snapshotQueueDirectory = join(profileDirectory, "..", "..", "snapshot-queue");
 const labelPagePath = join(profileDirectory, "h2ads-instance-label.html");
 const privacyExtensionDirectory = join(profileDirectory, "h2ads-privacy-extension");
 const instanceName = String(proxy.instanceName || `Instancia ${instanceId}`).trim().slice(0, 128);
@@ -43,7 +45,14 @@ let rotationInProgress = false;
 let lastReportedIp = null;
 let ipCheckInProgress = false;
 let killSwitchCheckInProgress = false;
-let killSwitchTriggered = false;
+let networkSuspended = false;
+let browserExitHandled = false;
+let panelSyncTimer;
+let panelSyncInProgress = false;
+let openingCommandConfirmed = false;
+let panelRuntimeConfirmed = false;
+let initialObservedIp = null;
+let runnerLockOwned = false;
 let browserProbeInProgress = false;
 
 function upstreamUrl() {
@@ -61,7 +70,7 @@ function createFrontRelay(port = 0) {
     port,
     verbose: false,
     prepareRequestFunction: () => {
-      if (!activeBackendPort) throw new Error("backend_relay_unavailable");
+      if (networkSuspended || !activeBackendPort) throw new Error("backend_relay_unavailable");
       return { upstreamProxyUrl: `http://127.0.0.1:${activeBackendPort}` };
     },
   });
@@ -77,7 +86,7 @@ function headers() {
 }
 
 async function post(path, body) {
-  const response = await fetch(`${panelUrl.replace(/\/$/, "")}${path}`, { method: "POST", headers: headers(), body: JSON.stringify(body) });
+  const response = await fetch(`${panelUrl.replace(/\/$/, "")}${path}`, { method: "POST", headers: headers(), body: JSON.stringify(body), signal: AbortSignal.timeout(12_000) });
   if (!response.ok) throw new Error(`panel_http_${response.status}`);
 }
 
@@ -218,14 +227,11 @@ async function privacyGuardPreflight(executable) {
   return { observedIp, browserObservedIp };
 }
 
-async function terminateBrowserProcess() {
-  const pid = browser?.pid;
-  if (!pid || browser?.exitCode !== null) return;
-  try {
-    await execFileAsync("taskkill.exe", ["/PID", String(pid), "/T", "/F"], { windowsHide: true, timeout: 10_000, maxBuffer: 8_192 });
-  } catch {
-    try { browser.kill("SIGKILL"); } catch { }
-  }
+function stopSessionTimers() {
+  if (rotationTimer) clearInterval(rotationTimer);
+  if (ipTimer) clearInterval(ipTimer);
+  if (killSwitchTimer) clearInterval(killSwitchTimer);
+  if (panelSyncTimer) clearInterval(panelSyncTimer);
 }
 
 async function closeRelay(server) {
@@ -233,45 +239,136 @@ async function closeRelay(server) {
   await server.close(true).catch(() => undefined);
 }
 
-async function triggerKillSwitch(reason = "proxy_path_unverified") {
-  if (killSwitchTriggered) return;
-  killSwitchTriggered = true;
-  if (rotationTimer) clearInterval(rotationTimer);
-  if (ipTimer) clearInterval(ipTimer);
-  if (killSwitchTimer) clearInterval(killSwitchTimer);
-  writeSession({ privacyGuard: "blocked", killSwitch: "triggered", killSwitchReason: reason, killSwitchTriggeredAt: new Date().toISOString() });
-  await closeRelay(frontRelay);
-  await closeRelay(backendRelay);
+function disconnectRelayConnections(server) {
+  if (!server) return;
+  if (typeof server.closeConnections !== "function") throw new Error("relay_connection_drain_unavailable");
+  server.closeConnections();
+}
+
+function panelFailure(error) {
+  const message = error instanceof Error ? error.message : String(error);
+  const category = /^panel_http_\d{3}$/.test(message) ? message : "panel_unavailable";
+  try { writeSession({ panelConnection: "offline", panelLastErrorCategory: category, panelLastFailureAt: new Date().toISOString() }); } catch { }
+}
+
+// The panel reports *observations*; failure to report is never permission to kill Chrome.
+async function syncPanelOpening(observedIp = initialObservedIp) {
+  if (panelSyncInProgress || browserExitHandled || !browser || browser.exitCode !== null) return;
+  panelSyncInProgress = true;
+  try {
+    if (!openingCommandConfirmed) {
+      await post("/api/h2ads/worker/commands/" + commandId + "/result", { command: "launch_browser", state: "browser_open" });
+      openingCommandConfirmed = true;
+    }
+    if (!panelRuntimeConfirmed && observedIp) {
+      await post("/api/h2ads/worker/runs/" + instanceId + "/state", { state: "browser_open", observedIp });
+      panelRuntimeConfirmed = true;
+    }
+    writeSession({ panelConnection: "online", panelLastErrorCategory: null, panelLastSyncedAt: new Date().toISOString() });
+  } catch (error) {
+    panelFailure(error);
+  } finally {
+    panelSyncInProgress = false;
+  }
+}
+
+// Close CONNECT tunnels, not the Chrome process. The front relay remains bound on
+// the same localhost port, so Chrome keeps its tabs and can resume on verification.
+async function suspendProxyTraffic(reason = "proxy_path_unverified") {
+  if (browserExitHandled) return;
+  const category = classifyNetworkError({ message: String(reason) }, "proxy_path_unverified");
+  networkSuspended = true;
   activeBackendPort = undefined;
-  await terminateBrowserProcess();
+  try {
+    disconnectRelayConnections(frontRelay);
+  } catch {
+    await closeRelay(frontRelay);
+    frontRelay = undefined;
+  }
+  try {
+    disconnectRelayConnections(backendRelay);
+  } catch {
+    await closeRelay(backendRelay);
+    backendRelay = undefined;
+  }
+  try {
+    writeSession({
+      networkState: "suspended", privacyGuard: "blocked", killSwitch: "armed",
+      networkFailureCategory: category, networkSuspendedAt: new Date().toISOString(),
+    });
+  } catch { }
+}
+
+async function resumeProxyTraffic() {
+  if (!networkSuspended || browserExitHandled) return;
+  try {
+    if (!backendRelay) {
+      backendRelay = createBackendRelay();
+      await backendRelay.listen();
+    }
+    // Prove the upstream route with the FRONT STILL BLOCKED. No traffic from
+    // Chrome is released until a Chrome probe also confirms the expected IP.
+    const observedIp = await checkIpThroughPort(backendRelay.port);
+    const executable = chromeExecutable();
+    if (!executable) throw new Error("browser_not_found");
+    const browserObservedIp = await verifyChromeProxyPath(executable, backendRelay.port, observedIp);
+    if (!frontRelay) {
+      frontRelay = createFrontRelay(relayPort);
+      await frontRelay.listen();
+    }
+    activeBackendPort = backendRelay.port;
+    networkSuspended = false;
+    const frontIp = await checkIp();
+    if (normalizeIp(frontIp) !== normalizeIp(observedIp)) throw new Error("exit_ip_mismatch");
+    writeSession({
+      networkState: "online", privacyGuard: "protected", killSwitch: "armed",
+      networkFailureCategory: null, networkRestoredAt: new Date().toISOString(),
+      observedIp: frontIp, browserObservedIp, browserProxyVerified: true,
+    });
+    // A panel outage must not undo successful proxy recovery.
+    void syncPanelOpening(frontIp);
+  } catch (error) {
+    await suspendProxyTraffic(error instanceof Error ? error.message : "proxy_path_unverified");
+  }
 }
 
 async function reportObservedIp() {
-  if (!browser || browser.exitCode !== null || !relayPort || rotationInProgress || ipCheckInProgress || killSwitchTriggered) return;
+  if (!browser || browser.exitCode !== null || !relayPort || rotationInProgress || ipCheckInProgress || networkSuspended || browserExitHandled) return;
   ipCheckInProgress = true;
+  let observedIp;
   try {
-    const observedIp = await checkIp();
-    const checkedAt = new Date().toISOString();
-    writeSession({ observedIp, lastIpCheckedAt: checkedAt, killSwitch: "armed" });
-    if (observedIp === lastReportedIp) return;
-    await post(`/api/h2ads/worker/runs/${instanceId}/state`, { state: "browser_open", observedIp });
-    lastReportedIp = observedIp;
-    writeSession({ observedIp, lastIpReportedAt: checkedAt });
+    observedIp = await checkIp();
+    writeSession({ observedIp, lastIpCheckedAt: new Date().toISOString(), killSwitch: "armed" });
   } catch (error) {
-    await triggerKillSwitch(error instanceof Error ? error.message : "proxy_path_unverified");
+    await suspendProxyTraffic(error instanceof Error ? error.message : "proxy_path_unverified");
+    ipCheckInProgress = false;
+    return;
+  }
+  try {
+    if (observedIp !== lastReportedIp) {
+      await post("/api/h2ads/worker/runs/" + instanceId + "/state", { state: "browser_open", observedIp });
+      lastReportedIp = observedIp;
+      writeSession({ observedIp, lastIpReportedAt: new Date().toISOString(), panelConnection: "online" });
+    }
+  } catch (error) {
+    panelFailure(error);
   } finally {
     ipCheckInProgress = false;
   }
 }
 
 async function enforceKillSwitch() {
-  if (!browser || browser.exitCode !== null || !relayPort || rotationInProgress || killSwitchTriggered || killSwitchCheckInProgress || ipCheckInProgress) return;
+  if (!browser || browser.exitCode !== null || !relayPort || rotationInProgress || browserExitHandled || killSwitchCheckInProgress || ipCheckInProgress) return;
   killSwitchCheckInProgress = true;
   try {
-    await checkIp();
-    writeSession({ killSwitch: "armed", killSwitchLastVerifiedAt: new Date().toISOString() });
+    if (networkSuspended) {
+      await resumeProxyTraffic();
+    } else {
+      await checkIp();
+      writeSession({ killSwitch: "armed", killSwitchLastVerifiedAt: new Date().toISOString() });
+    }
   } catch (error) {
-    await triggerKillSwitch(error instanceof Error ? error.message : "proxy_path_unverified");
+    await suspendProxyTraffic(error instanceof Error ? error.message : "proxy_path_unverified");
   } finally {
     killSwitchCheckInProgress = false;
   }
@@ -310,7 +407,7 @@ function createGoogleSorryPrivacyGuard() {
 }
 
 async function rotateRelay() {
-  if (!frontRelay || !backendRelay || !relayPort || !activeBackendPort || rotationInProgress || killSwitchTriggered) return;
+  if (!frontRelay || !backendRelay || !relayPort || !activeBackendPort || rotationInProgress || networkSuspended || browserExitHandled) return;
   rotationInProgress = true;
   const previousBackend = backendRelay;
   const previousBackendPort = activeBackendPort;
@@ -320,14 +417,15 @@ async function rotateRelay() {
     candidateBackend = createBackendRelay();
     await candidateBackend.listen();
     const candidateIp = await checkIpThroughPort(candidateBackend.port);
+    const executable = chromeExecutable();
+    if (!executable) throw new Error("browser_not_found");
+    // Check the candidate while the old verified relay is still active.
+    const browserObservedIp = await verifyChromeProxyPath(executable, candidateBackend.port, candidateIp);
     backendRelay = candidateBackend;
     activeBackendPort = candidateBackend.port;
     candidateActivated = true;
     const observedIp = await checkIp();
     if (normalizeIp(observedIp) !== normalizeIp(candidateIp)) throw new Error("exit_ip_mismatch");
-    const executable = chromeExecutable();
-    if (!executable) throw new Error("browser_not_found");
-    const browserObservedIp = await verifyChromeProxyPath(executable, relayPort, observedIp);
     writeSession({
       lastRotationAt: new Date().toISOString(), observedIp, browserObservedIp,
       rotationChangedExitIp: lastReportedIp ? normalizeIp(observedIp) !== normalizeIp(lastReportedIp) : null,
@@ -340,21 +438,110 @@ async function rotateRelay() {
     if (candidateActivated) {
       backendRelay = previousBackend;
       activeBackendPort = previousBackendPort;
+      try { disconnectRelayConnections(frontRelay); } catch { await suspendProxyTraffic("relay_connection_drain_unavailable"); }
     }
     if (candidateBackend && candidateBackend !== previousBackend) await closeRelay(candidateBackend);
-    try {
-      const fallbackIp = await checkIp();
-      writeSession({ rotationState: "rolled_back", rotationFailure: reason, rotationFailureAt: new Date().toISOString(), observedIp: fallbackIp, privacyGuard: "protected", killSwitch: "armed" });
-    } catch (fallbackError) {
-      await triggerKillSwitch(fallbackError instanceof Error ? fallbackError.message : "proxy_rotation_unverified");
+    if (!networkSuspended) {
+      try {
+        const fallbackIp = await checkIp();
+        writeSession({ rotationState: "rolled_back", rotationFailure: classifyNetworkError({ message: reason }), rotationFailureAt: new Date().toISOString(), observedIp: fallbackIp, privacyGuard: "protected", killSwitch: "armed" });
+      } catch (fallbackError) {
+        await suspendProxyTraffic(fallbackError instanceof Error ? fallbackError.message : "proxy_rotation_unverified");
+      }
     }
   } finally {
     rotationInProgress = false;
   }
-  if (!killSwitchTriggered) void reportObservedIp();
+  if (!networkSuspended) void reportObservedIp();
+}
+
+function isProcessRunning(pid) {
+  if (!Number.isSafeInteger(pid) || pid < 1) return false;
+  try {
+    process.kill(pid, 0);
+    return true;
+  } catch (error) {
+    return error?.code === "EPERM";
+  }
+}
+
+function acquireRunnerLock() {
+  const claim = () => {
+    writeFileSync(runnerLockPath, JSON.stringify({ pid: process.pid, startedAt: new Date().toISOString() }), { encoding: "utf8", mode: 0o600, flag: "wx" });
+    runnerLockOwned = true;
+    process.once("exit", releaseRunnerLock);
+    return true;
+  };
+  try {
+    return claim();
+  } catch (error) {
+    if (error?.code !== "EEXIST") throw error;
+    let existingPid = null;
+    try { existingPid = Number(JSON.parse(readFileSync(runnerLockPath, "utf8")).pid); } catch { }
+    if (isProcessRunning(existingPid)) return false;
+    try { unlinkSync(runnerLockPath); } catch { return false; }
+    try { return claim(); } catch (nextError) {
+      if (nextError?.code === "EEXIST") return false;
+      throw nextError;
+    }
+  }
+}
+
+function releaseRunnerLock() {
+  if (!runnerLockOwned) return;
+  try {
+    if (Number(JSON.parse(readFileSync(runnerLockPath, "utf8")).pid) === process.pid) unlinkSync(runnerLockPath);
+  } catch { }
+  runnerLockOwned = false;
+}
+
+function queueProfileSnapshot() {
+  if (!hasBrowserProfileData()) return null;
+  mkdirSync(snapshotQueueDirectory, { recursive: true });
+  const stamp = new Date().toISOString().replace(/\D/g, "").slice(0, 17);
+  const pendingPath = join(snapshotQueueDirectory, stamp + "-instance-" + instanceId + "-" + randomUUID().replaceAll("-", "") + ".pending");
+  writeFileSync(pendingPath, String(instanceId), { encoding: "ascii", mode: 0o600, flag: "wx" });
+  return pendingPath;
+}
+
+async function finalizeBrowserExit(reason, code = null, signal = null) {
+  if (browserExitHandled) return;
+  browserExitHandled = true;
+  stopSessionTimers();
+  const closedAt = new Date().toISOString();
+  try {
+    writeSession({ lastClosedAt: closedAt, browserExitReason: reason, browserExitCode: code, browserExitSignal: signal, networkState: "closed" });
+    const manifestPath = join(profileDirectory, "h2ads-profile.json");
+    const manifest = existsSync(manifestPath) ? JSON.parse(readFileSync(manifestPath, "utf8")) : { instanceId, profileVersion: 1 };
+    writeFileSync(manifestPath, JSON.stringify({ ...manifest, lastClosedAt: closedAt }), "utf8");
+  } catch { }
+  // The durable local queue must exist BEFORE any remote call. If the panel
+  // or snapshot upload fails, the Worker can retry without touching the profile.
+  let pendingPath = null;
+  try { pendingPath = queueProfileSnapshot(); } catch { }
+  try {
+    await post("/api/h2ads/worker/runs/" + instanceId + "/state", { state: "closed" });
+  } catch (error) {
+    panelFailure(error);
+  }
+  try {
+    if (pendingPath) {
+      await uploadProfileSnapshot();
+      // Deletion is safe only after the server acknowledges the upload.
+      try { unlinkSync(pendingPath); } catch { }
+    }
+  } catch {
+    try { writeSession({ profileSnapshotPending: true, profileSnapshotQueuedAt: closedAt }); } catch { }
+  } finally {
+    await closeRelay(frontRelay);
+    await closeRelay(backendRelay);
+    activeBackendPort = undefined;
+    releaseRunnerLock();
+  }
 }
 
 async function run() {
+  if (!acquireRunnerLock()) return; // A delayed duplicate command cannot open the same profile twice.
   try {
     const executable = chromeExecutable();
     if (!executable) throw new Error("browser_not_found");
@@ -364,62 +551,62 @@ async function run() {
     frontRelay = createFrontRelay();
     await frontRelay.listen();
     relayPort = frontRelay.port;
+    if (typeof frontRelay.closeConnections !== "function" || typeof backendRelay.closeConnections !== "function") {
+      throw new Error("relay_connection_drain_unavailable");
+    }
     const initial = await privacyGuardPreflight(executable);
+    initialObservedIp = initial.observedIp;
     lastReportedIp = initial.observedIp;
     const labelPageUrl = createInstanceLabelPage();
     const privacyGuardExtension = createGoogleSorryPrivacyGuard();
     browser = spawn(executable, [
-      `--user-data-dir=${profileDirectory}`, `--proxy-server=http://127.0.0.1:${relayPort}`, "--proxy-bypass-list=<-loopback>",
+      "--user-data-dir=" + profileDirectory, "--proxy-server=http://127.0.0.1:" + relayPort, "--proxy-bypass-list=<-loopback>",
       "--disable-quic", "--dns-prefetch-disable", "--force-webrtc-ip-handling-policy=disable_non_proxied_udp",
-      `--load-extension=${privacyGuardExtension}`, "--no-first-run", "--no-default-browser-check", labelPageUrl,
+      "--load-extension=" + privacyGuardExtension, "--no-first-run", "--no-default-browser-check", labelPageUrl,
     ], { detached: false, stdio: "ignore", windowsHide: false });
-    writeSession({
-      startedAt: new Date().toISOString(), instanceLabelState: "static_tab", observedIp: initial.observedIp, browserObservedIp: initial.browserObservedIp,
-      browserProxyVerified: true, privacyGuard: "protected", googleSorryPrivacyGuard: "enabled_v3", killSwitch: "armed", directBrowserEgress: "blocked_by_windows_firewall",
-    });
-    if (rotationMinutes) {
-      rotationTimer = setInterval(() => { void rotateRelay(); }, rotationMinutes * 60_000);
-      rotationTimer.unref?.();
-    }
-    await post(`/api/h2ads/worker/commands/${commandId}/result`, { command: "launch_browser", state: "browser_open" });
-    await post(`/api/h2ads/worker/runs/${instanceId}/state`, { state: "browser_open", observedIp: initial.observedIp });
+
+    // Register before any network request to the panel: early exit is never lost.
+    browser.once("error", (error) => { void finalizeBrowserExit("spawn_error", null, error?.code || null); });
+    browser.once("exit", (code, signal) => { void finalizeBrowserExit("browser_exit", code, signal); });
     ipTimer = setInterval(() => { void reportObservedIp(); }, IP_CHECK_INTERVAL_MS);
     ipTimer.unref?.();
     killSwitchTimer = setInterval(() => { void enforceKillSwitch(); }, KILL_SWITCH_CHECK_INTERVAL_MS);
     killSwitchTimer.unref?.();
-    browser.once("exit", async () => {
-      try {
-        if (rotationTimer) clearInterval(rotationTimer);
-        if (ipTimer) clearInterval(ipTimer);
-        if (killSwitchTimer) clearInterval(killSwitchTimer);
-        const manifestPath = join(profileDirectory, "h2ads-profile.json");
-        const manifest = existsSync(manifestPath) ? JSON.parse(readFileSync(manifestPath, "utf8")) : { instanceId, profileVersion: 1 };
-        writeFileSync(manifestPath, JSON.stringify({ ...manifest, lastClosedAt: new Date().toISOString() }), "utf8");
-        await post(`/api/h2ads/worker/runs/${instanceId}/state`, { state: "closed" });
-        await uploadProfileSnapshot().catch(() => undefined);
-      } finally {
-        await closeRelay(frontRelay);
-        await closeRelay(backendRelay);
-        activeBackendPort = undefined;
-      }
-    });
+    panelSyncTimer = setInterval(() => { void syncPanelOpening(); }, 12_000);
+    panelSyncTimer.unref?.();
+    if (rotationMinutes) {
+      rotationTimer = setInterval(() => { void rotateRelay(); }, rotationMinutes * 60_000);
+      rotationTimer.unref?.();
+    }
+    try {
+      writeSession({
+        startedAt: new Date().toISOString(), lastClosedAt: null, browserExitReason: null,
+        instanceLabelState: "static_tab", observedIp: initial.observedIp, browserObservedIp: initial.browserObservedIp,
+        browserProxyVerified: true, privacyGuard: "protected", googleSorryPrivacyGuard: "enabled_v3",
+        killSwitch: "armed", networkState: "online", panelConnection: "pending",
+        directBrowserEgress: "blocked_by_windows_firewall",
+      });
+    } catch { }
+    // Communication failure never reaches the launch catch or terminates Chrome.
+    await syncPanelOpening(initial.observedIp);
   } catch (error) {
-    if (rotationTimer) clearInterval(rotationTimer);
-    if (ipTimer) clearInterval(ipTimer);
-    if (killSwitchTimer) clearInterval(killSwitchTimer);
     const reason = error instanceof Error ? error.message : "browser_launch_failed";
-    writeSession({ privacyGuard: "blocked", killSwitch: "triggered", killSwitchReason: reason, privacyGuardFailureAt: new Date().toISOString() });
+    if (browser && browser.pid && !browserExitHandled) {
+      await suspendProxyTraffic("browser_session_setup_failed");
+      return;
+    }
+    try { writeSession({ privacyGuard: "blocked", killSwitch: "triggered", killSwitchReason: classifyNetworkError({ message: reason }), privacyGuardFailureAt: new Date().toISOString() }); } catch { }
     const category = reason === "browser_not_found" ? "browser_not_found"
       : reason === "exit_ip_mismatch" ? "exit_ip_mismatch"
         : reason === "browser_probe_invalid_response" || reason === "browser_proxy_probe_failed" ? "browser_proxy_unverified"
           : reason.startsWith("privacy_guard_") ? "privacy_guard_blocked"
             : reason.startsWith("proxy_") || reason === "local_relay_down" ? reason
               : "browser_launch_failed";
-    await post(`/api/h2ads/worker/commands/${commandId}/result`, { command: "launch_browser", state: "blocked", errorCategory: category }).catch(() => undefined);
+    await post("/api/h2ads/worker/commands/" + commandId + "/result", { command: "launch_browser", state: "blocked", errorCategory: category }).catch(() => undefined);
     await closeRelay(frontRelay);
     await closeRelay(backendRelay);
     activeBackendPort = undefined;
-    await terminateBrowserProcess();
+    releaseRunnerLock();
   }
 }
 
