@@ -434,12 +434,14 @@ Isso encerra somente os browsers abertos. Grupos, clientes vinculados, proxies e
   const removeInstance = async (instanceId: number, instanceName: string) => {
     const run = browserRunByInstance.get(instanceId);
     if (run?.state === "browser_open") { toast.error("Encerre o browser antes de excluir esta instância."); return; }
-    if (!window.confirm(`Excluir definitivamente a instância ${instanceName}? A rota, o perfil local vinculado no painel e o histórico operacional desta instância serão removidos.`)) return;
+    if (!window.confirm(`Excluir definitivamente a instância ${instanceName}? A operação é irreversível e apagará perfil, sessões, backups, histórico e configurações desta instância. Até o Worker confirmar a limpeza, a instância continuará listada como pendente.`)) return;
     setAction(instanceId, "Excluindo instância...");
     try {
-      await deleteInstance.mutateAsync({ id: instanceId });
+      const result = await deleteInstance.mutateAsync({ id: instanceId });
       setAction(instanceId, null);
-      toast.success("Instância excluída.");
+      if (result.pending) toast.info("Exclusão solicitada. Aguardando limpeza e confirmação do Worker; a instância permanece no ADM.");
+      else if (result.success) toast.success("Instância excluída e limpeza confirmada.");
+      else toast.error("Exclusão ainda não confirmada.");
       await refresh();
     } catch (error) { setAction(instanceId, null); toast.error(errorText(error, "Não foi possível excluir a instância.")); }
   };
