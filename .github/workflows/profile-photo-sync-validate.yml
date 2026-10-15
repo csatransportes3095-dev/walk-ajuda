@@ -1,0 +1,48 @@
+name: Profile photo synchronization validation
+on:
+  push:
+    branches: [fix/profile-photo-sync-20261015]
+    paths: ['.github/workflows/profile-photo-sync-validate.yml']
+  workflow_dispatch:
+permissions:
+  contents: read
+jobs:
+  inspect:
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          persist-credentials: false
+      - name: Photo code locations
+        run: |
+          python3 - <<'PY'
+          from pathlib import Path
+          import re
+          files = ['server/routers.ts','server/db.ts','server/uploadRoute.ts','client/src/pages/AdminCustomers.tsx','client/src/pages/AdminOrders.tsx','server/_core/index.ts']
+          for name in files:
+            p=Path(name)
+            if not p.exists(): continue
+            lines=p.read_text().splitlines()
+            hits=[i for i,s in enumerate(lines) if re.search(r'uploadProfilePhoto|profilePhotoUrl|syncCustomersFrom|customer-photo-preview',s)]
+            print('\nFILE',name,'LINES',len(lines))
+            for i in hits: print(f'{i+1}: {lines[i]}')
+          print('\nPHOTO RELATED FILES')
+          for folder in ['server','shared','client/src/lib','scripts']:
+            for p in Path(folder).glob('*'):
+              if re.search(r'photo|Photo|customerProfile|customerIdentity|mediaRecovery',p.name): print(p)
+          print('\nWORKFLOW CONNECTION IDENTIFIERS')
+          for p in Path('.github/workflows').glob('*.yml'):
+            names=sorted(set(re.findall(r'secrets\.([A-Za-z0-9_]+)',p.read_text())))
+            if names: print(p.name, ','.join(names))
+          PY
+      - name: Legacy media hostname reachability (no customer data)
+        run: |
+          node --input-type=module <<'JS'
+          for (const host of ['d2xsxph8kpxj0f.cloudfront.net','midia.h2colombiano.com']) {
+            try {
+              const r=await fetch('https://'+host+'/',{method:'HEAD',signal:AbortSignal.timeout(15000)});
+              console.log(JSON.stringify({host,status:r.status,type:r.headers.get('content-type')}));
+            } catch(e) { console.log(JSON.stringify({host,error:e.cause?.code||e.name})); }
+          }
+          JS
