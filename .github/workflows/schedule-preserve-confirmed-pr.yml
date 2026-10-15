@@ -1,0 +1,30 @@
+name: Schedule confirmed reservation validation
+
+on:
+  pull_request:
+    paths:
+      - 'server/routers.ts'
+      - 'server/schedulePreserveConfirmedEdit.test.ts'
+      - '.github/workflows/schedule-preserve-confirmed-pr.yml'
+
+permissions:
+  contents: read
+
+jobs:
+  validate-schedule-confirmed:
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+    steps:
+      - uses: actions/checkout@v4
+      - uses: pnpm/action-setup@v4
+        with:
+          version: 10.4.1
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '22'
+          cache: pnpm
+      - run: pnpm install --frozen-lockfile
+      - name: Reservation preservation regression
+        run: pnpm exec vitest run server/schedulePreserveConfirmedEdit.test.ts
+      - name: Production build
+        run: pnpm build
