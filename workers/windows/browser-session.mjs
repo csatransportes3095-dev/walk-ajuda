@@ -239,12 +239,6 @@ async function closeRelay(server) {
   await server.close(true).catch(() => undefined);
 }
 
-function disconnectRelayConnections(server) {
-  if (!server) return;
-  if (typeof server.closeConnections !== "function") throw new Error("relay_connection_drain_unavailable");
-  server.closeConnections();
-}
-
 function panelFailure(error) {
   const message = error instanceof Error ? error.message : String(error);
   const category = /^panel_http_\d{3}$/.test(message) ? message : "panel_unavailable";
@@ -279,18 +273,16 @@ async function suspendProxyTraffic(reason = "proxy_path_unverified") {
   const category = classifyNetworkError({ message: String(reason) }, "proxy_path_unverified");
   networkSuspended = true;
   activeBackendPort = undefined;
+  // proxy-chain close(true) destroys existing CONNECT and HTTP sockets.
+  // Keep Chrome open, and restore a local front relay bound to the same port.
+  await closeRelay(frontRelay);
+  frontRelay = undefined;
+  await closeRelay(backendRelay);
+  backendRelay = undefined;
   try {
-    disconnectRelayConnections(frontRelay);
-  } catch {
-    await closeRelay(frontRelay);
-    frontRelay = undefined;
-  }
-  try {
-    disconnectRelayConnections(backendRelay);
-  } catch {
-    await closeRelay(backendRelay);
-    backendRelay = undefined;
-  }
+    frontRelay = createFrontRelay(relayPort);
+    await frontRelay.listen();
+  } catch { }
   try {
     writeSession({
       networkState: "suspended", privacyGuard: "blocked", killSwitch: "armed",
@@ -438,7 +430,7 @@ async function rotateRelay() {
     if (candidateActivated) {
       backendRelay = previousBackend;
       activeBackendPort = previousBackendPort;
-      try { disconnectRelayConnections(frontRelay); } catch { await suspendProxyTraffic("relay_connection_drain_unavailable"); }
+      await suspendProxyTraffic("proxy_rotation_rollback");
     }
     if (candidateBackend && candidateBackend !== previousBackend) await closeRelay(candidateBackend);
     if (!networkSuspended) {
@@ -551,9 +543,6 @@ async function run() {
     frontRelay = createFrontRelay();
     await frontRelay.listen();
     relayPort = frontRelay.port;
-    if (typeof frontRelay.closeConnections !== "function" || typeof backendRelay.closeConnections !== "function") {
-      throw new Error("relay_connection_drain_unavailable");
-    }
     const initial = await privacyGuardPreflight(executable);
     initialObservedIp = initial.observedIp;
     lastReportedIp = initial.observedIp;
