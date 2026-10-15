@@ -1,0 +1,31 @@
+name: H2ADS deletion priority validation
+on:
+  pull_request:
+    paths:
+      - "workers/windows/H2AdsWorker.ps1"
+      - "client/src/components/OrderH2AdsBrowserShortcut.tsx"
+      - ".github/workflows/h2ads-deletion-priority.yml"
+permissions:
+  contents: read
+jobs:
+  validate:
+    runs-on: windows-latest
+    timeout-minutes: 20
+    steps:
+      - uses: actions/checkout@v4
+      - name: Parse Worker PowerShell
+        shell: pwsh
+        run: |
+          $tokens = $null
+          $errors = $null
+          [System.Management.Automation.Language.Parser]::ParseFile("$env:GITHUB_WORKSPACE/workers/windows/H2AdsWorker.ps1", [ref]$tokens, [ref]$errors) | Out-Null
+          if ($errors.Count -gt 0) { $errors | Format-List; exit 1 }
+      - name: Verify deletion priority and exact status confirmation
+        shell: pwsh
+        run: |
+          $agent = Get-Content workers/windows/H2AdsWorker.ps1 -Raw
+          $ui = Get-Content client/src/components/OrderH2AdsBrowserShortcut.tsx -Raw
+          foreach ($required in @("Test-H2AdsDeletionPriority", "if (Test-H2AdsDeletionPriority) { break }", "Invoke-H2AdsPendingInstanceDeletion")) {
+            if (!$agent.Contains($required)) { throw "Missing deletion priority: $required" }
+          }
+          if (!$ui.Contains("if (result.success)") -or !$ui.Contains("else if (result.pending)")) { throw "Premature deletion success message" }
