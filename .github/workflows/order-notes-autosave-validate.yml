@@ -1,0 +1,56 @@
+name: Order notes autosave validation
+
+on:
+  push:
+    branches:
+      - fix/order-notes-autosave-20261015
+    paths:
+      - 'client/src/components/NotesTab.tsx'
+      - 'client/src/hooks/useOrderNoteAutosave.ts'
+      - 'client/src/lib/orderNoteAutosave.ts'
+      - 'scripts/test-order-notes-autosave.mjs'
+      - '.github/workflows/order-notes-autosave-validate.yml'
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  validate:
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+    steps:
+      - uses: actions/checkout@v4
+      - uses: pnpm/action-setup@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '22'
+          cache: pnpm
+      - name: Autosave regression tests
+        run: node --experimental-strip-types --test scripts/test-order-notes-autosave.mjs
+      - run: pnpm install --frozen-lockfile
+      - name: Strict check of the autosave queue
+        run: pnpm exec tsc client/src/lib/orderNoteAutosave.ts --strict --noEmit --target ES2022 --module ESNext --lib ES2022,DOM --skipLibCheck
+      - name: TypeScript diagnostics for changed client files
+        shell: bash
+        run: |
+          set +e
+          pnpm check > /tmp/notes-typecheck.log 2>&1
+          rc=$?
+          set -e
+          if [ "$rc" -ne 0 ] && ! grep -q 'error TS' /tmp/notes-typecheck.log; then
+            cat /tmp/notes-typecheck.log
+            exit "$rc"
+          fi
+          if grep -E '^client/src/(components/NotesTab[.]tsx|hooks/useOrderNoteAutosave[.]ts|lib/orderNoteAutosave[.]ts)\(' /tmp/notes-typecheck.log; then
+            echo 'TypeScript diagnostics in changed files'
+            exit 1
+          fi
+          if [ "$rc" -ne 0 ]; then
+            echo 'Existing repository diagnostics (outside changed files):'
+            grep 'error TS' /tmp/notes-typecheck.log | head -n 20 || true
+          fi
+      - name: Inspect existing notes API input
+        run: grep -n -A 12 -B 3 'saveBlock:' server/routers.ts
+      - name: Production build
+        run: pnpm build
