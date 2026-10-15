@@ -4,6 +4,8 @@ import {
   createH2AdsGroup,
   createH2AdsInstance,
   deleteH2AdsInstance,
+  requestH2AdsInstancePermanentDeletion,
+  finalizeH2AdsInstancePermanentDeletion,
   deleteH2AdsGroup,
   createH2AdsWorkerPairingCode,
   getH2AdsGroup,
@@ -22,6 +24,7 @@ import {
   updateH2AdsInstance,
 } from "../h2ads";
 import { adminProcedure } from "../_core/trpc";
+import { assertH2AdsInstanceNotDeleting } from "../h2adsDeletionState";
 import { decryptH2AdsProxy, encryptH2AdsProxy, H2ADS_PROXY_ROTATION_MINUTES_MAX, H2ADS_PROXY_ROTATION_MINUTES_MIN, isH2AdsProxyEncryptionReady, parseH2AdsProxyInput, proxyCredentialSummary } from "../h2adsProxySecurity";
 import { classifyH2AdsRouteFailure, getH2AdsRouteMismatches, validateH2AdsProxyRoute } from "../h2adsProxyValidation";
 import { h2AdsOrderLinkRouterPart } from "../h2adsOrderLinkRouter";
@@ -160,6 +163,7 @@ async function requireWritableGroup(groupId: number) {
 }
 
 async function requireConfigurableInstance(instanceId: number) {
+  await assertH2AdsInstanceNotDeleting(instanceId);
   const instance = await getH2AdsInstance(instanceId);
   if (!instance) {
     throw new TRPCError({ code: "NOT_FOUND", message: "Instância H2 Ads não encontrada." });
@@ -336,9 +340,13 @@ export const h2AdsRouter = {
 
   deleteInstance: adminProcedure.input(h2AdsDeleteInstanceSchema).mutation(async ({ input }) => {
     try {
-      const deleted = await deleteH2AdsInstance(input.id);
-      if (!deleted) throw new TRPCError({ code: "NOT_FOUND", message: "Instância H2 Ads não encontrada." });
-      return { success: true };
+      const state = await requestH2AdsInstancePermanentDeletion(input.id);
+      if (state === "not_found") throw new TRPCError({ code: "NOT_FOUND", message: "Instância H2 Ads não encontrada." });
+      if (state === "ready_remote") {
+        const complete = await finalizeH2AdsInstancePermanentDeletion(input.id);
+        return { success: complete, pending: !complete };
+      }
+      return { success: false, pending: true };
     } catch (error) {
       if (error instanceof TRPCError) throw error;
       const message = error instanceof Error ? error.message : "Não foi possível excluir a instância.";
