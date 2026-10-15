@@ -17,6 +17,7 @@ $RunnerPath = Join-Path $WorkerDirectory "browser-runner.mjs"
 $SessionRunnerPath = Join-Path $WorkerDirectory "browser-session.mjs"
 $ProfilesDirectory = Join-Path $WorkerDirectory "profiles"
 $SnapshotQueueDirectory = Join-Path $WorkerDirectory "snapshot-queue"
+$DeletionPriorityPath = Join-Path $WorkerDirectory "snapshot-queue-deletion-priority.signal"
 $PackagePath = Join-Path $WorkerDirectory "package.json"
 $ProxyChainPackagePath = Join-Path $WorkerDirectory "node_modules\proxy-chain\package.json"
 $DedicatedBrowserDirectory = Join-Path $WorkerDirectory "browser\chrome"
@@ -258,7 +259,24 @@ function Send-H2AdsProfileSnapshot([object]$Config, [int]$InstanceId) {
   }
 }
 
+# A solicitação de exclusão deve passar na frente de novos backups. Sinal
+# temporário por Worker: o backup em curso termina, os próximos aguardam a
+# limpeza; um sinal abandonado expira após 5 minutos.
+function Test-H2AdsDeletionPriority {
+  if (!(Test-Path -LiteralPath $DeletionPriorityPath)) { return $false }
+  try {
+    $flag = Get-Item -LiteralPath $DeletionPriorityPath -ErrorAction Stop
+    if ($flag.LastWriteTimeUtc -ge (Get-Date).ToUniversalTime().AddMinutes(-5)) { return $true }
+    Remove-Item -LiteralPath $DeletionPriorityPath -Force -ErrorAction Stop
+    return $false
+  } catch {
+    # Falha de leitura nunca pode permitir um backup durante exclusão.
+    return $true
+  }
+}
+
 function Start-H2AdsSnapshotQueueWorker {
+  if (Test-H2AdsDeletionPriority) { return }
   if (!(Test-Path $SnapshotQueueDirectory)) { return }
   $pending = Get-ChildItem -LiteralPath $SnapshotQueueDirectory -Filter "*.pending" -File -ErrorAction SilentlyContinue | Select-Object -First 1
   $staleWorking = Get-ChildItem -LiteralPath $SnapshotQueueDirectory -Filter "*.pending.working" -File -ErrorAction SilentlyContinue |
@@ -464,7 +482,7 @@ function Invoke-H2AdsPendingInstanceDeletion([object]$Config) {
       } catch { return }
     }
     try {
-      $all = @(Get-CimInstance Win32_Process -Filter "Name = 'chrome.exe' OR Name = 'node.exe'" -ErrorAction Stop)
+      $all = @(Get-CimInstance Win32_Process -Filter "Name = 'chrome.exe' OR Name = 'node.exe' OR Name = 'tar.exe'" -ErrorAction Stop)
       foreach ($proc in $all) {
         $line = [string]$proc.CommandLine
         if ([string]::IsNullOrWhiteSpace($line)) { return }
@@ -476,25 +494,52 @@ function Invoke-H2AdsPendingInstanceDeletion([object]$Config) {
     $safeWorkerKey = ([string]$Config.workerKey) -replace '[^A-Za-z0-9_-]', '_'
     $createdNew = $false
     $queueMutex = New-Object System.Threading.Mutex($true, "Local\H2AdsSnapshotQueue-$safeWorkerKey", [ref]$createdNew)
+    # Antes de tentar o mutex, pede ao processador de snapshots para
+    # ceder a vez após o arquivo atual, sem interromper uma gravação.
+    [string]$instanceId | Set-Content -LiteralPath $DeletionPriorityPath -Encoding ASCII -NoNewline -ErrorAction Stop
     if (!$createdNew) { $queueMutex.Dispose(); return }
     try {
+      if (!(Test-Path -LiteralPath $SnapshotQueueDirectory)) {
+        New-Item -ItemType Directory -Path $SnapshotQueueDirectory -Force -ErrorAction Stop | Out-Null
+      }
       if (Test-Path -LiteralPath $profile) {
         $rootInfo = Get-Item -LiteralPath $profile -Force -ErrorAction Stop
         if ($rootInfo.Attributes -band [System.IO.FileAttributes]::ReparsePoint) { return }
         $linked = @(Get-ChildItem -LiteralPath $profile -Recurse -Force -Attributes ReparsePoint -ErrorAction Stop)
         if ($linked.Count -gt 0) { return }
       }
-      $files = @(Get-ChildItem -LiteralPath $SnapshotQueueDirectory -File -ErrorAction SilentlyContinue |
+      $files = @(Get-ChildItem -LiteralPath $SnapshotQueueDirectory -File -ErrorAction Stop |
         Where-Object { $_.Name -match "^(?:\d+-)?instance-$instanceId(?:-|\.)" })
       foreach ($file in $files) { Remove-Item -LiteralPath $file.FullName -Force -ErrorAction Stop }
       if (Test-Path -LiteralPath $profile) { Remove-Item -LiteralPath $profile -Force -Recurse -ErrorAction Stop }
       if (Test-Path -LiteralPath $profile) { return }
-      $remaining = @(Get-ChildItem -LiteralPath $SnapshotQueueDirectory -File -ErrorAction SilentlyContinue |
+      $remaining = @(Get-ChildItem -LiteralPath $SnapshotQueueDirectory -File -ErrorAction Stop |
         Where-Object { $_.Name -match "^(?:\d+-)?instance-$instanceId(?:-|\.)" })
       if ($remaining.Count -gt 0) { return }
+
+      # Limpa arquivos temporários órfãos desta instância, inclusive arquivos
+      # criados por um snapshot ou restauração interrompidos abruptamente.
+      if (Test-Path -LiteralPath $env:TEMP) {
+        foreach ($pattern in @("h2ads-profile-$instanceId-*.tar.gz", "h2ads-restore-$instanceId-*.tar.gz")) {
+          $tempArchives = @(Get-ChildItem -LiteralPath $env:TEMP -Filter $pattern -File -ErrorAction Stop)
+          foreach ($archive in $tempArchives) {
+            if ($archive.Attributes -band [System.IO.FileAttributes]::ReparsePoint) { return }
+            Remove-Item -LiteralPath $archive.FullName -Force -ErrorAction Stop
+          }
+          if (@(Get-ChildItem -LiteralPath $env:TEMP -Filter $pattern -File -ErrorAction Stop).Count -gt 0) { return }
+        }
+        $tempDirs = @(Get-ChildItem -LiteralPath $env:TEMP -Filter "h2ads-restore-$instanceId-*" -Directory -ErrorAction Stop)
+        foreach ($dir in $tempDirs) {
+          if ($dir.Attributes -band [System.IO.FileAttributes]::ReparsePoint) { return }
+          if (@(Get-ChildItem -LiteralPath $dir.FullName -Recurse -Force -Attributes ReparsePoint -ErrorAction Stop).Count -gt 0) { return }
+          Remove-Item -LiteralPath $dir.FullName -Recurse -Force -ErrorAction Stop
+        }
+        if (@(Get-ChildItem -LiteralPath $env:TEMP -Filter "h2ads-restore-$instanceId-*" -Directory -ErrorAction Stop).Count -gt 0) { return }
+      }
     } finally {
       try { $queueMutex.ReleaseMutex() } catch { }
       $queueMutex.Dispose()
+      Remove-Item -LiteralPath $DeletionPriorityPath -Force -ErrorAction SilentlyContinue
     }
   }
   try {
@@ -619,6 +664,7 @@ if ($SnapshotQueueWorker) {
     # Congela a lista desta rodada. Um item com erro nao pode bloquear snapshots de outras instancias.
     $pendingItems = @(Get-ChildItem -LiteralPath $SnapshotQueueDirectory -Filter "*.pending" -File -ErrorAction SilentlyContinue | Sort-Object LastWriteTimeUtc | Select-Object -First 8)
     foreach ($pending in $pendingItems) {
+      if (Test-H2AdsDeletionPriority) { break }
       if ($pending.Name -notmatch 'instance-(\d+)-') {
         # Invalid queue names are preserved for investigation, not deleted.
         continue
@@ -726,11 +772,12 @@ if ($Run) {
         try { Invoke-WorkerHeartbeat $config } catch { }
         $nextHeartbeatAt = $now.AddSeconds(20)
       }
+      # A exclusão tem prioridade sobre o disparo de novos backups.
+      try { Invoke-H2AdsPendingInstanceDeletion $config } catch { }
       if ($now -ge $nextSnapshotQueueCheckAt) {
         try { Start-H2AdsSnapshotQueueWorker } catch { }
-        $nextSnapshotQueueCheckAt = $now.AddMinutes(2)
+        $nextSnapshotQueueCheckAt = $now.AddSeconds(20)
       }
-      try { Invoke-H2AdsPendingInstanceDeletion $config } catch { }
       try { Invoke-PendingBrowserCommand $config } catch { }
       Start-Sleep -Seconds 2
     }
