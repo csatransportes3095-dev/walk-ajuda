@@ -190,9 +190,15 @@ export default function OrderH2AdsBrowserShortcut({ registrationId, subOrderInde
     const label = linkedInstance?.name || `instância #${shortcut.instanceId}`;
     if (!window.confirm(`DELETAR ${label}?\n\nA instância H2ADS e o vínculo com este pedido serão apagados. O pedido e o cliente não serão excluídos.`)) return;
     try {
-      await deleteInstance.mutateAsync({ id: shortcut.instanceId });
-      toast.success("Instância H2ADS deletada.");
+      const result = await deleteInstance.mutateAsync({ id: shortcut.instanceId });
       await refresh();
+      if (result.success) {
+        toast.success("Instância H2ADS excluída. Limpeza confirmada.");
+      } else if (result.pending) {
+        toast.info("Exclusão em andamento. Aguardando limpeza local e dos backups; não clique novamente.");
+      } else {
+        toast.error("Exclusão não confirmada. A instância permanece em verificação.");
+      }
     } catch (error) {
       toast.error(error instanceof Error ? error.message : "Não foi possível deletar a instância H2ADS.");
     }
