@@ -1,5 +1,6 @@
 import fs from "node:fs";
 import path from "node:path";
+import { runInNewContext } from "node:vm";
 import { describe, expect, it } from "vitest";
 import { assertH2AdsSchemaStatementSafe } from "./h2adsSchemaMigration";
 
@@ -112,11 +113,111 @@ describe("fundação multi-Worker H2 Ads", () => {
     expect(session).toContain('directBrowserEgress: "blocked_by_windows_firewall"');
     expect(session).toContain('const browserExecutable = process.env.H2ADS_BROWSER_EXECUTABLE');
     expect(session).toContain("KILL_SWITCH_CHECK_INTERVAL_MS = 5_000");
-    expect(session).toContain("triggerKillSwitch");
-    expect(session).toContain("taskkill.exe");
+    // Falha de proxy deve bloquear trafego SEM matar o Chrome.
+    expect(session).toContain("suspendProxyTraffic");
+    expect(session).toContain("resumeProxyTraffic");
+    expect(session).toContain("networkSuspended");
+    expect(session).toContain("closeRelay(frontRelay)");
+    expect(session).toContain("queueProfileSnapshot");
+    expect(session).not.toContain("triggerKillSwitch");
+    expect(session).not.toContain("terminateBrowserProcess");
+    expect(session).not.toContain("taskkill.exe");
     expect(session).toContain("--disable-quic");
     expect(session).toContain("--dns-prefetch-disable");
     expect(session).toContain("--force-webrtc-ip-handling-policy=disable_non_proxied_udp");
+  });
+
+  it("falha de telemetria nao fecha nem bloqueia o navegador com proxy saudavel", async () => {
+    const session = read("workers/windows/browser-session.mjs");
+    const start = session.indexOf("async function reportObservedIp() {");
+    const end = session.indexOf("async function enforceKillSwitch() {", start);
+    expect(start).toBeGreaterThan(-1);
+    expect(end).toBeGreaterThan(start);
+    const events: string[] = [];
+    const sandbox: Record<string, any> = {
+      browser: { exitCode: null }, relayPort: 9876,
+      rotationInProgress: false, ipCheckInProgress: false, networkSuspended: false, browserExitHandled: false,
+      lastReportedIp: "198.51.100.10",
+      checkIp: async () => "198.51.100.11",
+      writeSession: () => undefined,
+      post: async () => { throw new Error("panel_http_503"); },
+      panelFailure: () => { events.push("panel_offline"); },
+      suspendProxyTraffic: async () => { events.push("proxy_blocked"); },
+    };
+    runInNewContext(session.slice(start, end), sandbox);
+    await sandbox.reportObservedIp();
+    expect(events).toEqual(["panel_offline"]);
+    expect(sandbox.ipCheckInProgress).toBe(false);
+  });
+
+  it("falha do verificador suspende somente o trafego, sem encerrar o Chrome", async () => {
+    const session = read("workers/windows/browser-session.mjs");
+    const start = session.indexOf("async function reportObservedIp() {");
+    const end = session.indexOf("async function enforceKillSwitch() {", start);
+    expect(start).toBeGreaterThan(-1);
+    expect(end).toBeGreaterThan(start);
+    const events: string[] = [];
+    const sandbox: Record<string, any> = {
+      browser: { exitCode: null }, relayPort: 9876,
+      rotationInProgress: false, ipCheckInProgress: false, networkSuspended: false, browserExitHandled: false,
+      checkIp: async () => { throw new Error("proxy_tcp_timeout"); },
+      suspendProxyTraffic: async () => { events.push("proxy_suspended"); },
+      post: async () => { events.push("panel_post"); },
+      writeSession: () => undefined,
+    };
+    runInNewContext(session.slice(start, end), sandbox);
+    await sandbox.reportObservedIp();
+    expect(events).toEqual(["proxy_suspended"]);
+    expect(sandbox.browser.exitCode).toBeNull();
+  });
+
+  it("suspensao desliga relays antigos e conserva a porta local bloqueada", async () => {
+    const session = read("workers/windows/browser-session.mjs");
+    const start = session.indexOf("async function suspendProxyTraffic(");
+    const end = session.indexOf("async function resumeProxyTraffic()", start);
+    expect(start).toBeGreaterThan(-1);
+    expect(end).toBeGreaterThan(start);
+    const events: string[] = [];
+    const browser = { exitCode: null, pid: 12345 };
+    const sandbox: Record<string, any> = {
+      browser, browserExitHandled: false, networkSuspended: false, activeBackendPort: 8901, relayPort: 4567,
+      frontRelay: { kind: "front" }, backendRelay: { kind: "backend" },
+      classifyNetworkError: () => "proxy_tcp_timeout",
+      closeRelay: async (relay: { kind: string }) => { events.push("close_" + relay.kind); },
+      createFrontRelay: (port: number) => ({
+        kind: "front_blocked", port, listen: async () => { events.push("rebind_front"); },
+      }),
+      writeSession: (status: Record<string, string>) => { events.push(status.networkState); },
+    };
+    runInNewContext(session.slice(start, end), sandbox);
+    await sandbox.suspendProxyTraffic("proxy_tcp_timeout");
+    expect(sandbox.networkSuspended).toBe(true);
+    expect(sandbox.activeBackendPort).toBeUndefined();
+    expect(sandbox.frontRelay.port).toBe(4567);
+    expect(sandbox.backendRelay).toBeUndefined();
+    expect(browser.pid).toBe(12345);
+    expect(events).toEqual(["close_front", "close_backend", "rebind_front", "suspended"]);
+  });
+
+  it("nao reabre trafego durante recuperacao se a verificacao do proxy falha", async () => {
+    const session = read("workers/windows/browser-session.mjs");
+    const start = session.indexOf("async function resumeProxyTraffic() {");
+    const end = session.indexOf("async function reportObservedIp() {", start);
+    expect(start).toBeGreaterThan(-1);
+    expect(end).toBeGreaterThan(start);
+    const events: string[] = [];
+    const sandbox: Record<string, any> = {
+      networkSuspended: true, browserExitHandled: false, activeBackendPort: undefined,
+      backendRelay: undefined, frontRelay: { kind: "front_blocked" }, relayPort: 9876,
+      createBackendRelay: () => ({ port: 6543, listen: async () => undefined }),
+      checkIpThroughPort: async () => { throw new Error("proxy_tcp_timeout"); },
+      suspendProxyTraffic: async () => { events.push("keep_blocked"); },
+    };
+    runInNewContext(session.slice(start, end), sandbox);
+    await sandbox.resumeProxyTraffic();
+    expect(sandbox.networkSuspended).toBe(true);
+    expect(sandbox.activeBackendPort).toBeUndefined();
+    expect(events).toEqual(["keep_blocked"]);
   });
 
   it("mantém versões anteriores do perfil somente após validar o snapshot novo", () => {
