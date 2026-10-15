@@ -4,6 +4,7 @@ import { pipeline } from "node:stream/promises";
 import { and, eq } from "drizzle-orm";
 import { h2AdsInstanceBrowserRuns, h2AdsInstanceWorkerAssignments } from "../drizzle/schema";
 import { getDb } from "./db";
+import { assertH2AdsInstanceNotDeleting } from "./h2adsDeletionState";
 import { r2DeleteObjects, r2GetObjectStream, r2ListObjects, r2PutObjectStream } from "./r2Storage";
 
 const SNAPSHOT_PREFIX = "h2ads-profile-snapshots/";
@@ -98,6 +99,7 @@ export async function storeH2AdsProfileSnapshot(input: {
   if (!Number.isSafeInteger(input.plainBytes) || input.plainBytes < 1 || input.plainBytes > MAX_SNAPSHOT_BYTES) throw new Error("Tamanho de snapshot H2ADS inválido.");
   if (!/^[a-f0-9]{64}$/i.test(input.plainSha256)) throw new Error("SHA-256 de snapshot H2ADS inválido.");
 
+  await assertH2AdsInstanceNotDeleting(input.instanceId);
   const { db, assignment } = await requireAssignment(input.workerId, input.instanceId);
   const run = await db.select({ state: h2AdsInstanceBrowserRuns.state }).from(h2AdsInstanceBrowserRuns).where(and(eq(h2AdsInstanceBrowserRuns.instanceId, input.instanceId), eq(h2AdsInstanceBrowserRuns.workerId, input.workerId))).limit(1);
   if (run[0]?.state === "browser_open") throw new Error("Snapshot bloqueado enquanto o browser está aberto.");
@@ -119,6 +121,7 @@ export async function storeH2AdsProfileSnapshot(input: {
       throw new Error("Integridade do snapshot H2ADS não confere com o arquivo recebido.");
     }
 
+    await assertH2AdsInstanceNotDeleting(input.instanceId);
     await db.update(h2AdsInstanceWorkerAssignments).set({
       profileState: "snapshot_ready",
       profileVersion: nextVersion,
@@ -138,6 +141,7 @@ export async function storeH2AdsProfileSnapshot(input: {
 }
 
 export async function openH2AdsProfileSnapshot(workerId: number, instanceId: number) {
+  await assertH2AdsInstanceNotDeleting(instanceId);
   const { assignment } = await requireAssignment(workerId, instanceId);
   if (!assignment.snapshotKey || !assignment.integrityHash || !assignment.snapshotSizeBytes) return null;
   const encryptedBody = toNodeReadable(await r2GetObjectStream(assignment.snapshotKey));
@@ -187,6 +191,7 @@ export async function openH2AdsProfileSnapshot(workerId: number, instanceId: num
 }
 
 export async function recordH2AdsProfileRestoreResult(input: { workerId: number; instanceId: number; restored: boolean }) {
+  await assertH2AdsInstanceNotDeleting(input.instanceId);
   const { db, assignment } = await requireAssignment(input.workerId, input.instanceId);
   await db.update(h2AdsInstanceWorkerAssignments).set({
     profileState: input.restored ? (assignment.snapshotKey ? "snapshot_ready" : "local_only") : "restore_failed",
