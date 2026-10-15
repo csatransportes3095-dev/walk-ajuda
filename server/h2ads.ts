@@ -1,5 +1,6 @@
 import { beginH2AdsInstanceDeletion, assertH2AdsInstanceNotDeleting, getH2AdsDeletionRequest, finishH2AdsDeletionRequest } from "./h2adsDeletionState";
 import { r2DeleteH2AdsInstanceSnapshotsVerified } from "./r2Storage";
+import { deleteH2AdsIpHistory } from "./h2adsIpHistory";
 import { createHash, randomBytes, timingSafeEqual } from "node:crypto";
 import { and, asc, desc, eq, gt, isNull, sql } from "drizzle-orm";
 import { h2AdsBrowserWorkers, h2AdsGroups, h2AdsInstanceBrowserRuns, h2AdsInstanceNetworkProfiles, h2AdsInstanceProxyCredentials, h2AdsInstances, h2AdsInstanceWorkerAssignments, h2AdsProxyPool, h2AdsWorkerBrowserCommands, h2AdsWorkerCommands, h2AdsWorkerPairingCodes, type H2AdsBrowserWorker, type H2AdsGroup, type H2AdsInstance, type H2AdsInstanceBrowserRun, type H2AdsInstanceNetworkProfile, type H2AdsInstanceWorkerAssignment } from "../drizzle/schema";
@@ -172,12 +173,12 @@ export async function finalizeH2AdsInstancePermanentDeletion(id: number): Promis
   const request = await getH2AdsDeletionRequest(id);
   if (!request || request.state !== "local_removed") return false;
   await r2DeleteH2AdsInstanceSnapshotsVerified(id);
+  await deleteH2AdsIpHistory(id);
   const db = await requireH2AdsDb();
   await db.transaction(async tx => {
     const found = await tx.execute(sql`SELECT id FROM h2ads_instance_deletion_requests
       WHERE instanceId = ${id} AND state = 'local_removed' FOR UPDATE`);
     if (!(found[0] as unknown as Array<{id:number}>)[0]) throw new Error("Exclusão ainda não confirmada pelo Worker.");
-    await tx.execute(sql`DELETE FROM h2ads_instance_ip_history WHERE instanceId = ${id}`);
     await tx.delete(h2AdsWorkerBrowserCommands).where(eq(h2AdsWorkerBrowserCommands.instanceId,id));
     await tx.delete(h2AdsWorkerCommands).where(eq(h2AdsWorkerCommands.instanceId,id));
     await tx.delete(h2AdsInstanceBrowserRuns).where(eq(h2AdsInstanceBrowserRuns.instanceId,id));
