@@ -6,6 +6,9 @@ import { h2AdsWorkerBrowserCommands, h2AdsWorkerCommands } from "../drizzle/sche
 import { getDb } from "./db";
 import { authenticateH2AdsWorker, claimH2AdsWorker, claimNextH2AdsWorkerCommand, completeH2AdsWorkerBrowserCommand, completeH2AdsWorkerPreparation, getH2AdsInstance, getH2AdsProxyCredential, recordH2AdsBrowserRuntimeState, recordH2AdsWorkerHeartbeat } from "./h2ads";
 import { recordH2AdsRuntimeIp } from "./h2adsIpHistory";
+import { confirmH2AdsLocalRemoval, getNextH2AdsInstanceDeletion } from "./h2adsDeletionState";
+import { finalizeH2AdsInstancePermanentDeletion } from "./h2ads";
+
 import { decryptH2AdsProxy } from "./h2adsProxySecurity";
 import { openH2AdsProfileSnapshot, recordH2AdsProfileRestoreResult, storeH2AdsProfileSnapshot } from "./h2adsProfileSnapshots";
 
@@ -139,6 +142,36 @@ export function registerH2AdsWorkerRoute(app: Express): void {
       return;
     }
     res.status(204).end();
+  }));
+
+  app.get("/api/h2ads/worker/deletions/next", safeH2AdsWorkerRoute(async (req: Request, res: Response) => {
+    noStore(res);
+    const worker = await authenticateRequest(req, res);
+    if (!worker) return;
+    const pending = await getNextH2AdsInstanceDeletion(worker.id);
+    if (!pending) { res.status(204).end(); return; }
+    res.status(200).json({ instanceId: pending.instanceId, state: pending.state });
+  }));
+
+  app.post("/api/h2ads/worker/deletions/:instanceId/local-removed", safeH2AdsWorkerRoute(async (req: Request, res: Response) => {
+    noStore(res);
+    const worker = await authenticateRequest(req, res);
+    if (!worker) return;
+    const instanceId = Number(req.params.instanceId);
+    if (!Number.isSafeInteger(instanceId) || instanceId < 1) {
+      res.status(400).json({ error: "Instância inválida." }); return;
+    }
+    if (!(await confirmH2AdsLocalRemoval(worker.id, instanceId))) {
+      res.status(409).json({ error: "Confirmação de exclusão não pertence a este Worker." }); return;
+    }
+    try {
+      if (await finalizeH2AdsInstancePermanentDeletion(instanceId)) {
+        res.status(204).end(); return;
+      }
+    } catch {
+      // Fail closed: keep the deletion fence until storage and SQL are verified.
+    }
+    res.status(202).json({ pending: true });
   }));
 
   app.post("/api/h2ads/worker/profiles/:instanceId/snapshot", safeH2AdsWorkerRoute(async (req: Request, res: Response) => {
