@@ -158,9 +158,87 @@ function Test-H2AdsProfileHasBrowserData([string]$ProfileDirectory) {
   return $false
 }
 
+# The backup worker must NEVER tar a profile being used by Chrome or the Node
+# session runner. Read-only inspection; uncertainty delays upload, not user work.
+function Test-H2AdsProfileBusy([string]$ProfileDirectory) {
+  $lockPath = Join-Path $ProfileDirectory "h2ads-session-runner.lock"
+  if (Test-Path -LiteralPath $lockPath) {
+    try {
+      $lock = Get-Content -Raw -LiteralPath $lockPath -ErrorAction Stop | ConvertFrom-Json -ErrorAction Stop
+      $lockPid = [int]$lock.pid
+      if ($lockPid -gt 0 -and (Get-Process -Id $lockPid -ErrorAction SilentlyContinue)) { return $true }
+    } catch {
+      # Treat unreadable lock files as busy until they can be inspected.
+      return $true
+    }
+  }
+
+  $processes = @(Get-CimInstance Win32_Process -Filter "Name = 'chrome.exe'" -ErrorAction Stop)
+  foreach ($process in $processes) {
+    if (-not [string]::Equals([string]$process.ExecutablePath, $DedicatedChromePath, [StringComparison]::OrdinalIgnoreCase)) { continue }
+    $commandLine = [string]$process.CommandLine
+    if ([string]::IsNullOrWhiteSpace($commandLine)) { return $true }
+    if ($commandLine.IndexOf("--user-data-dir=", [StringComparison]::OrdinalIgnoreCase) -ge 0 -and
+        $commandLine.IndexOf($ProfileDirectory, [StringComparison]::OrdinalIgnoreCase) -ge 0) { return $true }
+  }
+  return $false
+}
+
+# Persist only approved diagnostic categories. Never write HTTP bodies, keys,
+# profile paths or proxy credentials to diagnostic files.
+function Get-H2AdsSnapshotFailureCode([object]$ErrorRecord) {
+  $message = [string]$ErrorRecord.Exception.Message
+  $details = [string]$ErrorRecord.ErrorDetails.Message
+  $status = 0
+  try { $status = [int]$ErrorRecord.Exception.Response.StatusCode } catch { }
+
+  if ($status -eq 409 -and [string]::IsNullOrWhiteSpace($details)) {
+    try {
+      $stream = $ErrorRecord.Exception.Response.GetResponseStream()
+      if ($stream) {
+        $reader = New-Object System.IO.StreamReader($stream)
+        try { $details = $reader.ReadToEnd() } finally { $reader.Dispose() }
+      }
+    } catch { }
+  }
+  $reason = "$message $details"
+  if ($reason -match "profile_busy_local") { return "profile_busy_local" }
+  if ($reason -match "profile_not_ready") { return "profile_not_ready" }
+  if ($reason -match "(?i)snapshot bloqueado enquanto.*browser.*aberto") { return "server_browser_open" }
+  if ($reason -match "(?i)BACKUP_ENCRYPTION_KEY") { return "encryption_key_unavailable" }
+  if ($reason -match "(?i)\b(R2|bucket|storage)\b") { return "storage_unavailable" }
+  if ($reason -match "(?i)banco indispon") { return "database_unavailable" }
+  if ($reason -match "(?i)inst.ncia n.o atribu") { return "assignment_rejected" }
+  if ($status -eq 409) { return "http_409_unclassified" }
+  if ($status -eq 401 -or $status -eq 403) { return "authentication_rejected" }
+  if ($status -eq 429) { return "rate_limited" }
+  if ($status -ge 500) { return "server_unavailable" }
+  if ($reason -match "(?i)timed out|timeout|tempo limite") { return "network_timeout" }
+  if ($reason -match "(?i)connect|dns|resolve|conex") { return "network_unavailable" }
+  return "snapshot_upload_failed"
+}
+
+# Called only while holding the named snapshot-worker mutex. Existing
+# .pending markers win: never overwrite one, and never remove a working marker.
+function Restore-H2AdsAbandonedSnapshotQueue {
+  $cutoff = (Get-Date).ToUniversalTime().AddMinutes(-30)
+  $abandoned = @(Get-ChildItem -LiteralPath $SnapshotQueueDirectory -Filter "*.pending.working" -File -ErrorAction SilentlyContinue |
+    Where-Object { $_.LastWriteTimeUtc -lt $cutoff } | Sort-Object LastWriteTimeUtc)
+  foreach ($item in $abandoned) {
+    $retryPath = $item.FullName -replace '\.working$', ''
+    if (Test-Path -LiteralPath $retryPath) { continue }
+    try {
+      Move-Item -LiteralPath $item.FullName -Destination $retryPath -ErrorAction Stop
+    } catch {
+      # Keep the source .working marker intact for later review/recovery.
+    }
+  }
+}
+
 function Send-H2AdsProfileSnapshot([object]$Config, [int]$InstanceId) {
   $profileDirectory = Join-Path $ProfilesDirectory "instance-$InstanceId"
   if (!(Test-H2AdsProfileHasBrowserData $profileDirectory)) { return $false }
+  if (Test-H2AdsProfileBusy $profileDirectory) { throw "profile_busy_local" }
   if (!(Get-Command tar.exe -ErrorAction SilentlyContinue)) { throw "tar.exe não está disponível para criar o snapshot H2ADS." }
   $archivePath = Join-Path $env:TEMP "h2ads-profile-$InstanceId-$([guid]::NewGuid().ToString('N')).tar.gz"
   try {
@@ -168,6 +246,7 @@ function Send-H2AdsProfileSnapshot([object]$Config, [int]$InstanceId) {
     if ($LASTEXITCODE -ne 0 -or !(Test-Path $archivePath)) { throw "Não foi possível compactar o perfil H2ADS." }
     $file = Get-Item $archivePath
     if ($file.Length -lt 1) { throw "Snapshot H2ADS vazio." }
+    if (Test-H2AdsProfileBusy $profileDirectory) { throw "profile_busy_local" }
     $sha256 = (Get-FileHash -Algorithm SHA256 -Path $archivePath).Hash.ToLowerInvariant()
     $headers = Get-WorkerHeaders $Config
     $headers["X-H2ADS-Snapshot-Size"] = [string]$file.Length
@@ -181,8 +260,10 @@ function Send-H2AdsProfileSnapshot([object]$Config, [int]$InstanceId) {
 
 function Start-H2AdsSnapshotQueueWorker {
   if (!(Test-Path $SnapshotQueueDirectory)) { return }
-  $pending = Get-ChildItem -Path $SnapshotQueueDirectory -Filter "*.pending" -File -ErrorAction SilentlyContinue | Select-Object -First 1
-  if (!$pending) { return }
+  $pending = Get-ChildItem -LiteralPath $SnapshotQueueDirectory -Filter "*.pending" -File -ErrorAction SilentlyContinue | Select-Object -First 1
+  $staleWorking = Get-ChildItem -LiteralPath $SnapshotQueueDirectory -Filter "*.pending.working" -File -ErrorAction SilentlyContinue |
+    Where-Object { $_.LastWriteTimeUtc -lt (Get-Date).ToUniversalTime().AddMinutes(-30) } | Select-Object -First 1
+  if (!$pending -and !$staleWorking) { return }
   $arguments = "-NoProfile -NonInteractive -ExecutionPolicy Bypass -WindowStyle Hidden -File `"$InstalledScriptPath`" -SnapshotQueueWorker"
   $process = Start-Process -FilePath "powershell.exe" -ArgumentList $arguments -WindowStyle Hidden -PassThru
   try { $process.PriorityClass = "BelowNormal" } catch { }
@@ -191,7 +272,9 @@ function Start-H2AdsSnapshotQueueWorker {
 function Queue-H2AdsProfileSnapshot([int]$InstanceId) {
   if ($InstanceId -lt 1) { return }
   New-Item -ItemType Directory -Force -Path $SnapshotQueueDirectory | Out-Null
-  Get-ChildItem -Path $SnapshotQueueDirectory -Filter "*-instance-$InstanceId-*.pending" -File -ErrorAction SilentlyContinue | Remove-Item -Force -ErrorAction SilentlyContinue
+  # Reuse an existing unsaved request; never erase older pending evidence.
+  $existing = Get-ChildItem -LiteralPath $SnapshotQueueDirectory -Filter "*-instance-$InstanceId-*.pending" -File -ErrorAction SilentlyContinue | Select-Object -First 1
+  if ($existing) { Start-H2AdsSnapshotQueueWorker; return }
   $stamp = (Get-Date).ToUniversalTime().ToString("yyyyMMddHHmmssfff")
   $pendingPath = Join-Path $SnapshotQueueDirectory "$stamp-instance-$InstanceId-$([guid]::NewGuid().ToString('N')).pending"
   [string]$InstanceId | Set-Content -Path $pendingPath -Encoding ASCII -NoNewline
@@ -393,14 +476,29 @@ function Invoke-H2AdsPendingInstanceDeletion([object]$Config) {
     $queueWorker = @(Get-CimInstance Win32_Process -Filter "Name = 'powershell.exe' OR Name = 'pwsh.exe'" -ErrorAction Stop |
       Where-Object { $_.CommandLine -match '(?i)-SnapshotQueueWorker\b' })
     if ($queueWorker.Count -gt 0) { return }
-    $files = @(Get-ChildItem -LiteralPath $SnapshotQueueDirectory -File -ErrorAction SilentlyContinue |
-      Where-Object { $_.Name -match "^(?:\d+-)?instance-$instanceId(?:-|\.)" })
-    foreach ($file in $files) { Remove-Item -LiteralPath $file.FullName -Force -ErrorAction Stop }
-    if (Test-Path -LiteralPath $profile) { Remove-Item -LiteralPath $profile -Force -Recurse -ErrorAction Stop }
-    if (Test-Path -LiteralPath $profile) { return }
-    $remaining = @(Get-ChildItem -LiteralPath $SnapshotQueueDirectory -File -ErrorAction SilentlyContinue |
-      Where-Object { $_.Name -match "^(?:\d+-)?instance-$instanceId(?:-|\.)" })
-    if ($remaining.Count -gt 0) { return }
+    $safeWorkerKey = ([string]$Config.workerKey) -replace '[^A-Za-z0-9_-]', '_'
+    $createdNew = $false
+    $queueMutex = New-Object System.Threading.Mutex($true, "Local\H2AdsSnapshotQueue-$safeWorkerKey", [ref]$createdNew)
+    if (!$createdNew) { $queueMutex.Dispose(); return }
+    try {
+      if (Test-Path -LiteralPath $profile) {
+        $rootInfo = Get-Item -LiteralPath $profile -Force -ErrorAction Stop
+        if ($rootInfo.Attributes -band [System.IO.FileAttributes]::ReparsePoint) { return }
+        $linked = @(Get-ChildItem -LiteralPath $profile -Recurse -Force -Attributes ReparsePoint -ErrorAction Stop)
+        if ($linked.Count -gt 0) { return }
+      }
+      $files = @(Get-ChildItem -LiteralPath $SnapshotQueueDirectory -File -ErrorAction SilentlyContinue |
+        Where-Object { $_.Name -match "^(?:\d+-)?instance-$instanceId(?:-|\.)" })
+      foreach ($file in $files) { Remove-Item -LiteralPath $file.FullName -Force -ErrorAction Stop }
+      if (Test-Path -LiteralPath $profile) { Remove-Item -LiteralPath $profile -Force -Recurse -ErrorAction Stop }
+      if (Test-Path -LiteralPath $profile) { return }
+      $remaining = @(Get-ChildItem -LiteralPath $SnapshotQueueDirectory -File -ErrorAction SilentlyContinue |
+        Where-Object { $_.Name -match "^(?:\d+-)?instance-$instanceId(?:-|\.)" })
+      if ($remaining.Count -gt 0) { return }
+    } finally {
+      try { $queueMutex.ReleaseMutex() } catch { }
+      $queueMutex.Dispose()
+    }
   }
   try {
     Invoke-WebRequest -UseBasicParsing -Method Post -Uri "$($Config.panelUrl)/api/h2ads/worker/deletions/$instanceId/local-removed" -Headers $headers -TimeoutSec 15 | Out-Null
@@ -519,11 +617,13 @@ if ($SnapshotQueueWorker) {
     exit 0
   }
   try {
+    # Restore only abandoned requests while holding the exclusive snapshot mutex.
+    Restore-H2AdsAbandonedSnapshotQueue
     # Congela a lista desta rodada. Um item com erro nao pode bloquear snapshots de outras instancias.
-    $pendingItems = @(Get-ChildItem -Path $SnapshotQueueDirectory -Filter "*.pending" -File -ErrorAction SilentlyContinue | Sort-Object LastWriteTimeUtc)
+    $pendingItems = @(Get-ChildItem -LiteralPath $SnapshotQueueDirectory -Filter "*.pending" -File -ErrorAction SilentlyContinue | Sort-Object LastWriteTimeUtc | Select-Object -First 8)
     foreach ($pending in $pendingItems) {
       if ($pending.Name -notmatch 'instance-(\d+)-') {
-        Remove-Item -Force $pending.FullName -ErrorAction SilentlyContinue
+        # Invalid queue names are preserved for investigation, not deleted.
         continue
       }
       $instanceId = [int]$Matches[1]
@@ -543,7 +643,10 @@ if ($SnapshotQueueWorker) {
           if ($saved) { break }
           $lastError = "profile_not_ready"
         } catch {
-          $lastError = [string]$_.Exception.Message
+          $lastError = Get-H2AdsSnapshotFailureCode $_
+          # Conflicts, busy profiles and missing configuration do not improve
+          # with immediate repetition. Retry them in a later queue cycle.
+          if ($lastError -in @("profile_busy_local", "server_browser_open", "http_409_unclassified", "encryption_key_unavailable", "storage_unavailable", "assignment_rejected")) { break }
         }
       }
 
@@ -554,8 +657,8 @@ if ($SnapshotQueueWorker) {
       }
 
       $retryPath = $workingPath -replace '\.working$', ''
-      if (Test-Path $workingPath) {
-        Move-Item -Path $workingPath -Destination $retryPath -Force -ErrorAction SilentlyContinue
+      if ((Test-Path -LiteralPath $workingPath) -and !(Test-Path -LiteralPath $retryPath)) {
+        Move-Item -LiteralPath $workingPath -Destination $retryPath -ErrorAction SilentlyContinue
       }
       $safeError = if ([string]::IsNullOrWhiteSpace($lastError)) { "profile_snapshot_failed" } else { $lastError }
       if ($safeError.Length -gt 240) { $safeError = $safeError.Substring(0, 240) }
