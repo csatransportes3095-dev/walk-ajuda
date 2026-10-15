@@ -581,17 +581,23 @@ export default function GeradorChassiPublico({ embedded = false, customer }: {
               <label className="mb-1.5 block text-xs font-semibold text-zinc-300">
                 Quantidade
               </label>
-              <select
-                value={quantidade}
-                onChange={(e) => setQuantidade(Number(e.target.value))}
-                className="w-full rounded-xl border border-zinc-700 bg-zinc-800 px-3 py-2.5 text-sm text-white outline-none transition-colors focus:border-cyan-500"
-              >
-                {[1, 2, 3, 5, 10].map((n) => (
-                  <option key={n} value={n}>
-                    {n} chassi{n > 1 ? "s" : ""}
-                  </option>
-                ))}
-              </select>
+              {customer ? (
+                <select
+                  value={quantidade}
+                  onChange={(e) => setQuantidade(Number(e.target.value))}
+                  className="w-full rounded-xl border border-zinc-700 bg-zinc-800 px-3 py-2.5 text-sm text-white outline-none transition-colors focus:border-cyan-500"
+                >
+                  {[1, 2, 3, 5, 10].map((n) => (
+                    <option key={n} value={n}>
+                      {n} chassi{n > 1 ? "s" : ""}
+                    </option>
+                  ))}
+                </select>
+              ) : (
+                <div className="w-full rounded-xl border border-zinc-700 bg-zinc-800 px-3 py-2.5 text-sm text-white">
+                  1 chassi
+                </div>
+              )}
             </div>
           </div>
 
