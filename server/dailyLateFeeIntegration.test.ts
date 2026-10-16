@@ -47,6 +47,7 @@ describe("daily late fee production integration", () => {
     expect(router).toContain("AND COALESCE(lateFeeAdminOverrideActive,0)=");
     expect(router).toContain("AND COALESCE(lateFeeAdminOverrideBaseline,-1)=");
     expect(router).toContain("if (overrideActive === 1 && overrideValue > 0) continue");
+    expect(router).toContain("if (isSystemRestoreLocked()) return");
     expect(router).toContain("AND NOT (l.status='aprovado' AND l.pixSentAt IS NULL)");
     expect(router).toContain("autoApplyLateFees: adminProcedure.mutation(() => reconcileDailyLoanLateFees())");
   });
