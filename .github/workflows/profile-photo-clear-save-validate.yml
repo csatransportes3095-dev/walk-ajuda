@@ -1,0 +1,101 @@
+name: Profile photo clear-save validation
+on:
+  push:
+    branches: [fix/profile-photo-clear-save-20261016]
+    paths:
+      - '.github/workflows/profile-photo-clear-save-validate.yml'
+      - 'client/src/lib/confirmedProfilePhotoSave.ts'
+      - 'scripts/apply-profile-photo-clear-save-20261016.mjs'
+      - 'scripts/test-profile-photo-clear-save.mjs'
+  workflow_dispatch:
+permissions:
+  contents: write
+concurrency:
+  group: profile-photo-clear-save-validation
+  cancel-in-progress: true
+jobs:
+  validate:
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    steps:
+      - uses: actions/checkout@v4
+      - uses: pnpm/action-setup@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '22'
+          cache: pnpm
+      - name: Apply only scoped UI wiring
+        run: |
+          node scripts/apply-profile-photo-clear-save-20261016.mjs
+          before=$(sha256sum client/src/pages/AdminCustomers.tsx)
+          node scripts/apply-profile-photo-clear-save-20261016.mjs
+          test "$before" = "$(sha256sum client/src/pages/AdminCustomers.tsx)"
+      - name: Dependencies
+        run: pnpm install --frozen-lockfile > /tmp/photo-clear-install.log 2>&1 || { tail -n 30 /tmp/photo-clear-install.log; exit 1; }
+      - name: Actual query-cache race, UI callback and backend empty-save regression
+        run: node --experimental-strip-types --test scripts/test-profile-photo-clear-save.mjs
+      - name: Keep published photo recovery and notes behavior
+        run: |
+          pnpm exec vitest run server/customerProfilePhoto.test.ts server/customerProfileRequirements.test.ts > /tmp/photo-clear-regression.log 2>&1 || { tail -n 60 /tmp/photo-clear-regression.log; exit 1; }
+          tail -n 12 /tmp/photo-clear-regression.log
+          node --experimental-strip-types --test scripts/test-order-notes-autosave.mjs
+      - name: Compare TypeScript diagnostics with immutable production reference
+        shell: bash
+        run: |
+          git fetch --depth=1 origin cb4a79c4e78bcb29936efe3d3b3d4f33445231a1
+          git worktree add --detach /tmp/photo-clear-baseline cb4a79c4e78bcb29936efe3d3b3d4f33445231a1
+          ln -s "$PWD/node_modules" /tmp/photo-clear-baseline/node_modules
+          set +e
+          (cd /tmp/photo-clear-baseline && pnpm check) > /tmp/photo-clear-before.log 2>&1
+          before=$?
+          pnpm check > /tmp/photo-clear-after.log 2>&1
+          after=$?
+          set -e
+          if [ "$before" -ne 0 ] && ! grep -q 'error TS' /tmp/photo-clear-before.log; then tail -n 40 /tmp/photo-clear-before.log; exit 1; fi
+          if [ "$after" -ne 0 ] && ! grep -q 'error TS' /tmp/photo-clear-after.log; then tail -n 40 /tmp/photo-clear-after.log; exit 1; fi
+          python3 - <<'PY'
+          import re
+          from collections import Counter
+          from pathlib import Path
+          def diagnostics(file):
+            return Counter(re.sub(r'\(\d+,\d+\)', '', line) for line in Path(file).read_text().splitlines() if 'error TS' in line)
+          before=diagnostics('/tmp/photo-clear-before.log')
+          after=diagnostics('/tmp/photo-clear-after.log')
+          added=after-before
+          print('TYPECHECK_BASELINE',sum(before.values()),'CANDIDATE',sum(after.values()),'NEW',sum(added.values()))
+          for line,count in added.items(): print(count,line)
+          if added: raise SystemExit(1)
+          PY
+      - name: Validate actual Render patch chain, regressions and production build
+        run: |
+          mkdir -p /tmp/photo-clear-production
+          tar --exclude=.git --exclude=node_modules -cf - . | tar -xf - -C /tmp/photo-clear-production
+          ln -s "$PWD/node_modules" /tmp/photo-clear-production/node_modules
+          python3 - <<'PY'
+          import re,subprocess
+          from pathlib import Path
+          root=Path('/tmp/photo-clear-production')
+          scripts=re.findall(r'&& node (scripts/[^\s\\]+\.mjs)',(root/'Dockerfile').read_text())
+          with open('/tmp/photo-clear-production.log','w') as log:
+            try:
+              for script in scripts:
+                subprocess.run(['node',script],cwd=root,check=True,stdout=log,stderr=log)
+              subprocess.run(['node','--experimental-strip-types','--test','scripts/test-profile-photo-clear-save.mjs'],cwd=root,check=True,stdout=log,stderr=log)
+              subprocess.run(['pnpm','build'],cwd=root,check=True,stdout=log,stderr=log)
+            except Exception:
+              log.flush()
+              print('\n'.join(Path('/tmp/photo-clear-production.log').read_text().splitlines()[-70:]))
+              raise
+          print('RENDER_PATCHES_OK',len(scripts),'PATCHED_REGRESSIONS_OK','PRODUCTION_BUILD_OK')
+          PY
+      - name: Commit tested wiring to isolated branch only
+        run: |
+          git diff --check
+          git config user.name 'github-actions[bot]'
+          git config user.email '41898282+github-actions[bot]@users.noreply.github.com'
+          git add client/src/pages/AdminCustomers.tsx
+          if ! git diff --cached --quiet; then
+            git commit -m 'fix(fotos): confirm one photo save before closing editor; keep cleared URL visible'
+            git push origin HEAD:fix/profile-photo-clear-save-20261016
+          fi
+          echo "VALIDATED_SOURCE_COMMIT=$(git rev-parse HEAD)"
