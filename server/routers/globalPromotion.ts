@@ -14,7 +14,7 @@ export const globalPromotionRouter = router({
       schedule: z.union([
         z.null(),
         z.object({ mode: z.literal("period"), startAt: z.string(), endAt: z.string() }).strict(),
-        z.object({ mode: z.literal("weekly"), weekdays: z.array(z.number().int().min(0).max(6)), startTime: z.string(), endTime: z.string(), startsOn: z.string(), endsOn: z.string() }).strict(),
+        z.object({ mode: z.literal("weekly"), weekdays: z.array(z.number().int().min(0).max(6)), startTime: z.string(), endTime: z.string(), startsOn: z.string().optional(), endsOn: z.string().optional() }).strict(),
       ]).optional(),
     }))
     .mutation(async ({ input }) => {

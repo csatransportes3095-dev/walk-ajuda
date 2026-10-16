@@ -1,7 +1,7 @@
 name: Promo schedule and original visual validation
 on:
   push:
-    branches: [fix/vitrine-textos-e-promo-agendada-20261016]
+    branches: [fix/vitrine-textos-e-promo-agendada-20261016, fix/promocao-geral-prioridade-layout-semanal-20261016]
   workflow_dispatch:
 permissions:
   contents: read
@@ -32,6 +32,8 @@ jobs:
           assert.match(card, /scheduleCountdown && <div role="timer"/);
           assert.match(css, /@container \(max-width: 425px\)/);
           assert.match(css, /container-type: inline-size/);
+          assert.doesNotMatch(css, /font-size: clamp/);
+          assert.match(readFileSync("client/src/pages/AdminGlobalPromotion.tsx", "utf8"), /scheduleMode === "period" &&/);
           const adm = readFileSync("client/src/pages/AdminGlobalPromotion.tsx", "utf8");
           assert.match(adm, /Dias da semana e horários recorrentes/);
           assert.match(adm, /Data de início/);
@@ -40,8 +42,8 @@ jobs:
           NODE
       - name: TypeScript compared to immutable previous production commit
         run: |
-          git fetch --no-tags --depth=1 origin 294701b54880efce109e977ec921ec1a1d88dca5
-          git worktree add --detach /tmp/schedule-reference 294701b54880efce109e977ec921ec1a1d88dca5
+          git fetch --no-tags --depth=1 origin 1b1fd341043717cd054f6876119688eb2117c4fe
+          git worktree add --detach /tmp/schedule-reference 1b1fd341043717cd054f6876119688eb2117c4fe
           ln -s "$PWD/node_modules" /tmp/schedule-reference/node_modules
           (cd /tmp/schedule-reference && pnpm check > /tmp/ts-before.log 2>&1) || true
           pnpm check > /tmp/ts-after.log 2>&1 || true
