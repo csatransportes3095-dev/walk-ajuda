@@ -2,7 +2,7 @@ import { useEffect, useState } from "react";
 import { Link } from "wouter";
 import { toast } from "sonner";
 import { trpc } from "@/lib/trpc";
-import { calculateGlobalPromotionPrice, globalPromotionLabel, globalPromotionWindow, isValidGlobalPromotionSchedule, type GlobalPromotionSchedule, type GlobalPromotionWeeklyWindow } from "@shared/globalPromotion";
+import { calculateGlobalPromotionPrice, globalPromotionLabel, globalPromotionWindow, isValidGlobalPromotionSchedule, type GlobalPromotionSchedule, type GlobalPromotionWeeklyWindow, weeklyWindowOccurrence } from "@shared/globalPromotion";
 import AdminHeader from "@/components/AdminHeader";
 
 export default function AdminGlobalPromotion() {
@@ -69,6 +69,8 @@ export default function AdminGlobalPromotion() {
       : { mode: "weekly_windows", windows };
   const scheduleValid = schedule === null || isValidGlobalPromotionSchedule(schedule);
   const current = query.data;
+  const previews = windows.map(slot => isValidGlobalPromotionSchedule({mode:"weekly_windows",windows:[slot]}) ? weeklyWindowOccurrence(slot,nowMs) : null);
+  const dateLabel=(ts:number)=>new Intl.DateTimeFormat("pt-BR",{timeZone:"America/Sao_Paulo",dateStyle:"full",timeStyle:"short"}).format(new Date(ts));
   const windowState = globalPromotionWindow(current, nowMs);
   const statusLabel = !current?.active ? "DESATIVADA" : windowState.status === "active" ? "ATIVA" : windowState.status === "scheduled" ? "AGENDADA" : "ENCERRADA";
 
@@ -116,15 +118,17 @@ export default function AdminGlobalPromotion() {
               {windows.map((slot,index)=><div key={index} className="rounded-xl border border-violet-300/30 p-3 space-y-2">
                 <div className="flex items-center justify-between"><strong className="text-sm">Faixa {index+1}</strong><button type="button" disabled={windows.length===1} onClick={()=>setWindows(old=>old.filter((_,i)=>i!==index))} className="rounded-lg border border-rose-400/50 px-3 py-1 text-xs text-rose-200 disabled:opacity-30">Remover</button></div>
                 <div className="grid grid-cols-2 gap-2 sm:grid-cols-4">
-                  <label className="text-xs">Início — dia<select className="mt-1 w-full rounded-lg bg-white p-2 text-black" value={slot.startDay} onChange={e=>setWindows(old=>old.map((v,i)=>i===index?{...v,startDay:Number(e.target.value)}:v))}>{weekdayLabels.map((label,day)=><option key={day} value={day}>{label}</option>)}</select></label>
+                  <label className="text-xs">Início — dia<select className="mt-1 w-full rounded-lg bg-white p-2 text-black" value={slot.startDay} onChange={e=>setWindows(old=>old.map((v,i)=>i===index?{...v,startDay:Number(e.target.value),firstStartDate:undefined}:v))}>{weekdayLabels.map((label,day)=><option key={day} value={day}>{label}</option>)}</select></label>
                   <label className="text-xs">Início — hora<input type="time" className="mt-1 w-full rounded-lg bg-white p-2 text-black" value={slot.startTime} onChange={e=>setWindows(old=>old.map((v,i)=>i===index?{...v,startTime:e.target.value}:v))}/></label>
                   <label className="text-xs">Fim — dia<select className="mt-1 w-full rounded-lg bg-white p-2 text-black" value={slot.endDay} onChange={e=>setWindows(old=>old.map((v,i)=>i===index?{...v,endDay:Number(e.target.value)}:v))}>{weekdayLabels.map((label,day)=><option key={day} value={day}>{label}</option>)}</select></label>
                   <label className="text-xs">Fim — hora<input type="time" className="mt-1 w-full rounded-lg bg-white p-2 text-black" value={slot.endTime} onChange={e=>setWindows(old=>old.map((v,i)=>i===index?{...v,endTime:e.target.value}:v))}/></label>
                 </div>
+                <label className="block text-xs">Data da primeira ativação (opcional)<input type="date" className="mt-1 w-full rounded-lg bg-white p-2 text-black" value={slot.firstStartDate || ""} onChange={e=>setWindows(old=>old.map((v,i)=>i===index?{...v,firstStartDate:e.target.value||undefined}:v))}/></label>
                 <p className="text-xs text-emerald-300">{weekdayLong[slot.startDay]} {slot.startTime} → {weekdayLong[slot.endDay]} {slot.endTime}</p>
+                {previews[index] && <p className="rounded-lg border border-emerald-500/40 p-2 text-xs text-emerald-200">Próxima execução: {dateLabel(previews[index]!.startAt)} → {dateLabel(previews[index]!.endsAt)} • {previews[index]!.active?"EM ANDAMENTO":"AGENDADA"}</p>}
               </div>)}
               <button type="button" disabled={windows.length>=28} onClick={()=>setWindows(old=>[...old,{startDay:6,startTime:"14:01",endDay:0,endTime:"14:00"}])} className="rounded-lg border border-emerald-400/50 bg-emerald-900/20 px-3 py-2 text-sm font-bold text-emerald-200">+ Adicionar outra faixa</button>
-              <p className="text-xs text-amber-200">As faixas se repetem toda semana. Não podem se sobrepor. Exemplo: sexta 23h → sábado 14h; sábado 14h01 → domingo 14h.</p>
+              <p className="text-xs text-amber-200">As faixas se repetem toda semana. É possível definir a primeira data de ativação. Não podem se sobrepor. Exemplo: sexta 23h → sábado 14h; sábado 14h01 → domingo 14h.</p>
             </div>}
             {!scheduleValid && <p className="text-red-300 text-sm">Confira o período, o horário e os dias selecionados antes de salvar.</p>}
           </>}
