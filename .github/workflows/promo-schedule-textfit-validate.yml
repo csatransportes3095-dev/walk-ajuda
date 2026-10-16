@@ -18,7 +18,7 @@ jobs:
           cache: pnpm
       - run: pnpm install --frozen-lockfile
       - name: Schedule and pricing regression
-        run: pnpm exec vitest run shared/globalPromotion.test.ts shared/globalPromotion.schedule.test.ts server/vipPricing.test.ts
+        run: pnpm exec vitest run --config vitest.promo-schedule.config.ts shared/globalPromotion.test.ts shared/globalPromotion.schedule.test.ts server/vipPricing.test.ts
       - name: Check visual scope
         run: |
           node --input-type=module <<'NODE'
@@ -71,5 +71,5 @@ jobs:
           }
           console.log("Patches applied",scripts.length);
           NODE
-          pnpm exec vitest run shared/globalPromotion.test.ts shared/globalPromotion.schedule.test.ts
+          pnpm exec vitest run --config vitest.promo-schedule.config.ts shared/globalPromotion.test.ts shared/globalPromotion.schedule.test.ts
           pnpm build
