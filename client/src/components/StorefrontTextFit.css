@@ -1,15 +1,18 @@
-/* A identidade visual e as fontes originais têm prioridade. Nunca reduzir valores. */
+/* Correção estritamente de transbordamento. Preserve tipografia, grid e selo originais. */
 .h2-text-fit { container-type: inline-size; }
 .h2-text-fit__choice-name { overflow-wrap: anywhere; }
 .h2-text-fit__prices > *, .h2-text-fit__actions > * { min-width: 0; }
-@container (max-width: 425px) {
-  .h2-text-fit__prices { grid-template-columns: minmax(0,1fr) !important; gap: 12px !important; }
-  .h2-text-fit__prices > div:last-child { justify-self: end; min-width: 108px; }
-  .h2-text-fit__main-price { white-space: normal !important; overflow-wrap: anywhere; }
-  .h2-text-fit__actions { grid-template-columns: minmax(0,1.22fr) minmax(0,.9fr); }
+/* Não transformar em coluna a área do preço no celular: o selo deve ficar ao lado. */
+@container (max-width: 420px) {
+  .h2-text-fit__price-before { flex-wrap: wrap; white-space: normal; }
+  .h2-text-fit__old-price, .h2-text-fit__main-price { white-space: normal !important; }
+  .h2-text-fit__main-price { overflow-wrap: anywhere; }
   .h2-text-fit__action { min-width: 0; white-space: normal; text-align: center; }
   .h2-text-fit__choice-head { flex-wrap: wrap; row-gap: 6px; }
 }
-@container (max-width: 300px) {
+/* Apenas em larguras extremas, quando nem os valores completos cabem lado a lado. */
+@container (max-width: 270px) {
+  .h2-text-fit__prices { grid-template-columns: minmax(0,1fr) !important; }
+  .h2-text-fit__prices > div:last-child { justify-self: start; }
   .h2-text-fit__actions { grid-template-columns: minmax(0,1fr); }
 }
