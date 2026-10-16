@@ -39,7 +39,7 @@ import { adjustCustomerH2Score, getCustomerH2ScoreSummary, getH2ScoreCustomerDir
 import { CUSTOMER_ROUTES, ensureCustomerIdentityInfrastructure, findMainCustomerByIdentity, getRouteAccess, getRouteReleaseMode, listRouteReleaseModes, normalizeCustomerCpf, normalizeCustomerEmail, normalizeCustomerPhone, requestCustomerRouteAccess, setCustomerRoutePermissions, setRouteReleaseMode } from "./customerAccess";
 import { adCampaignsRouter } from "./routers/adCampaigns";
 import { globalPromotionRouter } from "./routers/globalPromotion";
-import { parseGlobalPromotionConfig, globalPromotionIsActive, globalPromotionPrice } from "../shared/globalPromotion";
+import { parseGlobalPromotionConfig, globalPromotionOverridesIndividual, globalPromotionPrice } from "../shared/globalPromotion";
 import { optionPriceModelsRouter, checkOptionPriceModelCheckoutAccess, cloneOptionPriceModelsComplete } from "./routers/optionPriceModels";
 import { vipMembershipsRouter, getVipMembershipSnapshotMap, isVipMemberByPhone } from "./routers/vipMemberships";
 import { vipInstallmentsRouter } from "./routers/vipInstallments";
@@ -1544,7 +1544,7 @@ export const appRouter = router({
           // Promoção geral sempre vence os descontos de cupom, VIP e revendedor.
           // O backend não confia no valor enviado pelo navegador.
           const globalPromo = parseGlobalPromotionConfig(await getSetting("global_promotion_config_v1"));
-          if (globalPromotionIsActive(globalPromo)) {
+          if (globalPromotionOverridesIndividual(globalPromo)) {
             if (!input.optionId || !input.productId) {
               return { success: false, message: "Seleção do produto ausente. Reabra a compra para confirmar a promoção geral." };
             }
