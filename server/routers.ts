@@ -748,6 +748,11 @@ export const appRouter = router({
         cardBgColor: z.string().nullable().optional(),
         cardTextColor: z.string().nullable().optional(),
         cardBtnColor: z.string().nullable().optional(),
+        badgeBgColor: z.string().regex(/^#[0-9a-fA-F]{6}$/).nullable().optional(),
+        badgeTextColor: z.string().regex(/^#[0-9a-fA-F]{6}$/).nullable().optional(),
+        badgeBorderColor: z.string().regex(/^#[0-9a-fA-F]{6}$/).nullable().optional(),
+        badgeSize: z.enum(["small", "medium", "large"]).nullable().optional(),
+        badgeAlign: z.enum(["left", "center", "right"]).nullable().optional(),
         isActive: z.number().optional(), sortOrder: z.number().optional(),
         resellerDiscount: z.number().nullable().optional(), // % de desconto por produto para revendedores
         deliveryDays: z.string().nullable().optional(), // Ex: "2 a 5 dias úteis"
