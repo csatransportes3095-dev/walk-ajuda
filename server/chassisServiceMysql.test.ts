@@ -84,23 +84,6 @@ describe.skipIf(!url)("créditos e sessões com MySQL isolado", () => {
     const [rows] = await pool.query<RowDataPacket[]>("SELECT COUNT(*) AS amount FROM h2_generated_vin_registry WHERE vin = ?", [fresh]);
     expect(Number(rows[0].amount)).toBe(0);
   });
-  it("gera testes sintéticos para cliente sem repetição e debita exatamente os créditos", async () => {
-    const { user, tokenHash } = await account(3);
-    const input = { ...generationInput(), marca: "Hyundai", modelo: "HB20 Limited Plus", yearCode: "N" as const, originalVin: "9BHCP51AANP304551", syntheticLab: true, quantity: 2 };
-    const result = await store.generate(user.id, tokenHash, input);
-    expect(result.vins).toHaveLength(2);
-    expect(new Set(result.vins).size).toBe(2);
-    expect(result.vins.every(vin => vin.startsWith("0H2T") && vin[9] === "N")).toBe(true);
-    expect(result.balance).toBe(1);
-    const [registry] = await pool.query<RowDataPacket[]>("SELECT COUNT(*) AS amount FROM h2_generated_vin_registry WHERE vin IN (?, ?)", result.vins);
-    expect(Number(registry[0].amount)).toBe(2);
-    const replay = await store.generate(user.id, tokenHash, input);
-    expect(replay.vins).toEqual(result.vins);
-    expect(replay.replayed).toBe(true);
-    expect((await store.listUsers())[0].balance).toBe(1);
-    await expect(store.generate(user.id, tokenHash, { ...input, requestId: randomUUID(), quantity: 1, yearCode: "T" })).rejects.toThrow("mesmo ano");
-    expect((await store.listUsers())[0].balance).toBe(1);
-  });
   it("não permite remoção além do saldo e não repete o mesmo ajuste", async () => {
     const { user } = await account(2);
     await expect(store.adjustCredits(user.id, -3, "test", "test-admin", randomUUID())).rejects.toThrow();

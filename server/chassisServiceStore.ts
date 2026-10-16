@@ -1,7 +1,6 @@
 import { randomBytes, randomUUID } from "node:crypto";
 import { createPool, type Pool, type PoolConnection, type ResultSetHeader, type RowDataPacket } from "mysql2/promise";
 import { gerarMultiplosVINs, gerarVINsDeTestePorChassiOriginal, obterPerfilFabricanteOficial } from "../client/src/lib/vinGenerator";
-import { gerarIdentificadorLaboratorio } from "../client/src/lib/chassisTestIdentifier";
 import { assertValidVinReservationBatch } from "./vinRegistryCore";
 import { assertChassisCredits, chassisGenerationHash, chassisTokenHash, ChassisServiceError, hashChassisPassword, normalizeChassisPhone, verifyChassisPassword } from "./chassisServiceCore";
 import type { ChassisGenerationInput, ChassisGenerationResult } from "../shared/chassisService";
@@ -32,15 +31,6 @@ function generationResult(row: GenerationRow, balance: number, replayed: boolean
 }
 
 export function generateChassisCandidates(input: ChassisGenerationInput, amount: number): string[] {
-  if (input.syntheticLab) {
-    if (!input.originalVin || input.originalVin[9] !== input.yearCode) throw new ChassisServiceError("BAD_REQUEST", "Informe o chassi original e selecione o mesmo ano.");
-    const used = new Set<string>([input.originalVin]);
-    return Array.from({ length: amount }, () => {
-      const value = gerarIdentificadorLaboratorio(input.originalVin!, used);
-      used.add(value);
-      return value;
-    });
-  }
   if (input.originalVin) {
     if (input.originalVin[9] !== input.yearCode) throw new ChassisServiceError("BAD_REQUEST", "O ano selecionado precisa ser o mesmo do chassi original.");
     return gerarVINsDeTestePorChassiOriginal(input.originalVin, amount);

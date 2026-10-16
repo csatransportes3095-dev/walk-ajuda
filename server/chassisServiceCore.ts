@@ -45,7 +45,7 @@ export function chassisTokenHash(token: string): string {
 }
 
 export function chassisGenerationHash(input: ChassisGenerationInput): string {
-  return createHash("sha256").update(JSON.stringify({ marca: input.marca, modelo: input.modelo, yearCode: input.yearCode, quantity: input.quantity, originalVin: input.originalVin || "", syntheticLab: input.syntheticLab === true })).digest("hex");
+  return createHash("sha256").update(JSON.stringify({ marca: input.marca, modelo: input.modelo, yearCode: input.yearCode, quantity: input.quantity, originalVin: input.originalVin || "" })).digest("hex");
 }
 
 export function assertChassisSameOrigin(origin: string | undefined, host: string | undefined): void {
