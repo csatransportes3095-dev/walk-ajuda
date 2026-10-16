@@ -11,6 +11,7 @@ import { spreadsheetSessions } from "../../drizzle/schema";
 import { eq, sql as drizzleSql } from "drizzle-orm";
 import { applyH2ScoreEventFromSubmission, approveH2ScoreSubmission, backfillLegacyH2ScoreEvents, getClientH2ScoreSummary, getCustomerH2ScoreHistory, getCustomerH2ScoreSummary, getH2ScoreCustomerDirectory, getH2ScoreSubmissionMap, getLoanH2ScoreConfig, registerH2ScoreSubmission, refuseH2ScoreSubmission, setCustomerH2ScoreExact } from "../loans/h2Score";
 import { calculateLateFeeDetailsForInstallment, calculateLateFeeForInstallment } from "../loans/lateFee";
+import { isSystemRestoreLocked } from "../backupRestoreService";
 import { calculateParceladoFromAdminPlan } from "../loans/parcelado";
 import PDFDocument from "pdfkit";
 import { sendMailDirect } from "../_core/sendMailDirect";
@@ -641,6 +642,7 @@ export function reconcileDailyLoanLateFees(): Promise<{ ok: boolean; applied: nu
   if (activeLoanLateFeeReconciliation) return activeLoanLateFeeReconciliation;
 
   const job = (async () => {
+    if (isSystemRestoreLocked()) return { ok: true, applied: 0, message: "Restauração em andamento" };
     const db = await getDb() as any;
     if (!db) throw new Error("Banco de empréstimos indisponível.");
     await ensureLateFeeAdminOverrideColumns(db);
