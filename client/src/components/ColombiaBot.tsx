@@ -12,7 +12,7 @@ import { uploadOrderFileReliably } from "@/lib/reliableOrderUpload";
 import { isPersistedOrderResult } from "@shared/orderSubmission";
 import { getVehicleModels, getVehicleQuestionKind, VEHICLE_BRANDS, VEHICLE_COLORS, VEHICLE_YEARS } from "@shared/vehicleCatalog";
 import { applyVipBenefitToPrice, isVipOnlyLocked, normalizeVipAccessMode, vipBenefitText } from "@shared/vipPricing";
-import { globalPromotionIsActive, globalPromotionPrice } from "@shared/globalPromotion";
+import { globalPromotionIsActive, globalPromotionOverridesIndividual, globalPromotionPrice } from "@shared/globalPromotion";
 
 // ── Tipos ────────────────────────────────────────────────────────────────────
 
@@ -148,12 +148,13 @@ export function ColombiaBot({ products, onStartNormal, onSelectProduct, onSelect
   const [promotionNowMs, setPromotionNowMs] = useState(() => Date.now());
   useEffect(() => {
     if (!globalPromotion?.active || !globalPromotion?.schedule) return;
-    const timer = window.setInterval(() => setPromotionNowMs(Date.now()), 1000);
+    const timer = window.setInterval(() => setPromotionNowMs(Date.now()), 30000);
     return () => window.clearInterval(timer);
   }, [globalPromotion?.active, globalPromotion?.schedule]);
   const sitePromoActive = globalPromotionIsActive(globalPromotion, promotionNowMs);
+  const sitePromoOverrides = globalPromotionOverridesIndividual(globalPromotion, promotionNowMs);
   const priceForOption = (option: ProductOption | null | undefined) => option ? globalPromotionPrice({ price: option.price || "", originalPrice: (option as any).originalPrice || null }, globalPromotion) : "";
-  const getModelPrice = (model: OptionPriceModel | null | undefined) => model ? sitePromoActive ? globalPromotionPrice(model, globalPromotion) : applyVipBenefitToPrice(model.price, model, isVipCustomer) : '';
+  const getModelPrice = (model: OptionPriceModel | null | undefined) => model ? sitePromoOverrides ? globalPromotionPrice(model, globalPromotion) : applyVipBenefitToPrice(model.price, model, isVipCustomer) : '';
   const profileQuery = trpc.customers.getMyProfile.useQuery(
     { phone: clientPhone },
     { enabled: !!clientPhone }
@@ -502,8 +503,8 @@ export function ColombiaBot({ products, onStartNormal, onSelectProduct, onSelect
     const displayLabel = (model: OptionPriceModel) => {
       const locked = isVipOnlyLocked(model, isVipCustomer);
       const mode = normalizeVipAccessMode(model.vipAccessMode);
-      const prefix = locked ? '🔒 SOMENTE VIP • ' : (!sitePromoActive && mode !== 'all' ? '👑 VIP • ' : '');
-      const benefit = !sitePromoActive && isVipCustomer ? vipBenefitText(model) : '';
+      const prefix = locked ? '🔒 SOMENTE VIP • ' : (!sitePromoOverrides && mode !== 'all' ? '👑 VIP • ' : '');
+      const benefit = !sitePromoOverrides && isVipCustomer ? vipBenefitText(model) : '';
       return `${prefix}${model.label} — ${getModelPrice(model)}${benefit ? ` • ${benefit}` : ''}`;
     };
     if (models.length === 1 && !isVipOnlyLocked(models[0], isVipCustomer)) {
@@ -872,7 +873,7 @@ export function ColombiaBot({ products, onStartNormal, onSelectProduct, onSelect
           autoScheduleOptionId: option?.id,
           questionAudioFlowId: hasAudioAnswersForCurrentOption ? flowState.current.audioFlowId : undefined,
           audioDraftIds: hasAudioAnswersForCurrentOption ? audioDraftIdsForSubmit : undefined,
-          couponCode: !sitePromoActive ? flowState.current.couponCode || undefined : undefined,
+          couponCode: !sitePromoOverrides ? flowState.current.couponCode || undefined : undefined,
           price: (() => {
             const rawPrice = getModelPrice(flowState.current.priceModel) || priceForOption(option);
             if (!rawPrice) return undefined;
