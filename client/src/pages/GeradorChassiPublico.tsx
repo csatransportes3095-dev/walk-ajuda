@@ -57,6 +57,7 @@ type ResultadoVIN = {
   marca: string;
   modelo: string;
   ano: number;
+  modo: "Perfil FIPE" | "Chassi original";
 };
 
 async function copiarTexto(texto: string): Promise<boolean> {
@@ -95,7 +96,12 @@ export default function GeradorChassiPublico({ embedded = false, customer }: {
   const [buscaModelo, setBuscaModelo] = useState("");
   const [modelo, setModelo] = useState("");
   const [anoCode, setAnoCode] = useState("G");
-  const [usarChassiOriginal, setUsarChassiOriginal] = useState(false);
+  const [usarChassiOriginal, setUsarChassiOriginal] = useState(() => {
+    if (customer || typeof window === "undefined") return false;
+    try { return window.sessionStorage.getItem("h2-chassis-adm-mode") === "original"; }
+    catch { return false; }
+  });
+  const [comparacaoAberta, setComparacaoAberta] = useState(false);
   const [chassiOriginal, setChassiOriginal] = useState("");
   const [quantidade, setQuantidade] = useState(1);
   const [resultados, setResultados] = useState<ResultadoVIN[]>([]);
@@ -112,6 +118,30 @@ export default function GeradorChassiPublico({ embedded = false, customer }: {
     ANOS_GERADOR_PUBLICO[0];
 
   const marca = marcas.find((item) => item.code === marcaCode);
+
+  // Mascaras informativas: nao geram ou reservam VINs e nao consomem creditos.
+  const mascaraOriginal = /^[A-HJ-NPR-Z0-9]{17}$/.test(chassiOriginal)
+    ? `${chassiOriginal.slice(0, 8)}?${chassiOriginal.slice(9, 11)}??????`
+    : null;
+  const mascaraFipe = useMemo(() => {
+    if (!marca || !modelo) return null;
+    try {
+      const perfil = obterPerfilFabricanteOficial(marca.name, modelo);
+      const planta = perfil.plant && perfil.plant !== "A" ? perfil.plant : "?";
+      return `${perfil.wmi}${perfil.vds}?${anoCode}${planta}??????`;
+    } catch {
+      return null;
+    }
+  }, [marca?.name, modelo, anoCode]);
+
+  const selecionarModo = (original: boolean) => {
+    if (verificandoUnicidade) return;
+    setUsarChassiOriginal(original);
+    if (!customer && typeof window !== "undefined") {
+      try { window.sessionStorage.setItem("h2-chassis-adm-mode", original ? "original" : "fipe"); }
+      catch { /* Preferencia opcional: nao bloqueia o gerador. */ }
+    }
+  };
 
   const marcasFiltradas = useMemo(() => {
     const termo = buscaMarca.trim().toLowerCase();
@@ -278,6 +308,7 @@ export default function GeradorChassiPublico({ embedded = false, customer }: {
     setVerificandoUnicidade(true);
     try {
       const chassiBase = chassiOriginal.toUpperCase().replace(/[\s-]/g, "");
+      const modoDaGeracao = usarChassiOriginal ? "Chassi original" : "Perfil FIPE";
       if (usarChassiOriginal && chassiBase[9] !== anoCode) {
         toast.error("O ano selecionado precisa ser o mesmo do chassi original.");
         return;
@@ -287,7 +318,7 @@ export default function GeradorChassiPublico({ embedded = false, customer }: {
         if (customer.balance < quantidade) throw new Error("Saldo insuficiente. Escolha uma quantidade menor ou recarregue.");
         const vins = await customer.onGenerate({ marca: marca.name, modelo, yearCode: anoCode as ChassisGenerationInput["yearCode"], quantity: quantidade, ...(usarChassiOriginal ? { originalVin: chassiBase } : {}) });
         const agora = Date.now();
-        setResultados(vins.map((vin, i) => ({ vin, key: `${vin}-${i}-${agora}`, marca: marca.name, modelo, ano: anoInfo.ano })));
+        setResultados(vins.map((vin, i) => ({ vin, key: `${vin}-${i}-${agora}`, marca: marca.name, modelo, ano: anoInfo.ano, modo: modoDaGeracao })));
         setCopiados(new Set());
         return;
       }
@@ -314,7 +345,7 @@ export default function GeradorChassiPublico({ embedded = false, customer }: {
 
       const agora = Date.now();
       setResultados(accepted.map((vin, i) => ({
-        vin, key: `${vin}-${i}-${agora}`, marca: marca.name, modelo, ano: anoInfo.ano,
+        vin, key: `${vin}-${i}-${agora}`, marca: marca.name, modelo, ano: anoInfo.ano, modo: modoDaGeracao,
       })));
       setCopiados(new Set());
     } catch (error) {
@@ -430,7 +461,7 @@ export default function GeradorChassiPublico({ embedded = false, customer }: {
             <button
               type="button"
               aria-pressed={!usarChassiOriginal}
-              onClick={() => setUsarChassiOriginal(false)}
+              onClick={() => selecionarModo(false)}
               className={`rounded-lg px-3 py-2 text-xs font-semibold transition-colors ${usarChassiOriginal ? "text-zinc-400 hover:text-white" : "bg-zinc-700 text-white"}`}
             >
               Perfil FIPE
@@ -438,11 +469,47 @@ export default function GeradorChassiPublico({ embedded = false, customer }: {
             <button
               type="button"
               aria-pressed={usarChassiOriginal}
-              onClick={() => setUsarChassiOriginal(true)}
+              onClick={() => selecionarModo(true)}
               className={`rounded-lg px-3 py-2 text-xs font-semibold transition-colors ${usarChassiOriginal ? "bg-cyan-700 text-white" : "text-zinc-400 hover:text-white"}`}
             >
               Chassi original
             </button>
+          </div>
+
+          <div className="rounded-xl border border-zinc-700/70 bg-zinc-950/40 p-3 text-xs">
+            <div className="flex flex-wrap items-center justify-between gap-2">
+              <p className="text-zinc-300">
+                <strong className="text-white">Modo atual:</strong> {usarChassiOriginal ? "Chassi original" : "Perfil FIPE"}
+              </p>
+              <button
+                type="button"
+                aria-expanded={comparacaoAberta}
+                onClick={() => setComparacaoAberta((aberta) => !aberta)}
+                className="rounded-lg border border-cyan-500/30 px-3 py-1.5 font-semibold text-cyan-300 hover:bg-cyan-500/10"
+              >
+                {comparacaoAberta ? "Fechar comparação" : "Comparar modos sem gerar"}
+              </button>
+            </div>
+            {comparacaoAberta && (
+              <div className="mt-3 space-y-3 border-t border-zinc-700/70 pt-3">
+                <p className="text-zinc-400">Prévia ilustrativa, sem geração, reserva ou desconto de créditos. O funcionamento atual permanece disponível.</p>
+                <div className="grid gap-3 sm:grid-cols-2">
+                  <div className="rounded-lg border border-zinc-700 bg-zinc-900/70 p-3">
+                    <p className="font-bold text-cyan-200">Chassi original</p>
+                    <p className="mt-1 text-zinc-400">Mantém posições 1–8, 10 e 11 da referência; recalcula a 9 e gera 12–17.</p>
+                    {mascaraOriginal && <p className="mt-2 break-all font-mono text-zinc-200">{mascaraOriginal}</p>}
+                    {!mascaraOriginal && <p className="mt-2 text-zinc-500">Informe 17 caracteres para visualizar a máscara.</p>}
+                  </div>
+                  <div className="rounded-lg border border-zinc-700 bg-zinc-900/70 p-3">
+                    <p className="font-bold text-cyan-200">Perfil FIPE</p>
+                    <p className="mt-1 text-zinc-400">Aplica WMI/VDS de referência da marca, ano selecionado e novo serial.</p>
+                    {mascaraFipe && <p className="mt-2 break-all font-mono text-zinc-200">{mascaraFipe}</p>}
+                    {!mascaraFipe && <p className="mt-2 text-zinc-500">Selecione marca e modelo com perfil disponível para visualizar a máscara.</p>}
+                  </div>
+                </div>
+                <p className="text-zinc-500">O símbolo ? representa um caractere variável. A máscara não é um VIN válido nem garante identificação em consulta oficial.</p>
+              </div>
+            )}
           </div>
 
           <div className="space-y-4">
@@ -719,7 +786,7 @@ export default function GeradorChassiPublico({ embedded = false, customer }: {
             </div>
 
             <div className="space-y-3">
-              {resultados.map(({ vin, key, marca: marcaResultado, modelo: modeloResultado, ano }) => (
+              {resultados.map(({ vin, key, marca: marcaResultado, modelo: modeloResultado, ano, modo }) => (
                 <article
                   key={key}
                   className={`rounded-xl border p-4 transition-all ${copiados.has(key) ? "border-cyan-500/40 bg-cyan-950/30" : "border-zinc-700/50 bg-zinc-800/60"}`}
@@ -734,6 +801,9 @@ export default function GeradorChassiPublico({ embedded = false, customer }: {
                       </p>
                       <p className="mt-1 text-xs text-zinc-500">
                         {marcaResultado} • {modeloResultado} • {ano} • 17 caracteres
+                      </p>
+                      <p className="mt-1 text-xs text-cyan-300">
+                        Modo utilizado: {modo}
                       </p>
                     </div>
 
