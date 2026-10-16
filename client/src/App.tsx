@@ -45,6 +45,7 @@ import AdminCustomerPasswordPage from "./pages/AdminCustomerPasswordPage";
 import AdminAdCampaigns from "./pages/AdminAdCampaigns";
 
 import AdminCoupons from "./pages/AdminCoupons";
+import AdminGlobalPromotion from "./pages/AdminGlobalPromotion";
 import AdminProducts from "./pages/AdminProducts";
 import AdminSettings from "./pages/AdminSettings";
 import AdminVip from "./pages/AdminVip";
@@ -213,6 +214,9 @@ function Router() {
       </Route>
       <Route path={"/admin/codes"}>
         <AdminGuard><AdminCodes /></AdminGuard>
+      </Route>
+      <Route path={"/admin/promocao-geral"}>
+        <AdminGuard><AdminGlobalPromotion /></AdminGuard>
       </Route>
       <Route path={"/admin/coupons"}>
         <AdminGuard><AdminCoupons /></AdminGuard>
