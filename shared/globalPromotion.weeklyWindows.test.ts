@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { globalPromotionWindow, globalPromotionOverridesIndividual, globalPromotionPrice, isValidGlobalPromotionSchedule, weeklyWindowsOverlap } from "./globalPromotion";
+import { globalPromotionWindow, globalPromotionOverridesIndividual, globalPromotionPrice, isValidGlobalPromotionSchedule, weeklyWindowsOverlap, weeklyWindowOccurrence } from "./globalPromotion";
 
 const base = { active: true, type:"percentage" as const, value:50, revision:"t", updatedAt:null };
 const one = {startDay:5,startTime:"23:00",endDay:6,endTime:"14:00"};
@@ -39,5 +39,22 @@ describe("Faixas independentes semanais em Brasília",()=>{
     expect(globalPromotionWindow(overnight,time("2026-10-18T23:00:00-03:00")).active).toBe(true);
     expect(globalPromotionWindow(overnight,time("2026-10-19T05:59:00-03:00")).active).toBe(true);
     expect(globalPromotionWindow(overnight,time("2026-10-19T06:00:00-03:00")).active).toBe(false);
+  });
+});
+
+describe("datas reais para cada faixa semanal",()=>{
+  const saturday={startDay:6,startTime:"01:00",endDay:6,endTime:"14:00",firstStartDate:"2026-10-17"};
+  it("não agenda sábado para a semana seguinte quando ainda é sexta",()=>{
+    const next=weeklyWindowOccurrence(saturday,Date.parse("2026-10-16T01:16:00-03:00"));
+    expect(next.startAt).toBe(Date.parse("2026-10-17T01:00:00-03:00"));
+    expect(next.endsAt).toBe(Date.parse("2026-10-17T14:00:00-03:00"));
+    expect(next.active).toBe(false);
+  });
+  it("ativa durante a faixa e agenda semana seguinte depois de encerrar",()=>{
+    expect(weeklyWindowOccurrence(saturday,Date.parse("2026-10-17T10:00:00-03:00")).active).toBe(true);
+    expect(weeklyWindowOccurrence(saturday,Date.parse("2026-10-17T14:00:00-03:00")).startAt).toBe(Date.parse("2026-10-24T01:00:00-03:00"));
+  });
+  it("bloqueia data que não corresponda ao dia selecionado",()=>{
+    expect(isValidGlobalPromotionSchedule({mode:"weekly_windows",windows:[{...saturday,firstStartDate:"2026-10-16"}]})).toBe(false);
   });
 });
