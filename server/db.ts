@@ -459,6 +459,8 @@ export async function updateProduct(id: number, data: Partial<{
   requireCondutaxi: number; requireVehicle2016: number; isPdfOnly: number;
   showYearField: number; cardColor: string | null; cardBgColor: string | null;
   cardTextColor: string | null; cardBtnColor: string | null; isActive: number; sortOrder: number;
+  badgeBgColor: string | null; badgeTextColor: string | null; badgeBorderColor: string | null;
+  badgeSize: string | null; badgeAlign: string | null;
   deliveryDays: string | null;
 }>): Promise<void> {
   const db = await getDb();
@@ -511,6 +513,8 @@ export async function cloneProductComplete(sourceProductId: number): Promise<Com
       requireVehicle2016: source.requireVehicle2016, isPdfOnly: source.isPdfOnly,
       showYearField: source.showYearField, cardColor: source.cardColor, cardBgColor: source.cardBgColor,
       cardTextColor: source.cardTextColor, cardBtnColor: source.cardBtnColor, isActive: 0,
+      badgeBgColor: source.badgeBgColor, badgeTextColor: source.badgeTextColor,
+      badgeBorderColor: source.badgeBorderColor, badgeSize: source.badgeSize, badgeAlign: source.badgeAlign,
       sortOrder: nextSortOrder, resellerDiscount: source.resellerDiscount, deliveryDays: source.deliveryDays,
     });
     const productId = Number(productInsert[0].insertId);

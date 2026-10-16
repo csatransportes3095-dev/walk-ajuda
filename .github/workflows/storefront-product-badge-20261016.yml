@@ -1,0 +1,63 @@
+name: Validate storefront product badges
+on:
+  push:
+    branches: [feat/storefront-product-badge-20261016]
+  workflow_dispatch:
+permissions:
+  contents: read
+jobs:
+  validate:
+    runs-on: ubuntu-latest
+    timeout-minutes: 18
+    steps:
+      - uses: actions/checkout@v4
+      - uses: pnpm/action-setup@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '22'
+          cache: pnpm
+      - run: pnpm install --frozen-lockfile
+      - name: Badge appearance tests
+        run: node --experimental-strip-types --test scripts/test-product-badge-appearance.mjs
+      - name: Verify TypeScript has no new diagnostics
+        run: |
+          git fetch --depth=1 origin dc7df9c16bb06d80b7e053ad77f0eaebae075607
+          git worktree add --detach /tmp/badge-base dc7df9c16bb06d80b7e053ad77f0eaebae075607
+          ln -s "$PWD/node_modules" /tmp/badge-base/node_modules
+          (cd /tmp/badge-base && pnpm check > /tmp/badge-base.log 2>&1) || true
+          pnpm check > /tmp/badge-new.log 2>&1 || true
+          python3 - <<'PY'
+          from pathlib import Path
+          import re
+          from collections import Counter
+          def errors(path):
+            return Counter(re.sub(r'\(\d+,\d+\)','',x) for x in Path(path).read_text().splitlines() if 'error TS' in x)
+          before=errors('/tmp/badge-base.log')
+          after=errors('/tmp/badge-new.log')
+          added=after-before
+          print('Baseline:',sum(before.values()),'Candidate:',sum(after.values()),'New:',sum(added.values()))
+          for k,v in added.items():print(v,k)
+          if added:raise SystemExit(1)
+          PY
+      - name: Simulate Render patch chain and build
+        run: |
+          mkdir -p /tmp/badge-prod
+          tar --exclude=.git --exclude=node_modules -cf - . | tar -xf - -C /tmp/badge-prod
+          ln -s "$PWD/node_modules" /tmp/badge-prod/node_modules
+          python3 - <<'PY'
+          import re,subprocess
+          from pathlib import Path
+          root=Path('/tmp/badge-prod')
+          scripts=re.findall(r'&& node (scripts/[^\s\\]+\.mjs)',(root/'Dockerfile').read_text())
+          with open('/tmp/badge-prod.log','w') as log:
+            try:
+              for script in scripts:
+                subprocess.run(['node',script],cwd=root,check=True,stdout=log,stderr=log)
+              subprocess.run(['node','--experimental-strip-types','--test','scripts/test-product-badge-appearance.mjs'],cwd=root,check=True,stdout=log,stderr=log)
+              subprocess.run(['pnpm','build'],cwd=root,check=True,stdout=log,stderr=log)
+            except Exception:
+              log.flush()
+              print('\n'.join(Path('/tmp/badge-prod.log').read_text().splitlines()[-70:]))
+              raise
+          print('RENDER_PATCHES_OK',len(scripts),'PRODUCTION_BUILD_OK')
+          PY

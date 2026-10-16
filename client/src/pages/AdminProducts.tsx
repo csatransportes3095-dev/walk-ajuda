@@ -71,6 +71,8 @@ type ProductWithRelations = {
   requireAlvara: number; requireCondutaxi: number; requireVehicle2016: number;
   isPdfOnly: number; showYearField: number; cardColor: string | null;
   cardBgColor: string | null; cardTextColor: string | null; cardBtnColor: string | null;
+  badgeBgColor?: string | null; badgeTextColor?: string | null; badgeBorderColor?: string | null;
+  badgeSize?: string | null; badgeAlign?: string | null;
   isActive: number; sortOrder: number;
   options: OptionType[];
 };
@@ -1506,6 +1508,11 @@ export default function AdminProducts() {
   const [editCardBgColor, setEditCardBgColor] = useState("");
   const [editCardTextColor, setEditCardTextColor] = useState("");
   const [editCardBtnColor, setEditCardBtnColor] = useState("");
+  const [editBadgeBgColor, setEditBadgeBgColor] = useState("");
+  const [editBadgeTextColor, setEditBadgeTextColor] = useState("");
+  const [editBadgeBorderColor, setEditBadgeBorderColor] = useState("");
+  const [editBadgeSize, setEditBadgeSize] = useState("");
+  const [editBadgeAlign, setEditBadgeAlign] = useState("");
   const [editResellerDiscount, setEditResellerDiscount] = useState<string>("");
   const [editDeliveryDays, setEditDeliveryDays] = useState<string>("");
 
@@ -1596,6 +1603,11 @@ export default function AdminProducts() {
     setEditButtonText(p.buttonText || "COMPRAR"); setEditCardColor(p.cardColor || "");
     setEditCardBgColor(p.cardBgColor || ""); setEditCardTextColor(p.cardTextColor || "");
     setEditCardBtnColor(p.cardBtnColor || "");
+    setEditBadgeBgColor(p.badgeBgColor || "");
+    setEditBadgeTextColor(p.badgeTextColor || "");
+    setEditBadgeBorderColor(p.badgeBorderColor || "");
+    setEditBadgeSize(p.badgeSize || "");
+    setEditBadgeAlign(p.badgeAlign || "");
     setEditResellerDiscount((p as any).resellerDiscount != null ? String((p as any).resellerDiscount) : "");
     setEditDeliveryDays((p as any).deliveryDays || "");
   };
@@ -1785,6 +1797,31 @@ export default function AdminProducts() {
                         <div className="text-[9px] font-bold text-center py-0.5 rounded mt-1" style={{ backgroundColor: editCardBtnColor || '#f3f4f6', color: '#000' }}>BOTÃO</div>
                       </div>
                     </div>
+                    <div className="bg-black/30 rounded-lg border border-cyan-400/40 p-3 space-y-3">
+                      <p className="text-xs font-bold text-cyan-200 flex items-center gap-1"><Palette className="w-3 h-3" /> Selo do produto na vitrine (card pequeno e grande)</p>
+                      <p className="text-[11px] text-gray-400">Personalize somente o selo do cabeçalho, sem mudar o nome do produto. Limpar restaura o padrão.</p>
+                      <div className="grid grid-cols-2 sm:grid-cols-3 gap-3">
+                        <ColorPicker label="Fundo do selo" value={editBadgeBgColor} onChange={setEditBadgeBgColor} />
+                        <ColorPicker label="Texto do selo" value={editBadgeTextColor} onChange={setEditBadgeTextColor} />
+                        <ColorPicker label="Borda do selo" value={editBadgeBorderColor} onChange={setEditBadgeBorderColor} />
+                      </div>
+                      <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
+                        <label className="text-xs text-gray-300">Tamanho
+                          <select aria-label="Tamanho do selo" value={editBadgeSize} onChange={e => setEditBadgeSize(e.target.value)} style={whiteInputStyle}>
+                            <option value="">Padrão</option><option value="small">Pequeno</option><option value="medium">Médio</option><option value="large">Grande</option>
+                          </select>
+                        </label>
+                        <label className="text-xs text-gray-300">Alinhamento
+                          <select aria-label="Alinhamento do selo" value={editBadgeAlign} onChange={e => setEditBadgeAlign(e.target.value)} style={whiteInputStyle}>
+                            <option value="">Padrão (esquerda)</option><option value="left">Esquerda</option><option value="center">Centro</option><option value="right">Direita</option>
+                          </select>
+                        </label>
+                      </div>
+                      <div className={`flex ${editBadgeAlign === 'center' ? 'justify-center' : editBadgeAlign === 'right' ? 'justify-end' : 'justify-start'}`}>
+                        <span className={`inline-flex max-w-full items-center rounded-xl border-2 font-black text-center uppercase break-words ${editBadgeSize === 'small' ? 'px-3 py-1.5 text-xs' : editBadgeSize === 'medium' ? 'px-4 py-2 text-sm' : 'px-5 py-2.5 text-base'}`} style={{ backgroundColor: editBadgeBgColor || '#1d4ed8', color: editBadgeTextColor || '#ffffff', borderColor: editBadgeBorderColor || '#67e8f9' }}>{editName}</span>
+                      </div>
+                      <button type="button" className="text-xs font-bold text-cyan-300 underline" onClick={() => { setEditBadgeBgColor(""); setEditBadgeTextColor(""); setEditBadgeBorderColor(""); setEditBadgeSize(""); setEditBadgeAlign(""); }}>Restaurar padrão do selo</button>
+                    </div>
                     {/* Desconto Revendedor por produto */}
                     <div className="bg-black/30 rounded-lg border border-yellow-500/20 p-3 space-y-2">
                       <p className="text-xs font-bold text-yellow-400 flex items-center gap-1">🏷️ Desconto Revendedor</p>
@@ -1816,7 +1853,7 @@ export default function AdminProducts() {
                     <div className="flex gap-2">
                       <Button onClick={() => {
                         const discountVal = editResellerDiscount.trim() !== '' ? parseFloat(editResellerDiscount) : null;
-                        updateMut.mutate({ id: product.id, name: editName, description: editDesc || null, buttonText: editButtonText, cardColor: editCardColor || null, cardBgColor: editCardBgColor || null, cardTextColor: editCardTextColor || null, cardBtnColor: editCardBtnColor || null, resellerDiscount: discountVal !== null && !isNaN(discountVal) ? discountVal : null, deliveryDays: editDeliveryDays.trim() || null } as any);
+                        updateMut.mutate({ id: product.id, name: editName, description: editDesc || null, buttonText: editButtonText, cardColor: editCardColor || null, cardBgColor: editCardBgColor || null, cardTextColor: editCardTextColor || null, cardBtnColor: editCardBtnColor || null, badgeBgColor: editBadgeBgColor || null, badgeTextColor: editBadgeTextColor || null, badgeBorderColor: editBadgeBorderColor || null, badgeSize: editBadgeSize || null, badgeAlign: editBadgeAlign || null, resellerDiscount: discountVal !== null && !isNaN(discountVal) ? discountVal : null, deliveryDays: editDeliveryDays.trim() || null } as any);
                       }} className="bg-green-600 hover:bg-green-700 text-white text-sm"><Save className="w-3 h-3 mr-1" /> Salvar Card</Button>
                       <Button onClick={() => setEditingProduct(null)} variant="outline" className="text-white border-gray-600 hover:bg-white/10 text-sm"><X className="w-3 h-3 mr-1" /> Cancelar</Button>
                     </div>

@@ -1,6 +1,7 @@
 import { Check, ChevronDown, ChevronUp, CircleAlert, Crown, Flame, ShieldCheck, ShoppingCart, Tag, Timer } from "lucide-react";
 import { memo, useEffect, useMemo, useState } from "react";
 import "./StorefrontTextFit.css";
+import { resolveProductBadgeAppearance } from "@/lib/productBadgeAppearance";
 import { requestProductManifest } from "@/lib/productManifest";
 import { useVipMembership } from "@/hooks/useVipMembership";
 import { type GlobalPromotionConfig, globalPromotionIsActive, globalPromotionOverridesIndividual, globalPromotionWindow, globalPromotionPrice, calculateGlobalPromotionPrice, globalPromotionLabel } from "@shared/globalPromotion";
@@ -73,6 +74,8 @@ export type StorefrontProduct = {
   cardBgColor: string | null;
   cardTextColor: string | null;
   cardBtnColor: string | null;
+  badgeBgColor?: string | null; badgeTextColor?: string | null; badgeBorderColor?: string | null;
+  badgeSize?: string | null; badgeAlign?: string | null;
   deliveryDays?: string | null;
 };
 
@@ -264,6 +267,7 @@ function StorefrontProductCardComponent({
   const detailsId = `product-details-${item.product.id}-${item.option.id}`;
   const categoryLabel = item.category.toUpperCase();
   const productPill = item.product.name.toUpperCase();
+  const badge = resolveProductBadgeAppearance(item.product);
   // Primeiro mostra a página VIP; quando o plano estiver indisponível, o contato com o ADM aparece lá.
   const vipHref = typeof window !== "undefined"
     ? `/vip?${new URLSearchParams({
@@ -317,7 +321,9 @@ function StorefrontProductCardComponent({
             {item.product.iconUrl ? <img src={item.product.iconUrl} alt="" loading="lazy" className="h-[clamp(66px,6vw,86px)] w-[clamp(66px,6vw,86px)] rounded-2xl object-contain" /> : <Tag className="h-9 w-9 text-violet-300" />}
           </div>
           <div className="min-w-0 flex-1">
-            <span className="inline-flex max-w-full rounded-full border border-violet-400/60 bg-violet-500/20 px-3 py-1.5 text-[clamp(10px,0.85vw,12px)] font-black uppercase tracking-[0.07em] leading-tight text-violet-200 shadow-[0_0_16px_rgba(139,92,246,.16)]">{productPill}</span>
+            <div className={`flex min-w-0 ${badge.alignClass}`}>
+              <span className={badge.highlighted ? `inline-flex max-w-full items-center rounded-xl border-2 font-black uppercase tracking-[0.07em] leading-tight text-center shadow-[0_0_18px_rgba(37,99,235,.52)] ${badge.sizeClass}` : "inline-flex max-w-full rounded-full border border-violet-400/60 bg-violet-500/20 px-3 py-1.5 text-[clamp(10px,0.85vw,12px)] font-black uppercase tracking-[0.07em] leading-tight text-violet-200 shadow-[0_0_16px_rgba(139,92,246,.16)]"} style={badge.highlighted ? { backgroundColor: badge.background, color: badge.text, borderColor: badge.border } : undefined}>{productPill}</span>
+            </div>
             <h3 className="mt-2 max-w-full break-words text-[clamp(23px,2.1vw,31px)] font-black leading-[1.04] tracking-tight text-white drop-shadow-[0_0_12px_rgba(255,255,255,.18)]">{item.option.label.trim()}</h3>
           </div>
         </div>

@@ -103,6 +103,11 @@ export const products = mysqlTable("products", {
   cardBgColor: varchar("cardBgColor", { length: 32 }),
   cardTextColor: varchar("cardTextColor", { length: 32 }),
   cardBtnColor: varchar("cardBtnColor", { length: 32 }),
+  badgeBgColor: varchar("badgeBgColor", { length: 32 }),
+  badgeTextColor: varchar("badgeTextColor", { length: 32 }),
+  badgeBorderColor: varchar("badgeBorderColor", { length: 32 }),
+  badgeSize: varchar("badgeSize", { length: 12 }),
+  badgeAlign: varchar("badgeAlign", { length: 12 }),
   isActive: int("isActive").notNull().default(1),
   sortOrder: int("sortOrder").notNull().default(0),
   resellerDiscount: decimal("resellerDiscount", { precision: 5, scale: 2 }), // % de desconto para revendedores por produto (prioridade sobre % global do cadastro)
