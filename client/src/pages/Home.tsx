@@ -1221,22 +1221,22 @@ export default function Home() {
   // Obter valor atual (usa benefício VIP do Modelo/Categoria quando configurado)
   const getCurrentServiceValue = (): string => {
     if (selectedPriceModel) return getPriceModelServiceValue(selectedPriceModel);
-    if (selectedTier) return sitePromoActive ? globalPromotionPrice(selectedTier, globalPromotion) : selectedTier.price;
-    if (selectedOption) return sitePromoActive ? globalPromotionPrice(selectedOption, globalPromotion) : selectedOption.price;
+    if (selectedTier) return sitePromoOverrides ? globalPromotionPrice(selectedTier, globalPromotion) : selectedTier.price;
+    if (selectedOption) return sitePromoOverrides ? globalPromotionPrice(selectedOption, globalPromotion) : selectedOption.price;
     return "Consulte";
   };
 
   const getCurrentNormalServiceValue = (): string => {
-    if (sitePromoActive) { const source = selectedPriceModel || selectedTier || selectedOption; return source ? calculateGlobalPromotionPrice(source, globalPromotion).base : "Consulte"; }
+    if (sitePromoOverrides) { const source = selectedPriceModel || selectedTier || selectedOption; return source ? calculateGlobalPromotionPrice(source, globalPromotion).base : "Consulte"; }
     if (selectedPriceModel) return getPriceModelNormalValue(selectedPriceModel);
-    if (selectedTier) return sitePromoActive ? globalPromotionPrice(selectedTier, globalPromotion) : selectedTier.price;
-    if (selectedOption) return sitePromoActive ? globalPromotionPrice(selectedOption, globalPromotion) : selectedOption.price;
+    if (selectedTier) return sitePromoOverrides ? globalPromotionPrice(selectedTier, globalPromotion) : selectedTier.price;
+    if (selectedOption) return sitePromoOverrides ? globalPromotionPrice(selectedOption, globalPromotion) : selectedOption.price;
     return "Consulte";
   };
 
   // Calcula se o item atual tem promoção ativa (preço riscado)
   const hasActivePromotion = (): boolean => {
-    if (sitePromoActive) return true;
+    if (sitePromoOverrides) return true;
     if (selectedPriceModel) return !!selectedPriceModel.originalPrice;
     // Se tem tier selecionado, verifica se o tier tem promoção
     if (selectedTier) return !!(selectedTier as any).originalPrice;
@@ -1263,7 +1263,7 @@ export default function Home() {
   };
 
   const getResellerDiscountAmount = (): number => {
-    if (sitePromoActive) return 0;
+    if (sitePromoOverrides) return 0;
     if (!resellerInfo?.isReseller) return 0;
     if (hasActivePromotion()) return 0; // promoção tem prioridade
     const rawValue = getCurrentServiceValue();
@@ -1282,7 +1282,7 @@ export default function Home() {
   };
 
   const calculateDiscountedValue = (originalValue: string): string => {
-    if (sitePromoActive) return originalValue;
+    if (sitePromoOverrides) return originalValue;
     const numericValue = parseFloat(originalValue.replace('R$ ', '').replace('.', '').replace(',', '.'));
     if (isNaN(numericValue)) return originalValue;
     let discounted = numericValue;
@@ -1759,7 +1759,7 @@ export default function Home() {
 
       // Parcelamento VIP é exclusivo do fluxo direto de um único produto nesta primeira versão.
       const vipInstallmentActive = vipInstallmentSelection.mode === 'vip_installment';
-      if (vipInstallmentActive && (sitePromoActive || cart.length > 0 || activeResellerSlug || !selectedProduct || !selectedOption)) {
+      if (vipInstallmentActive && (sitePromoOverrides || cart.length > 0 || activeResellerSlug || !selectedProduct || !selectedOption)) {
         throw new Error('Parcelamento VIP disponível somente para compra direta de um produto por vez.');
       }
       if (vipInstallmentActive && !vipCheckoutTokenRef.current) {
@@ -1781,7 +1781,7 @@ export default function Home() {
         }
         // Calcular desconto do cupom sobre o total
         let cartCouponDiscountValue: number | undefined;
-        if (!sitePromoActive && couponDiscount) {
+        if (!sitePromoOverrides && couponDiscount) {
           if (couponDiscount.type === 'percentage') {
             cartCouponDiscountValue = cartTotalValue * couponDiscount.value / 100;
           } else {
@@ -1820,7 +1820,7 @@ export default function Home() {
               email: clientEmail.trim(),
               accessCode: accessCode || undefined,
               cpToken: cpTokenForSubmit || undefined,
-              couponCode: !sitePromoActive && couponValid ? couponCode : undefined,
+              couponCode: !sitePromoOverrides && couponValid ? couponCode : undefined,
               // Comprovante PIX: apenas no primeiro item (cartItemIndex=0)
               paymentProof: undefined,
               paymentProofUrl: i === 0 ? paymentProofUploadedUrl : undefined,
@@ -1842,8 +1842,8 @@ export default function Home() {
               // Campos de agrupamento de carrinho
               cartGroupId,
               cartTotal: cartTotalValue,
-              cartCouponCode: !sitePromoActive && couponValid ? couponCode : undefined,
-              cartCouponDiscount: sitePromoActive ? undefined : cartCouponDiscountValue,
+              cartCouponCode: !sitePromoOverrides && couponValid ? couponCode : undefined,
+              cartCouponDiscount: sitePromoOverrides ? undefined : cartCouponDiscountValue,
               cartItemIndex: i,
             });
             if (!isPersistedOrderResult(itemResult)) {
@@ -1867,7 +1867,7 @@ export default function Home() {
         setAutomaticScheduleLinks(uniqueScheduleLinks);
         setPostOrderScheduleDecision(uniqueScheduleLinks.length > 0 ? 'choose' : 'completed');
         // Salvar dados do pedido para mensagem WhatsApp
-        const cartTotalPago = cartTotalValue - (sitePromoActive ? 0 : (cartCouponDiscountValue || 0));
+        const cartTotalPago = cartTotalValue - (sitePromoOverrides ? 0 : (cartCouponDiscountValue || 0));
         setSubmittedOrderData({
           cartItems: cartItems.map(item => ({
             service: item.product.name,
@@ -1938,7 +1938,7 @@ export default function Home() {
         email: clientEmail.trim(),
         accessCode: accessCode || undefined,
         cpToken: cpTokenForSubmit || undefined,
-        couponCode: !sitePromoActive && couponValid ? couponCode : undefined,
+        couponCode: !sitePromoOverrides && couponValid ? couponCode : undefined,
         vipInstallmentCheckoutToken: vipInstallmentActive ? vipCheckoutTokenRef.current : undefined,
         paymentProof: undefined,
         paymentProofUrl: paymentProofUploadedUrl,
@@ -2224,7 +2224,7 @@ export default function Home() {
     let normal = 0;
     let effective = 0;
     for (const item of cart) {
-      const normalPrice = sitePromoActive ? (item.priceModel ? calculateGlobalPromotionPrice(item.priceModel, globalPromotion).base : item.tier ? calculateGlobalPromotionPrice(item.tier, globalPromotion).base : item.option ? calculateGlobalPromotionPrice(item.option, globalPromotion).base : '0') : (getPriceModelNormalValue(item.priceModel) || item.tier?.price || item.option?.price || '0');
+      const normalPrice = sitePromoOverrides ? (item.priceModel ? calculateGlobalPromotionPrice(item.priceModel, globalPromotion).base : item.tier ? calculateGlobalPromotionPrice(item.tier, globalPromotion).base : item.option ? calculateGlobalPromotionPrice(item.option, globalPromotion).base : '0') : (getPriceModelNormalValue(item.priceModel) || item.tier?.price || item.option?.price || '0');
       const effectivePrice = getPriceModelServiceValue(item.priceModel) || (item.tier ? globalPromotionPrice(item.tier, globalPromotion) : item.option ? globalPromotionPrice(item.option, globalPromotion) : '0');
       normal += parseBrazilMoney(normalPrice);
       effective += parseBrazilMoney(effectivePrice);
@@ -4066,7 +4066,7 @@ export default function Home() {
                     <div className="bg-green-500/20 border border-green-500/40 rounded-lg p-3">
                       <div className="flex justify-between items-center">
                         <span className="text-green-300 font-bold text-sm">TOTAL ({cart.length} itens):</span>
-                        {(!sitePromoActive && (couponDiscount || hasResellerDiscount)) && cartTotalFormatted ? (
+                        {(!sitePromoOverrides && (couponDiscount || hasResellerDiscount)) && cartTotalFormatted ? (
                           <div className="flex items-center gap-2">
                             <span className="text-white/50 line-through text-sm font-semibold">{cartTotalFormatted}</span>
                             <span className="text-green-400 font-bold text-xl">{cartTotalWithDiscount}</span>
@@ -4075,11 +4075,11 @@ export default function Home() {
                           <span className="font-bold text-lg text-green-400">{cartTotalFormatted || 'Consulte'}</span>
                         )}
                       </div>
-                      {(!sitePromoActive && (couponDiscount || hasResellerDiscount)) && cartTotalFormatted && (
+                      {(!sitePromoOverrides && (couponDiscount || hasResellerDiscount)) && cartTotalFormatted && (
                         <div className="flex justify-between items-center mt-1">
                           <span className="text-green-300 text-xs">
                             {hasResellerDiscount && !couponDiscount && `🏷️ Desconto revendedor aplicado`}
-                            {!sitePromoActive && couponDiscount && !hasResellerDiscount && `🎫 Cupom aplicado`}
+                            {!sitePromoOverrides && couponDiscount && !hasResellerDiscount && `🎫 Cupom aplicado`}
                             {couponDiscount && hasResellerDiscount && `🏷️ Revendedor + 🎫 Cupom`}
                           </span>
                           <span className="text-green-300 text-xs font-bold">
@@ -4105,7 +4105,7 @@ export default function Home() {
                     <div className="border-t border-white/10 mt-2 pt-2">
                       <div className="flex justify-between items-center">
                         <span className="text-white/70 text-sm">Valor:</span>
-                        {(!sitePromoActive && (couponDiscount || hasResellerDiscount)) ? (
+                        {(!sitePromoOverrides && (couponDiscount || hasResellerDiscount)) ? (
                           <div className="flex items-center gap-2">
                             <span className="text-white/50 line-through text-sm font-semibold">{originalValue}</span>
                             <span className="text-green-400 font-bold text-lg">{finalValue}</span>
@@ -4114,7 +4114,7 @@ export default function Home() {
                           <span className="font-bold text-lg text-green-400">{originalValue}</span>
                         )}
                       </div>
-                      {(!sitePromoActive && (couponDiscount || hasResellerDiscount)) && (
+                      {(!sitePromoOverrides && (couponDiscount || hasResellerDiscount)) && (
                         <div className="flex justify-between items-center mt-1">
                           <span className="text-green-300 text-xs">
                             {hasResellerDiscount && !couponDiscount && `🏷️ Desconto revendedor: -R$ ${getResellerDiscountAmount().toFixed(2).replace('.', ',')}`}
@@ -4131,8 +4131,8 @@ export default function Home() {
                 )}
 
                 {/* Cupom suspenso enquanto a promoção geral estiver ligada */}
-                {sitePromoActive && <p className="text-emerald-300 text-xs font-bold py-2">🏷️ PROMOÇÃO GERAL ATIVA — cupons, VIP e outros descontos não acumulam.</p>}
-                {!sitePromoActive && <div className="border-t border-green-500/20 pt-3">
+                {sitePromoOverrides && <p className="text-emerald-300 text-xs font-bold py-2">🏷️ PROMOÇÃO GERAL PROGRAMADA — outras ofertas ficam suspensas enquanto esta programação estiver habilitada.</p>}
+                {!sitePromoOverrides && <div className="border-t border-green-500/20 pt-3">
                   <Label className="text-green-400 mb-2 block flex items-center gap-1 text-xs">
                     <Ticket className="w-4 h-4" /> Cupom de Desconto (opcional)
                   </Label>
@@ -4203,8 +4203,8 @@ export default function Home() {
                   optionId={selectedOption?.id || null}
                   priceModelId={selectedPriceModel?.id || null}
                   warrantyTierId={selectedTier?.id || null}
-                  couponCode={!sitePromoActive && couponValid ? couponCode : null}
-                  disabledReason={sitePromoActive ? "Parcelamento VIP temporariamente indisponível durante a Promoção Geral. Preço promocional válido para pagamento à vista." : cart.length > 0 ? 'Nesta primeira versão, o Parcelamento VIP está disponível somente na compra direta de um produto por vez.' : activeResellerSlug ? 'Parcelamento VIP não está disponível no fluxo de revendedor.' : !selectedProduct || !selectedOption ? 'Selecione um produto e uma opção para consultar o parcelamento.' : null}
+                  couponCode={!sitePromoOverrides && couponValid ? couponCode : null}
+                  disabledReason={sitePromoOverrides ? "Parcelamento VIP temporariamente indisponível durante a Promoção Geral. Preço promocional válido para pagamento à vista." : cart.length > 0 ? 'Nesta primeira versão, o Parcelamento VIP está disponível somente na compra direta de um produto por vez.' : activeResellerSlug ? 'Parcelamento VIP não está disponível no fluxo de revendedor.' : !selectedProduct || !selectedOption ? 'Selecione um produto e uma opção para consultar o parcelamento.' : null}
                   onSelectionChange={setVipInstallmentSelection}
                 />
               )}
@@ -4225,7 +4225,7 @@ export default function Home() {
                       phone: clientPhone.trim() || undefined,
                       checkoutToken,
                       items: [{ productId: selectedProduct.id, optionId: selectedOption.id, priceModelId: selectedPriceModel?.id || null, warrantyTierId: selectedTier?.id || null }],
-                      couponCode: !sitePromoActive && couponValid ? couponCode : undefined,
+                      couponCode: !sitePromoOverrides && couponValid ? couponCode : undefined,
                       installmentCount: vipInstallmentSelection.installmentCount,
                       frequency: vipInstallmentSelection.frequency,
                     });
