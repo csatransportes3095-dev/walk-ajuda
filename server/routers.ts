@@ -1471,6 +1471,7 @@ export const appRouter = router({
         cartCouponCode: z.string().optional(), // cupom aplicado no carrinho
         cartCouponDiscount: z.number().optional(), // valor do desconto do cupom em R$
         cartItemIndex: z.number().optional(), // índice do item no carrinho (0 = primeiro)
+        warrantyTierId: z.number().int().positive().optional(),
         cartItemCount: z.number().optional(), // total de itens no carrinho
         cartItems: z.string().optional(), // JSON com todos os itens do carrinho (para email/notificação)
       }))
@@ -1538,6 +1539,38 @@ export const appRouter = router({
             if (!modelAccess.allowed) return { success: false, message: modelAccess.reason || 'Modelo/categoria indisponível.' };
             // Preco do Modelo/Categoria e recalculado no servidor conforme a sessao VIP validada.
             if (modelAccess.effectivePrice) input.price = modelAccess.effectivePrice;
+          }
+
+          // Promoção geral sempre vence os descontos de cupom, VIP e revendedor.
+          // O backend não confia no valor enviado pelo navegador.
+          const globalPromo = parseGlobalPromotionConfig(await getSetting("global_promotion_config_v1"));
+          if (globalPromotionIsActive(globalPromo)) {
+            if (!input.optionId || !input.productId) {
+              return { success: false, message: "Seleção do produto ausente. Reabra a compra para confirmar a promoção geral." };
+            }
+            const availableOptions = await listProductOptions(input.productId);
+            const option = availableOptions.find(row => row.id === input.optionId && row.isActive === 1);
+            if (!option) return { success: false, message: "Este produto não está disponível para a promoção geral." };
+            let source: { price: string; originalPrice?: string | null } = option;
+            if (input.priceModelId) {
+              const models = await import("./routers/optionPriceModels");
+              const rows = await models.getActiveOptionPriceModelsForPromotion([input.optionId]);
+              const selected = rows.find(row => row.id === input.priceModelId);
+              if (!selected) return { success: false, message: "Categoria de preço indisponível." };
+              source = selected;
+            } else if (input.warrantyTierId) {
+              const tiers = await listWarrantyTiers(input.optionId);
+              const tier = tiers.find(row => row.id === input.warrantyTierId && row.isActive === 1);
+              if (!tier) return { success: false, message: "Garantia de preço indisponível." };
+              source = tier;
+            }
+            input.price = globalPromotionPrice(source, globalPromo);
+            input.couponCode = undefined;
+            input.cartCouponCode = undefined;
+            input.cartCouponDiscount = undefined;
+            input.resellerDiscountApplied = undefined;
+            // O total do carrinho deve ser recomputado no cliente e validado pelo
+            // servidor de cada item, sem aceitar um desconto complementar.
           }
 
           const emailTo = await getSetting('email_to') || 'h2@h2colombiano.com';
