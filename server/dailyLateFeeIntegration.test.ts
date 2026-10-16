@@ -16,9 +16,10 @@ describe("daily late fee production integration", () => {
   });
 
   it("never lowers a stored, manual, or automatic valid fee", () => {
-    expect(router).toContain("Math.max(storedFee, input.feeAmount, automaticFee)");
     expect(router).toContain("Math.max(storedFee, automaticFee)");
-    expect(router).toContain("Math.max(nextStoredFee, nextAutomaticFee)");
+    expect(router).toContain("positiveOverrideActive");
+    expect(router).toContain("const effectiveFee = resolveEffectiveLateFee(inst, requiredFee).fee;");
+    expect(router).toContain("AND COALESCE(feeApplied,0)=");
   });
 
   it("uses minute-exact Sao Paulo bands and daily-only public panel", () => {
