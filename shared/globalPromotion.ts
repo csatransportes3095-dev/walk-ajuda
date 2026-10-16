@@ -7,6 +7,9 @@ const DAY_MS = 24 * 60 * 60 * 1000;
 // Horário de Brasília (UTC-03); os dias da semana indicam sempre a data de início.
 export type GlobalPromotionWeeklyWindow = {
   startDay: number; startTime: string; endDay: number; endTime: string;
+  // Data civil de Brasília em que esta faixa começa a valer pela primeira vez.
+  // Agendas antigas não têm esta propriedade e continuam recorrentes como antes.
+  firstStartDate?: string;
 };
 
 export type GlobalPromotionSchedule =
@@ -23,6 +26,38 @@ export function weeklyWindowRange(window: GlobalPromotionWeeklyWindow): { start:
   let end = window.endDay * 1440 + minutes(window.endTime);
   if (end < start) end += WEEK_MINUTES;
   return { start, end };
+}
+
+export function brazilDateFromMs(timestampMs: number): string {
+  return new Date(timestampMs - BRAZIL_OFFSET_MS).toISOString().slice(0, 10);
+}
+
+export function brazilDayFromDate(date: string): number {
+  return new Date(date + "T00:00:00Z").getUTCDay();
+}
+
+export function weeklyWindowOccurrence(
+  window: GlobalPromotionWeeklyWindow,
+  nowMs: number = Date.now(),
+): { startAt: number; endsAt: number; active: boolean } {
+  const interval = weeklyWindowRange(window);
+  const durationMs = (interval.end - interval.start) * 60_000;
+  // firstStartDate ancora a primeira execução e impede ativação antes dela.
+  const anchorStart = window.firstStartDate
+    ? Date.parse(window.firstStartDate + "T" + window.startTime + ":00-03:00")
+    : (() => {
+        const brazil = new Date(nowMs - BRAZIL_OFFSET_MS);
+        const todayUtc = Date.UTC(brazil.getUTCFullYear(), brazil.getUTCMonth(), brazil.getUTCDate());
+        const sundayUtc = todayUtc - brazil.getUTCDay() * DAY_MS;
+        return sundayUtc + BRAZIL_OFFSET_MS + interval.start * 60_000;
+      })();
+  const weekIndex = Math.max(window.firstStartDate ? 0 : -1, Math.floor((nowMs - anchorStart) / WEEK_MS));
+  const currentStart = anchorStart + weekIndex * WEEK_MS;
+  if (nowMs >= currentStart && nowMs < currentStart + durationMs) {
+    return { startAt: currentStart, endsAt: currentStart + durationMs, active: true };
+  }
+  const nextStart = nowMs < currentStart ? currentStart : currentStart + WEEK_MS;
+  return { startAt: nextStart, endsAt: nextStart + durationMs, active: false };
 }
 
 export function weeklyWindowsOverlap(windows: GlobalPromotionWeeklyWindow[]): boolean {
@@ -97,8 +132,10 @@ export function isValidGlobalPromotionSchedule(value: unknown): value is GlobalP
       if (!Number.isInteger(row.startDay) || (row.startDay as number) < 0 || (row.startDay as number) > 6 ||
           !Number.isInteger(row.endDay) || (row.endDay as number) < 0 || (row.endDay as number) > 6 ||
           !validTime(row.startTime) || !validTime(row.endTime)) return false;
-      const interval = weeklyWindowRange(row as unknown as GlobalPromotionWeeklyWindow);
-      return interval.end > interval.start && interval.end - interval.start < WEEK_MINUTES;
+      const typedRow = row as unknown as GlobalPromotionWeeklyWindow;
+      const interval = weeklyWindowRange(typedRow);
+      return interval.end > interval.start && interval.end - interval.start < WEEK_MINUTES &&
+        (row.firstStartDate === undefined || (validDate(row.firstStartDate) && brazilDayFromDate(row.firstStartDate) === row.startDay));
     });
     return valid && !weeklyWindowsOverlap(windows as GlobalPromotionWeeklyWindow[]);
   }
@@ -165,23 +202,16 @@ export function globalPromotionWindow(config: GlobalPromotionConfig | null | und
   }
 
   if (schedule.mode === "weekly_windows") {
-    // Domingo às 00h de Brasília é o ponto de referência de cada semana.
-    // O período pode atravessar sábado/domingo e a virada de semana.
-    const brazilDate = new Date(nowMs - BRAZIL_OFFSET_MS);
-    const today = Date.UTC(brazilDate.getUTCFullYear(), brazilDate.getUTCMonth(), brazilDate.getUTCDate());
-    const thisSundayMidnight = today - brazilDate.getUTCDay() * DAY_MS + BRAZIL_OFFSET_MS;
     let nextStart: number | null = null;
     let nextEnd: number | null = null;
     for (const window of schedule.windows) {
-      const { start, end } = weeklyWindowRange(window);
-      for (const weekOffset of [-1, 0, 1]) {
-        const startAt = thisSundayMidnight + weekOffset * WEEK_MS + start * 60_000;
-        const endsAt = thisSundayMidnight + weekOffset * WEEK_MS + end * 60_000;
-        if (nowMs >= startAt && nowMs < endsAt) return { active: true, status: "active", startsAt: startAt, endsAt };
-        if (startAt > nowMs && (nextStart === null || startAt < nextStart)) {
-          nextStart = startAt;
-          nextEnd = endsAt;
-        }
+      const execution = weeklyWindowOccurrence(window, nowMs);
+      if (execution.active) {
+        return { active: true, status: "active", startsAt: execution.startAt, endsAt: execution.endsAt };
+      }
+      if (nextStart === null || execution.startAt < nextStart) {
+        nextStart = execution.startAt;
+        nextEnd = execution.endsAt;
       }
     }
     return nextStart !== null
