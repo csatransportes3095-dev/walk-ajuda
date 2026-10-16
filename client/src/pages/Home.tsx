@@ -20,6 +20,7 @@ import { uploadOrderFileReliably } from "@/lib/reliableOrderUpload";
 import { isPersistedOrderResult } from "@shared/orderSubmission";
 import { getVehicleModels, getVehicleQuestionKind, VEHICLE_BRANDS, VEHICLE_COLORS, VEHICLE_YEARS } from "@shared/vehicleCatalog";
 import { applyVipBenefitToPrice, formatBrazilMoney, parseBrazilMoney } from "@shared/vipPricing";
+import { calculateGlobalPromotionPrice, globalPromotionIsActive, globalPromotionPrice } from "@shared/globalPromotion";
 import { publicSiteUrl } from "@shared/publicLinks";
 
 type Step = "home" | "registration" | "name-select" | "upload" | "pdf-upload" | "questions" | "cadastro" | "success";
@@ -305,6 +306,8 @@ export default function Home() {
     }));
   }, [baseProducts, activeOptionPriceModels]);
   const { data: settings } = trpc.settings.getAll.useQuery();
+  const { data: globalPromotion } = trpc.globalPromotion.get.useQuery(undefined, { refetchOnWindowFocus: true, refetchInterval: 15000 });
+  const sitePromoActive = globalPromotionIsActive(globalPromotion);
   const botEnabled = settings?.bot_assistant_enabled !== '0';
   const { data: activePix } = trpc.pix.getActive.useQuery();
   const { data: faqData } = trpc.faq.getPublic.useQuery();
@@ -1196,7 +1199,7 @@ export default function Home() {
 
   const { isVipCustomer } = useVipMembership();
   // Valor efetivo usado na cobrança/pedido: aplica benefício VIP quando o cliente está ativo.
-  const getPriceModelServiceValue = (model: OptionPriceModel | null | undefined): string => model ? applyVipBenefitToPrice(model.price, model, isVipCustomer) : '';
+  const getPriceModelServiceValue = (model: OptionPriceModel | null | undefined): string => model ? sitePromoActive ? globalPromotionPrice(model, globalPromotion) : applyVipBenefitToPrice(model.price, model, isVipCustomer) : '';
   // Valor normal de referência: nunca recebe desconto VIP.
   const getPriceModelNormalValue = (model: OptionPriceModel | null | undefined): string => model ? String(model.price || '') : '';
 
@@ -1209,15 +1212,16 @@ export default function Home() {
   // Obter valor atual (usa benefício VIP do Modelo/Categoria quando configurado)
   const getCurrentServiceValue = (): string => {
     if (selectedPriceModel) return getPriceModelServiceValue(selectedPriceModel);
-    if (selectedTier) return selectedTier.price;
-    if (selectedOption) return selectedOption.price;
+    if (selectedTier) return sitePromoActive ? globalPromotionPrice(selectedTier, globalPromotion) : selectedTier.price;
+    if (selectedOption) return sitePromoActive ? globalPromotionPrice(selectedOption, globalPromotion) : selectedOption.price;
     return "Consulte";
   };
 
   const getCurrentNormalServiceValue = (): string => {
+    if (sitePromoActive) { const source = selectedPriceModel || selectedTier || selectedOption; return source ? calculateGlobalPromotionPrice(source, globalPromotion).base : "Consulte"; }
     if (selectedPriceModel) return getPriceModelNormalValue(selectedPriceModel);
-    if (selectedTier) return selectedTier.price;
-    if (selectedOption) return selectedOption.price;
+    if (selectedTier) return sitePromoActive ? globalPromotionPrice(selectedTier, globalPromotion) : selectedTier.price;
+    if (selectedOption) return sitePromoActive ? globalPromotionPrice(selectedOption, globalPromotion) : selectedOption.price;
     return "Consulte";
   };
 
@@ -1249,6 +1253,7 @@ export default function Home() {
   };
 
   const getResellerDiscountAmount = (): number => {
+    if (sitePromoActive) return 0;
     if (!resellerInfo?.isReseller) return 0;
     if (hasActivePromotion()) return 0; // promoção tem prioridade
     const rawValue = getCurrentServiceValue();
@@ -1267,6 +1272,7 @@ export default function Home() {
   };
 
   const calculateDiscountedValue = (originalValue: string): string => {
+    if (sitePromoActive) return originalValue;
     const numericValue = parseFloat(originalValue.replace('R$ ', '').replace('.', '').replace(',', '.'));
     if (isNaN(numericValue)) return originalValue;
     let discounted = numericValue;
@@ -1759,13 +1765,13 @@ export default function Home() {
         // Calcular total bruto do carrinho
         let cartTotalValue = 0;
         for (const item of cartItems) {
-          const price = getPriceModelServiceValue(item.priceModel) || item.option?.price || '0';
+          const price = getPriceModelServiceValue(item.priceModel) || (item.option ? globalPromotionPrice(item.option, globalPromotion) : '0');
           const num = parseFloat(price.replace('R$ ', '').replace('.', '').replace(',', '.'));
           if (!isNaN(num)) cartTotalValue += num;
         }
         // Calcular desconto do cupom sobre o total
         let cartCouponDiscountValue: number | undefined;
-        if (couponDiscount) {
+        if (!sitePromoActive && couponDiscount) {
           if (couponDiscount.type === 'percentage') {
             cartCouponDiscountValue = cartTotalValue * couponDiscount.value / 100;
           } else {
@@ -1780,7 +1786,7 @@ export default function Home() {
           const item = cartItems[i];
           setSubmitProgress(`Enviando pedido ${i + 1} de ${cartItems.length}: ${item.product.name}...`);
           // Calcular preço individual do item (sem desconto — o desconto é do carrinho todo)
-          const itemRawPrice = getPriceModelServiceValue(item.priceModel) || item.option?.price || undefined;
+          const itemRawPrice = getPriceModelServiceValue(item.priceModel) || (item.option ? globalPromotionPrice(item.option, globalPromotion) : undefined);
           try {
             const itemResult = await submitMutation.mutateAsync({
               clientName: clientName.trim() || 'Cliente',
@@ -1935,11 +1941,13 @@ export default function Home() {
         docNameMode: selectedOption?.docNameMode || 'none',
         docCustomName: selectedOption?.docCustomName || '',
         price: (() => {
-          const rawPrice = getPriceModelServiceValue(selectedPriceModel) || selectedTier?.price || selectedOption?.price;
+          const rawPrice = getPriceModelServiceValue(selectedPriceModel) || (selectedTier ? globalPromotionPrice(selectedTier, globalPromotion) : selectedOption ? globalPromotionPrice(selectedOption, globalPromotion) : undefined);
           if (!rawPrice) return undefined;
           const resellerDiscount = getResellerDiscountAmount();
           return (couponDiscount || resellerDiscount > 0) ? calculateDiscountedValue(rawPrice) : rawPrice;
         })(),
+        priceModelId: selectedPriceModel?.id || undefined,
+        warrantyTierId: selectedTier?.id || undefined,
         thirdPartyName: thirdPartyName.trim() || undefined,
         thirdPartyPhone: thirdPartyPhone.trim() || undefined,
         resellerDiscountApplied: (() => {
@@ -1978,7 +1986,7 @@ export default function Home() {
         }
         // Salvar dados do pedido para mensagem WhatsApp
         const singlePrice = (() => {
-          const rawPrice = getPriceModelServiceValue(selectedPriceModel) || selectedTier?.price || selectedOption?.price;
+          const rawPrice = getPriceModelServiceValue(selectedPriceModel) || (selectedTier ? globalPromotionPrice(selectedTier, globalPromotion) : selectedOption ? globalPromotionPrice(selectedOption, globalPromotion) : undefined);
           if (!rawPrice) return '';
           const resellerDiscount = getResellerDiscountAmount();
           return (couponDiscount || resellerDiscount > 0) ? calculateDiscountedValue(rawPrice) : rawPrice;
@@ -2196,7 +2204,8 @@ export default function Home() {
   const hasVipPriceDiscount = vipDiscountValue > 0;
 
   const hasResellerDiscount = getResellerDiscountAmount() > 0;
-  const finalValue = (couponDiscount || hasResellerDiscount) ? calculateDiscountedValue(originalValue) : originalValue;
+  const activeCouponDiscount = sitePromoActive ? null : couponDiscount;
+  const finalValue = (activeCouponDiscount || hasResellerDiscount) ? calculateDiscountedValue(originalValue) : originalValue;
 
   // Calcular totais do carrinho: normal para referência e efetivo VIP para cobrança.
   const cartTotals = useMemo(() => {
@@ -2204,13 +2213,13 @@ export default function Home() {
     let normal = 0;
     let effective = 0;
     for (const item of cart) {
-      const normalPrice = getPriceModelNormalValue(item.priceModel) || item.option?.price || '0';
-      const effectivePrice = getPriceModelServiceValue(item.priceModel) || item.option?.price || '0';
+      const normalPrice = sitePromoActive ? (item.priceModel ? calculateGlobalPromotionPrice(item.priceModel, globalPromotion).base : item.option ? calculateGlobalPromotionPrice(item.option, globalPromotion).base : '0') : (getPriceModelNormalValue(item.priceModel) || item.option?.price || '0');
+      const effectivePrice = getPriceModelServiceValue(item.priceModel) || (item.option ? globalPromotionPrice(item.option, globalPromotion) : '0');
       normal += parseBrazilMoney(normalPrice);
       effective += parseBrazilMoney(effectivePrice);
     }
     return { normal, effective };
-  }, [cart, isVipCustomer]);
+  }, [cart, isVipCustomer, globalPromotion]);
 
   const cartTotal = cartTotals.effective;
   const cartNormalTotal = cartTotals.normal;
@@ -2220,10 +2229,10 @@ export default function Home() {
   const cartHasVipPriceDiscount = cartVipDiscountValue > 0;
   const cartNormalTotalFormatted = cartNormalTotal !== null ? formatBrazilMoney(cartNormalTotal) : null;
   const cartTotalFormatted = cartTotal !== null ? formatBrazilMoney(cartTotal) : null;
-  const cartTotalWithDiscount = (cartTotal !== null && (couponDiscount || hasResellerDiscount)) ? calculateDiscountedValue(cartTotalFormatted!) : cartTotalFormatted;
+  const cartTotalWithDiscount = (cartTotal !== null && (activeCouponDiscount || hasResellerDiscount)) ? calculateDiscountedValue(cartTotalFormatted!) : cartTotalFormatted;
 
   // Valor a exibir no PIX: à vista mantém o cálculo atual; Parcelamento VIP cobra a entrada quando configurada.
-  const cashPixValue = cart.length > 1 ? ((couponDiscount || hasResellerDiscount) ? cartTotalWithDiscount : cartTotalFormatted) : ((couponDiscount || hasResellerDiscount) ? finalValue : originalValue);
+  const cashPixValue = cart.length > 1 ? ((activeCouponDiscount || hasResellerDiscount) ? cartTotalWithDiscount : cartTotalFormatted) : ((activeCouponDiscount || hasResellerDiscount) ? finalValue : originalValue);
   const vipEntryCents = Number(vipInstallmentSelection.quote?.quote?.firstInstallmentAmountCents || 0);
   const vipFirstParcelCents = Number(vipInstallmentSelection.quote?.quote?.installments?.[0]?.amountCents || 0);
   const vipCurrentPixCents = vipEntryCents > 0 ? vipEntryCents : vipFirstParcelCents;
@@ -4775,7 +4784,7 @@ export default function Home() {
                 {cart.length > 1 && (() => {
                   let total = 0;
                   for (const item of cart) {
-                    const price = getPriceModelServiceValue(item.priceModel) || item.option?.price || '0';
+                    const price = getPriceModelServiceValue(item.priceModel) || (item.option ? globalPromotionPrice(item.option, globalPromotion) : '0');
                     const num = parseFloat(price.replace('R$ ', '').replace('.', '').replace(',', '.'));
                     if (!isNaN(num)) total += num;
                   }
