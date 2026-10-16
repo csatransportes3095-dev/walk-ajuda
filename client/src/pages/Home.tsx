@@ -48,6 +48,7 @@ type CartItem = {
   product: Product;
   option: ProductOption | null;
   priceModel: OptionPriceModel | null;
+  tier: WarrantyTier | null;
 };
 
 type ProductQuestion = { id: number; question: string; fieldType: string; options: string | null; isRequired: number; sortOrder: number; helpText?: string | null; audioMinDurationSeconds?: number; audioMaxDurationSeconds?: number; allowAudioRerecord?: number; allowAudioFileUpload?: number; questionPresentation?: 'text' | 'audio'; questionAudioUrl?: string | null; showQuestionTextWithAudio?: number; parentQuestionId: number | null; triggerOption: string | null };
@@ -925,9 +926,9 @@ export default function Home() {
   const [showCart, setShowCart] = useState(false);
   const [cartPendingProduct, setCartPendingProduct] = useState<Product | null>(null);
 
-  const addToCart = (product: Product, option: ProductOption | null, priceModel: OptionPriceModel | null = null) => {
+  const addToCart = (product: Product, option: ProductOption | null, priceModel: OptionPriceModel | null = null, tier: WarrantyTier | null = null) => {
     const id = `${product.id}-${option?.id ?? 'none'}-${priceModel?.id ?? 'base'}-${Date.now()}`;
-    setCart(prev => [...prev, { id, product, option, priceModel }]);
+    setCart(prev => [...prev, { id, product, option, priceModel, tier }]);
     toast.success(`"${product.name}" adicionado ao carrinho!`);
     setShowCart(true);
   };
@@ -960,6 +961,7 @@ export default function Home() {
     setSelectedProduct(first.product);
     setSelectedOption(first.option);
     setSelectedPriceModel(first.priceModel);
+    setSelectedTier(first.tier);
     // Limpar uploads anteriores
     localStorage.removeItem(UPLOADED_FILES_KEY);
     setDocFiles({});
@@ -1766,7 +1768,7 @@ export default function Home() {
         // Calcular total bruto do carrinho
         let cartTotalValue = 0;
         for (const item of cartItems) {
-          const price = getPriceModelServiceValue(item.priceModel) || (item.option ? globalPromotionPrice(item.option, globalPromotion) : '0');
+          const price = getPriceModelServiceValue(item.priceModel) || (item.tier ? globalPromotionPrice(item.tier, globalPromotion) : item.option ? globalPromotionPrice(item.option, globalPromotion) : '0');
           const num = parseFloat(price.replace('R$ ', '').replace('.', '').replace(',', '.'));
           if (!isNaN(num)) cartTotalValue += num;
         }
@@ -1787,7 +1789,7 @@ export default function Home() {
           const item = cartItems[i];
           setSubmitProgress(`Enviando pedido ${i + 1} de ${cartItems.length}: ${item.product.name}...`);
           // Calcular preço individual do item (sem desconto — o desconto é do carrinho todo)
-          const itemRawPrice = getPriceModelServiceValue(item.priceModel) || (item.option ? globalPromotionPrice(item.option, globalPromotion) : undefined);
+          const itemRawPrice = getPriceModelServiceValue(item.priceModel) || (item.tier ? globalPromotionPrice(item.tier, globalPromotion) : item.option ? globalPromotionPrice(item.option, globalPromotion) : undefined);
           try {
             const itemResult = await submitMutation.mutateAsync({
               clientName: clientName.trim() || 'Cliente',
@@ -1826,6 +1828,7 @@ export default function Home() {
               docCustomName: item.option?.docCustomName || '',
               price: itemRawPrice,
               priceModelId: item.priceModel?.id || undefined,
+              warrantyTierId: item.tier?.id || undefined,
         thirdPartyName: thirdPartyName.trim() || undefined,
               thirdPartyPhone: thirdPartyPhone.trim() || undefined,
               resellerDiscountApplied: (() => { const d = getResellerDiscountAmount(); return d > 0 ? d : undefined; })(),
@@ -1862,7 +1865,7 @@ export default function Home() {
           cartItems: cartItems.map(item => ({
             service: item.product.name,
             nameOption: item.option ? `${item.option.label}${item.priceModel ? ` — ${item.priceModel.label}` : ''}` : 'N/A',
-            price: getPriceModelServiceValue(item.priceModel) || (item.option ? globalPromotionPrice(item.option, globalPromotion) : '')
+            price: getPriceModelServiceValue(item.priceModel) || (item.tier ? globalPromotionPrice(item.tier, globalPromotion) : item.option ? globalPromotionPrice(item.option, globalPromotion) : '')
           })),
           answers: answersArray,
           docs: dynamicDocsArray.filter(d => d.url).map(d => ({ label: d.label, url: d.url! })),
@@ -2214,8 +2217,8 @@ export default function Home() {
     let normal = 0;
     let effective = 0;
     for (const item of cart) {
-      const normalPrice = sitePromoActive ? (item.priceModel ? calculateGlobalPromotionPrice(item.priceModel, globalPromotion).base : item.option ? calculateGlobalPromotionPrice(item.option, globalPromotion).base : '0') : (getPriceModelNormalValue(item.priceModel) || item.option?.price || '0');
-      const effectivePrice = getPriceModelServiceValue(item.priceModel) || (item.option ? globalPromotionPrice(item.option, globalPromotion) : '0');
+      const normalPrice = sitePromoActive ? (item.priceModel ? calculateGlobalPromotionPrice(item.priceModel, globalPromotion).base : item.tier ? calculateGlobalPromotionPrice(item.tier, globalPromotion).base : item.option ? calculateGlobalPromotionPrice(item.option, globalPromotion).base : '0') : (getPriceModelNormalValue(item.priceModel) || item.tier?.price || item.option?.price || '0');
+      const effectivePrice = getPriceModelServiceValue(item.priceModel) || (item.tier ? globalPromotionPrice(item.tier, globalPromotion) : item.option ? globalPromotionPrice(item.option, globalPromotion) : '0');
       normal += parseBrazilMoney(normalPrice);
       effective += parseBrazilMoney(effectivePrice);
     }
@@ -4786,7 +4789,7 @@ export default function Home() {
                 {cart.length > 1 && (() => {
                   let total = 0;
                   for (const item of cart) {
-                    const price = getPriceModelServiceValue(item.priceModel) || (item.option ? globalPromotionPrice(item.option, globalPromotion) : '0');
+                    const price = getPriceModelServiceValue(item.priceModel) || (item.tier ? globalPromotionPrice(item.tier, globalPromotion) : item.option ? globalPromotionPrice(item.option, globalPromotion) : '0');
                     const num = parseFloat(price.replace('R$ ', '').replace('.', '').replace(',', '.'));
                     if (!isNaN(num)) total += num;
                   }
@@ -5197,7 +5200,7 @@ export default function Home() {
                         item={item as StorefrontCatalogItem}
                         globalPromotion={globalPromotion}
                         onBuy={(tier, priceModel) => startDirectOptionCheckout(item.product, item.option, tier as unknown as WarrantyTier | null, priceModel as OptionPriceModel | null)}
-                        onAddToCart={(_tier, priceModel) => addToCart(item.product, item.option, priceModel as OptionPriceModel | null)}
+                        onAddToCart={(tier, priceModel) => addToCart(item.product, item.option, priceModel as OptionPriceModel | null, tier as WarrantyTier | null)}
                       />
                     ))}
                   </div>
