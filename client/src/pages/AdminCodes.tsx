@@ -45,6 +45,7 @@ const ADMIN_SHORTCUTS: AdminShortcut[] = [
   { id: 'settings', href: '/admin/settings', label: 'Configurações', icon: Globe, tone: 'bg-orange-600/20 border-orange-500/30 hover:bg-orange-600/30', iconTone: 'text-orange-400' },
   { id: 'cep', href: '/admin/cep', label: 'Consulta CEP', icon: MapPin, tone: 'bg-emerald-600/20 border-emerald-500/30 hover:bg-emerald-600/30', iconTone: 'text-emerald-400' },
   { id: 'consultas', href: '/admin/consultas', label: 'Consultas', icon: FileSearch, tone: 'bg-orange-600/20 border-orange-500/30 hover:bg-orange-600/30', iconTone: 'text-orange-400' },
+  { id: 'global-promo', href: '/admin/promocao-geral', label: 'Promoção Geral', icon: Ticket, tone: 'bg-rose-600/20 border-rose-500/40 hover:bg-rose-600/30', iconTone: 'text-rose-300' },
   { id: 'coupons', href: '/admin/coupons', label: 'Cupons', icon: Ticket, tone: 'bg-green-600/20 border-green-500/30 hover:bg-green-600/30', iconTone: 'text-green-400' },
   { id: 'email', href: '/admin/email', label: 'Emails', icon: Mail, tone: 'bg-blue-600/20 border-blue-500/30 hover:bg-blue-600/30', iconTone: 'text-blue-400' },
   { id: 'email-generator', href: '/admin/gerador-emails', label: 'Gerador E-mails', icon: MailPlus, tone: 'bg-yellow-600/20 border-yellow-500/35 hover:bg-yellow-600/30', iconTone: 'text-yellow-300' },

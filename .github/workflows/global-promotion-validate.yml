@@ -1,0 +1,43 @@
+name: Global promotion isolated validation
+on:
+  push:
+    branches: [feature/desconto-geral-site-20261016]
+  pull_request:
+    branches: [recovery/organizar-salvos-2026-08-24]
+  workflow_dispatch:
+permissions:
+  contents: read
+jobs:
+  validate:
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+    steps:
+      - uses: actions/checkout@v4
+      - uses: pnpm/action-setup@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '22'
+          cache: pnpm
+      - run: pnpm install --frozen-lockfile
+      - run: pnpm exec vitest run shared/globalPromotion.test.ts server/vipPricing.test.ts
+      - run: pnpm build
+      - name: Ensure no new TypeScript errors versus production
+        run: |
+          git fetch --no-tags origin recovery/organizar-salvos-2026-08-24
+          git worktree add --detach /tmp/promo-baseline FETCH_HEAD
+          ln -s "$PWD/node_modules" /tmp/promo-baseline/node_modules
+          (cd /tmp/promo-baseline && pnpm check > /tmp/promo-before.log 2>&1) || true
+          pnpm check > /tmp/promo-after.log 2>&1 || true
+          python3 - <<'PY'
+          import re
+          from collections import Counter
+          from pathlib import Path
+          def errors(path):
+              return Counter(re.sub(r'\([0-9]+,[0-9]+\)', '', line) for line in Path(path).read_text().splitlines() if 'error TS' in line)
+          before=errors('/tmp/promo-before.log')
+          after=errors('/tmp/promo-after.log')
+          added=after-before
+          print('PREEXISTING',sum(before.values()), 'CURRENT',sum(after.values()), 'NEW',sum(added.values()))
+          for line,n in added.items(): print(n,line)
+          if added: raise SystemExit(1)
+          PY

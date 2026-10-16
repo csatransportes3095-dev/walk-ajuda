@@ -12,6 +12,7 @@ import { uploadOrderFileReliably } from "@/lib/reliableOrderUpload";
 import { isPersistedOrderResult } from "@shared/orderSubmission";
 import { getVehicleModels, getVehicleQuestionKind, VEHICLE_BRANDS, VEHICLE_COLORS, VEHICLE_YEARS } from "@shared/vehicleCatalog";
 import { applyVipBenefitToPrice, isVipOnlyLocked, normalizeVipAccessMode, vipBenefitText } from "@shared/vipPricing";
+import { globalPromotionIsActive, globalPromotionPrice } from "@shared/globalPromotion";
 
 // ── Tipos ────────────────────────────────────────────────────────────────────
 
@@ -143,7 +144,10 @@ export function ColombiaBot({ products, onStartNormal, onSelectProduct, onSelect
   const { data: settingsData } = trpc.settings.getAll.useQuery();
   const clientPhone = typeof window !== 'undefined' ? localStorage.getItem('walk_client_phone') || '' : '';
   const { isVipCustomer } = useVipMembership();
-  const getModelPrice = (model: OptionPriceModel | null | undefined) => model ? applyVipBenefitToPrice(model.price, model, isVipCustomer) : '';
+  const { data: globalPromotion } = trpc.globalPromotion.get.useQuery(undefined, { refetchOnWindowFocus: true, refetchInterval: 15000 });
+  const sitePromoActive = globalPromotionIsActive(globalPromotion);
+  const priceForOption = (option: ProductOption | null | undefined) => option ? globalPromotionPrice({ price: option.price || "", originalPrice: (option as any).originalPrice || null }, globalPromotion) : "";
+  const getModelPrice = (model: OptionPriceModel | null | undefined) => model ? sitePromoActive ? globalPromotionPrice(model, globalPromotion) : applyVipBenefitToPrice(model.price, model, isVipCustomer) : '';
   const profileQuery = trpc.customers.getMyProfile.useQuery(
     { phone: clientPhone },
     { enabled: !!clientPhone }
@@ -461,7 +465,7 @@ export function ColombiaBot({ products, onStartNormal, onSelectProduct, onSelect
       markAnswered(optId);
       addMsgs({ type: "user", id: uid(), text: opt });
       const option = product.options.find(o => {
-        const label = `${o.label || o.name}${o.price ? ` — R$ ${o.price}` : ""}`;
+        const label = `${o.label || o.name}${o.price ? ` — ${priceForOption(o)}` : ""}`;
         return label === opt;
       });
       if (!option) return;
@@ -476,7 +480,7 @@ export function ColombiaBot({ products, onStartNormal, onSelectProduct, onSelect
       {
         type: "options",
         id: optId,
-        options: product.options.map(o => `${o.label || o.name}${o.price ? ` — R$ ${o.price}` : ""}`),
+        options: product.options.map(o => `${o.label || o.name}${o.price ? ` — ${priceForOption(o)}` : ""}`),
         answered: false
       }
     );
@@ -492,8 +496,8 @@ export function ColombiaBot({ products, onStartNormal, onSelectProduct, onSelect
     const displayLabel = (model: OptionPriceModel) => {
       const locked = isVipOnlyLocked(model, isVipCustomer);
       const mode = normalizeVipAccessMode(model.vipAccessMode);
-      const prefix = locked ? '🔒 SOMENTE VIP • ' : (mode !== 'all' ? '👑 VIP • ' : '');
-      const benefit = isVipCustomer ? vipBenefitText(model) : '';
+      const prefix = locked ? '🔒 SOMENTE VIP • ' : (!sitePromoActive && mode !== 'all' ? '👑 VIP • ' : '');
+      const benefit = !sitePromoActive && isVipCustomer ? vipBenefitText(model) : '';
       return `${prefix}${model.label} — ${getModelPrice(model)}${benefit ? ` • ${benefit}` : ''}`;
     };
     if (models.length === 1 && !isVipOnlyLocked(models[0], isVipCustomer)) {
@@ -691,6 +695,12 @@ export function ColombiaBot({ products, onStartNormal, onSelectProduct, onSelect
 
   // Etapa de cupom de desconto — antes do Pix
   const askCoupon = (product: Product, option: ProductOption | null) => {
+    if (sitePromoActive) {
+      flowState.current.couponCode = "";
+      flowState.current.couponDiscount = null;
+      askPix(product, option);
+      return;
+    }
     saveSnapshot();
     const msgId = uid();
     // Callback para quando o cliente clicar em Sim ou Não
@@ -750,7 +760,7 @@ export function ColombiaBot({ products, onStartNormal, onSelectProduct, onSelect
     const pixKey = activePix?.pixKey || settingsData?.pix_key || '';
     const pixName = activePix?.pixName || settingsData?.pix_name || '';
     const pixBank = activePix?.pixBank || settingsData?.pix_bank || '';
-    const price = getModelPrice(flowState.current.priceModel) || option?.price || '';
+    const price = getModelPrice(flowState.current.priceModel) || priceForOption(option);
 
     const msgId = uid();
     pendingPixMsgId.current = msgId;
@@ -856,11 +866,11 @@ export function ColombiaBot({ products, onStartNormal, onSelectProduct, onSelect
           autoScheduleOptionId: option?.id,
           questionAudioFlowId: hasAudioAnswersForCurrentOption ? flowState.current.audioFlowId : undefined,
           audioDraftIds: hasAudioAnswersForCurrentOption ? audioDraftIdsForSubmit : undefined,
-          couponCode: flowState.current.couponCode || undefined,
+          couponCode: !sitePromoActive ? flowState.current.couponCode || undefined : undefined,
           price: (() => {
-            const rawPrice = getModelPrice(flowState.current.priceModel) || option?.price;
+            const rawPrice = getModelPrice(flowState.current.priceModel) || priceForOption(option);
             if (!rawPrice) return undefined;
-            const discount = flowState.current.couponDiscount;
+            const discount = sitePromoActive ? null : flowState.current.couponDiscount;
             if (!discount) return rawPrice;
             // Extrair valor numérico do preço (ex: "R$ 350,00" -> 350)
             const num = parseFloat(rawPrice.replace(/[^\d,]/g, '').replace(',', '.'));
@@ -880,7 +890,7 @@ export function ColombiaBot({ products, onStartNormal, onSelectProduct, onSelect
           clearCompletedBotProgress();
           addMsgs({ type: "bot", id: uid(), text: "Pedido enviado com sucesso! \u2705\n\nO admin j\u00e1 recebeu e entrar\u00e1 em contato em breve." });
           onOrderComplete({
-            cartItems: [{ service: product.name, nameOption: option?.label || option?.name || 'N/A', price: getModelPrice(flowState.current.priceModel) || option?.price || '' }],
+            cartItems: [{ service: product.name, nameOption: option?.label || option?.name || 'N/A', price: getModelPrice(flowState.current.priceModel) || priceForOption(option) }],
             answers: answersArray,
             docs: docsArray,
             totalValue: getModelPrice(flowState.current.priceModel) || option?.price || '',

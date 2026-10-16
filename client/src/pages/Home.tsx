@@ -20,6 +20,7 @@ import { uploadOrderFileReliably } from "@/lib/reliableOrderUpload";
 import { isPersistedOrderResult } from "@shared/orderSubmission";
 import { getVehicleModels, getVehicleQuestionKind, VEHICLE_BRANDS, VEHICLE_COLORS, VEHICLE_YEARS } from "@shared/vehicleCatalog";
 import { applyVipBenefitToPrice, formatBrazilMoney, parseBrazilMoney } from "@shared/vipPricing";
+import { calculateGlobalPromotionPrice, globalPromotionIsActive, globalPromotionPrice } from "@shared/globalPromotion";
 import { publicSiteUrl } from "@shared/publicLinks";
 
 type Step = "home" | "registration" | "name-select" | "upload" | "pdf-upload" | "questions" | "cadastro" | "success";
@@ -47,6 +48,7 @@ type CartItem = {
   product: Product;
   option: ProductOption | null;
   priceModel: OptionPriceModel | null;
+  tier: WarrantyTier | null;
 };
 
 type ProductQuestion = { id: number; question: string; fieldType: string; options: string | null; isRequired: number; sortOrder: number; helpText?: string | null; audioMinDurationSeconds?: number; audioMaxDurationSeconds?: number; allowAudioRerecord?: number; allowAudioFileUpload?: number; questionPresentation?: 'text' | 'audio'; questionAudioUrl?: string | null; showQuestionTextWithAudio?: number; parentQuestionId: number | null; triggerOption: string | null };
@@ -305,6 +307,8 @@ export default function Home() {
     }));
   }, [baseProducts, activeOptionPriceModels]);
   const { data: settings } = trpc.settings.getAll.useQuery();
+  const { data: globalPromotion } = trpc.globalPromotion.get.useQuery(undefined, { refetchOnWindowFocus: true, refetchInterval: 15000 });
+  const sitePromoActive = globalPromotionIsActive(globalPromotion);
   const botEnabled = settings?.bot_assistant_enabled !== '0';
   const { data: activePix } = trpc.pix.getActive.useQuery();
   const { data: faqData } = trpc.faq.getPublic.useQuery();
@@ -922,9 +926,9 @@ export default function Home() {
   const [showCart, setShowCart] = useState(false);
   const [cartPendingProduct, setCartPendingProduct] = useState<Product | null>(null);
 
-  const addToCart = (product: Product, option: ProductOption | null, priceModel: OptionPriceModel | null = null) => {
+  const addToCart = (product: Product, option: ProductOption | null, priceModel: OptionPriceModel | null = null, tier: WarrantyTier | null = null) => {
     const id = `${product.id}-${option?.id ?? 'none'}-${priceModel?.id ?? 'base'}-${Date.now()}`;
-    setCart(prev => [...prev, { id, product, option, priceModel }]);
+    setCart(prev => [...prev, { id, product, option, priceModel, tier }]);
     toast.success(`"${product.name}" adicionado ao carrinho!`);
     setShowCart(true);
   };
@@ -957,6 +961,7 @@ export default function Home() {
     setSelectedProduct(first.product);
     setSelectedOption(first.option);
     setSelectedPriceModel(first.priceModel);
+    setSelectedTier(first.tier);
     // Limpar uploads anteriores
     localStorage.removeItem(UPLOADED_FILES_KEY);
     setDocFiles({});
@@ -1196,7 +1201,7 @@ export default function Home() {
 
   const { isVipCustomer } = useVipMembership();
   // Valor efetivo usado na cobrança/pedido: aplica benefício VIP quando o cliente está ativo.
-  const getPriceModelServiceValue = (model: OptionPriceModel | null | undefined): string => model ? applyVipBenefitToPrice(model.price, model, isVipCustomer) : '';
+  const getPriceModelServiceValue = (model: OptionPriceModel | null | undefined): string => model ? sitePromoActive ? globalPromotionPrice(model, globalPromotion) : applyVipBenefitToPrice(model.price, model, isVipCustomer) : '';
   // Valor normal de referência: nunca recebe desconto VIP.
   const getPriceModelNormalValue = (model: OptionPriceModel | null | undefined): string => model ? String(model.price || '') : '';
 
@@ -1209,20 +1214,22 @@ export default function Home() {
   // Obter valor atual (usa benefício VIP do Modelo/Categoria quando configurado)
   const getCurrentServiceValue = (): string => {
     if (selectedPriceModel) return getPriceModelServiceValue(selectedPriceModel);
-    if (selectedTier) return selectedTier.price;
-    if (selectedOption) return selectedOption.price;
+    if (selectedTier) return sitePromoActive ? globalPromotionPrice(selectedTier, globalPromotion) : selectedTier.price;
+    if (selectedOption) return sitePromoActive ? globalPromotionPrice(selectedOption, globalPromotion) : selectedOption.price;
     return "Consulte";
   };
 
   const getCurrentNormalServiceValue = (): string => {
+    if (sitePromoActive) { const source = selectedPriceModel || selectedTier || selectedOption; return source ? calculateGlobalPromotionPrice(source, globalPromotion).base : "Consulte"; }
     if (selectedPriceModel) return getPriceModelNormalValue(selectedPriceModel);
-    if (selectedTier) return selectedTier.price;
-    if (selectedOption) return selectedOption.price;
+    if (selectedTier) return sitePromoActive ? globalPromotionPrice(selectedTier, globalPromotion) : selectedTier.price;
+    if (selectedOption) return sitePromoActive ? globalPromotionPrice(selectedOption, globalPromotion) : selectedOption.price;
     return "Consulte";
   };
 
   // Calcula se o item atual tem promoção ativa (preço riscado)
   const hasActivePromotion = (): boolean => {
+    if (sitePromoActive) return true;
     if (selectedPriceModel) return !!selectedPriceModel.originalPrice;
     // Se tem tier selecionado, verifica se o tier tem promoção
     if (selectedTier) return !!(selectedTier as any).originalPrice;
@@ -1249,6 +1256,7 @@ export default function Home() {
   };
 
   const getResellerDiscountAmount = (): number => {
+    if (sitePromoActive) return 0;
     if (!resellerInfo?.isReseller) return 0;
     if (hasActivePromotion()) return 0; // promoção tem prioridade
     const rawValue = getCurrentServiceValue();
@@ -1267,6 +1275,7 @@ export default function Home() {
   };
 
   const calculateDiscountedValue = (originalValue: string): string => {
+    if (sitePromoActive) return originalValue;
     const numericValue = parseFloat(originalValue.replace('R$ ', '').replace('.', '').replace(',', '.'));
     if (isNaN(numericValue)) return originalValue;
     let discounted = numericValue;
@@ -1743,7 +1752,7 @@ export default function Home() {
 
       // Parcelamento VIP é exclusivo do fluxo direto de um único produto nesta primeira versão.
       const vipInstallmentActive = vipInstallmentSelection.mode === 'vip_installment';
-      if (vipInstallmentActive && (cart.length > 0 || activeResellerSlug || !selectedProduct || !selectedOption)) {
+      if (vipInstallmentActive && (sitePromoActive || cart.length > 0 || activeResellerSlug || !selectedProduct || !selectedOption)) {
         throw new Error('Parcelamento VIP disponível somente para compra direta de um produto por vez.');
       }
       if (vipInstallmentActive && !vipCheckoutTokenRef.current) {
@@ -1759,13 +1768,13 @@ export default function Home() {
         // Calcular total bruto do carrinho
         let cartTotalValue = 0;
         for (const item of cartItems) {
-          const price = getPriceModelServiceValue(item.priceModel) || item.option?.price || '0';
+          const price = getPriceModelServiceValue(item.priceModel) || (item.tier ? globalPromotionPrice(item.tier, globalPromotion) : item.option ? globalPromotionPrice(item.option, globalPromotion) : '0');
           const num = parseFloat(price.replace('R$ ', '').replace('.', '').replace(',', '.'));
           if (!isNaN(num)) cartTotalValue += num;
         }
         // Calcular desconto do cupom sobre o total
         let cartCouponDiscountValue: number | undefined;
-        if (couponDiscount) {
+        if (!sitePromoActive && couponDiscount) {
           if (couponDiscount.type === 'percentage') {
             cartCouponDiscountValue = cartTotalValue * couponDiscount.value / 100;
           } else {
@@ -1780,7 +1789,7 @@ export default function Home() {
           const item = cartItems[i];
           setSubmitProgress(`Enviando pedido ${i + 1} de ${cartItems.length}: ${item.product.name}...`);
           // Calcular preço individual do item (sem desconto — o desconto é do carrinho todo)
-          const itemRawPrice = getPriceModelServiceValue(item.priceModel) || item.option?.price || undefined;
+          const itemRawPrice = getPriceModelServiceValue(item.priceModel) || (item.tier ? globalPromotionPrice(item.tier, globalPromotion) : item.option ? globalPromotionPrice(item.option, globalPromotion) : undefined);
           try {
             const itemResult = await submitMutation.mutateAsync({
               clientName: clientName.trim() || 'Cliente',
@@ -1804,7 +1813,7 @@ export default function Home() {
               email: clientEmail.trim(),
               accessCode: accessCode || undefined,
               cpToken: cpTokenForSubmit || undefined,
-              couponCode: couponValid ? couponCode : undefined,
+              couponCode: !sitePromoActive && couponValid ? couponCode : undefined,
               // Comprovante PIX: apenas no primeiro item (cartItemIndex=0)
               paymentProof: undefined,
               paymentProofUrl: i === 0 ? paymentProofUploadedUrl : undefined,
@@ -1819,14 +1828,15 @@ export default function Home() {
               docCustomName: item.option?.docCustomName || '',
               price: itemRawPrice,
               priceModelId: item.priceModel?.id || undefined,
+              warrantyTierId: item.tier?.id || undefined,
         thirdPartyName: thirdPartyName.trim() || undefined,
               thirdPartyPhone: thirdPartyPhone.trim() || undefined,
               resellerDiscountApplied: (() => { const d = getResellerDiscountAmount(); return d > 0 ? d : undefined; })(),
               // Campos de agrupamento de carrinho
               cartGroupId,
               cartTotal: cartTotalValue,
-              cartCouponCode: couponValid ? couponCode : undefined,
-              cartCouponDiscount: cartCouponDiscountValue,
+              cartCouponCode: !sitePromoActive && couponValid ? couponCode : undefined,
+              cartCouponDiscount: sitePromoActive ? undefined : cartCouponDiscountValue,
               cartItemIndex: i,
             });
             if (!isPersistedOrderResult(itemResult)) {
@@ -1850,12 +1860,12 @@ export default function Home() {
         setAutomaticScheduleLinks(uniqueScheduleLinks);
         setPostOrderScheduleDecision(uniqueScheduleLinks.length > 0 ? 'choose' : 'completed');
         // Salvar dados do pedido para mensagem WhatsApp
-        const cartTotalPago = cartTotalValue - (cartCouponDiscountValue || 0);
+        const cartTotalPago = cartTotalValue - (sitePromoActive ? 0 : (cartCouponDiscountValue || 0));
         setSubmittedOrderData({
           cartItems: cartItems.map(item => ({
             service: item.product.name,
             nameOption: item.option ? `${item.option.label}${item.priceModel ? ` — ${item.priceModel.label}` : ''}` : 'N/A',
-            price: getPriceModelServiceValue(item.priceModel) || item.option?.price || ''
+            price: getPriceModelServiceValue(item.priceModel) || (item.tier ? globalPromotionPrice(item.tier, globalPromotion) : item.option ? globalPromotionPrice(item.option, globalPromotion) : '')
           })),
           answers: answersArray,
           docs: dynamicDocsArray.filter(d => d.url).map(d => ({ label: d.label, url: d.url! })),
@@ -1921,7 +1931,7 @@ export default function Home() {
         email: clientEmail.trim(),
         accessCode: accessCode || undefined,
         cpToken: cpTokenForSubmit || undefined,
-        couponCode: couponValid ? couponCode : undefined,
+        couponCode: !sitePromoActive && couponValid ? couponCode : undefined,
         vipInstallmentCheckoutToken: vipInstallmentActive ? vipCheckoutTokenRef.current : undefined,
         paymentProof: undefined,
         paymentProofUrl: paymentProofUploadedUrl,
@@ -1935,11 +1945,13 @@ export default function Home() {
         docNameMode: selectedOption?.docNameMode || 'none',
         docCustomName: selectedOption?.docCustomName || '',
         price: (() => {
-          const rawPrice = getPriceModelServiceValue(selectedPriceModel) || selectedTier?.price || selectedOption?.price;
+          const rawPrice = getPriceModelServiceValue(selectedPriceModel) || (selectedTier ? globalPromotionPrice(selectedTier, globalPromotion) : selectedOption ? globalPromotionPrice(selectedOption, globalPromotion) : undefined);
           if (!rawPrice) return undefined;
           const resellerDiscount = getResellerDiscountAmount();
           return (couponDiscount || resellerDiscount > 0) ? calculateDiscountedValue(rawPrice) : rawPrice;
         })(),
+        priceModelId: selectedPriceModel?.id || undefined,
+        warrantyTierId: selectedTier?.id || undefined,
         thirdPartyName: thirdPartyName.trim() || undefined,
         thirdPartyPhone: thirdPartyPhone.trim() || undefined,
         resellerDiscountApplied: (() => {
@@ -1978,7 +1990,7 @@ export default function Home() {
         }
         // Salvar dados do pedido para mensagem WhatsApp
         const singlePrice = (() => {
-          const rawPrice = getPriceModelServiceValue(selectedPriceModel) || selectedTier?.price || selectedOption?.price;
+          const rawPrice = getPriceModelServiceValue(selectedPriceModel) || (selectedTier ? globalPromotionPrice(selectedTier, globalPromotion) : selectedOption ? globalPromotionPrice(selectedOption, globalPromotion) : undefined);
           if (!rawPrice) return '';
           const resellerDiscount = getResellerDiscountAmount();
           return (couponDiscount || resellerDiscount > 0) ? calculateDiscountedValue(rawPrice) : rawPrice;
@@ -2196,7 +2208,8 @@ export default function Home() {
   const hasVipPriceDiscount = vipDiscountValue > 0;
 
   const hasResellerDiscount = getResellerDiscountAmount() > 0;
-  const finalValue = (couponDiscount || hasResellerDiscount) ? calculateDiscountedValue(originalValue) : originalValue;
+  const activeCouponDiscount = sitePromoActive ? null : couponDiscount;
+  const finalValue = (activeCouponDiscount || hasResellerDiscount) ? calculateDiscountedValue(originalValue) : originalValue;
 
   // Calcular totais do carrinho: normal para referência e efetivo VIP para cobrança.
   const cartTotals = useMemo(() => {
@@ -2204,13 +2217,13 @@ export default function Home() {
     let normal = 0;
     let effective = 0;
     for (const item of cart) {
-      const normalPrice = getPriceModelNormalValue(item.priceModel) || item.option?.price || '0';
-      const effectivePrice = getPriceModelServiceValue(item.priceModel) || item.option?.price || '0';
+      const normalPrice = sitePromoActive ? (item.priceModel ? calculateGlobalPromotionPrice(item.priceModel, globalPromotion).base : item.tier ? calculateGlobalPromotionPrice(item.tier, globalPromotion).base : item.option ? calculateGlobalPromotionPrice(item.option, globalPromotion).base : '0') : (getPriceModelNormalValue(item.priceModel) || item.tier?.price || item.option?.price || '0');
+      const effectivePrice = getPriceModelServiceValue(item.priceModel) || (item.tier ? globalPromotionPrice(item.tier, globalPromotion) : item.option ? globalPromotionPrice(item.option, globalPromotion) : '0');
       normal += parseBrazilMoney(normalPrice);
       effective += parseBrazilMoney(effectivePrice);
     }
     return { normal, effective };
-  }, [cart, isVipCustomer]);
+  }, [cart, isVipCustomer, globalPromotion]);
 
   const cartTotal = cartTotals.effective;
   const cartNormalTotal = cartTotals.normal;
@@ -2220,10 +2233,10 @@ export default function Home() {
   const cartHasVipPriceDiscount = cartVipDiscountValue > 0;
   const cartNormalTotalFormatted = cartNormalTotal !== null ? formatBrazilMoney(cartNormalTotal) : null;
   const cartTotalFormatted = cartTotal !== null ? formatBrazilMoney(cartTotal) : null;
-  const cartTotalWithDiscount = (cartTotal !== null && (couponDiscount || hasResellerDiscount)) ? calculateDiscountedValue(cartTotalFormatted!) : cartTotalFormatted;
+  const cartTotalWithDiscount = (cartTotal !== null && (activeCouponDiscount || hasResellerDiscount)) ? calculateDiscountedValue(cartTotalFormatted!) : cartTotalFormatted;
 
   // Valor a exibir no PIX: à vista mantém o cálculo atual; Parcelamento VIP cobra a entrada quando configurada.
-  const cashPixValue = cart.length > 1 ? ((couponDiscount || hasResellerDiscount) ? cartTotalWithDiscount : cartTotalFormatted) : ((couponDiscount || hasResellerDiscount) ? finalValue : originalValue);
+  const cashPixValue = cart.length > 1 ? ((activeCouponDiscount || hasResellerDiscount) ? cartTotalWithDiscount : cartTotalFormatted) : ((activeCouponDiscount || hasResellerDiscount) ? finalValue : originalValue);
   const vipEntryCents = Number(vipInstallmentSelection.quote?.quote?.firstInstallmentAmountCents || 0);
   const vipFirstParcelCents = Number(vipInstallmentSelection.quote?.quote?.installments?.[0]?.amountCents || 0);
   const vipCurrentPixCents = vipEntryCents > 0 ? vipEntryCents : vipFirstParcelCents;
@@ -4046,7 +4059,7 @@ export default function Home() {
                     <div className="bg-green-500/20 border border-green-500/40 rounded-lg p-3">
                       <div className="flex justify-between items-center">
                         <span className="text-green-300 font-bold text-sm">TOTAL ({cart.length} itens):</span>
-                        {(couponDiscount || hasResellerDiscount) && cartTotalFormatted ? (
+                        {(!sitePromoActive && (couponDiscount || hasResellerDiscount)) && cartTotalFormatted ? (
                           <div className="flex items-center gap-2">
                             <span className="text-white/50 line-through text-sm font-semibold">{cartTotalFormatted}</span>
                             <span className="text-green-400 font-bold text-xl">{cartTotalWithDiscount}</span>
@@ -4055,11 +4068,11 @@ export default function Home() {
                           <span className="font-bold text-lg text-green-400">{cartTotalFormatted || 'Consulte'}</span>
                         )}
                       </div>
-                      {(couponDiscount || hasResellerDiscount) && cartTotalFormatted && (
+                      {(!sitePromoActive && (couponDiscount || hasResellerDiscount)) && cartTotalFormatted && (
                         <div className="flex justify-between items-center mt-1">
                           <span className="text-green-300 text-xs">
                             {hasResellerDiscount && !couponDiscount && `🏷️ Desconto revendedor aplicado`}
-                            {couponDiscount && !hasResellerDiscount && `🎫 Cupom aplicado`}
+                            {!sitePromoActive && couponDiscount && !hasResellerDiscount && `🎫 Cupom aplicado`}
                             {couponDiscount && hasResellerDiscount && `🏷️ Revendedor + 🎫 Cupom`}
                           </span>
                           <span className="text-green-300 text-xs font-bold">
@@ -4085,7 +4098,7 @@ export default function Home() {
                     <div className="border-t border-white/10 mt-2 pt-2">
                       <div className="flex justify-between items-center">
                         <span className="text-white/70 text-sm">Valor:</span>
-                        {(couponDiscount || hasResellerDiscount) ? (
+                        {(!sitePromoActive && (couponDiscount || hasResellerDiscount)) ? (
                           <div className="flex items-center gap-2">
                             <span className="text-white/50 line-through text-sm font-semibold">{originalValue}</span>
                             <span className="text-green-400 font-bold text-lg">{finalValue}</span>
@@ -4094,7 +4107,7 @@ export default function Home() {
                           <span className="font-bold text-lg text-green-400">{originalValue}</span>
                         )}
                       </div>
-                      {(couponDiscount || hasResellerDiscount) && (
+                      {(!sitePromoActive && (couponDiscount || hasResellerDiscount)) && (
                         <div className="flex justify-between items-center mt-1">
                           <span className="text-green-300 text-xs">
                             {hasResellerDiscount && !couponDiscount && `🏷️ Desconto revendedor: -R$ ${getResellerDiscountAmount().toFixed(2).replace('.', ',')}`}
@@ -4110,8 +4123,9 @@ export default function Home() {
                   </div>
                 )}
 
-                {/* Cupom */}
-                <div className="border-t border-green-500/20 pt-3">
+                {/* Cupom suspenso enquanto a promoção geral estiver ligada */}
+                {sitePromoActive && <p className="text-emerald-300 text-xs font-bold py-2">🏷️ PROMOÇÃO GERAL ATIVA — cupons, VIP e outros descontos não acumulam.</p>}
+                {!sitePromoActive && <div className="border-t border-green-500/20 pt-3">
                   <Label className="text-green-400 mb-2 block flex items-center gap-1 text-xs">
                     <Ticket className="w-4 h-4" /> Cupom de Desconto (opcional)
                   </Label>
@@ -4125,7 +4139,7 @@ export default function Home() {
                     </button>
                   </div>
                   {couponMessage && <p className={`text-xs mt-1 font-semibold ${couponValid ? 'text-green-400' : 'text-red-400'}`}>{couponMessage}</p>}
-                </div>
+                </div>}
 
                 {/* Campo de cliente final para revendedores */}
                 {resellerInfo?.isReseller && (
@@ -4182,8 +4196,8 @@ export default function Home() {
                   optionId={selectedOption?.id || null}
                   priceModelId={selectedPriceModel?.id || null}
                   warrantyTierId={selectedTier?.id || null}
-                  couponCode={couponValid ? couponCode : null}
-                  disabledReason={cart.length > 0 ? 'Nesta primeira versão, o Parcelamento VIP está disponível somente na compra direta de um produto por vez.' : activeResellerSlug ? 'Parcelamento VIP não está disponível no fluxo de revendedor.' : !selectedProduct || !selectedOption ? 'Selecione um produto e uma opção para consultar o parcelamento.' : null}
+                  couponCode={!sitePromoActive && couponValid ? couponCode : null}
+                  disabledReason={sitePromoActive ? "Parcelamento VIP temporariamente indisponível durante a Promoção Geral. Preço promocional válido para pagamento à vista." : cart.length > 0 ? 'Nesta primeira versão, o Parcelamento VIP está disponível somente na compra direta de um produto por vez.' : activeResellerSlug ? 'Parcelamento VIP não está disponível no fluxo de revendedor.' : !selectedProduct || !selectedOption ? 'Selecione um produto e uma opção para consultar o parcelamento.' : null}
                   onSelectionChange={setVipInstallmentSelection}
                 />
               )}
@@ -4204,7 +4218,7 @@ export default function Home() {
                       phone: clientPhone.trim() || undefined,
                       checkoutToken,
                       items: [{ productId: selectedProduct.id, optionId: selectedOption.id, priceModelId: selectedPriceModel?.id || null, warrantyTierId: selectedTier?.id || null }],
-                      couponCode: couponValid ? couponCode : undefined,
+                      couponCode: !sitePromoActive && couponValid ? couponCode : undefined,
                       installmentCount: vipInstallmentSelection.installmentCount,
                       frequency: vipInstallmentSelection.frequency,
                     });
@@ -4775,7 +4789,7 @@ export default function Home() {
                 {cart.length > 1 && (() => {
                   let total = 0;
                   for (const item of cart) {
-                    const price = getPriceModelServiceValue(item.priceModel) || item.option?.price || '0';
+                    const price = getPriceModelServiceValue(item.priceModel) || (item.tier ? globalPromotionPrice(item.tier, globalPromotion) : item.option ? globalPromotionPrice(item.option, globalPromotion) : '0');
                     const num = parseFloat(price.replace('R$ ', '').replace('.', '').replace(',', '.'));
                     if (!isNaN(num)) total += num;
                   }
@@ -5184,8 +5198,9 @@ export default function Home() {
                       <StorefrontProductCard
                         key={`${item.product.id}-${item.option.id}`}
                         item={item as StorefrontCatalogItem}
+                        globalPromotion={globalPromotion}
                         onBuy={(tier, priceModel) => startDirectOptionCheckout(item.product, item.option, tier as unknown as WarrantyTier | null, priceModel as OptionPriceModel | null)}
-                        onAddToCart={(_tier, priceModel) => addToCart(item.product, item.option, priceModel as OptionPriceModel | null)}
+                        onAddToCart={(tier, priceModel) => addToCart(item.product, item.option, priceModel as OptionPriceModel | null, tier as WarrantyTier | null)}
                       />
                     ))}
                   </div>

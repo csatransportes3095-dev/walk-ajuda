@@ -199,6 +199,10 @@ async function listModels(optionIds: number[], onlyActive: boolean): Promise<Opt
   return rows;
 }
 
+export async function getActiveOptionPriceModelsForPromotion(optionIds: number[]): Promise<OptionPriceModel[]> {
+  return listModels(optionIds, true);
+}
+
 export async function cloneOptionPriceModelsComplete(optionIdMap: Record<number, number>): Promise<Record<number, number>> {
   await ensureInfrastructure();
   const db = await getDb();

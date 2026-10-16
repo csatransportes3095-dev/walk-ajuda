@@ -2,6 +2,7 @@ import { Check, ChevronDown, ChevronUp, CircleAlert, Crown, Flame, ShieldCheck, 
 import { useEffect, useMemo, useState } from "react";
 import { requestProductManifest } from "@/lib/productManifest";
 import { useVipMembership } from "@/hooks/useVipMembership";
+import { type GlobalPromotionConfig, globalPromotionIsActive, globalPromotionPrice, calculateGlobalPromotionPrice, globalPromotionLabel } from "@shared/globalPromotion";
 import { applyVipBenefitToPrice, formatBrazilMoney, hasVipBenefit, isVipHighlighted, isVipOnlyLocked, normalizeVipAccessMode, parseBrazilMoney, vipBenefitText } from "@shared/vipPricing";
 
 export type StorefrontQuestion = {
@@ -175,11 +176,14 @@ export function StorefrontProductCard({
   item,
   onBuy,
   onAddToCart,
+  globalPromotion,
 }: {
   item: StorefrontCatalogItem;
   onBuy: (tier: StorefrontWarrantyTier | null, priceModel: StorefrontPriceModel | null) => void;
   onAddToCart: (tier: StorefrontWarrantyTier | null, priceModel: StorefrontPriceModel | null) => void;
+  globalPromotion?: GlobalPromotionConfig;
 }) {
+  const sitePromoActive = globalPromotionIsActive(globalPromotion);
   const [detailsOpen, setDetailsOpen] = useState(false);
   const [nowMs, setNowMs] = useState(() => Date.now());
   const tiers = item.option.warrantyTiers || [];
@@ -217,11 +221,12 @@ export function StorefrontProductCard({
   const selectedPriceModel = priceModels.find((model) => model.id === priceModelId) || null;
   const requiresPriceModelSelection = priceModels.length > 0;
   const vipAdjustedModelPrice = selectedPriceModel ? applyVipBenefitToPrice(selectedPriceModel.price, selectedPriceModel, isVipCustomer) : null;
-  const modelHasVipPrice = Boolean(selectedPriceModel && vipAdjustedModelPrice && vipAdjustedModelPrice !== selectedPriceModel.price);
+  const modelHasVipPrice = !sitePromoActive && Boolean(selectedPriceModel && vipAdjustedModelPrice && vipAdjustedModelPrice !== selectedPriceModel.price);
   // Regra visual: o seletor e o valor principal de "Sua escolha" sempre exibem o valor normal.
   // O benefício VIP aparece separado, sem substituir a referência de preço do produto.
-  const effectivePrice = requiresPriceModelSelection ? selectedPriceModel?.price : (selectedTier?.price || item.option.price);
-  const effectiveOriginalPrice = requiresPriceModelSelection ? selectedPriceModel?.originalPrice : (selectedTier?.originalPrice || item.option.originalPrice);
+  const standardSelection = requiresPriceModelSelection ? selectedPriceModel : (selectedTier || item.option);
+  const effectivePrice = sitePromoActive && standardSelection ? globalPromotionPrice(standardSelection, globalPromotion) : requiresPriceModelSelection ? selectedPriceModel?.price : (selectedTier?.price || item.option.price);
+  const effectiveOriginalPrice = sitePromoActive && standardSelection ? calculateGlobalPromotionPrice(standardSelection, globalPromotion).base : requiresPriceModelSelection ? selectedPriceModel?.originalPrice : (selectedTier?.originalPrice || item.option.originalPrice);
   const discount = useMemo(() => discountPercent(effectivePrice, effectiveOriginalPrice), [effectiveOriginalPrice, effectivePrice]);
 
   const promotionByModel = new Map(
@@ -335,17 +340,17 @@ export function StorefrontProductCard({
                 const parts = splitModelLabel(model.label);
                 const modelPromotion = promotionByModel.get(model.id);
                 const modelDiscount = discountPercent(model.price, model.originalPrice);
-                const modelHasDiscount = modelDiscount > 0;
+                const modelHasDiscount = sitePromoActive ? calculateGlobalPromotionPrice(model, globalPromotion).savingsCents > 0 : modelDiscount > 0;
                 const modelLocked = isVipOnlyLocked(model, isVipCustomer);
                 const modelVipMode = normalizeVipAccessMode(model.vipAccessMode);
-                const modelVipHighlighted = isVipHighlighted(model);
-                const modelHasVipBenefit = hasVipBenefit(model);
-                const vipPreviewPrice = applyVipBenefitToPrice(model.price, model, true);
+                const modelVipHighlighted = !sitePromoActive && isVipHighlighted(model);
+                const modelHasVipBenefit = !sitePromoActive && hasVipBenefit(model);
+                const vipPreviewPrice = sitePromoActive ? globalPromotionPrice(model, globalPromotion) : applyVipBenefitToPrice(model.price, model, true);
                 const vipSavings = Math.max(0, parseBrazilMoney(model.price) - parseBrazilMoney(vipPreviewPrice));
                 return (
                   <button key={model.id} type="button" aria-pressed={isSelected} disabled={modelLocked} onClick={() => { if (!modelLocked) handlePriceModelSelect(model.id); }} style={priceModels.length === 1 ? { gridColumn: "1 / -1", width: "100%", maxWidth: "none" } : undefined} className={`relative min-w-0 w-full min-h-[182px] overflow-hidden rounded-[18px] border bg-gradient-to-b px-2 pb-2 pt-5 text-center backdrop-blur-xl transition-all ${palette.border} ${palette.bg} ${palette.shadow} ${isSelected ? `-translate-y-1 ring-2 ${palette.ring}` : "hover:-translate-y-0.5"} ${modelPromotion?.active ? "outline outline-1 outline-amber-300/60" : ""} ${modelVipHighlighted ? "ring-1 ring-amber-300/70" : ""} ${modelLocked ? "cursor-not-allowed opacity-80 saturate-75" : ""}`}>
                     <span aria-hidden="true" className="pointer-events-none absolute inset-x-3 top-[1px] h-px bg-gradient-to-r from-transparent via-white/55 to-transparent opacity-90" />
-                    {modelVipMode !== 'all' && <span className={`absolute right-1 top-1 z-20 max-w-[46%] overflow-hidden text-ellipsis whitespace-nowrap rounded-full border px-[clamp(4px,0.45vw,8px)] py-1 text-[clamp(6px,0.5vw,8px)] font-black uppercase shadow-lg ${modelLocked ? 'border-rose-300/70 bg-rose-950 text-rose-200' : 'border-amber-300/70 bg-amber-400 text-amber-950'}`}>{modelLocked ? '🔒 SOMENTE VIP' : `👑 ${model.vipHighlightText || 'VIP'}`}</span>}
+                    {!sitePromoActive && modelVipMode !== 'all' && <span className={`absolute right-1 top-1 z-20 max-w-[46%] overflow-hidden text-ellipsis whitespace-nowrap rounded-full border px-[clamp(4px,0.45vw,8px)] py-1 text-[clamp(6px,0.5vw,8px)] font-black uppercase shadow-lg ${modelLocked ? 'border-rose-300/70 bg-rose-950 text-rose-200' : 'border-amber-300/70 bg-amber-400 text-amber-950'}`}>{modelLocked ? '🔒 SOMENTE VIP' : `👑 ${model.vipHighlightText || 'VIP'}`}</span>}
                     {index === 0 && modelHasDiscount ? (
                       <span className="absolute left-1 top-1 max-w-[52%] overflow-hidden text-ellipsis whitespace-nowrap rounded-lg bg-gradient-to-r from-red-500 via-orange-500 to-amber-400 px-[clamp(4px,0.45vw,10px)] py-1 text-[clamp(6px,0.5vw,8px)] font-black uppercase tracking-wide text-white shadow-[0_0_16px_rgba(249,115,22,.52)] sm:text-[9px]">Oferta -{modelDiscount}%</span>
                     ) : index === 1 ? (
@@ -355,7 +360,7 @@ export function StorefrontProductCard({
                     <span className="mt-1.5 block max-w-full overflow-hidden text-ellipsis whitespace-nowrap text-[clamp(9px,0.82vw,14px)] font-black leading-4 tracking-[-0.02em] text-white">{parts.title}</span>
                     <span className={`mt-1 block max-w-full overflow-hidden text-ellipsis whitespace-nowrap text-[clamp(10px,0.92vw,16px)] font-black leading-none ${palette.text}`}>{parts.subtitle}</span>
                     <div className="mt-2 min-h-[60px] border-t border-white/20 pt-1.5">
-                      {modelVipMode === 'all' ? (
+                      {sitePromoActive ? (<div className="flex flex-col items-center"><span className="text-xs text-slate-300 line-through">{calculateGlobalPromotionPrice(model, globalPromotion).base}</span><strong className="text-lg text-emerald-300">{globalPromotionPrice(model, globalPromotion)}</strong></div>) : modelVipMode === 'all' ? (
                         modelHasDiscount && model.originalPrice ? (
                           <div className="flex flex-col items-center">
                             <div className="flex items-baseline justify-center gap-1 whitespace-nowrap">
@@ -430,7 +435,7 @@ export function StorefrontProductCard({
                 <p className={`break-words font-black leading-none tracking-tight ${effectivePrice ? "text-[clamp(28px,3vw,42px)] text-teal-300 drop-shadow-[0_0_18px_rgba(45,212,191,.35)]" : "text-lg text-slate-400 sm:text-2xl"}`}>{effectivePrice ? asMoney(effectivePrice) : "Valor após a escolha"}</p>
               </>
             )}
-            {selectedPriceModel && hasVipBenefit(selectedPriceModel) && (() => {
+            {!sitePromoActive && selectedPriceModel && hasVipBenefit(selectedPriceModel) && (() => {
               const normalPrice = selectedPriceModel.price;
               const vipPrice = applyVipBenefitToPrice(normalPrice, selectedPriceModel, true);
               const saving = Math.max(0, parseBrazilMoney(normalPrice) - parseBrazilMoney(vipPrice));
