@@ -1,9 +1,9 @@
 import { Check, ChevronDown, ChevronUp, CircleAlert, Crown, Flame, ShieldCheck, ShoppingCart, Tag, Timer } from "lucide-react";
-import { useEffect, useMemo, useState } from "react";
+import { memo, useEffect, useMemo, useState } from "react";
 import "./StorefrontTextFit.css";
 import { requestProductManifest } from "@/lib/productManifest";
 import { useVipMembership } from "@/hooks/useVipMembership";
-import { type GlobalPromotionConfig, globalPromotionIsActive, globalPromotionWindow, globalPromotionPrice, calculateGlobalPromotionPrice, globalPromotionLabel } from "@shared/globalPromotion";
+import { type GlobalPromotionConfig, globalPromotionIsActive, globalPromotionOverridesIndividual, globalPromotionWindow, globalPromotionPrice, calculateGlobalPromotionPrice, globalPromotionLabel } from "@shared/globalPromotion";
 import { applyVipBenefitToPrice, formatBrazilMoney, hasVipBenefit, isVipHighlighted, isVipOnlyLocked, normalizeVipAccessMode, parseBrazilMoney, vipBenefitText } from "@shared/vipPricing";
 
 export type StorefrontQuestion = {
@@ -173,7 +173,7 @@ function productTagline(item: StorefrontCatalogItem) {
   return "Sua jornada com a Uber, mais rápida e segura.";
 }
 
-export function StorefrontProductCard({
+function StorefrontProductCardComponent({
   item,
   onBuy,
   onAddToCart,
@@ -186,6 +186,7 @@ export function StorefrontProductCard({
 }) {
   const [nowMs, setNowMs] = useState(() => Date.now());
   const sitePromoActive = globalPromotionIsActive(globalPromotion, nowMs);
+  const promoOverrides = globalPromotionOverridesIndividual(globalPromotion, nowMs);
   const scheduleWindow = globalPromotionWindow(globalPromotion, nowMs);
   const scheduleCountdown = sitePromoActive && globalPromotion?.schedule ? formatCountdown(scheduleWindow.endsAt, nowMs) : null;
   const [detailsOpen, setDetailsOpen] = useState(false);
@@ -206,7 +207,7 @@ export function StorefrontProductCard({
   useEffect(() => {
     if (!hasTimedPromotion) return;
     setNowMs(Date.now());
-    const timer = window.setInterval(() => setNowMs(Date.now()), 1000);
+    const timer = window.setInterval(() => setNowMs(Date.now()), 30000);
     return () => window.clearInterval(timer);
   }, [hasTimedPromotion]);
 
@@ -224,12 +225,12 @@ export function StorefrontProductCard({
   const selectedPriceModel = priceModels.find((model) => model.id === priceModelId) || null;
   const requiresPriceModelSelection = priceModels.length > 0;
   const vipAdjustedModelPrice = selectedPriceModel ? applyVipBenefitToPrice(selectedPriceModel.price, selectedPriceModel, isVipCustomer) : null;
-  const modelHasVipPrice = !sitePromoActive && Boolean(selectedPriceModel && vipAdjustedModelPrice && vipAdjustedModelPrice !== selectedPriceModel.price);
+  const modelHasVipPrice = !promoOverrides && Boolean(selectedPriceModel && vipAdjustedModelPrice && vipAdjustedModelPrice !== selectedPriceModel.price);
   // Regra visual: o seletor e o valor principal de "Sua escolha" sempre exibem o valor normal.
   // O benefício VIP aparece separado, sem substituir a referência de preço do produto.
   const standardSelection = requiresPriceModelSelection ? selectedPriceModel : (selectedTier || item.option);
-  const effectivePrice = sitePromoActive && standardSelection ? globalPromotionPrice(standardSelection, globalPromotion) : requiresPriceModelSelection ? selectedPriceModel?.price : (selectedTier?.price || item.option.price);
-  const effectiveOriginalPrice = sitePromoActive && standardSelection ? calculateGlobalPromotionPrice(standardSelection, globalPromotion).base : requiresPriceModelSelection ? selectedPriceModel?.originalPrice : (selectedTier?.originalPrice || item.option.originalPrice);
+  const effectivePrice = promoOverrides && standardSelection ? globalPromotionPrice(standardSelection, globalPromotion) : requiresPriceModelSelection ? selectedPriceModel?.price : (selectedTier?.price || item.option.price);
+  const effectiveOriginalPrice = promoOverrides && standardSelection ? calculateGlobalPromotionPrice(standardSelection, globalPromotion).base : requiresPriceModelSelection ? selectedPriceModel?.originalPrice : (selectedTier?.originalPrice || item.option.originalPrice);
   const discount = useMemo(() => discountPercent(effectivePrice, effectiveOriginalPrice), [effectiveOriginalPrice, effectivePrice]);
 
   const promotionByModel = new Map(
@@ -248,7 +249,7 @@ export function StorefrontProductCard({
   const optionPromoEnd = normalizeEpochMs(item.option.promoEndsAt);
   const optionDiscount = priceModels.length === 0 && tiers.length === 0 ? discountPercent(item.option.price, item.option.originalPrice) : 0;
   const optionPromotionActive = optionDiscount > 0 && (!optionPromoEnd || nowMs < optionPromoEnd);
-  const hasActivePromotion = !sitePromoActive && (activeModelPromotions.length > 0 || activeTierDiscounts.length > 0 || optionPromotionActive);
+  const hasActivePromotion = !promoOverrides && (activeModelPromotions.length > 0 || activeTierDiscounts.length > 0 || optionPromotionActive);
   const maxPromotionDiscount = Math.max(0, ...activeModelPromotions.map((promo) => promo.discount), ...activeTierDiscounts, optionPromotionActive ? optionDiscount : 0);
   const promotionEndCandidates = activeModelPromotions.map((promo) => promo.endsAt).filter((value): value is number => Boolean(value));
   if (optionPromotionActive && optionPromoEnd) promotionEndCandidates.push(optionPromoEnd);
@@ -293,7 +294,7 @@ export function StorefrontProductCard({
   return (
     <article
       data-promo-active={hasActivePromotion || sitePromoActive ? "true" : "false"}
-      className={`h2-text-fit relative min-w-0 flex h-full flex-col overflow-hidden rounded-[34px] bg-[radial-gradient(circle_at_50%_0%,rgba(68,104,214,.24),transparent_34%),radial-gradient(circle_at_16%_30%,rgba(124,58,237,.18),transparent_34%),linear-gradient(180deg,rgba(7,16,34,.90)_0%,rgba(5,9,22,.91)_48%,rgba(8,11,29,.94)_100%)] font-semibold backdrop-blur-2xl ring-1 ring-white/[0.06] ${hasActivePromotion ? "border border-amber-300/95 shadow-[0_0_0_1px_rgba(250,204,21,.28),0_0_36px_rgba(245,158,11,.34),0_32px_90px_rgba(0,0,0,.66)]" : "border border-violet-500/85 shadow-[0_32px_90px_rgba(0,0,0,.66),0_0_42px_rgba(124,58,237,.25)]"}`}
+      className={`h2-text-fit storefront-mobile-performance relative min-w-0 flex h-full flex-col overflow-hidden rounded-[34px] bg-[radial-gradient(circle_at_50%_0%,rgba(68,104,214,.24),transparent_34%),radial-gradient(circle_at_16%_30%,rgba(124,58,237,.18),transparent_34%),linear-gradient(180deg,rgba(7,16,34,.90)_0%,rgba(5,9,22,.91)_48%,rgba(8,11,29,.94)_100%)] font-semibold backdrop-blur-2xl ring-1 ring-white/[0.06] ${hasActivePromotion ? "border border-amber-300/95 shadow-[0_0_0_1px_rgba(250,204,21,.28),0_0_36px_rgba(245,158,11,.34),0_32px_90px_rgba(0,0,0,.66)]" : "border border-violet-500/85 shadow-[0_32px_90px_rgba(0,0,0,.66),0_0_42px_rgba(124,58,237,.25)]"}`}
     >
       <span aria-hidden="true" className="pointer-events-none absolute inset-x-6 top-[1px] z-20 h-px bg-gradient-to-r from-transparent via-white/45 to-transparent opacity-80" />
       {scheduleCountdown && <div role="timer" aria-label="Tempo restante da promoção geral" className="mx-3 mt-3 rounded-xl border border-amber-400/70 bg-amber-500/10 px-3 py-2 text-center text-xs font-black tracking-wide text-amber-200 sm:text-sm"><Timer className="mr-1 inline h-4 w-4 align-[-3px]" /> OFERTA TERMINA EM <span className="ml-1 text-amber-300 tabular-nums">{scheduleCountdown}</span></div>}
@@ -344,18 +345,18 @@ export function StorefrontProductCard({
                 const parts = splitModelLabel(model.label);
                 const modelPromotion = promotionByModel.get(model.id);
                 const modelDiscount = discountPercent(model.price, model.originalPrice);
-                const modelHasDiscount = !sitePromoActive && modelDiscount > 0;
+                const modelHasDiscount = !promoOverrides && modelDiscount > 0;
                 const modelLocked = isVipOnlyLocked(model, isVipCustomer);
                 const modelVipMode = normalizeVipAccessMode(model.vipAccessMode);
-                const modelVipHighlighted = !sitePromoActive && isVipHighlighted(model);
-                const modelHasVipBenefit = !sitePromoActive && hasVipBenefit(model);
-                const vipPreviewPrice = sitePromoActive ? globalPromotionPrice(model, globalPromotion) : applyVipBenefitToPrice(model.price, model, true);
+                const modelVipHighlighted = !promoOverrides && isVipHighlighted(model);
+                const modelHasVipBenefit = !promoOverrides && hasVipBenefit(model);
+                const vipPreviewPrice = promoOverrides ? globalPromotionPrice(model, globalPromotion) : applyVipBenefitToPrice(model.price, model, true);
                 const vipSavings = Math.max(0, parseBrazilMoney(model.price) - parseBrazilMoney(vipPreviewPrice));
                 return (
-                  <button key={model.id} type="button" aria-pressed={isSelected} disabled={modelLocked} onClick={() => { if (!modelLocked) handlePriceModelSelect(model.id); }} style={priceModels.length === 1 ? { gridColumn: "1 / -1", width: "100%", maxWidth: "none" } : undefined} className={`relative min-w-0 w-full min-h-[182px] overflow-hidden rounded-[18px] border bg-gradient-to-b px-2 pb-2 pt-5 text-center backdrop-blur-xl transition-all ${palette.border} ${palette.bg} ${palette.shadow} ${isSelected ? `-translate-y-1 ring-2 ${palette.ring}` : "hover:-translate-y-0.5"} ${!sitePromoActive && modelPromotion?.active ? "outline outline-1 outline-amber-300/60" : ""} ${modelVipHighlighted ? "ring-1 ring-amber-300/70" : ""} ${modelLocked ? "cursor-not-allowed opacity-80 saturate-75" : ""}`}>
+                  <button key={model.id} type="button" aria-pressed={isSelected} disabled={modelLocked} onClick={() => { if (!modelLocked) handlePriceModelSelect(model.id); }} style={priceModels.length === 1 ? { gridColumn: "1 / -1", width: "100%", maxWidth: "none" } : undefined} className={`relative min-w-0 w-full min-h-[182px] overflow-hidden rounded-[18px] border bg-gradient-to-b px-2 pb-2 pt-5 text-center backdrop-blur-xl transition-all ${palette.border} ${palette.bg} ${palette.shadow} ${isSelected ? `-translate-y-1 ring-2 ${palette.ring}` : "hover:-translate-y-0.5"} ${!promoOverrides && modelPromotion?.active ? "outline outline-1 outline-amber-300/60" : ""} ${modelVipHighlighted ? "ring-1 ring-amber-300/70" : ""} ${modelLocked ? "cursor-not-allowed opacity-80 saturate-75" : ""}`}>
                     <span aria-hidden="true" className="pointer-events-none absolute inset-x-3 top-[1px] h-px bg-gradient-to-r from-transparent via-white/55 to-transparent opacity-90" />
-                    {!sitePromoActive && modelVipMode !== 'all' && <span className={`absolute right-1 top-1 z-20 max-w-[46%] overflow-hidden text-ellipsis whitespace-nowrap rounded-full border px-[clamp(4px,0.45vw,8px)] py-1 text-[clamp(6px,0.5vw,8px)] font-black uppercase shadow-lg ${modelLocked ? 'border-rose-300/70 bg-rose-950 text-rose-200' : 'border-amber-300/70 bg-amber-400 text-amber-950'}`}>{modelLocked ? '🔒 SOMENTE VIP' : `👑 ${model.vipHighlightText || 'VIP'}`}</span>}
-                    {!sitePromoActive && index === 0 && modelHasDiscount ? (
+                    {!promoOverrides && modelVipMode !== 'all' && <span className={`absolute right-1 top-1 z-20 max-w-[46%] overflow-hidden text-ellipsis whitespace-nowrap rounded-full border px-[clamp(4px,0.45vw,8px)] py-1 text-[clamp(6px,0.5vw,8px)] font-black uppercase shadow-lg ${modelLocked ? 'border-rose-300/70 bg-rose-950 text-rose-200' : 'border-amber-300/70 bg-amber-400 text-amber-950'}`}>{modelLocked ? '🔒 SOMENTE VIP' : `👑 ${model.vipHighlightText || 'VIP'}`}</span>}
+                    {!promoOverrides && index === 0 && modelHasDiscount ? (
                       <span className="absolute left-1 top-1 max-w-[52%] overflow-hidden text-ellipsis whitespace-nowrap rounded-lg bg-gradient-to-r from-red-500 via-orange-500 to-amber-400 px-[clamp(4px,0.45vw,10px)] py-1 text-[clamp(6px,0.5vw,8px)] font-black uppercase tracking-wide text-white shadow-[0_0_16px_rgba(249,115,22,.52)] sm:text-[9px]">Oferta -{modelDiscount}%</span>
                     ) : index === 1 ? (
                       <span className="absolute left-1 top-1 max-w-[52%] overflow-hidden text-ellipsis whitespace-nowrap rounded-lg bg-cyan-400 px-[clamp(4px,0.45vw,12px)] py-1 text-[clamp(6px,0.5vw,8px)] font-black uppercase tracking-wide text-[#03111c] shadow-[0_0_16px_rgba(34,211,238,.38)] sm:text-[10px]">Mais escolhida</span>
@@ -439,7 +440,7 @@ export function StorefrontProductCard({
                 <p className={`break-words font-black leading-none tracking-tight ${effectivePrice ? "text-[clamp(28px,3vw,42px)] text-teal-300 drop-shadow-[0_0_18px_rgba(45,212,191,.35)]" : "text-lg text-slate-400 sm:text-2xl"}`}>{effectivePrice ? asMoney(effectivePrice) : "Valor após a escolha"}</p>
               </>
             )}
-            {!sitePromoActive && selectedPriceModel && hasVipBenefit(selectedPriceModel) && (() => {
+            {!promoOverrides && selectedPriceModel && hasVipBenefit(selectedPriceModel) && (() => {
               const normalPrice = selectedPriceModel.price;
               const vipPrice = applyVipBenefitToPrice(normalPrice, selectedPriceModel, true);
               const saving = Math.max(0, parseBrazilMoney(normalPrice) - parseBrazilMoney(vipPrice));
@@ -565,3 +566,5 @@ export function StorefrontProductCard({
     </article>
   );
 }
+
+export const StorefrontProductCard = memo(StorefrontProductCardComponent);
