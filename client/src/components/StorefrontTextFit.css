@@ -16,3 +16,9 @@
   .h2-text-fit__prices > div:last-child { justify-self: start; }
   .h2-text-fit__actions { grid-template-columns: minmax(0,1fr); }
 }
+
+/* No celular a rasterização de vários backdrop-blurs grandes retarda a rolagem. */
+@media (max-width: 639px) {
+  .storefront-mobile-performance, .storefront-mobile-performance .backdrop-blur-xl, .storefront-mobile-performance .backdrop-blur-2xl { -webkit-backdrop-filter: none !important; backdrop-filter: none !important; }
+  .storefront-mobile-performance { contain: layout style; }
+}
