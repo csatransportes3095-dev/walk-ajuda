@@ -146,7 +146,7 @@ export function ColombiaBot({ products, onStartNormal, onSelectProduct, onSelect
   const { isVipCustomer } = useVipMembership();
   const { data: globalPromotion } = trpc.globalPromotion.get.useQuery(undefined, { refetchOnWindowFocus: true, refetchInterval: 15000 });
   const sitePromoActive = globalPromotionIsActive(globalPromotion);
-  const priceForOption = (option: ProductOption | null | undefined) => option ? globalPromotionPrice(option, globalPromotion) : "";
+  const priceForOption = (option: ProductOption | null | undefined) => option ? globalPromotionPrice({ price: option.price || "", originalPrice: (option as any).originalPrice || null }, globalPromotion) : "";
   const getModelPrice = (model: OptionPriceModel | null | undefined) => model ? sitePromoActive ? globalPromotionPrice(model, globalPromotion) : applyVipBenefitToPrice(model.price, model, isVipCustomer) : '';
   const profileQuery = trpc.customers.getMyProfile.useQuery(
     { phone: clientPhone },
