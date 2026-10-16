@@ -98,7 +98,7 @@ describe.skipIf(!url)("créditos e sessões com MySQL isolado", () => {
     expect(replay.vins).toEqual(result.vins);
     expect(replay.replayed).toBe(true);
     expect((await store.listUsers())[0].balance).toBe(1);
-    await expect(store.generate(user.id, tokenHash, { ...input, requestId: randomUUID(), yearCode: "T" })).rejects.toThrow("mesmo ano");
+    await expect(store.generate(user.id, tokenHash, { ...input, requestId: randomUUID(), quantity: 1, yearCode: "T" })).rejects.toThrow("mesmo ano");
     expect((await store.listUsers())[0].balance).toBe(1);
   });
   it("não permite remoção além do saldo e não repete o mesmo ajuste", async () => {
