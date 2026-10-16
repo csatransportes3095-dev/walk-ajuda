@@ -1,6 +1,5 @@
 import { Check, ChevronDown, ChevronUp, CircleAlert, Crown, Flame, ShieldCheck, ShoppingCart, Tag, Timer } from "lucide-react";
 import { useEffect, useMemo, useState } from "react";
-import "./StorefrontProductCard.css";
 import { requestProductManifest } from "@/lib/productManifest";
 import { useVipMembership } from "@/hooks/useVipMembership";
 import { type GlobalPromotionConfig, globalPromotionIsActive, globalPromotionPrice, calculateGlobalPromotionPrice, globalPromotionLabel } from "@shared/globalPromotion";
@@ -291,7 +290,7 @@ export function StorefrontProductCard({
   return (
     <article
       data-promo-active={hasActivePromotion ? "true" : "false"}
-      className={`storefront-product-card relative min-w-0 flex h-full flex-col overflow-hidden rounded-[34px] bg-[radial-gradient(circle_at_50%_0%,rgba(68,104,214,.24),transparent_34%),radial-gradient(circle_at_16%_30%,rgba(124,58,237,.18),transparent_34%),linear-gradient(180deg,rgba(7,16,34,.90)_0%,rgba(5,9,22,.91)_48%,rgba(8,11,29,.94)_100%)] font-semibold backdrop-blur-2xl ring-1 ring-white/[0.06] ${hasActivePromotion ? "border border-amber-300/95 shadow-[0_0_0_1px_rgba(250,204,21,.28),0_0_36px_rgba(245,158,11,.34),0_32px_90px_rgba(0,0,0,.66)]" : "border border-violet-500/85 shadow-[0_32px_90px_rgba(0,0,0,.66),0_0_42px_rgba(124,58,237,.25)]"}`}
+      className={`relative min-w-0 flex h-full flex-col overflow-hidden rounded-[34px] bg-[radial-gradient(circle_at_50%_0%,rgba(68,104,214,.24),transparent_34%),radial-gradient(circle_at_16%_30%,rgba(124,58,237,.18),transparent_34%),linear-gradient(180deg,rgba(7,16,34,.90)_0%,rgba(5,9,22,.91)_48%,rgba(8,11,29,.94)_100%)] font-semibold backdrop-blur-2xl ring-1 ring-white/[0.06] ${hasActivePromotion ? "border border-amber-300/95 shadow-[0_0_0_1px_rgba(250,204,21,.28),0_0_36px_rgba(245,158,11,.34),0_32px_90px_rgba(0,0,0,.66)]" : "border border-violet-500/85 shadow-[0_32px_90px_rgba(0,0,0,.66),0_0_42px_rgba(124,58,237,.25)]"}`}
     >
       <span aria-hidden="true" className="pointer-events-none absolute inset-x-6 top-[1px] z-20 h-px bg-gradient-to-r from-transparent via-white/45 to-transparent opacity-80" />
       {hasActivePromotion && (
@@ -303,28 +302,28 @@ export function StorefrontProductCard({
 
       <div className={`pointer-events-none absolute inset-x-10 ${hasActivePromotion ? "top-[38px]" : "top-0"} h-px bg-gradient-to-r from-transparent via-violet-300 to-transparent shadow-[0_0_24px_rgba(167,139,250,.95)]`} />
 
-      <div className="storefront-product-card__header relative overflow-hidden rounded-b-[28px] border-b border-violet-300/40 bg-[radial-gradient(circle_at_90%_25%,rgba(129,140,248,.24),transparent_28%),linear-gradient(135deg,rgba(76,29,149,.28),rgba(15,23,42,.24)_55%,rgba(255,255,255,.025))] px-4 py-4 backdrop-blur-2xl shadow-[inset_0_1px_0_rgba(255,255,255,.18),inset_0_-1px_0_rgba(255,255,255,.04)] sm:px-5 sm:py-4">
+      <div className="relative overflow-hidden rounded-b-[28px] border-b border-violet-300/40 bg-[radial-gradient(circle_at_90%_25%,rgba(129,140,248,.24),transparent_28%),linear-gradient(135deg,rgba(76,29,149,.28),rgba(15,23,42,.24)_55%,rgba(255,255,255,.025))] px-4 py-4 backdrop-blur-2xl shadow-[inset_0_1px_0_rgba(255,255,255,.18),inset_0_-1px_0_rgba(255,255,255,.04)] sm:px-5 sm:py-4">
         <div className="pointer-events-none absolute right-5 top-3 text-[56px] font-black tracking-tighter text-violet-300/[0.06] sm:text-[74px]">{item.category}</div>
         <div className="relative flex min-w-0 items-start gap-[clamp(8px,1vw,16px)] pr-1">
-          <div className="storefront-product-card__icon grid h-[clamp(54px,5vw,74px)] w-[clamp(54px,5vw,74px)] shrink-0 place-items-center overflow-hidden rounded-[22px] border border-violet-300/55 bg-black/50 shadow-[0_0_24px_rgba(139,92,246,.45),inset_0_0_18px_rgba(255,255,255,.08)]">
+          <div className="grid h-[clamp(54px,5vw,74px)] w-[clamp(54px,5vw,74px)] shrink-0 place-items-center overflow-hidden rounded-[22px] border border-violet-300/55 bg-black/50 shadow-[0_0_24px_rgba(139,92,246,.45),inset_0_0_18px_rgba(255,255,255,.08)]">
             {item.product.iconUrl ? <img src={item.product.iconUrl} alt="" loading="lazy" className="h-[clamp(42px,4vw,58px)] w-[clamp(42px,4vw,58px)] rounded-2xl object-contain" /> : <Tag className="h-7 w-7 text-violet-300" />}
           </div>
           <div className="min-w-0 flex-1">
             <span className="inline-flex max-w-full overflow-hidden text-ellipsis whitespace-nowrap rounded-full border border-violet-400/60 bg-violet-500/20 px-[clamp(7px,0.8vw,12px)] py-1 text-[clamp(8px,0.75vw,11px)] font-black uppercase tracking-[0.10em] text-violet-200 shadow-[0_0_16px_rgba(139,92,246,.16)]">{productPill}</span>
-            <h3 className="storefront-product-card__heading mt-1.5 max-w-full overflow-hidden text-ellipsis whitespace-nowrap text-[clamp(16px,1.7vw,30px)] font-black leading-[1.02] tracking-tight text-white">{item.option.label.trim()}</h3>
+            <h3 className="mt-1.5 max-w-full overflow-hidden text-ellipsis whitespace-nowrap text-[clamp(16px,1.7vw,30px)] font-black leading-[1.02] tracking-tight text-white">{item.option.label.trim()}</h3>
             <span className="mt-2 inline-flex max-w-full overflow-hidden text-ellipsis whitespace-nowrap rounded-full border border-violet-300/40 bg-violet-500/10 px-[clamp(7px,0.8vw,12px)] py-1 text-[clamp(8px,0.7vw,10px)] font-black uppercase tracking-[0.13em] text-violet-200/90">TIPO DE CONTA</span>
           </div>
         </div>
-        <div className="storefront-product-card__tag-row relative mt-3 flex items-end justify-between gap-2">
-          <p className="storefront-product-card__tagline min-w-0 max-w-[68%] text-[clamp(9px,0.8vw,14px)] font-bold leading-[1.35] text-violet-100/75">{productTagline(item)}</p>
-          <div className="storefront-product-card__quality flex shrink-0 items-center gap-[clamp(4px,0.5vw,8px)] rounded-2xl border border-violet-400/70 bg-violet-950/55 px-[clamp(7px,0.8vw,12px)] py-[clamp(5px,0.55vw,8px)] text-violet-200 shadow-[0_0_18px_rgba(139,92,246,.20)]">
+        <div className="relative mt-3 flex items-end justify-between gap-2">
+          <p className="min-w-0 max-w-[68%] text-[clamp(9px,0.8vw,14px)] font-bold leading-[1.35] text-violet-100/75">{productTagline(item)}</p>
+          <div className="flex shrink-0 items-center gap-[clamp(4px,0.5vw,8px)] rounded-2xl border border-violet-400/70 bg-violet-950/55 px-[clamp(7px,0.8vw,12px)] py-[clamp(5px,0.55vw,8px)] text-violet-200 shadow-[0_0_18px_rgba(139,92,246,.20)]">
             <Crown className="h-5 w-5" />
             <div className="text-[9px] font-black uppercase leading-3 tracking-wide"><span className="block">Qualidade</span><span className="text-violet-100">H2</span></div>
           </div>
         </div>
       </div>
 
-      <div className="storefront-product-card__body p-4 sm:p-4">
+      <div className="p-4 sm:p-4">
         {priceModels.length > 0 && (
           <div>
             <div className="flex items-start gap-3">
@@ -334,7 +333,7 @@ export function StorefrontProductCard({
                 <p className="mt-1 text-[clamp(9px,0.8vw,14px)] font-semibold text-slate-300/80">Mais corridas, mais tempo, mais tranquilidade.</p>
               </div>
             </div>
-            <div data-model-count={priceModels.length} className={`storefront-product-card__model-grid mt-3 grid w-full gap-2 sm:gap-2 ${priceModels.length === 1 ? "grid-cols-1" : priceModels.length === 2 ? "grid-cols-2" : priceModels.length === 3 ? "grid-cols-3" : "grid-cols-2 sm:grid-cols-4"}`}>
+            <div className={`mt-3 grid w-full gap-2 sm:gap-2 ${priceModels.length === 1 ? "grid-cols-1" : priceModels.length === 2 ? "grid-cols-2" : priceModels.length === 3 ? "grid-cols-3" : "grid-cols-2 sm:grid-cols-4"}`}>
               {priceModels.map((model, index) => {
                 const isSelected = model.id === priceModelId;
                 const palette = OPTION_PALETTES[Math.min(index, OPTION_PALETTES.length - 1)];
@@ -401,30 +400,30 @@ export function StorefrontProductCard({
           </label>
         )}
 
-        <div className="storefront-product-card__selection relative mt-3 overflow-hidden rounded-[22px] border border-violet-300/75 bg-[radial-gradient(circle_at_18%_12%,rgba(124,58,237,.32),transparent_36%),radial-gradient(circle_at_86%_12%,rgba(59,130,246,.16),transparent_34%),linear-gradient(135deg,rgba(18,14,58,.82),rgba(6,10,31,.86)_58%,rgba(3,7,22,.91))] p-3.5 backdrop-blur-2xl shadow-[inset_0_1px_0_rgba(255,255,255,.20),inset_0_-1px_0_rgba(255,255,255,.04),0_0_0_1px_rgba(139,92,246,.10),0_0_34px_rgba(124,58,237,.20)] sm:p-4 lg:p-3.5">
+        <div className="relative mt-3 overflow-hidden rounded-[22px] border border-violet-300/75 bg-[radial-gradient(circle_at_18%_12%,rgba(124,58,237,.32),transparent_36%),radial-gradient(circle_at_86%_12%,rgba(59,130,246,.16),transparent_34%),linear-gradient(135deg,rgba(18,14,58,.82),rgba(6,10,31,.86)_58%,rgba(3,7,22,.91))] p-3.5 backdrop-blur-2xl shadow-[inset_0_1px_0_rgba(255,255,255,.20),inset_0_-1px_0_rgba(255,255,255,.04),0_0_0_1px_rgba(139,92,246,.10),0_0_34px_rgba(124,58,237,.20)] sm:p-4 lg:p-3.5">
           <span aria-hidden="true" className="pointer-events-none absolute inset-x-5 top-[1px] h-px bg-gradient-to-r from-transparent via-white/55 to-transparent opacity-90" />
-          <div className="storefront-product-card__selection-head relative flex items-center gap-3">
+          <div className="relative flex items-center gap-3">
             <div className="grid h-9 w-9 shrink-0 place-items-center rounded-xl bg-violet-600/25 text-violet-300"><Tag className="h-5 w-5" /></div>
             <p className="text-[14px] font-black uppercase tracking-[0.12em] text-violet-300 sm:text-base">Sua escolha</p>
-            <span className="storefront-product-card__account-badge ml-auto rounded-full border border-violet-300/35 bg-white/[0.04] px-3 py-1 text-[9px] font-black uppercase text-violet-100 sm:text-[10px]">CONTA {categoryLabel}</span>
+            <span className="ml-auto rounded-full border border-violet-300/35 bg-white/[0.04] px-3 py-1 text-[9px] font-black uppercase text-violet-100 sm:text-[10px]">CONTA {categoryLabel}</span>
           </div>
-          <p className="storefront-product-card__selection-name relative mt-3 text-[14px] font-black uppercase leading-5 tracking-[0.02em] text-white sm:text-[17px]">{selectedParts ? `${item.option.label} • ${selectedParts.title} • ${selectedParts.subtitle}` : `${item.option.label} • escolha uma garantia`}</p>
+          <p className="relative mt-3 text-[14px] font-black uppercase leading-5 tracking-[0.02em] text-white sm:text-[17px]">{selectedParts ? `${item.option.label} • ${selectedParts.title} • ${selectedParts.subtitle}` : `${item.option.label} • escolha uma garantia`}</p>
           <div className="relative mt-3 border-t border-white/20 pt-3">
             {discount > 0 && !(selectedPriceModel && modelHasVipPrice) ? (
-              <div className="storefront-product-card__price-grid grid grid-cols-[minmax(0,1fr)_108px] items-center gap-2.5 sm:grid-cols-[minmax(0,1fr)_116px] sm:gap-3 lg:grid-cols-[minmax(0,1fr)_108px] lg:gap-2.5 xl:grid-cols-[minmax(0,1fr)_116px] xl:gap-3">
+              <div className="grid grid-cols-[minmax(0,1fr)_108px] items-center gap-2.5 sm:grid-cols-[minmax(0,1fr)_116px] sm:gap-3 lg:grid-cols-[minmax(0,1fr)_108px] lg:gap-2.5 xl:grid-cols-[minmax(0,1fr)_116px] xl:gap-3">
                 <div className="min-w-0">
                   <div className="flex items-baseline gap-2 whitespace-nowrap">
                     <span className="text-[13px] font-black uppercase tracking-[0.08em] text-white/80 sm:text-sm">DE</span>
-                    <span className="storefront-product-card__original-price relative inline-block text-[24px] font-black leading-none text-white drop-shadow-[0_0_10px_rgba(255,255,255,.18)] sm:text-[28px] lg:text-[24px] xl:text-[28px]">
+                    <span className="relative inline-block text-[24px] font-black leading-none text-white drop-shadow-[0_0_10px_rgba(255,255,255,.18)] sm:text-[28px] lg:text-[24px] xl:text-[28px]">
                       {asMoney(effectiveOriginalPrice)}
                     </span>
                   </div>
                   <div className="mt-2">
                     <span className="block text-[16px] font-black uppercase tracking-[0.08em] text-emerald-300 sm:text-lg">POR</span>
-                    <p className="storefront-product-card__sale-price mt-1 whitespace-nowrap text-[36px] font-black leading-[0.88] tracking-[-0.045em] text-emerald-300 drop-shadow-[0_0_26px_rgba(74,222,128,.62)] sm:text-[42px] lg:text-[36px] xl:text-[40px]">{effectivePrice ? asMoney(effectivePrice) : "Valor após a escolha"}</p>
+                    <p className="mt-1 whitespace-nowrap text-[36px] font-black leading-[0.88] tracking-[-0.045em] text-emerald-300 drop-shadow-[0_0_26px_rgba(74,222,128,.62)] sm:text-[42px] lg:text-[36px] xl:text-[40px]">{effectivePrice ? asMoney(effectivePrice) : "Valor após a escolha"}</p>
                   </div>
                 </div>
-                <div className="storefront-product-card__saving flex min-h-[112px] flex-col items-center justify-center rounded-[22px] border-[3px] border-red-500 bg-[radial-gradient(circle_at_50%_18%,rgba(249,115,22,.25),transparent_30%),linear-gradient(180deg,rgba(72,8,18,.98),rgba(24,3,9,.99))] px-2 text-center shadow-[0_0_8px_rgba(239,68,68,.75),0_0_26px_rgba(239,68,68,.48)]">
+                <div className="flex min-h-[112px] flex-col items-center justify-center rounded-[22px] border-[3px] border-red-500 bg-[radial-gradient(circle_at_50%_18%,rgba(249,115,22,.25),transparent_30%),linear-gradient(180deg,rgba(72,8,18,.98),rgba(24,3,9,.99))] px-2 text-center shadow-[0_0_8px_rgba(239,68,68,.75),0_0_26px_rgba(239,68,68,.48)]">
                   <Flame className="h-10 w-10 fill-orange-500 text-orange-500 drop-shadow-[0_0_12px_rgba(249,115,22,.95)] sm:h-10 sm:w-10 lg:h-9 lg:w-9 xl:h-10 xl:w-10" />
                   <span className="mt-1 text-[11px] font-black uppercase tracking-[0.04em] text-yellow-200 sm:text-[12px] lg:text-[10px] xl:text-[11px]">Economize</span>
                   <span className="mt-0.5 text-[34px] font-black leading-none tracking-[-0.03em] text-yellow-300 drop-shadow-[0_0_12px_rgba(250,204,21,.35)] sm:text-[36px] lg:text-[32px] xl:text-[34px]">{discount}%</span>
@@ -452,12 +451,12 @@ export function StorefrontProductCard({
                       Pague menos
                     </span>
                   </div>
-                  <div className="storefront-product-card__vip-prices grid grid-cols-1 divide-y divide-amber-100/10 sm:grid-cols-2 sm:divide-x sm:divide-y-0">
+                  <div className="grid grid-cols-1 divide-y divide-amber-100/10 sm:grid-cols-2 sm:divide-x sm:divide-y-0">
                     <div className="bg-slate-950/35 p-3">
                       <p className="text-[10px] font-black uppercase tracking-[0.08em] text-slate-300">
                         {isVipCustomer ? 'VALOR NORMAL' : '👤 VOCÊ NÃO É VIP • PAGA'}
                       </p>
-                      <p className="storefront-product-card__vip-price mt-1 max-w-full overflow-hidden text-ellipsis whitespace-nowrap text-[clamp(21px,2.1vw,30px)] font-black tabular-nums text-white">
+                      <p className="mt-1 max-w-full overflow-hidden text-ellipsis whitespace-nowrap text-[clamp(21px,2.1vw,30px)] font-black tabular-nums text-white">
                         {asMoney(normalPrice)}
                       </p>
                     </div>
@@ -465,7 +464,7 @@ export function StorefrontProductCard({
                       <p className="text-[10px] font-black uppercase tracking-[0.08em] text-yellow-100">
                         {isVipCustomer ? '👑 VOCÊ É VIP • PAGA' : '👑 COM VIP • VOCÊ PAGA'}
                       </p>
-                      <p className="storefront-product-card__vip-price mt-1 max-w-full overflow-hidden text-ellipsis whitespace-nowrap text-[clamp(22px,2.1vw,31px)] font-black tabular-nums text-yellow-300 drop-shadow-[0_0_14px_rgba(250,204,21,.28)]">
+                      <p className="mt-1 max-w-full overflow-hidden text-ellipsis whitespace-nowrap text-[clamp(22px,2.1vw,31px)] font-black tabular-nums text-yellow-300 drop-shadow-[0_0_14px_rgba(250,204,21,.28)]">
                         {asMoney(vipPrice)}
                       </p>
                       {saving > 0 && (
@@ -496,9 +495,9 @@ export function StorefrontProductCard({
       </div>
 
       <div className="mt-auto px-4 pb-4 sm:px-4">
-        <div className="storefront-product-card__actions grid grid-cols-[1.22fr_.9fr] gap-2">
-          <button type="button" disabled={requiresPriceModelSelection && !selectedPriceModel} onClick={() => void runProtectedAction("buy")} className="storefront-product-card__action inline-flex min-h-[50px] items-center justify-center gap-3 rounded-[20px] border border-white bg-gradient-to-b from-white to-slate-200 px-3 text-[16px] font-black text-[#090b21] lg:text-[14px] xl:text-[15px] shadow-[0_12px_32px_rgba(255,255,255,.18)] transition-all hover:brightness-105 active:scale-[0.98] disabled:cursor-not-allowed disabled:opacity-35 sm:text-lg"><ShoppingCart className="h-6 w-6" /> Comprar agora <span className="text-2xl leading-none">→</span></button>
-          <button type="button" disabled={requiresPriceModelSelection && !selectedPriceModel} onClick={() => void runProtectedAction("cart")} className="storefront-product-card__action inline-flex min-h-[50px] items-center justify-center gap-2 rounded-[20px] border border-violet-400/90 bg-gradient-to-br from-violet-900/95 to-purple-950/85 px-3 text-[16px] font-black text-violet-100 lg:text-[14px] xl:text-[15px] shadow-[0_12px_32px_rgba(124,58,237,.22),inset_0_1px_0_rgba(255,255,255,.08)] transition-all hover:brightness-125 active:scale-[0.98] disabled:cursor-not-allowed disabled:opacity-35 sm:text-lg"><ShoppingCart className="h-5 w-5" /> Carrinho</button>
+        <div className="grid grid-cols-[1.22fr_.9fr] gap-2">
+          <button type="button" disabled={requiresPriceModelSelection && !selectedPriceModel} onClick={() => void runProtectedAction("buy")} className="inline-flex min-h-[50px] items-center justify-center gap-3 rounded-[20px] border border-white bg-gradient-to-b from-white to-slate-200 px-3 text-[16px] font-black text-[#090b21] lg:text-[14px] xl:text-[15px] shadow-[0_12px_32px_rgba(255,255,255,.18)] transition-all hover:brightness-105 active:scale-[0.98] disabled:cursor-not-allowed disabled:opacity-35 sm:text-lg"><ShoppingCart className="h-6 w-6" /> Comprar agora <span className="text-2xl leading-none">→</span></button>
+          <button type="button" disabled={requiresPriceModelSelection && !selectedPriceModel} onClick={() => void runProtectedAction("cart")} className="inline-flex min-h-[50px] items-center justify-center gap-2 rounded-[20px] border border-violet-400/90 bg-gradient-to-br from-violet-900/95 to-purple-950/85 px-3 text-[16px] font-black text-violet-100 lg:text-[14px] xl:text-[15px] shadow-[0_12px_32px_rgba(124,58,237,.22),inset_0_1px_0_rgba(255,255,255,.08)] transition-all hover:brightness-125 active:scale-[0.98] disabled:cursor-not-allowed disabled:opacity-35 sm:text-lg"><ShoppingCart className="h-5 w-5" /> Carrinho</button>
         </div>
 
         <div className="mt-3">
@@ -509,7 +508,7 @@ export function StorefrontProductCard({
             aria-label={detailsOpen ? "Ocultar detalhes do produto" : "Ver detalhes do produto"}
             onClick={() => setDetailsOpen((open) => !open)}
             className={[
-              "storefront-product-card__details group/details relative isolate flex min-h-[56px] w-full items-center justify-between gap-3 overflow-hidden rounded-2xl border-2 px-3.5 py-2.5 text-left backdrop-blur-xl transition-all duration-200 hover:brightness-110 active:scale-[0.99] focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-offset-2 focus-visible:ring-offset-[#090c20] motion-reduce:transition-none",
+              "group/details relative isolate flex min-h-[56px] w-full items-center justify-between gap-3 overflow-hidden rounded-2xl border-2 px-3.5 py-2.5 text-left backdrop-blur-xl transition-all duration-200 hover:brightness-110 active:scale-[0.99] focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-offset-2 focus-visible:ring-offset-[#090c20] motion-reduce:transition-none",
               detailsOpen
                 ? "border-violet-300/75 bg-gradient-to-r from-violet-700/45 via-indigo-950/65 to-violet-900/50 text-white shadow-[inset_0_1px_0_rgba(255,255,255,.16),0_8px_24px_rgba(124,58,237,.18)] focus-visible:ring-violet-300"
                 : "border-[#FF5267] bg-[linear-gradient(110deg,#380C1B,#160E2A)] text-white shadow-[inset_0_1px_0_rgba(255,255,255,.08),0_0_18px_rgba(244,63,94,.24)] focus-visible:ring-rose-300",
