@@ -561,13 +561,38 @@ function LoansTab() {
       // Atualiza imediatamente as informações visíveis no ADM.
       await Promise.all([
         utils.loans.listLoans.invalidate(),
+        utils.loans.getLoan.invalidate(),
         utils.loans.getScoreDAlerts.invalidate(),
         utils.loans.getDashboard.invalidate(),
       ]);
     },
     onError: (e) => toast.error(e.message || 'Não foi possível atualizar as taxas automáticas.'),
   });
-  useEffect(() => { autoApplyFees.mutate(); }, []);
+  // A multa muda em horarios especificos mesmo com o painel ADM aberto.
+  // Repete a sincronizacao em intervalos curtos e ao retomar a aba;
+  // o backend so persiste aumentos devidos e respeita overrides manuais.
+  useEffect(() => {
+    let inFlight = false;
+    const syncAutomaticFees = () => {
+      if (inFlight) return;
+      inFlight = true;
+      autoApplyFees.mutateAsync()
+        .catch(() => { /* onError da mutation ja informa o erro ao ADM */ })
+        .finally(() => { inFlight = false; });
+    };
+    const syncWhenVisible = () => {
+      if (document.visibilityState === "visible") syncAutomaticFees();
+    };
+    syncAutomaticFees();
+    const interval = window.setInterval(syncWhenVisible, 60_000);
+    window.addEventListener("focus", syncWhenVisible);
+    document.addEventListener("visibilitychange", syncWhenVisible);
+    return () => {
+      window.clearInterval(interval);
+      window.removeEventListener("focus", syncWhenVisible);
+      document.removeEventListener("visibilitychange", syncWhenVisible);
+    };
+  }, []);
   const { data: instData } = trpc.loans.getLoan.useQuery(
     { id: expandedLoan! },
     { enabled: !!expandedLoan }

@@ -11,6 +11,7 @@ import { spreadsheetSessions } from "../../drizzle/schema";
 import { eq, sql as drizzleSql } from "drizzle-orm";
 import { applyH2ScoreEventFromSubmission, approveH2ScoreSubmission, backfillLegacyH2ScoreEvents, getClientH2ScoreSummary, getCustomerH2ScoreHistory, getCustomerH2ScoreSummary, getH2ScoreCustomerDirectory, getH2ScoreSubmissionMap, getLoanH2ScoreConfig, registerH2ScoreSubmission, refuseH2ScoreSubmission, setCustomerH2ScoreExact } from "../loans/h2Score";
 import { calculateLateFeeDetailsForInstallment, calculateLateFeeForInstallment } from "../loans/lateFee";
+import { isSystemRestoreLocked } from "../backupRestoreService";
 import { calculateParceladoFromAdminPlan } from "../loans/parcelado";
 import PDFDocument from "pdfkit";
 import { sendMailDirect } from "../_core/sendMailDirect";
@@ -628,6 +629,96 @@ function resolveEffectiveLateFee(row: any, automaticFee: number) {
         ? 0
         : Math.max(storedFee, automaticFee),
   };
+}
+
+/**
+ * Aplica as mesmas regras de multa diária na tela do ADM e no worker do servidor.
+ * Não cria cobranças extras: somente persiste a diferença que a regra já prevê.
+ * Verificações concorrentes não sobrescrevem pagamentos, alterações ou isenções do ADM.
+ */
+let activeLoanLateFeeReconciliation: Promise<{ ok: boolean; applied: number; message?: string }> | null = null;
+
+export function reconcileDailyLoanLateFees(): Promise<{ ok: boolean; applied: number; message?: string }> {
+  if (activeLoanLateFeeReconciliation) return activeLoanLateFeeReconciliation;
+
+  const job = (async () => {
+    if (isSystemRestoreLocked()) return { ok: true, applied: 0, message: "Restauração em andamento" };
+    const db = await getDb() as any;
+    if (!db) throw new Error("Banco de empréstimos indisponível.");
+    await ensureLateFeeAdminOverrideColumns(db);
+    const clock = getBrazilClock();
+    const cfgRows = await qRows(db, drizzleSql`SELECT * FROM loan_late_fee_config WHERE id=1 LIMIT 1`);
+    const cfg = cfgRows[0];
+    if (!cfg || !cfg.enabled || String(cfg.enabled) === "0") {
+      return { ok: true, applied: 0, message: "Taxa desativada" };
+    }
+
+    // Apenas parcelas diárias ativas, já liberadas e não pagas.
+    const candidates = await qRows(db, drizzleSql`
+      SELECT li.*, lc.late_fee_disabled, l.paymentType
+      FROM loanInstallments li
+      JOIN loans l ON l.id = li.loanId
+      JOIN loanClients lc ON lc.id = l.clientId
+      WHERE li.status IN ('pendente', 'atrasado')
+        AND li.dueDate <= ${clock.today}
+        AND l.paymentType = 'diario'
+        AND l.status NOT IN ('pago', 'cancelado', 'reprovado', 'pendente')
+        AND NOT (l.status='aprovado' AND l.pixSentAt IS NULL)
+        AND (lc.late_fee_disabled IS NULL OR lc.late_fee_disabled = 0)
+    `);
+
+    let applied = 0;
+    for (const inst of candidates) {
+      const baseAmount = inst.originalAmount != null ? Number(inst.originalAmount) : Number(inst.amount);
+      const storedFee = Number(inst.feeApplied || 0);
+      const overrideActive = Number(inst.lateFeeAdminOverrideActive || 0);
+      const overrideValue = Number(inst.lateFeeAdminOverride || 0);
+      const baseline = inst.lateFeeAdminOverrideBaseline == null ? -1 : Number(inst.lateFeeAdminOverrideBaseline);
+      // O ADM definiu um valor positivo: não modificar esse lançamento.
+      if (overrideActive === 1 && overrideValue > 0) continue;
+      const requiredFee = calculateLateFeeForInstallment({
+        dueDate: inst.dueDate, amount: baseAmount, config: cfg, clock,
+      });
+      // A isenção manual de uma faixa continua válida até o próximo aumento da regra.
+      const effectiveFee = resolveEffectiveLateFee(inst, requiredFee).fee;
+      if (effectiveFee <= 0 || effectiveFee <= storedFee) continue;
+
+      const newAmount = Math.round((baseAmount + effectiveFee) * 100) / 100;
+      const spNow = new Date().toLocaleString("pt-BR", { timeZone: "America/Sao_Paulo" });
+      const note = `Taxa diária automática: +R$ ${effectiveFee.toFixed(2).replace(".", ",")} atualizada em ${spNow}`;
+      // Compare-and-set no MySQL: nada de sobrescrever um pagamento, uma isenção,
+      // ou uma multa alterada entre o SELECT e o UPDATE (inclusive entre instâncias).
+      const [result] = await db.execute(drizzleSql`
+        UPDATE loanInstallments
+        SET amount=${newAmount.toFixed(2)}, originalAmount=${baseAmount.toFixed(2)},
+            feeApplied=${effectiveFee.toFixed(2)}, notes=${note},
+            status=CASE WHEN dueDate < ${clock.today} THEN 'atrasado' ELSE status END
+        WHERE id=${inst.id}
+          AND status IN ('pendente','atrasado')
+          AND dueDate <= ${clock.today}
+          AND amount=${Number(inst.amount).toFixed(2)}
+          AND COALESCE(feeApplied,0)=${storedFee.toFixed(2)}
+          AND COALESCE(lateFeeAdminOverrideActive,0)=${overrideActive}
+          AND COALESCE(lateFeeAdminOverride,0)=${overrideValue.toFixed(2)}
+          AND COALESCE(lateFeeAdminOverrideBaseline,-1)=${baseline}
+          AND EXISTS (
+            SELECT 1 FROM loans l JOIN loanClients lc ON lc.id=l.clientId
+            WHERE l.id=loanInstallments.loanId
+              AND l.paymentType='diario'
+              AND l.status NOT IN ('pago','cancelado','reprovado','pendente')
+              AND NOT (l.status='aprovado' AND l.pixSentAt IS NULL)
+              AND (lc.late_fee_disabled IS NULL OR lc.late_fee_disabled=0)
+          )
+      `);
+      if (Number((result as any)?.affectedRows || 0) === 1) applied++;
+    }
+    return { ok: true, applied };
+  })();
+  activeLoanLateFeeReconciliation = job;
+  void job.finally(() => {
+    if (activeLoanLateFeeReconciliation === job) activeLoanLateFeeReconciliation = null;
+  }).catch(() => { /* sem rejection solta; o chamador recebe o erro original */ });
+  return job;
 }
 
 export const loanRouter = router({
@@ -4036,52 +4127,8 @@ export const loanRouter = router({
     return { ok: true, created, updated, total };
   }),
 
-  // Aplica taxas de atraso automaticamente em todas as parcelas vencidas não pagas
-  // Deve ser chamado diariamente (ex: via cron ou na abertura do painel ADM)
-  autoApplyLateFees: adminProcedure.mutation(async () => {
-    const db = await getDb() as any;
-    const clock = getBrazilClock();
-    const cfgRows = await qRows(db, drizzleSql`SELECT * FROM loan_late_fee_config WHERE id=1 LIMIT 1`);
-    const cfg = cfgRows[0];
-    if (!cfg || !cfg.enabled) return { ok: true, applied: 0, message: 'Taxa desativada' };
-
-    // SOMENTE parcelas diárias. Inclui o vencimento de hoje para que 18:01, 20:01
-    // e 23:59 possam ser persistidos quando a rotina rodar durante o dia.
-    const candidates = await qRows(db, drizzleSql`
-      SELECT li.*, lc.late_fee_disabled, l.paymentType
-      FROM loanInstallments li
-      JOIN loans l ON l.id = li.loanId
-      JOIN loanClients lc ON lc.id = l.clientId
-      WHERE li.status IN ('pendente', 'atrasado')
-        AND li.dueDate <= ${clock.today}
-        AND l.paymentType = 'diario'
-        AND l.status NOT IN ('pago', 'cancelado', 'reprovado')
-        AND (lc.late_fee_disabled IS NULL OR lc.late_fee_disabled = 0)
-    `);
-
-    let applied = 0;
-    for (const inst of candidates) {
-      const baseAmount = inst.originalAmount != null ? parseFloat(inst.originalAmount) : parseFloat(inst.amount);
-      const storedFee = inst.feeApplied != null ? parseFloat(inst.feeApplied) : 0;
-      const requiredFee = calculateLateFeeForInstallment({ dueDate: inst.dueDate, amount: baseAmount, config: cfg, clock });
-      // Respeita override manual positivo e remoção apenas da faixa atual.
-      // Quando a próxima faixa de São Paulo elevar a taxa, o automático volta.
-      const effectiveFee = resolveEffectiveLateFee(inst, requiredFee).fee;
-      if (effectiveFee <= 0 || effectiveFee <= storedFee) continue;
-      const newAmount = Math.round((baseAmount + effectiveFee) * 100) / 100;
-      const spNow = new Date().toLocaleString('pt-BR', { timeZone: 'America/Sao_Paulo' });
-      const note = `Taxa diária automática: +R$ ${effectiveFee.toFixed(2).replace('.', ',')} atualizada em ${spNow}`;
-      await db.execute(drizzleSql`
-        UPDATE loanInstallments
-        SET amount=${newAmount.toFixed(2)}, originalAmount=${baseAmount.toFixed(2)},
-            feeApplied=${effectiveFee.toFixed(2)}, notes=${note},
-            status=CASE WHEN dueDate < ${clock.today} THEN 'atrasado' ELSE status END
-        WHERE id=${inst.id}
-      `);
-      applied++;
-    }
-    return { ok: true, applied };
-  }),
+  // Mesma rotina usada pelo worker independente do painel ADM.
+  autoApplyLateFees: adminProcedure.mutation(() => reconcileDailyLoanLateFees()),
 
   // Busca clientes com score D para alerta no ADM
   getScoreDAlerts: adminProcedure.query(async () => {
