@@ -5125,7 +5125,7 @@ export default function Home() {
       })()}
 
       {/* Seção de Serviços */}
-      <section className="pt-4 pb-16 md:pt-6 md:pb-24 bg-black/10">
+      <section className="pt-2 pb-16 md:pt-3 md:pb-24 bg-black/10">
         <div className="container">
           <div className="text-center mb-5">
             {SERVICES_TITLE && <h2 className="text-3xl md:text-4xl font-bold mb-3 neon-lightning" style={{ color: '#00FFFF' }}>{SERVICES_TITLE}</h2>}

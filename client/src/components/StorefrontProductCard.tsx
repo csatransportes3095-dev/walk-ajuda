@@ -165,14 +165,6 @@ function splitModelLabel(label: string) {
   return { title: clean, subtitle: "SELECIONAR" };
 }
 
-function productTagline(item: StorefrontCatalogItem) {
-  const value = `${item.category} ${item.product.name}`.toLowerCase();
-  if (value.includes("99")) return "Sua jornada com a 99, mais rápida e segura.";
-  if (value.includes("tax")) return "Seu atendimento com mais rapidez, segurança e acompanhamento.";
-  if (value.includes("doc")) return "Seu serviço organizado, rápido e acompanhado do início ao fim.";
-  return "Sua jornada com a Uber, mais rápida e segura.";
-}
-
 function GlobalPromotionTimer({ endsAt }: { endsAt: number }) {
   const [now, setNow] = useState(() => Date.now());
   useEffect(() => {
@@ -318,23 +310,15 @@ function StorefrontProductCardComponent({
 
       <div className={`pointer-events-none absolute inset-x-10 ${hasActivePromotion ? "top-[38px]" : "top-0"} h-px bg-gradient-to-r from-transparent via-violet-300 to-transparent shadow-[0_0_24px_rgba(167,139,250,.95)]`} />
 
-      <div className="relative overflow-hidden rounded-b-[28px] border-b border-violet-300/40 bg-[radial-gradient(circle_at_90%_25%,rgba(129,140,248,.24),transparent_28%),linear-gradient(135deg,rgba(76,29,149,.28),rgba(15,23,42,.24)_55%,rgba(255,255,255,.025))] px-4 py-4 backdrop-blur-2xl shadow-[inset_0_1px_0_rgba(255,255,255,.18),inset_0_-1px_0_rgba(255,255,255,.04)] sm:px-5 sm:py-4">
+      <div className="relative overflow-hidden rounded-b-[28px] border-b border-violet-300/40 bg-[radial-gradient(circle_at_90%_25%,rgba(129,140,248,.24),transparent_28%),linear-gradient(135deg,rgba(76,29,149,.28),rgba(15,23,42,.24)_55%,rgba(255,255,255,.025))] px-4 py-3.5 backdrop-blur-2xl shadow-[inset_0_1px_0_rgba(255,255,255,.18),inset_0_-1px_0_rgba(255,255,255,.04)] sm:px-5 sm:py-4">
         <div className="pointer-events-none absolute right-5 top-3 text-[56px] font-black tracking-tighter text-violet-300/[0.06] sm:text-[74px]">{item.category}</div>
-        <div className="relative flex min-w-0 items-start gap-[clamp(8px,1vw,16px)] pr-1">
-          <div className="grid h-[clamp(54px,5vw,74px)] w-[clamp(54px,5vw,74px)] shrink-0 place-items-center overflow-hidden rounded-[22px] border border-violet-300/55 bg-black/50 shadow-[0_0_24px_rgba(139,92,246,.45),inset_0_0_18px_rgba(255,255,255,.08)]">
-            {item.product.iconUrl ? <img src={item.product.iconUrl} alt="" loading="lazy" className="h-[clamp(42px,4vw,58px)] w-[clamp(42px,4vw,58px)] rounded-2xl object-contain" /> : <Tag className="h-7 w-7 text-violet-300" />}
+        <div className="relative flex min-w-0 items-center gap-3.5 pr-1 sm:gap-4">
+          <div className="grid h-[clamp(78px,7vw,98px)] w-[clamp(78px,7vw,98px)] shrink-0 place-items-center overflow-hidden rounded-[22px] border border-violet-300/55 bg-black/50 shadow-[0_0_24px_rgba(139,92,246,.45),inset_0_0_18px_rgba(255,255,255,.08)]">
+            {item.product.iconUrl ? <img src={item.product.iconUrl} alt="" loading="lazy" className="h-[clamp(66px,6vw,86px)] w-[clamp(66px,6vw,86px)] rounded-2xl object-contain" /> : <Tag className="h-9 w-9 text-violet-300" />}
           </div>
           <div className="min-w-0 flex-1">
-            <span className="inline-flex max-w-full overflow-hidden text-ellipsis whitespace-nowrap rounded-full border border-violet-400/60 bg-violet-500/20 px-[clamp(7px,0.8vw,12px)] py-1 text-[clamp(8px,0.75vw,11px)] font-black uppercase tracking-[0.10em] text-violet-200 shadow-[0_0_16px_rgba(139,92,246,.16)]">{productPill}</span>
-            <h3 className="mt-1.5 max-w-full overflow-hidden text-ellipsis whitespace-nowrap text-[clamp(16px,1.7vw,30px)] font-black leading-[1.02] tracking-tight text-white">{item.option.label.trim()}</h3>
-            <span className="mt-2 inline-flex max-w-full overflow-hidden text-ellipsis whitespace-nowrap rounded-full border border-violet-300/40 bg-violet-500/10 px-[clamp(7px,0.8vw,12px)] py-1 text-[clamp(8px,0.7vw,10px)] font-black uppercase tracking-[0.13em] text-violet-200/90">TIPO DE CONTA</span>
-          </div>
-        </div>
-        <div className="relative mt-3 flex items-end justify-between gap-2">
-          <p className="min-w-0 max-w-[68%] text-[clamp(9px,0.8vw,14px)] font-bold leading-[1.35] text-violet-100/75">{productTagline(item)}</p>
-          <div className="flex shrink-0 items-center gap-[clamp(4px,0.5vw,8px)] rounded-2xl border border-violet-400/70 bg-violet-950/55 px-[clamp(7px,0.8vw,12px)] py-[clamp(5px,0.55vw,8px)] text-violet-200 shadow-[0_0_18px_rgba(139,92,246,.20)]">
-            <Crown className="h-5 w-5" />
-            <div className="text-[9px] font-black uppercase leading-3 tracking-wide"><span className="block">Qualidade</span><span className="text-violet-100">H2</span></div>
+            <span className="inline-flex max-w-full rounded-full border border-violet-400/60 bg-violet-500/20 px-3 py-1.5 text-[clamp(10px,0.85vw,12px)] font-black uppercase tracking-[0.07em] leading-tight text-violet-200 shadow-[0_0_16px_rgba(139,92,246,.16)]">{productPill}</span>
+            <h3 className="mt-2 max-w-full break-words text-[clamp(23px,2.1vw,31px)] font-black leading-[1.04] tracking-tight text-white drop-shadow-[0_0_12px_rgba(255,255,255,.18)]">{item.option.label.trim()}</h3>
           </div>
         </div>
       </div>
