@@ -13,6 +13,7 @@ import { registerStorageProxy } from "./storageProxy";
 import { registerUploadRoute } from "../uploadRoute";
 import { registerApkDownloadRoute, ensureApkTable } from "../routers/apk";
 import { appRouter } from "../routers";
+import { reconcileDailyLoanLateFees } from "../routers/loans";
 import { createContext } from "./context";
 import { isAdminJwtValid } from "./trpc";
 import { serveStatic, setupVite } from "./vite";
@@ -590,6 +591,18 @@ async function startServer() {
   });
   server.listen(port, "0.0.0.0", () => {
     console.log(`Server running on http://0.0.0.0:${port}/`);
+    // Empréstimos: reconcilia multas sem depender do ADM aberto.
+    // Reutiliza a rotina do painel e os bloqueios de concorrência do MySQL.
+    const reconcileLateFees = () => {
+      void reconcileDailyLoanLateFees()
+        .then(result => {
+          if (result.applied > 0) console.info(`[LoanLateFeeWorker] ${result.applied} parcela(s) atualizada(s).`);
+        })
+        .catch(error => console.error("[LoanLateFeeWorker] falha ao atualizar taxas:", error));
+    };
+    reconcileLateFees();
+    const lateFeeInterval = setInterval(reconcileLateFees, 60_000);
+    lateFeeInterval.unref?.();
   });
 }
 
