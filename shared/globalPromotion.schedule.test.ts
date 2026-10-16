@@ -4,7 +4,7 @@ import { globalPromotionWindow, globalPromotionIsActive, calculateGlobalPromotio
 const base = { active: true, type: "percentage" as const, value: 50, revision: "test", updatedAt: null };
 const ms = (date: string) => Date.parse(date);
 const period = { ...base, schedule: { mode: "period" as const, startAt: "2026-10-15T23:00:00-03:00", endAt: "2026-10-16T06:00:00-03:00" } };
-const weekly = { ...base, schedule: { mode: "weekly" as const, weekdays: [1,2], startsOn: "2026-10-12", endsOn: "2026-10-20", startTime: "23:00", endTime: "06:00" } };
+const weekly = { ...base, schedule: { mode: "weekly" as const, weekdays: [1,2], startTime: "23:00", endTime: "06:00" } };
 const price = { price: "400,00", originalPrice: "500,00" };
 
 describe("programação da promoção geral em Brasília", () => {
@@ -28,12 +28,18 @@ describe("programação da promoção geral em Brasília", () => {
     expect(globalPromotionWindow(weekly, ms("2026-10-14T05:59:59-03:00")).active).toBe(true);
     expect(globalPromotionWindow(weekly, ms("2026-10-14T06:00:00-03:00")).active).toBe(false);
   });
-  it("encerra a recorrência após o último dia configurado", () => {
-    expect(globalPromotionWindow(weekly, ms("2026-10-21T06:00:00-03:00")).status).toBe("expired");
+  it("repete semanalmente sem exigir data final", () => {
+    expect(globalPromotionWindow(weekly, ms("2026-10-26T23:00:00-03:00")).active).toBe(true);
+  });
+  it("permite sábado e domingo com horários independentes do calendário", () => {
+    const weekend = { ...weekly, schedule: { ...weekly.schedule, weekdays: [0,6] } };
+    expect(globalPromotionWindow(weekend, ms("2026-10-17T23:00:00-03:00")).active).toBe(true);
+    expect(globalPromotionWindow(weekend, ms("2026-10-18T05:59:59-03:00")).active).toBe(true);
+    expect(globalPromotionWindow(weekend, ms("2026-10-18T23:00:00-03:00")).active).toBe(true);
   });
   it("preserva desconto salvo quando desativado e rejeita agendas inválidas", () => {
     expect(globalPromotionWindow({ ...weekly, active: false }, ms("2026-10-13T00:00:00-03:00")).status).toBe("disabled");
-    expect(isValidGlobalPromotionSchedule({ mode: "weekly", weekdays: [], startsOn: "2026-10-12", endsOn: "2026-10-13", startTime: "23:00", endTime: "06:00" })).toBe(false);
+    expect(isValidGlobalPromotionSchedule({ mode: "weekly", weekdays: [], startTime: "23:00", endTime: "06:00" })).toBe(false);
     expect(parseGlobalPromotionConfig(JSON.stringify({ ...base, schedule: { mode: "period", startAt: "2026-10-16T06:00:00-03:00", endAt: "2026-10-15T23:00:00-03:00" } })).active).toBe(false);
   });
 });
