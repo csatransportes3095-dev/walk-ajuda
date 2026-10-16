@@ -97,7 +97,7 @@ export function isValidGlobalPromotionSchedule(value: unknown): value is GlobalP
       if (!Number.isInteger(row.startDay) || (row.startDay as number) < 0 || (row.startDay as number) > 6 ||
           !Number.isInteger(row.endDay) || (row.endDay as number) < 0 || (row.endDay as number) > 6 ||
           !validTime(row.startTime) || !validTime(row.endTime)) return false;
-      const interval = weeklyWindowRange(row as GlobalPromotionWeeklyWindow);
+      const interval = weeklyWindowRange(row as unknown as GlobalPromotionWeeklyWindow);
       return interval.end > interval.start && interval.end - interval.start < WEEK_MINUTES;
     });
     return valid && !weeklyWindowsOverlap(windows as GlobalPromotionWeeklyWindow[]);
