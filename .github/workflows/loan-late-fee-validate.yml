@@ -1,0 +1,33 @@
+name: Empréstimos - multa automática
+on:
+  pull_request:
+    branches:
+      - recovery/organizar-salvos-2026-08-24
+    paths:
+      - 'client/src/pages/AdminLoans.tsx'
+      - 'server/_core/index.ts'
+      - 'server/routers/loans.ts'
+      - 'server/loans/lateFee.ts'
+      - 'server/dailyLateFeeIntegration.test.ts'
+      - '.github/workflows/loan-late-fee-validate.yml'
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  validate:
+    runs-on: ubuntu-latest
+    timeout-minutes: 25
+    steps:
+      - uses: actions/checkout@v4
+      - uses: pnpm/action-setup@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '22'
+          cache: pnpm
+      - run: pnpm install --frozen-lockfile
+      - name: Testes de multas e integracao ADM/worker
+        run: pnpm exec vitest run server/loans/lateFee.test.ts server/dailyLateFeeIntegration.test.ts
+      - name: Compilacao da aplicacao
+        run: pnpm build
