@@ -1810,7 +1810,7 @@ export default function Home() {
               email: clientEmail.trim(),
               accessCode: accessCode || undefined,
               cpToken: cpTokenForSubmit || undefined,
-              couponCode: couponValid ? couponCode : undefined,
+              couponCode: !sitePromoActive && couponValid ? couponCode : undefined,
               // Comprovante PIX: apenas no primeiro item (cartItemIndex=0)
               paymentProof: undefined,
               paymentProofUrl: i === 0 ? paymentProofUploadedUrl : undefined,
@@ -1831,8 +1831,8 @@ export default function Home() {
               // Campos de agrupamento de carrinho
               cartGroupId,
               cartTotal: cartTotalValue,
-              cartCouponCode: couponValid ? couponCode : undefined,
-              cartCouponDiscount: cartCouponDiscountValue,
+              cartCouponCode: !sitePromoActive && couponValid ? couponCode : undefined,
+              cartCouponDiscount: sitePromoActive ? undefined : cartCouponDiscountValue,
               cartItemIndex: i,
             });
             if (!isPersistedOrderResult(itemResult)) {
@@ -1856,7 +1856,7 @@ export default function Home() {
         setAutomaticScheduleLinks(uniqueScheduleLinks);
         setPostOrderScheduleDecision(uniqueScheduleLinks.length > 0 ? 'choose' : 'completed');
         // Salvar dados do pedido para mensagem WhatsApp
-        const cartTotalPago = cartTotalValue - (cartCouponDiscountValue || 0);
+        const cartTotalPago = cartTotalValue - (sitePromoActive ? 0 : (cartCouponDiscountValue || 0));
         setSubmittedOrderData({
           cartItems: cartItems.map(item => ({
             service: item.product.name,
@@ -4055,7 +4055,7 @@ export default function Home() {
                     <div className="bg-green-500/20 border border-green-500/40 rounded-lg p-3">
                       <div className="flex justify-between items-center">
                         <span className="text-green-300 font-bold text-sm">TOTAL ({cart.length} itens):</span>
-                        {(couponDiscount || hasResellerDiscount) && cartTotalFormatted ? (
+                        {(!sitePromoActive && (couponDiscount || hasResellerDiscount)) && cartTotalFormatted ? (
                           <div className="flex items-center gap-2">
                             <span className="text-white/50 line-through text-sm font-semibold">{cartTotalFormatted}</span>
                             <span className="text-green-400 font-bold text-xl">{cartTotalWithDiscount}</span>
@@ -4068,7 +4068,7 @@ export default function Home() {
                         <div className="flex justify-between items-center mt-1">
                           <span className="text-green-300 text-xs">
                             {hasResellerDiscount && !couponDiscount && `🏷️ Desconto revendedor aplicado`}
-                            {couponDiscount && !hasResellerDiscount && `🎫 Cupom aplicado`}
+                            {!sitePromoActive && couponDiscount && !hasResellerDiscount && `🎫 Cupom aplicado`}
                             {couponDiscount && hasResellerDiscount && `🏷️ Revendedor + 🎫 Cupom`}
                           </span>
                           <span className="text-green-300 text-xs font-bold">
@@ -4119,8 +4119,9 @@ export default function Home() {
                   </div>
                 )}
 
-                {/* Cupom */}
-                <div className="border-t border-green-500/20 pt-3">
+                {/* Cupom suspenso enquanto a promoção geral estiver ligada */}
+                {sitePromoActive && <p className="text-emerald-300 text-xs font-bold py-2">🏷️ PROMOÇÃO GERAL ATIVA — cupons, VIP e outros descontos não acumulam.</p>}
+                {!sitePromoActive && <div className="border-t border-green-500/20 pt-3">
                   <Label className="text-green-400 mb-2 block flex items-center gap-1 text-xs">
                     <Ticket className="w-4 h-4" /> Cupom de Desconto (opcional)
                   </Label>
@@ -4134,7 +4135,7 @@ export default function Home() {
                     </button>
                   </div>
                   {couponMessage && <p className={`text-xs mt-1 font-semibold ${couponValid ? 'text-green-400' : 'text-red-400'}`}>{couponMessage}</p>}
-                </div>
+                </div>}
 
                 {/* Campo de cliente final para revendedores */}
                 {resellerInfo?.isReseller && (
@@ -4213,7 +4214,7 @@ export default function Home() {
                       phone: clientPhone.trim() || undefined,
                       checkoutToken,
                       items: [{ productId: selectedProduct.id, optionId: selectedOption.id, priceModelId: selectedPriceModel?.id || null, warrantyTierId: selectedTier?.id || null }],
-                      couponCode: couponValid ? couponCode : undefined,
+                      couponCode: !sitePromoActive && couponValid ? couponCode : undefined,
                       installmentCount: vipInstallmentSelection.installmentCount,
                       frequency: vipInstallmentSelection.frequency,
                     });
@@ -5193,6 +5194,7 @@ export default function Home() {
                       <StorefrontProductCard
                         key={`${item.product.id}-${item.option.id}`}
                         item={item as StorefrontCatalogItem}
+                        globalPromotion={globalPromotion}
                         onBuy={(tier, priceModel) => startDirectOptionCheckout(item.product, item.option, tier as unknown as WarrantyTier | null, priceModel as OptionPriceModel | null)}
                         onAddToCart={(_tier, priceModel) => addToCart(item.product, item.option, priceModel as OptionPriceModel | null)}
                       />
