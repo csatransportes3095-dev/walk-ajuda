@@ -5,9 +5,38 @@ const BRAZIL_OFFSET_MS = 3 * 60 * 60 * 1000;
 const DAY_MS = 24 * 60 * 60 * 1000;
 
 // Horário de Brasília (UTC-03); os dias da semana indicam sempre a data de início.
+export type GlobalPromotionWeeklyWindow = {
+  startDay: number; startTime: string; endDay: number; endTime: string;
+};
+
 export type GlobalPromotionSchedule =
   | { mode: "period"; startAt: string; endAt: string }
-  | { mode: "weekly"; weekdays: number[]; startTime: string; endTime: string; startsOn?: string; endsOn?: string };
+  | { mode: "weekly"; weekdays: number[]; startTime: string; endTime: string; startsOn?: string; endsOn?: string }
+  | { mode: "weekly_windows"; windows: GlobalPromotionWeeklyWindow[] };
+
+const WEEK_MS = 7 * DAY_MS;
+const WEEK_MINUTES = 7 * 24 * 60;
+const minutes = (time: string): number => Number(time.slice(0, 2)) * 60 + Number(time.slice(3, 5));
+
+export function weeklyWindowRange(window: GlobalPromotionWeeklyWindow): { start: number; end: number } {
+  const start = window.startDay * 1440 + minutes(window.startTime);
+  let end = window.endDay * 1440 + minutes(window.endTime);
+  if (end < start) end += WEEK_MINUTES;
+  return { start, end };
+}
+
+export function weeklyWindowsOverlap(windows: GlobalPromotionWeeklyWindow[]): boolean {
+  for (let i = 0; i < windows.length; i++) {
+    const first = weeklyWindowRange(windows[i]);
+    for (let j = i + 1; j < windows.length; j++) {
+      const second = weeklyWindowRange(windows[j]);
+      for (const shift of [-WEEK_MINUTES, 0, WEEK_MINUTES]) {
+        if (Math.max(first.start, second.start + shift) < Math.min(first.end, second.end + shift)) return true;
+      }
+    }
+  }
+  return false;
+}
 
 export type GlobalPromotionConfig = {
   active: boolean;
@@ -58,6 +87,20 @@ export function isValidGlobalPromotionSchedule(value: unknown): value is GlobalP
     const from = brazilTimestamp(raw.startAt);
     const to = brazilTimestamp(raw.endAt);
     return from !== null && to !== null && from < to;
+  }
+  if (raw.mode === "weekly_windows") {
+    const windows = raw.windows;
+    if (!Array.isArray(windows) || windows.length < 1 || windows.length > 28) return false;
+    const valid = windows.every(window => {
+      if (!window || typeof window !== "object" || Array.isArray(window)) return false;
+      const row = window as Record<string, unknown>;
+      if (!Number.isInteger(row.startDay) || (row.startDay as number) < 0 || (row.startDay as number) > 6 ||
+          !Number.isInteger(row.endDay) || (row.endDay as number) < 0 || (row.endDay as number) > 6 ||
+          !validTime(row.startTime) || !validTime(row.endTime)) return false;
+      const interval = weeklyWindowRange(row as GlobalPromotionWeeklyWindow);
+      return interval.end > interval.start && interval.end - interval.start < WEEK_MINUTES;
+    });
+    return valid && !weeklyWindowsOverlap(windows as GlobalPromotionWeeklyWindow[]);
   }
   if (raw.mode === "weekly") {
     const days = raw.weekdays;
@@ -121,8 +164,32 @@ export function globalPromotionWindow(config: GlobalPromotionConfig | null | und
     return disabledWindow("expired");
   }
 
-  // O fuso é o de Brasília, independente do fuso do servidor ou navegador.
-  // Inclui ontem para manter o período 23h-06h depois da meia-noite.
+  if (schedule.mode === "weekly_windows") {
+    // Domingo às 00h de Brasília é o ponto de referência de cada semana.
+    // O período pode atravessar sábado/domingo e a virada de semana.
+    const brazilDate = new Date(nowMs - BRAZIL_OFFSET_MS);
+    const today = Date.UTC(brazilDate.getUTCFullYear(), brazilDate.getUTCMonth(), brazilDate.getUTCDate());
+    const thisSundayMidnight = today - brazilDate.getUTCDay() * DAY_MS + BRAZIL_OFFSET_MS;
+    let nextStart: number | null = null;
+    let nextEnd: number | null = null;
+    for (const window of schedule.windows) {
+      const { start, end } = weeklyWindowRange(window);
+      for (const weekOffset of [-1, 0, 1]) {
+        const startAt = thisSundayMidnight + weekOffset * WEEK_MS + start * 60_000;
+        const endsAt = thisSundayMidnight + weekOffset * WEEK_MS + end * 60_000;
+        if (nowMs >= startAt && nowMs < endsAt) return { active: true, status: "active", startsAt: startAt, endsAt };
+        if (startAt > nowMs && (nextStart === null || startAt < nextStart)) {
+          nextStart = startAt;
+          nextEnd = endsAt;
+        }
+      }
+    }
+    return nextStart !== null
+      ? { active: false, status: "scheduled", startsAt: nextStart, endsAt: nextEnd }
+      : disabledWindow("invalid");
+  }
+
+  // Compatibilidade de agendas semanais antigas: não mudar o que já foi salvo.
   const localDate = new Date(nowMs - BRAZIL_OFFSET_MS);
   const todayUtc = Date.UTC(localDate.getUTCFullYear(), localDate.getUTCMonth(), localDate.getUTCDate());
   let nearestStart: number | null = null;
@@ -150,6 +217,13 @@ export function globalPromotionIsActive(config: GlobalPromotionConfig | null | u
   return globalPromotionWindow(config, nowMs).active;
 }
 
+// Enquanto uma programação está agendada ou em andamento, ela prevalece
+// sobre promoções individuais, VIP e cupons. Ao expirar/cancelar, libera novamente.
+export function globalPromotionOverridesIndividual(config: GlobalPromotionConfig | null | undefined, nowMs: number = Date.now()): boolean {
+  const status = globalPromotionWindow(config, nowMs).status;
+  return status === "active" || status === "scheduled";
+}
+
 type StandardPrice = { price: string | null | undefined; originalPrice?: string | null };
 
 export function calculateGlobalPromotionPrice(
@@ -160,13 +234,16 @@ export function calculateGlobalPromotionPrice(
   const listed = Math.max(0, Math.round(parseBrazilMoney(standard.price) * 100));
   const previous = Math.max(0, Math.round(parseBrazilMoney(standard.originalPrice) * 100));
   const baseCents = Math.max(listed, previous);
-  const applied = globalPromotionIsActive(config, nowMs) && baseCents > 0;
+  const window = globalPromotionWindow(config, nowMs);
+  const applied = window.active && baseCents > 0;
+  const reserved = window.status === "scheduled";
   const amountCents = applied
     ? config!.type === "percentage"
       ? Math.round(baseCents * config!.value / 100)
       : Math.round(config!.value * 100)
     : 0;
-  const finalCents = applied ? Math.max(1, baseCents - amountCents) : listed;
+  // Fora do horário da regra geral, não aplicar descontos individuais antigos.
+  const finalCents = applied ? Math.max(1, baseCents - amountCents) : reserved ? baseCents : listed;
   return {
     baseCents,
     finalCents,
@@ -182,7 +259,7 @@ export function globalPromotionPrice(
   config: GlobalPromotionConfig | null | undefined,
   nowMs: number = Date.now(),
 ): string {
-  return globalPromotionIsActive(config, nowMs)
+  return globalPromotionOverridesIndividual(config, nowMs)
     ? calculateGlobalPromotionPrice(standard, config, nowMs).final
     : String(standard.price || "");
 }
