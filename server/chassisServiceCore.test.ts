@@ -2,6 +2,9 @@ import { describe, expect, it } from "vitest";
 import { randomUUID } from "node:crypto";
 import { assertChassisCredits, assertChassisSameOrigin, chassisGenerationHash, chassisTokenHash, ChassisRateLimiter, hashChassisPassword, normalizeChassisPhone, verifyChassisPassword } from "./chassisServiceCore";
 import { isChassisCustomerLocation } from "../shared/chassisService";
+import { gerarIdentificadorLaboratorio, isIdentificadorLaboratorio } from "../client/src/lib/chassisTestIdentifier";
+import { isVINValido } from "../client/src/lib/vinGenerator";
+import { generateChassisCandidates } from "./chassisServiceStore";
 
 describe("acesso independente do serviço", () => {
   it("normaliza o mesmo telefone com ou sem código do Brasil", () => {
@@ -47,5 +50,44 @@ describe("acesso independente do serviço", () => {
     for (const path of ["/app", "/app-pro", "/app/chassis", "/h2chassis-outro", "/h2chassis/cliente", "/admin/login", "/login"]) expect(isChassisCustomerLocation(path)).toBe(false);
     expect(isChassisCustomerLocation("/", "app.h2colombiano.com.evil.example")).toBe(false);
     expect(isChassisCustomerLocation("/", "h2colombiano.com")).toBe(false);
+  });
+});
+
+describe("H2CHASSIS: mesmo motor de teste para ADM e cliente", () => {
+  const referencia = "9BHCP51AANP304551";
+  const input = { requestId: randomUUID(), marca: "Hyundai", modelo: "HB20 Limited Plus", yearCode: "N" as const, quantity: 10, originalVin: referencia, syntheticLab: true };
+
+  it("cria lote de dez identificadores de teste, todos distintos do original e com digito verificador", () => {
+    const lote = generateChassisCandidates(input, 10);
+    expect(lote).toHaveLength(10);
+    expect(new Set(lote).size).toBe(10);
+    for (const codigo of lote) {
+      expect(codigo).not.toBe(referencia);
+      expect(codigo).toHaveLength(17);
+      expect(codigo.startsWith("0H2T")).toBe(true);
+      expect(codigo[9]).toBe("N");
+      expect(codigo[10]).toBe("X");
+      expect(isVINValido(codigo)).toBe(true);
+      expect(isIdentificadorLaboratorio(codigo)).toBe(true);
+    }
+  });
+
+  it("usa a mesma funcao nos dois caminhos e rejeita ano divergente", () => {
+    const adm = gerarIdentificadorLaboratorio(referencia, new Set());
+    const cliente = generateChassisCandidates({ ...input, quantity: 1 }, 1)[0];
+    expect(isIdentificadorLaboratorio(adm)).toBe(true);
+    expect(isIdentificadorLaboratorio(cliente)).toBe(true);
+    expect(cliente).not.toBe(adm);
+    expect(() => gerarIdentificadorLaboratorio(referencia, new Set([adm]))).not.toThrow();
+    expect(() => generateChassisCandidates({ ...input, yearCode: "T" }, 1)).toThrow("mesmo ano");
+    expect(() => generateChassisCandidates({ ...input, originalVin: undefined }, 1)).toThrow("original");
+  });
+
+  it("preserva o gerador legado quando o novo modo nao foi escolhido", () => {
+    const legado = generateChassisCandidates({ ...input, syntheticLab: false }, 1)[0];
+    expect(legado.startsWith("9BHCP51A")).toBe(true);
+    expect(legado[9]).toBe("N");
+    expect(isVINValido(legado)).toBe(true);
+    expect(isIdentificadorLaboratorio(legado)).toBe(false);
   });
 });

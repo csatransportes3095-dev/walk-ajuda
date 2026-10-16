@@ -16,6 +16,7 @@ export type ChassisGenerationInput = {
   yearCode: typeof CHASSIS_YEARS[number];
   quantity: number;
   originalVin?: string;
+  syntheticLab?: boolean;
 };
 
 export type ChassisGenerationResult = {

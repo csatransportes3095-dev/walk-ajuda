@@ -17,6 +17,7 @@ import {
   obterPerfilFabricanteOficial,
 } from "@/lib/vinGenerator";
 import { trpc } from "@/lib/trpc";
+import { gerarIdentificadorLaboratorio, isIdentificadorLaboratorio, salvarRegistroLaboratorio } from "@/lib/chassisTestIdentifier";
 import type { ChassisGenerationInput } from "@shared/chassisService";
 
 const FIPE_BASE = "https://fipe.parallelum.com.br/api/v2/cars";
@@ -57,6 +58,7 @@ type ResultadoVIN = {
   marca: string;
   modelo: string;
   ano: number;
+  modo?: "Perfil FIPE" | "Chassi original" | "Laboratorio sintetico";
 };
 
 async function copiarTexto(texto: string): Promise<boolean> {
@@ -96,6 +98,9 @@ export default function GeradorChassiPublico({ embedded = false, customer }: {
   const [modelo, setModelo] = useState("");
   const [anoCode, setAnoCode] = useState("G");
   const [usarChassiOriginal, setUsarChassiOriginal] = useState(false);
+  const [modoLaboratorio, setModoLaboratorio] = useState(false);
+  const [versaoLaboratorio, setVersaoLaboratorio] = useState("");
+  const [motorLaboratorio, setMotorLaboratorio] = useState("");
   const [chassiOriginal, setChassiOriginal] = useState("");
   const [quantidade, setQuantidade] = useState(1);
   const [resultados, setResultados] = useState<ResultadoVIN[]>([]);
@@ -268,6 +273,23 @@ export default function GeradorChassiPublico({ embedded = false, customer }: {
     };
   }, [marcaCode, anoInfo.ano]);
 
+  const registrarFichasDeTeste = (vins: string[], referencia: string) => {
+    if (!modoLaboratorio || !marca || !anoInfo) return;
+    try {
+      for (const codigo of vins) {
+        if (!isIdentificadorLaboratorio(codigo)) throw new Error("O identificador retornado nao e do laboratorio.");
+        salvarRegistroLaboratorio({
+          codigo, chassiReferencia: referencia, marca: marca.name, modelo,
+          versao: versaoLaboratorio.trim(), motorizacao: motorLaboratorio.trim(),
+          ano: anoInfo.ano, criadoEm: new Date().toISOString(),
+          fonte: "informado-pelo-adm",
+        });
+      }
+    } catch (error) {
+      toast.warning("Identificador reservado, mas a ficha local nao foi salva. Copie o resultado e confira o armazenamento deste navegador.");
+    }
+  };
+
   const gerar = async () => {
     if (verificandoUnicidade) return;
     if (!marca || !modelo || !anoInfo) {
@@ -278,21 +300,22 @@ export default function GeradorChassiPublico({ embedded = false, customer }: {
     setVerificandoUnicidade(true);
     try {
       const chassiBase = chassiOriginal.toUpperCase().replace(/[\s-]/g, "");
-      if (usarChassiOriginal && chassiBase[9] !== anoCode) {
+      if ((usarChassiOriginal || modoLaboratorio) && chassiBase[9] !== anoCode) {
         toast.error("O ano selecionado precisa ser o mesmo do chassi original.");
         return;
       }
 
       if (customer) {
         if (customer.balance < quantidade) throw new Error("Saldo insuficiente. Escolha uma quantidade menor ou recarregue.");
-        const vins = await customer.onGenerate({ marca: marca.name, modelo, yearCode: anoCode as ChassisGenerationInput["yearCode"], quantity: quantidade, ...(usarChassiOriginal ? { originalVin: chassiBase } : {}) });
+        const vins = await customer.onGenerate({ marca: marca.name, modelo, yearCode: anoCode as ChassisGenerationInput["yearCode"], quantity: quantidade, ...((usarChassiOriginal || modoLaboratorio) ? { originalVin: chassiBase } : {}), ...(modoLaboratorio ? { syntheticLab: true } : {}) });
+        registrarFichasDeTeste(vins, chassiBase);
         const agora = Date.now();
         setResultados(vins.map((vin, i) => ({ vin, key: `${vin}-${i}-${agora}`, marca: marca.name, modelo, ano: anoInfo.ano })));
         setCopiados(new Set());
         return;
       }
 
-      const perfilTeste = usarChassiOriginal ? null : obterPerfilFabricanteOficial(marca.name, modelo);
+      const perfilTeste = (usarChassiOriginal || modoLaboratorio) ? null : obterPerfilFabricanteOficial(marca.name, modelo);
       const accepted: string[] = [];
       let attempts = 0;
 
@@ -300,9 +323,18 @@ export default function GeradorChassiPublico({ embedded = false, customer }: {
       while (accepted.length < quantidade && attempts < 20) {
         attempts += 1;
         const missing = quantidade - accepted.length;
-        const candidates = usarChassiOriginal
-          ? gerarVINsDeTestePorChassiOriginal(chassiBase, missing)
-          : gerarMultiplosVINs(perfilTeste!.wmi, perfilTeste!.vds, anoCode, missing, perfilTeste!.plant);
+        const candidates = modoLaboratorio
+          ? (() => {
+              const used = new Set([...accepted, chassiBase]);
+              return Array.from({ length: missing }, () => {
+                const value = gerarIdentificadorLaboratorio(chassiBase, used);
+                used.add(value);
+                return value;
+              });
+            })()
+          : usarChassiOriginal
+            ? gerarVINsDeTestePorChassiOriginal(chassiBase, missing)
+            : gerarMultiplosVINs(perfilTeste!.wmi, perfilTeste!.vds, anoCode, missing, perfilTeste!.plant);
         const reservation = await reserveVins.mutateAsync({ vins: candidates });
         accepted.push(...reservation.reserved);
         if (reservation.duplicates.length === 0 && reservation.reserved.length === missing) break;
@@ -312,6 +344,7 @@ export default function GeradorChassiPublico({ embedded = false, customer }: {
         throw new Error("Não foi possível reservar chassis exclusivos. Tente novamente.");
       }
 
+      registrarFichasDeTeste(accepted, chassiBase);
       const agora = Date.now();
       setResultados(accepted.map((vin, i) => ({
         vin, key: `${vin}-${i}-${agora}`, marca: marca.name, modelo, ano: anoInfo.ano,
@@ -426,30 +459,41 @@ export default function GeradorChassiPublico({ embedded = false, customer }: {
             </h2>
           </div>
 
-          <div className="grid grid-cols-2 gap-1 rounded-xl bg-zinc-950 p-1">
+          <div className="grid grid-cols-3 gap-1 rounded-xl bg-zinc-950 p-1">
             <button
               type="button"
-              aria-pressed={!usarChassiOriginal}
-              onClick={() => setUsarChassiOriginal(false)}
-              className={`rounded-lg px-3 py-2 text-xs font-semibold transition-colors ${usarChassiOriginal ? "text-zinc-400 hover:text-white" : "bg-zinc-700 text-white"}`}
+              aria-pressed={!usarChassiOriginal && !modoLaboratorio}
+              onClick={() => { setUsarChassiOriginal(false); setModoLaboratorio(false); }}
+              className={`rounded-lg px-3 py-2 text-xs font-semibold transition-colors ${(usarChassiOriginal || modoLaboratorio) ? "text-zinc-400 hover:text-white" : "bg-zinc-700 text-white"}`}
             >
               Perfil FIPE
             </button>
             <button
               type="button"
               aria-pressed={usarChassiOriginal}
-              onClick={() => setUsarChassiOriginal(true)}
-              className={`rounded-lg px-3 py-2 text-xs font-semibold transition-colors ${usarChassiOriginal ? "bg-cyan-700 text-white" : "text-zinc-400 hover:text-white"}`}
+              onClick={() => { setUsarChassiOriginal(true); setModoLaboratorio(false); }}
+              className={`rounded-lg px-3 py-2 text-xs font-semibold transition-colors ${(usarChassiOriginal && !modoLaboratorio) ? "bg-cyan-700 text-white" : "text-zinc-400 hover:text-white"}`}
             >
               Chassi original
             </button>
+            <button
+              type="button"
+              aria-pressed={modoLaboratorio}
+              onClick={() => { setUsarChassiOriginal(false); setModoLaboratorio(true); }}
+              className={`rounded-lg px-2 py-2 text-xs font-semibold transition-colors ${modoLaboratorio ? "bg-cyan-700 text-white" : "text-zinc-400 hover:text-white"}`}
+            >
+              Teste sintético
+            </button>
           </div>
+          {modoLaboratorio && <p className="rounded-lg border border-amber-500/40 p-3 text-xs text-amber-200">
+            Laboratório: identificador de 17 caracteres com prefixo 0H2T (não oficial). O dígito verificador é matemático; a marca e o modelo vêm da ficha selecionada, não de consulta oficial. ADM e cliente usam o mesmo algoritmo.
+          </p>}
 
           <div className="space-y-4">
-            {usarChassiOriginal && (
+            {(usarChassiOriginal || modoLaboratorio) && (
               <div>
                 <label className="mb-1.5 block text-xs font-semibold text-zinc-300">
-                  Chassi original para usar como perfil
+                  Chassi original como referência
                 </label>
                 <input
                   value={chassiOriginal}
@@ -460,12 +504,20 @@ export default function GeradorChassiPublico({ embedded = false, customer }: {
                   placeholder="Ex.: 9BRB29BT0J2189102"
                   className="w-full rounded-xl border border-zinc-700 bg-zinc-800 px-3 py-2.5 font-mono text-sm text-white outline-none transition-colors placeholder:text-zinc-600 focus:border-cyan-500"
                 />
-                {!customer && <p className="mt-1.5 text-xs leading-relaxed text-zinc-500">
+                {!customer && !modoLaboratorio && <p className="mt-1.5 text-xs leading-relaxed text-zinc-500">
                   Preserva as posições 1–8, 10 e 11; troca o serial 12–17 e recalcula a posição 9. Selecione abaixo a mesma marca, modelo e ano do original.
                 </p>}
               </div>
             )}
 
+            {modoLaboratorio && <div className="grid gap-3 sm:grid-cols-2">
+              <label className="text-xs text-zinc-300">Versão (informada, opcional)
+                <input value={versaoLaboratorio} onChange={event => setVersaoLaboratorio(event.target.value.slice(0, 120))} maxLength={120} className="mt-1 w-full rounded-xl border border-zinc-700 bg-zinc-800 px-3 py-2.5 text-white" placeholder="Ex.: Limited Plus" />
+              </label>
+              <label className="text-xs text-zinc-300">Motorização (informada, opcional)
+                <input value={motorLaboratorio} onChange={event => setMotorLaboratorio(event.target.value.slice(0, 120))} maxLength={120} className="mt-1 w-full rounded-xl border border-zinc-700 bg-zinc-800 px-3 py-2.5 text-white" placeholder="Ex.: 1.0" />
+              </label>
+            </div>}
             <div>
               <label className="mb-1.5 block text-xs font-semibold text-zinc-300">
                 Buscar marca
@@ -612,7 +664,7 @@ export default function GeradorChassiPublico({ embedded = false, customer }: {
               !marca ||
               !modelo ||
               modelosFiltrados.length === 0 ||
-              (usarChassiOriginal && chassiOriginal.length !== 17)
+              ((usarChassiOriginal || modoLaboratorio) && chassiOriginal.length !== 17)
             }
             className="flex w-full items-center justify-center gap-2 rounded-xl bg-gradient-to-r from-cyan-600 to-blue-600 py-3.5 text-base font-bold text-white shadow-lg transition-all hover:opacity-90 active:scale-[0.99] disabled:cursor-not-allowed disabled:opacity-40"
           >
@@ -672,8 +724,10 @@ export default function GeradorChassiPublico({ embedded = false, customer }: {
                   </span>
                 </p>
                 <p className="sm:col-span-2 text-zinc-500">
-                  {usarChassiOriginal
-                    ? "O padrão do VIN original é preservado para manter a identificação do modelo no decodificador; o serial gerado é sintético e serve somente para testes."
+                  {modoLaboratorio
+                    ? "Identificador não oficial: dados de veículo vinculados à ficha selecionada neste site, sem garantia de reconhecimento externo."
+                    : usarChassiOriginal
+                      ? "O descritor original é preservado, mas outro VIN não garante o mesmo modelo em decodificadores externos."
                     : "Marca, modelo e ano são referências do catálogo FIPE. A sequência gerada é sintética e não confirma um veículo real nem seus dados no decodificador."}
                 </p>
               </div>
@@ -731,6 +785,7 @@ export default function GeradorChassiPublico({ embedded = false, customer }: {
                       </p>
                       <p className="mt-1 break-all font-mono text-base font-bold tracking-[0.08em] text-white sm:text-lg sm:tracking-[0.14em]">
                         {vin}
+                        {isIdentificadorLaboratorio(vin) && <span className="ml-2 text-xs text-amber-300">TESTE NÃO OFICIAL</span>}
                       </p>
                       <p className="mt-1 text-xs text-zinc-500">
                         {marcaResultado} • {modeloResultado} • {ano} • 17 caracteres
