@@ -1,0 +1,75 @@
+name: Promo schedule and original visual validation
+on:
+  push:
+    branches: [fix/vitrine-textos-e-promo-agendada-20261016]
+  workflow_dispatch:
+permissions:
+  contents: read
+jobs:
+  validate:
+    runs-on: ubuntu-latest
+    timeout-minutes: 25
+    steps:
+      - uses: actions/checkout@v4
+      - uses: pnpm/action-setup@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: "22"
+          cache: pnpm
+      - run: pnpm install --frozen-lockfile
+      - name: Schedule and pricing regression
+        run: pnpm exec vitest run --config vitest.promo-schedule.config.ts shared/globalPromotion.test.ts shared/globalPromotion.schedule.test.ts server/vipPricing.test.ts
+      - name: Check visual scope
+        run: |
+          node --input-type=module <<'NODE'
+          import { readFileSync } from "node:fs";
+          import assert from "node:assert/strict";
+          const card = readFileSync("client/src/components/StorefrontProductCard.tsx", "utf8");
+          const home = readFileSync("client/src/pages/Home.tsx", "utf8");
+          const css = readFileSync("client/src/components/StorefrontTextFit.css", "utf8");
+          assert.match(home, /grid grid-cols-1 gap-4 sm:grid-cols-2 lg:!grid-cols-3/);
+          assert.match(card, /h2-text-fit__main-price/);
+          assert.match(card, /scheduleCountdown && <div role="timer"/);
+          assert.match(css, /@container \(max-width: 425px\)/);
+          assert.match(css, /container-type: inline-size/);
+          const adm = readFileSync("client/src/pages/AdminGlobalPromotion.tsx", "utf8");
+          assert.match(adm, /Dias da semana e horários recorrentes/);
+          assert.match(adm, /Data de início/);
+          assert.match(adm, /Horário final/);
+          console.log("Original 3 card design preserved; text fit and ADM schedule OK");
+          NODE
+      - name: TypeScript compared to immutable previous production commit
+        run: |
+          git fetch --no-tags --depth=1 origin 294701b54880efce109e977ec921ec1a1d88dca5
+          git worktree add --detach /tmp/schedule-reference 294701b54880efce109e977ec921ec1a1d88dca5
+          ln -s "$PWD/node_modules" /tmp/schedule-reference/node_modules
+          (cd /tmp/schedule-reference && pnpm check > /tmp/ts-before.log 2>&1) || true
+          pnpm check > /tmp/ts-after.log 2>&1 || true
+          python3 - <<'PY'
+          import re
+          from pathlib import Path
+          from collections import Counter
+          def diagnostics(name):
+              return Counter(re.sub(r'\(\d+,\d+\)','',line) for line in Path(name).read_text().splitlines() if 'error TS' in line)
+          before=diagnostics('/tmp/ts-before.log')
+          after=diagnostics('/tmp/ts-after.log')
+          added=after-before
+          print('BASELINE',sum(before.values()),'CURRENT',sum(after.values()),'ADDED',sum(added.values()))
+          for msg,count in added.items(): print(count,msg)
+          if added: raise SystemExit(1)
+          PY
+      - name: Real Render Dockerfile patches and production build
+        run: |
+          node --input-type=module <<'NODE'
+          import { readFileSync } from "node:fs";
+          import { spawnSync } from "node:child_process";
+          const docker=readFileSync("Dockerfile","utf8");
+          const scripts=[...docker.matchAll(/&& node (scripts\/[^\s\\]+\.mjs)/g)].map(x=>x[1]);
+          for(const script of scripts){
+            const result=spawnSync("node",[script],{stdio:"inherit"});
+            if(result.status!==0)process.exit(result.status||1);
+          }
+          console.log("Patches applied",scripts.length);
+          NODE
+          pnpm exec vitest run --config vitest.promo-schedule.config.ts shared/globalPromotion.test.ts shared/globalPromotion.schedule.test.ts
+          pnpm build

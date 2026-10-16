@@ -308,7 +308,13 @@ export default function Home() {
   }, [baseProducts, activeOptionPriceModels]);
   const { data: settings } = trpc.settings.getAll.useQuery();
   const { data: globalPromotion } = trpc.globalPromotion.get.useQuery(undefined, { refetchOnWindowFocus: true, refetchInterval: 15000 });
-  const sitePromoActive = globalPromotionIsActive(globalPromotion);
+  const [promotionNowMs, setPromotionNowMs] = useState(() => Date.now());
+  useEffect(() => {
+    if (!globalPromotion?.active || !globalPromotion?.schedule) return;
+    const timer = window.setInterval(() => setPromotionNowMs(Date.now()), 1000);
+    return () => window.clearInterval(timer);
+  }, [globalPromotion?.active, globalPromotion?.schedule]);
+  const sitePromoActive = globalPromotionIsActive(globalPromotion, promotionNowMs);
   const botEnabled = settings?.bot_assistant_enabled !== '0';
   const { data: activePix } = trpc.pix.getActive.useQuery();
   const { data: faqData } = trpc.faq.getPublic.useQuery();
