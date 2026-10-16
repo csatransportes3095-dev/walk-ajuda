@@ -20,7 +20,7 @@ import { uploadOrderFileReliably } from "@/lib/reliableOrderUpload";
 import { isPersistedOrderResult } from "@shared/orderSubmission";
 import { getVehicleModels, getVehicleQuestionKind, VEHICLE_BRANDS, VEHICLE_COLORS, VEHICLE_YEARS } from "@shared/vehicleCatalog";
 import { applyVipBenefitToPrice, formatBrazilMoney, parseBrazilMoney } from "@shared/vipPricing";
-import { calculateGlobalPromotionPrice, globalPromotionIsActive, globalPromotionPrice } from "@shared/globalPromotion";
+import { calculateGlobalPromotionPrice, globalPromotionIsActive, globalPromotionOverridesIndividual, globalPromotionPrice } from "@shared/globalPromotion";
 import { publicSiteUrl } from "@shared/publicLinks";
 
 type Step = "home" | "registration" | "name-select" | "upload" | "pdf-upload" | "questions" | "cadastro" | "success";
@@ -311,10 +311,11 @@ export default function Home() {
   const [promotionNowMs, setPromotionNowMs] = useState(() => Date.now());
   useEffect(() => {
     if (!globalPromotion?.active || !globalPromotion?.schedule) return;
-    const timer = window.setInterval(() => setPromotionNowMs(Date.now()), 1000);
+    const timer = window.setInterval(() => setPromotionNowMs(Date.now()), 30000);
     return () => window.clearInterval(timer);
   }, [globalPromotion?.active, globalPromotion?.schedule]);
   const sitePromoActive = globalPromotionIsActive(globalPromotion, promotionNowMs);
+  const sitePromoOverrides = globalPromotionOverridesIndividual(globalPromotion, promotionNowMs);
   const botEnabled = settings?.bot_assistant_enabled !== '0';
   const { data: activePix } = trpc.pix.getActive.useQuery();
   const { data: faqData } = trpc.faq.getPublic.useQuery();
@@ -1207,7 +1208,7 @@ export default function Home() {
 
   const { isVipCustomer } = useVipMembership();
   // Valor efetivo usado na cobrança/pedido: aplica benefício VIP quando o cliente está ativo.
-  const getPriceModelServiceValue = (model: OptionPriceModel | null | undefined): string => model ? sitePromoActive ? globalPromotionPrice(model, globalPromotion) : applyVipBenefitToPrice(model.price, model, isVipCustomer) : '';
+  const getPriceModelServiceValue = (model: OptionPriceModel | null | undefined): string => model ? sitePromoOverrides ? globalPromotionPrice(model, globalPromotion) : applyVipBenefitToPrice(model.price, model, isVipCustomer) : '';
   // Valor normal de referência: nunca recebe desconto VIP.
   const getPriceModelNormalValue = (model: OptionPriceModel | null | undefined): string => model ? String(model.price || '') : '';
 
@@ -2213,8 +2214,8 @@ export default function Home() {
     : 0;
   const hasVipPriceDiscount = vipDiscountValue > 0;
 
-  const hasResellerDiscount = getResellerDiscountAmount() > 0;
-  const activeCouponDiscount = sitePromoActive ? null : couponDiscount;
+  const hasResellerDiscount = !sitePromoOverrides && getResellerDiscountAmount() > 0;
+  const activeCouponDiscount = sitePromoOverrides ? null : couponDiscount;
   const finalValue = (activeCouponDiscount || hasResellerDiscount) ? calculateDiscountedValue(originalValue) : originalValue;
 
   // Calcular totais do carrinho: normal para referência e efetivo VIP para cobrança.
@@ -2229,7 +2230,7 @@ export default function Home() {
       effective += parseBrazilMoney(effectivePrice);
     }
     return { normal, effective };
-  }, [cart, isVipCustomer, globalPromotion]);
+  }, [cart, isVipCustomer, globalPromotion, sitePromoOverrides, promotionNowMs]);
 
   const cartTotal = cartTotals.effective;
   const cartNormalTotal = cartTotals.normal;
@@ -5069,8 +5070,8 @@ export default function Home() {
 
 
 
-      {/* Banner de Promoções em Destaque */}
-      {(() => {
+      {/* Banner de Promoções em Destaque: suspenso enquanto a promoção geral está programada */}
+      {!sitePromoOverrides && (() => {
         const now = Date.now();
         const allPromoOptions = (products || []).flatMap((p: Product) =>
           (p.options || []).filter((o: ProductOption) =>
