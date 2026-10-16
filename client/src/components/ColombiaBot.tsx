@@ -702,7 +702,7 @@ export function ColombiaBot({ products, onStartNormal, onSelectProduct, onSelect
 
   // Etapa de cupom de desconto — antes do Pix
   const askCoupon = (product: Product, option: ProductOption | null) => {
-    if (sitePromoActive) {
+    if (sitePromoOverrides) {
       flowState.current.couponCode = "";
       flowState.current.couponDiscount = null;
       askPix(product, option);
@@ -877,7 +877,7 @@ export function ColombiaBot({ products, onStartNormal, onSelectProduct, onSelect
           price: (() => {
             const rawPrice = getModelPrice(flowState.current.priceModel) || priceForOption(option);
             if (!rawPrice) return undefined;
-            const discount = sitePromoActive ? null : flowState.current.couponDiscount;
+            const discount = sitePromoOverrides ? null : flowState.current.couponDiscount;
             if (!discount) return rawPrice;
             // Extrair valor numérico do preço (ex: "R$ 350,00" -> 350)
             const num = parseFloat(rawPrice.replace(/[^\d,]/g, '').replace(',', '.'));
