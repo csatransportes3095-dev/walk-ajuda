@@ -37,8 +37,8 @@ export default function AdminGlobalPromotion() {
       setEndTime(query.data.schedule.endAt.slice(11, 16));
     } else if (query.data.schedule?.mode === "weekly") {
       setScheduleMode("weekly");
-      setStartsOn(query.data.schedule.startsOn);
-      setEndsOn(query.data.schedule.endsOn);
+      setStartsOn(query.data.schedule.startsOn || "2026-10-15");
+      setEndsOn(query.data.schedule.endsOn || "2026-10-16");
       setStartTime(query.data.schedule.startTime);
       setEndTime(query.data.schedule.endTime);
       setWeekdays(query.data.schedule.weekdays);
@@ -54,7 +54,7 @@ export default function AdminGlobalPromotion() {
   const schedule: GlobalPromotionSchedule | null = scheduleMode === "manual" ? null
     : scheduleMode === "period"
       ? { mode: "period", startAt: localDateTime(startsOn, startTime), endAt: localDateTime(endsOn, endTime) }
-      : { mode: "weekly", weekdays, startsOn, endsOn, startTime, endTime };
+      : { mode: "weekly", weekdays, startTime, endTime };
   const scheduleValid = schedule === null || isValidGlobalPromotionSchedule(schedule);
   const current = query.data;
   const windowState = globalPromotionWindow(current, nowMs);
@@ -94,20 +94,20 @@ export default function AdminGlobalPromotion() {
           </label>
           {scheduleMode !== "manual" && <>
             <div className="grid gap-2 sm:grid-cols-2">
-              <label className="text-sm">Data de início<input className="mt-1 w-full rounded-lg bg-white p-2 text-black" type="date" value={startsOn} onChange={e => setStartsOn(e.target.value)} /></label>
-              <label className="text-sm">Data final<input className="mt-1 w-full rounded-lg bg-white p-2 text-black" type="date" value={endsOn} onChange={e => setEndsOn(e.target.value)} /></label>
+              {scheduleMode === "period" && <><label className="text-sm">Data de início<input className="mt-1 w-full rounded-lg bg-white p-2 text-black" type="date" value={startsOn} onChange={e => setStartsOn(e.target.value)} /></label>
+              <label className="text-sm">Data final<input className="mt-1 w-full rounded-lg bg-white p-2 text-black" type="date" value={endsOn} onChange={e => setEndsOn(e.target.value)} /></label></>}
               <label className="text-sm">Horário de início<input className="mt-1 w-full rounded-lg bg-white p-2 text-black" type="time" value={startTime} onChange={e => setStartTime(e.target.value)} /></label>
               <label className="text-sm">Horário final<input className="mt-1 w-full rounded-lg bg-white p-2 text-black" type="time" value={endTime} onChange={e => setEndTime(e.target.value)} /></label>
             </div>
             {scheduleMode === "weekly" && <fieldset className="space-y-2">
               <legend className="text-sm font-bold">Selecione os dias da semana em que a promoção começa</legend>
               <div className="flex flex-wrap gap-2">{weekdayLabels.map((label, day) => <label key={label} className={`inline-flex items-center gap-2 rounded-lg border p-2 text-sm ${weekdays.includes(day) ? "border-emerald-400 bg-emerald-950/50" : "border-slate-700"}`}><input type="checkbox" checked={weekdays.includes(day)} onChange={() => setWeekdays(old => old.includes(day) ? old.filter(x => x !== day) : [...old, day].sort())}/>{label}</label>)}</div>
-              <p className="text-xs text-amber-200">Por exemplo, segunda e terça das 23h às 06h encerram na manhã do dia seguinte. A data final limita o último dia de início.</p>
+              <p className="text-xs text-amber-200">Por exemplo, segunda e terça das 23h às 06h encerram na manhã do dia seguinte. A programação semanal repete automaticamente todas as semanas, sem escolher datas.</p>
             </fieldset>}
             {!scheduleValid && <p className="text-red-300 text-sm">Confira o período, o horário e os dias selecionados antes de salvar.</p>}
           </>}
           <p className="text-xs text-slate-300">{scheduleMode === "manual" ? "A promoção ativa continua sem cronômetro." : "Ao clicar em Ativar/Atualizar, o ADM grava esta programação, sem alterar os preços cadastrados."}</p>
-          {current?.schedule && <p className="text-xs text-violet-200">Programação gravada: {current.schedule.mode === "period" ? "Período específico" : "Recorrente"} • {windowState.status === "active" ? "em andamento" : windowState.status === "scheduled" ? "aguardando horário" : windowState.status === "expired" ? "encerrada" : "desativada"}</p>}
+          {current?.schedule && <p className="text-xs text-violet-200">Programação gravada: {current.schedule.mode === "period" ? "Período específico" : "Semanal, sem data final"} • {windowState.status === "active" ? "em andamento" : windowState.status === "scheduled" ? "aguardando horário" : windowState.status === "expired" ? "encerrada" : "desativada"}</p>}
         </section>
         <div className="rounded-lg bg-black/30 p-4 text-sm">
           <p className="font-bold">Exemplo demonstrativo</p>
