@@ -1,3 +1,4 @@
+import { createCustomerSaveGate, reconcileConfirmedProfilePhoto, replaceConfirmedProfilePhoto } from "@/lib/confirmedProfilePhotoSave";
 import { ProfilePhotoRecovery } from "@/components/ProfilePhotoRecovery";
 import { useEffect, useMemo, useState } from "react";
 import { trpc } from "@/lib/trpc";
@@ -378,6 +379,7 @@ function LoginHistoryColumn({ phone, formatDate }: { phone: string; formatDate: 
 
 export default function AdminCustomers() {
   const profilePhotoUtils = trpc.useUtils();
+  const [customerSaveGate] = useState(createCustomerSaveGate);
   const [searchTerm, setSearchTerm] = useState("");
   const [editingId, setEditingId] = useState<number | null>(null);
   const [editName, setEditName] = useState("");
@@ -508,8 +510,40 @@ export default function AdminCustomers() {
     onError: (error) => toast.error(error.message || 'Não foi possível atualizar o modo de liberação.'),
   });
   const updateMut = trpc.customers.update.useMutation({
-    onSuccess: () => { customersQuery.refetch(); toast.success("Cliente atualizado!"); setEditingId(null); },
+    onSuccess: async (saved, input) => {
+      try {
+        const photoChanged = await reconcileConfirmedProfilePhoto(input, saved, {
+          cancelReads: async () => {
+            await Promise.all([
+              profilePhotoUtils.customers.list.cancel(),
+              profilePhotoUtils.orderStatus.listOrders.cancel(),
+            ]);
+          },
+          applyConfirmed: (id, url) => {
+            profilePhotoUtils.customers.list.setData(undefined, previous => replaceConfirmedProfilePhoto(previous, id, url));
+            setFailedProfilePhotoIds(previous => { const next = new Map(previous); next.delete(id); return next; });
+            if (editingId === id) {
+              setEditProfilePhotoUrl(url ?? "");
+              setEditOriginal(previous => previous ? { ...previous, profilePhotoUrl: url ?? "" } : previous);
+            }
+          },
+        });
+        toast.success(photoChanged && !input.profilePhotoUrl?.trim()
+          ? "Foto removida do cadastro. O cliente poderá enviar uma nova foto."
+          : "Cliente atualizado!");
+        setEditingId(current => current === input.id ? null : current);
+        // The acknowledged photo is already visible. Refresh other computed fields separately.
+        void Promise.allSettled([
+          profilePhotoUtils.customers.invalidate(),
+          profilePhotoUtils.orderStatus.listOrders.invalidate(),
+        ]);
+      } catch (error) {
+        // Keep the draft/editor; never turn an unconfirmed response into a success toast.
+        toast.error(error instanceof Error ? error.message : "Não foi possível confirmar o salvamento da foto.");
+      }
+    },
     onError: (error) => toast.error(error.message || "Erro ao atualizar cliente"),
+    onSettled: () => { customerSaveGate.finish(); },
   });
   const generateCustomerNumberMut = trpc.customerUpdate.generateCustomerNumber.useMutation({
     onSuccess: (data) => {
@@ -716,6 +750,7 @@ export default function AdminCustomers() {
   });
 
   const handlePhotoUpload = (customer: Customer, file: File) => {
+    if (customerSaveGate.isBusy()) { toast.info("Aguarde o salvamento antes de enviar outra foto."); return; }
     if (!file.type.startsWith('image/')) { toast.error('Selecione uma imagem'); return; }
     if (file.size > 5 * 1024 * 1024) { toast.error('A foto deve ter no máximo 5MB'); return; }
     setUploadingPhotoFor(customer.id);
@@ -803,6 +838,7 @@ export default function AdminCustomers() {
   }), [sortedCustomers, searchTerm, showOnlyVip, showOnlyOrders, showOnlyNoOrders, showOnlyBlocked]);
 
   const startEdit = (c: Customer) => {
+    if (customerSaveGate.isBusy()) { toast.info("Aguarde a confirmação do salvamento em andamento."); return; }
     setEditOriginal({
       name: String(c.name || '').trim(),
       phone: String(c.phone || '').replace(/\D/g, ''),
@@ -848,7 +884,8 @@ export default function AdminCustomers() {
   };
 
   const savePhoneEdit = () => {
-    if (!editingId) return;
+    if (!editingId || customerSaveGate.isBusy()) return;
+    if (uploadingPhotoFor === editingId || uploadPhotoMut.isPending) { toast.info("Aguarde o envio da foto antes de salvar."); return; }
     const phoneDigits = normalizeEditablePhone(editPhone);
     if (!/^\d{10,11}$/.test(phoneDigits)) {
       toast.error("Telefone inválido. Informe DDD + número.");
@@ -859,11 +896,13 @@ export default function AdminCustomers() {
       toast.info("O telefone não foi alterado.");
       return;
     }
+    if (!customerSaveGate.tryStart()) return;
     updateMut.mutate({ id: editingId, phone: phoneDigits } as any);
   };
 
   const saveEdit = () => {
-    if (!editingId) return;
+    if (!editingId || customerSaveGate.isBusy()) return;
+    if (uploadingPhotoFor === editingId || uploadPhotoMut.isPending) { toast.info("Aguarde o envio da foto antes de salvar."); return; }
     const phoneDigits = normalizeEditablePhone(editPhone);
     if (!/^\d{10,11}$/.test(phoneDigits)) {
       toast.error("Telefone inválido. Informe DDD + número.");
@@ -916,6 +955,7 @@ export default function AdminCustomers() {
       toast.info('Nenhuma alteração para salvar.');
       return;
     }
+    if (!customerSaveGate.tryStart()) return;
     updateMut.mutate(payload as any);
   };
 
@@ -1618,7 +1658,7 @@ export default function AdminCustomers() {
                 </div>}
                 </div>
               ) : (
-                <div className="px-4 pb-4 space-y-2 border-t border-border/50 pt-3">
+                <fieldset disabled={updateMut.isPending} className="min-w-0 px-4 pb-4 space-y-2 border-t border-border/50 pt-3">
                   <div>
                     <label className="text-xs text-muted-foreground">Nome</label>
                     <input type="text" value={editName} onChange={(e) => setEditName(e.target.value)} className="w-full px-2 py-1.5 bg-background border border-border rounded-lg text-sm text-foreground mt-0.5 focus:outline-none focus:ring-1 focus:ring-primary/50" />
@@ -1812,12 +1852,12 @@ export default function AdminCustomers() {
                     )}
                   </div>
                   <div className="flex gap-2 pt-1">
-                    <button onClick={saveEdit} disabled={updateMut.isPending} className="flex-1 py-1.5 bg-green-600 hover:bg-green-700 text-white rounded-lg text-sm font-medium disabled:opacity-50 transition-colors">
-                      {updateMut.isPending ? "Salvando..." : "Salvar"}
+                    <button type="button" onClick={saveEdit} disabled={updateMut.isPending} className="flex-1 py-1.5 bg-green-600 hover:bg-green-700 text-white rounded-lg text-sm font-medium disabled:opacity-50 transition-colors">
+                      {updateMut.isPending ? "Salvando..." : "Salvar alterações"}
                     </button>
-                    <button onClick={() => setEditingId(null)} className="flex-1 py-1.5 bg-muted hover:bg-muted/80 text-foreground rounded-lg text-sm font-medium transition-colors">Cancelar</button>
+                    <button type="button" onClick={() => setEditingId(null)} className="flex-1 py-1.5 bg-muted hover:bg-muted/80 text-foreground rounded-lg text-sm font-medium transition-colors">Cancelar</button>
                   </div>
-                </div>
+                </fieldset>
               )}
             </div>
           ))}
