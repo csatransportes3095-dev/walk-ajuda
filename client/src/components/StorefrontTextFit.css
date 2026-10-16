@@ -1,23 +1,15 @@
-/* Mantém o visual original; somente impede texto e valores de escapar do próprio card. */
+/* A identidade visual e as fontes originais têm prioridade. Nunca reduzir valores. */
 .h2-text-fit { container-type: inline-size; }
-.h2-text-fit__main-price, .h2-text-fit__old-price, .h2-text-fit__vip-price { font-variant-numeric: tabular-nums; }
 .h2-text-fit__choice-name { overflow-wrap: anywhere; }
-.h2-text-fit__actions > *, .h2-text-fit__prices > * { min-width: 0; }
+.h2-text-fit__prices > *, .h2-text-fit__actions > * { min-width: 0; }
 @container (max-width: 425px) {
-  .h2-text-fit__prices { grid-template-columns: minmax(0,1fr) minmax(88px,28%) !important; gap: 6px !important; }
-  .h2-text-fit__main-price { font-size: clamp(17px,7.3cqw,31px) !important; letter-spacing: -.045em; }
-  .h2-text-fit__old-price { font-size: clamp(14px,5.2cqw,22px) !important; }
-  .h2-text-fit__vip-price { font-size: clamp(16px,6cqw,25px) !important; }
-  .h2-text-fit__actions { grid-template-columns: minmax(0, 1.22fr) minmax(0, .9fr); gap: 6px; }
-  .h2-text-fit__action { min-width: 0; font-size: clamp(10px,3cqw,14px) !important; gap: 4px !important; padding-inline: 5px !important; white-space: normal; text-align: center; }
-  .h2-text-fit__action svg { width: 17px; height: 17px; flex-shrink: 0; }
-  .h2-text-fit__choice-head { flex-wrap: wrap; row-gap: 6px; }
-  .h2-text-fit__options > button { min-width: 0; padding-inline: 4px; }
-}
-@container (max-width: 310px) {
-  .h2-text-fit__prices { grid-template-columns: minmax(0,1fr) !important; }
-  .h2-text-fit__prices > div:first-child { max-width: 100%; }
-  .h2-text-fit__prices > div:last-child { min-height: 60px; }
+  .h2-text-fit__prices { grid-template-columns: minmax(0,1fr) !important; gap: 12px !important; }
+  .h2-text-fit__prices > div:last-child { justify-self: end; min-width: 108px; }
   .h2-text-fit__main-price { white-space: normal !important; overflow-wrap: anywhere; }
+  .h2-text-fit__actions { grid-template-columns: minmax(0,1.22fr) minmax(0,.9fr); }
+  .h2-text-fit__action { min-width: 0; white-space: normal; text-align: center; }
+  .h2-text-fit__choice-head { flex-wrap: wrap; row-gap: 6px; }
+}
+@container (max-width: 300px) {
   .h2-text-fit__actions { grid-template-columns: minmax(0,1fr); }
 }
