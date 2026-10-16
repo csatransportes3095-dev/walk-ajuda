@@ -38,6 +38,8 @@ import { syncUnifiedCustomerRegistry } from "./customerIdentity";
 import { adjustCustomerH2Score, getCustomerH2ScoreSummary, getH2ScoreCustomerDirectory, setCustomerCommercialProfileMode } from "./loans/h2Score";
 import { CUSTOMER_ROUTES, ensureCustomerIdentityInfrastructure, findMainCustomerByIdentity, getRouteAccess, getRouteReleaseMode, listRouteReleaseModes, normalizeCustomerCpf, normalizeCustomerEmail, normalizeCustomerPhone, requestCustomerRouteAccess, setCustomerRoutePermissions, setRouteReleaseMode } from "./customerAccess";
 import { adCampaignsRouter } from "./routers/adCampaigns";
+import { globalPromotionRouter } from "./routers/globalPromotion";
+import { parseGlobalPromotionConfig, globalPromotionIsActive, globalPromotionPrice } from "../shared/globalPromotion";
 import { optionPriceModelsRouter, checkOptionPriceModelCheckoutAccess, cloneOptionPriceModelsComplete } from "./routers/optionPriceModels";
 import { vipMembershipsRouter, getVipMembershipSnapshotMap, isVipMemberByPhone } from "./routers/vipMemberships";
 import { vipInstallmentsRouter } from "./routers/vipInstallments";
@@ -441,6 +443,7 @@ export const appRouter = router({
   chassisService: chassisServiceRouter,
   system: systemRouter,
   optionPriceModels: optionPriceModelsRouter,
+  globalPromotion: globalPromotionRouter,
   vipMemberships: vipMembershipsRouter,
   vipInstallments: vipInstallmentsRouter,
   resellers: resellersRouter,
