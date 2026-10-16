@@ -1,0 +1,31 @@
+name: Validate weekly promotion first date
+on:
+  push:
+    branches: [fix/promo-semanal-datas-reais-20261016]
+permissions:
+  contents: read
+jobs:
+  tests:
+    runs-on: ubuntu-latest
+    timeout-minutes: 25
+    steps:
+      - uses: actions/checkout@v4
+      - uses: pnpm/action-setup@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: "22"
+          cache: pnpm
+      - run: pnpm install --frozen-lockfile
+      - run: pnpm exec vitest run --config vitest.promo-schedule.config.ts shared/globalPromotion.test.ts shared/globalPromotion.schedule.test.ts shared/globalPromotion.weeklyWindows.test.ts
+      - name: Validate real Render Docker build
+        run: |
+          node --input-type=module <<'NODE'
+          import fs from 'node:fs';
+          import {spawnSync} from 'node:child_process';
+          for (const [,script] of fs.readFileSync('Dockerfile','utf8').matchAll(/&& node (scripts\/[^\s\\]+\.mjs)/g)) {
+            const r=spawnSync('node',[script],{stdio:'inherit'});
+            if(r.status!==0)process.exit(r.status||1);
+          }
+          NODE
+          pnpm exec vitest run --config vitest.promo-schedule.config.ts shared/globalPromotion.weeklyWindows.test.ts
+          pnpm build
