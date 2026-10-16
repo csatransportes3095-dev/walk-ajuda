@@ -28,6 +28,15 @@ describe("daily late fee production integration", () => {
     expect(publicUi).toContain('paymentType={loan.paymentType}');
   });
 
+  it("rechecks automatic fees when ADM stays open or returns to the tab", () => {
+    expect(adminUi).toContain("window.setInterval(syncWhenVisible, 60_000)");
+    expect(adminUi).toContain('window.addEventListener("focus", syncWhenVisible)');
+    expect(adminUi).toContain('document.addEventListener("visibilitychange", syncWhenVisible)');
+    expect(adminUi).toContain("utils.loans.getLoan.invalidate()");
+    expect(router).toContain("autoApplyLateFees: adminProcedure.mutation");
+    expect(router).toContain("resolveEffectiveLateFee(inst, requiredFee).fee");
+  });
+
   it("keeps ADM manual fee available without time gate and correct final preset", () => {
     expect(adminUi).toContain('data-testid="manual-late-fee-button"');
     expect(adminUi).toContain("Math.max(feeTotal18_20");
