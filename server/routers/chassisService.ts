@@ -66,7 +66,7 @@ export const chassisServiceRouter = router({
     return { success: true };
   })),
   history: authenticatedProcedure.query(({ ctx }) => guarded(() => getChassisServiceStore().history(ctx.chassis.user.id))),
-  generate: authenticatedProcedure.input(z.object({ requestId: z.string().uuid(), marca: z.string().trim().min(1).max(120), modelo: z.string().trim().min(1).max(160), yearCode: z.enum(CHASSIS_YEARS), quantity: z.number().int().min(1).max(10), originalVin: z.string().regex(/^[A-HJ-NPR-Z0-9]{17}$/).optional() })).mutation(({ input, ctx }) => guarded(async () => {
+  generate: authenticatedProcedure.input(z.object({ requestId: z.string().uuid(), marca: z.string().trim().min(1).max(120), modelo: z.string().trim().min(1).max(160), yearCode: z.enum(CHASSIS_YEARS), quantity: z.number().int().min(1).max(10), originalVin: z.string().regex(/^[A-HJ-NPR-Z0-9]{17}$/).optional(), syntheticLab: z.boolean().optional() })).mutation(({ input, ctx }) => guarded(async () => {
     limiter.check(`generate:${ctx.chassis.user.id}`, 60, 60_000);
     return getChassisServiceStore().generate(ctx.chassis.user.id, ctx.chassis.tokenHash, input);
   })),
