@@ -2,7 +2,7 @@ import { Check, ChevronDown, ChevronUp, CircleAlert, Crown, Flame, ShieldCheck, 
 import { useEffect, useMemo, useState } from "react";
 import { requestProductManifest } from "@/lib/productManifest";
 import { useVipMembership } from "@/hooks/useVipMembership";
-import { type GlobalPromotionConfig, globalPromotionIsActive, globalPromotionPrice, calculateGlobalPromotionPrice, globalPromotionLabel } from "@shared/globalPromotion";
+import { type GlobalPromotionConfig, globalPromotionIsActive, globalPromotionWindow, globalPromotionPrice, calculateGlobalPromotionPrice, globalPromotionLabel } from "@shared/globalPromotion";
 import { applyVipBenefitToPrice, formatBrazilMoney, hasVipBenefit, isVipHighlighted, isVipOnlyLocked, normalizeVipAccessMode, parseBrazilMoney, vipBenefitText } from "@shared/vipPricing";
 
 export type StorefrontQuestion = {
@@ -183,9 +183,11 @@ export function StorefrontProductCard({
   onAddToCart: (tier: StorefrontWarrantyTier | null, priceModel: StorefrontPriceModel | null) => void;
   globalPromotion?: GlobalPromotionConfig;
 }) {
-  const sitePromoActive = globalPromotionIsActive(globalPromotion);
-  const [detailsOpen, setDetailsOpen] = useState(false);
   const [nowMs, setNowMs] = useState(() => Date.now());
+  const sitePromoActive = globalPromotionIsActive(globalPromotion, nowMs);
+  const scheduleWindow = globalPromotionWindow(globalPromotion, nowMs);
+  const scheduleCountdown = sitePromoActive && globalPromotion?.schedule ? formatCountdown(scheduleWindow.endsAt, nowMs) : null;
+  const [detailsOpen, setDetailsOpen] = useState(false);
   const tiers = item.option.warrantyTiers || [];
   const [tierId, setTierId] = useState<number | null>(tiers[0]?.id ?? null);
   const selectedTier = tiers.find((tier) => tier.id === tierId) || null;
@@ -198,7 +200,7 @@ export function StorefrontProductCard({
   const [priceModelId, setPriceModelId] = useState<number | null>(preferredModel?.id ?? null);
   const [manifestAcceptedKey, setManifestAcceptedKey] = useState<string | null>(null);
 
-  const hasTimedPromotion = priceModels.some((model) => normalizeEpochMs(model.promoStartsAt) || normalizeEpochMs(model.promoEndsAt)) || Boolean(normalizeEpochMs(item.option.promoEndsAt));
+  const hasTimedPromotion = Boolean(globalPromotion?.active && globalPromotion?.schedule) || priceModels.some((model) => normalizeEpochMs(model.promoStartsAt) || normalizeEpochMs(model.promoEndsAt)) || Boolean(normalizeEpochMs(item.option.promoEndsAt));
 
   useEffect(() => {
     if (!hasTimedPromotion) return;
@@ -289,10 +291,11 @@ export function StorefrontProductCard({
 
   return (
     <article
-      data-promo-active={hasActivePromotion ? "true" : "false"}
+      data-promo-active={hasActivePromotion || sitePromoActive ? "true" : "false"}
       className={`relative min-w-0 flex h-full flex-col overflow-hidden rounded-[34px] bg-[radial-gradient(circle_at_50%_0%,rgba(68,104,214,.24),transparent_34%),radial-gradient(circle_at_16%_30%,rgba(124,58,237,.18),transparent_34%),linear-gradient(180deg,rgba(7,16,34,.90)_0%,rgba(5,9,22,.91)_48%,rgba(8,11,29,.94)_100%)] font-semibold backdrop-blur-2xl ring-1 ring-white/[0.06] ${hasActivePromotion ? "border border-amber-300/95 shadow-[0_0_0_1px_rgba(250,204,21,.28),0_0_36px_rgba(245,158,11,.34),0_32px_90px_rgba(0,0,0,.66)]" : "border border-violet-500/85 shadow-[0_32px_90px_rgba(0,0,0,.66),0_0_42px_rgba(124,58,237,.25)]"}`}
     >
       <span aria-hidden="true" className="pointer-events-none absolute inset-x-6 top-[1px] z-20 h-px bg-gradient-to-r from-transparent via-white/45 to-transparent opacity-80" />
+      {scheduleCountdown && <div role="timer" aria-label="Tempo restante da promoção geral" className="mx-3 mt-3 rounded-xl border border-amber-400/70 bg-amber-500/10 px-3 py-2 text-center text-xs font-black tracking-wide text-amber-200 sm:text-sm"><Timer className="mr-1 inline h-4 w-4 align-[-3px]" /> OFERTA TERMINA EM <span className="ml-1 text-amber-300 tabular-nums">{scheduleCountdown}</span></div>}
       {hasActivePromotion && (
         <div className="relative z-30 flex min-h-[38px] flex-wrap items-center justify-center gap-x-2 gap-y-1 border-b border-amber-300/70 bg-gradient-to-r from-yellow-300 via-amber-400 to-orange-500 px-3 py-2 text-[10px] font-black uppercase tracking-[0.06em] text-[#1b1000] shadow-[0_5px_22px_rgba(245,158,11,.28)] sm:text-[11px]">
           <span className="inline-flex items-center gap-1"><Flame className="h-3.5 w-3.5 fill-orange-700/35" /> Promoção{maxPromotionDiscount > 0 ? ` • ${maxPromotionDiscount}% OFF` : ""}</span>
