@@ -7,7 +7,7 @@ const DAY_MS = 24 * 60 * 60 * 1000;
 // Horário de Brasília (UTC-03); os dias da semana indicam sempre a data de início.
 export type GlobalPromotionSchedule =
   | { mode: "period"; startAt: string; endAt: string }
-  | { mode: "weekly"; weekdays: number[]; startTime: string; endTime: string; startsOn: string; endsOn: string };
+  | { mode: "weekly"; weekdays: number[]; startTime: string; endTime: string; startsOn?: string; endsOn?: string };
 
 export type GlobalPromotionConfig = {
   active: boolean;
@@ -65,7 +65,9 @@ export function isValidGlobalPromotionSchedule(value: unknown): value is GlobalP
       days.every(day => Number.isInteger(day) && day >= 0 && day <= 6) &&
       new Set(days).size === days.length &&
       validTime(raw.startTime) && validTime(raw.endTime) && raw.startTime !== raw.endTime &&
-      validDate(raw.startsOn) && validDate(raw.endsOn) && raw.startsOn <= raw.endsOn;
+      (raw.startsOn === undefined || validDate(raw.startsOn)) &&
+      (raw.endsOn === undefined || validDate(raw.endsOn)) &&
+      (raw.startsOn === undefined || raw.endsOn === undefined || (raw.startsOn as string) <= (raw.endsOn as string));
   }
   return false;
 }
@@ -128,7 +130,7 @@ export function globalPromotionWindow(config: GlobalPromotionConfig | null | und
   for (let offset = -1; offset <= 8; offset++) {
     const dateObj = new Date(todayUtc + offset * DAY_MS);
     const day = dateObj.toISOString().slice(0, 10);
-    if (day < schedule.startsOn || day > schedule.endsOn || !schedule.weekdays.includes(dateObj.getUTCDay())) continue;
+    if ((schedule.startsOn && day < schedule.startsOn) || (schedule.endsOn && day > schedule.endsOn) || !schedule.weekdays.includes(dateObj.getUTCDay())) continue;
     const start = dateTimeInBrazil(day, schedule.startTime);
     let end = dateTimeInBrazil(day, schedule.endTime);
     if (end < start) end += DAY_MS;
