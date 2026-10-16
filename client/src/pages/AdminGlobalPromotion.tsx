@@ -24,6 +24,13 @@ export default function AdminGlobalPromotion() {
   }, []);
   const localDateTime = (date: string, time: string) => date + "T" + time + ":00-03:00";
   const weekdayLabels = ["Dom", "Seg", "Ter", "Qua", "Qui", "Sex", "Sáb"];
+  const weekdayLong = ["domingo", "segunda-feira", "terça-feira", "quarta-feira", "quinta-feira", "sexta-feira", "sábado"];
+  const nextDay = (day: number) => (day + 1) % 7;
+  const overnight = endTime < startTime;
+  const weekdaySummary = weekdays.length ? [...weekdays].sort((a,b) => a-b).map(day =>
+    weekdayLong[day] + " " + startTime + " → " + weekdayLong[overnight ? nextDay(day) : day] + " " + endTime
+  ).join(" • ") : "Escolha pelo menos um dia";
+
 
   useEffect(() => {
     if (!query.data || ready) return;
@@ -102,7 +109,7 @@ export default function AdminGlobalPromotion() {
             {scheduleMode === "weekly" && <fieldset className="space-y-2">
               <legend className="text-sm font-bold">Selecione os dias da semana em que a promoção começa</legend>
               <div className="flex flex-wrap gap-2">{weekdayLabels.map((label, day) => <label key={label} className={`inline-flex items-center gap-2 rounded-lg border p-2 text-sm ${weekdays.includes(day) ? "border-emerald-400 bg-emerald-950/50" : "border-slate-700"}`}><input type="checkbox" checked={weekdays.includes(day)} onChange={() => setWeekdays(old => old.includes(day) ? old.filter(x => x !== day) : [...old, day].sort())}/>{label}</label>)}</div>
-              <p className="text-xs text-amber-200">Por exemplo, segunda e terça das 23h às 06h encerram na manhã do dia seguinte. A programação semanal repete automaticamente todas as semanas, sem escolher datas.</p>
+              <p className="text-xs text-amber-200">Dia selecionado = dia do INÍCIO. Se o término for antes do início, termina no dia seguinte, sem precisar marcar esse outro dia.</p><p className="rounded-lg border border-emerald-500/30 bg-emerald-950/20 p-3 text-sm font-bold text-emerald-200">Programação escolhida: {weekdaySummary}</p>
             </fieldset>}
             {!scheduleValid && <p className="text-red-300 text-sm">Confira o período, o horário e os dias selecionados antes de salvar.</p>}
           </>}
