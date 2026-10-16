@@ -27,7 +27,7 @@ export default function AdminGlobalPromotion() {
   const draft = { active: true, type, value: amount, revision: "preview", updatedAt: null };
   const preview = valid ? calculateGlobalPromotionPrice({ price: "400,00", originalPrice: "500,00" }, draft) : null;
   return <div className="min-h-screen bg-[#090b19] text-white">
-    <AdminHeader />
+    <AdminHeader title="Promoção Geral" />
     <main className="mx-auto max-w-3xl p-4 sm:p-8 space-y-5">
       <Link href="/admin/codes" className="text-sm text-violet-300">← Voltar ao ADM</Link>
       <h1 className="text-2xl font-black">🏷️ PROMOÇÃO GERAL DO SITE</h1>
