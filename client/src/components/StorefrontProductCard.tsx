@@ -416,7 +416,7 @@ export function StorefrontProductCard({
             {discount > 0 && !(selectedPriceModel && modelHasVipPrice) ? (
               <div className="h2-text-fit__prices grid grid-cols-[minmax(0,1fr)_108px] items-center gap-2.5 sm:grid-cols-[minmax(0,1fr)_116px] sm:gap-3 lg:grid-cols-[minmax(0,1fr)_108px] lg:gap-2.5 xl:grid-cols-[minmax(0,1fr)_116px] xl:gap-3">
                 <div className="min-w-0">
-                  <div className="flex items-baseline gap-2 whitespace-nowrap">
+                  <div className="h2-text-fit__price-before flex items-baseline gap-2 whitespace-nowrap">
                     <span className="text-[13px] font-black uppercase tracking-[0.08em] text-white/80 sm:text-sm">DE</span>
                     <span className="h2-text-fit__old-price relative inline-block text-[24px] font-black leading-none text-white drop-shadow-[0_0_10px_rgba(255,255,255,.18)] sm:text-[28px] lg:text-[24px] xl:text-[28px]">
                       {asMoney(effectiveOriginalPrice)}
