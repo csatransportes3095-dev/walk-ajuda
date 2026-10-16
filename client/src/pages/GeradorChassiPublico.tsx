@@ -324,7 +324,14 @@ export default function GeradorChassiPublico({ embedded = false, customer }: {
         attempts += 1;
         const missing = quantidade - accepted.length;
         const candidates = modoLaboratorio
-          ? Array.from({ length: missing }, () => gerarIdentificadorLaboratorio(chassiBase, new Set([...accepted, chassiBase])))
+          ? (() => {
+              const used = new Set([...accepted, chassiBase]);
+              return Array.from({ length: missing }, () => {
+                const value = gerarIdentificadorLaboratorio(chassiBase, used);
+                used.add(value);
+                return value;
+              });
+            })()
           : usarChassiOriginal
             ? gerarVINsDeTestePorChassiOriginal(chassiBase, missing)
             : gerarMultiplosVINs(perfilTeste!.wmi, perfilTeste!.vds, anoCode, missing, perfilTeste!.plant);
