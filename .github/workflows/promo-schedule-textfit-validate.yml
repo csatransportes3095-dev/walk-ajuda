@@ -30,7 +30,7 @@ jobs:
           assert.match(home, /grid grid-cols-1 gap-4 sm:grid-cols-2 lg:!grid-cols-3/);
           assert.match(card, /h2-text-fit__main-price/);
           assert.match(card, /scheduleCountdown && <div role="timer"/);
-          assert.match(css, /@container \(max-width: 425px\)/);
+          assert.match(css, /@container \(max-width: 420px\)/);
           assert.match(css, /container-type: inline-size/);
           assert.doesNotMatch(css, /font-size: clamp/);
           assert.match(readFileSync("client/src/pages/AdminGlobalPromotion.tsx", "utf8"), /scheduleMode === "period" &&/);
