@@ -1,0 +1,131 @@
+name: Profile photo synchronization validation
+on:
+  push:
+    branches: [fix/profile-photo-sync-20261015]
+    paths:
+      - '.github/workflows/profile-photo-sync-validate.yml'
+      - 'scripts/apply-profile-photo-sync-20261015.mjs'
+      - 'server/customerProfilePhoto*'
+      - 'shared/profilePhotoIdentity.ts'
+      - 'client/src/components/ProfilePhotoRecovery.tsx'
+  workflow_dispatch:
+permissions:
+  contents: write
+concurrency:
+  group: profile-photo-sync-validation
+  cancel-in-progress: true
+jobs:
+  validate:
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          fetch-depth: 1
+          show-progress: false
+      - uses: pnpm/action-setup@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '22'
+          cache: pnpm
+      - name: Apply scoped source changes
+        run: node scripts/apply-profile-photo-sync-20261015.mjs
+      - name: Dependencies
+        run: pnpm install --frozen-lockfile > /tmp/photo-install.log 2>&1 || { tail -n 30 /tmp/photo-install.log; exit 1; }
+      - name: Photo persistence and profile requirements regression tests
+        run: |
+          pnpm exec vitest run server/customerProfilePhoto.test.ts server/customerProfileRequirements.test.ts --reporter=json --outputFile=/tmp/photo-tests.json > /tmp/photo-tests.log 2>&1 || status=$?
+          python3 - <<'PY'
+          import json
+          from pathlib import Path
+          p=Path('/tmp/photo-tests.json')
+          if not p.exists():
+            print(Path('/tmp/photo-tests.log').read_text()[-3000:]); raise SystemExit(1)
+          r=json.loads(p.read_text())
+          print('PHOTO_TEST_SUMMARY',r.get('numPassedTests'), 'passed;',r.get('numFailedTests'),'failed')
+          for suite in r.get('testResults',[]):
+            for test in suite.get('assertionResults',[]):
+              if test['status'] != 'passed':
+                print('FAILED_TEST',test.get('fullName'))
+                for message in test.get('failureMessages',[]): print(message[:700])
+          if not r.get('success'): raise SystemExit(1)
+          PY
+      - name: Preserve published notes autosave
+        run: |
+          node --experimental-strip-types --test scripts/test-order-notes-autosave.mjs > /tmp/notes-test.log 2>&1 || { tail -n 60 /tmp/notes-test.log; exit 1; }
+          tail -n 9 /tmp/notes-test.log
+      - name: Prepare immutable production baseline
+        run: |
+          git fetch --quiet --depth 1 origin b6563d94178e888eea45dabae354558200040918
+          git worktree add --detach /tmp/photo-baseline b6563d94178e888eea45dabae354558200040918
+          ln -s "$PWD/node_modules" /tmp/photo-baseline/node_modules
+      - name: Compare existing profile policy tests with production baseline
+        run: |
+          (cd /tmp/photo-baseline && pnpm exec vitest run server/customerProfileUpdateGates.test.ts --reporter=json --outputFile=/tmp/gates-before.json) > /tmp/gates-before.log 2>&1 || true
+          pnpm exec vitest run server/customerProfileUpdateGates.test.ts --reporter=json --outputFile=/tmp/gates-after.json > /tmp/gates-after.log 2>&1 || true
+          python3 - <<'PY'
+          import json
+          from pathlib import Path
+          before=json.loads(Path('/tmp/gates-before.json').read_text())
+          after=json.loads(Path('/tmp/gates-after.json').read_text())
+          def statuses(result):
+            return {t['fullName']:t['status'] for s in result['testResults'] for t in s['assertionResults']}
+          b,a=statuses(before),statuses(after)
+          if not b or a.keys()!=b.keys(): raise SystemExit('Policy test suite mismatch')
+          regressions=[n for n,s in a.items() if s!='passed' and b[n]=='passed']
+          print('POLICY_BASELINE_FAILURES',before['numFailedTests'],'CANDIDATE_FAILURES',after['numFailedTests'],'NEW',len(regressions))
+          for n,s in a.items():
+            if s!='passed': print('Existing failure:',n)
+          if regressions or after.get('numRuntimeErrorTestSuites',0): raise SystemExit(1)
+          PY
+      - name: Compare TypeScript diagnostics to production baseline
+        shell: bash
+        run: |
+          set +e
+          (cd /tmp/photo-baseline && pnpm check) > /tmp/photo-before.log 2>&1
+          before=$?
+          pnpm check > /tmp/photo-after.log 2>&1
+          after=$?
+          set -e
+          if [ "$before" -ne 0 ] && ! grep -q 'error TS' /tmp/photo-before.log; then tail -n 30 /tmp/photo-before.log; exit 1; fi
+          if [ "$after" -ne 0 ] && ! grep -q 'error TS' /tmp/photo-after.log; then tail -n 30 /tmp/photo-after.log; exit 1; fi
+          python3 - <<'PY'
+          import re
+          from pathlib import Path
+          def diagnostics(name):
+            lines=Path(name).read_text().splitlines()
+            return {re.sub(r'\(\d+,\d+\)', '', line) for line in lines if 'error TS' in line}
+          before=diagnostics('/tmp/photo-before.log')
+          after=diagnostics('/tmp/photo-after.log')
+          added=after-before
+          print('Baseline diagnostics:', len(before), 'Candidate:',len(after), 'New:',len(added))
+          for line in sorted(added): print(line)
+          if added: raise SystemExit(1)
+          PY
+      - name: Validate actual Render patch chain and build in a disposable copy
+        run: |
+          mkdir -p /tmp/photo-production
+          tar --exclude=.git --exclude=node_modules -cf - . | tar -xf - -C /tmp/photo-production
+          ln -s "$PWD/node_modules" /tmp/photo-production/node_modules
+          python3 - <<'PY'
+          import re,subprocess
+          from pathlib import Path
+          root=Path('/tmp/photo-production')
+          docker=(root/'Dockerfile').read_text()
+          scripts=re.findall(r'&& node (scripts/[^\s\\]+\.mjs)',docker)
+          for script in scripts:
+            print('Render patch:',script,flush=True)
+            subprocess.run(['node',script],cwd=root,check=True)
+          subprocess.run(['pnpm','build'],cwd=root,check=True)
+          PY
+      - name: Commit only tested source wiring to this isolated branch
+        run: |
+          git diff --check
+          git config user.name 'github-actions[bot]'
+          git config user.email '41898282+github-actions[bot]@users.noreply.github.com'
+          git add server/routers.ts client/src/pages/AdminCustomers.tsx client/src/pages/AdminOrders.tsx
+          if ! git diff --cached --quiet; then
+            git commit -m 'fix(photo): wire active profile saves and explicit recovery after regression validation'
+            git push origin HEAD:fix/profile-photo-sync-20261015
+          fi
+          echo "Validated source commit: $(git rev-parse HEAD)"

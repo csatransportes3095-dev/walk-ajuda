@@ -1481,8 +1481,14 @@ export default function AdminOrders() {
   });
 
   const uploadPhotoMut = trpc.customers.uploadProfilePhoto.useMutation({
-    onSuccess: () => { toast.success("Foto atualizada!"); ordersQuery.refetch(); setUploadingPhotoOrderId(null); },
-    onError: () => { toast.error("Erro ao enviar foto"); setUploadingPhotoOrderId(null); },
+    onSuccess: data => {
+      setUploadingPhotoOrderId(null);
+      if (!data.saved || !data.customerId) { toast.error("Imagem enviada, mas não vinculada ao cadastro. Confira o cliente."); return; }
+      toast.success("Foto salva no cadastro!");
+      void ordersQuery.refetch();
+      void trpcUtils.customers.invalidate();
+    },
+    onError: error => { toast.error(error.message || "Erro ao enviar foto"); setUploadingPhotoOrderId(null); },
   });
 
   const handlePhotoUpload = (orderId: string, phone: string, file: File) => {
@@ -1492,8 +1498,9 @@ export default function AdminOrders() {
     const reader = new FileReader();
     reader.onload = () => {
       const base64 = (reader.result as string).split(',')[1];
-      uploadPhotoMut.mutate({ imageBase64: base64, phone });
+      uploadPhotoMut.mutate({ imageBase64: base64, phone, requireExisting: true });
     };
+    reader.onerror = () => { setUploadingPhotoOrderId(null); toast.error("Não foi possível ler a foto."); };
     reader.readAsDataURL(file);
   };
 
