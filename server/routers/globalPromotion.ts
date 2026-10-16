@@ -26,6 +26,7 @@ export const globalPromotionRouter = router({
       const config = {
         ...previous,
         ...input,
+        schedule: input.schedule === undefined ? previous.schedule ?? null : input.schedule,
         revision: randomUUID(),
         updatedAt: new Date().toISOString(),
       };
