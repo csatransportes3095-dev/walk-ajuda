@@ -1,0 +1,54 @@
+name: Validate scheduled weekly windows and mobile storefront
+on:
+  push:
+    branches: [fix/promocao-geral-prioridade-e-vitrine-mobile-20261016]
+permissions:
+  contents: read
+jobs:
+  verify:
+    runs-on: ubuntu-latest
+    timeout-minutes: 30
+    steps:
+      - uses: actions/checkout@v4
+      - uses: pnpm/action-setup@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '22'
+          cache: pnpm
+      - run: pnpm install --frozen-lockfile
+      - name: Weekly time/priority tests
+        run: pnpm exec vitest run --config vitest.promo-schedule.config.ts shared/globalPromotion.test.ts shared/globalPromotion.schedule.test.ts shared/globalPromotion.weeklyWindows.test.ts
+      - name: Verify original visuals and pause old promotions
+        run: |
+          node --input-type=module <<'NODE'
+          import fs from 'node:fs';
+          import assert from 'node:assert/strict';
+          const home=fs.readFileSync('client/src/pages/Home.tsx','utf8');
+          const card=fs.readFileSync('client/src/components/StorefrontProductCard.tsx','utf8');
+          const css=fs.readFileSync('client/src/components/StorefrontTextFit.css','utf8');
+          const admin=fs.readFileSync('client/src/pages/AdminGlobalPromotion.tsx','utf8');
+          const server=fs.readFileSync('server/routers.ts','utf8');
+          assert.match(home,/!sitePromoOverrides && \(\(\) =>/);
+          assert.match(home,/sm:grid-cols-2 lg:!grid-cols-3/);
+          assert.match(card,/memo\(StorefrontProductCardComponent\)/);
+          assert.match(card,/globalPromotionOverridesIndividual/);
+          assert.match(server,/if \(globalPromotionOverridesIndividual\(globalPromo\)\)/);
+          assert.match(admin,/Faixas semanais com início e fim independentes/);
+          assert.match(admin,/Adicionar outra faixa/);
+          assert.match(css,/storefront-mobile-performance/);
+          assert.match(card,/text-\[36px\]/);
+          console.log('Visual, schedule, priority and mobile safeguards verified');
+          NODE
+      - name: Verify Render build after Docker patches
+        run: |
+          node --input-type=module <<'NODE'
+          import fs from 'node:fs';
+          import {spawnSync} from 'node:child_process';
+          const docker=fs.readFileSync('Dockerfile','utf8');
+          for (const [,script] of docker.matchAll(/&& node (scripts\/[^\s\\]+\.mjs)/g)) {
+            const result=spawnSync('node',[script],{stdio:'inherit'});
+            if(result.status!==0) process.exit(result.status || 1);
+          }
+          NODE
+          pnpm exec vitest run --config vitest.promo-schedule.config.ts shared/globalPromotion.weeklyWindows.test.ts
+          pnpm build

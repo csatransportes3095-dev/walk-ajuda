@@ -2,7 +2,7 @@ import { useEffect, useState } from "react";
 import { Link } from "wouter";
 import { toast } from "sonner";
 import { trpc } from "@/lib/trpc";
-import { calculateGlobalPromotionPrice, globalPromotionLabel, globalPromotionWindow, isValidGlobalPromotionSchedule, type GlobalPromotionSchedule } from "@shared/globalPromotion";
+import { calculateGlobalPromotionPrice, globalPromotionLabel, globalPromotionWindow, isValidGlobalPromotionSchedule, type GlobalPromotionSchedule, type GlobalPromotionWeeklyWindow } from "@shared/globalPromotion";
 import AdminHeader from "@/components/AdminHeader";
 
 export default function AdminGlobalPromotion() {
@@ -17,6 +17,7 @@ export default function AdminGlobalPromotion() {
   const [startTime, setStartTime] = useState("23:00");
   const [endTime, setEndTime] = useState("06:00");
   const [weekdays, setWeekdays] = useState<number[]>([1, 2]);
+  const [windows, setWindows] = useState<GlobalPromotionWeeklyWindow[]>([{startDay:5,startTime:"23:00",endDay:6,endTime:"14:00"}]);
   const [nowMs, setNowMs] = useState(() => Date.now());
   useEffect(() => {
     const timer = window.setInterval(() => setNowMs(Date.now()), 1000);
@@ -36,7 +37,10 @@ export default function AdminGlobalPromotion() {
     if (!query.data || ready) return;
     setType(query.data.type);
     setValue(String(query.data.value));
-    if (query.data.schedule?.mode === "period") {
+    if (query.data.schedule?.mode === "weekly_windows") {
+      setScheduleMode("weekly");
+      setWindows(query.data.schedule.windows);
+    } else if (query.data.schedule?.mode === "period") {
       setScheduleMode("period");
       setStartsOn(query.data.schedule.startAt.slice(0, 10));
       setEndsOn(query.data.schedule.endAt.slice(0, 10));
@@ -49,6 +53,7 @@ export default function AdminGlobalPromotion() {
       setStartTime(query.data.schedule.startTime);
       setEndTime(query.data.schedule.endTime);
       setWeekdays(query.data.schedule.weekdays);
+      setWindows(query.data.schedule.weekdays.map(day => ({startDay:day,startTime:query.data.schedule!.mode === "weekly" ? query.data.schedule.startTime : "23:00",endDay:(day + ((query.data.schedule!.mode === "weekly" && query.data.schedule.endTime < query.data.schedule.startTime) ? 1 : 0)) % 7,endTime:query.data.schedule!.mode === "weekly" ? query.data.schedule.endTime : "06:00"})));
     }
     setReady(true);
   }, [query.data, ready]);
@@ -61,7 +66,7 @@ export default function AdminGlobalPromotion() {
   const schedule: GlobalPromotionSchedule | null = scheduleMode === "manual" ? null
     : scheduleMode === "period"
       ? { mode: "period", startAt: localDateTime(startsOn, startTime), endAt: localDateTime(endsOn, endTime) }
-      : { mode: "weekly", weekdays, startTime, endTime };
+      : { mode: "weekly_windows", windows };
   const scheduleValid = schedule === null || isValidGlobalPromotionSchedule(schedule);
   const current = query.data;
   const windowState = globalPromotionWindow(current, nowMs);
@@ -96,25 +101,35 @@ export default function AdminGlobalPromotion() {
             <select className="mt-1 w-full rounded-lg bg-white p-2 text-black" value={scheduleMode} onChange={e => setScheduleMode(e.target.value as "manual" | "period" | "weekly")}>
               <option value="manual">Manual — sem horário de encerramento</option>
               <option value="period">Data e hora de início e fim</option>
-              <option value="weekly">Dias da semana e horários recorrentes</option>
+              <option value="weekly">Faixas semanais com início e fim independentes</option>
             </select>
           </label>
           {scheduleMode !== "manual" && <>
-            <div className="grid gap-2 sm:grid-cols-2">
+            {scheduleMode === "period" && <div className="grid gap-2 sm:grid-cols-2">
               {scheduleMode === "period" && <><label className="text-sm">Data de início<input className="mt-1 w-full rounded-lg bg-white p-2 text-black" type="date" value={startsOn} onChange={e => setStartsOn(e.target.value)} /></label>
               <label className="text-sm">Data final<input className="mt-1 w-full rounded-lg bg-white p-2 text-black" type="date" value={endsOn} onChange={e => setEndsOn(e.target.value)} /></label></>}
               <label className="text-sm">Horário de início<input className="mt-1 w-full rounded-lg bg-white p-2 text-black" type="time" value={startTime} onChange={e => setStartTime(e.target.value)} /></label>
               <label className="text-sm">Horário final<input className="mt-1 w-full rounded-lg bg-white p-2 text-black" type="time" value={endTime} onChange={e => setEndTime(e.target.value)} /></label>
-            </div>
-            {scheduleMode === "weekly" && <fieldset className="space-y-2">
-              <legend className="text-sm font-bold">Selecione os dias da semana em que a promoção começa</legend>
-              <div className="flex flex-wrap gap-2">{weekdayLabels.map((label, day) => <label key={label} className={`inline-flex items-center gap-2 rounded-lg border p-2 text-sm ${weekdays.includes(day) ? "border-emerald-400 bg-emerald-950/50" : "border-slate-700"}`}><input type="checkbox" checked={weekdays.includes(day)} onChange={() => setWeekdays(old => old.includes(day) ? old.filter(x => x !== day) : [...old, day].sort())}/>{label}</label>)}</div>
-              <p className="text-xs text-amber-200">Dia selecionado = dia do INÍCIO. Se o término for antes do início, termina no dia seguinte, sem precisar marcar esse outro dia.</p><p className="rounded-lg border border-emerald-500/30 bg-emerald-950/20 p-3 text-sm font-bold text-emerald-200">Programação escolhida: {weekdaySummary}</p>
-            </fieldset>}
+            </div>}
+            {scheduleMode === "weekly" && <div className="space-y-3">
+              <p className="text-sm font-bold">Faixas automáticas semanais — configure o dia e a hora do início e do fim separadamente.</p>
+              {windows.map((slot,index)=><div key={index} className="rounded-xl border border-violet-300/30 p-3 space-y-2">
+                <div className="flex items-center justify-between"><strong className="text-sm">Faixa {index+1}</strong><button type="button" disabled={windows.length===1} onClick={()=>setWindows(old=>old.filter((_,i)=>i!==index))} className="rounded-lg border border-rose-400/50 px-3 py-1 text-xs text-rose-200 disabled:opacity-30">Remover</button></div>
+                <div className="grid grid-cols-2 gap-2 sm:grid-cols-4">
+                  <label className="text-xs">Início — dia<select className="mt-1 w-full rounded-lg bg-white p-2 text-black" value={slot.startDay} onChange={e=>setWindows(old=>old.map((v,i)=>i===index?{...v,startDay:Number(e.target.value)}:v))}>{weekdayLabels.map((label,day)=><option key={day} value={day}>{label}</option>)}</select></label>
+                  <label className="text-xs">Início — hora<input type="time" className="mt-1 w-full rounded-lg bg-white p-2 text-black" value={slot.startTime} onChange={e=>setWindows(old=>old.map((v,i)=>i===index?{...v,startTime:e.target.value}:v))}/></label>
+                  <label className="text-xs">Fim — dia<select className="mt-1 w-full rounded-lg bg-white p-2 text-black" value={slot.endDay} onChange={e=>setWindows(old=>old.map((v,i)=>i===index?{...v,endDay:Number(e.target.value)}:v))}>{weekdayLabels.map((label,day)=><option key={day} value={day}>{label}</option>)}</select></label>
+                  <label className="text-xs">Fim — hora<input type="time" className="mt-1 w-full rounded-lg bg-white p-2 text-black" value={slot.endTime} onChange={e=>setWindows(old=>old.map((v,i)=>i===index?{...v,endTime:e.target.value}:v))}/></label>
+                </div>
+                <p className="text-xs text-emerald-300">{weekdayLong[slot.startDay]} {slot.startTime} → {weekdayLong[slot.endDay]} {slot.endTime}</p>
+              </div>)}
+              <button type="button" disabled={windows.length>=28} onClick={()=>setWindows(old=>[...old,{startDay:6,startTime:"14:01",endDay:0,endTime:"14:00"}])} className="rounded-lg border border-emerald-400/50 bg-emerald-900/20 px-3 py-2 text-sm font-bold text-emerald-200">+ Adicionar outra faixa</button>
+              <p className="text-xs text-amber-200">As faixas se repetem toda semana. Não podem se sobrepor. Exemplo: sexta 23h → sábado 14h; sábado 14h01 → domingo 14h.</p>
+            </div>}
             {!scheduleValid && <p className="text-red-300 text-sm">Confira o período, o horário e os dias selecionados antes de salvar.</p>}
           </>}
           <p className="text-xs text-slate-300">{scheduleMode === "manual" ? "A promoção ativa continua sem cronômetro." : "Ao clicar em Ativar/Atualizar, o ADM grava esta programação, sem alterar os preços cadastrados."}</p>
-          {current?.schedule && <p className="text-xs text-violet-200">Programação gravada: {current.schedule.mode === "period" ? "Período específico" : "Semanal, sem data final"} • {windowState.status === "active" ? "em andamento" : windowState.status === "scheduled" ? "aguardando horário" : windowState.status === "expired" ? "encerrada" : "desativada"}</p>}
+          {current?.schedule && <p className="text-xs text-violet-200">Programação gravada: {current.schedule.mode === "period" ? "Período específico" : "Faixas semanais automáticas"} • {windowState.status === "active" ? "em andamento" : windowState.status === "scheduled" ? "aguardando horário" : windowState.status === "expired" ? "encerrada" : "desativada"}</p>}
         </section>
         <div className="rounded-lg bg-black/30 p-4 text-sm">
           <p className="font-bold">Exemplo demonstrativo</p>
