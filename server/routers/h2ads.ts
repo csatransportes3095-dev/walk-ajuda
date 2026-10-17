@@ -204,7 +204,7 @@ export const h2AdsRouter = {
     const active = h2AdsMobileBridge.heartbeat(input.instanceId, input.sessionToken);
     if (!active) return { active: false as const, image: null, at: null };
     const frame = h2AdsMobileBridge.readFrame(input.instanceId, input.sessionToken);
-    return { active: true as const, image: frame ? `data:image/jpeg;base64,${frame.jpeg.toString("base64")}` : null, at: frame?.at ?? null };
+    return { active: true as const, image: frame ? `data:image/jpeg;base64,${frame.jpeg.toString("base64")}` : null, at: frame?.at ?? null, lastInput: h2AdsMobileBridge.lastInputStatus(input.instanceId, input.sessionToken) };
   }),
   mobileRemoteInput: adminProcedure.input(z.object({
     instanceId: z.number().int().positive(),
