@@ -3,7 +3,7 @@
   "name": "H2 COLOMBIANO",
   "short_name": "H2 COLOMBIANO",
   "description": "Atendimento rÃ¡pido para motoristas de app - Uber, 99 e InDrive",
-  "start_url": "/",
+  "start_url": "/login",
   "scope": "/",
   "display": "standalone",
   "orientation": "portrait",

@@ -121,7 +121,6 @@ import OrderTracking from "./pages/OrderTracking";
 import VideoTutorial from "./pages/VideoTutorial";
 import Tutorial from "./pages/Tutorial";
 import PasswordGate from "./components/PasswordGate";
-import WelcomeScreen from "./components/WelcomeScreen";
 import AdminPWABanner from "./components/AdminPWABanner";
 import InstallWall from "./components/InstallWall";
 import CustomerRouteSecurityMonitor from "./components/CustomerRouteSecurityMonitor";
@@ -541,6 +540,13 @@ function AppContent() {
     return <MaintenanceManifestGate config={maintenanceManifest} />;
   }
 
+  // A vitrine de cards antiga foi retirada da raiz do site.
+  // Preserva links e o fluxo de autenticacao de clientes em /login.
+  if (location === "/") {
+    const suffix = typeof window === "undefined" ? "" : window.location.search + window.location.hash;
+    return <Redirect to={"/login" + suffix} />;
+  }
+
   // Rota /vip é pública — vitrine e contratação do plano H2 VIP
   if (isVipRoute) {
     return <Router />;
@@ -573,13 +579,11 @@ function AppContent() {
     );
   }
 
-  // Rota /acompanhar é pública — sem senha, mas com tela de boas-vindas
+  // Acompanhamento continua público; a tela inicial legada foi aposentada.
   if (isTrackingRoute) {
     return (
       <>
-        <WelcomeScreen>
-          <Router />
-        </WelcomeScreen>
+        <Router />
         <WarningOverlay />
       </>
     );
@@ -635,13 +639,13 @@ function AppContent() {
     );
   }
 
+  // Nenhuma rota pública volta a montar a vitrine antiga de quatro cards.
+  // Os serviços continuam sob seus próprios gates e o login permanece ativo.
   return (
     <>
-      <WelcomeScreen>
-        <PasswordGate>
-          <Router />
-        </PasswordGate>
-      </WelcomeScreen>
+      <PasswordGate>
+        <Router />
+      </PasswordGate>
       <WarningOverlay />
     </>
   );

@@ -24,6 +24,21 @@ describe("H2 Ads entry route isolation", () => {
     expect(adminSource).toContain("href: '/h2ads'");
   });
 
+  it("retira a vitrine antiga da entrada sem alterar a rota H2ADS ou o login", () => {
+    const appSource = fs.readFileSync(path.join(projectRoot, "client/src/App.tsx"), "utf8");
+    const manifest = JSON.parse(fs.readFileSync(path.join(projectRoot, "client/public/manifest.json"), "utf8"));
+    expect(appSource).not.toContain('import WelcomeScreen from "./components/WelcomeScreen"');
+    expect(appSource).not.toContain("<WelcomeScreen>");
+    expect(appSource).toContain('if (location === "/")');
+    expect(appSource).toContain('return <Redirect to={"/login" + suffix} />');
+    expect(appSource).toContain('<Route path={"/h2ads"}>');
+    expect(appSource).toContain('<H2AdsGuard><H2Ads /></H2AdsGuard>');
+    expect(appSource).toContain('<Route path={"/login"} component={Home} />');
+    expect(appSource).toContain('<PasswordGate>');
+    expect(appSource).toContain('if (isTrackingRoute)');
+    expect(manifest.start_url).toBe("/login");
+  });
+
   it("keeps the H2 Ads page tied only to its own router, without business data or proxy secrets", () => {
     const pageSource = fs.readFileSync(path.join(projectRoot, "client/src/pages/H2Ads.tsx"), "utf8");
 
