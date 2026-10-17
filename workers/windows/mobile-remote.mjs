@@ -127,9 +127,12 @@ export function startH2AdsMobileRemote({ browser, panelUrl, workerKey, workerTok
       const work = await remoteRequest("next");
       if (!work?.active) return;
       const { targetInfos } = await send("Target.getTargets");
-      const target = Array.isArray(targetInfos) ? targetInfos.find(info =>
-        info.type === "page" && /^https?:\/\//i.test(String(info.url || ""))) : null;
-      if (!target?.targetId) return;
+      // Evita enviar comandos para a aba errada quando houver varias paginas.
+      // O piloto controla somente o caso em que existe uma unica aba HTTP(S).
+      const eligible = Array.isArray(targetInfos) ? targetInfos.filter(info =>
+        info.type === "page" && /^https?:\/\//i.test(String(info.url || ""))) : [];
+      if (eligible.length !== 1 || !eligible[0]?.targetId) return;
+      const target = eligible[0];
       const attached = await send("Target.attachToTarget", { targetId: target.targetId, flatten: true });
       if (!attached.sessionId) return;
       const sessionId = attached.sessionId;
