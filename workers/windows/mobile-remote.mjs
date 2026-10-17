@@ -134,6 +134,13 @@ export function startH2AdsMobileRemote({ browser, panelUrl, workerKey, workerTok
     }
   }
 
+  async function acknowledge(work, state, reason = null) {
+    if (!work?.input) return;
+    await remoteRequest("input-result", {
+      workerLeaseId: work.workerLeaseId, jobId: work.input.id, state, reason,
+    });
+  }
+
   async function tick() {
     if (stopped || busy || !browser || browser.exitCode !== null) return;
     busy = true;
@@ -153,28 +160,46 @@ export function startH2AdsMobileRemote({ browser, panelUrl, workerKey, workerTok
       // O piloto controla somente o caso em que existe uma unica aba HTTP(S).
       const eligible = Array.isArray(targetInfos) ? targetInfos.filter(info =>
         info.type === "page" && /^https?:\/\//i.test(String(info.url || ""))) : [];
-      if (eligible.length !== 1 || !eligible[0]?.targetId) return;
+      if (eligible.length !== 1 || !eligible[0]?.targetId) {
+        await acknowledge(work, "blocked", "target_unavailable");
+        return;
+      }
       const target = eligible[0];
       if (!pinnedTargetId) pinnedTargetId = target.targetId;
       // Se uma aba for substituida, mesmo que reste apenas uma, nao redirecionar
       // os toques nem o teclado para a nova pagina sem uma nova sessao ADM.
-      if (target.targetId !== pinnedTargetId) return;
+      if (target.targetId !== pinnedTargetId) {
+        await acknowledge(work, "blocked", "target_changed");
+        return;
+      }
       const attached = await send("Target.attachToTarget", { targetId: pinnedTargetId, flatten: true });
-      if (!attached.sessionId) return;
+      if (!attached.sessionId) {
+        await acknowledge(work, "failed", "chrome_error");
+        return;
+      }
       const sessionId = attached.sessionId;
       const sendPage = (method, params = {}) => send(method, params, sessionId);
       try {
         const fresh = await send("Target.getTargetInfo", { targetId: pinnedTargetId });
         const current = fresh?.targetInfo;
         if (!current || current.targetId !== pinnedTargetId ||
-            current.type !== "page" || !/^https?:\/\//i.test(String(current.url || ""))) return;
+            current.type !== "page" || !/^https?:\/\//i.test(String(current.url || ""))) {
+          await acknowledge(work, "blocked", "target_changed");
+          return;
+        }
         await sendPage("Page.enable");
         if (work.input) {
           // O Chrome pode manter a pagina remota em segundo plano
           // porque ha uma aba local de identificacao da instancia.
           // Ativar somente a aba pinada antes de executar o comando.
           await sendPage("Page.bringToFront");
-          await handleInput(sendPage, work.input);
+          try {
+            await handleInput(sendPage, work.input);
+            await acknowledge(work, "sent");
+          } catch (error) {
+            await acknowledge(work, "failed", "chrome_error");
+            throw error;
+          }
         }
         if (work.capture) {
           const result = await sendPage("Page.captureScreenshot", {
