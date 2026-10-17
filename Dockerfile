@@ -20,6 +20,9 @@ RUN apt-get update && apt-get install -y --no-install-recommends \
     fonts-liberation \
     fonts-dejavu-core \
     mariadb-client \
+    tesseract-ocr \
+    tesseract-ocr-por \
+    tesseract-ocr-eng \
     openssl \
     && rm -rf /var/lib/apt/lists/*
 
