@@ -13,6 +13,7 @@ import { z } from "zod";
 import { adminProcedure, router } from "../_core/trpc";
 import { getDb } from "../db";
 import { storagePut } from "../storage";
+import { ensureH2BicoReviewSchema } from "../h2bicoReview";
 
 async function dbOrThrow() {
   const db = await getDb();
@@ -75,6 +76,7 @@ async function dbOrThrow() {
     ) CHARACTER SET utf8mb4 COLLATE utf8mb4_unicode_ci
   `);
 
+  await ensureH2BicoReviewSchema(db);
   return db;
 }
 
@@ -446,10 +448,10 @@ export const h2bicoRouter = router({
   }).strict()).mutation(async ({input})=>{
     const db=await dbOrThrow();
     const ids=[...new Set(input.ids)];
-    const rows=await db.execute(sql`SELECT id,status,linkedOrder,usedAt FROM h2bico_records WHERE id IN (${sql.join(ids.map(id=>sql`${id}`),sql`, `)})`);
+    const rows=await db.execute(sql`SELECT r.id,r.status,r.linkedOrder,r.usedAt,rv.reviewState FROM h2bico_records r LEFT JOIN h2bico_review rv ON rv.recordId=r.id WHERE r.id IN (${sql.join(ids.map(id=>sql`${id}`),sql`, `)})`);
     const found=rows[0] as Array<{id:number;status:string;linkedOrder:string|null;usedAt:string|null}>;
     if(found.length!==ids.length||found.some(row=>
-      row.status==="used"||row.usedAt||row.linkedOrder||
+      row.status==="used"||row.usedAt||row.linkedOrder||(row as any).reviewState==="discarded"||
       (input.mode==="archive"&&!["available","reserved"].includes(row.status))||
       (input.mode==="restore"&&row.status!=="archived")
     ))throw new TRPCError({code:"CONFLICT",message:"Há CPFs protegidos ou com status incompatível. Atualize a consulta."});
@@ -520,10 +522,11 @@ export const h2bicoRouter = router({
     linkedOrder: z.string().max(64).optional().nullable(),
   })).mutation(async ({ input }) => {
     const db = await dbOrThrow();
-    const currentRows = await db.execute(sql`SELECT status FROM h2bico_records WHERE id=${input.id} LIMIT 1`);
+    const currentRows = await db.execute(sql`SELECT r.status,r.usedAt,r.linkedOrder,rv.reviewState FROM h2bico_records r LEFT JOIN h2bico_review rv ON rv.recordId=r.id WHERE r.id=${input.id} LIMIT 1`);
     const current = (currentRows[0] as any[])[0];
     if (!current) throw new TRPCError({ code: "NOT_FOUND", message: "Registro não encontrado." });
 
+    if (current.reviewState === "discarded" && input.status !== "archived") throw new TRPCError({code:"FORBIDDEN",message:"CPF descartado: restaure somente pela conferência do H2BICO."});
     if (String(current.status) === "used" && input.status !== "used") {
       throw new TRPCError({
         code: "FORBIDDEN",
