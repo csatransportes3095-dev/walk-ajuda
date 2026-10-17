@@ -54,6 +54,8 @@ let panelRuntimeConfirmed = false;
 let initialObservedIp = null;
 let runnerLockOwned = false;
 let browserProbeInProgress = false;
+let stopMobileRemote = null;
+const mobileRemoteRequested = process.env.H2ADS_REMOTE_DEBUG === "1";
 
 function upstreamUrl() {
   const protocol = proxy.protocol === "socks5" ? "socks5" : proxy.protocol === "https" ? "https" : "http";
@@ -232,6 +234,7 @@ function stopSessionTimers() {
   if (ipTimer) clearInterval(ipTimer);
   if (killSwitchTimer) clearInterval(killSwitchTimer);
   if (panelSyncTimer) clearInterval(panelSyncTimer);
+  if (stopMobileRemote) { stopMobileRemote(); stopMobileRemote = null; }
 }
 
 async function closeRelay(server) {
@@ -548,7 +551,11 @@ async function run() {
     lastReportedIp = initial.observedIp;
     const labelPageUrl = createInstanceLabelPage();
     const privacyGuardExtension = createGoogleSorryPrivacyGuard();
+    if (mobileRemoteRequested) {
+      try { unlinkSync(join(profileDirectory, "DevToolsActivePort")); } catch { }
+    }
     browser = spawn(executable, [
+      ...(mobileRemoteRequested ? ["--remote-debugging-address=127.0.0.1", "--remote-debugging-port=0"] : []),
       "--user-data-dir=" + profileDirectory, "--proxy-server=http://127.0.0.1:" + relayPort, "--proxy-bypass-list=<-loopback>",
       "--disable-quic", "--dns-prefetch-disable", "--force-webrtc-ip-handling-policy=disable_non_proxied_udp",
       "--load-extension=" + privacyGuardExtension, "--no-first-run", "--no-default-browser-check", labelPageUrl,
@@ -561,6 +568,16 @@ async function run() {
     ipTimer.unref?.();
     killSwitchTimer = setInterval(() => { void enforceKillSwitch(); }, KILL_SWITCH_CHECK_INTERVAL_MS);
     killSwitchTimer.unref?.();
+    if (mobileRemoteRequested) {
+      try {
+        const { startH2AdsMobileRemote } = await import("./mobile-remote.mjs");
+        stopMobileRemote = startH2AdsMobileRemote({
+          browser, profileDirectory, panelUrl, workerKey, workerToken, instanceId,
+        });
+      } catch {
+        // Uma falha no complemento mobile nao interrompe Chrome nem o proxy.
+      }
+    }
     panelSyncTimer = setInterval(() => { void syncPanelOpening(); }, 12_000);
     panelSyncTimer.unref?.();
     if (rotationMinutes) {
