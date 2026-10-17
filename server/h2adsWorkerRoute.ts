@@ -140,6 +140,26 @@ export function registerH2AdsWorkerRoute(app: Express): void {
     res.status(200).json(item);
   }));
 
+  app.post("/api/h2ads/worker/mobile/:instanceId/input-result", safeH2AdsWorkerRoute(async (req: Request, res: Response) => {
+    noStore(res);
+    if (!h2AdsMobileRemoteEnabled() || isSystemRestoreLocked()) { res.status(404).end(); return; }
+    const worker = await authenticateRequest(req, res);
+    if (!worker) return;
+    const instanceId = Number(req.params.instanceId);
+    const jobId = req.body?.jobId;
+    const lease = workerString(req.body?.workerLeaseId, 64);
+    const state = req.body?.state;
+    const reason = req.body?.reason ?? null;
+    if (!Number.isSafeInteger(instanceId) || instanceId < 1 || !Number.isSafeInteger(jobId) || jobId < 1 || !lease ||
+        !["sent", "blocked", "failed"].includes(state) ||
+        ![null, "target_unavailable", "target_changed", "chrome_error"].includes(reason)) {
+      res.status(400).json({ error: "Resultado remoto invalido." }); return;
+    }
+    if (await h2AdsRemoteOwnerForOpenInstance(instanceId) !== worker.id) { res.status(403).end(); return; }
+    const acknowledged = h2AdsMobileBridge.workerInputResult(instanceId, worker.id, lease, jobId, state, reason);
+    res.status(acknowledged ? 204 : 409).end();
+  }));
+
   app.post("/api/h2ads/worker/mobile/:instanceId/frame", safeH2AdsWorkerRoute(async (req: Request, res: Response) => {
     noStore(res);
     if (!h2AdsMobileRemoteEnabled() || isSystemRestoreLocked()) { res.status(404).end(); return; }
