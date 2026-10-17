@@ -5,7 +5,7 @@
  */
 export type ScreenshotCrop = {x:number;y:number;size:number};
 export type ScreenshotPerson = {
-  name:string; cpf:string; crop:ScreenshotCrop; confidence:number; warnings:string[];
+  name:string; cpf:string; crop:ScreenshotCrop; confidence:number; warnings:string[]; nameBox?:{left:number;top:number;width:number;height:number};
 };
 type Word = {text:string;left:number;top:number;width:number;height:number;confidence:number};
 type TextLine = Word;
@@ -116,7 +116,7 @@ export function parseScreenshotTsv(tsv:string,width:number,height:number):Screen
     if(!cpf)warnings.push("CPF não reconhecido: preencha e confira antes de salvar.");
     if(confidence<75)warnings.push("Leitura de texto com baixa confiança; confira nome e CPF.");
     if(size<60)warnings.push("Foto pequena: confira o recorte.");
-    output.push({name,cpf,crop:{x,y,size},confidence,warnings});
+    output.push({name,cpf,crop:{x,y,size},confidence,warnings,nameBox:{left:nameLine.left,top:nameLine.top,width:nameLine.width,height:nameLine.height}});
     if(output.length>=80)break;
   }
   return output;
