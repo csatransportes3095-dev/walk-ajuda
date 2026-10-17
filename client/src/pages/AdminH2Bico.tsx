@@ -3,6 +3,7 @@ import { useLocation } from "wouter";
 import { Archive, CheckCircle2, Copy, Eye, EyeOff, FileText, FolderOpen, Images, Search, UploadCloud, UserCheck, XCircle } from "lucide-react";
 import { toast } from "sonner";
 import AdminHeader from "@/components/AdminHeader";
+import H2BicoScreenshotImporter from "@/components/H2BicoScreenshotImporter";
 import { Button } from "@/components/ui/button";
 import { Card } from "@/components/ui/card";
 import { Input } from "@/components/ui/input";
@@ -346,6 +347,8 @@ export default function AdminH2Bico(){
         </div>
         <Button onClick={()=>navigate("/similaridade")} variant="outline">Abrir Similaridade</Button>
       </Card>
+
+      <H2BicoScreenshotImporter/>
 
       <Card className="bg-gray-900 border-gray-800 p-4 space-y-3">
         <div className="flex flex-wrap items-center justify-between gap-3">
