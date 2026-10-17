@@ -12,7 +12,7 @@ type Item={
   id:string; source:string; name:string; cpf:string;
   photo:string; crop:{x:number;y:number;size:number};
   width:number;height:number; existing:boolean; selected:boolean; warnings:string[];
-  error?:string; saved?:boolean;
+  error?:string; saved?:boolean; cpfSuggestion?:string|null;
 };
 const digits=(value:string)=>value.replace(/\D/g,"");
 const readBase64=(file:File)=>new Promise<string>((resolve,reject)=>{
@@ -89,7 +89,7 @@ export default function H2BicoScreenshotImporter(){
             photoUrlsRef.current.add(photo);
             const incoming:Item[]=analysis.persons.map((p,i)=>({
               id:Date.now()+"-"+number+"-"+i+"-"+Math.random(),
-              source:file.name,photo,name:p.name,cpf:p.cpf,crop:p.crop,
+              source:file.name,photo,name:p.name,cpf:p.cpf,cpfSuggestion:p.cpfSuggestion,crop:p.crop,
               width:analysis.width,height:analysis.height,
               existing:p.alreadyExists,
               selected:!p.alreadyExists&&p.validCpf&&p.name.length>5&&p.confidence>=70&&!p.warnings.some(w=>w.includes("CONFIRA O NUMERO")),
@@ -242,6 +242,13 @@ export default function H2BicoScreenshotImporter(){
                 onChange={e=>update(item.id,{name:e.target.value,error:undefined})} placeholder="NOME COMPLETO" />
               <Input aria-label="CPF" disabled={saving||item.saved||item.existing} value={item.cpf}
                 onChange={e=>update(item.id,{cpf:digits(e.target.value).slice(0,11),error:undefined})} placeholder="CPF" />
+              {item.cpfSuggestion&&!item.saved&&!item.existing&&<div className="rounded-lg border border-amber-500/50 bg-amber-950/20 p-2 space-y-2">
+                <p className="text-xs font-bold text-amber-200">Possível erro de OCR. CPF sugerido: {item.cpfSuggestion.slice(0,3)}.{item.cpfSuggestion.slice(3,6)}.{item.cpfSuggestion.slice(6,9)}-{item.cpfSuggestion.slice(9)}. Compare com o print original.</p>
+                <Button type="button" variant="outline" size="sm" disabled={saving} onClick={()=>{
+                  if(!window.confirm("Você conferiu visualmente o CPF no print original e confirma esta correção?"))return;
+                  update(item.id,{cpf:item.cpfSuggestion!,cpfSuggestion:null,selected:false,error:undefined});
+                }}>CONFERI NO PRINT — USAR CPF SUGERIDO</Button>
+              </div>}
               <label className="inline-flex items-center gap-2 text-sm">
                 <input type="checkbox" checked={item.selected} disabled={saving||item.saved||item.existing}
                   onChange={e=>update(item.id,{selected:e.target.checked})}/>
