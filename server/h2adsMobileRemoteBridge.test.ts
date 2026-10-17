@@ -26,9 +26,12 @@ describe("H2ADS Mobile Fase 2: sessoes em memoria", () => {
     expect(next.active).toBe(true);
     if (!next.active) throw new Error("lease inesperada");
     const jpeg = syntheticJpeg();
-    expect(bridge.workerFrame(11, 999, next.workerLeaseId, jpeg, 1_100)).toBe(false);
-    expect(bridge.workerFrame(11, 2, "wrong", jpeg, 1_100)).toBe(false);
-    expect(bridge.workerFrame(11, 2, next.workerLeaseId, jpeg, 1_100)).toBe(true);
+    expect(bridge.workerTabs(11, 2, next.workerLeaseId, [
+      { targetId: "abc123", title: "Teste", label: "example.com", kind: "web" },
+    ], 1_010)).toBe(true);
+    expect(bridge.workerFrame(11, 999, next.workerLeaseId, jpeg, 1_100, "abc123")).toBe(false);
+    expect(bridge.workerFrame(11, 2, "wrong", jpeg, 1_100, "abc123")).toBe(false);
+    expect(bridge.workerFrame(11, 2, next.workerLeaseId, jpeg, 1_100, "abc123")).toBe(true);
     expect(bridge.readFrame(11, "wrong", 1_200)).toBeNull();
     expect(bridge.readFrame(11, lease.sessionToken, 1_200)?.jpeg.equals(jpeg)).toBe(true);
     expect(bridge.readFrame(11, lease.sessionToken, 8_300)).toBeNull();
