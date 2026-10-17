@@ -8,6 +8,7 @@ import { Card } from "@/components/ui/card";
 import { Input } from "@/components/ui/input";
 import { Textarea } from "@/components/ui/textarea";
 import { trpc } from "@/lib/trpc";
+import { extractCpfsFromText, H2BICO_CPF_MAX_FILES, readCpfSourceFile } from "@/lib/h2bicoCpfExtractor";
 
 const STATUS:any = {available:"Disponível",reserved:"Reservado",in_use:"Em uso",used:"Usado",archived:"Arquivado"};
 const maskCpf=(cpf:string)=> cpf?.length===11 ? `${cpf.slice(0,3)}.***.***-${cpf.slice(-2)}` : cpf;
@@ -81,6 +82,9 @@ export default function AdminH2Bico(){
   const [,navigate]=useLocation();
   const filesRef=useRef<HTMLInputElement>(null);
   const folderRef=useRef<HTMLInputElement>(null);
+  const cpfFileRef=useRef<HTMLInputElement>(null);
+  const [readingCpfFiles,setReadingCpfFiles]=useState(false);
+  const [cpfFileReport,setCpfFileReport]=useState("");
   const [search,setSearch]=useState("");
   const [status,setStatus]=useState<any>("available");
   const [showCpf,setShowCpf]=useState(false);
@@ -118,7 +122,39 @@ export default function AdminH2Bico(){
   });
 
   const existingCpfs=useMemo(()=>new Set((allRecords.data||[]).map((r:any)=>String(r.cpf))),[allRecords.data]);
-  const cpfs=useMemo(()=>Array.from(new Set((extractText.match(/\d[\d.\-\s]{9,16}\d/g)||[]).map(v=>v.replace(/\D/g,"")).filter(v=>v.length===11))),[extractText]);
+  const cpfs=useMemo(()=>extractCpfsFromText(extractText),[extractText]);
+  const importCpfFiles=async(files:FileList|File[])=>{
+    if(readingCpfFiles) return;
+    const selected=Array.from(files).slice(0,H2BICO_CPF_MAX_FILES);
+    if(!selected.length) return;
+    setReadingCpfFiles(true);
+    let read=0,failed=0,added=0;
+    const found:string[]=[];
+    for(const file of selected){
+      try{
+        const content=await readCpfSourceFile(file);
+        const extracted=extractCpfsFromText(content);
+        found.push(...extracted);
+        added+=extracted.length;
+        read++;
+      }catch(error){
+        failed++;
+        toast.error(`${file.name}: ${error instanceof Error?error.message:"Falha ao ler arquivo."}`);
+      }
+    }
+    if(found.length) setExtractText(current=>[current,...found].filter(Boolean).join("\n"));
+    setCpfFileReport(`${read} arquivo(s) lido(s), ${added} CPF(s) localizado(s)${failed?`, ${failed} falha(s)`:""}.`);
+    setReadingCpfFiles(false);
+  };
+  const copyAllCpfs=async()=>{
+    if(!cpfs.length) return;
+    try{
+      await navigator.clipboard.writeText(cpfs.join("\n"));
+      toast.success(`${cpfs.length} CPF(s) copiado(s), um por linha.`);
+    }catch{
+      toast.error("Não foi possível copiar. Verifique a permissão do navegador.");
+    }
+  };
 
   const prepareFiles=(files:FileList|File[])=>{
     const incoming=Array.from(files);
@@ -285,10 +321,27 @@ export default function AdminH2Bico(){
       </Card>
 
       <Card className="bg-gray-900 border-gray-800 p-4 space-y-3">
-        <div className="font-semibold flex items-center gap-2"><FileText className="w-4 h-4"/>Extrator de CPF</div>
-        <Textarea placeholder="Cole o texto com vários CPFs..." value={extractText} onChange={e=>setExtractText(e.target.value)}/>
-        <div className="text-sm text-gray-400">{cpfs.length} CPF(s) encontrado(s)</div>
-        {cpfs.length>0&&<><Textarea readOnly value={cpfs.join("\n")} className="font-mono min-h-32"/><Button variant="outline" onClick={()=>{navigator.clipboard.writeText(cpfs.join("\n"));toast.success("CPFs copiados")}}><Copy className="w-4 h-4 mr-2"/>Copiar em coluna</Button></>}
+        <div className="flex flex-wrap items-center justify-between gap-3">
+          <div className="font-semibold flex items-center gap-2"><FileText className="w-4 h-4"/>Extrator de CPF <span className="rounded-md bg-emerald-500/15 px-2 py-1 text-xs font-bold text-emerald-300">{cpfs.length} CPF(s)</span></div>
+          <div className="flex flex-wrap gap-2">
+            <Button type="button" onClick={()=>void copyAllCpfs()} disabled={!cpfs.length}><Copy className="w-4 h-4 mr-2"/>COPIAR TODOS</Button>
+            <Button type="button" variant="outline" disabled={!extractText&& !cpfFileReport} onClick={()=>{setExtractText("");setCpfFileReport("");}}><XCircle className="w-4 h-4 mr-2"/>LIMPAR</Button>
+          </div>
+        </div>
+        <input ref={cpfFileRef} type="file" multiple className="hidden" accept=".txt,.csv,.log,.md,.rtf,.htm,.html,.xml,.docx,.doc"
+          onChange={e=>{if(e.target.files)void importCpfFiles(e.target.files);e.currentTarget.value="";}}/>
+        <div className="rounded-xl border-2 border-dashed border-cyan-400/40 bg-cyan-500/5 p-5 text-center transition hover:border-cyan-300"
+          onDragOver={e=>e.preventDefault()} onDrop={e=>{e.preventDefault();if(!readingCpfFiles)void importCpfFiles(e.dataTransfer.files);}}>
+          <FileText className="mx-auto h-7 w-7 text-cyan-300"/>
+          <div className="mt-2 font-bold">ARRASTE ARQUIVOS DE TEXTO OU WORD AQUI</div>
+          <div className="mt-1 text-xs text-slate-400">Bloco de Notas (.txt), CSV, RTF, HTML e Word (.docx). Até 30 arquivos de 8 MB. Word .doc antigo: converta para .docx.</div>
+          <Button type="button" variant="outline" className="mt-3" disabled={readingCpfFiles} onClick={()=>cpfFileRef.current?.click()}>
+            <UploadCloud className="w-4 h-4 mr-2"/>{readingCpfFiles?"LENDO ARQUIVOS...":"SELECIONAR ARQUIVOS"}
+          </Button>
+          {cpfFileReport&&<p role="status" className="mt-2 text-xs text-emerald-300">{cpfFileReport}</p>}
+        </div>
+        <Textarea placeholder="Ou cole aqui o texto com vários CPFs..." value={extractText} onChange={e=>setExtractText(e.target.value)}/>
+        {cpfs.length>0&&<Textarea readOnly value={cpfs.join("\n")} className="font-mono min-h-28" aria-label="CPFs extraídos, um por linha"/>}
       </Card>
 
       <div className="flex flex-col md:flex-row gap-2">
