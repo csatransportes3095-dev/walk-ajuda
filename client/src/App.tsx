@@ -90,6 +90,7 @@ import AdminAuthenticator from "./pages/AdminAuthenticator";
 import AdminSimilarity from "./pages/AdminSimilarity";
 import AdminH2Bico from "./pages/AdminH2Bico";
 import H2Ads from "./pages/H2Ads";
+import H2AdsMobile from "./pages/H2AdsMobile";
 import AdminReferrals from "./pages/AdminReferrals";
 import AdminPreRegistrations from "./pages/AdminPreRegistrations";
 import AdminPreCadastroQuestions from "./pages/AdminPreCadastroQuestions";
@@ -190,6 +191,9 @@ function Router() {
     <Switch>
       <Route path={"/site-access"} component={SiteAccess} />
       <Route path={"/admin/login"} component={AdminLogin} />
+      <Route path={"/h2ads/mobile"}>
+        <H2AdsGuard><H2AdsMobile /></H2AdsGuard>
+      </Route>
       <Route path={"/h2ads"}>
         <H2AdsGuard><H2Ads /></H2AdsGuard>
       </Route>
