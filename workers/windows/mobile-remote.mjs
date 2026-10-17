@@ -17,6 +17,9 @@ export function startH2AdsMobileRemote({ browser, panelUrl, workerKey, workerTok
   let busy = false;
   let loggedError = false;
   let serial = 0;
+  // A aba e fixada por sessao: nunca migrar o controle para outra aba por engano.
+  let pinnedLeaseId = null;
+  let pinnedTargetId = null;
   let inputBuffer = "";
   const decoder = new TextDecoder();
   const pending = new Map();
@@ -125,7 +128,15 @@ export function startH2AdsMobileRemote({ browser, panelUrl, workerKey, workerTok
     busy = true;
     try {
       const work = await remoteRequest("next");
-      if (!work?.active) return;
+      if (!work?.active) {
+        pinnedLeaseId = null;
+        pinnedTargetId = null;
+        return;
+      }
+      if (work.workerLeaseId !== pinnedLeaseId) {
+        pinnedLeaseId = work.workerLeaseId;
+        pinnedTargetId = null;
+      }
       const { targetInfos } = await send("Target.getTargets");
       // Evita enviar comandos para a aba errada quando houver varias paginas.
       // O piloto controla somente o caso em que existe uma unica aba HTTP(S).
@@ -133,11 +144,19 @@ export function startH2AdsMobileRemote({ browser, panelUrl, workerKey, workerTok
         info.type === "page" && /^https?:\/\//i.test(String(info.url || ""))) : [];
       if (eligible.length !== 1 || !eligible[0]?.targetId) return;
       const target = eligible[0];
-      const attached = await send("Target.attachToTarget", { targetId: target.targetId, flatten: true });
+      if (!pinnedTargetId) pinnedTargetId = target.targetId;
+      // Se uma aba for substituida, mesmo que reste apenas uma, nao redirecionar
+      // os toques nem o teclado para a nova pagina sem uma nova sessao ADM.
+      if (target.targetId !== pinnedTargetId) return;
+      const attached = await send("Target.attachToTarget", { targetId: pinnedTargetId, flatten: true });
       if (!attached.sessionId) return;
       const sessionId = attached.sessionId;
       const sendPage = (method, params = {}) => send(method, params, sessionId);
       try {
+        const fresh = await send("Target.getTargetInfo", { targetId: pinnedTargetId });
+        const current = fresh?.targetInfo;
+        if (!current || current.targetId !== pinnedTargetId ||
+            current.type !== "page" || !/^https?:\/\//i.test(String(current.url || ""))) return;
         await sendPage("Page.enable");
         if (work.input) await handleInput(sendPage, work.input);
         if (work.capture) {
