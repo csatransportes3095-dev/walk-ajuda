@@ -140,6 +140,22 @@ export function registerH2AdsWorkerRoute(app: Express): void {
     res.status(200).json(item);
   }));
 
+  app.post("/api/h2ads/worker/mobile/:instanceId/tabs", safeH2AdsWorkerRoute(async (req: Request, res: Response) => {
+    noStore(res);
+    if (!h2AdsMobileRemoteEnabled() || isSystemRestoreLocked()) { res.status(404).end(); return; }
+    const worker = await authenticateRequest(req, res);
+    if (!worker) return;
+    const instanceId = Number(req.params.instanceId);
+    const lease = workerString(req.body?.workerLeaseId, 64);
+    if (!Number.isSafeInteger(instanceId) || instanceId < 1 || !lease ||
+        !Array.isArray(req.body?.tabs) || req.body.tabs.length > 20) {
+      res.status(400).json({ error: "Abas invalidas." }); return;
+    }
+    if (await h2AdsRemoteOwnerForOpenInstance(instanceId) !== worker.id) { res.status(403).end(); return; }
+    const accepted = h2AdsMobileBridge.workerTabs(instanceId, worker.id, lease, req.body.tabs);
+    res.status(accepted ? 204 : 400).end();
+  }));
+
   app.post("/api/h2ads/worker/mobile/:instanceId/input-result", safeH2AdsWorkerRoute(async (req: Request, res: Response) => {
     noStore(res);
     if (!h2AdsMobileRemoteEnabled() || isSystemRestoreLocked()) { res.status(404).end(); return; }
@@ -168,6 +184,7 @@ export function registerH2AdsWorkerRoute(app: Express): void {
     const instanceId = Number(req.params.instanceId);
     const lease = workerString(req.body?.workerLeaseId, 64);
     const encoded = typeof req.body?.imageBase64 === "string" ? req.body.imageBase64 : "";
+    const targetId = workerString(req.body?.targetId, 128);
     if (!Number.isSafeInteger(instanceId) || instanceId < 1 || !lease ||
         encoded.length < 136 || encoded.length > Math.ceil(MOBILE_REMOTE_MAX_FRAME_BYTES * 4 / 3) + 10 ||
         !/^[A-Za-z0-9+/]+={0,2}$/.test(encoded)) {
@@ -175,7 +192,7 @@ export function registerH2AdsWorkerRoute(app: Express): void {
     }
     const owner = await h2AdsRemoteOwnerForOpenInstance(instanceId);
     if (owner !== worker.id) { res.status(403).end(); return; }
-    const accepted = h2AdsMobileBridge.workerFrame(instanceId, worker.id, lease, Buffer.from(encoded, "base64"));
+    const accepted = h2AdsMobileBridge.workerFrame(instanceId, worker.id, lease, Buffer.from(encoded, "base64"), Date.now(), targetId ?? undefined);
     res.status(accepted ? 204 : 409).end();
   }));
 
