@@ -71,6 +71,33 @@ describe("H2ADS Mobile Fase 2: sessoes em memoria", () => {
     expect(completed.input).toBeNull();
   });
 
+  it("permite identificacao local mais varias abas e protege a escolha explicita", () => {
+    const bridge = new H2AdsMobileBridge();
+    const lease = bridge.start(51, 4, 1_000);
+    const first = bridge.workerNext(51, 4, 1_010);
+    if (!first.active) throw new Error("sessao nao ativa");
+    const tabs = [
+      { targetId: "aabb01", title: "Identificacao H2ADS", label: "Identificacao H2ADS", kind: "label" as const },
+      { targetId: "aabb02", title: "Pagina um", label: "example.com", kind: "web" as const },
+      { targetId: "aabb03", title: "Pagina dois", label: "uber.com", kind: "web" as const },
+    ];
+    expect(bridge.workerTabs(51, 9, first.workerLeaseId, tabs, 1_020)).toBe(false);
+    expect(bridge.workerTabs(51, 4, first.workerLeaseId, tabs, 1_020)).toBe(true);
+    expect(bridge.tabStatus(51, lease.sessionToken, 1_030)?.selectedTargetId).toBeNull();
+    expect(bridge.selectTab(51, lease.sessionToken, "bad", 1_040)).toBe(false);
+    expect(bridge.selectTab(51, lease.sessionToken, "aabb03", 1_040)).toBe(true);
+    const selected = bridge.workerNext(51, 4, 1_050);
+    expect(selected.active && selected.selectedTargetId).toBe("aabb03");
+    const jpeg = syntheticJpeg();
+    expect(bridge.workerFrame(51, 4, first.workerLeaseId, jpeg, 1_100, "aabb02")).toBe(false);
+    expect(bridge.workerFrame(51, 4, first.workerLeaseId, jpeg, 1_100, "aabb03")).toBe(true);
+    expect(bridge.selectTab(51, lease.sessionToken, "aabb02", 1_120)).toBe(true);
+    expect(bridge.readFrame(51, lease.sessionToken, 1_130)).toBeNull();
+    expect(bridge.workerTabs(51, 4, first.workerLeaseId, tabs.filter(t => t.targetId !== "aabb02"), 1_140)).toBe(true);
+    expect(bridge.tabStatus(51, lease.sessionToken, 1_150)?.selectedTargetId).toBeNull();
+    expect(bridge.workerFrame(51, 4, first.workerLeaseId, jpeg, 1_160, "aabb03")).toBe(false);
+  });
+
   it("nega troca de Worker e rejeita JPEG ou volume invalido", () => {
     const bridge = new H2AdsMobileBridge();
     const first = bridge.start(42, 5, 1_000);
