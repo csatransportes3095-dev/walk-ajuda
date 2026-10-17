@@ -14,7 +14,7 @@ export default function H2AdsMobileRemoteViewer({ instanceId, instanceName, sess
 }) {
   // POST para o token nunca ir para a URL nem logs de query string.
   const frameRequest = trpc.h2Ads.mobileRemoteFrame.useMutation();
-  const [frameData, setFrameData] = useState<{ active: boolean; image: string | null; at: number | null; lastInput?: { id: number; kind: string; state: "queued" | "sent" | "blocked" | "failed"; reason: string | null } | null } | null>(null);
+  const [frameData, setFrameData] = useState<{ active: boolean; image: string | null; at: number | null; lastInput?: { id: number; kind: string; state: "queued" | "sent" | "blocked" | "failed"; reason: string | null } | null; tabStatus?: { selectedTargetId: string | null; tabs: { targetId: string; title: string; label: string; kind: "web" | "label" }[] } | null } | null>(null);
   const requestRef = useRef(frameRequest.mutateAsync);
   requestRef.current = frameRequest.mutateAsync;
 
@@ -38,6 +38,7 @@ export default function H2AdsMobileRemoteViewer({ instanceId, instanceName, sess
     return () => { disposed = true; window.clearInterval(timer); };
   }, [instanceId, sessionToken]);
   const mutation = trpc.h2Ads.mobileRemoteInput.useMutation();
+  const selectTab = trpc.h2Ads.mobileRemoteSelectTab.useMutation();
   const [text, setText] = useState("");
   const [zoom, setZoom] = useState(1);
   const [waitingTooLong, setWaitingTooLong] = useState(false);
@@ -113,6 +114,17 @@ export default function H2AdsMobileRemoteViewer({ instanceId, instanceName, sess
           </div>
         </div>
 
+        {(frameData?.tabStatus?.tabs.length ?? 0) > 1 && <div className="rounded-xl border border-blue-400/30 bg-[#141922] p-3">
+          <label htmlFor="h2ads-mobile-tab" className="mb-2 block text-xs font-bold text-blue-200">Escolha a aba para visualizar e controlar</label>
+          <select id="h2ads-mobile-tab" value={frameData?.tabStatus?.selectedTargetId ?? ""} onChange={e => {
+            if (e.target.value) void selectTab.mutateAsync({ instanceId, sessionToken, targetId: e.target.value })
+              .catch(() => toast.error("Nao foi possivel selecionar a aba."));
+          }} className="w-full rounded-lg border border-white/20 bg-[#0a0d15] p-3 text-sm text-white">
+            <option value="">Selecione a aba</option>
+            {frameData?.tabStatus?.tabs.map(tab =>
+              <option key={tab.targetId} value={tab.targetId}>{tab.kind === "label" ? "Identificacao H2ADS" : tab.label} — {tab.title.slice(0, 65)}</option>)}
+          </select>
+        </div>}
         <div className="overflow-auto rounded-xl border border-white/15 bg-black">
           {frameData?.image ? (
             <img
@@ -130,7 +142,7 @@ export default function H2AdsMobileRemoteViewer({ instanceId, instanceName, sess
               {expired ? "A sessao terminou. Feche e inicie uma nova." :
                 waitingTooLong
                   ? "Nenhuma imagem chegou. Use uma instancia de teste aberta depois de atualizar o agente Windows e ativar o controle remoto; instancias antigas nao recebem o recurso automaticamente. Confira tambem se ha apenas uma aba HTTP(S)."
-                  : "Aguardando uma unica aba HTTP(S) aberta no Chrome. Se houver varias abas web, o piloto bloqueia o controle para evitar a pagina errada."}
+                  : "Aguardando a aba escolhida no Chrome. Se houver varias abas, selecione a correta acima."}
             </div>
           )}
         </div>
@@ -157,7 +169,7 @@ export default function H2AdsMobileRemoteViewer({ instanceId, instanceName, sess
             )}
           </div>
         </div>
-        <p className="text-center text-xs leading-5 text-slate-500">Toque na imagem para clicar; deslize sobre ela para rolar. Por seguranca, o piloto controla apenas quando existe uma unica aba HTTP(S) na instancia.</p>
+        <p className="text-center text-xs leading-5 text-slate-500">Toque na imagem para clicar; deslize sobre ela para rolar. Por seguranca, o controle permanece vinculado a aba selecionada desta instancia.</p>
       </div>
     </div>
   );
