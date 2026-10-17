@@ -34,6 +34,7 @@ describe("H2ADS Mobile fase 2: ligacoes seguras", () => {
     expect(browser).not.toContain("--remote-debugging-port");
     expect(browser).toContain('["ignore", "ignore", "ignore", "pipe", "pipe"]');
     expect(read("workers/windows/mobile-remote.mjs")).toContain("Target.attachToTarget");
+    expect(read("workers/windows/mobile-remote.mjs")).toContain("eligible.length !== 1");
     expect(read("workers/windows/mobile-remote.mjs")).toContain('inputBuffer.indexOf("\\0")');
     expect(workerRoute).toContain("authenticateRequest(req, res)");
     expect(workerRoute).toContain("MOBILE_REMOTE_MAX_FRAME_BYTES");
