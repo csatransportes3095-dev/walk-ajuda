@@ -183,12 +183,13 @@ export const h2bicoRouter = router({
     const temp = await mkdtemp(join(tmpdir(),"h2bico-ocr-"));
     try {
       const image=sharp(buffer,{limitInputPixels:32_000_000}).rotate();
-      const metadata=await image.metadata();
-      const width=metadata.autoOrient?.width || metadata.width || 0;
-      const height=metadata.autoOrient?.height || metadata.height || 0;
+      const prepared=await image.png().toBuffer();
+      const metadata=await sharp(prepared).metadata();
+      const width=metadata.width || 0;
+      const height=metadata.height || 0;
       if(width<200||height<200)throw new Error("Imagem pequena.");
       const filename=join(temp,"print.png");
-      await writeFile(filename,await image.png().toBuffer());
+      await writeFile(filename,prepared);
       const {stdout}=await execFileAsync("tesseract",[filename,"stdout","-l","por+eng","--psm","11","tsv"],{
         timeout:35000,maxBuffer:8*1024*1024,encoding:"utf8",
       });
