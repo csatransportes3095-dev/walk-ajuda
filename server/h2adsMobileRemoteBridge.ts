@@ -17,6 +17,15 @@ export type MobileInput =
   | { kind: "key"; key: "Enter" | "Backspace" | "Tab" | "Escape" };
 
 type InputJob = MobileInput & { id: number };
+export type MobileInputResultState = "sent" | "blocked" | "failed";
+export type MobileInputResultReason = "target_unavailable" | "target_changed" | "chrome_error" | null;
+type InputReceipt = {
+  id: number;
+  kind: MobileInput["kind"];
+  state: "queued" | MobileInputResultState;
+  reason: MobileInputResultReason;
+  at: number;
+};
 type Session = {
   adminToken: string;
   workerLeaseId: string;
@@ -26,6 +35,8 @@ type Session = {
   frameAt: number;
   captureAskedAt: number;
   pending: InputJob[];
+  inFlight: InputJob | null;
+  lastInput: InputReceipt | null;
   nextJobId: number;
 };
 
@@ -47,7 +58,7 @@ export class H2AdsMobileBridge {
     const expiresAt = now + MOBILE_REMOTE_LEASE_MS;
     this.sessions.set(instanceId, {
       adminToken, workerLeaseId, workerId, expiresAt, frame: null, frameAt: 0,
-      captureAskedAt: 0, pending: [], nextJobId: 1,
+      captureAskedAt: 0, pending: [], inFlight: null, lastInput: null, nextJobId: 1,
     });
     return { sessionToken: adminToken, expiresAt };
   }
@@ -72,8 +83,10 @@ export class H2AdsMobileBridge {
 
   input(instanceId: number, token: string, input: MobileInput, now = Date.now()): boolean {
     const current = this.admin(instanceId, token, now);
-    if (!current || current.pending.length >= MOBILE_REMOTE_MAX_QUEUE) return false;
-    current.pending.push({ ...input, id: current.nextJobId++ });
+    if (!current || current.pending.length + (current.inFlight ? 1 : 0) >= MOBILE_REMOTE_MAX_QUEUE) return false;
+    const job = { ...input, id: current.nextJobId++ };
+    current.pending.push(job);
+    current.lastInput = { id: job.id, kind: input.kind, state: "queued", reason: null, at: now };
     return true;
   }
 
@@ -97,8 +110,31 @@ export class H2AdsMobileBridge {
     if (shouldCapture) current.captureAskedAt = now;
     return {
       active: true as const, workerLeaseId: current.workerLeaseId,
-      capture: shouldCapture, input: current.pending.shift() ?? null,
+      capture: shouldCapture, input: current.inFlight ?? (current.inFlight = current.pending.shift() ?? null),
     };
+  }
+
+  // O comando nao sai definitivamente da fila ate o Worker confirmar o envio
+  // ao CDP. A confirmacao nao significa que a pagina mudou visualmente.
+  workerInputResult(
+    instanceId: number, workerId: number, workerLeaseId: string, jobId: number,
+    state: MobileInputResultState, reason: MobileInputResultReason, now = Date.now(),
+  ): boolean {
+    this.purge(now);
+    const current = this.sessions.get(instanceId);
+    if (!current || current.workerId !== workerId || current.workerLeaseId !== workerLeaseId ||
+        !current.inFlight || current.inFlight.id !== jobId) return false;
+    const job = current.inFlight;
+    current.inFlight = null;
+    if (!current.lastInput || current.lastInput.id <= jobId) {
+      current.lastInput = { id: jobId, kind: job.kind, state, reason, at: now };
+    }
+    return true;
+  }
+
+  lastInputStatus(instanceId: number, token: string, now = Date.now()): InputReceipt | null {
+    const current = this.admin(instanceId, token, now);
+    return current?.lastInput ? { ...current.lastInput } : null;
   }
 
   workerFrame(instanceId: number, workerId: number, workerLeaseId: string, jpeg: Buffer, now = Date.now()): boolean {
