@@ -65,7 +65,10 @@ describe("H2ADS Mobile Fase 2: sessoes em memoria", () => {
     expect(bridge.lastInputStatus(301, lease.sessionToken, 1_041)).toMatchObject({
       state: "blocked", reason: "target_unavailable", kind: "scroll",
     });
-    expect(bridge.workerNext(301, 10, 1_050).input).toBeNull();
+    const completed = bridge.workerNext(301, 10, 1_050);
+    expect(completed.active).toBe(true);
+    if (!completed.active) throw new Error("sessao encerrada");
+    expect(completed.input).toBeNull();
   });
 
   it("nega troca de Worker e rejeita JPEG ou volume invalido", () => {
