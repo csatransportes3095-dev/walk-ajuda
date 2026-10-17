@@ -125,7 +125,26 @@ export default function H2AdsMobileRemoteViewer({ instanceId, instanceName, sess
               <option key={tab.targetId} value={tab.targetId}>{tab.kind === "label" ? "Identificacao H2ADS" : tab.label} — {tab.title.slice(0, 65)}</option>)}
           </select>
         </div>}
-        <div className="overflow-auto rounded-xl border border-white/15 bg-black">
+        <div role="status" className="rounded-xl border border-blue-400/25 bg-[#141922] px-3 py-2 text-xs text-slate-200">
+          <span className="font-bold text-blue-200">Ultimo comando: </span>
+          {!frameData?.lastInput ? "Nenhum comando enviado nesta sessao." :
+            `#${frameData.lastInput.id} — ${frameData.lastInput.kind === "scroll" ? "Rolagem" :
+              frameData.lastInput.kind === "tap" ? "Toque" : frameData.lastInput.kind === "text" ? "Texto" : "Tecla"}: ${frameData.lastInput.state === "queued" ? "Aguardando o Windows" :
+              frameData.lastInput.state === "sent" ? "Recebido pelo Chrome (a mudanca visual ainda precisa ser confirmada)" :
+              frameData.lastInput.state === "blocked" ? "Bloqueado: aba indisponivel ou alterada" : "Falhou no Chrome"}`}
+        </div>
+        <div className="grid grid-cols-2 gap-2">
+          <button type="button" disabled={expired} onClick={() => void send({ kind: "scroll", deltaY: -500 })}
+            className="flex min-h-12 items-center justify-center gap-2 rounded-xl bg-blue-500/15 text-sm font-bold text-blue-200 disabled:opacity-40">
+            <ArrowUp className="h-4 w-4" /> Subir no Chrome
+          </button>
+          <button type="button" disabled={expired} onClick={() => void send({ kind: "scroll", deltaY: 500 })}
+            className="flex min-h-12 items-center justify-center gap-2 rounded-xl bg-blue-500/15 text-sm font-bold text-blue-200 disabled:opacity-40">
+            <ArrowDown className="h-4 w-4" /> Descer no Chrome
+          </button>
+        </div>
+        <p className="text-xs text-slate-400">Para rolar a pagina do Chrome use os botoes acima; para navegar pelo painel deslize fora da imagem.</p>
+        <div className="max-h-[52dvh] overflow-auto overscroll-contain rounded-xl border border-white/15 bg-black">
           {frameData?.image ? (
             <img
               src={frameData.image} alt="Previa ao vivo da aba selecionada no computador"
@@ -141,22 +160,12 @@ export default function H2AdsMobileRemoteViewer({ instanceId, instanceName, sess
               {frameRequest.isPending && <Loader2 className="h-6 w-6 animate-spin" />}
               {expired ? "A sessao terminou. Feche e inicie uma nova." :
                 waitingTooLong
-                  ? "Nenhuma imagem chegou. Use uma instancia de teste aberta depois de atualizar o agente Windows e ativar o controle remoto; instancias antigas nao recebem o recurso automaticamente. Confira tambem se ha apenas uma aba HTTP(S)."
+                  ? "Nenhuma imagem chegou. Use uma instancia de teste aberta depois de atualizar o agente Windows e ativar o controle remoto; instancias antigas nao recebem o recurso automaticamente. Se houver varias abas, escolha uma na lista acima."
                   : "Aguardando a aba escolhida no Chrome. Se houver varias abas, selecione a correta acima."}
             </div>
           )}
         </div>
 
-        {frameData?.lastInput && <p role="status" className="rounded-xl border border-white/15 bg-[#141922] px-3 py-2 text-xs text-slate-200">
-          Ultimo comando #{frameData.lastInput.id}: {frameData.lastInput.state === "queued" ? "Aguardando o Windows" :
-            frameData.lastInput.state === "sent" ? "Enviado ao Chrome" :
-            frameData.lastInput.state === "blocked" ? "Bloqueado: aba indisponivel ou alterada" :
-            "Falhou no Chrome"}.
-        </p>}
-        <div className="grid grid-cols-2 gap-2">
-          <button type="button" disabled={expired} onClick={() => void send({ kind: "scroll", deltaY: -500 })} className="flex min-h-12 items-center justify-center gap-2 rounded-xl bg-blue-500/15 text-sm font-bold text-blue-200 disabled:opacity-40"><ArrowUp className="h-4 w-4" /> Subir</button>
-          <button type="button" disabled={expired} onClick={() => void send({ kind: "scroll", deltaY: 500 })} className="flex min-h-12 items-center justify-center gap-2 rounded-xl bg-blue-500/15 text-sm font-bold text-blue-200 disabled:opacity-40"><ArrowDown className="h-4 w-4" /> Descer</button>
-        </div>
         <div className="rounded-xl border border-white/10 bg-[#141922] p-3">
           <label htmlFor="h2ads-mobile-remote-text" className="text-xs font-bold text-slate-300">Teclado do Android</label>
           <div className="mt-2 flex items-center gap-2">

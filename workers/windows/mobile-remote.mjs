@@ -110,19 +110,20 @@ export function startH2AdsMobileRemote({ browser, panelUrl, workerKey, workerTok
       await sendPage("Input.dispatchMouseEvent", { type: "mousePressed", button: "left", clickCount: 1, x, y });
       await sendPage("Input.dispatchMouseEvent", { type: "mouseReleased", button: "left", clickCount: 1, x, y });
     } else if (job.kind === "scroll" && Number.isFinite(job.deltaY)) {
-      // Scroll de toque funciona melhor em paginas com containers rolaveis
-      // e evita depender apenas de mouseWheel em abas abertas no Windows.
+      // O navegador H2ADS executa Chrome DESKTOP no Windows.
+      // Prioriza roda de mouse, que aciona a rolagem normal nesse ambiente.
+      // O gesto touch fica como fallback caso o CDP recuse a roda.
       const deltaY = Math.max(-800, Math.min(800, job.deltaY));
       const scrollPosition = { x: Math.round(width / 2), y: Math.round(height / 2) };
       try {
+        await sendPage("Input.dispatchMouseEvent", {
+          type: "mouseWheel", ...scrollPosition, deltaX: 0, deltaY,
+          pointerType: "mouse",
+        });
+      } catch {
         await sendPage("Input.synthesizeScrollGesture", {
           ...scrollPosition, yDistance: -deltaY, xDistance: 0,
           gestureSourceType: "touch", speed: 1200,
-        });
-      } catch {
-        // Compatibilidade com versões do Chrome que nao aceitam gesto touch.
-        await sendPage("Input.dispatchMouseEvent", {
-          type: "mouseWheel", ...scrollPosition, deltaX: 0, deltaY,
         });
       }
     } else if (job.kind === "text" && typeof job.text === "string" && job.text.length <= 180) {
