@@ -8,6 +8,7 @@ import { join } from "node:path";
 import { isValidCpf } from "../../client/src/lib/h2bicoCpfExtractor";
 import { parseScreenshotTsv, normalizeScreenshotName, isReviewableName } from "../h2bicoScreenshotOcr";
 import { alignScreenshotPhotoCrops } from "../h2bicoScreenshotCrop";
+import { suggestCpfFromMisreadDigits } from "../h2bicoCpfOcrSuggestion";
 const execFileAsync = promisify(execFile);
 import { sql } from "drizzle-orm";
 import { z } from "zod";
@@ -240,7 +241,8 @@ export const h2bicoRouter = router({
           }
         }catch(error){console.warn("[H2BICO OCR] releitura indisponivel:",error instanceof Error?error.message:"erro");}
       }
-      const cpfs=[...new Set(found.filter(row=>isValidCpf(row.cpf)).map(row=>row.cpf))];
+      const proposed=found.map(row=>({...row,cpfSuggestion:suggestCpfFromMisreadDigits(row.cpf)}));
+      const cpfs=[...new Set(proposed.filter(row=>isValidCpf(row.cpf)).map(row=>row.cpf))];
       const db=await dbOrThrow();
       const existing=new Set<string>();
       for(let start=0;start<cpfs.length;start+=250){
@@ -248,7 +250,7 @@ export const h2bicoRouter = router({
         const rows=await db.execute(sql`SELECT cpf FROM h2bico_records WHERE cpf IN (${sql.join(batch.map(cpf=>sql`${cpf}`),sql`, `)})`);
         for(const row of rows[0] as Array<{cpf:string}>)existing.add(String(row.cpf));
       }
-      return {width,height,persons:found.map(row=>({
+      return {width,height,persons:proposed.map(row=>({
         ...row,validCpf:isValidCpf(row.cpf),alreadyExists:existing.has(row.cpf),
       }))};
     }catch(error){
