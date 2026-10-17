@@ -66,7 +66,11 @@ describe("H2ADS Mobile fase 2: ligacoes seguras", () => {
     expect(viewer).toContain("mobileRemoteSelectTab.useMutation()");
     expect(viewer).toContain("Subir no Chrome");
     expect(viewer).toContain("Descer no Chrome");
-    expect(viewer).toContain("max-h-[52dvh]");
+    expect(viewer).toContain("h-[100dvh]");
+    expect(viewer).not.toContain("max-h-[52dvh]");
+    expect(viewer).toContain("Teclado e diagnostico");
+    expect(viewer).toContain("pointInChrome");
+    expect(read("workers/windows/mobile-remote.mjs")).toContain("Number.isFinite(job.x)");
     expect(viewer).toContain("instancias antigas nao recebem o recurso automaticamente");
   });
 });
