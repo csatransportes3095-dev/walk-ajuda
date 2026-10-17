@@ -9,6 +9,7 @@ import { isValidCpf } from "../../client/src/lib/h2bicoCpfExtractor";
 import { parseScreenshotTsv, normalizeScreenshotName, isReviewableName } from "../h2bicoScreenshotOcr";
 import { alignScreenshotPhotoCrops } from "../h2bicoScreenshotCrop";
 import { suggestCpfFromMisreadDigits } from "../h2bicoCpfOcrSuggestion";
+import { autoReadCpfLine } from "../h2bicoScreenshotAutoCpf";
 const execFileAsync = promisify(execFile);
 import { sql } from "drizzle-orm";
 import { z } from "zod";
@@ -240,6 +241,20 @@ export const h2bicoRouter = router({
             person.confidence=Math.min(person.confidence,45);
           }
         }catch(error){console.warn("[H2BICO OCR] releitura indisponivel:",error instanceof Error?error.message:"erro");}
+      }
+      for(let index=0;index<found.length;index++){
+        const person=found[index];
+        if(isValidCpf(person.cpf)||!person.cpfBox)continue;
+        const fixed=await autoReadCpfLine({
+          image:prepared,width,height,ocrWidth,ocrHeight,
+          box:person.cpfBox,original:person.cpf,temporaryDir:temp,index,
+        });
+        if(fixed){
+          person.cpf=fixed;
+          person.confidence=Math.max(person.confidence,85);
+          person.warnings=person.warnings.filter(w=>!w.includes("CONFIRA O NUMERO"));
+          person.warnings.push("CPF corrigido automaticamente por leituras independentes e digitos verificadores.");
+        }
       }
       const proposed=found.map(row=>({...row,cpfSuggestion:suggestCpfFromMisreadDigits(row.cpf)}));
       const cpfs=[...new Set(proposed.filter(row=>isValidCpf(row.cpf)).map(row=>row.cpf))];
