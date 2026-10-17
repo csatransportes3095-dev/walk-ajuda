@@ -40,8 +40,20 @@ export default function H2AdsMobileRemoteViewer({ instanceId, instanceName, sess
   const mutation = trpc.h2Ads.mobileRemoteInput.useMutation();
   const [text, setText] = useState("");
   const [zoom, setZoom] = useState(1);
+  const [waitingTooLong, setWaitingTooLong] = useState(false);
   const pointerOrigin = useRef<{ x: number; y: number } | null>(null);
   const expired = frameData?.active === false;
+
+  useEffect(() => {
+    if (frameData?.image || expired) {
+      setWaitingTooLong(false);
+      return;
+    }
+    // Nao reinicia o cronometro a cada consulta: mostra o diagnostico
+    // quando o Worker ainda nao enviou nenhuma imagem desta sessao.
+    const timer = window.setTimeout(() => setWaitingTooLong(true), 12_000);
+    return () => window.clearTimeout(timer);
+  }, [frameData?.image, expired, instanceId, sessionToken]);
 
   const send = async (command: Action) => {
     try {
@@ -93,7 +105,7 @@ export default function H2AdsMobileRemoteViewer({ instanceId, instanceName, sess
         </div>
 
         <div className="flex items-center justify-between rounded-xl border border-white/10 bg-[#141922] px-3 py-2">
-          <span className="text-xs font-bold text-slate-300">{expired ? "Sessao expirada" : frameData?.image ? "Previa disponivel" : "Aguardando imagem da aba..."}</span>
+          <span className="text-xs font-bold text-slate-300">{expired ? "Sessao expirada" : frameData?.image ? "Previa disponivel" : waitingTooLong ? "Sem imagem do Chrome" : "Aguardando imagem da aba..."}</span>
           <div className="flex items-center gap-2">
             <button type="button" onClick={() => setZoom(z => Math.max(1, Math.round((z - 0.25) * 100) / 100))} aria-label="Diminuir zoom" className="rounded-lg border border-white/15 p-2"><Minus className="h-4 w-4" /></button>
             <span className="text-xs font-bold">{Math.round(zoom * 100)}%</span>
@@ -116,7 +128,9 @@ export default function H2AdsMobileRemoteViewer({ instanceId, instanceName, sess
             <div className="flex min-h-64 flex-col items-center justify-center gap-3 px-6 text-center text-sm text-slate-400">
               {frameRequest.isPending && <Loader2 className="h-6 w-6 animate-spin" />}
               {expired ? "A sessao terminou. Feche e inicie uma nova." :
-                "Aguardando uma unica aba HTTP(S) aberta no Chrome. Feche outras abas web da instancia para evitar controlar a pagina errada."}
+                waitingTooLong
+                  ? "Nenhuma imagem chegou. Use uma instancia de teste aberta depois de atualizar o agente Windows e ativar o controle remoto; instancias antigas nao recebem o recurso automaticamente. Confira tambem se ha apenas uma aba HTTP(S)."
+                  : "Aguardando uma unica aba HTTP(S) aberta no Chrome. Se houver varias abas web, o piloto bloqueia o controle para evitar a pagina errada."}
             </div>
           )}
         </div>
