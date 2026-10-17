@@ -14,7 +14,7 @@ export default function H2AdsMobileRemoteViewer({ instanceId, instanceName, sess
 }) {
   // POST para o token nunca ir para a URL nem logs de query string.
   const frameRequest = trpc.h2Ads.mobileRemoteFrame.useMutation();
-  const [frameData, setFrameData] = useState<{ active: boolean; image: string | null; at: number | null } | null>(null);
+  const [frameData, setFrameData] = useState<{ active: boolean; image: string | null; at: number | null; lastInput?: { id: number; kind: string; state: "queued" | "sent" | "blocked" | "failed"; reason: string | null } | null } | null>(null);
   const requestRef = useRef(frameRequest.mutateAsync);
   requestRef.current = frameRequest.mutateAsync;
 
@@ -135,6 +135,12 @@ export default function H2AdsMobileRemoteViewer({ instanceId, instanceName, sess
           )}
         </div>
 
+        {frameData?.lastInput && <p role="status" className="rounded-xl border border-white/15 bg-[#141922] px-3 py-2 text-xs text-slate-200">
+          Ultimo comando #{frameData.lastInput.id}: {frameData.lastInput.state === "queued" ? "Aguardando o Windows" :
+            frameData.lastInput.state === "sent" ? "Enviado ao Chrome" :
+            frameData.lastInput.state === "blocked" ? "Bloqueado: aba indisponivel ou alterada" :
+            "Falhou no Chrome"}.
+        </p>}
         <div className="grid grid-cols-2 gap-2">
           <button type="button" disabled={expired} onClick={() => void send({ kind: "scroll", deltaY: -500 })} className="flex min-h-12 items-center justify-center gap-2 rounded-xl bg-blue-500/15 text-sm font-bold text-blue-200 disabled:opacity-40"><ArrowUp className="h-4 w-4" /> Subir</button>
           <button type="button" disabled={expired} onClick={() => void send({ kind: "scroll", deltaY: 500 })} className="flex min-h-12 items-center justify-center gap-2 rounded-xl bg-blue-500/15 text-sm font-bold text-blue-200 disabled:opacity-40"><ArrowDown className="h-4 w-4" /> Descer</button>
