@@ -1,4 +1,4 @@
-import { useRef, useState } from "react";
+import { useEffect, useRef, useState } from "react";
 import { toast } from "sonner";
 import { ArrowDown, ArrowUp, Loader2, Minus, Plus, Send, X } from "lucide-react";
 import { trpc } from "@/lib/trpc";
@@ -12,14 +12,36 @@ export default function H2AdsMobileRemoteViewer({ instanceId, instanceName, sess
   sessionToken: string;
   onClose: () => void;
 }) {
-  const frame = trpc.h2Ads.mobileRemoteFrame.useQuery({ instanceId, sessionToken }, {
-    refetchInterval: 1_400, refetchOnWindowFocus: true, staleTime: 0, retry: false,
-  });
+  // POST para o token nunca ir para a URL nem logs de query string.
+  const frameRequest = trpc.h2Ads.mobileRemoteFrame.useMutation();
+  const [frameData, setFrameData] = useState<{ active: boolean; image: string | null; at: number | null } | null>(null);
+  const requestRef = useRef(frameRequest.mutateAsync);
+  requestRef.current = frameRequest.mutateAsync;
+
+  useEffect(() => {
+    let disposed = false;
+    let inflight = false;
+    const fetchFrame = async () => {
+      if (disposed || inflight || document.visibilityState === "hidden") return;
+      inflight = true;
+      try {
+        const value = await requestRef.current({ instanceId, sessionToken });
+        if (!disposed) setFrameData(value);
+      } catch {
+        if (!disposed) setFrameData(previous => previous || { active: false, image: null, at: null });
+      } finally {
+        inflight = false;
+      }
+    };
+    void fetchFrame();
+    const timer = window.setInterval(() => { void fetchFrame(); }, 1_400);
+    return () => { disposed = true; window.clearInterval(timer); };
+  }, [instanceId, sessionToken]);
   const mutation = trpc.h2Ads.mobileRemoteInput.useMutation();
   const [text, setText] = useState("");
   const [zoom, setZoom] = useState(1);
   const pointerOrigin = useRef<{ x: number; y: number } | null>(null);
-  const expired = frame.data?.active === false;
+  const expired = frameData?.active === false;
 
   const send = async (command: Action) => {
     try {
@@ -71,7 +93,7 @@ export default function H2AdsMobileRemoteViewer({ instanceId, instanceName, sess
         </div>
 
         <div className="flex items-center justify-between rounded-xl border border-white/10 bg-[#141922] px-3 py-2">
-          <span className="text-xs font-bold text-slate-300">{expired ? "Sessao expirada" : frame.data?.image ? "Previa disponivel" : "Aguardando imagem da aba..."}</span>
+          <span className="text-xs font-bold text-slate-300">{expired ? "Sessao expirada" : frameData?.image ? "Previa disponivel" : "Aguardando imagem da aba..."}</span>
           <div className="flex items-center gap-2">
             <button type="button" onClick={() => setZoom(z => Math.max(1, Math.round((z - 0.25) * 100) / 100))} aria-label="Diminuir zoom" className="rounded-lg border border-white/15 p-2"><Minus className="h-4 w-4" /></button>
             <span className="text-xs font-bold">{Math.round(zoom * 100)}%</span>
@@ -80,7 +102,7 @@ export default function H2AdsMobileRemoteViewer({ instanceId, instanceName, sess
         </div>
 
         <div className="overflow-auto rounded-xl border border-white/15 bg-black">
-          {frame.data?.image ? (
+          {frameData?.image ? (
             <img
               src={frame.data.image} alt="Previa ao vivo da aba selecionada no computador"
               className="block w-full select-none"
@@ -92,7 +114,7 @@ export default function H2AdsMobileRemoteViewer({ instanceId, instanceName, sess
             />
           ) : (
             <div className="flex min-h-64 flex-col items-center justify-center gap-3 px-6 text-center text-sm text-slate-400">
-              {frame.isFetching && <Loader2 className="h-6 w-6 animate-spin" />}
+              {frameRequest.isPending && <Loader2 className="h-6 w-6 animate-spin" />}
               {expired ? "A sessao terminou. Feche e inicie uma nova." :
                 "Aguardando uma aba HTTP(S) ativa no Chrome. A aba inicial local do H2ADS nao e transmitida."}
             </div>
