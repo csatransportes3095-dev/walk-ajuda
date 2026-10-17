@@ -60,7 +60,7 @@ jobs:
           node --check workers/windows/mobile-remote.mjs
 
       - name: Run H2 Ads tests
-        run: pnpm vitest run server/h2adsWorkerRoute.test.ts server/h2adsWorkerFoundation.test.ts server/h2adsWorkerErrorGuard.test.ts server/h2adsOrderBrowserShortcut.test.ts server/h2adsMobileRemoteBridge.test.ts server/h2adsEntryRoute.test.ts
+        run: pnpm vitest run server/h2adsWorkerRoute.test.ts server/h2adsWorkerFoundation.test.ts server/h2adsWorkerErrorGuard.test.ts server/h2adsOrderBrowserShortcut.test.ts server/h2adsMobileRemoteBridge.test.ts server/h2adsEntryRoute.test.ts server/h2adsMobilePhase2Wiring.test.ts
 
       - name: Build production bundle
         run: pnpm build
