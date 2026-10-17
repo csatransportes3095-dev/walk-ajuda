@@ -1,5 +1,6 @@
 
-import { useRef, useState } from "react";
+import { useCallback, useEffect, useRef, useState } from "react";
+import { ClipboardPaste } from "lucide-react";
 import { toast } from "sonner";
 import { trpc } from "@/lib/trpc";
 import { isValidCpf } from "@/lib/h2bicoCpfExtractor";
@@ -52,50 +53,135 @@ export default function H2BicoScreenshotImporter(){
   const [busy,setBusy]=useState(false);
   const [saving,setSaving]=useState(false);
   const [status,setStatus]=useState("");
+  // Fila sem limite artificial de quantidade: cada imagem e analisada separadamente.
+  const pendingRef=useRef<File[]>([]);
+  const runningRef=useRef(false);
+  const savingRef=useRef(false);
+  const photoUrlsRef=useRef(new Set<string>());
+  const [pendingCount,setPendingCount]=useState(0);
+  const [processedCount,setProcessedCount]=useState(0);
+  const nextPrintNumber=useRef(0);
+
+  useEffect(()=>()=>{for(const url of photoUrlsRef.current)URL.revokeObjectURL(url);photoUrlsRef.current.clear();},[]);
   const analyze=trpc.h2bico.analyzeScreenshot.useMutation();
   const save=trpc.h2bico.importScreenshotRecord.useMutation();
   const utils=trpc.useUtils();
   const update=(id:string,patch:Partial<Item>)=>setItems(current=>current.map(item=>item.id===id?{...item,...patch}:item));
-  const inspect=async(files:FileList|File[])=>{
-    if(busy||saving)return;
-    const chosen=Array.from(files).slice(0,12);
-    if(!chosen.length)return;
+  const processQueue=useCallback(async()=>{
+    if(runningRef.current||savingRef.current)return;
+    runningRef.current=true;
     setBusy(true);
     try{
-      for(let index=0;index<chosen.length;index++){
-        const file=chosen[index];
-        setStatus("Analisando "+(index+1)+"/"+chosen.length+": "+file.name);
+      while(pendingRef.current.length){
+        const file=pendingRef.current.shift()!;
+        setPendingCount(pendingRef.current.length);
+        const number=++nextPrintNumber.current;
+        setStatus("Analisando print "+number+" • "+file.name);
         try{
-          if(!["image/jpeg","image/png","image/webp"].includes(file.type)||file.size>10*1024*1024)
-            throw new Error("Use JPG, PNG ou WEBP com até 10 MB.");
+          if(!["image/jpeg","image/png","image/webp"].includes(file.type)||file.size>10*1024*1024||file.size===0)
+            throw new Error("Use JPG, PNG ou WEBP com até 10 MB por imagem.");
           const base64=await readBase64(file);
           const analysis=await analyze.mutateAsync({base64});
-          const photo="data:"+file.type+";base64,"+base64;
-          const incoming:Item[]=analysis.persons.map((p,i)=>({
-            id:Date.now()+"-"+index+"-"+i+"-"+Math.random(),source:file.name,photo,
-            name:p.name,cpf:p.cpf,crop:p.crop,width:analysis.width,height:analysis.height,
-            existing:p.alreadyExists,selected:!p.alreadyExists&&p.validCpf&&p.name.length>5,
-            warnings:p.warnings,
-          }));
-          setItems(current=>{
-            const known=new Set(current.map(item=>digits(item.cpf)));
-            const merged=[...current];
-            for(const person of incoming){
-              if(known.has(person.cpf)){person.selected=false;person.warnings.push("CPF repetido em outro print.");}
-              else known.add(person.cpf);
-              merged.push(person);
-            }
-            return merged;
-          });
-          if(!incoming.length)toast.warning(file.name+": nenhum CPF identificado.");
+          if(analysis.persons.length){
+            // Mantem a foto uma unica vez, via Blob URL, em vez de copiar um
+            // base64 grande para cada pessoa encontrada no mesmo print.
+            const photo=URL.createObjectURL(file);
+            photoUrlsRef.current.add(photo);
+            const incoming:Item[]=analysis.persons.map((p,i)=>({
+              id:Date.now()+"-"+number+"-"+i+"-"+Math.random(),
+              source:file.name,photo,name:p.name,cpf:p.cpf,crop:p.crop,
+              width:analysis.width,height:analysis.height,
+              existing:p.alreadyExists,
+              selected:!p.alreadyExists&&p.validCpf&&p.name.length>5,
+              warnings:[...p.warnings],
+            }));
+            setItems(current=>{
+              const known=new Set(current.map(item=>digits(item.cpf)));
+              const merged=[...current];
+              for(const person of incoming){
+                if(known.has(person.cpf)){
+                  person.selected=false;
+                  person.warnings.push("CPF repetido em outro print.");
+                }else known.add(person.cpf);
+                merged.push(person);
+              }
+              return merged;
+            });
+          }else toast.warning(file.name+": nenhum CPF identificado.");
         }catch(error){
           toast.error(file.name+": "+(error instanceof Error?error.message:"Falha na leitura"));
+        }finally{
+          setProcessedCount(count=>count+1);
         }
       }
-    }finally{setBusy(false);setStatus("");}
+    }finally{
+      runningRef.current=false;
+      setBusy(false);
+      setStatus("");
+    }
+  },[analyze]);
+
+  const inspect=useCallback((files:FileList|File[])=>{
+    if(savingRef.current){
+      toast.warning("Aguarde o salvamento terminar antes de adicionar prints.");
+      return;
+    }
+    const chosen=Array.from(files);
+    if(!chosen.length)return;
+    pendingRef.current.push(...chosen);
+    setPendingCount(pendingRef.current.length);
+    void processQueue();
+  },[processQueue]);
+
+  // Botao explicito para ler imagens da area de transferencia.
+  const pasteFromClipboard=async()=>{
+    if(savingRef.current)return;
+    if(!navigator.clipboard?.read){
+      toast.info("Use Ctrl+V para colar o print neste painel.");
+      return;
+    }
+    try{
+      const clips=await navigator.clipboard.read();
+      const files:File[]=[];
+      for(const clip of clips){
+        const imageType=clip.types.find(type=>["image/png","image/jpeg","image/webp"].includes(type));
+        if(!imageType)continue;
+        const blob=await clip.getType(imageType);
+        const ext=imageType==="image/png"?"png":imageType==="image/webp"?"webp":"jpg";
+        files.push(new File([blob],"print-colado-"+Date.now()+"-"+(files.length+1)+"."+ext,{type:imageType}));
+      }
+      if(!files.length){toast.warning("Copie uma imagem ou tire um print antes de clicar em COLAR PRINT.");return;}
+      inspect(files);
+    }catch{
+      toast.error("O navegador não permitiu ler o clipboard. Experimente Ctrl+V.");
+    }
+  };
+
+  // Ctrl+V em qualquer ponto da pagina; nao interfere com textos normais.
+  useEffect(()=>{
+    const handlePaste=(event:ClipboardEvent)=>{
+      const files=Array.from(event.clipboardData?.items||[])
+        .filter(item=>item.kind==="file"&&["image/png","image/jpeg","image/webp"].includes(item.type))
+        .map(item=>item.getAsFile()).filter((file):file is File=>file!==null);
+      if(!files.length)return;
+      event.preventDefault();
+      inspect(files);
+    };
+    document.addEventListener("paste",handlePaste);
+    return ()=>document.removeEventListener("paste",handlePaste);
+  },[inspect]);
+
+  const clearResults=()=>{
+    if(runningRef.current||savingRef.current)return;
+    for(const url of photoUrlsRef.current)URL.revokeObjectURL(url);
+    photoUrlsRef.current.clear();
+    setItems([]);
+    setProcessedCount(0);
+    nextPrintNumber.current=0;
   };
   const saveAll=async()=>{
-    if(saving||busy)return;
+    if(savingRef.current||runningRef.current||pendingRef.current.length)return;
+    savingRef.current=true;
     setSaving(true);
     let imported=0,duplicates=0,errors=0;
     try{
@@ -114,7 +200,7 @@ export default function H2BicoScreenshotImporter(){
       }
       await utils.h2bico.invalidate();
       toast.info("Concluído: "+imported+" novo(s), "+duplicates+" duplicado(s), "+errors+" erro(s).");
-    }finally{setSaving(false);setStatus("");}
+    }finally{savingRef.current=false;setSaving(false);setStatus("");}
   };
   const selected=items.filter(item=>item.selected&&!item.saved);
   return <Card className="border-cyan-500/30 bg-gray-900 p-4 space-y-3 text-white">
@@ -125,17 +211,24 @@ export default function H2BicoScreenshotImporter(){
     </div>
     <input ref={input} type="file" accept="image/png,image/jpeg,image/webp" multiple className="hidden"
       onChange={e=>{if(e.target.files)void inspect(e.target.files);e.currentTarget.value="";}}/>
-    <div onDragOver={e=>e.preventDefault()} onDrop={e=>{e.preventDefault();void inspect(e.dataTransfer.files);}}
+    <div onDragOver={e=>e.preventDefault()} onDrop={e=>{e.preventDefault();inspect(e.dataTransfer.files);}}
       className="rounded-xl border-2 border-dashed border-cyan-400/40 p-4 text-center">
-      <Button type="button" onClick={()=>input.current?.click()} disabled={busy||saving}>SELECIONAR OU ARRASTAR PRINTS</Button>
-      <p className="mt-2 text-xs text-gray-400">Até 12 prints por lote, 10 MB por arquivo. OCR em português; revisão obrigatória.</p>
+      <div className="flex flex-wrap items-center justify-center gap-3">
+        <Button type="button" onClick={()=>input.current?.click()} disabled={saving}>SELECIONAR OU ARRASTAR PRINTS</Button>
+        <Button type="button" onClick={()=>void pasteFromClipboard()} disabled={saving}
+          className="bg-emerald-600 font-black text-white hover:bg-emerald-500">
+          <ClipboardPaste className="mr-2 h-4 w-4"/>COLAR PRINT
+        </Button>
+      </div>
+      <p className="mt-2 text-xs text-gray-400">Sem limite fixo de quantidade: cole quantos prints quiser, inclusive com Ctrl+V. Processamento individual em fila, até 10 MB por imagem. Confira os dados antes de salvar.</p>
+      {(busy||pendingCount>0)&&<p role="status" className="mt-2 text-sm font-semibold text-cyan-300">Processados: {processedCount} • Aguardando na fila: {pendingCount} • Processando um print por vez</p>}
     </div>
     {status&&<p role="status" className="text-sm text-amber-200">{status}</p>}
     {items.length>0&&<>
       <div className="flex flex-wrap items-center justify-between gap-2">
         <div className="text-sm font-bold">{items.length} identificado(s) • {items.filter(x=>x.existing).length} já cadastrado(s) • {selected.length} selecionado(s)</div>
         <div className="flex gap-2">
-          <Button disabled={saving||busy} variant="outline" onClick={()=>setItems([])}>LIMPAR</Button>
+          <Button disabled={saving||busy} variant="outline" onClick={clearResults}>LIMPAR</Button>
           <Button disabled={saving||busy||!selected.length} onClick={()=>void saveAll()}>{saving?"SALVANDO...":"SALVAR "+selected.length+" NO H2BICO"}</Button>
         </div>
       </div>
