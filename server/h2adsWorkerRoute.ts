@@ -114,6 +114,14 @@ export function registerH2AdsWorkerRoute(app: Express): void {
 
   // Transporte Worker -> servidor: requests autenticadas; quadros somente em RAM.
   // O Worker nunca recebe o token de sessao do ADM e vice-versa.
+  app.get("/api/h2ads/worker/windows-mobile-remote.mjs", (_req: Request, res: Response) => {
+    noStore(res);
+    const remotePath = path.resolve(process.cwd(), "workers", "windows", "mobile-remote.mjs");
+    res.download(remotePath, "mobile-remote.mjs", (error) => {
+      if (error && !res.headersSent) res.status(404).json({ error: "Complemento mobile nao disponivel." });
+    });
+  });
+
   app.post("/api/h2ads/worker/mobile/:instanceId/next", safeH2AdsWorkerRoute(async (req: Request, res: Response) => {
     noStore(res);
     if (!h2AdsMobileRemoteEnabled() || isSystemRestoreLocked()) { res.status(204).end(); return; }
