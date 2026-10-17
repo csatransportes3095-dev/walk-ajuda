@@ -1,5 +1,5 @@
 import { type FormEvent, type ReactNode, useMemo, useState } from "react";
-import { useLocation } from "wouter";
+import { Link, useLocation } from "wouter";
 import { toast } from "sonner";
 import { Activity, ArrowDown, ArrowLeft, ArrowUp, ArrowUpDown, CheckCircle2, ChevronDown, ChevronRight, Copy, Eye, EyeOff, FolderPlus, KeyRound, Layers3, LockKeyhole, Monitor, Network, Pencil, Play, Plus, Search, ShieldCheck, Square, Trash2, Wifi, WifiOff, X } from "lucide-react";
 import { trpc } from "@/lib/trpc";
@@ -454,6 +454,10 @@ Isso encerra somente os browsers abertos. Grupos, clientes vinculados, proxies e
     </div></header>
     <main className="relative mx-auto max-w-none px-4 py-7 sm:px-6 sm:py-10 lg:px-5 2xl:px-8">
       <section className="grid gap-6 lg:grid-cols-[1fr_300px]"><div><div className="inline-flex items-center gap-2 rounded-full border border-[#148CFF]/25 bg-[#148CFF]/10 px-3 py-1.5 text-xs font-bold text-[#8CC8FF]"><Activity className="h-3.5 w-3.5" />Painel de instâncias autorizado</div><h2 className="mt-4 text-3xl font-black tracking-tight text-white sm:text-4xl">Uma rota por instância, sem confusão.</h2><p className="mt-3 max-w-2xl text-sm leading-6 text-slate-400">Edite, substitua e teste a rota no cartão da própria instância. Grupos, instâncias e configurações permanecem isolados de todas as outras áreas.</p></div><aside className="rounded-2xl border border-[#F5B800]/25 bg-gradient-to-br from-[#171208]/90 to-[#101823]/90 p-4"><p className="text-xs font-bold uppercase tracking-[0.16em] text-[#FFE37A]">Uso direto</p><p className="mt-1 text-sm font-semibold text-white">Rota individual por instância</p><p className="mt-3 text-xs leading-5 text-slate-400">Abasteça a fila de proxies uma vez. As novas instâncias criadas pelos pedidos usam o próximo proxy disponível e o WALK1 automaticamente.</p></aside></section>
+      <section className="mt-5 flex flex-col items-start gap-2 rounded-2xl border border-[#148CFF]/30 bg-[#148CFF]/[0.06] p-4 sm:flex-row sm:items-center sm:justify-between">
+        <div><p className="text-sm font-black text-white">H2ADS Mobile</p><p className="mt-1 text-xs text-slate-400">Controle de instâncias pelo celular: status e comandos de preparação, abertura e fechamento.</p></div>
+        <Link href="/h2ads/mobile" className="inline-flex min-h-11 items-center justify-center gap-2 rounded-xl bg-[#148CFF] px-5 text-sm font-black text-white"><Monitor className="h-4 w-4" /> Abrir painel Mobile</Link>
+      </section>
       <section className="mt-7 grid gap-3 sm:grid-cols-4"><Metric icon={Layers3} value={groups.length} label="grupos" text="Organização própria do módulo." tone="gold" /><Metric icon={Monitor} value={instances.length} label="instâncias" text="Cada uma possui rota própria." tone="blue" /><Metric icon={WifiOff} value={credentialStatuses.length} label="rotas vinculadas" text="Teste manual por instância." tone="red" /><Metric icon={Wifi} value={browserWorkers.filter(worker => worker.connectionStatus === "online").length} label="Workers online" text={`${browserWorkers.length} computador(es) autorizado(s).`} tone="blue" /></section>
       <section className="mt-6 overflow-hidden rounded-3xl border border-cyan-400/20 bg-[#0D1016]/90 shadow-[0_20px_60px_rgba(0,0,0,0.24)]">
         <header className="flex flex-col gap-3 border-b border-white/10 px-5 py-5 sm:flex-row sm:items-center sm:justify-between sm:px-6">
