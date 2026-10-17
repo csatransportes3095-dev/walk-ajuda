@@ -34,7 +34,8 @@ describe("H2ADS Mobile fase 2: ligacoes seguras", () => {
     expect(browser).not.toContain("--remote-debugging-port");
     expect(browser).toContain('["ignore", "ignore", "ignore", "pipe", "pipe"]');
     expect(read("workers/windows/mobile-remote.mjs")).toContain("Target.attachToTarget");
-    expect(read("workers/windows/mobile-remote.mjs")).toContain("eligible.length !== 1");
+    expect(read("workers/windows/mobile-remote.mjs")).toContain("selectedTargetId");
+    expect(read("workers/windows/mobile-remote.mjs")).toContain('remoteRequest("tabs"');
     expect(read("workers/windows/mobile-remote.mjs")).toContain('inputBuffer.indexOf("\\0")');
     expect(workerRoute).toContain("authenticateRequest(req, res)");
     expect(workerRoute).toContain("MOBILE_REMOTE_MAX_FRAME_BYTES");
@@ -45,7 +46,8 @@ describe("H2ADS Mobile fase 2: ligacoes seguras", () => {
     expect(remote).toContain("let pinnedLeaseId = null");
     expect(remote).toContain("let pinnedTargetId = null");
     expect(remote).toContain("if (work.workerLeaseId !== pinnedLeaseId)");
-    expect(remote).toContain("if (target.targetId !== pinnedTargetId) return");
+    expect(remote).toContain("if (target.targetId !== pinnedTargetId) {");
+    expect(remote).toContain("work.selectedTargetId === target.targetId");
     expect(remote).toContain('Target.getTargetInfo');
     expect(remote).toContain('Page.bringToFront');
     expect(remote).toContain('Input.synthesizeScrollGesture');
@@ -61,6 +63,7 @@ describe("H2ADS Mobile fase 2: ligacoes seguras", () => {
     expect(viewer).toContain('kind: "key"');
     expect(viewer).toContain("frameRequest.mutateAsync");
     expect(viewer).toContain("waitingTooLong");
+    expect(viewer).toContain("mobileRemoteSelectTab.useMutation()");
     expect(viewer).toContain("instancias antigas nao recebem o recurso automaticamente");
   });
 });

@@ -204,7 +204,16 @@ export const h2AdsRouter = {
     const active = h2AdsMobileBridge.heartbeat(input.instanceId, input.sessionToken);
     if (!active) return { active: false as const, image: null, at: null };
     const frame = h2AdsMobileBridge.readFrame(input.instanceId, input.sessionToken);
-    return { active: true as const, image: frame ? `data:image/jpeg;base64,${frame.jpeg.toString("base64")}` : null, at: frame?.at ?? null };
+    return { active: true as const, image: frame ? `data:image/jpeg;base64,${frame.jpeg.toString("base64")}` : null, at: frame?.at ?? null, lastInput: h2AdsMobileBridge.lastInputStatus(input.instanceId, input.sessionToken), tabStatus: h2AdsMobileBridge.tabStatus(input.instanceId, input.sessionToken) };
+  }),
+  mobileRemoteSelectTab: adminProcedure.input(z.object({
+    instanceId: z.number().int().positive(), sessionToken: z.string().min(32).max(64),
+    targetId: z.string().min(1).max(128),
+  }).strict()).mutation(({ input }) => {
+    if (!h2AdsMobileRemoteEnabled() || !h2AdsMobileBridge.selectTab(input.instanceId, input.sessionToken, input.targetId)) {
+      throw new TRPCError({ code: "CONFLICT", message: "Aba nao disponivel nesta sessao." });
+    }
+    return { selected: true };
   }),
   mobileRemoteInput: adminProcedure.input(z.object({
     instanceId: z.number().int().positive(),
