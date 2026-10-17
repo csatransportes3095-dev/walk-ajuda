@@ -1,4 +1,4 @@
-import { useMemo, useRef, useState } from "react";
+import { useEffect, useMemo, useRef, useState } from "react";
 import { useLocation } from "wouter";
 import { Archive, CheckCircle2, Copy, Eye, EyeOff, FileText, FolderOpen, Images, Search, UploadCloud, UserCheck, XCircle } from "lucide-react";
 import { toast } from "sonner";
@@ -8,7 +8,7 @@ import { Card } from "@/components/ui/card";
 import { Input } from "@/components/ui/input";
 import { Textarea } from "@/components/ui/textarea";
 import { trpc } from "@/lib/trpc";
-import { extractCpfsFromText, H2BICO_CPF_MAX_FILES, readCpfSourceFile } from "@/lib/h2bicoCpfExtractor";
+import { extractCpfCandidatesFromText, isValidCpf, H2BICO_CPF_MAX_FILES, readCpfSourceFile } from "@/lib/h2bicoCpfExtractor";
 
 const STATUS:any = {available:"Disponível",reserved:"Reservado",in_use:"Em uso",used:"Usado",archived:"Arquivado"};
 const maskCpf=(cpf:string)=> cpf?.length===11 ? `${cpf.slice(0,3)}.***.***-${cpf.slice(-2)}` : cpf;
@@ -93,6 +93,7 @@ export default function AdminH2Bico(){
   const [progress,setProgress]=useState({done:0,total:0,name:""});
   const [summary,setSummary]=useState<{imported:number;repaired:number;duplicates:number;errors:number}|null>(null);
   const [extractText,setExtractText]=useState("");
+  const [cpfCheck,setCpfCheck]=useState<{key:string;existing:string[];error?:string}|null>(null);
   const [brokenPhotos,setBrokenPhotos]=useState<Set<number>>(new Set());
   const utils=trpc.useUtils();
 
@@ -122,7 +123,33 @@ export default function AdminH2Bico(){
   });
 
   const existingCpfs=useMemo(()=>new Set((allRecords.data||[]).map((r:any)=>String(r.cpf))),[allRecords.data]);
-  const cpfs=useMemo(()=>extractCpfsFromText(extractText),[extractText]);
+  const candidates=useMemo(()=>extractCpfCandidatesFromText(extractText),[extractText]);
+  const validCpfs=useMemo(()=>candidates.filter(isValidCpf),[candidates]);
+  const cpfKey=validCpfs.join(",");
+  const checkReady=cpfCheck?.key===cpfKey && !cpfCheck.error;
+  const checkingCpfs=validCpfs.length>0 && cpfCheck?.key!==cpfKey;
+  const savedCpfs=useMemo(()=>new Set(cpfCheck?.existing||[]),[cpfCheck]);
+  const cpfs=useMemo(()=>checkReady?validCpfs.filter(cpf=>!savedCpfs.has(cpf)):[],[checkReady,validCpfs,savedCpfs]);
+  useEffect(()=>{
+    if(!validCpfs.length){setCpfCheck({key:cpfKey,existing:[]});return;}
+    let cancelled=false;
+    const timer=window.setTimeout(async()=>{
+      try{
+        const existing=new Set<string>();
+        for(let i=0;i<validCpfs.length;i+=300){
+          const response=await utils.h2bico.checkExtractedCpfs.fetch({cpfs:validCpfs.slice(i,i+300)}, {staleTime:0});
+          if(cancelled)return;
+          response.existing.forEach(cpf=>existing.add(cpf));
+        }
+        if(!cancelled)setCpfCheck({key:cpfKey,existing:[...existing]});
+      }catch(error){
+        if(!cancelled)setCpfCheck({key:cpfKey,existing:[],error:error instanceof Error?error.message:"Falha na consulta"});
+      }
+    },250);
+    return ()=>{cancelled=true;window.clearTimeout(timer);};
+  },[cpfKey,utils.h2bico.checkExtractedCpfs]);
+  const rejectedCount=candidates.length-validCpfs.length;
+  const savedCount=checkReady?savedCpfs.size:0;
   const importCpfFiles=async(files:FileList|File[])=>{
     if(readingCpfFiles) return;
     const selected=Array.from(files).slice(0,H2BICO_CPF_MAX_FILES);
@@ -133,7 +160,7 @@ export default function AdminH2Bico(){
     for(const file of selected){
       try{
         const content=await readCpfSourceFile(file);
-        const extracted=extractCpfsFromText(content);
+        const extracted=extractCpfCandidatesFromText(content);
         found.push(...extracted);
         added+=extracted.length;
         read++;
@@ -147,7 +174,7 @@ export default function AdminH2Bico(){
     setReadingCpfFiles(false);
   };
   const copyAllCpfs=async()=>{
-    if(!cpfs.length) return;
+    if(!checkReady || !cpfs.length) return;
     try{
       await navigator.clipboard.writeText(cpfs.join("\n"));
       toast.success(`${cpfs.length} CPF(s) copiado(s), um por linha.`);
@@ -324,10 +351,18 @@ export default function AdminH2Bico(){
         <div className="flex flex-wrap items-center justify-between gap-3">
           <div className="font-semibold flex items-center gap-2"><FileText className="w-4 h-4"/>Extrator de CPF <span className="rounded-md bg-emerald-500/15 px-2 py-1 text-xs font-bold text-emerald-300">{cpfs.length} CPF(s)</span></div>
           <div className="flex flex-wrap gap-2">
-            <Button type="button" onClick={()=>void copyAllCpfs()} disabled={!cpfs.length}><Copy className="w-4 h-4 mr-2"/>COPIAR TODOS</Button>
+            <Button type="button" onClick={()=>void copyAllCpfs()} disabled={!checkReady||!cpfs.length}><Copy className="w-4 h-4 mr-2"/>COPIAR TODOS</Button>
             <Button type="button" variant="outline" disabled={!extractText&& !cpfFileReport} onClick={()=>{setExtractText("");setCpfFileReport("");}}><XCircle className="w-4 h-4 mr-2"/>LIMPAR</Button>
           </div>
         </div>
+        <div className="grid grid-cols-2 sm:grid-cols-4 gap-2 text-center text-xs">
+          <div className="rounded-lg bg-slate-800 p-2">Encontrados<br/><strong className="text-lg">{candidates.length}</strong></div>
+          <div className="rounded-lg bg-red-950/50 p-2">Inválidos descartados<br/><strong className="text-lg text-red-300">{rejectedCount}</strong></div>
+          <div className="rounded-lg bg-amber-950/40 p-2">Foto já salva<br/><strong className="text-lg text-amber-300">{checkReady?savedCount:"—"}</strong></div>
+          <div className="rounded-lg bg-emerald-950/40 p-2">Novos para copiar<br/><strong className="text-lg text-emerald-300">{checkReady?cpfs.length:"—"}</strong></div>
+        </div>
+        {checkingCpfs&&<p role="status" className="text-amber-300 text-sm">Consultando o banco de fotos. Aguarde a verificação para copiar.</p>}
+        {cpfCheck?.key===cpfKey&&cpfCheck.error&&<div role="alert" className="text-red-300 text-sm">Falha ao verificar o banco: {cpfCheck.error}. A cópia está bloqueada. <Button type="button" variant="outline" size="sm" onClick={()=>setCpfCheck(null)}>TENTAR NOVAMENTE</Button></div>}
         <input ref={cpfFileRef} type="file" multiple className="hidden" accept=".txt,.csv,.log,.md,.rtf,.htm,.html,.xml,.docx,.doc"
           onChange={e=>{if(e.target.files)void importCpfFiles(e.target.files);e.currentTarget.value="";}}/>
         <div className="rounded-xl border-2 border-dashed border-cyan-400/40 bg-cyan-500/5 p-5 text-center transition hover:border-cyan-300"
@@ -341,7 +376,7 @@ export default function AdminH2Bico(){
           {cpfFileReport&&<p role="status" className="mt-2 text-xs text-emerald-300">{cpfFileReport}</p>}
         </div>
         <Textarea placeholder="Ou cole aqui o texto com vários CPFs..." value={extractText} onChange={e=>setExtractText(e.target.value)}/>
-        {cpfs.length>0&&<Textarea readOnly value={cpfs.join("\n")} className="font-mono min-h-28" aria-label="CPFs extraídos, um por linha"/>}
+        {checkReady&&cpfs.length>0&&<Textarea readOnly value={cpfs.join("\n")} className="font-mono min-h-28" aria-label="CPFs extraídos, um por linha"/>}
       </Card>
 
       <div className="flex flex-col md:flex-row gap-2">

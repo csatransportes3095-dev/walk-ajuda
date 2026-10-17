@@ -1,5 +1,5 @@
 /**
- * Extracao local de CPFs: arquivos nunca saem do navegador.
+ * Extracao local de CPFs validos: arquivos nunca saem do navegador.
  * Word moderno (.docx) e ZIP/XML; usamos APIs nativas, sem dependencias.
  */
 export const H2BICO_CPF_MAX_FILE_BYTES = 8 * 1024 * 1024;
@@ -7,16 +7,35 @@ export const H2BICO_CPF_MAX_FILES = 30;
 
 const TEXT_EXTENSIONS = new Set(["txt", "csv", "log", "md", "rtf", "html", "htm", "xml"]);
 
-export function extractCpfsFromText(text: string): string[] {
+// Valida os dois digitos verificadores oficiais e rejeita sequencias repetidas.
+// A validacao matematica nao consulta a Receita Federal nem confirma titularidade.
+export function isValidCpf(value: string): boolean {
+  const cpf = value.replace(/\D/g, "");
+  if (!/^\d{11}$/.test(cpf) || /^(\d)\1{10}$/.test(cpf)) return false;
+  for (let position = 9; position <= 10; position++) {
+    let sum = 0;
+    for (let index = 0; index < position; index++) {
+      sum += Number(cpf[index]) * (position + 1 - index);
+    }
+    const digit = (sum * 10) % 11;
+    if (Number(cpf[position]) !== (digit === 10 ? 0 : digit)) return false;
+  }
+  return true;
+}
+
+// Mantem todos os candidatos distintos para explicar os numeros rejeitados.
+export function extractCpfCandidatesFromText(text: string): string[] {
   const result = new Set<string>();
-  // Aceita CPF sem formatacao ou com pontos, hifen e espacos.
-  // Nao valida digitos verificadores: mantem a extracao manual existente.
   const matches = text.matchAll(/(?<!\d)\d{3}(?:[.\-\s]?\d{3}){2}[.\-\s]?\d{2}(?!\d)/g);
   for (const match of matches) {
     const cpf = match[0].replace(/\D/g, "");
     if (cpf.length === 11) result.add(cpf);
   }
   return [...result];
+}
+
+export function extractCpfsFromText(text: string): string[] {
+  return extractCpfCandidatesFromText(text).filter(isValidCpf);
 }
 
 export function decodeCpfText(bytes: Uint8Array): string {

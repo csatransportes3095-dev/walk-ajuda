@@ -121,6 +121,21 @@ export const h2bicoRouter = router({
     }));
   }),
 
+  // Consulta por lote somente CPFs com foto salva; nao depende do limite da vitrine.
+  checkExtractedCpfs: adminProcedure.input(z.object({
+    cpfs: z.array(z.string().regex(/^\d{11}$/)).max(300),
+  }).strict()).query(async ({ input }) => {
+    if (!input.cpfs.length) return { existing: [] as string[] };
+    const db = await dbOrThrow();
+    const unique = [...new Set(input.cpfs)];
+    const rows = await db.execute(sql`
+      SELECT cpf FROM h2bico_records
+      WHERE cpf IN (${sql.join(unique.map(cpf => sql`${cpf}`), sql`, `)})
+        AND photoUrl IS NOT NULL AND TRIM(photoUrl) <> ''
+    `);
+    return { existing: (rows[0] as Array<{ cpf: string }>).map(row => String(row.cpf)) };
+  }),
+
   availableForSimilarity: adminProcedure.query(async () => {
     const db = await dbOrThrow();
     const rows = await db.execute(sql`
