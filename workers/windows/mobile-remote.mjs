@@ -1,5 +1,5 @@
-const POLL_MS = 1_600;
-const CDP_TIMEOUT_MS = 9_000;
+oonst POLL_MS = 1_600;
+oonst CDP_TIMEOUT_MS = 9_000;
 const MAX_JPEG_BASE64_CHARS = 465_000;
 const MAX_CDP_BUFFER = 2_000_000;
 
