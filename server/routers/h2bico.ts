@@ -213,6 +213,33 @@ export const h2bicoRouter = router({
           size:Math.round(person.crop.size*width/ocrWidth),
         }
       }));
+      // CPF duvidoso: tenta uma segunda leitura isolada da faixa do numero.
+      // O texto corrigido vira apenas uma sugestao, nunca uma confirmacao
+      // automatica de que aquele CPF pertence a pessoa da foto.
+      for(const person of found){
+        if(!person.nameBox || isValidCpf(person.cpf))continue;
+        const n=person.nameBox;
+        const left=Math.max(0,Math.floor(n.left*ocrWidth/ocrWidth));
+        const top=Math.max(0,Math.round(n.top+n.height*1.2));
+        const boxWidth=Math.min(ocrWidth-left,Math.max(130,Math.round(n.height*17)));
+        const boxHeight=Math.min(ocrHeight-top,Math.max(22,Math.round(n.height*2.35)));
+        if(boxWidth<100||boxHeight<15)continue;
+        try{
+          const region=await sharp(processed).extract({left,top,width:boxWidth,height:boxHeight})
+            .resize({width:boxWidth*4}).normalize().sharpen().png().toBuffer();
+          const regionFile=join(temp,"cpf-"+found.indexOf(person)+".png");
+          await writeFile(regionFile,region);
+          const {stdout:raw}=await execFileAsync("tesseract",[regionFile,"stdout","-l","eng","--psm","7",
+            "-c","tessedit_char_whitelist=0123456789.-"],{timeout:10000,maxBuffer:4096,encoding:"utf8"});
+          const numeric=raw.replace(/[^0-9]/g,"");
+          if(numeric.length===11 && isValidCpf(numeric) && numeric!==person.cpf){
+            person.warnings.push("CPF relido com resultado diferente; CONFIRA O NUMERO NO PRINT ANTES DE SALVAR.");
+            // O resultado nao e selecionado automaticamente no importador.
+            person.cpf=numeric;
+            person.confidence=Math.min(person.confidence,45);
+          }
+        }catch(error){console.warn("[H2BICO OCR] releitura indisponivel:",error instanceof Error?error.message:"erro");}
+      }
       const cpfs=[...new Set(found.filter(row=>isValidCpf(row.cpf)).map(row=>row.cpf))];
       const db=await dbOrThrow();
       const existing=new Set<string>();
