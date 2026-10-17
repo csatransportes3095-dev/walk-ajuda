@@ -116,7 +116,7 @@ export default function H2AdsMobileRemoteViewer({ instanceId, instanceName, sess
             <div className="flex min-h-64 flex-col items-center justify-center gap-3 px-6 text-center text-sm text-slate-400">
               {frameRequest.isPending && <Loader2 className="h-6 w-6 animate-spin" />}
               {expired ? "A sessao terminou. Feche e inicie uma nova." :
-                "Aguardando uma aba HTTP(S) ativa no Chrome. A aba inicial local do H2ADS nao e transmitida."}
+                "Aguardando uma unica aba HTTP(S) aberta no Chrome. Feche outras abas web da instancia para evitar controlar a pagina errada."}
             </div>
           )}
         </div>
@@ -137,7 +137,7 @@ export default function H2AdsMobileRemoteViewer({ instanceId, instanceName, sess
             )}
           </div>
         </div>
-        <p className="text-center text-xs leading-5 text-slate-500">Toque na imagem para clicar; deslize sobre ela para rolar. Apenas uma aba web da instancia sera controlada no piloto.</p>
+        <p className="text-center text-xs leading-5 text-slate-500">Toque na imagem para clicar; deslize sobre ela para rolar. Por seguranca, o piloto controla apenas quando existe uma unica aba HTTP(S) na instancia.</p>
       </div>
     </div>
   );
