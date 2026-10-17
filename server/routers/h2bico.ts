@@ -188,12 +188,27 @@ export const h2bicoRouter = router({
       const width=metadata.width || 0;
       const height=metadata.height || 0;
       if(width<200||height<200)throw new Error("Imagem pequena.");
+      // OCR de prints reduzidos: amplia a imagem para recuperar pontuacao e
+      // digitos que se perdem em miniaturas, mantendo recortes na escala original.
+      const scale=width<1500?Math.min(3,2400/width):1;
+      const processed=scale>1
+        ? await sharp(prepared).resize({width:Math.round(width*scale)}).sharpen().png().toBuffer()
+        :prepared;
+      const processedMeta=await sharp(processed).metadata();
+      const ocrWidth=processedMeta.width||width,ocrHeight=processedMeta.height||height;
       const filename=join(temp,"print.png");
-      await writeFile(filename,prepared);
+      await writeFile(filename,processed);
       const {stdout}=await execFileAsync("tesseract",[filename,"stdout","-l","por+eng","--psm","11","tsv"],{
-        timeout:35000,maxBuffer:8*1024*1024,encoding:"utf8",
+        timeout:45000,maxBuffer:12*1024*1024,encoding:"utf8",
       });
-      const found=parseScreenshotTsv(stdout,width,height);
+      const found=parseScreenshotTsv(stdout,ocrWidth,ocrHeight).map(person=>({
+        ...person,
+        crop:{
+          x:Math.round(person.crop.x*width/ocrWidth),
+          y:Math.round(person.crop.y*height/ocrHeight),
+          size:Math.round(person.crop.size*width/ocrWidth),
+        }
+      }));
       const cpfs=[...new Set(found.filter(row=>isValidCpf(row.cpf)).map(row=>row.cpf))];
       const db=await dbOrThrow();
       const existing=new Set<string>();
