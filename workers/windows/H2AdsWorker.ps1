@@ -353,10 +353,11 @@ function Invoke-BrowserSession([object]$Config, [object]$Payload) {
   $env:H2ADS_PROXY_JSON = ($Payload.proxy | ConvertTo-Json -Compress)
   $env:H2ADS_PROFILE_DIRECTORY = $profileDirectory
   $env:H2ADS_BROWSER_EXECUTABLE = $DedicatedChromePath
+  $env:H2ADS_REMOTE_DEBUG = $(if ($Payload.mobileRemoteEnabled -eq $true) { "1" } else { "0" })
   try {
     Start-Process -FilePath "node.exe" -ArgumentList "`"$SessionRunnerPath`"" -WindowStyle Hidden | Out-Null
   } finally {
-    Remove-Item Env:H2ADS_PANEL_URL, Env:H2ADS_WORKER_KEY, Env:H2ADS_WORKER_TOKEN, Env:H2ADS_INSTANCE_ID, Env:H2ADS_COMMAND_ID, Env:H2ADS_PROXY_JSON, Env:H2ADS_PROFILE_DIRECTORY, Env:H2ADS_BROWSER_EXECUTABLE -ErrorAction SilentlyContinue
+    Remove-Item Env:H2ADS_PANEL_URL, Env:H2ADS_WORKER_KEY, Env:H2ADS_WORKER_TOKEN, Env:H2ADS_INSTANCE_ID, Env:H2ADS_COMMAND_ID, Env:H2ADS_PROXY_JSON, Env:H2ADS_PROFILE_DIRECTORY, Env:H2ADS_BROWSER_EXECUTABLE, Env:H2ADS_REMOTE_DEBUG -ErrorAction SilentlyContinue
   }
 }
 
