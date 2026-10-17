@@ -257,6 +257,8 @@ async function startServer() {
   // prioritários. A inicialização não pode filtrá-los ou regravá-los pelo perfil.
   // O perfil continua sendo usado apenas como padrão de criação de novos clientes.
   // Configure body parser with larger size limit for file uploads
+  // O piloto H2ADS Mobile recebe somente JPEG pequeno, nunca uploads gerais de 200 MB.
+  app.use("/api/h2ads/worker/mobile", express.json({ limit: "525kb" }));
   app.use(express.json({ limit: "200mb" }));
   app.use(express.urlencoded({ limit: "200mb", extended: true }));
   // Rotas de identificação preparadas, sem alterar o acesso público existente.

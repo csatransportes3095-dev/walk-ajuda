@@ -11,6 +11,9 @@ import { finalizeH2AdsInstancePermanentDeletion } from "./h2ads";
 
 import { decryptH2AdsProxy } from "./h2adsProxySecurity";
 import { openH2AdsProfileSnapshot, recordH2AdsProfileRestoreResult, storeH2AdsProfileSnapshot } from "./h2adsProfileSnapshots";
+import { h2AdsMobileBridge, h2AdsMobileRemoteEnabled, MOBILE_REMOTE_MAX_FRAME_BYTES } from "./h2adsMobileRemoteBridge";
+import { h2AdsRemoteOwnerForOpenInstance } from "./h2adsMobileRemoteOwner";
+import { isSystemRestoreLocked } from "./backupRestoreService";
 
 const MAX_NAME_LENGTH = 128;
 const STALE_BROWSER_COMMAND_MS = 30_000;
@@ -107,6 +110,54 @@ export function registerH2AdsWorkerRoute(app: Express): void {
       if (error && !res.headersSent) res.status(404).json({ error: "Componente de sessão não disponível." });
     });
   });
+
+
+  // Transporte Worker -> servidor: requests autenticadas; quadros somente em RAM.
+  // O Worker nunca recebe o token de sessao do ADM e vice-versa.
+  app.get("/api/h2ads/worker/windows-mobile-remote.mjs", (_req: Request, res: Response) => {
+    noStore(res);
+    const remotePath = path.resolve(process.cwd(), "workers", "windows", "mobile-remote.mjs");
+    res.download(remotePath, "mobile-remote.mjs", (error) => {
+      if (error && !res.headersSent) res.status(404).json({ error: "Complemento mobile nao disponivel." });
+    });
+  });
+
+  app.post("/api/h2ads/worker/mobile/:instanceId/next", safeH2AdsWorkerRoute(async (req: Request, res: Response) => {
+    noStore(res);
+    if (!h2AdsMobileRemoteEnabled() || isSystemRestoreLocked()) { res.status(204).end(); return; }
+    const worker = await authenticateRequest(req, res);
+    if (!worker) return;
+    const instanceId = Number(req.params.instanceId);
+    if (!Number.isSafeInteger(instanceId) || instanceId < 1) { res.status(400).json({ error: "Instancia invalida." }); return; }
+    const owner = await h2AdsRemoteOwnerForOpenInstance(instanceId);
+    if (owner !== worker.id) {
+      h2AdsMobileBridge.revokeWorker(instanceId, worker.id);
+      res.status(204).end();
+      return;
+    }
+    const item = h2AdsMobileBridge.workerNext(instanceId, worker.id);
+    if (!item.active) { res.status(204).end(); return; }
+    res.status(200).json(item);
+  }));
+
+  app.post("/api/h2ads/worker/mobile/:instanceId/frame", safeH2AdsWorkerRoute(async (req: Request, res: Response) => {
+    noStore(res);
+    if (!h2AdsMobileRemoteEnabled() || isSystemRestoreLocked()) { res.status(404).end(); return; }
+    const worker = await authenticateRequest(req, res);
+    if (!worker) return;
+    const instanceId = Number(req.params.instanceId);
+    const lease = workerString(req.body?.workerLeaseId, 64);
+    const encoded = typeof req.body?.imageBase64 === "string" ? req.body.imageBase64 : "";
+    if (!Number.isSafeInteger(instanceId) || instanceId < 1 || !lease ||
+        encoded.length < 136 || encoded.length > Math.ceil(MOBILE_REMOTE_MAX_FRAME_BYTES * 4 / 3) + 10 ||
+        !/^[A-Za-z0-9+/]+={0,2}$/.test(encoded)) {
+      res.status(400).json({ error: "Quadro remoto invalido." }); return;
+    }
+    const owner = await h2AdsRemoteOwnerForOpenInstance(instanceId);
+    if (owner !== worker.id) { res.status(403).end(); return; }
+    const accepted = h2AdsMobileBridge.workerFrame(instanceId, worker.id, lease, Buffer.from(encoded, "base64"));
+    res.status(accepted ? 204 : 409).end();
+  }));
 
   app.post("/api/h2ads/worker/claim", safeH2AdsWorkerRoute(async (req: Request, res: Response) => {
     noStore(res);
@@ -272,6 +323,7 @@ export function registerH2AdsWorkerRoute(app: Express): void {
       res.status(200).json({
         command: { id: command.id, instanceId: command.instanceId, command: command.command },
         proxy: { ...proxy, instanceName },
+        mobileRemoteEnabled: command.command === "launch_browser" && h2AdsMobileRemoteEnabled(),
       });
     } catch (_error) {
       if (command.command === "prepare_browser") await completeH2AdsWorkerPreparation({ workerId: worker.id, commandId: command.id, state: "blocked", errorCategory: "route_unavailable" });
