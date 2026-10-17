@@ -109,10 +109,21 @@ export function startH2AdsMobileRemote({ browser, panelUrl, workerKey, workerTok
       await sendPage("Input.dispatchMouseEvent", { type: "mousePressed", button: "left", clickCount: 1, x, y });
       await sendPage("Input.dispatchMouseEvent", { type: "mouseReleased", button: "left", clickCount: 1, x, y });
     } else if (job.kind === "scroll" && Number.isFinite(job.deltaY)) {
-      await sendPage("Input.dispatchMouseEvent", {
-        type: "mouseWheel", x: width / 2, y: height / 2, deltaX: 0,
-        deltaY: Math.max(-800, Math.min(800, job.deltaY)),
-      });
+      // Scroll de toque funciona melhor em paginas com containers rolaveis
+      // e evita depender apenas de mouseWheel em abas abertas no Windows.
+      const deltaY = Math.max(-800, Math.min(800, job.deltaY));
+      const scrollPosition = { x: Math.round(width / 2), y: Math.round(height / 2) };
+      try {
+        await sendPage("Input.synthesizeScrollGesture", {
+          ...scrollPosition, yDistance: -deltaY, xDistance: 0,
+          gestureSourceType: "touch", speed: 1200,
+        });
+      } catch {
+        // Compatibilidade com versões do Chrome que nao aceitam gesto touch.
+        await sendPage("Input.dispatchMouseEvent", {
+          type: "mouseWheel", ...scrollPosition, deltaX: 0, deltaY,
+        });
+      }
     } else if (job.kind === "text" && typeof job.text === "string" && job.text.length <= 180) {
       await sendPage("Input.insertText", { text: job.text });
     } else if (job.kind === "key" && ["Enter", "Backspace", "Tab", "Escape"].includes(job.key)) {
@@ -158,7 +169,13 @@ export function startH2AdsMobileRemote({ browser, panelUrl, workerKey, workerTok
         if (!current || current.targetId !== pinnedTargetId ||
             current.type !== "page" || !/^https?:\/\//i.test(String(current.url || ""))) return;
         await sendPage("Page.enable");
-        if (work.input) await handleInput(sendPage, work.input);
+        if (work.input) {
+          // O Chrome pode manter a pagina remota em segundo plano
+          // porque ha uma aba local de identificacao da instancia.
+          // Ativar somente a aba pinada antes de executar o comando.
+          await sendPage("Page.bringToFront");
+          await handleInput(sendPage, work.input);
+        }
         if (work.capture) {
           const result = await sendPage("Page.captureScreenshot", {
             format: "jpeg", quality: 42, fromSurface: true, captureBeyondViewport: false,

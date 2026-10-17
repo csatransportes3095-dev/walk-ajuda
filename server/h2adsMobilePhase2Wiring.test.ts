@@ -47,6 +47,9 @@ describe("H2ADS Mobile fase 2: ligacoes seguras", () => {
     expect(remote).toContain("if (work.workerLeaseId !== pinnedLeaseId)");
     expect(remote).toContain("if (target.targetId !== pinnedTargetId) return");
     expect(remote).toContain('Target.getTargetInfo');
+    expect(remote).toContain('Page.bringToFront');
+    expect(remote).toContain('Input.synthesizeScrollGesture');
+    expect(remote).toContain('gestureSourceType: "touch"');
   });
 
   it("mostra controles no celular somente para instancias abertas no PC", () => {
