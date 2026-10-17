@@ -40,6 +40,15 @@ describe("H2ADS Mobile fase 2: ligacoes seguras", () => {
     expect(workerRoute).toContain("MOBILE_REMOTE_MAX_FRAME_BYTES");
   });
 
+  it("fixa cada lease remoto a uma unica aba, sem trocar automaticamente de target", () => {
+    const remote = read("workers/windows/mobile-remote.mjs");
+    expect(remote).toContain("let pinnedLeaseId = null");
+    expect(remote).toContain("let pinnedTargetId = null");
+    expect(remote).toContain("if (work.workerLeaseId !== pinnedLeaseId)");
+    expect(remote).toContain("if (target.targetId !== pinnedTargetId) return");
+    expect(remote).toContain('Target.getTargetInfo');
+  });
+
   it("mostra controles no celular somente para instancias abertas no PC", () => {
     expect(mobile).toContain("isOpen && online && remoteStatus.data?.enabled");
     expect(mobile).toContain("H2AdsMobileRemoteViewer");
