@@ -17,6 +17,16 @@ describe("H2BICO - gestão de CPF em massa",()=>{
   expect(server).toContain("INSERT INTO h2bico_history");
   expect(server).toContain("LEFT JOIN h2bico_ear_marks");
  });
+ it("aceita CPF pontuado ou simples e pagina todos cadastrados",()=>{
+  expect(server).toContain('CPF precisa ter 11 dígitos, com ou sem pontuação');
+  expect(server).toContain('category:z.enum(["all","active","archived"])');
+  expect(server).toContain('ORDER BY id ASC LIMIT 1001');
+  expect(server).toContain("hasMore:result.length>1000");
+  expect(component).toContain('TODOS OS CPFs CADASTRADOS');
+  expect(component).toContain('while(true)');
+  expect(component).toContain('cursor=result.nextCursor');
+  expect(component).toContain('cpfs.join("\\n")');
+ });
  it("pede confirmação, expõe filtros e trabalha em lotes de até 300",()=>{
   expect(component).toContain("window.confirm");
   expect(component).toContain('i+=300');

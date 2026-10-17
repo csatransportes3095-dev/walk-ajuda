@@ -401,7 +401,7 @@ export const h2bicoRouter = router({
   }),
 
   bulkLookup: adminProcedure.input(z.object({
-    cpfs: z.array(z.string().regex(/^\\d{11}$/)).min(1).max(300),
+    cpfs: z.array(z.string().trim().regex(/^(?:[0-9]{11}|[0-9]{3}[.][0-9]{3}[.][0-9]{3}-[0-9]{2})$/,"CPF precisa ter 11 dígitos, com ou sem pontuação").transform(cpf=>cpf.replace(/[^0-9]/g,""))).min(1).max(300),
   }).strict()).query(async ({input})=>{
     const db=await dbOrThrow();
     const unique=[...new Set(input.cpfs)];
@@ -463,14 +463,23 @@ export const h2bicoRouter = router({
     return {updated:found.length};
   }),
 
+  // Exporta os CPFs de todo o banco do H2BICO, sem depender do LIMIT 5000
+  // da listagem da tela. Paginacao por ID em lotes de ate 1000 registros.
   bulkCopyCpfs: adminProcedure.input(z.object({
-    category:z.enum(["active","archived"]),
+    category:z.enum(["all","active","archived"]),
+    cursor:z.number().int().min(0).max(2147483647).optional().default(0),
   }).strict()).query(async ({input})=>{
     const db=await dbOrThrow();
-    const condition=input.category==="active"?
-      sql`status IN ('available','reserved','in_use')`:sql`status='archived'`;
-    const rows=await db.execute(sql`SELECT cpf FROM h2bico_records WHERE ${condition} ORDER BY cpf ASC`);
-    return {cpfs:(rows[0] as Array<{cpf:string}>).map(row=>String(row.cpf))};
+    const condition=input.category==="all"?sql`1=1`:
+      input.category==="active"?sql`status IN ('available','reserved','in_use')`:sql`status='archived'`;
+    const rows=await db.execute(sql`SELECT id,cpf FROM h2bico_records WHERE ${condition} AND id > ${input.cursor} ORDER BY id ASC LIMIT 1001`);
+    const result=rows[0] as Array<{id:number;cpf:string}>;
+    const page=result.slice(0,1000);
+    return {
+      cpfs:page.map(row=>String(row.cpf)),
+      nextCursor:page.length?Number(page[page.length-1].id):null,
+      hasMore:result.length>1000,
+    };
   }),
 
   // COM EAR / SEM EAR e um marcador manual salvo por registro no banco.

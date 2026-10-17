@@ -16,8 +16,9 @@ export default function H2BicoBulkManager(){
   const [filter,setFilter]=useState("all");
   const [earFilter,setEarFilter]=useState("all");
   const [action,setAction]=useState("com_ear");
-  const [copyCategory,setCopyCategory]=useState<"active"|"archived">("active");
+  const [copyCategory,setCopyCategory]=useState<"all"|"active"|"archived">("all");
   const [copied,setCopied]=useState("");
+  const [copyProgress,setCopyProgress]=useState(0);
   const lookup=trpc.useUtils();
   const ear=trpc.h2bico.bulkEarMarker.useMutation();
   const archive=trpc.h2bico.bulkArchive.useMutation();
@@ -81,15 +82,31 @@ export default function H2BicoBulkManager(){
     finally{setBusy(false);}
   };
   const copyBank=async()=>{
+    if(busy)return;
     setBusy(true);
+    setCopyProgress(0);
+    setCopied("");
+    const cpfs:string[]=[];
+    let cursor=0;
     try{
-      const result=await lookup.h2bico.bulkCopyCpfs.fetch({category:copyCategory},{staleTime:0});
-      const body=result.cpfs.join("\n");
+      while(true){
+        const result=await lookup.h2bico.bulkCopyCpfs.fetch({category:copyCategory,cursor},{staleTime:0});
+        cpfs.push(...result.cpfs);
+        setCopyProgress(cpfs.length);
+        if(!result.hasMore)break;
+        if(result.nextCursor==null||result.nextCursor<=cursor)throw new Error("Falha na paginação de CPFs. Nenhum resultado parcial será copiado.");
+        cursor=result.nextCursor;
+      }
+      const body=cpfs.join("\n");
       setCopied(body);
-      if(body)await navigator.clipboard.writeText(body);
-      toast.success(result.cpfs.length+" CPFs "+(body?"copiados.":"encontrados."));
-    }catch(error){toast.error(error instanceof Error?error.message:"Falha ao copiar.");}
-    finally{setBusy(false);}
+      if(body){
+        try{await navigator.clipboard.writeText(body);toast.success(cpfs.length+" CPFs copiados, um por linha.");}
+        catch{toast.warning("Lista completa carregada. Use o campo Visualizar lista para selecionar e copiar.");}
+      }else toast.info("Nenhum CPF encontrado nesta categoria.");
+    }catch(error){
+      setCopied("");
+      toast.error(error instanceof Error?error.message:"Falha ao consultar todos os CPFs.");
+    }finally{setBusy(false);}
   };
   return <Card className="border-cyan-500/30 bg-gray-900 p-4 space-y-4 text-white">
     <div>
@@ -134,11 +151,12 @@ export default function H2BicoBulkManager(){
     <div className="border-t border-white/10 pt-3 space-y-2">
       <p className="font-bold">COPIAR CPFs DO BANCO H2BICO</p>
       <div className="flex flex-wrap gap-2">
-        <select aria-label="Categoria para copiar" value={copyCategory} onChange={e=>setCopyCategory(e.target.value as "active"|"archived")} className="rounded border border-gray-700 bg-gray-950 p-2">
-          <option value="active">Ativos (disponível, reservado, em uso)</option><option value="archived">Arquivados</option>
+        <select aria-label="Categoria para copiar" value={copyCategory} onChange={e=>{setCopyCategory(e.target.value as "all"|"active"|"archived");setCopied("");setCopyProgress(0);}} className="rounded border border-gray-700 bg-gray-950 p-2">
+          <option value="all">TODOS OS CPFs CADASTRADOS (inclusive usados e arquivados)</option><option value="active">Ativos (disponível, reservado, em uso)</option><option value="archived">Arquivados</option>
         </select>
-        <Button onClick={()=>void copyBank()} disabled={busy}>COPIAR TODOS</Button>
+        <Button onClick={()=>void copyBank()} disabled={busy}>{busy?"CONSULTANDO...":"COPIAR TODOS OS CPFs"}</Button>
       </div>
+      {busy&&copyProgress>0&&<p role="status" className="text-sm text-cyan-300">{copyProgress} CPFs consultados...</p>}
       {copied&&<details><summary className="text-xs text-gray-400">Visualizar lista gerada</summary><Textarea value={copied} readOnly className="mt-2 h-28 font-mono"/></details>}
     </div>
   </Card>;
