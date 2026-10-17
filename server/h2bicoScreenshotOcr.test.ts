@@ -24,6 +24,20 @@ describe("H2BICO: extracao de pessoas em prints",()=>{
   expect(persons[1].name).toBe("OUTRA PESSOA DE TESTE");
   expect(persons.every(p=>isValidCpf(p.cpf))).toBe(true);
  });
+ it("mantem a posicao do nome para calcular bordas reais das fotos",()=>{
+  const file=readFileSync("server/h2bicoScreenshotCrop.ts","utf8");
+  const router=readFileSync("server/routers/h2bico.ts","utf8");
+  const ui=readFileSync("client/src/components/H2BicoScreenshotImporter.tsx","utf8");
+  expect(file).toContain("alignScreenshotPhotoCrops");
+  expect(file).toContain("verticalScore");
+  expect(file).toContain("horizScore");
+  expect(router).toContain("alignScreenshotPhotoCrops(processed");
+  expect(router).toContain("tessedit_char_whitelist=0123456789.-");
+  expect(router).toContain("CONFIRA O NUMERO");
+  expect(ui).toContain("p.confidence>=70");
+  expect(ui).toContain("CONFIRA O NUMERO");
+  expect(readFileSync("server/h2bicoScreenshotOcr.ts","utf8")).toContain("nameBox:{left:nameLine.left");
+ });
  it("aceita virgula, dois-pontos e espacos do OCR sem alterar digitos",()=>{
   expect(cpfCandidatesInOcrLine("149,604:287-59")).toEqual(["14960428759"]);
   expect(cpfCandidatesInOcrLine("456775178:79")).toEqual(["45677517879"]);
