@@ -1,4 +1,13 @@
 import { TRPCError } from "@trpc/server";
+import sharp from "sharp";
+import { execFile } from "node:child_process";
+import { promisify } from "node:util";
+import { mkdtemp, writeFile, rm } from "node:fs/promises";
+import { tmpdir } from "node:os";
+import { join } from "node:path";
+import { isValidCpf } from "../../client/src/lib/h2bicoCpfExtractor";
+import { parseScreenshotTsv, normalizeScreenshotName, isReviewableName } from "../h2bicoScreenshotOcr";
+const execFileAsync = promisify(execFile);
 import { sql } from "drizzle-orm";
 import { z } from "zod";
 import { adminProcedure, router } from "../_core/trpc";
@@ -164,6 +173,80 @@ export const h2bicoRouter = router({
       out.total += Number(r.total);
     }
     return out;
+  }),
+
+  analyzeScreenshot: adminProcedure.input(z.object({
+    base64: z.string().min(100).max(15_000_000),
+  }).strict()).mutation(async ({ input }) => {
+    const buffer = Buffer.from(input.base64, "base64");
+    if (!buffer.length || buffer.length > 10 * 1024 * 1024) throw new TRPCError({code:"BAD_REQUEST",message:"Print acima de 10 MB."});
+    const temp = await mkdtemp(join(tmpdir(),"h2bico-ocr-"));
+    try {
+      const image=sharp(buffer,{limitInputPixels:32_000_000}).rotate();
+      const metadata=await image.metadata();
+      const width=metadata.autoOrient?.width || metadata.width || 0;
+      const height=metadata.autoOrient?.height || metadata.height || 0;
+      if(width<200||height<200)throw new Error("Imagem pequena.");
+      const filename=join(temp,"print.png");
+      await writeFile(filename,await image.png().toBuffer());
+      const {stdout}=await execFileAsync("tesseract",[filename,"stdout","-l","por+eng","--psm","11","tsv"],{
+        timeout:35000,maxBuffer:8*1024*1024,encoding:"utf8",
+      });
+      const found=parseScreenshotTsv(stdout,width,height);
+      const cpfs=[...new Set(found.filter(row=>isValidCpf(row.cpf)).map(row=>row.cpf))];
+      const db=await dbOrThrow();
+      const existing=new Set<string>();
+      for(let start=0;start<cpfs.length;start+=250){
+        const batch=cpfs.slice(start,start+250);
+        const rows=await db.execute(sql`SELECT cpf FROM h2bico_records WHERE cpf IN (${sql.join(batch.map(cpf=>sql`${cpf}`),sql`, `)})`);
+        for(const row of rows[0] as Array<{cpf:string}>)existing.add(String(row.cpf));
+      }
+      return {width,height,persons:found.map(row=>({
+        ...row,validCpf:isValidCpf(row.cpf),alreadyExists:existing.has(row.cpf),
+      }))};
+    }catch(error){
+      if(error instanceof TRPCError)throw error;
+      console.error("[H2BICO OCR]",error);
+      throw new TRPCError({code:"BAD_REQUEST",message:"Não foi possível ler o print. Confira a imagem."});
+    }finally{await rm(temp,{recursive:true,force:true});}
+  }),
+
+  importScreenshotRecord: adminProcedure.input(z.object({
+    name:z.string().min(2).max(200),
+    cpf:z.string().regex(/^\d{11}$/),
+    base64:z.string().min(100).max(5_500_000),
+  }).strict()).mutation(async ({input})=>{
+    const name=normalizeScreenshotName(input.name);
+    if(!isReviewableName(name) || !isValidCpf(input.cpf))
+      throw new TRPCError({code:"BAD_REQUEST",message:"Confira o nome completo e o CPF válido."});
+    const db=await dbOrThrow();
+    const found=await db.execute(sql`SELECT id FROM h2bico_records WHERE cpf=${input.cpf} LIMIT 1`);
+    if((found[0] as any[]).length)return {result:"duplicate" as const};
+    const buffer=Buffer.from(input.base64,"base64");
+    if(!buffer.length||buffer.length>4*1024*1024)
+      throw new TRPCError({code:"BAD_REQUEST",message:"Recorte acima do limite."});
+    let photo:Buffer;
+    try{
+      const meta=await sharp(buffer,{limitInputPixels:5_000_000}).metadata();
+      if(!["jpeg","png","webp"].includes(meta.format||"") || (meta.width||0)<48 || (meta.height||0)<48)
+        throw new Error("Imagem inválida");
+      photo=await sharp(buffer).rotate().resize({width:320,height:320,fit:"cover",withoutEnlargement:true}).jpeg({quality:90}).toBuffer();
+    }catch{throw new TRPCError({code:"BAD_REQUEST",message:"Recorte inválido."});}
+    const key="h2bico/print-"+input.cpf+"-"+Date.now()+".jpg";
+    const {url}=await storagePut(key,photo,"image/jpeg");
+    try{
+      const result:any=await db.execute(sql`
+        INSERT INTO h2bico_records(name,cpf,photoUrl,originalFilename,source,status)
+        VALUES(${name},${input.cpf},${url},${name+"_"+input.cpf+".jpg"},'importacao-print','available')
+      `);
+      const id=Number((result[0] as any).insertId||0);
+      if(id)await db.execute(sql`INSERT INTO h2bico_history(recordId,action,details)
+        VALUES(${id},'imported','Importado por print com revisão administrativa')`);
+      return {result:"imported" as const,id};
+    }catch(error){
+      if(/Duplicate|ER_DUP_ENTRY/i.test(String(error)))return {result:"duplicate" as const};
+      throw error;
+    }
   }),
 
   importPhoto: adminProcedure.input(z.object({
