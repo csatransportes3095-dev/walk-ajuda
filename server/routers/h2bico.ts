@@ -55,6 +55,17 @@ async function dbOrThrow() {
     ) CHARACTER SET utf8mb4 COLLATE utf8mb4_unicode_ci
   `);
 
+  // Marcacao manual independente do status de uso e das fotos.
+  // Criar uma tabela separada evita alterar registros ja cadastrados.
+  await db.execute(sql`
+    CREATE TABLE IF NOT EXISTS h2bico_ear_marks (
+      recordId INT NOT NULL PRIMARY KEY,
+      earStatus ENUM('com_ear','sem_ear') NOT NULL,
+      updatedAt TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP,
+      INDEX idx_h2bico_ear_status (earStatus)
+    ) CHARACTER SET utf8mb4 COLLATE utf8mb4_unicode_ci
+  `);
+
   return db;
 }
 
@@ -91,17 +102,21 @@ export const h2bicoRouter = router({
     const status = input?.status || "all";
     const like = `%${search}%`;
     const rows = await db.execute(sql`
-      SELECT id,name,cpf,uf,photoUrl,originalFilename,notes,source,status,linkedOrder,lastSimilarity,usedAt,createdAt,updatedAt
-      FROM h2bico_records
-      WHERE (${search} = '' OR name LIKE ${like} OR cpf LIKE ${like})
-        AND (${status} = 'all' OR status = ${status})
-      ORDER BY CASE status WHEN 'available' THEN 0 WHEN 'reserved' THEN 1 WHEN 'in_use' THEN 2 WHEN 'used' THEN 3 ELSE 4 END,
-               name ASC, id DESC
+      SELECT r.id,r.name,r.cpf,r.uf,r.photoUrl,r.originalFilename,r.notes,r.source,
+             r.status,r.linkedOrder,r.lastSimilarity,r.usedAt,r.createdAt,r.updatedAt,
+             em.earStatus
+      FROM h2bico_records r
+      LEFT JOIN h2bico_ear_marks em ON em.recordId = r.id
+      WHERE (${search} = '' OR r.name LIKE ${like} OR r.cpf LIKE ${like})
+        AND (${status} = 'all' OR r.status = ${status})
+      ORDER BY CASE r.status WHEN 'available' THEN 0 WHEN 'reserved' THEN 1 WHEN 'in_use' THEN 2 WHEN 'used' THEN 3 ELSE 4 END,
+               r.name ASC, r.id DESC
       LIMIT 5000
     `);
     return (rows[0] as any[]).map(r => ({
       ...r,
       id: Number(r.id),
+      earStatus: r.earStatus === "com_ear" || r.earStatus === "sem_ear" ? r.earStatus : null,
       lastSimilarity: r.lastSimilarity == null ? null : Number(r.lastSimilarity),
     }));
   }),
@@ -269,6 +284,38 @@ export const h2bicoRouter = router({
     const key = `h2bico/manual-${Date.now()}-${Math.random().toString(36).slice(2,10)}.${ext}`;
     const { url } = await storagePut(key, Buffer.from(input.base64, "base64"), input.mimeType);
     return { success: true, url };
+  }),
+
+  // COM EAR / SEM EAR e um marcador manual salvo por registro no banco.
+  // Nao modifica disponibilidade, fotos, CPF ou status de uso.
+  setEarMarker: adminProcedure.input(z.object({
+    id: z.number().int().positive(),
+    earStatus: z.enum(["com_ear", "sem_ear"]).nullable(),
+  }).strict()).mutation(async ({ input }) => {
+    const db = await dbOrThrow();
+    const found = await db.execute(sql`
+      SELECT id FROM h2bico_records WHERE id = ${input.id} LIMIT 1
+    `);
+    if (!(found[0] as unknown as any[]).length) {
+      throw new TRPCError({ code: "NOT_FOUND", message: "Registro H2BICO não encontrado." });
+    }
+
+    if (input.earStatus === null) {
+      await db.execute(sql`DELETE FROM h2bico_ear_marks WHERE recordId = ${input.id}`);
+    } else {
+      await db.execute(sql`
+        INSERT INTO h2bico_ear_marks (recordId, earStatus)
+        VALUES (${input.id}, ${input.earStatus})
+        ON DUPLICATE KEY UPDATE earStatus = ${input.earStatus}
+      `);
+    }
+    await db.execute(sql`
+      INSERT INTO h2bico_history (recordId, action, details)
+      VALUES (${input.id}, 'ear_marker',
+        ${input.earStatus === "com_ear" ? "Marcado COM EAR" :
+          input.earStatus === "sem_ear" ? "Marcado SEM EAR" : "Marcação EAR removida"})
+    `);
+    return { success: true as const, earStatus: input.earStatus };
   }),
 
   setStatus: adminProcedure.input(z.object({
