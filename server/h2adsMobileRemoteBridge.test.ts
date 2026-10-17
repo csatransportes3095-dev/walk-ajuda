@@ -51,6 +51,23 @@ describe("H2ADS Mobile Fase 2: sessoes em memoria", () => {
     expect(bridge.start(3, 1, 99_001).sessionToken).toBeTruthy();
   });
 
+  it("mantem entrada em voo ate ACK do Worker correto e informa o Android", () => {
+    const bridge = new H2AdsMobileBridge();
+    const lease = bridge.start(301, 10, 1_000);
+    expect(bridge.input(301, lease.sessionToken, { kind: "scroll", deltaY: 200 }, 1_010)).toBe(true);
+    const first = bridge.workerNext(301, 10, 1_020);
+    const second = bridge.workerNext(301, 10, 1_030);
+    if (!first.active || !second.active || !first.input || !second.input) throw new Error("entrada pendente");
+    expect(second.input.id).toBe(first.input.id);
+    expect(bridge.workerInputResult(301, 11, first.workerLeaseId, first.input.id, "sent", null, 1_040)).toBe(false);
+    expect(bridge.workerInputResult(301, 10, "invalid", first.input.id, "sent", null, 1_040)).toBe(false);
+    expect(bridge.workerInputResult(301, 10, first.workerLeaseId, first.input.id, "blocked", "target_unavailable", 1_040)).toBe(true);
+    expect(bridge.lastInputStatus(301, lease.sessionToken, 1_041)).toMatchObject({
+      state: "blocked", reason: "target_unavailable", kind: "scroll",
+    });
+    expect(bridge.workerNext(301, 10, 1_050).input).toBeNull();
+  });
+
   it("nega troca de Worker e rejeita JPEG ou volume invalido", () => {
     const bridge = new H2AdsMobileBridge();
     const first = bridge.start(42, 5, 1_000);
