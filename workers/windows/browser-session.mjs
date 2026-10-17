@@ -551,15 +551,13 @@ async function run() {
     lastReportedIp = initial.observedIp;
     const labelPageUrl = createInstanceLabelPage();
     const privacyGuardExtension = createGoogleSorryPrivacyGuard();
-    if (mobileRemoteRequested) {
-      try { unlinkSync(join(profileDirectory, "DevToolsActivePort")); } catch { }
-    }
     browser = spawn(executable, [
-      ...(mobileRemoteRequested ? ["--remote-debugging-address=127.0.0.1", "--remote-debugging-port=0"] : []),
+      // Um pipe local entre Node e Chrome: nenhuma porta TCP de depuracao e aberta.
+      ...(mobileRemoteRequested ? ["--remote-debugging-pipe"] : []),
       "--user-data-dir=" + profileDirectory, "--proxy-server=http://127.0.0.1:" + relayPort, "--proxy-bypass-list=<-loopback>",
       "--disable-quic", "--dns-prefetch-disable", "--force-webrtc-ip-handling-policy=disable_non_proxied_udp",
       "--load-extension=" + privacyGuardExtension, "--no-first-run", "--no-default-browser-check", labelPageUrl,
-    ], { detached: false, stdio: "ignore", windowsHide: false });
+    ], { detached: false, stdio: mobileRemoteRequested ? ["ignore", "ignore", "ignore", "pipe", "pipe"] : "ignore", windowsHide: false });
 
     // Register before any network request to the panel: early exit is never lost.
     browser.once("error", (error) => { void finalizeBrowserExit("spawn_error", null, error?.code || null); });
