@@ -20,6 +20,7 @@ export function startH2AdsMobileRemote({ browser, panelUrl, workerKey, workerTok
   // A aba e fixada por sessao: nunca migrar o controle para outra aba por engano.
   let pinnedLeaseId = null;
   let pinnedTargetId = null;
+  let lastTabSignature = "";
   let inputBuffer = "";
   const decoder = new TextDecoder();
   const pending = new Map();
@@ -154,20 +155,46 @@ export function startH2AdsMobileRemote({ browser, panelUrl, workerKey, workerTok
       if (work.workerLeaseId !== pinnedLeaseId) {
         pinnedLeaseId = work.workerLeaseId;
         pinnedTargetId = null;
+        lastTabSignature = "";
       }
       const { targetInfos } = await send("Target.getTargets");
       // Evita enviar comandos para a aba errada quando houver varias paginas.
       // O piloto controla somente o caso em que existe uma unica aba HTTP(S).
-      const eligible = Array.isArray(targetInfos) ? targetInfos.filter(info =>
-        info.type === "page" && /^https?:\/\//i.test(String(info.url || ""))) : [];
-      if (eligible.length !== 1 || !eligible[0]?.targetId) {
+      // A aba file:// de identificacao e parte normal da instancia.
+      // Outras abas HTTP(S) permanecem disponiveis para escolha do ADM.
+      const pages = Array.isArray(targetInfos) ? targetInfos.filter(info =>
+        info.type === "page" && (
+          /^https?:\/\//i.test(String(info.url || "")) ||
+          String(info.url || "").startsWith("file://"))) : [];
+      const tabs = pages.slice(0, 20).map(info => ({
+        targetId: info.targetId, title: String(info.title || "").slice(0, 120),
+        label: /^https?:\/\//i.test(String(info.url || "")) ?
+          (() => { try { return new URL(info.url).hostname.slice(0, 120); } catch { return "Pagina web"; } })() : "Identificacao H2ADS",
+        kind: /^https?:\/\//i.test(String(info.url || "")) ? "web" : "label",
+      }));
+      const signature = JSON.stringify(tabs);
+      if (signature !== lastTabSignature) {
+        await remoteRequest("tabs", { workerLeaseId: work.workerLeaseId, tabs });
+        lastTabSignature = signature;
+      }
+      const webTabs = pages.filter(info => /^https?:\/\//i.test(String(info.url || "")));
+      const selectedId = work.selectedTargetId ||
+        (webTabs.length === 1 ? webTabs[0].targetId : pages.length === 1 ? pages[0].targetId : null);
+      if (!selectedId) {
         await acknowledge(work, "blocked", "target_unavailable");
         return;
       }
-      const target = eligible[0];
+      const target = pages.find(info => info.targetId === selectedId);
+      if (!target) {
+        await acknowledge(work, "blocked", "target_changed");
+        return;
+      }
       if (!pinnedTargetId) pinnedTargetId = target.targetId;
       // Se uma aba for substituida, mesmo que reste apenas uma, nao redirecionar
       // os toques nem o teclado para a nova pagina sem uma nova sessao ADM.
+      if (target.targetId !== pinnedTargetId && work.selectedTargetId === target.targetId) {
+        pinnedTargetId = target.targetId;
+      }
       if (target.targetId !== pinnedTargetId) {
         await acknowledge(work, "blocked", "target_changed");
         return;
@@ -183,7 +210,7 @@ export function startH2AdsMobileRemote({ browser, panelUrl, workerKey, workerTok
         const fresh = await send("Target.getTargetInfo", { targetId: pinnedTargetId });
         const current = fresh?.targetInfo;
         if (!current || current.targetId !== pinnedTargetId ||
-            current.type !== "page" || !/^https?:\/\//i.test(String(current.url || ""))) {
+            current.type !== "page" || !/^(https?:\/\/|file:\/\/)/i.test(String(current.url || ""))) {
           await acknowledge(work, "blocked", "target_changed");
           return;
         }
@@ -207,7 +234,7 @@ export function startH2AdsMobileRemote({ browser, panelUrl, workerKey, workerTok
           });
           if (typeof result.data === "string" && result.data.length >= 136 &&
               result.data.length <= MAX_JPEG_BASE64_CHARS) {
-            await remoteRequest("frame", { workerLeaseId: work.workerLeaseId, imageBase64: result.data });
+            await remoteRequest("frame", { workerLeaseId: work.workerLeaseId, targetId: pinnedTargetId, imageBase64: result.data });
           }
         }
       } finally {
