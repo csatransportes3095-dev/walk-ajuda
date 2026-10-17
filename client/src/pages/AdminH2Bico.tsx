@@ -5,6 +5,7 @@ import { toast } from "sonner";
 import AdminHeader from "@/components/AdminHeader";
 import H2BicoScreenshotImporter from "@/components/H2BicoScreenshotImporter";
 import H2BicoBulkManager from "@/components/H2BicoBulkManager";
+import H2BicoReviewLotes from "@/components/H2BicoReviewLotes";
 import { Button } from "@/components/ui/button";
 import { Card } from "@/components/ui/card";
 import { Input } from "@/components/ui/input";
@@ -348,6 +349,8 @@ export default function AdminH2Bico(){
         </div>
         <Button onClick={()=>navigate("/similaridade")} variant="outline">Abrir Similaridade</Button>
       </Card>
+
+      <H2BicoReviewLotes/>
 
       <H2BicoBulkManager/>
 
