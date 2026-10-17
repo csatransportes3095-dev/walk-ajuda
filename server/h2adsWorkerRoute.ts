@@ -315,6 +315,7 @@ export function registerH2AdsWorkerRoute(app: Express): void {
       res.status(200).json({
         command: { id: command.id, instanceId: command.instanceId, command: command.command },
         proxy: { ...proxy, instanceName },
+        mobileRemoteEnabled: command.command === "launch_browser" && h2AdsMobileRemoteEnabled(),
       });
     } catch (_error) {
       if (command.command === "prepare_browser") await completeH2AdsWorkerPreparation({ workerId: worker.id, commandId: command.id, state: "blocked", errorCategory: "route_unavailable" });
