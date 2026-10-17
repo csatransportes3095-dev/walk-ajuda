@@ -440,6 +440,39 @@ export const h2bicoRouter = router({
     return {updated:valid.length};
   }),
 
+  bulkArchive: adminProcedure.input(z.object({
+    ids:z.array(z.number().int().positive()).min(1).max(300),
+    mode:z.enum(["archive","restore"]),
+  }).strict()).mutation(async ({input})=>{
+    const db=await dbOrThrow();
+    const ids=[...new Set(input.ids)];
+    const rows=await db.execute(sql`SELECT id,status,linkedOrder,usedAt FROM h2bico_records WHERE id IN (${sql.join(ids.map(id=>sql`${id}`),sql`, `)})`);
+    const found=rows[0] as Array<{id:number;status:string;linkedOrder:string|null;usedAt:string|null}>;
+    if(found.length!==ids.length||found.some(row=>
+      row.status==="used"||row.usedAt||row.linkedOrder||
+      (input.mode==="archive"&&!["available","reserved"].includes(row.status))||
+      (input.mode==="restore"&&row.status!=="archived")
+    ))throw new TRPCError({code:"CONFLICT",message:"Há CPFs protegidos ou com status incompatível. Atualize a consulta."});
+    const next=input.mode==="archive"?"archived":"available";
+    for(const row of found){
+      await db.execute(sql`UPDATE h2bico_records SET status=${next} WHERE id=${row.id}
+        AND status=${row.status} AND usedAt IS NULL AND (linkedOrder IS NULL OR linkedOrder='')`);
+      await db.execute(sql`INSERT INTO h2bico_history(recordId,action,details)
+        VALUES(${row.id},${"status:"+next},'Alteração administrativa em lote')`);
+    }
+    return {updated:found.length};
+  }),
+
+  bulkCopyCpfs: adminProcedure.input(z.object({
+    category:z.enum(["active","archived"]),
+  }).strict()).query(async ({input})=>{
+    const db=await dbOrThrow();
+    const condition=input.category==="active"?
+      sql`status IN ('available','reserved','in_use')`:sql`status='archived'`;
+    const rows=await db.execute(sql`SELECT cpf FROM h2bico_records WHERE ${condition} ORDER BY cpf ASC`);
+    return {cpfs:(rows[0] as Array<{cpf:string}>).map(row=>String(row.cpf))};
+  }),
+
   // COM EAR / SEM EAR e um marcador manual salvo por registro no banco.
   // Nao modifica disponibilidade, fotos, CPF ou status de uso.
   setEarMarker: adminProcedure.input(z.object({
