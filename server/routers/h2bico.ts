@@ -7,6 +7,7 @@ import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { isValidCpf } from "../../client/src/lib/h2bicoCpfExtractor";
 import { parseScreenshotTsv, normalizeScreenshotName, isReviewableName } from "../h2bicoScreenshotOcr";
+import { alignScreenshotPhotoCrops } from "../h2bicoScreenshotCrop";
 const execFileAsync = promisify(execFile);
 import { sql } from "drizzle-orm";
 import { z } from "zod";
@@ -203,7 +204,8 @@ export const h2bicoRouter = router({
       const {stdout}=await execFileAsync("tesseract",[filename,"stdout","-l","por+eng","--psm","11","tsv"],{
         timeout:45000,maxBuffer:12*1024*1024,encoding:"utf8",
       });
-      const found=parseScreenshotTsv(stdout,ocrWidth,ocrHeight).map(person=>({
+      const aligned=await alignScreenshotPhotoCrops(processed,parseScreenshotTsv(stdout,ocrWidth,ocrHeight),ocrWidth,ocrHeight);
+      const found=aligned.map(person=>({
         ...person,
         crop:{
           x:Math.round(person.crop.x*width/ocrWidth),
