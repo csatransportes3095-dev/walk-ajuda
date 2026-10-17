@@ -296,7 +296,7 @@ export const h2bicoRouter = router({
     const found = await db.execute(sql`
       SELECT id FROM h2bico_records WHERE id = ${input.id} LIMIT 1
     `);
-    if (!(found[0] as any[]).length) {
+    if (!(found[0] as unknown as any[]).length) {
       throw new TRPCError({ code: "NOT_FOUND", message: "Registro H2BICO não encontrado." });
     }
 
