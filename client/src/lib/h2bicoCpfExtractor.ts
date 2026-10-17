@@ -115,7 +115,7 @@ export async function extractDocxText(buffer: ArrayBuffer): Promise<string> {
       if (typeof DecompressionStream === "undefined") {
         throw new Error("Seu navegador não suporta a leitura de Word .docx.");
       }
-      const stream = new Blob([zipped]).stream().pipeThrough(new DecompressionStream("deflate-raw"));
+      const stream = new Blob([Uint8Array.from(zipped)]).stream().pipeThrough(new DecompressionStream("deflate-raw"));
       xmlBytes = new Uint8Array(await new Response(stream).arrayBuffer());
     } else {
       throw new Error("Arquivo Word compactado em formato não suportado.");
