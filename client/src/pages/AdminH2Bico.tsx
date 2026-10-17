@@ -96,6 +96,20 @@ export default function AdminH2Bico(){
   const allRecords=trpc.h2bico.list.useQuery({search:"",status:"all"});
   const stats=trpc.h2bico.stats.useQuery();
   const importer=trpc.h2bico.importPhoto.useMutation();
+  const [savingEar,setSavingEar]=useState<Set<number>>(new Set());
+  const setEar=trpc.h2bico.setEarMarker.useMutation({
+    onSuccess:()=>{void utils.h2bico.invalidate();},
+    onError:e=>toast.error("Não foi possível salvar EAR: " + e.message),
+  });
+  const changeEar=async(id:number, previous:"com_ear"|"sem_ear"|null, selected:"com_ear"|"sem_ear")=>{
+    if(savingEar.has(id)) return;
+    setSavingEar(state=>new Set(state).add(id));
+    try{
+      await setEar.mutateAsync({id,earStatus:previous===selected?null:selected});
+    }finally{
+      setSavingEar(state=>{const next=new Set(state);next.delete(id);return next;});
+    }
+  };
   const setSt=trpc.h2bico.setStatus.useMutation({
     onSuccess:()=>utils.h2bico.invalidate(),
     onError:e=>toast.error(e.message)
@@ -285,6 +299,20 @@ export default function AdminH2Bico(){
         {(list.data||[]).map((r:any)=><Card key={r.id} className="bg-gray-900 border-gray-800 p-4">
           <div className="flex gap-3">{r.photoUrl&&!brokenPhotos.has(r.id)?<img src={`/api/admin/h2bico/photo/${r.id}`} onError={()=>setBrokenPhotos(current=>{const next=new Set(current);next.add(r.id);return next;})} className="w-20 h-20 rounded-xl object-cover border border-gray-700"/>:<div className="w-20 h-20 rounded-xl bg-gray-800 grid place-items-center"><UserCheck/></div>}
             <div className="min-w-0 flex-1"><div className="font-bold truncate">{r.name}</div><div className="text-sm text-gray-400 font-mono">{showCpf?r.cpf:maskCpf(r.cpf)}</div>{r.uf&&<div className="text-xs text-gray-500">{r.uf}</div>}<div className="text-xs mt-1 font-bold">{STATUS[r.status]}</div>{r.linkedOrder&&<div className="text-xs text-amber-300">Pedido: {r.linkedOrder}</div>}</div>
+          </div>
+          <div className="mt-3 grid grid-cols-2 gap-2" role="group" aria-label={`Marcação EAR de ${r.name}`}>
+            {(["com_ear","sem_ear"] as const).map(option=>{
+              const active=r.earStatus===option;
+              const positive=option==="com_ear";
+              return <button key={option} type="button" disabled={savingEar.has(r.id)}
+                aria-pressed={active}
+                onClick={()=>void changeEar(r.id,r.earStatus??null,option)}
+                className={`min-h-10 rounded-lg border px-2 py-2 text-xs font-black transition disabled:opacity-50 ${active
+                  ? positive?"border-emerald-400 bg-emerald-500/25 text-emerald-200":"border-red-400 bg-red-500/25 text-red-200"
+                  :"border-gray-700 bg-gray-950/60 text-gray-400 hover:border-gray-500"}`}>
+                {positive?"🟢 COM EAR":"🔴 SEM EAR"} {active?"✓":""}
+              </button>;
+            })}
           </div>
           <div className="flex flex-wrap gap-2 mt-3">
             {r.status==="available"&&<Button size="sm" variant="outline" onClick={()=>setSt.mutate({id:r.id,status:"reserved"})}>Reservar</Button>}
