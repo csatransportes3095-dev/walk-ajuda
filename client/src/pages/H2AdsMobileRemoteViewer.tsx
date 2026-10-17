@@ -104,7 +104,7 @@ export default function H2AdsMobileRemoteViewer({ instanceId, instanceName, sess
         <div className="overflow-auto rounded-xl border border-white/15 bg-black">
           {frameData?.image ? (
             <img
-              src={frame.data.image} alt="Previa ao vivo da aba selecionada no computador"
+              src={frameData.image} alt="Previa ao vivo da aba selecionada no computador"
               className="block w-full select-none"
               style={{ width: `${zoom * 100}%`, maxWidth: "none", touchAction: "none" }}
               draggable={false}
