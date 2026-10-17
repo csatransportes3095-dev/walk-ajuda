@@ -39,6 +39,24 @@ describe("H2 Ads entry route isolation", () => {
     expect(manifest.start_url).toBe("/login");
   });
 
+  it("mantem o mobile no ADM e reutiliza comandos sem revelar credenciais", () => {
+    const appSource = fs.readFileSync(path.join(projectRoot, "client/src/App.tsx"), "utf8");
+    const mobile = fs.readFileSync(path.join(projectRoot, "client/src/pages/H2AdsMobile.tsx"), "utf8");
+    const h2ads = fs.readFileSync(path.join(projectRoot, "client/src/pages/H2Ads.tsx"), "utf8");
+    expect(appSource).toContain('path={"/h2ads/mobile"}');
+    expect(appSource).toContain('<H2AdsGuard><H2AdsMobile /></H2AdsGuard>');
+    expect(appSource).toContain('path={"/h2ads"}');
+    expect(mobile).toContain("trpc.h2Ads.listDashboard.useQuery");
+    expect(mobile).toContain("trpc.h2Ads.prepareBrowser.useMutation");
+    expect(mobile).toContain("trpc.h2Ads.launchBrowser.useMutation");
+    expect(mobile).toContain("trpc.h2Ads.closeBrowser.useMutation");
+    expect(h2ads).toContain('href="/h2ads/mobile"');
+    expect(mobile).not.toContain("getH2AdsProxyCredential");
+    expect(mobile).not.toContain("decryptH2AdsProxy");
+    expect(mobile).not.toContain("browserWSEndpoint");
+    expect(mobile).not.toContain("proxyPassword");
+  });
+
   it("keeps the H2 Ads page tied only to its own router, without business data or proxy secrets", () => {
     const pageSource = fs.readFileSync(path.join(projectRoot, "client/src/pages/H2Ads.tsx"), "utf8");
 
