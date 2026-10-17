@@ -1,6 +1,6 @@
 import {describe,it,expect} from "vitest";
 import {readFileSync} from "node:fs";
-import {parseScreenshotTsv,normalizeScreenshotName} from "./h2bicoScreenshotOcr";
+import {parseScreenshotTsv,normalizeScreenshotName,cpfCandidatesInOcrLine} from "./h2bicoScreenshotOcr";
 import {isValidCpf} from "../client/src/lib/h2bicoCpfExtractor";
 
 function word(text:string,x:number,y:number,w:number,block:number,line:number){
@@ -23,6 +23,29 @@ describe("H2BICO: extracao de pessoas em prints",()=>{
   expect(persons[0].crop.x).toBeLessThan(190);
   expect(persons[1].name).toBe("OUTRA PESSOA DE TESTE");
   expect(persons.every(p=>isValidCpf(p.cpf))).toBe(true);
+ });
+ it("aceita virgula, dois-pontos e espacos do OCR sem alterar digitos",()=>{
+  expect(cpfCandidatesInOcrLine("149,604:287-59")).toEqual(["14960428759"]);
+  expect(cpfCandidatesInOcrLine("456775178:79")).toEqual(["45677517879"]);
+  expect(cpfCandidatesInOcrLine("068.071. 833-80")).toEqual(["06807183380"]);
+ });
+ it("identifica seis cards mesmo com CPF inválido ou faltando para revisao",()=>{
+  const header="level\tpage_num\tblock_num\tpar_num\tline_num\tword_num\tleft\ttop\twidth\theight\tconf\ttext";
+  const names=["PESSOA EXEMPLO DE TESTE","OUTRA PESSOA DE TESTE","TERCEIRA PESSOA DE TESTE","QUARTA PESSOA DE TESTE","QUINTA PESSOA DE TESTE","SEXTA PESSOA DE TESTE"];
+  const cpfs=["529.982.247-25","111.444.777-35","123,456:789-01","046.953.532-61","148.975.946-85",""];
+  let block=1;
+  const lines=[header];
+  for(let i=0;i<6;i++){
+    const y=90+i*170;
+    lines.push(word(names[i],160,y,230,block++,1));
+    if(cpfs[i])lines.push(word(cpfs[i],160,y+24,130,block++,1));
+  }
+  const found=parseScreenshotTsv(lines.join("\n"),935,1200);
+  expect(found).toHaveLength(6);
+  expect(found[0].crop.x).toBeGreaterThan(40);
+  expect(found[0].crop.size).toBeGreaterThan(65);
+  expect(found[5].cpf).toBe("");
+  expect(found[5].warnings.some(w=>w.includes("não reconhecido"))).toBe(true);
  });
  it("nao considera CPF sem digito verificador correto como apto a salvar",()=>{
   expect(isValidCpf("52998224725")).toBe(true);
