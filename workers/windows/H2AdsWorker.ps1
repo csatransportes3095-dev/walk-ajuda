@@ -15,6 +15,7 @@ $ConfigPath = Join-Path $WorkerDirectory "worker.json"
 $InstalledScriptPath = Join-Path $WorkerDirectory "H2AdsWorker.ps1"
 $RunnerPath = Join-Path $WorkerDirectory "browser-runner.mjs"
 $SessionRunnerPath = Join-Path $WorkerDirectory "browser-session.mjs"
+$MobileRemotePath = Join-Path $WorkerDirectory "mobile-remote.mjs"
 $ProfilesDirectory = Join-Path $WorkerDirectory "profiles"
 $SnapshotQueueDirectory = Join-Path $WorkerDirectory "snapshot-queue"
 $DeletionPriorityPath = Join-Path $WorkerDirectory "snapshot-queue-deletion-priority.signal"
@@ -144,6 +145,7 @@ function Ensure-BrowserPreparationComponent([object]$Config) {
   if (!(Get-Command npm.cmd -ErrorAction SilentlyContinue)) { throw "npm não está disponível neste Worker." }
   Invoke-WebRequest -UseBasicParsing -Uri "$($Config.panelUrl)/api/h2ads/worker/windows-browser-runner.mjs" -OutFile $RunnerPath
   Invoke-WebRequest -UseBasicParsing -Uri "$($Config.panelUrl)/api/h2ads/worker/windows-browser-session.mjs" -OutFile $SessionRunnerPath
+  Invoke-WebRequest -UseBasicParsing -Uri "$($Config.panelUrl)/api/h2ads/worker/windows-mobile-remote.mjs" -OutFile $MobileRemotePath
   @{ name = "h2ads-worker-local"; private = $true; type = "module"; dependencies = @{ "proxy-chain" = "3.0.0" } } | ConvertTo-Json -Compress | Set-Content -Path $PackagePath -Encoding UTF8 -NoNewline
   if (!(Test-Path $ProxyChainPackagePath)) {
     & npm.cmd install --omit=dev --ignore-scripts --no-audit --no-fund --prefix $WorkerDirectory | Out-Null
