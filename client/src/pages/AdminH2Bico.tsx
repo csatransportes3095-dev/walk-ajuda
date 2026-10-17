@@ -106,6 +106,8 @@ export default function AdminH2Bico(){
     setSavingEar(state=>new Set(state).add(id));
     try{
       await setEar.mutateAsync({id,earStatus:previous===selected?null:selected});
+    }catch{
+      // onError da mutation informa a falha ao administrador.
     }finally{
       setSavingEar(state=>{const next=new Set(state);next.delete(id);return next;});
     }
