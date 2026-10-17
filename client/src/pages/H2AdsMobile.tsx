@@ -3,6 +3,7 @@ import { Link } from "wouter";
 import { toast } from "sonner";
 import { ArrowLeft, RefreshCw, Monitor, Play, Square, ShieldCheck, Search, Wifi, WifiOff, Smartphone, Loader2 } from "lucide-react";
 import { trpc } from "@/lib/trpc";
+import H2AdsMobileRemoteViewer from "./H2AdsMobileRemoteViewer";
 
 /**
  * Painel H2ADS Mobile, fase 1.
@@ -18,6 +19,29 @@ export default function H2AdsMobile() {
   const prepare = trpc.h2Ads.prepareBrowser.useMutation();
   const launch = trpc.h2Ads.launchBrowser.useMutation();
   const close = trpc.h2Ads.closeBrowser.useMutation();
+  const remoteStatus = trpc.h2Ads.mobileRemoteStatus.useQuery(undefined, { retry: false });
+  const remoteStart = trpc.h2Ads.mobileRemoteStart.useMutation();
+  const remoteStop = trpc.h2Ads.mobileRemoteStop.useMutation();
+  const [remote, setRemote] = useState<{ instanceId: number; instanceName: string; sessionToken: string } | null>(null);
+
+  async function startRemote(instanceId: number, instanceName: string) {
+    try {
+      const created = await remoteStart.mutateAsync({ instanceId });
+      setRemote({ instanceId, instanceName, sessionToken: created.sessionToken });
+    } catch (error) {
+      toast.error(error instanceof Error ? error.message : "Nao foi possivel iniciar o controle remoto.");
+    }
+  }
+
+  function stopRemote() {
+    const current = remote;
+    setRemote(null);
+    if (current) {
+      void remoteStop.mutateAsync({ instanceId: current.instanceId, sessionToken: current.sessionToken })
+        .catch(() => { /* a sessao termina automaticamente em 20 s */ });
+    }
+  }
+
 
   const workers = useMemo(() => new Map((dashboard.data?.browserWorkers ?? []).map(w => [w.id, w])), [dashboard.data?.browserWorkers]);
   const assignments = useMemo(() => new Map((dashboard.data?.instanceWorkerAssignments ?? []).map(a => [a.instanceId, a])), [dashboard.data?.instanceWorkerAssignments]);
@@ -97,11 +121,14 @@ export default function H2AdsMobile() {
                 <button type="button" disabled={!canLaunch || busy} onClick={() => void command(instance.id, "launch")} className="flex min-h-12 items-center justify-center gap-1 rounded-xl border border-emerald-400/40 bg-emerald-500/10 px-2 text-xs font-black text-emerald-200 disabled:cursor-not-allowed disabled:opacity-35">{busyId === instance.id ? <Loader2 className="h-4 w-4 animate-spin" /> : <Play className="h-4 w-4" />}Abrir</button>
                 <button type="button" disabled={!canClose || busy} onClick={() => void command(instance.id, "close")} className="flex min-h-12 items-center justify-center gap-1 rounded-xl border border-rose-400/40 bg-rose-500/10 px-2 text-xs font-black text-rose-200 disabled:cursor-not-allowed disabled:opacity-35"><Square className="h-4 w-4" />Fechar</button>
               </div>
+              {isOpen && online && remoteStatus.data?.enabled && <button type="button" disabled={Boolean(remote) || remoteStart.isPending} onClick={() => void startRemote(instance.id, instance.name)} className="mt-3 flex min-h-12 w-full items-center justify-center gap-2 rounded-xl border border-blue-300/50 bg-blue-600/20 px-3 text-sm font-black text-blue-100 disabled:opacity-40"><Monitor className="h-4 w-4" /> Visualizar / Controlar (piloto)</button>}
+              {isOpen && !remoteStatus.data?.enabled && <p className="mt-3 text-[11px] text-slate-500">Controle visual: fase 2 em validacao, ainda nao liberada.</p>}
               {run?.lastErrorCategory && <p className="mt-3 break-words text-xs text-rose-300">Diagnóstico: {run.lastErrorCategory}</p>}
             </article>;
           })}
         </section>
         <p className="text-center text-xs leading-5 text-slate-500">Somente administração. O Chrome permanece no Windows; perfis e proxies não são transferidos para o celular.</p>
+        {remote && <H2AdsMobileRemoteViewer instanceId={remote.instanceId} instanceName={remote.instanceName} sessionToken={remote.sessionToken} onClose={stopRemote} />}
       </main>
     </div>
   );
