@@ -32,6 +32,8 @@ import { setH2AdsOrderLink } from "../h2adsOrderLink";
 import { assignH2AdsInstanceWorkerPortable } from "../h2adsProfilePortability";
 import { autoProvisionH2AdsInstance, getH2AdsAutoWorkerStatus, rotateH2AdsInstanceProxy } from "../h2adsAutoProvisioning";
 import { importH2AdsProxyPool, listH2AdsProxyPool } from "../h2adsProxyPool";
+import { h2AdsMobileBridge, h2AdsMobileRemoteEnabled } from "../h2adsMobileRemoteBridge";
+import { h2AdsRemoteOwnerForOpenInstance } from "../h2adsMobileRemoteOwner";
 
 export const h2AdsGroupStatusSchema = z.enum(["active", "archived"]);
 export const h2AdsInstanceStatusSchema = z.enum(["draft", "paused", "archived"]);
@@ -179,6 +181,51 @@ export const h2AdsRouter = {
   ...h2AdsOrderLinkRouterPart,
   listDashboard: adminProcedure.query(async () => listH2AdsDashboard()),
   proxySecurityStatus: adminProcedure.query(() => ({ encryptionReady: isH2AdsProxyEncryptionReady() })),
+  // Fase 2: visualizacao remota da pagina, disponivel apenas quando o piloto
+  // for explicitamente ativado. Sempre requer JWT administrativo vigente.
+  mobileRemoteStatus: adminProcedure.query(() => ({ enabled: h2AdsMobileRemoteEnabled() })),
+  mobileRemoteStart: adminProcedure.input(z.object({ instanceId: z.number().int().positive() }).strict()).mutation(async ({ input }) => {
+    if (!h2AdsMobileRemoteEnabled()) throw new TRPCError({ code: "PRECONDITION_FAILED", message: "Piloto de visualizacao remota ainda nao ativado." });
+    const workerId = await h2AdsRemoteOwnerForOpenInstance(input.instanceId);
+    if (!workerId) throw new TRPCError({ code: "CONFLICT", message: "Instancia nao esta aberta em um Worker online." });
+    try {
+      return h2AdsMobileBridge.start(input.instanceId, workerId);
+    } catch (error) {
+      throw new TRPCError({ code: "CONFLICT", message: error instanceof Error && error.message === "instance_already_controlled" ? "Instancia ja esta sob controle remoto." : "Limite de sessoes remotas atingido." });
+    }
+  }),
+  mobileRemoteFrame: adminProcedure.input(z.object({
+    instanceId: z.number().int().positive(),
+    sessionToken: z.string().min(32).max(64),
+  }).strict()).query(async ({ input }) => {
+    if (!h2AdsMobileRemoteEnabled()) return { active: false as const, image: null, at: null };
+    const active = h2AdsMobileBridge.heartbeat(input.instanceId, input.sessionToken);
+    if (!active) return { active: false as const, image: null, at: null };
+    const frame = h2AdsMobileBridge.readFrame(input.instanceId, input.sessionToken);
+    return { active: true as const, image: frame ? `data:image/jpeg;base64,${frame.jpeg.toString("base64")}` : null, at: frame?.at ?? null };
+  }),
+  mobileRemoteInput: adminProcedure.input(z.object({
+    instanceId: z.number().int().positive(),
+    sessionToken: z.string().min(32).max(64),
+    command: z.discriminatedUnion("kind", [
+      z.object({ kind: z.literal("tap"), x: z.number().min(0).max(1), y: z.number().min(0).max(1) }).strict(),
+      z.object({ kind: z.literal("scroll"), deltaY: z.number().min(-800).max(800) }).strict(),
+      z.object({ kind: z.literal("text"), text: z.string().min(1).max(180) }).strict(),
+      z.object({ kind: z.literal("key"), key: z.enum(["Enter", "Backspace", "Tab", "Escape"]) }).strict(),
+    ]),
+  }).strict()).mutation(async ({ input }) => {
+    if (!h2AdsMobileRemoteEnabled() || !h2AdsMobileBridge.input(input.instanceId, input.sessionToken, input.command)) {
+      throw new TRPCError({ code: "CONFLICT", message: "Sessao indisponivel, expirada ou ocupada." });
+    }
+    return { queued: true };
+  }),
+  mobileRemoteStop: adminProcedure.input(z.object({
+    instanceId: z.number().int().positive(),
+    sessionToken: z.string().min(32).max(64),
+  }).strict()).mutation(async ({ input }) => ({
+    stopped: h2AdsMobileBridge.stop(input.instanceId, input.sessionToken),
+  })),
+
   proxyPool: adminProcedure.query(async () => ({
     ...(await listH2AdsProxyPool()),
     autoWorker: await getH2AdsAutoWorkerStatus(),
