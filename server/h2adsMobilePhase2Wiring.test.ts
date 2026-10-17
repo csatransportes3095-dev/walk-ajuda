@@ -57,5 +57,7 @@ describe("H2ADS Mobile fase 2: ligacoes seguras", () => {
     expect(viewer).toContain('kind: "text"');
     expect(viewer).toContain('kind: "key"');
     expect(viewer).toContain("frameRequest.mutateAsync");
+    expect(viewer).toContain("waitingTooLong");
+    expect(viewer).toContain("instancias antigas nao recebem o recurso automaticamente");
   });
 });
