@@ -29,6 +29,16 @@ describe("H2BICO: extracao de pessoas em prints",()=>{
   expect(isValidCpf("52998224726")).toBe(false);
   expect(normalizeScreenshotName("MARIA DAS GRAÇAS 123")).toBe("MARIA DAS GRAÇAS");
  });
+ it("permite colar print sem limite artificial, preservando OCR sequencial",()=>{
+  const component=readFileSync("client/src/components/H2BicoScreenshotImporter.tsx","utf8");
+  expect(component).toContain("COLAR PRINT");
+  expect(component).toContain('document.addEventListener("paste",handlePaste)');
+  expect(component).toContain("navigator.clipboard.read()");
+  expect(component).toContain("pendingRef.current.push(...chosen)");
+  expect(component).toContain("while(pendingRef.current.length)");
+  expect(component).not.toContain("slice(0,12)");
+  expect(component).toContain("10 MB por imagem");
+ });
  it("mantem confirmacao e preserva cadastros",()=>{
   const server=readFileSync("server/routers/h2bico.ts","utf8");
   const page=readFileSync("client/src/pages/AdminH2Bico.tsx","utf8");
