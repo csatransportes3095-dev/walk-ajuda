@@ -1,4 +1,4 @@
-import { randomBytes } from "node:crypto";
+import   randomBytes } from "node:crypto";
 
 /**
  * Ponte efemera do H2ADS Mobile. Nunca persistir screenshots, comandos ou tokens.
@@ -11,7 +11,7 @@ export const MOBILE_REMOTE_MAX_CONCURRENT = 2;
 export const MOBILE_REMOTE_MAX_QUEUE = 16;
 
 export type MobileInput =
-  | { kind: "tap"; x: number; y: number }
+  |   kind: "tap"; x: number; y: number }
   | { kind: "scroll"; deltaY: number }
   | { kind: "text"; text: string }
   | { kind: "key"; key: "Enter" | "Backspace" | "Tab" | "Escape" };
