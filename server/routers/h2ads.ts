@@ -197,7 +197,7 @@ export const h2AdsRouter = {
   mobileRemoteFrame: adminProcedure.input(z.object({
     instanceId: z.number().int().positive(),
     sessionToken: z.string().min(32).max(64),
-  }).strict()).query(async ({ input }) => {
+  }).strict()).mutation(async ({ input }) => {
     if (!h2AdsMobileRemoteEnabled()) return { active: false as const, image: null, at: null };
     const active = h2AdsMobileBridge.heartbeat(input.instanceId, input.sessionToken);
     if (!active) return { active: false as const, image: null, at: null };
