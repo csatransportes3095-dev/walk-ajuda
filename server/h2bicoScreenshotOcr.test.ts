@@ -9,24 +9,24 @@ function word(text:string,x:number,y:number,w:number,block:number,line:number){
 describe("H2BICO: extracao de pessoas em prints",()=>{
  it("associa nome e CPF validos ao mesmo card e calcula recorte",()=>{
   const lines=["level\tpage_num\tblock_num\tpar_num\tline_num\tword_num\tleft\ttop\twidth\theight\tconf\ttext",
-   word("DIEGO",280,119,70,1,1),word("MARQUES",355,119,110,1,1),
-   word("ALVES",470,119,70,1,1),word("PINTO",545,119,80,1,1),
-   word("149.604.287-59",279,156,140,2,1),
-   word("MATHEUS",280,384,110,3,1),word("ADELINO",400,384,110,3,1),
-   word("DA",512,384,30,3,1),word("SILVA",545,384,75,3,1),
-   word("456.775.178-79",279,420,140,4,1)].join("\n");
+   word("PESSOA",280,119,70,1,1),word("EXEMPLO",355,119,110,1,1),
+   word("DE",470,119,70,1,1),word("TESTE",545,119,80,1,1),
+   word("529.982.247-25",279,156,140,2,1),
+   word("OUTRA",280,384,110,3,1),word("PESSOA",400,384,110,3,1),
+   word("DE",512,384,30,3,1),word("TESTE",545,384,75,3,1),
+   word("111.444.777-35",279,420,140,4,1)].join("\n");
   const persons=parseScreenshotTsv(lines,1489,1584);
   expect(persons).toHaveLength(2);
-  expect(persons[0].name).toBe("DIEGO MARQUES ALVES PINTO");
-  expect(persons[0].cpf).toBe("14960428759");
+  expect(persons[0].name).toBe("PESSOA EXEMPLO DE TESTE");
+  expect(persons[0].cpf).toBe("52998224725");
   expect(persons[0].crop.x).toBeGreaterThan(80);
   expect(persons[0].crop.x).toBeLessThan(190);
-  expect(persons[1].name).toBe("MATHEUS ADELINO DA SILVA");
+  expect(persons[1].name).toBe("OUTRA PESSOA DE TESTE");
   expect(persons.every(p=>isValidCpf(p.cpf))).toBe(true);
  });
  it("nao considera CPF sem digito verificador correto como apto a salvar",()=>{
-  expect(isValidCpf("14960428759")).toBe(true);
-  expect(isValidCpf("14960428750")).toBe(false);
+  expect(isValidCpf("52998224725")).toBe(true);
+  expect(isValidCpf("52998224726")).toBe(false);
   expect(normalizeScreenshotName("MARIA DAS GRAÇAS 123")).toBe("MARIA DAS GRAÇAS");
  });
  it("mantem confirmacao e preserva cadastros",()=>{
