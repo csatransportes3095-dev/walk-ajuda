@@ -184,7 +184,8 @@ export const h2AdsRouter = {
   // Fase 2: visualizacao remota da pagina, disponivel apenas quando o piloto
   // for explicitamente ativado. Sempre requer JWT administrativo vigente.
   mobileRemoteStatus: adminProcedure.query(() => ({ enabled: h2AdsMobileRemoteEnabled() })),
-  mobileRemoteStart: adminProcedure.input(z.object({ instanceId: z.number().int().positive() }).strict()).mutation(async ({ input }) => {
+  mobileRemoteStart: adminProcedure.input(z.object({ instanceId: z.number().int().positive() }).strict()).mutation(async ({ input, ctx }) => {
+    ctx.res.setHeader("Cache-Control", "private, no-store");
     if (!h2AdsMobileRemoteEnabled()) throw new TRPCError({ code: "PRECONDITION_FAILED", message: "Piloto de visualizacao remota ainda nao ativado." });
     const workerId = await h2AdsRemoteOwnerForOpenInstance(input.instanceId);
     if (!workerId) throw new TRPCError({ code: "CONFLICT", message: "Instancia nao esta aberta em um Worker online." });
@@ -197,7 +198,8 @@ export const h2AdsRouter = {
   mobileRemoteFrame: adminProcedure.input(z.object({
     instanceId: z.number().int().positive(),
     sessionToken: z.string().min(32).max(64),
-  }).strict()).mutation(async ({ input }) => {
+  }).strict()).mutation(async ({ input, ctx }) => {
+    ctx.res.setHeader("Cache-Control", "private, no-store");
     if (!h2AdsMobileRemoteEnabled()) return { active: false as const, image: null, at: null };
     const active = h2AdsMobileBridge.heartbeat(input.instanceId, input.sessionToken);
     if (!active) return { active: false as const, image: null, at: null };
