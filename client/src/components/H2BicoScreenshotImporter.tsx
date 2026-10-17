@@ -92,7 +92,7 @@ export default function H2BicoScreenshotImporter(){
               source:file.name,photo,name:p.name,cpf:p.cpf,crop:p.crop,
               width:analysis.width,height:analysis.height,
               existing:p.alreadyExists,
-              selected:!p.alreadyExists&&p.validCpf&&p.name.length>5,
+              selected:!p.alreadyExists&&p.validCpf&&p.name.length>5&&p.confidence>=70&&!p.warnings.some(w=>w.includes("CONFIRA O NUMERO")),
               warnings:[...p.warnings],
             }));
             setItems(current=>{
@@ -247,6 +247,7 @@ export default function H2BicoScreenshotImporter(){
                   onChange={e=>update(item.id,{selected:e.target.checked})}/>
                 {item.saved?"SALVO":item.existing?"CPF JÁ CADASTRADO":isValidCpf(item.cpf)?"Conferido — salvar":"CPF INVÁLIDO"}
               </label>
+              {item.warnings.some(w=>w.includes("CONFIRA O NUMERO"))&&<p className="text-xs font-bold text-amber-200">OCR apresentou leituras diferentes. Verifique o CPF e marque manualmente antes de salvar.</p>}
               {item.warnings.map((w,i)=><p key={i} className="text-xs text-amber-200">{w}</p>)}
               {item.error&&<p className="text-xs text-red-300">{item.error}</p>}
             </div>
