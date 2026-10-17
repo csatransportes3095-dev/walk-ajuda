@@ -3,7 +3,7 @@ import { toast } from "sonner";
 import { ArrowDown, ArrowUp, Loader2, Minus, Plus, Send, X } from "lucide-react";
 import { trpc } from "@/lib/trpc";
 
-type Action = { kind: "tap"; x: number; y: number } | { kind: "scroll"; deltaY: number } |
+type Action = { kind: "tap"; x: number; y: number } | { kind: "scroll"; deltaY: number; x?: number; y?: number } |
   { kind: "text"; text: string } | { kind: "key"; key: "Enter" | "Backspace" | "Tab" | "Escape" };
 
 export default function H2AdsMobileRemoteViewer({ instanceId, instanceName, sessionToken, onClose }: {
@@ -41,6 +41,7 @@ export default function H2AdsMobileRemoteViewer({ instanceId, instanceName, sess
   const selectTab = trpc.h2Ads.mobileRemoteSelectTab.useMutation();
   const [text, setText] = useState("");
   const [zoom, setZoom] = useState(1);
+  const [fitMode, setFitMode] = useState<"contain" | "cover">("contain");
   const [waitingTooLong, setWaitingTooLong] = useState(false);
   const pointerOrigin = useRef<{ x: number; y: number } | null>(null);
   const expired = frameData?.active === false;
@@ -64,7 +65,27 @@ export default function H2AdsMobileRemoteViewer({ instanceId, instanceName, sess
     }
   };
 
+  // Mapeia o toque para os pixels da pagina original mesmo usando "Ajustar",
+  // "Preencher" ou zoom: nunca clique nas margens pretas do object-fit.
+  const pointInChrome = (event: React.PointerEvent<HTMLImageElement>) => {
+    const img = event.currentTarget;
+    const bounds = img.getBoundingClientRect();
+    if (!bounds.width || !bounds.height || !img.naturalWidth || !img.naturalHeight) return null;
+    const scale = fitMode === "contain"
+      ? Math.min(bounds.width / img.naturalWidth, bounds.height / img.naturalHeight)
+      : Math.max(bounds.width / img.naturalWidth, bounds.height / img.naturalHeight);
+    const drawWidth = img.naturalWidth * scale;
+    const drawHeight = img.naturalHeight * scale;
+    const left = bounds.left + (bounds.width - drawWidth) / 2;
+    const top = bounds.top + (bounds.height - drawHeight) / 2;
+    const x = (event.clientX - left) / drawWidth;
+    const y = (event.clientY - top) / drawHeight;
+    if (x < 0 || x > 1 || y < 0 || y > 1) return null;
+    return { x, y };
+  };
+
   const pointerDown = (event: React.PointerEvent<HTMLImageElement>) => {
+    if (expired) return;
     pointerOrigin.current = { x: event.clientX, y: event.clientY };
     event.currentTarget.setPointerCapture(event.pointerId);
   };
@@ -75,110 +96,110 @@ export default function H2AdsMobileRemoteViewer({ instanceId, instanceName, sess
     if (!start || expired) return;
     const dx = event.clientX - start.x;
     const dy = event.clientY - start.y;
-    if (Math.abs(dy) >= 26 && Math.abs(dy) >= Math.abs(dx)) {
-      void send({ kind: "scroll", deltaY: Math.max(-800, Math.min(800, -dy * 2)) });
+    const point = pointInChrome(event);
+    if (Math.abs(dy) >= 22 && Math.abs(dy) >= Math.abs(dx)) {
+      void send({
+        kind: "scroll", deltaY: Math.max(-800, Math.min(800, -dy * 2)),
+        x: point?.x ?? 0.5, y: point?.y ?? 0.6,
+      });
       return;
     }
-    const bounds = event.currentTarget.getBoundingClientRect();
-    if (bounds.width <= 0 || bounds.height <= 0) return;
-    const x = Math.min(1, Math.max(0, (event.clientX - bounds.left) / bounds.width));
-    const y = Math.min(1, Math.max(0, (event.clientY - bounds.top) / bounds.height));
-    void send({ kind: "tap", x, y });
+    if (point) void send({ kind: "tap", ...point });
   };
 
   return (
-    <div role="dialog" aria-modal="true" aria-label={`Visualizacao remota de ${instanceName}`}
-      className="fixed inset-0 z-[100] overflow-y-auto bg-[#06070A] text-white">
-      <div className="mx-auto w-full max-w-5xl space-y-3 p-3 pb-16">
-        <header className="flex items-center justify-between gap-3">
-          <div className="min-w-0">
-            <p className="text-[10px] font-bold uppercase tracking-widest text-blue-300">H2ADS MOBILE • REMOTO</p>
-            <h2 className="truncate text-lg font-black">{instanceName}</h2>
-          </div>
-          <button type="button" onClick={onClose} className="flex min-h-11 items-center gap-2 rounded-xl border border-rose-400/40 bg-rose-500/10 px-3 text-sm font-bold text-rose-100">
-            <X className="h-4 w-4" /> Encerrar
-          </button>
-        </header>
-
-        <div className="rounded-xl border border-blue-400/25 bg-blue-400/5 px-3 py-2 text-xs leading-5 text-slate-300">
-          Previa da aba web, nao da janela Windows inteira. Conexao ADM temporaria.
-          O Chrome e o proxy permanecem no computador. Atualizacao aproximada de 1 a 2 segundos.
+    <div role="dialog" aria-modal="true" aria-label={"Controle remoto: " + instanceName}
+      className="fixed inset-0 z-[100] flex h-[100dvh] w-full flex-col overflow-hidden bg-[#06070A] text-white">
+      <header className="flex min-h-12 shrink-0 items-center justify-between gap-2 border-b border-white/10 px-3 py-1.5">
+        <div className="min-w-0 flex-1">
+          <span className="block truncate text-[10px] font-bold uppercase tracking-wider text-blue-300">H2ADS · Controle remoto</span>
+          <strong className="block truncate text-sm">{instanceName}</strong>
         </div>
+        <button type="button" onClick={onClose} className="flex min-h-10 shrink-0 items-center gap-1 rounded-lg border border-rose-400/40 bg-rose-500/10 px-3 text-xs font-bold text-rose-100">
+          <X className="h-4 w-4" /> Encerrar
+        </button>
+      </header>
 
-        <div className="flex items-center justify-between rounded-xl border border-white/10 bg-[#141922] px-3 py-2">
-          <span className="text-xs font-bold text-slate-300">{expired ? "Sessao expirada" : frameData?.image ? "Previa disponivel" : waitingTooLong ? "Sem imagem do Chrome" : "Aguardando imagem da aba..."}</span>
-          <div className="flex items-center gap-2">
-            <button type="button" onClick={() => setZoom(z => Math.max(1, Math.round((z - 0.25) * 100) / 100))} aria-label="Diminuir zoom" className="rounded-lg border border-white/15 p-2"><Minus className="h-4 w-4" /></button>
-            <span className="text-xs font-bold">{Math.round(zoom * 100)}%</span>
-            <button type="button" onClick={() => setZoom(z => Math.min(2, Math.round((z + 0.25) * 100) / 100))} aria-label="Aumentar zoom" className="rounded-lg border border-white/15 p-2"><Plus className="h-4 w-4" /></button>
-          </div>
-        </div>
-
-        {(frameData?.tabStatus?.tabs.length ?? 0) > 1 && <div className="rounded-xl border border-blue-400/30 bg-[#141922] p-3">
-          <label htmlFor="h2ads-mobile-tab" className="mb-2 block text-xs font-bold text-blue-200">Escolha a aba para visualizar e controlar</label>
-          <select id="h2ads-mobile-tab" value={frameData?.tabStatus?.selectedTargetId ?? ""} onChange={e => {
-            if (e.target.value) void selectTab.mutateAsync({ instanceId, sessionToken, targetId: e.target.value })
-              .catch(() => toast.error("Nao foi possivel selecionar a aba."));
-          }} className="w-full rounded-lg border border-white/20 bg-[#0a0d15] p-3 text-sm text-white">
+      <div className="flex shrink-0 items-center gap-2 border-b border-white/10 px-2 py-1.5">
+        {(frameData?.tabStatus?.tabs.length ?? 0) > 1 ? (
+          <select aria-label="Escolher aba Chrome" value={frameData?.tabStatus?.selectedTargetId ?? ""}
+            onChange={event => {
+              if (event.target.value) void selectTab.mutateAsync({
+                instanceId, sessionToken, targetId: event.target.value,
+              }).catch(() => toast.error("Nao foi possivel selecionar a aba."));
+            }}
+            className="min-w-0 flex-1 rounded-lg border border-white/20 bg-[#141922] px-2 py-2 text-xs text-white">
             <option value="">Selecione a aba</option>
-            {frameData?.tabStatus?.tabs.map(tab =>
-              <option key={tab.targetId} value={tab.targetId}>{tab.kind === "label" ? "Identificacao H2ADS" : tab.label} — {tab.title.slice(0, 65)}</option>)}
+            {frameData?.tabStatus?.tabs.map(tab => (
+              <option key={tab.targetId} value={tab.targetId}>
+                {tab.kind === "label" ? "Identificacao H2ADS" : tab.label} - {tab.title.slice(0, 45)}
+              </option>
+            ))}
           </select>
-        </div>}
-        <div role="status" className="rounded-xl border border-blue-400/25 bg-[#141922] px-3 py-2 text-xs text-slate-200">
-          <span className="font-bold text-blue-200">Ultimo comando: </span>
-          {!frameData?.lastInput ? "Nenhum comando enviado nesta sessao." :
-            `#${frameData.lastInput.id} — ${frameData.lastInput.kind === "scroll" ? "Rolagem" :
-              frameData.lastInput.kind === "tap" ? "Toque" : frameData.lastInput.kind === "text" ? "Texto" : "Tecla"}: ${frameData.lastInput.state === "queued" ? "Aguardando o Windows" :
-              frameData.lastInput.state === "sent" ? "Recebido pelo Chrome (a mudanca visual ainda precisa ser confirmada)" :
-              frameData.lastInput.state === "blocked" ? "Bloqueado: aba indisponivel ou alterada" : "Falhou no Chrome"}`}
-        </div>
-        <div className="grid grid-cols-2 gap-2">
-          <button type="button" disabled={expired} onClick={() => void send({ kind: "scroll", deltaY: -500 })}
-            className="flex min-h-12 items-center justify-center gap-2 rounded-xl bg-blue-500/15 text-sm font-bold text-blue-200 disabled:opacity-40">
-            <ArrowUp className="h-4 w-4" /> Subir no Chrome
-          </button>
-          <button type="button" disabled={expired} onClick={() => void send({ kind: "scroll", deltaY: 500 })}
-            className="flex min-h-12 items-center justify-center gap-2 rounded-xl bg-blue-500/15 text-sm font-bold text-blue-200 disabled:opacity-40">
-            <ArrowDown className="h-4 w-4" /> Descer no Chrome
-          </button>
-        </div>
-        <p className="text-xs text-slate-400">Para rolar a pagina do Chrome use os botoes acima; para navegar pelo painel deslize fora da imagem.</p>
-        <div className="max-h-[52dvh] overflow-auto overscroll-contain rounded-xl border border-white/15 bg-black">
-          {frameData?.image ? (
-            <img
-              src={frameData.image} alt="Previa ao vivo da aba selecionada no computador"
-              className="block w-full select-none"
-              style={{ width: `${zoom * 100}%`, maxWidth: "none", touchAction: "none" }}
-              draggable={false}
-              onPointerDown={pointerDown}
-              onPointerUp={pointerUp}
-              onPointerCancel={() => { pointerOrigin.current = null; }}
-            />
-          ) : (
-            <div className="flex min-h-64 flex-col items-center justify-center gap-3 px-6 text-center text-sm text-slate-400">
-              {frameRequest.isPending && <Loader2 className="h-6 w-6 animate-spin" />}
-              {expired ? "A sessao terminou. Feche e inicie uma nova." :
-                waitingTooLong
-                  ? "Nenhuma imagem chegou. Use uma instancia de teste aberta depois de atualizar o agente Windows e ativar o controle remoto; instancias antigas nao recebem o recurso automaticamente. Se houver varias abas, escolha uma na lista acima."
-                  : "Aguardando a aba escolhida no Chrome. Se houver varias abas, selecione a correta acima."}
-            </div>
-          )}
-        </div>
+        ) : <span className="min-w-0 flex-1 truncate text-xs text-slate-300">{frameData?.image ? "Chrome conectado" : "Aguardando Chrome..."}</span>}
+        <button type="button" onClick={() => setFitMode(mode => mode === "contain" ? "cover" : "contain")}
+          className="shrink-0 rounded-lg border border-blue-400/40 px-2 py-2 text-[11px] font-bold text-blue-200">
+          {fitMode === "contain" ? "Preencher" : "Ajustar"}
+        </button>
+        <button type="button" aria-label="Diminuir zoom" onClick={() => setZoom(z => Math.max(1, Math.round((z - 0.25) * 100) / 100))}
+          className="rounded-lg border border-white/20 p-2"><Minus className="h-4 w-4" /></button>
+        <button type="button" aria-label="Aumentar zoom" onClick={() => setZoom(z => Math.min(2.5, Math.round((z + 0.25) * 100) / 100))}
+          className="rounded-lg border border-white/20 p-2"><Plus className="h-4 w-4" /></button>
+      </div>
 
-        <div className="rounded-xl border border-white/10 bg-[#141922] p-3">
-          <label htmlFor="h2ads-mobile-remote-text" className="text-xs font-bold text-slate-300">Teclado do Android</label>
-          <div className="mt-2 flex items-center gap-2">
-            <input id="h2ads-mobile-remote-text" value={text} maxLength={180} onChange={e => setText(e.target.value)} autoComplete="off" className="min-w-0 flex-1 rounded-xl border border-white/20 bg-black/30 px-3 py-3 text-sm text-white outline-none" placeholder="Digite o texto para enviar..." />
-            <button type="button" disabled={!text || expired} onClick={() => { void send({ kind: "text", text }); setText(""); }} className="flex min-h-11 items-center gap-2 rounded-xl bg-blue-600 px-3 text-sm font-bold disabled:opacity-40"><Send className="h-4 w-4" /> Enviar</button>
+      <main className="relative min-h-0 flex-1 overflow-hidden bg-black">
+        {frameData?.image ? (
+          <img
+            src={frameData.image} alt="Chrome remoto em tela cheia"
+            className="block h-full w-full select-none"
+            style={{ objectFit: fitMode, transform: "scale(" + zoom + ")", transformOrigin: "center center", touchAction: "none" }}
+            draggable={false} onPointerDown={pointerDown} onPointerUp={pointerUp}
+            onPointerCancel={() => { pointerOrigin.current = null; }}
+          />
+        ) : (
+          <div className="flex h-full items-center justify-center px-6 text-center text-sm text-slate-400">
+            {expired ? "Sessao expirada. Encerre e abra outra." :
+              waitingTooLong ? "Chrome sem imagem. Confira a aba selecionada ou reabra somente a instancia de teste." :
+              <div className="flex flex-col items-center gap-3"><Loader2 className="h-6 w-6 animate-spin" />Aguardando imagem...</div>}
           </div>
-          <div className="mt-3 grid grid-cols-4 gap-2">
-            {(["Enter", "Backspace", "Tab", "Escape"] as const).map(key =>
-              <button key={key} type="button" disabled={expired} onClick={() => void send({ kind: "key", key })} className="min-h-11 rounded-lg border border-white/15 bg-white/5 px-1 text-[11px] font-bold disabled:opacity-40">{key === "Backspace" ? "Apagar" : key === "Escape" ? "Esc" : key}</button>
-            )}
-          </div>
+        )}
+      </main>
+
+      <div className="shrink-0 border-t border-white/10 bg-[#10151E] px-2 pb-[max(8px,env(safe-area-inset-bottom))] pt-2">
+        <div className="grid grid-cols-2 gap-2">
+          <button type="button" disabled={expired} onClick={() => void send({ kind: "scroll", deltaY: -550, x: 0.5, y: 0.6 })}
+            className="flex min-h-12 items-center justify-center gap-2 rounded-xl bg-blue-600/25 text-sm font-bold text-blue-100 disabled:opacity-40">
+            <ArrowUp className="h-5 w-5" /> Subir
+          </button>
+          <button type="button" disabled={expired} onClick={() => void send({ kind: "scroll", deltaY: 550, x: 0.5, y: 0.6 })}
+            className="flex min-h-12 items-center justify-center gap-2 rounded-xl bg-blue-600/25 text-sm font-bold text-blue-100 disabled:opacity-40">
+            <ArrowDown className="h-5 w-5" /> Descer
+          </button>
         </div>
-        <p className="text-center text-xs leading-5 text-slate-500">Toque na imagem para clicar; deslize sobre ela para rolar. Por seguranca, o controle permanece vinculado a aba selecionada desta instancia.</p>
+        <details className="mt-1.5 text-xs text-slate-300">
+          <summary className="cursor-pointer select-none px-2 py-1.5">Teclado e diagnostico</summary>
+          <p role="status" className="mb-2 rounded-lg bg-black/30 p-2">
+            {!frameData?.lastInput ? "Nenhum comando enviado." :
+              <>Ultimo comando #{frameData.lastInput.id}: {frameData.lastInput.state === "queued" ? "Aguardando o Windows" :
+                frameData.lastInput.state === "sent" ? "Enviado ao Chrome (sem garantia de rolagem)" :
+                frameData.lastInput.state === "blocked" ? "Bloqueado: aba alterada ou indisponivel" : "Falhou no Chrome"}</>}
+          </p>
+          <label htmlFor="h2ads-mobile-remote-text" className="block pb-1">Teclado do Android</label>
+          <div className="flex gap-2">
+            <input id="h2ads-mobile-remote-text" value={text} maxLength={180} onChange={e => setText(e.target.value)} autoComplete="off"
+              className="min-w-0 flex-1 rounded-lg border border-white/20 bg-black/30 px-3 py-2 text-white" placeholder="Texto para o Chrome..." />
+            <button type="button" disabled={!text || expired} onClick={() => { void send({ kind: "text", text }); setText(""); }}
+              className="rounded-lg bg-blue-600 px-3 font-bold disabled:opacity-40"><Send className="h-4 w-4" /></button>
+          </div>
+          <div className="mt-2 grid grid-cols-4 gap-2">
+            {(["Enter", "Backspace", "Tab", "Escape"] as const).map(key => (
+              <button key={key} type="button" disabled={expired} onClick={() => void send({ kind: "key", key })}
+                className="min-h-10 rounded-lg border border-white/20 text-xs font-bold disabled:opacity-40">
+                {key === "Backspace" ? "Apagar" : key === "Escape" ? "Esc" : key}
+              </button>
+            ))}
+          </div>
+        </details>
       </div>
     </div>
   );

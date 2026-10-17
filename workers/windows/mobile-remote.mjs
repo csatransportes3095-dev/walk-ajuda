@@ -114,7 +114,7 @@ export function startH2AdsMobileRemote({ browser, panelUrl, workerKey, workerTok
       // Prioriza roda de mouse, que aciona a rolagem normal nesse ambiente.
       // O gesto touch fica como fallback caso o CDP recuse a roda.
       const deltaY = Math.max(-800, Math.min(800, job.deltaY));
-      const scrollPosition = { x: Math.round(width / 2), y: Math.round(height / 2) };
+      const scrollPosition = { x: Math.round(width * (Number.isFinite(job.x) ? Math.max(0, Math.min(1, job.x)) : 0.5)), y: Math.round(height * (Number.isFinite(job.y) ? Math.max(0, Math.min(1, job.y)) : 0.6)) };
       try {
         await sendPage("Input.dispatchMouseEvent", {
           type: "mouseWheel", ...scrollPosition, deltaX: 0, deltaY,

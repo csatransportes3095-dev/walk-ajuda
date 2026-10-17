@@ -12,7 +12,7 @@ export const MOBILE_REMOTE_MAX_QUEUE = 16;
 
 export type MobileInput =
   | { kind: "tap"; x: number; y: number }
-  | { kind: "scroll"; deltaY: number }
+  | { kind: "scroll"; deltaY: number; x?: number; y?: number }
   | { kind: "text"; text: string }
   | { kind: "key"; key: "Enter" | "Backspace" | "Tab" | "Escape" };
 

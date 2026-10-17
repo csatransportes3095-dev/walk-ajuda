@@ -220,7 +220,7 @@ export const h2AdsRouter = {
     sessionToken: z.string().min(32).max(64),
     command: z.discriminatedUnion("kind", [
       z.object({ kind: z.literal("tap"), x: z.number().min(0).max(1), y: z.number().min(0).max(1) }).strict(),
-      z.object({ kind: z.literal("scroll"), deltaY: z.number().min(-800).max(800) }).strict(),
+      z.object({ kind: z.literal("scroll"), deltaY: z.number().min(-800).max(800), x: z.number().min(0).max(1).optional(), y: z.number().min(0).max(1).optional() }).strict(),
       z.object({ kind: z.literal("text"), text: z.string().min(1).max(180) }).strict(),
       z.object({ kind: z.literal("key"), key: z.enum(["Enter", "Backspace", "Tab", "Escape"]) }).strict(),
     ]),
