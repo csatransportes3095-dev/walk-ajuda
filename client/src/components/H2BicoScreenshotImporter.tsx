@@ -4,6 +4,7 @@ import { ClipboardPaste } from "lucide-react";
 import { toast } from "sonner";
 import { trpc } from "@/lib/trpc";
 import { isValidCpf } from "@/lib/h2bicoCpfExtractor";
+import { shouldPreselectH2BicoPhoto } from "@/lib/h2bicoImportReview";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Card } from "@/components/ui/card";
@@ -179,9 +180,7 @@ export default function H2BicoScreenshotImporter(){
                whiteChecked:true,
               width:analysis.width,height:analysis.height,
               existing:p.alreadyExists,
-              selected:false, // never save automatically: confirm face/name/CPF association
-              /* legacy check disabled intentionally !p.alreadyExists&&p.validCpf&&p.name.length>5&&p.confidence>=70&&
-                 !p.warnings.some(w=>w.includes("CONFIRA O NUMERO")||w.includes("CONFIRA RECORTE")||w.includes("associação")), */
+              selected:shouldPreselectH2BicoPhoto(p),
               warnings:[...p.warnings],
             }));
             setItems(current=>{
