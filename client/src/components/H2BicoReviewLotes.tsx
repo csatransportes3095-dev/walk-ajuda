@@ -24,6 +24,7 @@ export default function H2BicoReviewLotes(){
   const create=trpc.h2bicoReview.createRun.useMutation();
   const decide=trpc.h2bicoReview.decide.useMutation();
   const confirmLot=trpc.h2bicoReview.confirmLot.useMutation();
+  const unconfirmLot=trpc.h2bicoReview.unconfirmLot.useMutation();
   const lots=trpc.h2bicoReview.lots.useQuery({runId:runId||1},{enabled:!!runId});
   const current=trpc.h2bicoReview.lot.useQuery({runId:runId||1,lotIndex:index},{enabled:!!runId});
   const refresh=async()=>{await Promise.all([utils.h2bicoReview.invalidate(),utils.h2bico.invalidate()]);};
@@ -38,15 +39,20 @@ export default function H2BicoReviewLotes(){
   };
   const rows=current.data?.records||[];
   const pending=rows.filter(row=>row.reviewState==="pending");
+  const confirmed=rows.filter(row=>row.reviewState==="confirmed");
   const doDecision=async(decision:Decision,fromText=false)=>{
     if(!runId||busy)return;
     const cpfs=fromText?[...new Set(manual.split(/\r?\n/).map(x=>x.replace(/\D/g,"")).filter(Boolean))]:selected;
     if(!cpfs.length){toast.error("Selecione CPFs ou cole uma lista para esta ação.");return;}
     if(cpfs.some(cpf=>cpf.length!==11)){toast.error("Há CPF com formato inválido.");return;}
-    if(!window.confirm("Confirmar "+decision+" em "+cpfs.length+" CPF(s) do lote "+(index+1)+"?"))return;
+    const eligible=decision==="unconfirm"?cpfs.filter(cpf=>confirmed.some(row=>row.cpf===cpf)):cpfs;
+    if(!eligible.length){toast.error("Nenhum CPF confirmado selecionado para desfazer.");return;}
+    if(decision==="unconfirm"&&eligible.length!==cpfs.length)
+      toast.info((cpfs.length-eligible.length)+" CPF(s) não confirmados ignorados.");
+    if(!window.confirm("Confirmar "+decision+" em "+eligible.length+" CPF(s) do lote "+(index+1)+"?"))return;
     setBusy(true);
     try{
-      const res=await decide.mutateAsync({runId,lotIndex:index,decision,cpfs});
+      const res=await decide.mutateAsync({runId,lotIndex:index,decision,cpfs:eligible});
       await refresh();setSelected([]);setManual("");
       toast.success(res.updated+" atualizado(s), "+res.unchanged+" já estavam assim.");
     }catch(e){toast.error(e instanceof Error?e.message:"Falha ao atualizar. Nenhum lote deve ser presumido confirmado.");}
@@ -58,6 +64,17 @@ export default function H2BicoReviewLotes(){
     setBusy(true);
     try{const res=await confirmLot.mutateAsync({runId,lotIndex:index});await refresh();setSelected([]);toast.success(res.confirmed+" CPFs confirmados.");}
     catch(e){toast.error(e instanceof Error?e.message:"Falha ao confirmar lote.");}
+    finally{setBusy(false);}
+  };
+  const undoConfirmedLot=async()=>{
+    if(!runId||busy||!confirmed.length)return;
+    if(!window.confirm("DESFAZER A CONFIRMAÇÃO dos "+confirmed.length+" CPFs confirmados do LOTE "+(index+1)+"? Eles voltarão para PENDENTE. Os descartados não serão alterados."))return;
+    setBusy(true);
+    try{
+      const result=await unconfirmLot.mutateAsync({runId,lotIndex:index});
+      await refresh();setSelected([]);setManual("");
+      toast.success(result.unconfirmed+" CPFs voltaram para PENDENTE.");
+    }catch(error){toast.error(error instanceof Error?error.message:"Falha ao desfazer confirmação.");}
     finally{setBusy(false);}
   };
   const copy=async()=>{
@@ -104,7 +121,10 @@ export default function H2BicoReviewLotes(){
       <div className="flex flex-wrap gap-2">
         <Button disabled={busy||!rows.length} onClick={()=>void copy()}>COPIAR CPFs DO LOTE</Button>
         <Button disabled={busy||!pending.length} onClick={()=>void doConfirmLot()}>CONFIRMAR {pending.length} PENDENTES</Button>
-        <Button variant="outline" disabled={busy} onClick={()=>setSelected(rows.filter(r=>r.reviewState==="pending").map(r=>r.cpf))}>SELECIONAR PENDENTES</Button>
+        <Button variant="outline" disabled={busy||!rows.length} onClick={()=>setSelected(rows.map(r=>r.cpf))}>SELECIONAR TODOS DO LOTE</Button>
+        <Button variant="outline" disabled={busy||!confirmed.length} onClick={()=>setSelected(confirmed.map(r=>r.cpf))}>SELECIONAR CONFIRMADOS ({confirmed.length})</Button>
+        <Button variant="outline" disabled={busy||!pending.length} onClick={()=>setSelected(pending.map(r=>r.cpf))}>SELECIONAR PENDENTES</Button>
+        <Button variant="destructive" disabled={busy||!confirmed.length} onClick={()=>void undoConfirmedLot()}>DESFAZER CONFIRMAÇÃO DO LOTE ({confirmed.length})</Button>
         <Button variant="outline" onClick={()=>setSelected([])}>DESMARCAR</Button>
       </div>
       <div className="max-h-64 overflow-y-auto space-y-1 border border-gray-700 rounded-lg p-2">
