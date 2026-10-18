@@ -134,7 +134,7 @@ export default function H2BicoScreenshotImporter(){
               id:Date.now()+"-"+number+"-"+i+"-"+Math.random(),
               source:file.name,photo,name:p.name,cpf:p.cpf,cpfSuggestion:p.cpfSuggestion,crop:p.crop,
                photoLayout:p.photoLayout,confidence:p.confidence,
-               nameBox:p.nameBox?{left:p.nameBox.left*analysis.width/(p.ocrWidth||analysis.width),top:p.nameBox.top*analysis.height/(p.ocrHeight||analysis.height),width:p.nameBox.width*analysis.width/(p.ocrWidth||analysis.width),height:p.nameBox.height*analysis.height/(p.ocrHeight||analysis.height)}:undefined,
+               nameBox:p.nameBox,
               width:analysis.width,height:analysis.height,
               existing:p.alreadyExists,
               selected:!p.alreadyExists&&p.validCpf&&p.name.length>5&&p.confidence>=70&&
