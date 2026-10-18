@@ -57,6 +57,16 @@ describe("Importacao de e-mails na Seguranca do Site", () => {
     expect(batches.map(b=>b.length)).toEqual([500,500,205]);
     expect(new Set(batches.flat()).size).toBe(1205);
   });
+  it("inclui emprestimos antigos e ativos independentemente do status dos pedidos", () => {
+    const matches = new Map([["cpf:12345678901",2],["phone:61999991004",1]]);
+    const withLoans=prepareSiteBulkCandidates(
+      [{ id:20,name:"Antigo",email:"antigo@exemplo.com",phone:"61911112222",cpf:"123.456.789-01" },
+       { id:21,name:"Atual",email:"atual@exemplo.com",phone:"61999991004" }],
+      [], [], matches,
+    );
+    expect(filterSiteBulkCandidates(withLoans,"with_loans").map(c=>c.email)).toEqual(["antigo@exemplo.com","atual@exemplo.com"]);
+    expect(filterSiteBulkCandidates(withLoans,"without_orders")).toHaveLength(2);
+  });
   it("classifica cancelamentos fora dos pedidos em andamento", () => {
     expect(classifySiteBulkStatus("cancelado")).toBe("other");
     expect(classifySiteBulkStatus("p")).toBe("active");
