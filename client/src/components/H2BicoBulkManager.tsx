@@ -5,7 +5,7 @@ import {Button} from "@/components/ui/button";
 import {Card} from "@/components/ui/card";
 import {Textarea} from "@/components/ui/textarea";
 
-type Row={id:number;name:string;cpf:string;status:string;hasPhoto:boolean;earStatus:"com_ear"|"sem_ear"|null;protected:boolean};
+type Row={id:number;name:string;cpf:string;status:string;hasPhoto:boolean;earStatus:"com_ear"|"sem_ear"|null;protected:boolean;reviewState?:"pending"|"confirmed"|"discarded";reviewedAt?:string|null};
 const statuses:Record<string,string>={available:"Disponível",reserved:"Reservado",in_use:"Em uso",used:"USADO",archived:"Arquivado"};
 export default function H2BicoBulkManager(){
   const [text,setText]=useState("");
@@ -99,8 +99,13 @@ export default function H2BicoBulkManager(){
         missingCount+=res.missing;
       }
       await Promise.all([lookup.h2bico.invalidate(),lookup.h2bicoReview.invalidate()]);
-      setSelected([]);setRecords([]);setMissing([]);
-      toast.success(updated+" atualizado(s); "+skipped+" ignorado(s)/protegido(s); "+missingCount+" não encontrado(s).");
+      setSelected([]);
+      const refreshed:Row[]=[];
+      for(let i=0;i<cpfs.length;i+=300)refreshed.push(...await lookup.h2bico.bulkLookup.fetch({cpfs:cpfs.slice(i,i+300)},{staleTime:0}) as Row[]);
+      const index=new Map(refreshed.map(r=>[r.cpf,r]));
+      setRecords(cpfs.flatMap(cpf=>index.has(cpf)?[index.get(cpf)!]:[]));
+      setMissing(cpfs.filter(cpf=>!index.has(cpf)));
+      toast.success(updated+" atualizado(s); "+skipped+" já confirmados ou protegidos; "+missingCount+" não encontrado(s).");
     }catch(e){toast.error("Ação interrompida após "+updated+" atualizados: "+(e instanceof Error?e.message:"erro"));}
     finally{setBusy(false);}
   };
@@ -160,7 +165,7 @@ export default function H2BicoBulkManager(){
         <input aria-label={"Selecionar "+r.name} type="checkbox" checked={selected.includes(r.id)}
           onChange={e=>setSelected(ids=>e.target.checked?[...new Set([...ids,r.id])]:ids.filter(id=>id!==r.id))}/>
         {r.hasPhoto?<img alt={"Foto do registro "+r.name} src={"/api/admin/h2bico/photo/"+r.id} className="h-12 w-12 rounded object-cover" loading="lazy"/>:<div className="h-12 w-12 rounded bg-slate-800 grid place-items-center text-xs">Sem foto</div>}
-        <div className="min-w-0 flex-1"><p className="truncate font-bold text-sm">{r.name}</p><p className="text-xs text-gray-400 font-mono">{r.cpf}</p></div>
+        <div className="min-w-0 flex-1"><p className="truncate font-bold text-sm">{r.name}</p><p className="text-xs text-gray-400 font-mono">{r.cpf}</p><p className={r.reviewState==="confirmed"?"text-xs text-emerald-300":r.reviewState==="discarded"?"text-xs text-red-300":"text-xs text-amber-200"}>{r.reviewState==="confirmed"?"JÁ CONFIRMADO":r.reviewState==="discarded"?"DESCARTADO / BLOQUEADO":"PENDENTE"} {r.reviewedAt?"· "+new Date(r.reviewedAt).toLocaleString("pt-BR"):""}</p></div>
         <div className="text-right text-xs"><p>{statuses[r.status]||r.status}</p><p className="text-cyan-300">{r.earStatus==="com_ear"?"COM EAR":r.earStatus==="sem_ear"?"SEM EAR":"Sem marcação"}</p>{r.protected&&<p className="text-amber-300">Protegido</p>}</div>
       </div>)}
     </div>

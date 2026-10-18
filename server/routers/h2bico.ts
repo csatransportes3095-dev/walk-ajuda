@@ -454,15 +454,18 @@ export const h2bicoRouter = router({
     const db=await dbOrThrow();
     const unique=[...new Set(input.cpfs)];
     const rows=await db.execute(sql`
-      SELECT r.id,r.name,r.cpf,r.status,r.photoUrl,r.linkedOrder,r.usedAt,em.earStatus
+      SELECT r.id,r.name,r.cpf,r.status,r.photoUrl,r.linkedOrder,r.usedAt,em.earStatus,rv.reviewState,rv.reviewedAt
       FROM h2bico_records r
       LEFT JOIN h2bico_ear_marks em ON em.recordId=r.id
+      LEFT JOIN h2bico_review rv ON rv.recordId=r.id
       WHERE r.cpf IN (${sql.join(unique.map(cpf=>sql`${cpf}`),sql`, `)})
     `);
     return (rows[0] as any[]).map(row=>({
       id:Number(row.id),name:String(row.name),cpf:String(row.cpf),
       status:String(row.status),hasPhoto:!!String(row.photoUrl||"").trim(),
       earStatus:row.earStatus==="com_ear"||row.earStatus==="sem_ear"?row.earStatus:null,
+      reviewState:row.reviewState==="confirmed"||row.reviewState==="discarded"?row.reviewState:"pending",
+      reviewedAt:row.reviewedAt||null,
       protected:String(row.status)==="used"||!!row.usedAt||!!String(row.linkedOrder||"").trim(),
     }));
   }),

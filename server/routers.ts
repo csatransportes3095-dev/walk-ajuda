@@ -65,6 +65,7 @@ import { h2AdsRouter } from "./routers/h2ads";
 import { adminAuthenticatorRouter } from "./routers/adminAuthenticator";
 import { h2bicoRouter } from "./routers/h2bico";
 import { h2bicoReviewRouter } from "./h2bicoReview";
+import { h2bicoIntelligenceRouter } from "./h2bicoReviewIntelligence";
 import { createSqlOrderPersistenceStore, isPersistedPublicOrder, notifyOnlyAfterPersistence, persistPublicOrder } from "./orderPersistence";
 import { ensureAutomaticScheduleForOrder, regenerateAutomaticScheduleForOrder } from "./autoSchedule";
 import { resolveLegacyCommissionValue, type CommissionCandidate } from "./commissionResolver";
@@ -3792,6 +3793,7 @@ export const appRouter = router({
   adminAuthenticator: adminAuthenticatorRouter,
   h2bico: h2bicoRouter,
   h2bicoReview: h2bicoReviewRouter,
+  h2bicoIntelligence: h2bicoIntelligenceRouter,
   backup: backupRouter,
 
   orderStatus: router({
