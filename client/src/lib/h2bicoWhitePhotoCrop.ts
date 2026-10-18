@@ -120,3 +120,57 @@ export function findWhitePhotoCrop(
   }
   return winner;
 }
+
+/** Busca em TODO o print, inclusive acima do nome. Não usa o crop antigo
+ * como localização obrigatória. Cada candidato precisa ter uma área branca
+ * conectada suficientemente grande, proporção de retrato e espaço para texto.
+ */
+export function locateWhitePortrait(
+ pixels:Uint8ClampedArray,width:number,height:number,
+ nameX:number,nameY:number,nameWidth:number,
+):WhitePhotoCrop|null {
+ if(width<80||height<80||pixels.length<width*height*4)return null;
+ const mark=new Uint8Array(width*height);
+ const seen=new Uint8Array(mark.length);
+ const queue=new Int32Array(mark.length);
+ for(let i=0;i<mark.length;i++){
+  const p=i*4,r=pixels[p],g=pixels[p+1],b=pixels[p+2];
+  mark[i]=(pixels[p+3]>=128&&r>=215&&g>=215&&b>=215&&Math.max(r,g,b)-Math.min(r,g,b)<=36)?1:0;
+ }
+ let best:WhitePhotoCrop|null=null,score=-Infinity;
+ for(let i=0;i<mark.length;i++){
+  if(!mark[i]||seen[i])continue;
+  let head=0,tail=1,left=width,right=0,top=height,bottom=0;
+  queue[0]=i;seen[i]=1;
+  while(head<tail){
+   const pos=queue[head++],x=pos%width,y=Math.floor(pos/width);
+   left=Math.min(left,x);right=Math.max(right,x);top=Math.min(top,y);bottom=Math.max(bottom,y);
+   const visit=(at:number)=>{if(mark[at]&&!seen[at]){seen[at]=1;queue[tail++]=at;}};
+   if(x>0)visit(pos-1);if(x<width-1)visit(pos+1);
+   if(y>0)visit(pos-width);if(y<height-1)visit(pos+width);
+  }
+  const w=right-left+1,h=bottom-top+1;
+  if(w<70||h<88||w>width*.85||h>height*.85||h/w<.86||h/w>2.3||tail/(w*h)<.22)continue;
+  // Nome logo abaixo da fotografia (ou à direita, nos cards tradicionais).
+  const nameCenter=nameX+nameWidth*.5,cx=left+w*.5;
+  const above=top<nameY && bottom<=nameY+Math.max(35,h*.35) &&
+    Math.abs(cx-nameCenter)<Math.max(w*.9,nameWidth*.85);
+  const leftOfName=right<nameX+Math.max(30,w*.25)&&
+    Math.abs(top+h*.5-nameY)<Math.max(h*.9,70);
+  const rightOfName=left>nameX&&left<nameX+nameWidth+w*1.3&&
+    Math.abs(top+h*.5-nameY)<Math.max(h*.9,70);
+  if(!above&&!leftOfName&&!rightOfName)continue;
+  // Portrait output is strictly interior to the bright component. Do not
+  // include the dark card frame; align vertically from the white top.
+  const outH=Math.min(h,Math.floor(w*1.25)),outW=Math.floor(outH*.8);
+  if(outW<64||outH<80)continue;
+  const outX=left+Math.floor((w-outW)/2);
+  if(!mark[(top+2)*width+outX+3]||!mark[(top+2)*width+outX+outW-4])continue;
+  const distance=above?Math.abs(nameY-bottom):Math.abs(nameX-right);
+  const candidateScore=(above?60:15)+Math.min(tail/(w*h),.75)*30+
+    Math.min(w*h,250000)/5000-distance*.09-
+    Math.abs(cx-nameCenter)*.025;
+  if(candidateScore>score){score=candidateScore;best={x:outX,y:top,width:outW,height:outH};}
+ }
+ return best;
+}
