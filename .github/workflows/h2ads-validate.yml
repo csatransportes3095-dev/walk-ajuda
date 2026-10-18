@@ -67,4 +67,4 @@ jobs:
         run: pnpm build
 
       - name: Verify packaged worker version
-        run: node -e "const fs=require('node:fs'); const text=fs.readFileSync('workers/windows/H2AdsWorker.ps1','utf8'); if (!text.includes('AgentVersion = \\\"1.4.0\\\"')) throw new Error('Packaged worker is not 1.4.0'); console.log('Packaged worker 1.4.0 confirmed');"
+        run: node -e "const fs=require('node:fs'); const text=fs.readFileSync('workers/windows/H2AdsWorker.ps1','utf8'); if (!text.includes('AgentVersion = \\\"1.4.1\\\"')) throw new Error('Packaged worker is not 1.4.1'); console.log('Packaged worker 1.4.1 confirmed');"
