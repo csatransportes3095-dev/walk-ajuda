@@ -1,4 +1,5 @@
 import { useState } from "react";
+import type { SiteBulkFilter } from "../../../server/siteSecurityBulk";
 import { useLocation } from "wouter";
 import { ShieldCheck, ArrowLeft, UserPlus, Trash2, RefreshCcw } from "lucide-react";
 import { trpc } from "@/lib/trpc";
@@ -14,6 +15,18 @@ export default function AdminSiteSecurity() {
  const add=trpc.siteSecurity.add.useMutation({onSuccess:()=>{void people.refetch();setName("");setEmail("");setPhone("");toast.success("Autorização registrada.");},onError:e=>toast.error(e.message)});
  const change=trpc.siteSecurity.changeStatus.useMutation({onSuccess:()=>void people.refetch(),onError:e=>toast.error(e.message)});
  const remove=trpc.siteSecurity.remove.useMutation({onSuccess:()=>void people.refetch(),onError:e=>toast.error(e.message)});
+ const [bulkOpen,setBulkOpen]=useState(false);
+ const [bulkFilter,setBulkFilter]=useState<SiteBulkFilter>("with_orders");
+ const [bulkSearch,setBulkSearch]=useState("");
+ const [selectedIds,setSelectedIds]=useState<number[]>([]);
+ const bulk=trpc.siteSecurity.bulkCandidates.useQuery({filter:bulkFilter,search:bulkSearch},{enabled:bulkOpen,retry:false});
+ const bulkAdd=trpc.siteSecurity.bulkAdd.useMutation({
+  onSuccess:r=>{toast.success(r.added+" cliente(s) autorizado(s); "+r.already+" já cadastrado(s).");setSelectedIds([]);void bulk.refetch();void people.refetch();},
+  onError:e=>toast.error(e.message),
+ });
+ const candidates=bulk.data||[];
+ const eligible=candidates.filter(c=>!c.alreadyAuthorized);
+ const selected=selectedIds.filter(id=>eligible.some(c=>c.id===id));
  const current=status.data?.mode;
  const choose=(mode:Mode)=>{if(!window.confirm("Confirmar alteração do site para o modo "+mode+"?"))return;setMode.mutate({mode});};
  if(status.error) return <div className="min-h-screen bg-[#0a0a1a] p-5 text-white"><button onClick={()=>navigate("/admin/codes")} className="text-yellow-300">← Voltar</button><p className="mt-8 text-red-300">Acesso reservado ao Super Admin ou configuração de segurança indisponível.</p></div>;
@@ -29,6 +42,43 @@ export default function AdminSiteSecurity() {
  <input required type="email" value={email} onChange={e=>setEmail(e.target.value)} placeholder="E-mail autorizado" className="w-full rounded-lg p-3 bg-white/10 border border-white/20"/>
  <input value={phone} onChange={e=>setPhone(e.target.value)} placeholder="Telefone (opcional)" className="w-full rounded-lg p-3 bg-white/10 border border-white/20"/>
  <button disabled={add.isPending} className="sm:col-span-3 rounded-lg p-3 bg-yellow-500 text-black font-black flex items-center gap-2 justify-center"><UserPlus size={18}/> Adicionar pessoa</button></form>
+
+ <div className="rounded-xl border border-yellow-500/25 bg-black/20 p-3 space-y-3">
+  <button type="button" onClick={()=>{setBulkOpen(!bulkOpen);setSelectedIds([])}} className="rounded-lg bg-yellow-500/15 border border-yellow-500/40 px-4 py-3 font-bold text-yellow-200 w-full sm:w-auto">Adicionar clientes em massa {bulkOpen?"▲":"▼"}</button>
+  {bulkOpen&&<div className="space-y-3">
+   <div className="grid grid-cols-1 sm:grid-cols-2 gap-2">
+    <select aria-label="Filtrar clientes por pedidos" value={bulkFilter} onChange={e=>{setBulkFilter(e.target.value as SiteBulkFilter);setSelectedIds([])}} className="bg-[#292939] border border-white/20 rounded-lg p-3">
+     <option value="all">Todos os cadastros</option>
+     <option value="with_orders">Todos com pedido</option>
+     <option value="active">Pedido ativo</option>
+     <option value="delivered">Pedido entregue</option>
+     <option value="in_progress">Pedido em andamento</option>
+     <option value="without_orders">Sem pedido</option>
+    </select>
+    <input aria-label="Pesquisar clientes" value={bulkSearch} onChange={e=>{setBulkSearch(e.target.value);setSelectedIds([])}} placeholder="Nome, e-mail ou telefone" className="bg-[#292939] border border-white/20 rounded-lg p-3"/>
+   </div>
+   <p className="text-sm text-white/70">{bulk.isLoading?"Buscando cadastros...":bulk.error?"Erro ao buscar cadastros: "+bulk.error.message:candidates.length+" cliente(s) encontrado(s), "+eligible.length+" disponível(is) para autorizar"}</p>
+   {!bulk.error&&<div className="flex flex-wrap gap-2 items-center">
+    <button type="button" disabled={bulk.isLoading} onClick={()=>setSelectedIds(eligible.map(c=>c.id))} className="px-3 py-2 rounded-lg bg-white/10 border border-white/20">Selecionar todos do filtro</button>
+    <button type="button" onClick={()=>setSelectedIds([])} className="px-3 py-2 rounded-lg bg-white/10 border border-white/20">Limpar seleção</button>
+    <span className="text-yellow-200 font-bold">{selected.length} selecionado(s)</span>
+   </div>}
+   <div className="max-h-80 overflow-y-auto space-y-1 border border-white/10 rounded-xl p-2">
+    {candidates.map(c=><label key={c.id} className="flex items-center gap-3 px-2 py-2 rounded-lg hover:bg-white/5 text-sm">
+     <input type="checkbox" className="h-4 w-4 shrink-0" disabled={c.alreadyAuthorized} checked={selected.includes(c.id)} onChange={e=>setSelectedIds(previous=>e.target.checked?[...previous,c.id]:previous.filter(id=>id!==c.id))}/>
+     <span className="flex-1 min-w-0"><span className="font-bold">{c.name}</span><span className="block text-xs text-white/60 break-all">{c.email} · {c.orderCount} pedido(s)</span></span>
+     {c.alreadyAuthorized&&<span className="text-xs text-white/50">Já autorizado</span>}
+    </label>)}
+    {!bulk.isLoading&&!bulk.error&&candidates.length===0&&<p className="p-3 text-white/60">Nenhum cliente encontrado nesse filtro.</p>}
+   </div>
+   <button type="button" disabled={bulkAdd.isPending||selected.length===0} onClick={()=>{
+    const n=selected.length;
+    if(!window.confirm("Confirmar autorização de "+n+" cliente(s) selecionado(s)?"))return;
+    bulkAdd.mutate({customerIds:selected});
+   }} className="w-full bg-yellow-500 disabled:opacity-50 text-black font-black p-3 rounded-lg">Autorizar {selected.length} cliente(s) selecionado(s)</button>
+   {selected.length>500&&<p className="text-amber-300 text-xs">Limite de 500 cadastros por operação. Selecione um lote menor.</p>}
+  </div>}
+ </div>
  {people.isLoading?<p>Carregando lista...</p>:people.error?<p className="text-red-300">Não foi possível carregar as autorizações.</p>:people.data?.length===0?<p className="text-white/50 text-sm">Nenhuma pessoa autorizada cadastrada.</p>:(people.data||[]).map(p=><div key={p.id} className="rounded-xl bg-black/20 border border-white/10 p-3 flex flex-wrap justify-between items-center gap-3"><div><p className="font-bold">{p.displayName}</p><p className="text-xs text-white/55 break-all">{p.email} · {p.status}</p></div><div className="flex gap-2"><button onClick={()=>change.mutate({id:p.id,status:p.status==="active"?"suspended":"active"})} className="rounded-lg border border-white/20 p-2 text-xs">{p.status==="active"?"Suspender":"Reativar"}</button><button aria-label={"Remover "+p.displayName} onClick={()=>{if(window.confirm("Remover autorização?"))remove.mutate({id:p.id});}} className="rounded-lg border border-red-500/30 p-2 text-red-300"><Trash2 size={16}/></button></div></div>)}
  </section></div></main>;
 }
