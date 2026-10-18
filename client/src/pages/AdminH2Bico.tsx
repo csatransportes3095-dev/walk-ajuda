@@ -6,6 +6,7 @@ import AdminHeader from "@/components/AdminHeader";
 import H2BicoScreenshotImporter from "@/components/H2BicoScreenshotImporter";
 import H2BicoBulkManager from "@/components/H2BicoBulkManager";
 import H2BicoReviewLotes from "@/components/H2BicoReviewLotes";
+import H2BicoIntelligence from "@/components/H2BicoIntelligence";
 import { Button } from "@/components/ui/button";
 import { Card } from "@/components/ui/card";
 import { Input } from "@/components/ui/input";
@@ -351,6 +352,8 @@ export default function AdminH2Bico(){
       </Card>
 
       <H2BicoReviewLotes/>
+
+      <H2BicoIntelligence/>
 
       <H2BicoBulkManager/>
 
