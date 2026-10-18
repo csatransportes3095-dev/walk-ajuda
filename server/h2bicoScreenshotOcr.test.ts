@@ -36,7 +36,7 @@ describe("H2BICO: extracao de pessoas em prints",()=>{
   expect(router).toContain("CONFIRA O NUMERO");
   expect(ui).toContain("p.confidence>=70");
   expect(ui).toContain("CONFIRA O NUMERO");
-  expect(readFileSync("server/h2bicoScreenshotOcr.ts","utf8")).toContain("nameBox:{left:nameLine.left");
+  expect(readFileSync("server/h2bicoScreenshotOcr.ts","utf8")).toContain("nameBox:{left:line.left");
  });
  it("aceita virgula, dois-pontos e espacos do OCR sem alterar digitos",()=>{
   expect(cpfCandidatesInOcrLine("149,604:287-59")).toEqual(["14960428759"]);
@@ -110,5 +110,27 @@ describe("H2BICO: extracao de pessoas em prints",()=>{
   expect(found).toHaveLength(2);
   expect(found.every(p=>p.photoLayout==="right")).toBe(true);
   expect(found.every(p=>p.warnings.some(w=>w.includes("CONFIRA RECORTE")))).toBe(true);
+ });
+
+ it("recupera CPF de linha de resultado sem nome aceito pelo OCR",()=>{
+  const header="level\tpage_num\tblock_num\tpar_num\tline_num\tword_num\tleft\ttop\twidth\theight\tconf\ttext";
+  const entries=[
+    word("52998224725",235,240,135,1,1),
+    word("MARCOS",430,240,95,2,1),
+    word("BARBOSA",535,240,125,2,1),
+    word("-",675,240,15,2,1),
+    word("04/11/1961",695,240,115,2,1),
+  ];
+  const found=parseScreenshotTsv([header,...entries].join("\n"),1080,900);
+  expect(found.some(p=>p.cpf==="52998224725")).toBe(true);
+  expect(found.every(p=>p.crop.size>=48)).toBe(true);
+ });
+ it("nao perde CPF quando nome esta ausente e obriga a conferencia",()=>{
+  const header="level\tpage_num\tblock_num\tpar_num\tline_num\tword_num\tleft\ttop\twidth\theight\tconf\ttext";
+  const found=parseScreenshotTsv([header,word("52998224725",230,210,125,1,1)].join("\n"),1080,900);
+  expect(found).toHaveLength(1);
+  expect(found[0].name).toBe("");
+  expect(found[0].cpf).toBe("52998224725");
+  expect(found[0].warnings.some(w=>w.includes("Digite o nome"))).toBe(true);
  });
 });
