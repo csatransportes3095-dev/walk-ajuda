@@ -285,6 +285,7 @@ export const h2bicoRouter = router({
     name:z.string().min(2).max(200),
     cpf:z.string().regex(/^\d{11}$/),
     base64:z.string().min(100).max(5_500_000),
+    photoMode:z.enum(["original","white"]).optional(),
   }).strict()).mutation(async ({input})=>{
     const name=normalizeScreenshotName(input.name);
     if(!isReviewableName(name) || !isValidCpf(input.cpf))
@@ -300,7 +301,9 @@ export const h2bicoRouter = router({
       const meta=await sharp(buffer,{limitInputPixels:5_000_000}).metadata();
       if(!["jpeg","png","webp"].includes(meta.format||"") || (meta.width||0)<48 || (meta.height||0)<48)
         throw new Error("Imagem inválida");
-      photo=await sharp(buffer).rotate().resize({width:320,height:320,fit:"cover",withoutEnlargement:true}).jpeg({quality:90}).toBuffer();
+      photo=input.photoMode==="white"
+        ? await sharp(buffer).rotate().resize({width:256,height:320,fit:"fill",withoutEnlargement:true}).jpeg({quality:90}).toBuffer()
+        : await sharp(buffer).rotate().resize({width:320,height:320,fit:"cover",withoutEnlargement:true}).jpeg({quality:90}).toBuffer();
     }catch{throw new TRPCError({code:"BAD_REQUEST",message:"Recorte inválido."});}
     const key="h2bico/print-"+input.cpf+"-"+Date.now()+".jpg";
     const {url}=await storagePut(key,photo,"image/jpeg");

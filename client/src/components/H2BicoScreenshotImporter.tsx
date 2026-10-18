@@ -7,6 +7,7 @@ import { isValidCpf } from "@/lib/h2bicoCpfExtractor";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Card } from "@/components/ui/card";
+import { findWhitePhotoCrop, type WhitePhotoCrop } from "@/lib/h2bicoWhitePhotoCrop";
 
 type Item={
   id:string; source:string; name:string; cpf:string;
@@ -14,6 +15,7 @@ type Item={
   width:number;height:number; existing:boolean; selected:boolean; warnings:string[];
   error?:string; saved?:boolean; cpfSuggestion?:string|null;
   photoLayout?:"left"|"right"|"above"; confidence?:number;
+  cropMode?:"original"|"white"; whiteCrop?:WhitePhotoCrop|null; whiteChecked?:boolean;
 };
 const digits=(value:string)=>value.replace(/\D/g,"");
 const readBase64=(file:File)=>new Promise<string>((resolve,reject)=>{
@@ -28,23 +30,30 @@ async function cropPhoto(item:Item):Promise<string>{
   await image.decode();
   const canvas=document.createElement("canvas");
   const size=Math.round(item.crop.size);
+  const white=item.cropMode==="white" ? item.whiteCrop : null;
   const x=Math.round(item.crop.x);
   const y=Math.round(item.crop.y);
   if(size<48||x<0||y<0||x+size>image.naturalWidth||y+size>image.naturalHeight)
     throw new Error("Ajuste o recorte da foto.");
-  canvas.width=canvas.height=size;
+  canvas.width=white ? white.width : size;
+  canvas.height=white ? white.height : size;
   const ctx=canvas.getContext("2d");
   if(!ctx)throw new Error("Não foi possível recortar a foto.");
-  ctx.drawImage(image,x,y,size,size,0,0,size,size);
+  if(white){
+    if(white.x<0||white.y<0||white.width<48||white.height<48||white.x+white.width>image.naturalWidth||white.y+white.height>image.naturalHeight)
+      throw new Error("Recorte branco inválido. Confira a foto.");
+    ctx.drawImage(image,white.x,white.y,white.width,white.height,0,0,white.width,white.height);
+  }else ctx.drawImage(image,x,y,size,size,0,0,size,size);
   return canvas.toDataURL("image/jpeg",0.9).split(",")[1];
 }
 function CropPreview({item}:{item:Item}){
   const {crop,width,height}=item;
-  const scale=112/Math.max(1,crop.size);
-  return <div className="relative h-28 w-28 shrink-0 overflow-hidden rounded-lg border border-cyan-400/40 bg-black">
+  const active=item.cropMode==="white"&&item.whiteCrop?item.whiteCrop:{x:crop.x,y:crop.y,width:crop.size,height:crop.size};
+  const scale=112/Math.max(1,active.width);
+  return <div className={`relative ${item.cropMode==="white"?"h-36":"h-28"} w-28 shrink-0 overflow-hidden rounded-lg border border-cyan-400/40 bg-black`}>
     <img alt={"Recorte de "+item.name} src={item.photo} style={{
       position:"absolute",maxWidth:"none",width:width*scale,height:height*scale,
-      left:-crop.x*scale,top:-crop.y*scale
+      left:-active.x*scale,top:-active.y*scale
     }}/>
   </div>;
 }
@@ -68,6 +77,26 @@ export default function H2BicoScreenshotImporter(){
   const save=trpc.h2bico.importScreenshotRecord.useMutation();
   const utils=trpc.useUtils();
   const update=(id:string,patch:Partial<Item>)=>setItems(current=>current.map(item=>item.id===id?{...item,...patch}:item));
+  const applyWhitePreset=async(item:Item)=>{
+    try{
+      const img=new Image();img.src=item.photo;await img.decode();
+      const canvas=document.createElement("canvas");
+      const regionX=Math.max(0,Math.floor(item.crop.x-item.crop.size*.4));
+      const regionY=Math.max(0,Math.floor(item.crop.y-item.crop.size*.4));
+      const regionW=Math.min(img.naturalWidth-regionX,Math.ceil(item.crop.size*1.8));
+      const regionH=Math.min(img.naturalHeight-regionY,Math.ceil(item.crop.size*1.8));
+      canvas.width=regionW;canvas.height=regionH;
+      const ctx=canvas.getContext("2d",{willReadFrequently:true});
+      if(!ctx)throw new Error("Não foi possível analisar a foto.");
+      ctx.drawImage(img,regionX,regionY,regionW,regionH,0,0,regionW,regionH);
+      const pixels=ctx.getImageData(0,0,regionW,regionH).data;
+      const found=findWhitePhotoCrop(pixels,regionW,regionH,regionX,regionY,item.crop);
+      update(item.id,{whiteChecked:true,whiteCrop:found,cropMode:found?"white":"original",
+        selected:false,error:found?undefined:"Fundo branco não localizado com segurança. Recorte antigo preservado. Confira o print original."});
+      if(found)toast.success("Foto padrão: somente a área branca foi selecionada. Confira o preview.");
+      else toast.warning("Fundo branco não localizado; nenhum recorte foi substituído.");
+    }catch(error){update(item.id,{selected:false,error:error instanceof Error?error.message:"Erro ao analisar fundo branco."});}
+  };
   const processQueue=useCallback(async()=>{
     if(runningRef.current||savingRef.current)return;
     runningRef.current=true;
@@ -196,7 +225,7 @@ export default function H2BicoScreenshotImporter(){
         setStatus("Salvando "+item.name+"...");
         try{
           const base64=await cropPhoto(item);
-          const result=await save.mutateAsync({cpf:item.cpf,name:item.name,base64});
+          const result=await save.mutateAsync({cpf:item.cpf,name:item.name,base64,photoMode:item.cropMode==="white"?"white":"original"});
           if(result.result==="imported"){imported++;update(item.id,{saved:true,selected:false,error:undefined});}
           else{duplicates++;update(item.id,{selected:false,existing:true,error:"CPF já cadastrado."});}
         }catch(error){errors++;update(item.id,{error:error instanceof Error?error.message:"Falha ao salvar"});}
@@ -238,7 +267,7 @@ export default function H2BicoScreenshotImporter(){
       <div className="max-h-[600px] overflow-y-auto space-y-2">
         {items.map(item=><div key={item.id} className="rounded-xl border border-white/10 bg-black/20 p-3">
           <div className="flex flex-wrap items-start gap-3">
-            <CropPreview item={item}/>
+            <div className="space-y-2"><CropPreview item={item}/><p className="text-[11px] text-cyan-200">{item.cropMode==="white"?"Foto padrão 4:5":"Recorte atual"}</p></div>
             <div className="min-w-[210px] flex-1 space-y-2">
               <div className="flex flex-wrap items-center justify-between gap-2">
                  <div className="text-xs text-gray-400 break-all">{item.source}</div>
@@ -271,13 +300,24 @@ export default function H2BicoScreenshotImporter(){
               {item.error&&<p className="text-xs text-red-300">{item.error}</p>}
             </div>
           </div>
-          {!item.saved&&!item.existing&&<div className="mt-3 grid grid-cols-3 gap-2">
+          {!item.saved&&!item.existing&&<div className="mt-3 space-y-2">
+            <div className="flex flex-wrap items-center gap-2">
+              <Button type="button" size="sm" variant={item.cropMode==="white"?"default":"outline"} disabled={saving||busy} onClick={()=>void applyWhitePreset(item)}>
+                USAR RECORTE PADRÃO DA FOTO — FUNDO BRANCO
+              </Button>
+              <Button type="button" size="sm" variant="outline" disabled={saving||busy} onClick={()=>update(item.id,{cropMode:"original",selected:false,error:undefined})}>
+                VOLTAR AO RECORTE ATUAL
+              </Button>
+            </div>
+            <p className="text-xs text-gray-400">Novo modo separado: começa no fundo branco, exclui a borda escura e mantém retrato vertical 4:5. Confira a prévia antes de marcar para salvar.</p>
+            <div className="grid grid-cols-3 gap-2">
             {(["x","y","size"] as const).map(key=><label key={key} className="text-xs text-gray-400">
               {key==="x"?"Foto horizontal":key==="y"?"Foto vertical":"Tamanho do recorte"}
               <Input type="number" className="mt-1" min={key==="size"?48:0}
                 value={item.crop[key]} disabled={saving}
                 onChange={e=>update(item.id,{crop:{...item.crop,[key]:Number(e.target.value)}})}/>
             </label>)}
+            </div>
           </div>}
         </div>)}
       </div>
