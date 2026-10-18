@@ -465,6 +465,28 @@ export async function updateProduct(id: number, data: Partial<{
 }>): Promise<void> {
   const db = await getDb();
   if (!db) return;
+  if(data.name!==undefined){
+    const newName=data.name.trim();
+    if(!newName)throw new Error("Nome do produto obrigatorio.");
+    await db.transaction(async tx=>{
+      const rows=await tx.execute(sql`SELECT name FROM products WHERE id=${id} FOR UPDATE`);
+      const oldName=String((rows[0] as Array<{name:string}>)[0]?.name||"");
+      if(!oldName)throw new Error("Produto nao encontrado.");
+      if(oldName!==newName){
+        const duplicates=await tx.execute(sql`SELECT id FROM products WHERE name=${oldName} AND id<>${id} LIMIT 1`);
+        if((duplicates[0] as any[]).length)
+          throw new Error("Existem produtos com o mesmo nome antigo. Renomeacao bloqueada para proteger os pedidos.");
+        const {ensureProductScheduleAliasTable,captureAliasesBeforeProductRename}=await import("./productScheduleAliases");
+        await ensureProductScheduleAliasTable(tx);
+        await captureAliasesBeforeProductRename(tx,id,oldName);
+        // Pedidos antigos somente com correspondencia EXATA do nome salvo.
+        // Nao altera opcao de compra, status, garantia ou preco.
+        await tx.execute(sql`UPDATE orderStatusHistory SET serviceName=${newName} WHERE serviceName=${oldName}`);
+      }
+      await tx.update(products).set({...data,name:newName}).where(eq(products.id,id));
+    });
+    return;
+  }
   await db.update(products).set(data).where(eq(products.id, id));
 }
 
@@ -625,6 +647,22 @@ export async function updateProductOption(id: number, data: Partial<{
 }>): Promise<void> {
   const db = await getDb();
   if (!db) return;
+  if(data.label!==undefined){
+    const newLabel=data.label.trim();
+    if(!newLabel)throw new Error("Nome da opcao obrigatorio.");
+    await db.transaction(async tx=>{
+      const result=await tx.execute(sql`SELECT label FROM productOptions WHERE id=${id} FOR UPDATE`);
+      const oldLabel=String((result[0] as Array<{label:string}>)[0]?.label||"");
+      if(!oldLabel)throw new Error("Opcao nao encontrada.");
+      if(oldLabel!==newLabel){
+        const {ensureProductScheduleAliasTable,captureAliasBeforeOptionRename}=await import("./productScheduleAliases");
+        await ensureProductScheduleAliasTable(tx);
+        await captureAliasBeforeOptionRename(tx,id,oldLabel);
+      }
+      await tx.update(productOptions).set({...data,label:newLabel}).where(eq(productOptions.id,id));
+    });
+    return;
+  }
   await db.update(productOptions).set(data).where(eq(productOptions.id, id));
 }
 
