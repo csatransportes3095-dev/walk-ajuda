@@ -549,6 +549,20 @@ async function run() {
     const initial = await privacyGuardPreflight(executable);
     initialObservedIp = initial.observedIp;
     lastReportedIp = initial.observedIp;
+    // Auto-provision Store extensions only for the isolated Chrome for Testing binary.
+    // All third-party downloads are tunnelled through this instance's verified relay.
+    let globalExtensionPaths = [];
+    if (browserExecutable.toLowerCase().includes("chrome-for-testing")) {
+      try {
+        const { syncH2AdsExtensions } = await import("./h2ads-extension-sync.mjs");
+        globalExtensionPaths = await syncH2AdsExtensions({
+          panelUrl, headers: headers(), proxyPort: relayPort,
+          root: join(profileDirectory, "h2ads-global-extensions"),
+        });
+      } catch (error) {
+        console.error("[H2ADS] falha ao sincronizar extensoes:", String(error?.message || error));
+      }
+    }
     const labelPageUrl = createInstanceLabelPage();
     const privacyGuardExtension = createGoogleSorryPrivacyGuard();
     browser = spawn(executable, [
@@ -556,7 +570,7 @@ async function run() {
       ...(mobileRemoteRequested ? ["--remote-debugging-pipe"] : []),
       "--user-data-dir=" + profileDirectory, "--proxy-server=http://127.0.0.1:" + relayPort, "--proxy-bypass-list=<-loopback>",
       "--disable-quic", "--dns-prefetch-disable", "--force-webrtc-ip-handling-policy=disable_non_proxied_udp",
-      "--load-extension=" + privacyGuardExtension, "--no-first-run", "--no-default-browser-check", labelPageUrl,
+      "--load-extension=" + [privacyGuardExtension, ...globalExtensionPaths].join(","), "--no-first-run", "--no-default-browser-check", labelPageUrl,
     ], { detached: false, stdio: mobileRemoteRequested ? ["ignore", "ignore", "ignore", "pipe", "pipe"] : "ignore", windowsHide: false });
 
     // Register before any network request to the panel: early exit is never lost.

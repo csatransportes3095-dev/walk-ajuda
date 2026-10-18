@@ -57,13 +57,14 @@ jobs:
         run: |
           node --check workers/windows/browser-runner.mjs
           node --check workers/windows/browser-session.mjs
+          node --check workers/windows/h2ads-extension-sync.mjs
           node --check workers/windows/mobile-remote.mjs
 
       - name: Run H2 Ads tests
-        run: pnpm vitest run server/h2adsWorkerRoute.test.ts server/h2adsWorkerFoundation.test.ts server/h2adsWorkerErrorGuard.test.ts server/h2adsOrderBrowserShortcut.test.ts server/h2adsMobileRemoteBridge.test.ts server/h2adsEntryRoute.test.ts server/h2adsMobilePhase2Wiring.test.ts
+        run: pnpm vitest run server/h2adsExtensionSync.test.ts server/h2adsWorkerRoute.test.ts server/h2adsWorkerFoundation.test.ts server/h2adsWorkerErrorGuard.test.ts server/h2adsOrderBrowserShortcut.test.ts server/h2adsMobileRemoteBridge.test.ts server/h2adsEntryRoute.test.ts server/h2adsMobilePhase2Wiring.test.ts
 
       - name: Build production bundle
         run: pnpm build
 
       - name: Verify packaged worker version
-        run: node -e "const fs=require('node:fs'); const text=fs.readFileSync('workers/windows/H2AdsWorker.ps1','utf8'); if (!text.includes('AgentVersion = \\\"1.3.9\\\"')) throw new Error('Packaged worker is not 1.3.9'); console.log('Packaged worker 1.3.9 confirmed');"
+        run: node -e "const fs=require('node:fs'); const text=fs.readFileSync('workers/windows/H2AdsWorker.ps1','utf8'); if (!text.includes('AgentVersion = \\\"1.4.0\\\"')) throw new Error('Packaged worker is not 1.4.0'); console.log('Packaged worker 1.4.0 confirmed');"
