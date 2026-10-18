@@ -468,14 +468,15 @@ export default function AdminH2Bico(){
         <div className="relative flex-1"><Search className="w-4 h-4 absolute left-3 top-3 text-gray-500"/><Input className="pl-9" placeholder="Pesquisar nome ou CPF" value={search} onChange={e=>setSearch(e.target.value)}/></div>
         <Button variant="outline" onClick={()=>setShowCpf(!showCpf)}>{showCpf?<EyeOff className="w-4 h-4 mr-2"/>:<Eye className="w-4 h-4 mr-2"/>}{showCpf?"Ocultar CPF":"Mostrar CPF"}</Button>
         <select className="bg-gray-900 border border-gray-700 rounded-md px-3 py-2" value={status} onChange={e=>setStatus(e.target.value)}><option value="all">Todos</option>{Object.entries(STATUS).map(([k,v])=><option key={k} value={k}>{String(v)}</option>)}</select>
+        <select aria-label="Filtrar conferência" className="bg-gray-900 border border-gray-700 rounded-md px-3 py-2" value={review} onChange={e=>setReview(e.target.value as typeof review)}><option value="all">Todas as conferências</option><option value="confirmed">Confirmados</option><option value="pending">Pendentes</option><option value="discarded">Descartados</option></select>
       </div>
 
-      <div className="grid md:grid-cols-2 xl:grid-cols-3 gap-3">
-        {(list.data||[]).map((r:any)=><Card key={r.id} className="bg-gray-900 border-gray-800 p-4">
-          <div className="flex gap-3">{r.photoUrl&&!brokenPhotos.has(r.id)?<img src={`/api/admin/h2bico/photo/${r.id}`} onError={()=>setBrokenPhotos(current=>{const next=new Set(current);next.add(r.id);return next;})} className="w-20 h-20 rounded-xl object-cover border border-gray-700"/>:<div className="w-20 h-20 rounded-xl bg-gray-800 grid place-items-center"><UserCheck/></div>}
+      <div className="mt-3 grid max-h-[70vh] grid-cols-1 gap-2 overflow-y-auto pr-1 sm:grid-cols-2 xl:grid-cols-3">
+        {cardsOnPage.map((r:any)=><Card key={r.id} className="bg-gray-900 border-gray-800 p-3">
+          <div className="flex gap-3">{r.photoUrl&&!brokenPhotos.has(r.id)?<img src={`/api/admin/h2bico/photo/${r.id}`} onError={()=>setBrokenPhotos(current=>{const next=new Set(current);next.add(r.id);return next;})} className="h-14 w-14 shrink-0 rounded-lg object-cover border border-gray-700"/>:<div className="h-14 w-14 shrink-0 rounded-lg bg-gray-800 grid place-items-center"><UserCheck/></div>}
             <div className="min-w-0 flex-1"><div className="font-bold truncate">{r.name}</div><div className="text-sm text-gray-400 font-mono">{showCpf?r.cpf:maskCpf(r.cpf)}</div>{r.uf&&<div className="text-xs text-gray-500">{r.uf}</div>}<div className="text-xs mt-1 font-bold">Situação: {STATUS[r.status]}</div><div className={`mt-1 inline-flex rounded-md border px-2 py-1 text-xs font-black ${r.reviewState==="confirmed"?"border-emerald-500/40 bg-emerald-500/15 text-emerald-300":r.reviewState==="discarded"?"border-red-500/40 bg-red-500/15 text-red-300":"border-amber-500/30 bg-amber-500/10 text-amber-200"}`}>{r.reviewState==="confirmed"?"✓ CPF CONFERIDO":r.reviewState==="discarded"?"⛔ DESCARTADO — BLOQUEADO":"⏳ CPF PENDENTE DE CONFERÊNCIA"}</div>{r.reviewState==="confirmed"&&r.reviewedAt&&<div className="text-xs mt-1 text-emerald-200/80">Conferido em {new Date(r.reviewedAt).toLocaleString("pt-BR")}</div>}{r.linkedOrder&&<div className="text-xs text-amber-300">Pedido: {r.linkedOrder}</div>}</div>
           </div>
-          <div className="mt-3 grid grid-cols-2 gap-2" role="group" aria-label={`Marcação EAR de ${r.name}`}>
+          <div className="mt-2 grid grid-cols-2 gap-2" role="group" aria-label={`Marcação EAR de ${r.name}`}>
             {(["com_ear","sem_ear"] as const).map(option=>{
               const active=r.earStatus===option;
               const positive=option==="com_ear";
@@ -489,7 +490,7 @@ export default function AdminH2Bico(){
               </button>;
             })}
           </div>
-          <div className="flex flex-wrap gap-2 mt-3">
+          <div className="flex flex-wrap gap-1.5 mt-2">
             {r.status==="available"&&<Button size="sm" variant="outline" onClick={()=>setSt.mutate({id:r.id,status:"reserved"})}>Reservar</Button>}
             {r.status==="reserved"&&<Button size="sm" variant="outline" onClick={()=>setSt.mutate({id:r.id,status:"in_use"})}>Em uso</Button>}
             {r.status!=="used"&&r.status!=="archived"&&<Button size="sm" variant="outline" className="border-gray-700 bg-transparent text-gray-300 hover:text-white" onClick={()=>markUsed(r.id)}><CheckCircle2 className="w-4 h-4 mr-1"/>Marcar como usado</Button>}
@@ -500,6 +501,13 @@ export default function AdminH2Bico(){
         </Card>)}
       </div>
       {!list.isLoading&&(list.data?.length??0)===0&&<div className="text-center text-gray-500 py-12">Nenhum registro encontrado.</div>}
+      <div className="mt-3 flex flex-wrap items-center justify-between gap-2 border-t border-slate-800 pt-3">
+        <span className="text-xs text-slate-400">{cardsTotal?Math.min(safeCardPage*H2BICO_CARD_PAGE_SIZE+1,cardsTotal):0}–{Math.min((safeCardPage+1)*H2BICO_CARD_PAGE_SIZE,cardsTotal)} de {cardsTotal} cadastros</span>
+        <div className="flex gap-2">
+          <Button size="sm" variant="outline" disabled={safeCardPage===0} onClick={()=>setCardPage(p=>Math.max(0,p-1))}>ANTERIOR</Button>
+          <Button size="sm" variant="outline" disabled={safeCardPage>=cardsPageCount-1} onClick={()=>setCardPage(p=>p+1)}>PRÓXIMA</Button>
+        </div>
+      </div>
       </section>}
     </main>
   </div>
