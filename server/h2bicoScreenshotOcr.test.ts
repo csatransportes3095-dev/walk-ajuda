@@ -88,4 +88,27 @@ describe("H2BICO: extracao de pessoas em prints",()=>{
   expect(component).toContain('selected&&!row.saved');
   expect(component).toContain('await cropPhoto(item)');
  });
+
+ it("associa nome e CPF mesmo em mesma linha ou com CPF acima",()=>{
+  const header="level\tpage_num\tblock_num\tpar_num\tline_num\tword_num\tleft\ttop\twidth\theight\tconf\ttext";
+  const line=(text:string,x:number,y:number,block:number)=>["5","1",block,"1","1","1",x,y,250,18,94,text].join("\t");
+  const tsv=[header,
+    line("NOME: Maria de Souza CPF: 529.982.247-25",80,80,1),
+    line("111.444.777-35",580,290,2),
+    line("JOSE PEREIRA",580,315,3)].join("\n");
+  const found=parseScreenshotTsv(tsv,1200,800);
+  expect(found.some(p=>p.cpf==="52998224725"&&p.name==="MARIA DE SOUZA")).toBe(true);
+  expect(found.some(p=>p.cpf==="11144477735"&&p.name==="JOSE PEREIRA")).toBe(true);
+  expect(new Set(found.filter(p=>p.cpf).map(p=>p.cpf)).size).toBe(found.filter(p=>p.cpf).length);
+ });
+ it("nao duplica CPF entre cards e sinaliza recorte em layout alternativo",()=>{
+  const header="level\tpage_num\tblock_num\tpar_num\tline_num\tword_num\tleft\ttop\twidth\theight\tconf\ttext";
+  const line=(text:string,x:number,y:number,b:number)=>["5","1",b,"1","1","1",x,y,150,18,96,text].join("\t");
+  const found=parseScreenshotTsv([header,
+    line("MARIA DE SOUZA",50,120,1),line("529.982.247-25",50,150,2),
+    line("JOSE PEREIRA",50,350,3),line("111.444.777-35",50,385,4)].join("\n"),1000,850);
+  expect(found).toHaveLength(2);
+  expect(found.every(p=>p.photoLayout==="right")).toBe(true);
+  expect(found.every(p=>p.warnings.some(w=>w.includes("CONFIRA RECORTE")))).toBe(true);
+ });
 });
