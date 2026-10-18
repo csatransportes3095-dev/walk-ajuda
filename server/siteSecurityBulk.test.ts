@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { classifySiteBulkStatus, filterSiteBulkCandidates, prepareSiteBulkCandidates, selectVisibleSiteBulkOrders, splitSiteBulkBatches } from "./siteSecurityBulk";
+import { classifySiteBulkStatus, filterSiteBulkCandidates, prepareSiteBulkCandidates, selectVisibleSiteBulkOrders, splitSiteBulkBatches } from "../shared/siteSecurityBulk";
 
 const customers = [
   { id: 1, name: "Ana", email: " ANA@EXEMPLO.COM ", phone: "(61) 99999-1001" },
