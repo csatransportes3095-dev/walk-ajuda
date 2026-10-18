@@ -15,7 +15,8 @@ type TextLine = Word;
 const cpfPattern = /(?<!\d)\d{3}[\s.,:;]{0,3}\d{3}[\s.,:;]{0,3}\d{3}[\s.,:;\-–—]{0,3}\d{2}(?!\d)/g;
 export const cpfDigits=(value:string)=>value.replace(/\D/g,"");
 export function cpfCandidatesInOcrLine(text:string):string[]{
-  const normalized=text.replace(/[\u00a0\u2007\u202f]/g," ")\n    .replace(/\s*([.,:;\-–—])\s*/g,"$1");
+  const normalized=text.replace(/[\u00a0\u2007\u202f]/g," ")
+    .replace(/\s*([.,:;\-–—])\s*/g,"$1");
   return [...normalized.matchAll(cpfPattern)].map(match=>cpfDigits(match[0]));
 }
 export function normalizeScreenshotName(value:string):string {
