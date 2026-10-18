@@ -4,10 +4,13 @@ on:
     branches:
       - feature/site-security-bulk-email-20261018
       - feature/site-security-loans-filter-20261018
+      - feature/site-security-authorized-photos-20261018
     paths:
       - shared/siteSecurityBulk.ts
       - server/siteSecurityBulk.test.ts
       - server/siteSecurityBulk.mysql.test.ts
+      - server/siteSecurityProfilePhotos.ts
+      - server/siteSecurityProfilePhotos.test.ts
       - server/siteSecurityRouter.ts
       - client/src/pages/AdminSiteSecurity.tsx
       - .github/workflows/site-security-bulk-validate.yml
@@ -39,7 +42,7 @@ jobs:
           cache: pnpm
       - run: pnpm install --frozen-lockfile
       - name: Test bulk filters, suborders and batching
-        run: pnpm exec vitest run server/siteSecurityBulk.test.ts
+        run: pnpm exec vitest run server/siteSecurityBulk.test.ts server/siteSecurityProfilePhotos.test.ts
       - name: Disposable MySQL integration tests
         run: |
           TEST_MYSQL_URL=mysql://root:integration-only@127.0.0.1:3306/h2_bulk_test pnpm exec vitest run server/siteSecurityBulk.mysql.test.ts
@@ -47,7 +50,7 @@ jobs:
         shell: bash
         run: |
           set -euo pipefail
-          BASE_SHA=1a118f458c0d67dae18574811c1e0c07708af5f4
+          BASE_SHA=252a1ceea9bddb013d248d6426e836851ba17eef
           BASE_DIR="$RUNNER_TEMP/site-security-base"
           git fetch --no-tags --depth=1 origin "$BASE_SHA"
           git worktree add --detach "$BASE_DIR" "$BASE_SHA"
