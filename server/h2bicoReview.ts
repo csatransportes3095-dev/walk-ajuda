@@ -272,6 +272,38 @@ export const h2bicoReviewRouter=router({
       return {updated:ids.length,unchanged:rows.length-ids.length};
     });
   }),
+  // Desfaz SOMENTE a confirmacao dos CPFs deste lote (ate 1500).
+  // O filtro e aplicado no banco, evitando enviar 1500 CPFs pelo navegador.
+  // Preserva os descartados, status, fotos, EAR e historico do pedido.
+  unconfirmLot:adminProcedure.input(lotRefSchema).mutation(async({input})=>{
+    const db=await reviewDb();
+    const run=await assertRun(db,input.runId);
+    const {begin,end}=checkedLot(input.lotIndex);
+    if(begin>=run.total)
+      throw new TRPCError({code:"BAD_REQUEST",message:"Lote fora desta conferencia."});
+    return db.transaction(async tx=>{
+      const result=await tx.execute(sql`
+        SELECT i.recordId AS id
+        FROM h2bico_review_run_items i
+        JOIN h2bico_review rv ON rv.recordId=i.recordId AND rv.reviewState='confirmed'
+        WHERE i.runId=${input.runId} AND i.ordinal BETWEEN ${begin} AND ${end}
+        FOR UPDATE
+      `);
+      const ids=(result[0] as Array<{id:number}>).map(row=>Number(row.id));
+      for(let start=0;start<ids.length;start+=250){
+        const chunk=ids.slice(start,start+250);
+        const membership=sql.join(chunk.map(id=>sql`${id}`),sql`, `);
+        await tx.execute(sql`
+          DELETE FROM h2bico_review
+          WHERE recordId IN (${membership}) AND reviewState='confirmed'
+        `);
+        await tx.execute(sql`INSERT INTO h2bico_history(recordId,action,details)
+          VALUES ${sql.join(chunk.map(id=>sql`(${id},'review_unconfirmed','Confirmacao do lote desfeita no ADM H2BICO')`),sql`, `)}
+        `);
+      }
+      return {unconfirmed:ids.length,skipped:Math.min(LOT_SIZE,run.total-begin)-ids.length};
+    });
+  }),
   confirmLot:adminProcedure.input(lotRefSchema).mutation(async({input})=>{
     const db=await reviewDb();
     const run=await assertRun(db,input.runId);
