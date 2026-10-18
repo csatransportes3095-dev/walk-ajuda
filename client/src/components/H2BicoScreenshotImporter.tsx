@@ -37,8 +37,8 @@ async function cropPhoto(item:Item):Promise<string>{
   const y=Math.round(item.crop.y);
   if(size<48||x<0||y<0||x+size>image.naturalWidth||y+size>image.naturalHeight)
     throw new Error("Ajuste o recorte da foto.");
-  canvas.width=white ? white.width : size;
-  canvas.height=white ? white.height : size;
+  canvas.width=white ? Math.round(white.width) : size;
+  canvas.height=white ? Math.round(white.height) : size;
   const ctx=canvas.getContext("2d");
   if(!ctx)throw new Error("Não foi possível recortar a foto.");
   if(white){
@@ -46,6 +46,9 @@ async function cropPhoto(item:Item):Promise<string>{
       throw new Error("Recorte branco inválido. Confira a foto.");
     ctx.drawImage(image,white.x,white.y,white.width,white.height,0,0,white.width,white.height);
   }else ctx.drawImage(image,x,y,size,size,0,0,size,size);
+  // Only the cropped portrait canvas is serialized, never the full print.
+  const p=ctx.getImageData(Math.floor(canvas.width*.5),Math.floor(canvas.height*.5),1,1).data;
+  if(p[0]+p[1]+p[2]<90)throw new Error("Recorte escuro ou vazio. Foto não salva.");
   return canvas.toDataURL("image/jpeg",0.9).split(",")[1];
 }
 function CropPreview({item}:{item:Item}){
@@ -293,7 +296,14 @@ export default function H2BicoScreenshotImporter(){
       toast.info("Concluído: "+imported+" novo(s), "+duplicates+" duplicado(s), "+errors+" erro(s).");
     }finally{savingRef.current=false;setSaving(false);setStatus("");}
   };
+  const eligible=(item:Item)=>!item.existing&&!item.saved&&isValidCpf(item.cpf)&&
+    item.name.trim().split(/\\s+/).length>=2&&item.confidence!==undefined&&item.confidence>=70&&
+    !item.cpfSuggestion&&!item.warnings.some(w=>/CONFIRA O N[UÚ]MERO|ASSOCIA|CPF REPETIDO|LEITURA DIVERGENTE/i.test(w))&&
+    (item.cropMode==="white"&&!!item.whiteCrop||item.crop.size>=48);
   const selected=items.filter(item=>item.selected&&!item.saved&&!item.existing);
+  const selectable=items.filter(eligible);
+  const selectAll=()=>setItems(current=>current.map(item=>({...item,selected:eligible(item)})));
+  const deselectAll=()=>setItems(current=>current.map(item=>({...item,selected:false})));
   return <Card className="border-cyan-500/30 bg-gray-900 p-4 space-y-3 text-white">
     <div>
       <div className="text-xs font-black uppercase tracking-widest text-cyan-300">Extrator inteligente de prints</div>
@@ -350,7 +360,7 @@ export default function H2BicoScreenshotImporter(){
                 }}>CONFERI NO PRINT — USAR CPF SUGERIDO</Button>
               </div>}
               <label className="inline-flex items-center gap-2 text-sm">
-                <input type="checkbox" checked={item.selected} disabled={saving||item.saved||item.existing||!item.whiteCrop&&item.cropMode!=="original"}
+                <input type="checkbox" checked={item.selected} disabled={saving||item.saved||item.existing}
                   onChange={e=>update(item.id,{selected:e.target.checked})}/>
                 {item.saved?"SALVO":item.existing?"CPF JÁ CADASTRADO":isValidCpf(item.cpf)?"Conferido — salvar":"CPF INVÁLIDO"}
               </label>
