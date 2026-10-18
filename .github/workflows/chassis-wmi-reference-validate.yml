@@ -1,0 +1,27 @@
+name: H2 Chassis WMI Reference Validation
+on:
+  push:
+    branches:
+      - feature/chassis-wmi-reference-20261018
+  workflow_dispatch:
+jobs:
+  verify:
+    runs-on: ubuntu-latest
+    permissions:
+      contents: read
+    steps:
+      - uses: actions/checkout@v4
+      - uses: pnpm/action-setup@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '22'
+          cache: pnpm
+      - run: pnpm install --frozen-lockfile
+      - name: Test WMI reference lookup
+        run: pnpm exec vitest run server/chassisWmiReference.test.ts
+      - name: Ensure synthetic VIN generator remains unchanged
+        run: |
+          git fetch --no-tags --depth=1 origin 945259659ae9e3be0863da4af048512f6322fe2a
+          git diff --exit-code 945259659ae9e3be0863da4af048512f6322fe2a HEAD -- client/src/lib/vinGenerator.ts server/chassisServiceStore.ts
+      - name: Build application
+        run: pnpm run build

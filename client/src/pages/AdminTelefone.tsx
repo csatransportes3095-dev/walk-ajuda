@@ -3,6 +3,7 @@ import { toast } from "sonner";
 import { Phone, Copy, RefreshCw, Trash2, CheckCheck, CreditCard, FileText, Car } from "lucide-react";
 import AdminHeader from "@/components/AdminHeader";
 import { MONTADORAS_VIN, ANOS_VIN, gerarMultiplosVINs } from "@/lib/vinGenerator";
+import ChassisWmiReferencePanel from "@/components/ChassisWmiReferencePanel";
 
 // ════════════════════════════════════════════════════════════
 // GERADOR DE TELEFONE 90+
@@ -441,6 +442,8 @@ function GeradorChassi() {
           Gerar Chassi{quantidade > 1 ? 's' : ''}
         </button>
       </div>
+
+      <ChassisWmiReferencePanel />
 
       {/* Resultados */}
       {resultados.length > 0 && (
