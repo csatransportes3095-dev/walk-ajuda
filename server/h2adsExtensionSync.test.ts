@@ -21,9 +21,9 @@ describe("H2ADS extension package validation", () => {
     const publicKey = pair.publicKey.export({ format: "der", type: "spki" }) as Buffer;
     const idBytes = createHash("sha256").update(publicKey).digest().subarray(0, 16);
     const id = [...idBytes].map(x => x.toString(16).padStart(2, "0")).join("").replace(/[0-9a-f]/g, x => String.fromCharCode(97 + Number.parseInt(x, 16)));
-    const zip = Buffer.from("PK\\x03\\x04synthetic-test-archive", "binary");
+    const zip = Buffer.concat([Buffer.from([0x50, 0x4b, 0x03, 0x04]), Buffer.from("synthetic-test-archive")]);
     const signedData = field(1, idBytes);
-    const prefix = Buffer.from("CRX3 SignedData\\0", "binary");
+    const prefix = Buffer.concat([Buffer.from("CRX3 SignedData", "ascii"), Buffer.from([0])]);
     const len = Buffer.alloc(4); len.writeUInt32LE(signedData.length);
     const signature = sign("sha256", Buffer.concat([prefix, len, signedData, zip]), pair.privateKey);
     const header = Buffer.concat([field(2, Buffer.concat([field(1, publicKey), field(2, signature)])), field(10000, signedData)]);
