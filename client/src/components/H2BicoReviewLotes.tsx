@@ -87,7 +87,7 @@ export default function H2BicoReviewLotes(){
   const openRun=(id:number)=>{setRunId(id);setIndex(0);setSelected([]);setManual("");setCopied("");};
   return <Card className="border-emerald-500/30 bg-gray-900 p-4 space-y-3 text-white">
     <div className="text-xs font-bold tracking-widest text-emerald-300">H2BICO · CONFERÊNCIA PERSISTENTE</div>
-    <h2 className="text-xl font-black">LOTES DE 1.500 CPFs · CONFERÊNCIA E DESCARTE</h2>
+    <h2 className="text-xl font-black">COPIAR CPFs EM LOTES DE 1.500</h2>
     <p className="text-sm text-gray-400">O lote fica salvo para continuar depois. Descartar arquiva e bloqueia a reentrada automática; nada é apagado. COM EAR e SEM EAR permanecem independentes.</p>
     <div className="grid grid-cols-2 md:grid-cols-4 gap-2 text-center">
       {([["Total",stats.data?.total],["Pendentes",stats.data?.pending],["Confirmados",stats.data?.confirmed],["Descartados",stats.data?.discarded]] as const).map(([label,count])=>
