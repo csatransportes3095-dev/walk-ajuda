@@ -4,6 +4,7 @@ import {toast} from "sonner";
 import {Button} from "@/components/ui/button";
 import {Card} from "@/components/ui/card";
 import {Textarea} from "@/components/ui/textarea";
+import {formatMissingH2BicoCpfs} from "@/lib/h2bicoImportReview";
 const stateLabels={pending:"PENDENTE",confirmed:"JÁ CONFIRMADO",discarded:"DESCARTADO / BLOQUEADO"};
 type Decision="confirm"|"unconfirm"|"discard"|"restore";
 type Filter="all"|"pending"|"confirmed"|"discarded";
@@ -69,6 +70,20 @@ export default function H2BicoIntelligence(){
    <p className="font-bold">{analysis.total} CPFs únicos analisados</p>
    <div className="grid grid-cols-2 md:grid-cols-4 gap-2 text-center">{([["JÁ CONFIRMADOS",analysis.confirmed],["PENDENTES",analysis.pending],["DESCARTADOS",analysis.discarded],["NÃO ENCONTRADOS",analysis.missing.length]] as const).map(([label,n])=><div key={label} className="rounded bg-gray-950 p-2"><p className="text-xs text-gray-400">{label}</p><p className="text-xl font-bold">{n}</p></div>)}</div>
    {analysis.previousProcessing&&<p className="text-sm text-amber-200">Lista já processada anteriormente: {new Date(analysis.previousProcessing.startedAt).toLocaleString("pt-BR")}</p>}
+   {!!analysis.missing?.length&&<section className="space-y-2 rounded-lg border border-amber-500/40 bg-gray-950/60 p-3">
+    <div className="flex flex-wrap items-center justify-between gap-2">
+     <h3 className="font-bold text-amber-200">CPFs NÃO ENCONTRADOS ({analysis.missing.length})</h3>
+     <Button size="sm" variant="outline" onClick={async()=>{
+      try{
+       await navigator.clipboard.writeText(formatMissingH2BicoCpfs(analysis.missing));
+       toast.success(analysis.missing.length+" CPF(s) não encontrados copiados.");
+      }catch{toast.error("Cópia automática bloqueada. Selecione os números abaixo e copie com Ctrl+C.");}
+     }}>COPIAR TODOS</Button>
+    </div>
+    <Textarea aria-label="Lista de CPFs não encontrados" readOnly value={formatMissingH2BicoCpfs(analysis.missing)}
+      className="min-h-32 max-h-64 resize-y overflow-y-auto font-mono text-sm" />
+    <p className="text-xs text-gray-400">Um CPF por linha, mantendo zeros à esquerda. Nenhum cadastro é alterado ao copiar.</p>
+   </section>}
    {!!analysis.missingPhoto&&<p className="text-amber-200 text-sm">{analysis.missingPhoto} registros sem foto.</p>}
    <div className="max-h-60 overflow-y-auto space-y-1">{analysis.records.map((r:any)=><div key={r.id} className="flex items-center gap-2 border-b border-gray-800 py-1 text-xs"><span className="font-mono">{r.cpf}</span><span className="flex-1 truncate">{r.name}</span><strong className={r.reviewState==="confirmed"?"text-emerald-300":r.reviewState==="discarded"?"text-red-300":"text-amber-200"}>{stateLabels[r.reviewState as keyof typeof stateLabels]}</strong></div>)}</div>
    <div className="flex flex-wrap gap-2"><select aria-label="Ação proposta" className="bg-gray-950 p-2 rounded" value={decision} onChange={e=>setDecision(e.target.value as Decision)}><option value="confirm">CONFIRMAR PENDENTES</option><option value="unconfirm">VOLTAR A PENDENTE</option><option value="discard">DESCARTAR E ARQUIVAR</option><option value="restore">RESTAURAR DESCARTADOS</option></select><Button disabled={busy||!analysis.counts[decision]} onClick={()=>void startOperation()}>{busy?"PROCESSANDO...":"APLICAR SOMENTE "+(analysis.counts[decision]||0)+" ELEGÍVEIS"}</Button></div>
