@@ -1,6 +1,8 @@
 import { z } from "zod";
 import { TRPCError } from "@trpc/server";
-import { eq, sql } from "drizzle-orm";
+import { eq, sql, inArray } from "drizzle-orm";
+import { customers, orderStatusHistory } from "../drizzle/schema";
+import { prepareSiteBulkCandidates, filterSiteBulkCandidates, siteBulkFilters, siteBulkEmail, validSiteBulkEmail, selectVisibleSiteBulkOrders } from "../shared/siteSecurityBulk";
 import jwt from "jsonwebtoken";
 import { parse as parseCookieHeader } from "cookie";
 import { adminProcedure, router } from "./_core/trpc";
@@ -53,6 +55,51 @@ export const siteSecurityRouter = router({
     if(!db) throw new TRPCError({code:"INTERNAL_SERVER_ERROR"});
     return db.select({id:siteAccessEntries.id,displayName:siteAccessEntries.displayName,email:siteAccessEntries.email,phone:siteAccessEntries.phone,status:siteAccessEntries.status,expiresAt:siteAccessEntries.expiresAt,createdAt:siteAccessEntries.createdAt})
       .from(siteAccessEntries).orderBy(siteAccessEntries.id);
+  }),
+
+  bulkCandidates: adminProcedure.input(z.object({filter:z.enum(siteBulkFilters).default("all"), search:z.string().max(160).default("")})).query(async ({ctx,input})=>{
+    await requireSiteOwner(ctx.req);
+    const db=await getDb();if(!db)throw new TRPCError({code:"INTERNAL_SERVER_ERROR"});
+    const [customerRows,orderRows,hiddenRows,initialRows,entryRows]=await Promise.all([
+      db.select({id:customers.id,name:customers.name,email:customers.email,phone:customers.phone,blocked:customers.blocked,deletedAt:customers.deletedAt})
+        .from(customers).where(sql`${customers.deletedAt} IS NULL AND ${customers.blocked} = 0`),
+      db.select({registrationId:orderStatusHistory.registrationId,customerPhone:orderStatusHistory.customerPhone,status:orderStatusHistory.status,id:orderStatusHistory.id})
+        .from(orderStatusHistory).orderBy(orderStatusHistory.id),
+      db.execute(sql`SELECT registrationId, subOrderIndex FROM hiddenSubOrders`),
+      db.execute(sql`SELECT \`key\` FROM orderStatusTypes WHERE isActive = 1 AND isGlobal = 1 ORDER BY sortOrder ASC, id ASC LIMIT 1`),
+      db.select({email:siteAccessEntries.email}).from(siteAccessEntries),
+    ]);
+    // One current status per registration; historical rows must never be counted as separate orders.
+    const hidden=(hiddenRows as any)[0] as Array<{registrationId:number;subOrderIndex:number}>;
+    const initial=(initialRows as any)[0] as Array<{key:string}>;
+    const latest=selectVisibleSiteBulkOrders(orderRows,hidden,initial?.[0]?.key||"recebido");
+    return filterSiteBulkCandidates(prepareSiteBulkCandidates(customerRows,latest,entryRows.map(x=>x.email)),input.filter,input.search);
+  }),
+  bulkAdd: adminProcedure.input(z.object({customerIds:z.array(z.number().int().positive()).min(1).max(500)})).mutation(async ({ctx,input})=>{
+    const actor=await requireSiteOwner(ctx.req);
+    const db=await getDb();if(!db)throw new TRPCError({code:"INTERNAL_SERVER_ERROR"});
+    const ids=[...new Set(input.customerIds)];
+    const rows=await db.select({id:customers.id,name:customers.name,email:customers.email,phone:customers.phone,blocked:customers.blocked,deletedAt:customers.deletedAt})
+      .from(customers).where(inArray(customers.id,ids));
+    if(rows.length!==ids.length)throw new TRPCError({code:"BAD_REQUEST",message:"Lista desatualizada. Atualize a seleção."});
+    const available=rows.filter(x=>!x.deletedAt && x.blocked===0 && validSiteBulkEmail(siteBulkEmail(x.email)));
+    if(available.length!==ids.length)throw new TRPCError({code:"BAD_REQUEST",message:"Algum cliente foi bloqueado, excluído ou está sem e-mail válido. Atualize a seleção."});
+    const unique=new Set(available.map(x=>siteBulkEmail(x.email)));
+    if(unique.size!==ids.length)throw new TRPCError({code:"BAD_REQUEST",message:"Existem e-mails repetidos na seleção. Atualize a lista."});
+    let added=0,already=0;
+    // Unique index on e-mail prevents duplicates across simultaneous requests.
+    await db.transaction(async tx=>{
+      for(const c of available) {
+        const email=siteBulkEmail(c.email);
+        const [result]=await tx.execute(sql`INSERT IGNORE INTO siteAccessEntries
+          (displayName,email,phone,customerId,createdBy)
+          VALUES (${c.name},${email},${c.phone},${c.id},${actor})`);
+        const affected=Number((result as any)?.affectedRows ?? 0);
+        if(affected===1)added++;else already++;
+      }
+      await tx.insert(siteAccessAudit).values({actor,action:"BULK_ACCESS_ADDED",subject:JSON.stringify({added,already,total:ids.length})});
+    });
+    return {added,already,total:ids.length};
   }),
   setMode: adminProcedure.input(z.object({mode:z.enum(SITE_ACCESS_MODE)})).mutation(async ({ctx,input})=>{
     const actor=await requireSiteOwner(ctx.req);
