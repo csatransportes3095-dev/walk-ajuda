@@ -17,6 +17,7 @@ import {
   obterPerfilFabricanteOficial,
 } from "@/lib/vinGenerator";
 import { trpc } from "@/lib/trpc";
+import ChassisWmiReferencePanel from "@/components/ChassisWmiReferencePanel";
 import type { ChassisGenerationInput } from "@shared/chassisService";
 
 const FIPE_BASE = "https://fipe.parallelum.com.br/api/v2/cars";
@@ -762,6 +763,8 @@ export default function GeradorChassiPublico({ embedded = false, customer }: {
             Tabela FIPE via API pública. O gerador usa os nomes de veículos para organizar os testes; o VIN produzido não é um chassi oficial.
           </p>
         </section>}
+
+        <ChassisWmiReferencePanel />
 
         <div className="pb-5" />
       </main>
