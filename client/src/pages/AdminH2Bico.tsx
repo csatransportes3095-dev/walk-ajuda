@@ -1,6 +1,6 @@
 import { useEffect, useMemo, useRef, useState } from "react";
 import { useLocation } from "wouter";
-import { Archive, CheckCircle2, Copy, Eye, EyeOff, FileText, FolderOpen, Images, Search, UploadCloud, UserCheck, XCircle } from "lucide-react";
+import { Archive, CheckCircle2, ChevronDown, Copy, Eye, EyeOff, FileText, FolderOpen, Images, Search, UploadCloud, UserCheck, XCircle } from "lucide-react";
 import { toast } from "sonner";
 import AdminHeader from "@/components/AdminHeader";
 import H2BicoScreenshotImporter from "@/components/H2BicoScreenshotImporter";
@@ -16,6 +16,19 @@ import { extractCpfCandidatesFromText, isValidCpf, H2BICO_CPF_MAX_FILES, readCpf
 
 const STATUS:any = {available:"Disponível",reserved:"Reservado",in_use:"Em uso",used:"Usado",archived:"Arquivado"};
 const maskCpf=(cpf:string)=> cpf?.length===11 ? `${cpf.slice(0,3)}.***.***-${cpf.slice(-2)}` : cpf;
+
+const H2BICO_GROUPS = [
+  {id:"bulk",title:"Gestão em massa",subtitle:"Consultar e atualizar CPFs",Icon:CheckCircle2},
+  {id:"intelligence",title:"Conferências",subtitle:"Confirmados e histórico",Icon:Search},
+  {id:"lotes",title:"Lotes de 1.500",subtitle:"Copiar listas por lote",Icon:Copy},
+  {id:"fotos",title:"Fotos em lote",subtitle:"Importar fotos e pastas",Icon:Images},
+  {id:"prints",title:"Extrator de prints",subtitle:"Foto, nome e CPF",Icon:Eye},
+  {id:"cpf",title:"Extrator de CPF",subtitle:"TXT, Word e texto colado",Icon:FileText},
+  {id:"cadastros",title:"Cards de clientes",subtitle:"Consultar e marcar EAR",Icon:UserCheck},
+] as const;
+type H2BicoGroupId = (typeof H2BICO_GROUPS)[number]["id"];
+const H2BICO_CARD_PAGE_SIZE = 24;
+
 
 type ParsedFile = {
   file: File;
@@ -84,6 +97,17 @@ async function readDroppedFiles(items: DataTransferItemList): Promise<File[]> {
 
 export default function AdminH2Bico(){
   const [,navigate]=useLocation();
+
+  // Abre apenas um grupo. Depois da primeira visita, fica montado e somente
+  // oculto, sem perder textos, seleções ou operações de importação em curso.
+  const [activeGroup,setActiveGroup]=useState<H2BicoGroupId|null>(null);
+  const [visitedGroups,setVisitedGroups]=useState<Set<H2BicoGroupId>>(()=>new Set());
+  const [cardPage,setCardPage]=useState(0);
+  const toggleGroup=(group:H2BicoGroupId)=>{
+    setVisitedGroups(current=>new Set(current).add(group));
+    setActiveGroup(current=>current===group?null:group);
+  };
+
   const filesRef=useRef<HTMLInputElement>(null);
   const folderRef=useRef<HTMLInputElement>(null);
   const cpfFileRef=useRef<HTMLInputElement>(null);
@@ -102,7 +126,7 @@ export default function AdminH2Bico(){
   const [brokenPhotos,setBrokenPhotos]=useState<Set<number>>(new Set());
   const utils=trpc.useUtils();
 
-  const list=trpc.h2bico.list.useQuery({search,status,review});
+  const list=trpc.h2bico.list.useQuery({search,status,review},{enabled:activeGroup==="cadastros"});
   const allRecords=trpc.h2bico.list.useQuery({search:"",status:"all"});
   const stats=trpc.h2bico.stats.useQuery();
   const importer=trpc.h2bico.importPhoto.useMutation();
@@ -127,6 +151,7 @@ export default function AdminH2Bico(){
     onError:e=>toast.error(e.message)
   });
 
+  useEffect(()=>{setCardPage(0);},[search,status,review]);
   const existingCpfs=useMemo(()=>new Set((allRecords.data||[]).map((r:any)=>String(r.cpf))),[allRecords.data]);
   const candidates=useMemo(()=>extractCpfCandidatesFromText(extractText),[extractText]);
   const validCpfs=useMemo(()=>candidates.filter(isValidCpf),[candidates]);
@@ -227,6 +252,12 @@ export default function AdminH2Bico(){
   const invalidCount=batch.filter(p=>!p.valid).length;
   const duplicateSelectionCount=batch.filter(p=>p.duplicateInSelection).length;
   const existingCount=batch.filter(p=>p.alreadyExists).length;
+  const cardsTotal=list.data?.length??0;
+  const cardsPageCount=Math.max(1,Math.ceil(cardsTotal/H2BICO_CARD_PAGE_SIZE));
+  const safeCardPage=Math.min(cardPage,cardsPageCount-1);
+  const cardsOnPage=(list.data||[]).slice(
+    safeCardPage*H2BICO_CARD_PAGE_SIZE,(safeCardPage+1)*H2BICO_CARD_PAGE_SIZE,
+  );
 
   const importAll=async()=>{
     if(!readyBatch.length){toast.error("Nenhuma foto válida para importar.");return;}
@@ -265,16 +296,52 @@ export default function AdminH2Bico(){
 
   return <div className="min-h-screen bg-gray-950 text-white">
     <AdminHeader title="H2BICO" backTo="/admin/codes"/>
-    <main className="max-w-7xl mx-auto p-4 space-y-4">
+    <main className="max-w-7xl mx-auto p-3 sm:p-4 space-y-3">
 
-      <div className="grid grid-cols-2 md:grid-cols-6 gap-2">
+      <div className="grid grid-cols-3 md:grid-cols-6 gap-2">
         {[["Total",stats.data?.total],["Disponíveis",stats.data?.available],["Reservados",stats.data?.reserved],["Em uso",stats.data?.in_use],["Usados",stats.data?.used],["Arquivados",stats.data?.archived]].map(([l,v])=>
-          <Card key={String(l)} className="bg-gray-900 border-gray-800 p-3">
-            <div className="text-xs text-gray-400">{l}</div><div className="text-2xl font-bold">{v??0}</div>
+          <Card key={String(l)} className="bg-gray-900 border-gray-800 px-3 py-2">
+            <div className="text-[11px] text-gray-400">{l}</div><div className="text-xl font-bold">{v??0}</div>
           </Card>)}
       </div>
 
-      <Card className="bg-gradient-to-br from-emerald-950/60 to-gray-900 border-emerald-500/35 p-5 space-y-4">
+
+      <nav aria-label="Grupos de funções do H2BICO" className="rounded-2xl border border-cyan-500/25 bg-slate-900/70 p-3 sm:p-4">
+        <div className="mb-3 flex flex-wrap items-center justify-between gap-2">
+          <div>
+            <h2 className="text-base font-black tracking-wide">PAINEL ORGANIZADO · H2BICO</h2>
+            <p className="text-xs text-slate-400">Abra apenas a função necessária. Clique novamente para recolher, sem perder o que digitou.</p>
+          </div>
+          <Button type="button" size="sm" variant="outline" disabled={!activeGroup} onClick={()=>setActiveGroup(null)}>RECOLHER TUDO</Button>
+        </div>
+        <div className="grid grid-cols-2 gap-2 sm:grid-cols-3 xl:grid-cols-4">
+          {H2BICO_GROUPS.map(group=>{
+            const Icon=group.Icon;
+            const opened=activeGroup===group.id;
+            return <button key={group.id} id={"h2bico-tab-"+group.id} type="button"
+              aria-controls={"h2bico-panel-"+group.id} aria-expanded={opened}
+              onClick={()=>toggleGroup(group.id)}
+              className={"flex min-h-[72px] w-full items-start gap-2 rounded-xl border p-3 text-left transition-colors focus-visible:outline focus-visible:outline-2 focus-visible:outline-cyan-400 "+
+                (opened?"border-cyan-400 bg-cyan-500/15":"border-slate-700 bg-slate-950/55 hover:border-cyan-500/50 hover:bg-slate-800/80")}>
+              <Icon className="mt-0.5 h-4 w-4 shrink-0 text-cyan-300"/>
+              <span className="min-w-0 flex-1">
+                <span className="block text-sm font-bold leading-tight text-white">{group.title}</span>
+                <span className="mt-1 block text-[11px] leading-snug text-slate-400">{group.subtitle}</span>
+              </span>
+              <ChevronDown className={"mt-0.5 h-4 w-4 shrink-0 text-slate-400 transition-transform "+(opened?"rotate-180":"")}/>
+            </button>;
+          })}
+        </div>
+      </nav>
+
+      <div className="flex flex-wrap items-center justify-between gap-2 rounded-xl border border-cyan-500/20 bg-slate-900 px-3 py-2">
+        <span className="text-xs text-slate-400"><strong className="text-slate-200">Similaridade:</strong> compare a Foto Mestre com os cadastros disponíveis do banco H2BICO.</span>
+        <Button size="sm" variant="outline" onClick={()=>navigate("/similaridade")}>Abrir Similaridade</Button>
+      </div>
+      {!activeGroup&&<p role="status" className="px-1 text-xs text-slate-400">Selecione um dos 7 grupos acima para trabalhar. Os demais ficam recolhidos.</p>}
+
+      {visitedGroups.has("fotos")&&<section id="h2bico-panel-fotos" role="region" aria-labelledby="h2bico-tab-fotos" hidden={activeGroup!=="fotos"} className={activeGroup==="fotos"?"":"hidden"}>
+      <Card className="bg-gradient-to-br from-emerald-950/60 to-gray-900 border-emerald-500/35 p-4 space-y-3">
         <div>
           <div className="text-xs font-black tracking-[0.18em] text-emerald-300 uppercase">Importação principal</div>
           <h2 className="text-2xl font-black mt-1">Importar fotos em lote</h2>
@@ -343,23 +410,25 @@ export default function AdminH2Bico(){
           <strong>Importação concluída.</strong> {summary.imported} adicionada(s) • {summary.repaired} foto(s) reparada(s) • {summary.duplicates} duplicada(s) mantida(s) • {summary.errors} erro(s).
         </div>}
       </Card>
+      </section>}
 
-      <Card className="bg-gray-900 border-cyan-500/20 p-4 flex flex-col md:flex-row items-start md:items-center justify-between gap-3">
-        <div>
-          <div className="font-black">Comparar com o banco H2BICO</div>
-          <div className="text-sm text-gray-400">Na Similaridade, coloque somente a Foto Mestre e carregue todos os CPFs DISPONÍVEIS do H2BICO.</div>
-        </div>
-        <Button onClick={()=>navigate("/similaridade")} variant="outline">Abrir Similaridade</Button>
-      </Card>
+      {visitedGroups.has("lotes")&&<section id="h2bico-panel-lotes" role="region" aria-labelledby="h2bico-tab-lotes" hidden={activeGroup!=="lotes"} className={activeGroup==="lotes"?"":"hidden"}>
+        <H2BicoReviewLotes/>
+      </section>}
 
-      <H2BicoReviewLotes/>
+      {visitedGroups.has("intelligence")&&<section id="h2bico-panel-intelligence" role="region" aria-labelledby="h2bico-tab-intelligence" hidden={activeGroup!=="intelligence"} className={activeGroup==="intelligence"?"":"hidden"}>
+        <H2BicoIntelligence/>
+      </section>}
 
-      <H2BicoIntelligence/>
+      {visitedGroups.has("bulk")&&<section id="h2bico-panel-bulk" role="region" aria-labelledby="h2bico-tab-bulk" hidden={activeGroup!=="bulk"} className={activeGroup==="bulk"?"":"hidden"}>
+        <H2BicoBulkManager/>
+      </section>}
 
-      <H2BicoBulkManager/>
+      {visitedGroups.has("prints")&&<section id="h2bico-panel-prints" role="region" aria-labelledby="h2bico-tab-prints" hidden={activeGroup!=="prints"} className={activeGroup==="prints"?"":"hidden"}>
+        <H2BicoScreenshotImporter/>
+      </section>}
 
-      <H2BicoScreenshotImporter/>
-
+      {visitedGroups.has("cpf")&&<section id="h2bico-panel-cpf" role="region" aria-labelledby="h2bico-tab-cpf" hidden={activeGroup!=="cpf"} className={activeGroup==="cpf"?"":"hidden"}>
       <Card className="bg-gray-900 border-gray-800 p-4 space-y-3">
         <div className="flex flex-wrap items-center justify-between gap-3">
           <div className="font-semibold flex items-center gap-2"><FileText className="w-4 h-4"/>Extrator de CPF <span className="rounded-md bg-emerald-500/15 px-2 py-1 text-xs font-bold text-emerald-300">{cpfs.length} CPF(s)</span></div>
@@ -391,19 +460,23 @@ export default function AdminH2Bico(){
         <Textarea placeholder="Ou cole aqui o texto com vários CPFs..." value={extractText} onChange={e=>setExtractText(e.target.value)}/>
         {checkReady&&cpfs.length>0&&<Textarea readOnly value={cpfs.join("\n")} className="font-mono min-h-28" aria-label="CPFs extraídos, um por linha"/>}
       </Card>
+      </section>}
 
+      {visitedGroups.has("cadastros")&&<section id="h2bico-panel-cadastros" role="region" aria-labelledby="h2bico-tab-cadastros" hidden={activeGroup!=="cadastros"} className={activeGroup==="cadastros"?"":"hidden"}>
+      <div className="mb-3 flex flex-wrap items-center justify-between gap-2"><div><h2 className="text-base font-black">CARDS DE CLIENTES · ACERVO H2BICO</h2><p className="text-xs text-slate-400">{cardsTotal} registro(s) no filtro · até 24 por página</p></div><span className="text-sm text-slate-300">Página {safeCardPage+1} de {cardsPageCount}</span></div>
       <div className="flex flex-col md:flex-row gap-2">
         <div className="relative flex-1"><Search className="w-4 h-4 absolute left-3 top-3 text-gray-500"/><Input className="pl-9" placeholder="Pesquisar nome ou CPF" value={search} onChange={e=>setSearch(e.target.value)}/></div>
         <Button variant="outline" onClick={()=>setShowCpf(!showCpf)}>{showCpf?<EyeOff className="w-4 h-4 mr-2"/>:<Eye className="w-4 h-4 mr-2"/>}{showCpf?"Ocultar CPF":"Mostrar CPF"}</Button>
         <select className="bg-gray-900 border border-gray-700 rounded-md px-3 py-2" value={status} onChange={e=>setStatus(e.target.value)}><option value="all">Todos</option>{Object.entries(STATUS).map(([k,v])=><option key={k} value={k}>{String(v)}</option>)}</select>
+        <select aria-label="Filtrar conferência" className="bg-gray-900 border border-gray-700 rounded-md px-3 py-2" value={review} onChange={e=>setReview(e.target.value as typeof review)}><option value="all">Todas as conferências</option><option value="confirmed">Confirmados</option><option value="pending">Pendentes</option><option value="discarded">Descartados</option></select>
       </div>
 
-      <div className="grid md:grid-cols-2 xl:grid-cols-3 gap-3">
-        {(list.data||[]).map((r:any)=><Card key={r.id} className="bg-gray-900 border-gray-800 p-4">
-          <div className="flex gap-3">{r.photoUrl&&!brokenPhotos.has(r.id)?<img src={`/api/admin/h2bico/photo/${r.id}`} onError={()=>setBrokenPhotos(current=>{const next=new Set(current);next.add(r.id);return next;})} className="w-20 h-20 rounded-xl object-cover border border-gray-700"/>:<div className="w-20 h-20 rounded-xl bg-gray-800 grid place-items-center"><UserCheck/></div>}
+      <div className="mt-3 grid max-h-[70vh] grid-cols-1 gap-2 overflow-y-auto pr-1 sm:grid-cols-2 xl:grid-cols-3">
+        {cardsOnPage.map((r:any)=><Card key={r.id} className="bg-gray-900 border-gray-800 p-3">
+          <div className="flex gap-3">{r.photoUrl&&!brokenPhotos.has(r.id)?<img src={`/api/admin/h2bico/photo/${r.id}`} onError={()=>setBrokenPhotos(current=>{const next=new Set(current);next.add(r.id);return next;})} className="h-14 w-14 shrink-0 rounded-lg object-cover border border-gray-700"/>:<div className="h-14 w-14 shrink-0 rounded-lg bg-gray-800 grid place-items-center"><UserCheck/></div>}
             <div className="min-w-0 flex-1"><div className="font-bold truncate">{r.name}</div><div className="text-sm text-gray-400 font-mono">{showCpf?r.cpf:maskCpf(r.cpf)}</div>{r.uf&&<div className="text-xs text-gray-500">{r.uf}</div>}<div className="text-xs mt-1 font-bold">Situação: {STATUS[r.status]}</div><div className={`mt-1 inline-flex rounded-md border px-2 py-1 text-xs font-black ${r.reviewState==="confirmed"?"border-emerald-500/40 bg-emerald-500/15 text-emerald-300":r.reviewState==="discarded"?"border-red-500/40 bg-red-500/15 text-red-300":"border-amber-500/30 bg-amber-500/10 text-amber-200"}`}>{r.reviewState==="confirmed"?"✓ CPF CONFERIDO":r.reviewState==="discarded"?"⛔ DESCARTADO — BLOQUEADO":"⏳ CPF PENDENTE DE CONFERÊNCIA"}</div>{r.reviewState==="confirmed"&&r.reviewedAt&&<div className="text-xs mt-1 text-emerald-200/80">Conferido em {new Date(r.reviewedAt).toLocaleString("pt-BR")}</div>}{r.linkedOrder&&<div className="text-xs text-amber-300">Pedido: {r.linkedOrder}</div>}</div>
           </div>
-          <div className="mt-3 grid grid-cols-2 gap-2" role="group" aria-label={`Marcação EAR de ${r.name}`}>
+          <div className="mt-2 grid grid-cols-2 gap-2" role="group" aria-label={`Marcação EAR de ${r.name}`}>
             {(["com_ear","sem_ear"] as const).map(option=>{
               const active=r.earStatus===option;
               const positive=option==="com_ear";
@@ -417,7 +490,7 @@ export default function AdminH2Bico(){
               </button>;
             })}
           </div>
-          <div className="flex flex-wrap gap-2 mt-3">
+          <div className="flex flex-wrap gap-1.5 mt-2">
             {r.status==="available"&&<Button size="sm" variant="outline" onClick={()=>setSt.mutate({id:r.id,status:"reserved"})}>Reservar</Button>}
             {r.status==="reserved"&&<Button size="sm" variant="outline" onClick={()=>setSt.mutate({id:r.id,status:"in_use"})}>Em uso</Button>}
             {r.status!=="used"&&r.status!=="archived"&&<Button size="sm" variant="outline" className="border-gray-700 bg-transparent text-gray-300 hover:text-white" onClick={()=>markUsed(r.id)}><CheckCircle2 className="w-4 h-4 mr-1"/>Marcar como usado</Button>}
@@ -428,6 +501,14 @@ export default function AdminH2Bico(){
         </Card>)}
       </div>
       {!list.isLoading&&(list.data?.length??0)===0&&<div className="text-center text-gray-500 py-12">Nenhum registro encontrado.</div>}
+      <div className="mt-3 flex flex-wrap items-center justify-between gap-2 border-t border-slate-800 pt-3">
+        <span className="text-xs text-slate-400">{cardsTotal?Math.min(safeCardPage*H2BICO_CARD_PAGE_SIZE+1,cardsTotal):0}–{Math.min((safeCardPage+1)*H2BICO_CARD_PAGE_SIZE,cardsTotal)} de {cardsTotal} cadastros</span>
+        <div className="flex gap-2">
+          <Button size="sm" variant="outline" disabled={safeCardPage===0} onClick={()=>setCardPage(p=>Math.max(0,p-1))}>ANTERIOR</Button>
+          <Button size="sm" variant="outline" disabled={safeCardPage>=cardsPageCount-1} onClick={()=>setCardPage(p=>p+1)}>PRÓXIMA</Button>
+        </div>
+      </div>
+      </section>}
     </main>
   </div>
 }
