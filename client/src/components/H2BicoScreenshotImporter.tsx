@@ -285,7 +285,7 @@ export default function H2BicoScreenshotImporter(){
         }
         setStatus("Salvando "+item.name+"...");
         try{
-          if(item.cropMode!=="white"||!item.whiteCrop){update(item.id,{error:"Foto com fundo branco não identificada automaticamente. Salvamento bloqueado.",selected:false});errors++;continue;}
+          // Both legacy square and automatic white crops are already bounded to the portrait preview.
           const base64=await cropPhoto(item);
           const result=await save.mutateAsync({cpf:item.cpf,name:item.name,base64,photoMode:item.cropMode==="white"?"white":"original"});
           if(result.result==="imported"){imported++;update(item.id,{saved:true,selected:false,error:undefined});}
@@ -297,7 +297,7 @@ export default function H2BicoScreenshotImporter(){
     }finally{savingRef.current=false;setSaving(false);setStatus("");}
   };
   const eligible=(item:Item)=>!item.existing&&!item.saved&&isValidCpf(item.cpf)&&
-    item.name.trim().split(/\\s+/).length>=2&&item.confidence!==undefined&&item.confidence>=70&&
+    item.name.trim().split(/\s+/).length>=2&&item.confidence!==undefined&&item.confidence>=70&&
     !item.cpfSuggestion&&!item.warnings.some(w=>/CONFIRA O N[UÚ]MERO|ASSOCIA|CPF REPETIDO|LEITURA DIVERGENTE/i.test(w))&&
     (item.cropMode==="white"&&!!item.whiteCrop||item.crop.size>=48);
   const selected=items.filter(item=>item.selected&&!item.saved&&!item.existing);
