@@ -38,9 +38,9 @@ export default function H2BicoReviewLotes(){
     try{await navigator.clipboard.writeText(value);toast.success(lines.length+" CPFs do lote copiados.");}
     catch{toast.warning("Não foi possível copiar automaticamente. Abra a lista abaixo para selecionar.");}
   };
-  const openRun=(id:number)=>{setRunId(id);setIndex(0);setSelected([]);setManual("");setCopied("");};
+  const openRun=(id:number)=>{setRunId(id);setIndex(0);setCopied("");};
   return <Card className="border-emerald-500/30 bg-gray-900 p-4 space-y-3 text-white">
-    <div className="text-xs font-bold tracking-widest text-emerald-300">H2BICO · CONFERÊNCIA PERSISTENTE</div>
+    <div className="text-xs font-bold tracking-widest text-emerald-300">H2BICO · EXPORTAÇÃO POR LOTES</div>
     <h2 className="text-xl font-black">COPIAR CPFs EM LOTES DE 1.500</h2>
     <p className="text-sm text-gray-400">Esta área serve apenas para copiar CPFs em lotes de 1.500. Confirmação e descarte ficam na Gestão em Massa abaixo.</p>
     <div className="grid grid-cols-2 md:grid-cols-4 gap-2 text-center">
@@ -65,8 +65,8 @@ export default function H2BicoReviewLotes(){
       {runs.data.slice(0,8).map(r=><Button key={r.id} size="sm" variant={runId===r.id?"default":"outline"} onClick={()=>openRun(r.id)}>#{r.id} · {r.total} CPFs</Button>)}
     </div>}
     {!!lots.data&&<div className="flex flex-wrap gap-2">
-      {lots.data.lots.map(l=><Button key={l.index} size="sm" variant={index===l.index?"default":"outline"} onClick={()=>{setIndex(l.index);setSelected([]);setManual("");setCopied("");}}>
-        LOTE {l.index+1} · {l.total} · ✓{l.confirmed} · X{l.discarded}
+      {lots.data.lots.map(l=><Button key={l.index} size="sm" variant={index===l.index?"default":"outline"} onClick={()=>{setIndex(l.index);setCopied("");}}>
+        LOTE {l.index+1} · {l.total} CPFs
       </Button>)}
     </div>}
     {!!runId&&current.isLoading&&<p role="status">Carregando lote...</p>}
