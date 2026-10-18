@@ -13,6 +13,9 @@ on:
       - 'server/h2bicoWhitePhotoCrop.test.ts'
       - 'server/h2bicoScreenshotWhitePhoto.ts'
       - 'server/h2bicoScreenshotWhitePhoto.test.ts'
+      - 'server/h2bicoImportReview.test.ts'
+      - 'client/src/lib/h2bicoImportReview.ts'
+      - 'client/src/components/H2BicoIntelligence.tsx'
       - '.github/workflows/h2bico-white-crop-validate.yml'
   workflow_dispatch:
 permissions:
@@ -30,6 +33,6 @@ jobs:
           cache: pnpm
       - run: pnpm install --frozen-lockfile
       - name: New white-background detector and existing OCR tests
-        run: pnpm exec vitest run server/h2bicoWhitePhotoCrop.test.ts server/h2bicoScreenshotWhitePhoto.test.ts server/h2bicoScreenshotOcr.test.ts
+        run: pnpm exec vitest run server/h2bicoWhitePhotoCrop.test.ts server/h2bicoScreenshotWhitePhoto.test.ts server/h2bicoImportReview.test.ts server/h2bicoScreenshotOcr.test.ts
       - name: Production build
         run: pnpm build
