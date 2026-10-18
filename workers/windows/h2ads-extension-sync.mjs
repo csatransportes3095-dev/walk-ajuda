@@ -48,12 +48,9 @@ export function verifyCrx3(buffer, id) {
   if (!signed || signed.length < 18 || zip.toString("ascii", 0, 2) !== "PK") throw new Error("invalid_crx_content");
   const signedFields = fields(signed);
   const crxId = signedFields.get(1)?.[0];
-  const desired = Buffer.from(id.split("").map(c => c.charCodeAt(0) - 97));
-  if (!crxId || crxId.length !== 16 || !crxId.equals(Buffer.from(desired.toString("hex"), "hex"))) {
-    // The ID is represented as 16 bytes, each byte encodes TWO alphabet characters.
-    const hex = [...id].map(c => (c.charCodeAt(0) - 97).toString(16)).join("");
-    if (!crxId || crxId.toString("hex") !== hex) throw new Error("crx_id_mismatch");
-  }
+  // SignedData.crx_id is the first 16 bytes of the SHA-256 of the public key.
+  const idHex = [...id].map(c => (c.charCodeAt(0) - 97).toString(16)).join("");
+  if (!crxId || crxId.length !== 16 || crxId.toString("hex") !== idHex) throw new Error("crx_id_mismatch");
   const message = Buffer.concat([CRX_PREFIX, Buffer.alloc(4), signed, zip]);
   message.writeUInt32LE(signed.length, CRX_PREFIX.length);
   for (const proof of header.get(2) ?? []) {
@@ -86,7 +83,8 @@ export async function syncH2AdsExtensions({ panelUrl, headers, proxyPort, root }
       const unpacked = verifyCrx3(data, id);
       await writeFile(zipPath, unpacked.zip);
       const output = join(temp, "unpacked");
-      await exec("powershell.exe", ["-NoProfile", "-NonInteractive", "-Command", "Expand-Archive -LiteralPath $args[0] -DestinationPath $args[1] -Force", zipPath, output], { windowsHide: true, timeout: 30000 });
+      const quote = value => "'" + value.replaceAll("'", "''") + "'";
+      await exec("powershell.exe", ["-NoProfile", "-NonInteractive", "-Command", "Expand-Archive -LiteralPath " + quote(zipPath) + " -DestinationPath " + quote(output) + " -Force"], { windowsHide: true, timeout: 30000 });
       const manifestPath = join(output, "manifest.json");
       const manifest = JSON.parse(await readFile(manifestPath, "utf8"));
       if (![2, 3].includes(manifest.manifest_version)) throw new Error("unsupported_extension_manifest");
