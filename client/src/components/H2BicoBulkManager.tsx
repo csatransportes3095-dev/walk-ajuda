@@ -22,6 +22,8 @@ export default function H2BicoBulkManager(){
   const lookup=trpc.useUtils();
   const ear=trpc.h2bico.bulkEarMarker.useMutation();
   const archive=trpc.h2bico.bulkArchive.useMutation();
+  const pasted=trpc.h2bicoReview.managePasted.useMutation();
+  const [reviewAction,setReviewAction]=useState<"confirm"|"unconfirm"|"discard"|"restore">("confirm");
   const parse=()=>{
     const all=text.split(/\r?\n/).map(x=>x.replace(/\D/g,"")).filter(Boolean);
     const invalid=all.filter(x=>x.length!==11);
@@ -79,6 +81,27 @@ export default function H2BicoBulkManager(){
       const byCpf=new Map(found.map(r=>[r.cpf,r]));
       setRecords(cpfs.flatMap(cpf=>byCpf.has(cpf)?[byCpf.get(cpf)!]:[]));
     }catch(error){toast.error("Atualizados "+done+" antes da falha: "+(error instanceof Error?error.message:"Erro"));}
+    finally{setBusy(false);}
+  };
+  const reviewPasted=async()=>{
+    const {cpfs,invalid}=parse();
+    if(invalid.length||!cpfs.length){toast.error("Cole CPFs válidos, um por linha.");return;}
+    if(busy)return;
+    const labels={confirm:"CONFIRMAR",unconfirm:"VOLTAR A PENDENTE",discard:"DESCARTAR / ARQUIVAR",restore:"RESTAURAR"};
+    if(!window.confirm(labels[reviewAction]+" os "+cpfs.length+" CPFs colados encontrados no H2BICO? Descartados ficam protegidos da confirmação."))return;
+    setBusy(true);
+    let updated=0,skipped=0,missingCount=0;
+    try{
+      for(let i=0;i<cpfs.length;i+=250){
+        const res=await pasted.mutateAsync({cpfs:cpfs.slice(i,i+250),decision:reviewAction});
+        updated+=res.updated;
+        skipped+=res.already+res.skippedDiscarded+res.skippedProtected;
+        missingCount+=res.missing;
+      }
+      await Promise.all([lookup.h2bico.invalidate(),lookup.h2bicoReview.invalidate()]);
+      setSelected([]);setRecords([]);setMissing([]);
+      toast.success(updated+" atualizado(s); "+skipped+" ignorado(s)/protegido(s); "+missingCount+" não encontrado(s).");
+    }catch(e){toast.error("Ação interrompida após "+updated+" atualizados: "+(e instanceof Error?e.message:"erro"));}
     finally{setBusy(false);}
   };
   const copyBank=async()=>{
@@ -147,6 +170,19 @@ export default function H2BicoBulkManager(){
         <option value="clear_ear">Remover EAR</option><option value="archive">Arquivar</option><option value="restore">Restaurar</option>
       </select>
       <Button disabled={busy||!ids.length} onClick={()=>void run()}>{busy?"PROCESSANDO...":"APLICAR A "+ids.length+" CPF(s)"}</Button>
+    </div>
+    <div className="border-t border-white/10 pt-3 space-y-2">
+      <p className="font-bold">CONFERÊNCIA DOS CPFs COLADOS</p>
+      <p className="text-sm text-gray-400">Após conferir sua lista, cole os CPFs no campo superior. O botão aplica a conferência a todos os CPFs encontrados, sem selecionar cada registro. Copiar não confirma.</p>
+      <div className="flex flex-wrap items-center gap-2">
+        <select aria-label="Ação de conferência dos CPFs colados" value={reviewAction} onChange={e=>setReviewAction(e.target.value as typeof reviewAction)} className="rounded border border-gray-700 bg-gray-950 p-2">
+          <option value="confirm">CONFIRMAR CPFs COLADOS</option>
+          <option value="unconfirm">VOLTAR A PENDENTE</option>
+          <option value="discard">DESCARTAR / ARQUIVAR</option>
+          <option value="restore">RESTAURAR DESCARTADOS</option>
+        </select>
+        <Button disabled={busy||!parse().cpfs.length} onClick={()=>void reviewPasted()}>{busy?"PROCESSANDO...":"APLICAR À LISTA COLADA"}</Button>
+      </div>
     </div>
     <div className="border-t border-white/10 pt-3 space-y-2">
       <p className="font-bold">COPIAR CPFs DO BANCO H2BICO</p>

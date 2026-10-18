@@ -22,23 +22,24 @@ describe("H2BICO: conferencia persistente",()=>{
   expect(core).toContain('(row as any).reviewState==="discarded"');
   expect(router).toContain("h2bicoReview: h2bicoReviewRouter");
  });
- it("desfaz em massa somente CPFs confirmados sem tocar descartados",()=>{
-  expect(server).toContain("unconfirmLot:adminProcedure.input");
-  expect(server).toContain("rv.reviewState='confirmed'");
-  expect(server).toContain("AND reviewState='confirmed'");
-  expect(server).toContain("review_unconfirmed");
-  expect(ui).toContain("SELECIONAR TODOS DO LOTE");
-  expect(ui).toContain("SELECIONAR CONFIRMADOS");
-  expect(ui).toContain("DESFAZER CONFIRMAÇÃO DO LOTE");
-  expect(ui).toContain("unconfirmLot.mutateAsync");
- });
- it("somente endpoints administrativos e confirmação antes de alteração",()=>{
-  for(const key of ["stats","runs","createRun","lots","lot","decide","confirmLot"])
-    expect(server).toMatch(new RegExp(key+":adminProcedure"));
-  expect(ui).toContain("window.confirm");
-  expect(ui).toContain("CONFIRMAR");
-  expect(ui).toContain("DESCARTAR / ARQUIVAR");
-  expect(ui).toContain("RESTAURAR DESCARTADOS");
+ it("a tela de lotes apenas copia e nao executa alteracoes",()=>{
+  expect(ui).toContain("COPIAR CPFs EM LOTES DE 1.500");
+  expect(ui).toContain("COPIAR CPFs DO LOTE");
+  expect(ui).not.toContain("confirmLot.mutateAsync");
+  expect(ui).not.toContain("decide.mutateAsync");
+  expect(ui).not.toContain("unconfirmLot.mutateAsync");
   expect(page).toContain("<H2BicoReviewLotes/>");
  });
+ it("a confirmacao de CPFs colados ocorre na gestao em massa e protege descartados",()=>{
+  const bulk=readFileSync("client/src/components/H2BicoBulkManager.tsx","utf8");
+  expect(server).toContain("managePasted:adminProcedure.input");
+  expect(server).toContain('row.reviewState==="discarded"');
+  expect(server).toContain("skippedDiscarded");
+  expect(server).toContain("skippedProtected");
+  expect(bulk).toContain("pasted.mutateAsync");
+  expect(bulk).toContain("CONFIRMAR CPFs COLADOS");
+  expect(bulk).toContain("APLICAR À LISTA COLADA");
+  expect(bulk).toContain("window.confirm");
+ });
+
 });
