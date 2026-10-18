@@ -26,6 +26,14 @@ export async function alignScreenshotPhotoCrops(
     Math.abs(data[a+1]-data[b+1])+Math.abs(data[a+2]-data[b+2]);
   const at=(x:number,y:number)=>(y*width+x)*channels;
   return persons.map(person=>{
+    // Alternative print layouts can put the portrait on the right or above
+    // the text. The left-only border detector must never move those crops
+    // back to an unrelated person's photograph. Keep the guarded estimate
+    // and require the administrator to inspect the preview before saving.
+    if(person.photoLayout==="right"||person.photoLayout==="above"){
+      return {...person,warnings:[...person.warnings,
+        "CONFIRA RECORTE: posição estimada; ajuste as coordenadas se necessário."]};
+    }
     const name=person.nameBox;
     if(!name || name.left<60 || !name.height) {
       return {...person,warnings:[...person.warnings,"Confira manualmente os limites da foto."]};
