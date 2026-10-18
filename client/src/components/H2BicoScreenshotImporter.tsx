@@ -329,6 +329,8 @@ export default function H2BicoScreenshotImporter(){
       <div className="flex flex-wrap items-center justify-between gap-2">
         <div className="text-sm font-bold">{items.length} identificado(s) • {items.filter(x=>x.existing).length} já cadastrado(s) • {selected.length} selecionado(s)</div>
         <div className="flex gap-2">
+          <Button disabled={saving||busy||!selectable.length} variant="outline" onClick={selectAll}>SELECIONAR TODOS ({selectable.length})</Button>
+          <Button disabled={saving||busy||!selected.length} variant="outline" onClick={deselectAll}>DESMARCAR TODOS</Button>
           <Button disabled={saving||busy} variant="outline" onClick={clearResults}>LIMPAR</Button>
           <Button disabled={saving||busy||!selected.length} onClick={()=>void saveAll()}>{saving?"SALVANDO...":"SALVAR "+selected.length+" NO H2BICO"}</Button>
         </div>
