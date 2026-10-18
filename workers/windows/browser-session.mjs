@@ -552,17 +552,22 @@ async function run() {
     // Auto-provision Store extensions only for the isolated Chrome for Testing binary.
     // All third-party downloads are tunnelled through this instance's verified relay.
     let globalExtensionPaths = [];
+    let extensionSyncStatus = "testing_browser_not_enabled";
     if (browserExecutable.toLowerCase().includes("chrome-for-testing")) {
       try {
         const { syncH2AdsExtensions } = await import("./h2ads-extension-sync.mjs");
+        extensionSyncStatus = "sync_started";
         globalExtensionPaths = await syncH2AdsExtensions({
           panelUrl, headers: headers(), proxyPort: relayPort,
           root: join(profileDirectory, "h2ads-global-extensions"),
         });
+        extensionSyncStatus = globalExtensionPaths.length ? "packages_prepared" : "none_prepared";
       } catch (error) {
+        extensionSyncStatus = "sync_failed";
         console.error("[H2ADS] falha ao sincronizar extensoes:", String(error?.message || error));
       }
     }
+    writeSession({ extensionSyncStatus, extensionPreparedCount: globalExtensionPaths.length, extensionSyncAt: new Date().toISOString() });
     const labelPageUrl = createInstanceLabelPage();
     const privacyGuardExtension = createGoogleSorryPrivacyGuard();
     browser = spawn(executable, [

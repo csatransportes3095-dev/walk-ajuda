@@ -76,8 +76,12 @@ export async function syncH2AdsExtensions({ panelUrl, headers, proxyPort, root }
     const temp = await mkdtemp(join(tmpdir(), "h2ads-crx-"));
     try {
       const crxPath = join(temp, "extension.crx"), zipPath = join(temp, "extension.zip");
-      const upstream = "https://clients2.google.com/service/update2/crx?response=redirect&prodversion=156.0.8078.12&acceptformat=crx3&x=" + encodeURIComponent("id=" + id + "&uc");
-      await exec("curl.exe", ["--fail", "--silent", "--show-error", "--location", "--max-time", "40", "--max-filesize", "25000000", "--proxy", "http://127.0.0.1:" + proxyPort, "--output", crxPath, upstream], { windowsHide: true, timeout: 45000 });
+      const params = new URLSearchParams({
+        response: "redirect", prodversion: "156.0.8078.12", acceptformat: "crx3",
+        os: "win", arch: "x64", prod: "chromecrx", x: "id=" + id + "&uc",
+      });
+      const upstream = "https://clients2.google.com/service/update2/crx?" + params.toString();
+      await exec("curl.exe", ["--fail", "--silent", "--show-error", "--location", "--proto", "=https", "--proto-redir", "=https", "--max-redirs", "4", "--max-time", "40", "--max-filesize", "25000000", "--proxy", "http://127.0.0.1:" + proxyPort, "--output", crxPath, upstream], { windowsHide: true, timeout: 45000 });
       const data = await readFile(crxPath);
       if (data.length > 25000000) throw new Error("crx_too_large");
       const unpacked = verifyCrx3(data, id);
