@@ -4,6 +4,7 @@ import { completeOpenAppointmentsForOrder, createAppointment, deleteAppointment,
 import { findMainCustomerByIdentity, normalizeCustomerPhone } from "./customerAccess";
 import { publicSiteUrl } from "../shared/publicLinks";
 import { sendMailDirect } from "./_core/sendMailDirect";
+import { loadAutomaticProductAliases } from "./productScheduleAliases";
 
 type AutomaticScheduleOption = {
   id: number;
@@ -11,6 +12,7 @@ type AutomaticScheduleOption = {
   label: string;
   productName: string | null;
   autoScheduleEnabled: number;
+  aliases?: {productName:string;optionLabel:string}[];
 };
 
 export type AutomaticScheduleResult = {
@@ -107,7 +109,9 @@ async function loadAutomaticOptions(): Promise<AutomaticScheduleOption[]> {
     LEFT JOIN products p ON p.id = po.productId
     WHERE po.autoScheduleEnabled = 1
   `);
-  return (result[0] || []) as AutomaticScheduleOption[];
+  const options=(result[0] || []) as AutomaticScheduleOption[];
+  const aliases=await loadAutomaticProductAliases(db,options.map(option=>Number(option.id)));
+  return options.map(option=>({...option,aliases:aliases.get(Number(option.id))||[]}));
 }
 
 export function findAutomaticOption(
@@ -126,7 +130,22 @@ export function findAutomaticOption(
     return productCandidates.length === 1 ? productCandidates[0] : null;
   }
 
-  const candidates = options.filter((option) => normalizeLabel(option.label) === optionLabel);
+  const candidates=options.filter(option=>
+    normalizeLabel(option.label)===optionLabel ||
+    option.aliases?.some(alias=>normalizeLabel(alias.optionLabel)===optionLabel)
+  );
+  // Historical identity is stronger than a display label reused in multiple
+  // cards. A legacy pair may only map to ONE immutable option ID.
+  if(service){
+    const historical=candidates.filter(option=>
+      option.aliases?.some(alias=>
+        normalizeLabel(alias.productName)===service &&
+        normalizeLabel(alias.optionLabel)===optionLabel
+      )
+    );
+    if(historical.length===1)return historical[0];
+    if(historical.length>1)return null;
+  }
   if (candidates.length === 0) return null;
 
   // Quando o pedido antigo traz o produto, ele também precisa coincidir.
