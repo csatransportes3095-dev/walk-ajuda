@@ -1,7 +1,7 @@
 import { z } from "zod";
 import { TRPCError } from "@trpc/server";
 import { eq, sql, inArray } from "drizzle-orm";
-import { customers, orderStatusHistory } from "../drizzle/schema";
+import { customers, orderStatusHistory, loans, loanClients } from "../drizzle/schema";
 import { prepareSiteBulkCandidates, filterSiteBulkCandidates, siteBulkFilters, siteBulkEmail, validSiteBulkEmail, selectVisibleSiteBulkOrders } from "../shared/siteSecurityBulk";
 import jwt from "jsonwebtoken";
 import { parse as parseCookieHeader } from "cookie";
@@ -60,20 +60,32 @@ export const siteSecurityRouter = router({
   bulkCandidates: adminProcedure.input(z.object({filter:z.enum(siteBulkFilters).default("all"), search:z.string().max(160).default("")})).query(async ({ctx,input})=>{
     await requireSiteOwner(ctx.req);
     const db=await getDb();if(!db)throw new TRPCError({code:"INTERNAL_SERVER_ERROR"});
-    const [customerRows,orderRows,hiddenRows,initialRows,entryRows]=await Promise.all([
-      db.select({id:customers.id,name:customers.name,email:customers.email,phone:customers.phone,blocked:customers.blocked,deletedAt:customers.deletedAt})
+    const [customerRows,orderRows,hiddenRows,initialRows,entryRows,loanRows]=await Promise.all([
+      db.select({id:customers.id,name:customers.name,email:customers.email,phone:customers.phone,cpf:customers.cpf,blocked:customers.blocked,deletedAt:customers.deletedAt})
         .from(customers).where(sql`${customers.deletedAt} IS NULL AND ${customers.blocked} = 0`),
       db.select({registrationId:orderStatusHistory.registrationId,customerPhone:orderStatusHistory.customerPhone,status:orderStatusHistory.status,id:orderStatusHistory.id})
         .from(orderStatusHistory).orderBy(orderStatusHistory.id),
       db.execute(sql`SELECT registrationId, subOrderIndex FROM hiddenSubOrders`),
       db.execute(sql`SELECT \`key\` FROM orderStatusTypes WHERE isActive = 1 AND isGlobal = 1 ORDER BY sortOrder ASC, id ASC LIMIT 1`),
       db.select({email:siteAccessEntries.email}).from(siteAccessEntries),
+      input.filter==="with_loans" ? db.select({cpf:loanClients.cpf,phone:loanClients.phone,id:loans.id}).from(loans).innerJoin(loanClients,eq(loans.clientId,loanClients.id)) : Promise.resolve([]),
     ]);
     // One current status per registration; historical rows must never be counted as separate orders.
     const hidden=(hiddenRows as any)[0] as Array<{registrationId:number;subOrderIndex:number}>;
     const initial=(initialRows as any)[0] as Array<{key:string}>;
     const latest=selectVisibleSiteBulkOrders(orderRows,hidden,initial?.[0]?.key||"recebido");
-    return filterSiteBulkCandidates(prepareSiteBulkCandidates(customerRows,latest,entryRows.map(x=>x.email)),input.filter,input.search);
+    const loanIds=new Map<string,Set<number>>();
+    for(const loan of loanRows){
+      const cpf=String(loan.cpf||"").replace(/\D/g,"");
+      const phone=String(loan.phone||"").replace(/\D/g,"").slice(-11);
+      for(const key of [cpf.length===11?"cpf:"+cpf:"",phone.length>=10?"phone:"+phone:""]){
+        if(!key)continue;
+        if(!loanIds.has(key))loanIds.set(key,new Set());
+        loanIds.get(key)!.add(loan.id);
+      }
+    }
+    const loanCounts=new Map([...loanIds].map(([key,ids])=>[key,ids.size]));
+    return filterSiteBulkCandidates(prepareSiteBulkCandidates(customerRows,latest,entryRows.map(x=>x.email),loanCounts),input.filter,input.search);
   }),
   bulkAdd: adminProcedure.input(z.object({customerIds:z.array(z.number().int().positive()).min(1).max(500)})).mutation(async ({ctx,input})=>{
     const actor=await requireSiteOwner(ctx.req);
