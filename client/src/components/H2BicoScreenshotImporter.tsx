@@ -50,7 +50,7 @@ function CropPreview({item}:{item:Item}){
   const {crop,width,height}=item;
   const active=item.cropMode==="white"&&item.whiteCrop?item.whiteCrop:{x:crop.x,y:crop.y,width:crop.size,height:crop.size};
   const scale=112/Math.max(1,active.width);
-  return <div className="relative h-28 w-28 shrink-0 overflow-hidden rounded-lg border border-cyan-400/40 bg-black">
+  return <div className={`relative ${item.cropMode==="white"?"h-36":"h-28"} w-28 shrink-0 overflow-hidden rounded-lg border border-cyan-400/40 bg-black`}>
     <img alt={"Recorte de "+item.name} src={item.photo} style={{
       position:"absolute",maxWidth:"none",width:width*scale,height:height*scale,
       left:-active.x*scale,top:-active.y*scale
