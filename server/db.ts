@@ -468,6 +468,8 @@ export async function updateProduct(id: number, data: Partial<{
   if(data.name!==undefined){
     const newName=data.name.trim();
     if(!newName)throw new Error("Nome do produto obrigatorio.");
+    const {ensureProductScheduleAliasTable,captureAliasesBeforeProductRename}=await import("./productScheduleAliases");
+    await ensureProductScheduleAliasTable(db);
     await db.transaction(async tx=>{
       const rows=await tx.execute(sql`SELECT name FROM products WHERE id=${id} FOR UPDATE`);
       const oldName=String((rows[0] as Array<{name:string}>)[0]?.name||"");
@@ -476,8 +478,6 @@ export async function updateProduct(id: number, data: Partial<{
         const duplicates=await tx.execute(sql`SELECT id FROM products WHERE name=${oldName} AND id<>${id} LIMIT 1`);
         if((duplicates[0] as any[]).length)
           throw new Error("Existem produtos com o mesmo nome antigo. Renomeacao bloqueada para proteger os pedidos.");
-        const {ensureProductScheduleAliasTable,captureAliasesBeforeProductRename}=await import("./productScheduleAliases");
-        await ensureProductScheduleAliasTable(tx);
         await captureAliasesBeforeProductRename(tx,id,oldName);
         // Pedidos antigos somente com correspondencia EXATA do nome salvo.
         // Nao altera opcao de compra, status, garantia ou preco.
@@ -650,13 +650,13 @@ export async function updateProductOption(id: number, data: Partial<{
   if(data.label!==undefined){
     const newLabel=data.label.trim();
     if(!newLabel)throw new Error("Nome da opcao obrigatorio.");
+    const {ensureProductScheduleAliasTable,captureAliasBeforeOptionRename}=await import("./productScheduleAliases");
+    await ensureProductScheduleAliasTable(db);
     await db.transaction(async tx=>{
       const result=await tx.execute(sql`SELECT label FROM productOptions WHERE id=${id} FOR UPDATE`);
       const oldLabel=String((result[0] as Array<{label:string}>)[0]?.label||"");
       if(!oldLabel)throw new Error("Opcao nao encontrada.");
       if(oldLabel!==newLabel){
-        const {ensureProductScheduleAliasTable,captureAliasBeforeOptionRename}=await import("./productScheduleAliases");
-        await ensureProductScheduleAliasTable(tx);
         await captureAliasBeforeOptionRename(tx,id,oldLabel);
       }
       await tx.update(productOptions).set({...data,label:newLabel}).where(eq(productOptions.id,id));
