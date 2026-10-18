@@ -15,7 +15,7 @@ type TextLine = Word;
 const cpfPattern = /(?<!\d)\d{3}[\s.,:;]{0,3}\d{3}[\s.,:;]{0,3}\d{3}[\s.,:;\-–—]{0,3}\d{2}(?!\d)/g;
 export const cpfDigits=(value:string)=>value.replace(/\D/g,"");
 export function cpfCandidatesInOcrLine(text:string):string[]{
-  const normalized=text.replace(/[\u00a0\u2007\u202f]/g," ");
+  const normalized=text.replace(/[\u00a0\u2007\u202f]/g," ")\n    .replace(/\s*([.,:;\-–—])\s*/g,"$1");
   return [...normalized.matchAll(cpfPattern)].map(match=>cpfDigits(match[0]));
 }
 export function normalizeScreenshotName(value:string):string {
@@ -82,6 +82,56 @@ function proximity(name:TextLine,number:TextLine,width:number):number|null {
     return 1.75+Math.max(0,rightGap,leftGap)/Math.max(100,width*.28);
   }
   return null;
+}
+
+
+// Tesseract can split the 3-3-3-2 CPF groups into different TSV lines or
+// blocks even when they appear on the same visual row. Recombine only nearby
+// boxes, without joining two distant columns or guessing any digits.
+function findCpfNumbers(lines:TextLine[],width:number):NumberAnchor[]{
+  const numbers=findCpfNumbers(lines,width);
+  const rows:TextLine[][]=[];
+  for(const line of lines){
+    const center=line.top+line.height/2;
+    const row=rows.find(group=>{
+      const first=group[0];
+      return Math.abs(center-(first.top+first.height/2))<=
+        Math.max(first.height,line.height)*.58;
+    });
+    if(row)row.push(line);
+    else rows.push([line]);
+  }
+  for(const row of rows){
+    const ordered=[...row].sort((a,b)=>a.left-b.left);
+    let segment:TextLine[]=[];
+    const flush=()=>{
+      if(segment.length<=1)return;
+      const left=Math.min(...segment.map(item=>item.left));
+      const top=Math.min(...segment.map(item=>item.top));
+      const right=Math.max(...segment.map(item=>item.left+item.width));
+      const bottom=Math.max(...segment.map(item=>item.top+item.height));
+      const line:TextLine={text:segment.map(item=>item.text).join(" "),
+        left,top,width:right-left,height:bottom-top,
+        confidence:segment.reduce((sum,item)=>sum+item.confidence,0)/segment.length};
+      for(const cpf of cpfCandidatesInOcrLine(line.text)){
+        if(numbers.some(found=>found.cpf===cpf &&
+          Math.abs(found.line.top-line.top)<=Math.max(16,line.height*1.5) &&
+          Math.abs(found.line.left-line.left)<=Math.max(55,line.width)))continue;
+        numbers.push({line,cpf});
+      }
+    };
+    for(const line of ordered){
+      const last=segment[segment.length-1];
+      if(last){
+        const gap=line.left-last.left-last.width;
+        const maxGap=Math.max(35,Math.min(width*.04,Math.max(line.height,last.height)*4));
+        if(gap>maxGap){flush();segment=[];}
+      }
+      segment.push(line);
+    }
+    flush();
+  }
+  return numbers;
 }
 
 export function parseScreenshotTsv(tsv:string,width:number,height:number):ScreenshotPerson[]{
@@ -217,6 +267,37 @@ export function parseScreenshotTsv(tsv:string,width:number,height:number):Screen
       nameBox:{left:line.left,top:line.top,width:line.width,height:line.height},
       cpfBox:number?{left:number.line.left,top:number.line.top,width:number.line.width,height:number.line.height}:undefined});
     if(output.length>=80)break;
+  }
+
+  // Safety fallback: a readable CPF must never disappear just because OCR
+  // could not associate it with a complete name. The administrator can
+  // review the original print, type the name and correct the photo crop.
+  // No CPF-only result is ever pre-approved for saving.
+  for(const number of numbers){
+    if(output.length>=80)break;
+    if(seen.has(number.cpf))continue;
+    seen.add(number.cpf);
+    const line=number.line;
+    const size=Math.round(Math.max(48,Math.min(width*.24,height*.28,line.height*7)));
+    const gap=Math.max(10,Math.round(line.height*1.5));
+    const leftRoom=line.left,rightRoom=width-line.left-line.width;
+    const photoLayout:"left"|"right"|"above"=
+      leftRoom>=size+gap?"left":rightRoom>=size+gap?"right":"above";
+    const x=photoLayout==="left"?line.left-size-gap:
+      photoLayout==="right"?line.left+line.width+gap:
+      line.left+(line.width-size)/2;
+    const y=photoLayout==="above"?line.top-size-gap:line.top-line.height*.75;
+    output.push({
+      name:"",cpf:number.cpf,
+      crop:{x:Math.round(Math.max(0,Math.min(width-size,x))),
+        y:Math.round(Math.max(0,Math.min(height-size,y))),size},
+      photoLayout,confidence:Math.min(50,Math.max(0,Math.round(line.confidence))),
+      cpfBox:{left:line.left,top:line.top,width:line.width,height:line.height},
+      warnings:[
+        "CPF encontrado, mas nome não identificado. Digite o nome após conferir o print.",
+        "CONFIRA RECORTE: foto estimada, ajuste a posição antes de salvar.",
+      ],
+    });
   }
   return output;
 }
