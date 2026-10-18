@@ -7,7 +7,7 @@ import { isValidCpf } from "@/lib/h2bicoCpfExtractor";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Card } from "@/components/ui/card";
-import { findWhitePhotoCrop, locateWhitePortrait, type WhitePhotoCrop } from "@/lib/h2bicoWhitePhotoCrop";
+import { findWhitePhotoCrop, locateWhitePortrait, isWhitePortraitAboveName, type WhitePhotoCrop } from "@/lib/h2bicoWhitePhotoCrop";
 
 type Item={
   id:string; source:string; name:string; cpf:string;
@@ -78,6 +78,45 @@ export default function H2BicoScreenshotImporter(){
   const save=trpc.h2bico.importScreenshotRecord.useMutation();
   const utils=trpc.useUtils();
   const update=(id:string,patch:Partial<Item>)=>setItems(current=>current.map(item=>item.id===id?{...item,...patch}:item));
+  // Automatically try the independent white-background crop on every
+  // imported print. Wrong legacy estimates must not silently save a dark box.
+  const autoPreviewWhite=async(item:Item)=>{
+    if(!item.nameBox)return;
+    try{
+      const img=new Image();img.src=item.photo;await img.decode();
+      const scale=Math.min(1,1400/Math.max(img.naturalWidth,img.naturalHeight));
+      const canvas=document.createElement("canvas");
+      canvas.width=Math.max(1,Math.round(img.naturalWidth*scale));
+      canvas.height=Math.max(1,Math.round(img.naturalHeight*scale));
+      const ctx=canvas.getContext("2d",{willReadFrequently:true});
+      if(!ctx)return;
+      ctx.drawImage(img,0,0,canvas.width,canvas.height);
+      const pixels=ctx.getImageData(0,0,canvas.width,canvas.height).data;
+      const box=item.nameBox;
+      const found=locateWhitePortrait(pixels,canvas.width,canvas.height,
+        box.left*scale,box.top*scale,box.width*scale);
+      const crop=found?{x:Math.round(found.x/scale),y:Math.round(found.y/scale),
+        width:Math.round(found.width/scale),height:Math.round(found.height/scale)}:null;
+      if(isWhitePortraitAboveName(crop,box)){
+        update(item.id,{whiteCrop:crop,cropMode:"white",whiteChecked:true,selected:false,
+          error:undefined,warnings:[...item.warnings,
+          "Foto branca encontrada automaticamente acima do nome. Confira a prévia e marque para salvar."]});
+      }else if(item.selected){
+        // Do not block the legacy workflow. Prevent auto-import when crop
+        // plausibly points at the dark app background instead of a portrait.
+        const x=Math.max(0,Math.min(img.naturalWidth-1,Math.round(item.crop.x+item.crop.size*.5)));
+        const y=Math.max(0,Math.min(img.naturalHeight-1,Math.round(item.crop.y+item.crop.size*.5)));
+        const sample=document.createElement("canvas");sample.width=sample.height=1;
+        const sx=sample.getContext("2d");
+        if(sx){sx.drawImage(img,x,y,1,1,0,0,1,1);
+          const rgb=sx.getImageData(0,0,1,1).data;
+          if(rgb[0]+rgb[1]+rgb[2]<170)
+            update(item.id,{selected:false,warnings:[...item.warnings,
+              "RECORTE ESCURO: nenhuma foto confirmada; confira a imagem original antes de salvar."]});
+        }
+      }
+    }catch{ /* OCR and old manual crop remain available */ }
+  };
   const applyWhitePreset=async(item:Item)=>{
     try{
       const img=new Image();img.src=item.photo;await img.decode();
@@ -153,6 +192,7 @@ export default function H2BicoScreenshotImporter(){
               }
               return merged;
             });
+            for(const person of incoming)void autoPreviewWhite(person);
           }else toast.warning(file.name+": nenhum CPF identificado.");
         }catch(error){
           toast.error(file.name+": "+(error instanceof Error?error.message:"Falha na leitura"));
