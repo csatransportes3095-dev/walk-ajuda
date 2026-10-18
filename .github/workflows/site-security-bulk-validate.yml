@@ -25,22 +25,57 @@ jobs:
       - run: pnpm install --frozen-lockfile
       - name: Test bulk filters, suborders and batching
         run: pnpm exec vitest run server/siteSecurityBulk.test.ts
-      - name: Type-check entire app and identify unrelated baseline errors
+      - name: Compare TypeScript with unchanged production baseline
         shell: bash
         run: |
+          set -euo pipefail
+          BASE_SHA=bb9289590380390b2e877906476bfbb82d00a556
+          BASE_DIR="$RUNNER_TEMP/site-security-base"
+          git fetch --no-tags --depth=1 origin "$BASE_SHA"
+          git worktree add --detach "$BASE_DIR" "$BASE_SHA"
+          ln -s "$GITHUB_WORKSPACE/node_modules" "$BASE_DIR/node_modules"
           set +e
-          pnpm run check > /tmp/site-security-typecheck.log 2>&1
-          result=$?
+          pnpm exec tsc --noEmit --tsBuildInfoFile "$RUNNER_TEMP/site-security-feature.tsbuildinfo" > "$RUNNER_TEMP/feature-typescript.log" 2>&1
+          FEATURE_EXIT=$?
+          ( cd "$BASE_DIR" && "$GITHUB_WORKSPACE/node_modules/.bin/tsc" --noEmit --tsBuildInfoFile "$RUNNER_TEMP/site-security-baseline.tsbuildinfo" ) > "$RUNNER_TEMP/baseline-typescript.log" 2>&1
+          BASE_EXIT=$?
           set -e
-          if [ "$result" -eq 0 ]; then
-            echo "TypeScript: all files passed."
-            exit 0
-          fi
-          echo "::warning::Project-wide TypeScript check failed. Listing errors for the new feature below; other modules are baseline issues."
-          if grep -E '^((client/src/pages/AdminSiteSecurity|server/siteSecurityRouter|shared/siteSecurityBulk)\\.tsx?)\\(' /tmp/site-security-typecheck.log; then
-            echo "::error::TypeScript errors found in the site security import feature."
+
+          # Compare compiler diagnostics by file, position and TS code, not long message text.
+          for VERSION in feature baseline; do
+            { grep -E '^[^[:space:]]+\([0-9]+,[0-9]+\): error TS[0-9]+:' "$RUNNER_TEMP/$VERSION-typescript.log" || true; } \
+              | sed -E 's/: error (TS[0-9]+):.*/: \1/' \
+              | sort -u > "$RUNNER_TEMP/$VERSION-diagnostics.txt"
+          done
+
+          if [ "$FEATURE_EXIT" -ne 0 ] && [ ! -s "$RUNNER_TEMP/feature-diagnostics.txt" ]; then
+            echo "::error::Feature TypeScript run failed without parseable diagnostics."
             exit 1
           fi
-          echo "No TypeScript errors were reported in modified feature modules."
-          echo "Global check remains red due to unrelated files; no production deploy is authorized."
-          grep -E 'error TS[0-9]+' /tmp/site-security-typecheck.log | head -n 8 || true
+          if [ "$BASE_EXIT" -ne 0 ] && [ ! -s "$RUNNER_TEMP/baseline-diagnostics.txt" ]; then
+            echo "::error::Baseline TypeScript run failed without parseable diagnostics."
+            exit 1
+          fi
+
+          comm -13 "$RUNNER_TEMP/baseline-diagnostics.txt" "$RUNNER_TEMP/feature-diagnostics.txt" > "$RUNNER_TEMP/new-diagnostics.txt"
+          NEW_ERRORS=$(wc -l < "$RUNNER_TEMP/new-diagnostics.txt")
+          BASE_ERRORS=$(wc -l < "$RUNNER_TEMP/baseline-diagnostics.txt")
+          FEATURE_ERRORS=$(wc -l < "$RUNNER_TEMP/feature-diagnostics.txt")
+          if [ "$NEW_ERRORS" -gt 0 ]; then
+            echo "::error::The new feature introduces $NEW_ERRORS TypeScript error(s) compared with $BASE_SHA."
+            cat "$RUNNER_TEMP/new-diagnostics.txt"
+            exit 1
+          fi
+          echo "New TypeScript diagnostics: none."
+          echo "Baseline TypeScript diagnostics: $BASE_ERRORS."
+          echo "Current TypeScript diagnostics: $FEATURE_ERRORS."
+          if [ "$FEATURE_ERRORS" -gt 0 ]; then
+            echo "::warning::TypeScript is not clean globally ($FEATURE_ERRORS diagnostics); no new errors compared with the unmodified base."
+          fi
+          {
+            echo "### H2 Site Security Bulk — validation result"
+            echo "Feature tests: completed in previous step."
+            echo "New TypeScript diagnostics compared with original base: **0**."
+            echo "Existing project-wide TypeScript diagnostics: **$FEATURE_ERRORS**."
+            echo "Full-project typing is not yet clean; this is not a full production approval."
+          } >> "$GITHUB_STEP_SUMMARY"
