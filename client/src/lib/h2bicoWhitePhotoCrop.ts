@@ -160,10 +160,15 @@ export function locateWhitePortrait(
   const rightOfName=left>nameX&&left<nameX+nameWidth+w*1.3&&
     Math.abs(top+h*.5-nameY)<Math.max(h*.9,70);
   if(!above&&!leftOfName&&!rightOfName)continue;
-  // Portrait output is strictly interior to the bright component. Do not
-  // include the dark card frame; align vertically from the white top.
-  const outH=Math.min(h,Math.floor(w*1.25)),outW=Math.floor(outH*.8);
-  if(outW<64||outH<80)continue;
+  // On "photo above name" cards, hair/clothing can interrupt the WHITE
+  // region before the image ends. Use the full white width and a 4:5 height,
+  // instead of stopping at the last white pixel and cutting shoulders off.
+  // The candidate must still end above its associated name.
+  const safeAboveHeight=Math.floor(Math.min(height-top,nameY-top-12));
+  const outW=above?Math.min(w,Math.floor(safeAboveHeight/1.25)):
+    Math.floor(Math.min(h,w*1.25)*.8);
+  const outH=above?Math.floor(outW*1.25):Math.floor(Math.min(h,w*1.25));
+  if(outW<64||outH<80||top+outH>height)continue;
   const outX=left+Math.floor((w-outW)/2);
   if(!mark[(top+2)*width+outX+3]||!mark[(top+2)*width+outX+outW-4])continue;
   const distance=above?Math.abs(nameY-bottom):Math.abs(nameX-right);
@@ -173,4 +178,21 @@ export function locateWhitePortrait(
   if(candidateScore>score){score=candidateScore;best={x:outX,y:top,width:outW,height:outH};}
  }
  return best;
+}
+
+/** Auto-select only a real portrait ABOVE the OCR name. Never convert the
+ * legacy left/right/square photo crops automatically.
+ */
+export function isWhitePortraitAboveName(
+ crop:WhitePhotoCrop|null,
+ nameBox:{left:number;top:number;width:number;height:number}|undefined,
+):boolean {
+ if(!crop||!nameBox||crop.width<64||crop.height<80)return false;
+ const distance=nameBox.top-(crop.y+crop.height);
+ const center=crop.x+crop.width/2;
+ const nameCenter=nameBox.left+nameBox.width/2;
+ return distance>=7 &&
+  distance<=Math.max(35,crop.height*.60) &&
+  Math.abs(center-nameCenter)<Math.max(crop.width*.50,nameBox.width*.8) &&
+  Math.abs(crop.height/crop.width-1.25)<.025;
 }
