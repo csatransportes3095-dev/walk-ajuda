@@ -215,12 +215,6 @@ export const h2bicoRouter = router({
       const aligned=await alignScreenshotPhotoCrops(processed,parseScreenshotTsv(stdout,ocrWidth,ocrHeight),ocrWidth,ocrHeight);
       const found=aligned.map(person=>({
         ...person,
-        nameBox:person.nameBox?{
-          left:person.nameBox.left*width/ocrWidth,
-          top:person.nameBox.top*height/ocrHeight,
-          width:person.nameBox.width*width/ocrWidth,
-          height:person.nameBox.height*height/ocrHeight,
-        }:undefined,
         crop:{
           x:Math.round(person.crop.x*width/ocrWidth),
           y:Math.round(person.crop.y*height/ocrHeight),
@@ -278,7 +272,9 @@ export const h2bicoRouter = router({
         for(const row of rows[0] as Array<{cpf:string}>)existing.add(String(row.cpf));
       }
       return {width,height,persons:proposed.map(row=>({
-        ...row,validCpf:isValidCpf(row.cpf),alreadyExists:existing.has(row.cpf),
+        ...row,
+        nameBox:row.nameBox?{left:row.nameBox.left*width/ocrWidth,top:row.nameBox.top*height/ocrHeight,width:row.nameBox.width*width/ocrWidth,height:row.nameBox.height*height/ocrHeight}:undefined,
+        validCpf:isValidCpf(row.cpf),alreadyExists:existing.has(row.cpf),
       }))};
     }catch(error){
       if(error instanceof TRPCError)throw error;
