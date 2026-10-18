@@ -644,6 +644,22 @@ export async function updateProductOption(id: number, data: Partial<{
 }>): Promise<void> {
   const db = await getDb();
   if (!db) return;
+  if(data.label!==undefined){
+    const newLabel=data.label.trim();
+    if(!newLabel)throw new Error("Nome da opcao obrigatorio.");
+    await db.transaction(async tx=>{
+      const result=await tx.execute(sql`SELECT label FROM productOptions WHERE id=${id} FOR UPDATE`);
+      const oldLabel=String((result[0] as Array<{label:string}>)[0]?.label||"");
+      if(!oldLabel)throw new Error("Opcao nao encontrada.");
+      if(oldLabel!==newLabel){
+        const {ensureProductScheduleAliasTable,captureAliasBeforeOptionRename}=await import("./productScheduleAliases");
+        await ensureProductScheduleAliasTable(tx);
+        await captureAliasBeforeOptionRename(tx,id,oldLabel);
+      }
+      await tx.update(productOptions).set({...data,label:newLabel}).where(eq(productOptions.id,id));
+    });
+    return;
+  }
   await db.update(productOptions).set(data).where(eq(productOptions.id, id));
 }
 
