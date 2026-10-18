@@ -2,6 +2,7 @@ param(
   [switch]$Install,
   [switch]$Run,
   [switch]$Update,
+  [switch]$EnableExtensionBrowser,
   [switch]$SnapshotQueueWorker,
   [string]$PanelUrl = "https://h2colombiano.com",
   [string]$PairingCode
@@ -9,7 +10,7 @@ param(
 
 $ErrorActionPreference = "Stop"
 $ProgressPreference = "SilentlyContinue"
-$AgentVersion = "1.3.9"
+$AgentVersion = "1.4.0"
 $WorkerDirectory = Join-Path $env:LOCALAPPDATA "H2AdsWorker"
 $ConfigPath = Join-Path $WorkerDirectory "worker.json"
 $InstalledScriptPath = Join-Path $WorkerDirectory "H2AdsWorker.ps1"
@@ -23,6 +24,11 @@ $PackagePath = Join-Path $WorkerDirectory "package.json"
 $ProxyChainPackagePath = Join-Path $WorkerDirectory "node_modules\proxy-chain\package.json"
 $DedicatedBrowserDirectory = Join-Path $WorkerDirectory "browser\chrome"
 $DedicatedChromePath = Join-Path $DedicatedBrowserDirectory "chrome.exe"
+$TestingDirectory = Join-Path $WorkerDirectory "browser\\chrome-for-testing"
+$TestingChromePath = Join-Path $TestingDirectory "chrome-win64\\chrome.exe"
+$TestingV4Rule = "H2ADS Testing Chrome - Block Direct IPv4"
+$TestingV6Rule = "H2ADS Testing Chrome - Block Direct IPv6"
+$TestingRelease = "156.0.8078.12"
 $FirewallRuleV4Name = "H2ADS Dedicated Chrome - Block Direct IPv4"
 $FirewallRuleV6Name = "H2ADS Dedicated Chrome - Block Direct IPv6"
 $TaskName = "H2 Ads Browser Worker"
@@ -69,6 +75,69 @@ function Ensure-DedicatedBrowser {
   New-Item -ItemType Directory -Force -Path $DedicatedBrowserDirectory | Out-Null
   Copy-Item -Path (Join-Path $sourceDirectory "*") -Destination $DedicatedBrowserDirectory -Recurse -Force
   Assert-GoogleChromeSignature $DedicatedChromePath
+}
+
+function Test-H2AdsTestingFirewall {
+  if (!(Test-Path $TestingChromePath)) { return $false }
+  foreach ($name in @($TestingV4Rule, $TestingV6Rule)) {
+    $rule = Get-NetFirewallRule -DisplayName $name -ErrorAction SilentlyContinue | Where-Object { $_.Enabled -eq "True" -and $_.Direction -eq "Outbound" -and $_.Action -eq "Block" } | Select-Object -First 1
+    if (!$rule) { return $false }
+    $filter = $rule | Get-NetFirewallApplicationFilter
+    if (!$filter -or !([string]$filter.Program).Equals($TestingChromePath, [StringComparison]::OrdinalIgnoreCase)) { return $false }
+  }
+  return $true
+}
+
+function Ensure-H2AdsTestingFirewall {
+  if (Test-H2AdsTestingFirewall) { return }
+  if (!(Test-IsAdministrator)) { throw "Chrome for Testing sem firewall validado. Execute como Administrador." }
+  foreach ($name in @($TestingV4Rule, $TestingV6Rule)) {
+    Get-NetFirewallRule -DisplayName $name -ErrorAction SilentlyContinue | Remove-NetFirewallRule -ErrorAction SilentlyContinue
+  }
+  New-NetFirewallRule -DisplayName $TestingV4Rule -Direction Outbound -Program $TestingChromePath -Action Block -Protocol Any -RemoteAddress @("0.0.0.0-126.255.255.255", "128.0.0.0-255.255.255.255") -Profile Any -Enabled True | Out-Null
+  New-NetFirewallRule -DisplayName $TestingV6Rule -Direction Outbound -Program $TestingChromePath -Action Block -Protocol Any -RemoteAddress "Internet6" -Profile Any -Enabled True | Out-Null
+  if (!(Test-H2AdsTestingFirewall)) { throw "Kill switch do Chrome for Testing nao validado." }
+}
+
+function Assert-H2AdsTestingExecutable {
+  if (!(Test-Path $TestingChromePath)) { return $false }
+  $actual = (Get-Item $TestingChromePath).VersionInfo.ProductVersion
+  if ($actual -ne $TestingRelease) { throw "Versao inesperada do Chrome for Testing: $actual" }
+  return $true
+}
+
+function Install-H2AdsTestingBrowser {
+  if (!(Test-IsAdministrator)) { throw "Execute como Administrador para instalar o Chrome for Testing isolado." }
+  if (Test-Path $TestingChromePath) {
+    Assert-H2AdsTestingExecutable | Out-Null
+    Ensure-H2AdsTestingFirewall
+    return
+  }
+  $running = @(Get-CimInstance Win32_Process -Filter "Name = 'chrome.exe'" -ErrorAction Stop | Where-Object {
+    [string]$_.ExecutablePath -like "$WorkerDirectory*"
+  })
+  if ($running.Count -gt 0) { throw "Feche normalmente todas as instancias H2ADS antes da instalacao. Nenhum navegador foi encerrado." }
+  $temp = Join-Path $WorkerDirectory "cft-setup-$([guid]::NewGuid().ToString('N'))"
+  $url = "https://storage.googleapis.com/chrome-for-testing-public/$TestingRelease/win64/chrome-win64.zip"
+  try {
+    New-Item -ItemType Directory -Force -Path $temp | Out-Null
+    $archive = Join-Path $temp "chrome-win64.zip"
+    Invoke-WebRequest -UseBasicParsing -Uri $url -OutFile $archive
+    if ((Get-Item $archive).Length -lt 10000000) { throw "Arquivo do Chrome for Testing incompleto." }
+    $staging = Join-Path $temp "unpacked"
+    Expand-Archive -LiteralPath $archive -DestinationPath $staging -Force
+    $stagedExecutable = Join-Path $staging "chrome-win64\\chrome.exe"
+    if (!(Test-Path $stagedExecutable)) { throw "Pacote oficial invalido." }
+    if ((Get-Item $stagedExecutable).VersionInfo.ProductVersion -ne $TestingRelease) { throw "Versao do navegador nao corresponde ao pacote solicitado." }
+    # Never overwrite the signed Chrome installation. The testing binary stays in a separate directory.
+    New-Item -ItemType Directory -Force -Path (Split-Path $TestingDirectory -Parent) | Out-Null
+    if (Test-Path $TestingDirectory) { throw "Pasta de teste existente: revise antes de instalar." }
+    Move-Item -LiteralPath $staging -Destination $TestingDirectory
+    Ensure-H2AdsTestingFirewall
+    Assert-H2AdsTestingExecutable | Out-Null
+  } finally {
+    Remove-Item -LiteralPath $temp -Recurse -Force -ErrorAction SilentlyContinue
+  }
 }
 
 function Test-H2AdsBrowserFirewall {
@@ -145,6 +214,7 @@ function Ensure-BrowserPreparationComponent([object]$Config) {
   if (!(Get-Command npm.cmd -ErrorAction SilentlyContinue)) { throw "npm não está disponível neste Worker." }
   Invoke-WebRequest -UseBasicParsing -Uri "$($Config.panelUrl)/api/h2ads/worker/windows-browser-runner.mjs" -OutFile $RunnerPath
   Invoke-WebRequest -UseBasicParsing -Uri "$($Config.panelUrl)/api/h2ads/worker/windows-browser-session.mjs" -OutFile $SessionRunnerPath
+  Invoke-WebRequest -UseBasicParsing -Uri "$($Config.panelUrl)/api/h2ads/worker/windows-extension-sync.mjs" -OutFile (Join-Path $WorkerDirectory "h2ads-extension-sync.mjs")
   Invoke-WebRequest -UseBasicParsing -Uri "$($Config.panelUrl)/api/h2ads/worker/windows-mobile-remote.mjs" -OutFile $MobileRemotePath
   @{ name = "h2ads-worker-local"; private = $true; type = "module"; dependencies = @{ "proxy-chain" = "3.0.0" } } | ConvertTo-Json -Compress | Set-Content -Path $PackagePath -Encoding UTF8 -NoNewline
   if (!(Test-Path $ProxyChainPackagePath)) {
@@ -354,7 +424,13 @@ function Invoke-BrowserSession([object]$Config, [object]$Payload) {
   $env:H2ADS_COMMAND_ID = [string]$Payload.command.id
   $env:H2ADS_PROXY_JSON = ($Payload.proxy | ConvertTo-Json -Compress)
   $env:H2ADS_PROFILE_DIRECTORY = $profileDirectory
-  $env:H2ADS_BROWSER_EXECUTABLE = $DedicatedChromePath
+  $extensionExecutable = $DedicatedChromePath
+  if (Test-Path $TestingChromePath) {
+    Assert-H2AdsTestingExecutable | Out-Null
+    if (!(Test-H2AdsTestingFirewall)) { throw "Chrome for Testing sem kill switch verificado. Nao abrir instancia." }
+    $extensionExecutable = $TestingChromePath
+  }
+  $env:H2ADS_BROWSER_EXECUTABLE = $extensionExecutable
   $env:H2ADS_REMOTE_DEBUG = $(if ($Payload.mobileRemoteEnabled -eq $true) { "1" } else { "0" })
   try {
     Start-Process -FilePath "node.exe" -ArgumentList "`"$SessionRunnerPath`"" -WindowStyle Hidden | Out-Null
@@ -715,6 +791,12 @@ if ($SnapshotQueueWorker) {
     try { $snapshotMutex.ReleaseMutex() } catch { }
     $snapshotMutex.Dispose()
   }
+  exit 0
+}
+
+if ($EnableExtensionBrowser) {
+  Install-H2AdsTestingBrowser
+  Write-Output "Chrome for Testing H2ADS instalado e firewall isolado validado. Chrome original preservado."
   exit 0
 }
 
