@@ -110,19 +110,23 @@ export const h2bicoRouter = router({
   list: adminProcedure.input(z.object({
     search: z.string().optional().default(""),
     status: z.enum(["all","available","reserved","in_use","used","archived"]).optional().default("all"),
+    review: z.enum(["all","confirmed","pending","discarded"]).optional().default("all"),
   }).optional()).query(async ({ input }) => {
     const db = await dbOrThrow();
     const search = (input?.search || "").trim();
     const status = input?.status || "all";
+    const review = input?.review || "all";
     const like = `%${search}%`;
     const rows = await db.execute(sql`
       SELECT r.id,r.name,r.cpf,r.uf,r.photoUrl,r.originalFilename,r.notes,r.source,
              r.status,r.linkedOrder,r.lastSimilarity,r.usedAt,r.createdAt,r.updatedAt,
-             em.earStatus
+             em.earStatus,rv.reviewState,rv.reviewedAt
       FROM h2bico_records r
       LEFT JOIN h2bico_ear_marks em ON em.recordId = r.id
+      LEFT JOIN h2bico_review rv ON rv.recordId = r.id
       WHERE (${search} = '' OR r.name LIKE ${like} OR r.cpf LIKE ${like})
         AND (${status} = 'all' OR r.status = ${status})
+        AND (${review} = 'all' OR (${review} = 'pending' AND rv.recordId IS NULL) OR rv.reviewState = ${review})
       ORDER BY CASE r.status WHEN 'available' THEN 0 WHEN 'reserved' THEN 1 WHEN 'in_use' THEN 2 WHEN 'used' THEN 3 ELSE 4 END,
                r.name ASC, r.id DESC
       LIMIT 5000
@@ -131,6 +135,8 @@ export const h2bicoRouter = router({
       ...r,
       id: Number(r.id),
       earStatus: r.earStatus === "com_ear" || r.earStatus === "sem_ear" ? r.earStatus : null,
+      reviewState: r.reviewState === "confirmed" || r.reviewState === "discarded" ? r.reviewState : "pending",
+      reviewedAt: r.reviewedAt || null,
       lastSimilarity: r.lastSimilarity == null ? null : Number(r.lastSimilarity),
     }));
   }),
