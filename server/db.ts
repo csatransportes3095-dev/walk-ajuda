@@ -473,6 +473,9 @@ export async function updateProduct(id: number, data: Partial<{
       const oldName=String((rows[0] as Array<{name:string}>)[0]?.name||"");
       if(!oldName)throw new Error("Produto nao encontrado.");
       if(oldName!==newName){
+        const duplicates=await tx.execute(sql`SELECT id FROM products WHERE name=${oldName} AND id<>${id} LIMIT 1`);
+        if((duplicates[0] as any[]).length)
+          throw new Error("Existem produtos com o mesmo nome antigo. Renomeacao bloqueada para proteger os pedidos.");
         const {ensureProductScheduleAliasTable,captureAliasesBeforeProductRename}=await import("./productScheduleAliases");
         await ensureProductScheduleAliasTable(tx);
         await captureAliasesBeforeProductRename(tx,id,oldName);
