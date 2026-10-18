@@ -2,7 +2,7 @@ import { useState } from "react";
 import { splitSiteBulkBatches } from "@shared/siteSecurityBulk";
 import type { SiteBulkFilter } from "@shared/siteSecurityBulk";
 import { useLocation } from "wouter";
-import { ShieldCheck, ArrowLeft, UserPlus, Trash2, RefreshCcw } from "lucide-react";
+import { ShieldCheck, ArrowLeft, UserPlus, Trash2, RefreshCcw, Image as ImageIcon, Expand, X } from "lucide-react";
 import { trpc } from "@/lib/trpc";
 import { toast } from "sonner";
 type Mode = "public" | "restricted" | "blocked";
@@ -16,6 +16,8 @@ export default function AdminSiteSecurity() {
  const add=trpc.siteSecurity.add.useMutation({onSuccess:()=>{void people.refetch();setName("");setEmail("");setPhone("");toast.success("Autorização registrada.");},onError:e=>toast.error(e.message)});
  const change=trpc.siteSecurity.changeStatus.useMutation({onSuccess:()=>void people.refetch(),onError:e=>toast.error(e.message)});
  const remove=trpc.siteSecurity.remove.useMutation({onSuccess:()=>void people.refetch(),onError:e=>toast.error(e.message)});
+ const [photoModal,setPhotoModal]=useState<{url:string;name:string}|null>(null);
+ const [brokenPhotos,setBrokenPhotos]=useState<string[]>([]);
  const [bulkOpen,setBulkOpen]=useState(false);
  const [bulkFilter,setBulkFilter]=useState<SiteBulkFilter>("with_orders");
  const [bulkSearch,setBulkSearch]=useState("");
@@ -97,6 +99,21 @@ export default function AdminSiteSecurity() {
    {bulkRunning&&<p role="status" className="text-sm text-yellow-200">Concluídos: {bulkProgress.done} / {bulkProgress.total} · Novos: {bulkProgress.added} · Já existentes: {bulkProgress.already}. Aguarde a finalização.</p>}
   </div>}
  </div>
- {people.isLoading?<p>Carregando lista...</p>:people.error?<p className="text-red-300">Não foi possível carregar as autorizações.</p>:people.data?.length===0?<p className="text-white/50 text-sm">Nenhuma pessoa autorizada cadastrada.</p>:(people.data||[]).map(p=><div key={p.id} className="rounded-xl bg-black/20 border border-white/10 p-3 flex flex-wrap justify-between items-center gap-3"><div><p className="font-bold">{p.displayName}</p><p className="text-xs text-white/55 break-all">{p.email} · {p.status}</p></div><div className="flex gap-2"><button onClick={()=>change.mutate({id:p.id,status:p.status==="active"?"suspended":"active"})} className="rounded-lg border border-white/20 p-2 text-xs">{p.status==="active"?"Suspender":"Reativar"}</button><button aria-label={"Remover "+p.displayName} onClick={()=>{if(window.confirm("Remover autorização?"))remove.mutate({id:p.id});}} className="rounded-lg border border-red-500/30 p-2 text-red-300"><Trash2 size={16}/></button></div></div>)}
- </section></div></main>;
+ {people.isLoading?<p>Carregando lista...</p>:people.error?<p className="text-red-300">Não foi possível carregar as autorizações.</p>:people.data?.length===0?<p className="text-white/50 text-sm">Nenhuma pessoa autorizada cadastrada.</p>:(people.data||[]).map(p=><div key={p.id} className="rounded-xl bg-black/20 border border-white/10 p-3 flex flex-wrap justify-between items-center gap-3"><div className="flex items-center gap-3 min-w-0 flex-1">
+ <div className="shrink-0">
+ {p.profilePhotoUrl && !brokenPhotos.includes(p.profilePhotoUrl)?<button type="button" onClick={()=>setPhotoModal({url:p.profilePhotoUrl!,name:p.displayName})} aria-label={"Expandir foto de "+p.displayName} title="Ampliar foto" className="relative rounded-lg overflow-hidden border border-white/20 focus-visible:ring-2 focus-visible:ring-yellow-400 group">
+  <img loading="lazy" src={p.profilePhotoUrl} onError={()=>setBrokenPhotos(prev=>[...prev,p.profilePhotoUrl!])} alt={"Foto de "+p.displayName} className="w-14 h-14 object-cover"/>
+  <Expand size={13} className="absolute bottom-0.5 right-0.5 text-white drop-shadow-md" aria-hidden="true"/>
+ </button>:<div aria-label="Foto não disponível" className="w-14 h-14 rounded-lg flex items-center justify-center bg-white/5 border border-white/15"><ImageIcon size={22} className="text-white/35"/></div>}
+ </div>
+ <div className="min-w-0"><p className="font-bold break-words">{p.displayName}</p><p className="text-xs text-white/55 break-all">{p.email} · {p.status}</p></div>
+ </div><div className="flex gap-2"><button onClick={()=>change.mutate({id:p.id,status:p.status==="active"?"suspended":"active"})} className="rounded-lg border border-white/20 p-2 text-xs">{p.status==="active"?"Suspender":"Reativar"}</button><button aria-label={"Remover "+p.displayName} onClick={()=>{if(window.confirm("Remover autorização?"))remove.mutate({id:p.id});}} className="rounded-lg border border-red-500/30 p-2 text-red-300"><Trash2 size={16}/></button></div></div>)}
+ </section>
+ {photoModal&&<div className="fixed inset-0 z-[100] flex items-center justify-center bg-black/85 p-4" role="presentation" onMouseDown={e=>{if(e.target===e.currentTarget)setPhotoModal(null)}}>
+  <div role="dialog" aria-modal="true" aria-label={"Foto de "+photoModal.name} className="relative w-full max-w-2xl rounded-2xl border border-white/20 bg-[#10101f] p-4 shadow-2xl">
+   <div className="mb-3 flex items-center justify-between gap-3"><p className="font-bold break-words">{photoModal.name}</p><button type="button" aria-label="Fechar foto" title="Fechar" onClick={()=>setPhotoModal(null)} className="rounded-lg border border-white/20 bg-white/10 p-2"><X size={20}/></button></div>
+   <img alt={"Foto ampliada de "+photoModal.name} src={photoModal.url} onError={()=>{setBrokenPhotos(prev=>[...prev,photoModal.url]);setPhotoModal(null);toast.error("Foto indisponível no cadastro.");}} className="mx-auto max-h-[76vh] w-auto max-w-full rounded-xl object-contain"/>
+  </div>
+ </div>}
+ </div></main>;
 }
