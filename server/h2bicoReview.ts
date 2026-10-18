@@ -208,6 +208,91 @@ export const h2bicoReviewRouter=router({
       discarded:records.filter(r=>r.reviewState==="discarded").length,
       pending:records.filter(r=>r.reviewState==="pending").length};
   }),
+
+  // Admin H2BICO: os CPFs colados e encontrados podem ser confirmados sem
+  // pertencer a um lote historico. Operacao idempotente em lotes de 250.
+  // Confirmacao nao altera EAR, foto ou disponibilidade.
+  managePasted:adminProcedure.input(z.object({
+    cpfs:z.array(cpfSchema).min(1).max(250),
+    decision:z.enum(["confirm","unconfirm","discard","restore"]),
+  }).strict()).mutation(async({input})=>{
+    const db=await reviewDb();
+    const cpfs=[...new Set(input.cpfs)];
+    return db.transaction(async tx=>{
+      const found=await tx.execute(sql`
+        SELECT r.id,r.cpf,r.status,r.linkedOrder,r.usedAt,rv.reviewState
+        FROM h2bico_records r
+        LEFT JOIN h2bico_review rv ON rv.recordId=r.id
+        WHERE r.cpf IN (${sql.join(cpfs.map(cpf=>sql`${cpf}`),sql`, `)})
+        FOR UPDATE
+      `);
+      const rows=lockedRows(found[0] as any[]);
+      let skippedDiscarded=0,skippedProtected=0,already=0;
+      const eligible:LockedRow[]=[];
+      for(const row of rows){
+        if(input.decision==="confirm"){
+          if(row.reviewState==="discarded"){skippedDiscarded++;continue;}
+          if(row.reviewState==="confirmed"){already++;continue;}
+        }else if(input.decision==="unconfirm"){
+          if(row.reviewState==="discarded"){skippedDiscarded++;continue;}
+          if(row.reviewState!=="confirmed"){already++;continue;}
+        }else if(input.decision==="discard"){
+          if(row.reviewState==="discarded"){already++;continue;}
+          if(!canDiscard(row)){skippedProtected++;continue;}
+        }else if(input.decision==="restore"){
+          if(row.reviewState!=="discarded"){already++;continue;}
+          if(!canRestore(row)){skippedProtected++;continue;}
+        }
+        eligible.push(row);
+      }
+      const ids=eligible.map(row=>row.id);
+      if(ids.length){
+        if(input.decision==="confirm"||input.decision==="discard"){
+          if(input.decision==="discard"){
+            for(let i=0;i<ids.length;i+=250){
+              const chunk=ids.slice(i,i+250);
+              await tx.execute(sql`
+                UPDATE h2bico_records SET status='archived'
+                WHERE id IN (${sql.join(chunk.map(id=>sql`${id}`),sql`, `)})
+                  AND status IN ('available','reserved','archived')
+                  AND usedAt IS NULL AND (linkedOrder IS NULL OR linkedOrder='')
+              `);
+            }
+          }
+          await updateReviewState(tx,ids,input.decision==="confirm"?"confirmed":"discarded",
+            input.decision==="confirm"?"review_confirmed":"review_discarded");
+        }else{
+          for(let i=0;i<ids.length;i+=250){
+            const chunk=ids.slice(i,i+250);
+            const membership=sql.join(chunk.map(id=>sql`${id}`),sql`, `);
+            if(input.decision==="restore"){
+              await tx.execute(sql`
+                UPDATE h2bico_records SET status='available'
+                WHERE id IN (${membership}) AND status='archived'
+                  AND usedAt IS NULL AND (linkedOrder IS NULL OR linkedOrder='')
+              `);
+            }
+            await tx.execute(sql`
+              DELETE FROM h2bico_review
+              WHERE recordId IN (${membership})
+                AND reviewState=${input.decision==="unconfirm"?"confirmed":"discarded"}
+            `);
+            await tx.execute(sql`INSERT INTO h2bico_history(recordId,action,details)
+              VALUES ${sql.join(chunk.map(id=>sql`(${id},${input.decision==="restore"?"review_restored":"review_unconfirmed"},'Alteracao de conferencia por CPF colado no ADM H2BICO')`),sql`, `)}
+            `);
+          }
+        }
+      }
+      return {
+        updated:ids.length,
+        already,
+        skippedDiscarded,
+        skippedProtected,
+        missing:cpfs.length-rows.length,
+      };
+    });
+  }),
+
   decide:adminProcedure.input(lotRefSchema.extend({
     decision:z.enum(["confirm","discard","unconfirm","restore"]),
     cpfs:z.array(cpfSchema).min(1).max(LOT_SIZE),
