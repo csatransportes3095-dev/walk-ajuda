@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { classifySiteBulkStatus, filterSiteBulkCandidates, prepareSiteBulkCandidates } from "./siteSecurityBulk";
+import { classifySiteBulkStatus, filterSiteBulkCandidates, prepareSiteBulkCandidates, selectVisibleSiteBulkOrders, splitSiteBulkBatches } from "./siteSecurityBulk";
 
 const customers = [
   { id: 1, name: "Ana", email: " ANA@EXEMPLO.COM ", phone: "(61) 99999-1001" },
@@ -38,6 +38,24 @@ describe("Importacao de e-mails na Seguranca do Site", () => {
     expect(filterSiteBulkCandidates(list, "all", "ANA")).toHaveLength(1);
     expect(filterSiteBulkCandidates(list, "all", "BRUNO@EXEMPLO.COM")).toHaveLength(1);
     expect(filterSiteBulkCandidates(list, "all", "1004")).toHaveLength(1);
+  });
+  it("separa subpedidos e exclui os ocultados do ADM", () => {
+    const orders = selectVisibleSiteBulkOrders([
+      {id:1,registrationId:12,customerPhone:"61999991001",status:"recebido"},
+      {id:2,registrationId:12,customerPhone:"61999991001",status:"pedido_entregue"},
+      {id:3,registrationId:12,customerPhone:"61999991001",status:"recebido"},
+      {id:4,registrationId:12,customerPhone:"61999991001",status:"conta_ativa"},
+      {id:5,registrationId:13,customerPhone:"61999991002",status:"recebido"},
+    ], [{registrationId:12,subOrderIndex:1}]);
+    expect(orders).toEqual([
+      {customerPhone:"61999991001",status:"conta_ativa"},
+      {customerPhone:"61999991002",status:"recebido"},
+    ]);
+  });
+  it("permite mais de 500 clientes repartindo em lotes sem duplicar IDs", () => {
+    const batches=splitSiteBulkBatches(Array.from({length:1205},(_,i)=>i+1).concat([42]));
+    expect(batches.map(b=>b.length)).toEqual([500,500,205]);
+    expect(new Set(batches.flat()).size).toBe(1205);
   });
   it("classifica cancelamentos fora dos pedidos em andamento", () => {
     expect(classifySiteBulkStatus("cancelado")).toBe("other");
