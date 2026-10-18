@@ -1,5 +1,6 @@
 import { describe, expect, it } from "vitest";
-import { createHash, createPrivateKey, generateKeyPairSync, sign } from "node:crypto";
+import { createHash, generateKeyPairSync, sign } from "node:crypto";
+// @ts-ignore Worker module intentionally uses .mjs without a TypeScript declaration.
 import { verifyCrx3 } from "../workers/windows/h2ads-extension-sync.mjs";
 
 function varint(n: number): Buffer {
