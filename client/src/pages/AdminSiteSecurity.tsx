@@ -1,6 +1,6 @@
 import { useState } from "react";
-import { splitSiteBulkBatches } from "../../../server/siteSecurityBulk";
-import type { SiteBulkFilter } from "../../../server/siteSecurityBulk";
+import { splitSiteBulkBatches } from "@shared/siteSecurityBulk";
+import type { SiteBulkFilter } from "@shared/siteSecurityBulk";
 import { useLocation } from "wouter";
 import { ShieldCheck, ArrowLeft, UserPlus, Trash2, RefreshCcw } from "lucide-react";
 import { trpc } from "@/lib/trpc";
