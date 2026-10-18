@@ -1,5 +1,5 @@
 import { describe, it, expect } from "vitest";
-import { findWhitePhotoCrop, locateWhitePortrait } from "../client/src/lib/h2bicoWhitePhotoCrop";
+import { findWhitePhotoCrop, locateWhitePortrait, isWhitePortraitAboveName } from "../client/src/lib/h2bicoWhitePhotoCrop";
 
 function sample(bg: [number,number,number]=[12,18,30]) {
   const width=300,height=300;
@@ -69,5 +69,15 @@ describe("H2BICO: retrato acima do nome",()=>{
   const w=360,h=360,data=new Uint8ClampedArray(w*h*4);
   for(let i=0;i<data.length;i+=4){data[i]=17;data[i+1]=19;data[i+2]=26;data[i+3]=255;}
   expect(locateWhitePortrait(data,w,h,120,290,90)).toBeNull();
+ });
+});
+
+describe("automatic white portrait placement",()=>{
+ it("accepts white portrait aligned above OCR name",()=>{
+  expect(isWhitePortraitAboveName({x:452,y:186,width:297,height:371},
+    {left:495,top:620,width:220,height:24})).toBe(true);
+ });
+ it("rejects dark-region replacement without a found portrait",()=>{
+  expect(isWhitePortraitAboveName(null,{left:495,top:620,width:220,height:24})).toBe(false);
  });
 });
