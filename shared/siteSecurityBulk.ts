@@ -1,6 +1,6 @@
 /** Owner-only site access bulk import helpers. Pure functions; no mutations or side effects. */
 export const siteBulkFilters = [
-  "all", "with_orders", "active", "delivered", "in_progress", "without_orders",
+  "all", "with_orders", "active", "delivered", "in_progress", "without_orders", "with_loans",
 ] as const;
 export type SiteBulkFilter = (typeof siteBulkFilters)[number];
 
@@ -13,6 +13,7 @@ export type SiteBulkCustomer = {
   phone: string;
   blocked?: number | null;
   deletedAt?: Date | null;
+  cpf?: string | null;
 };
 
 export type SiteBulkOrder = { customerPhone: string | null; status: string | null };
@@ -28,6 +29,7 @@ export type SiteBulkCandidate = {
   email: string;
   phone: string;
   orderCount: number;
+  loanCount: number;
   activeOrders: number;
   deliveredOrders: number;
   inProgressOrders: number;
@@ -90,6 +92,7 @@ export function prepareSiteBulkCandidates(
   customers: SiteBulkCustomer[],
   latestOrders: SiteBulkOrder[],
   knownEmails: Iterable<string>,
+  loansByIdentity: ReadonlyMap<string, number> = new Map(),
 ): SiteBulkCandidate[] {
   const authorizedEmails = new Set(Array.from(knownEmails, siteBulkEmail));
   const orderCounts = new Map<string, { count: number; active: number; delivered: number; progress: number }>();
@@ -110,9 +113,12 @@ export function prepareSiteBulkCandidates(
     const email = siteBulkEmail(c.email);
     if (!validSiteBulkEmail(email)) continue;
     const counts = orderCounts.get(siteBulkPhone(c.phone)) || { count: 0, active: 0, delivered: 0, progress: 0 };
+    const cpf = String((c as SiteBulkCustomer & { cpf?: string | null }).cpf || "").replace(/\D/g, "");
+    const loanCount = (cpf && loansByIdentity.get("cpf:" + cpf)) || loansByIdentity.get("phone:" + siteBulkPhone(c.phone)) || 0;
     const existing = byEmail.get(email);
     if (existing) {
       existing.orderCount += counts.count;
+      existing.loanCount = Math.max(existing.loanCount, loanCount);
       existing.activeOrders += counts.active;
       existing.deliveredOrders += counts.delivered;
       existing.inProgressOrders += counts.progress;
@@ -120,7 +126,7 @@ export function prepareSiteBulkCandidates(
     }
     byEmail.set(email, {
       id: c.id, name: c.name, email, phone: c.phone,
-      orderCount: counts.count, activeOrders: counts.active,
+      orderCount: counts.count, loanCount, activeOrders: counts.active,
       deliveredOrders: counts.delivered, inProgressOrders: counts.progress,
       alreadyAuthorized: authorizedEmails.has(email),
     });
@@ -137,7 +143,8 @@ export function filterSiteBulkCandidates(candidates: SiteBulkCandidate[], filter
       (filter === "without_orders" && c.orderCount === 0) ||
       (filter === "active" && c.activeOrders > 0) ||
       (filter === "delivered" && c.deliveredOrders > 0) ||
-      (filter === "in_progress" && c.inProgressOrders > 0);
+      (filter === "in_progress" && c.inProgressOrders > 0) ||
+      (filter === "with_loans" && c.loanCount > 0);
     if (!matchesGroup) return false;
     if (!query) return true;
     return fold(c.name).includes(query) || c.email.includes(query) ||

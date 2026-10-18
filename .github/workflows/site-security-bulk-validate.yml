@@ -3,6 +3,7 @@ on:
   push:
     branches:
       - feature/site-security-bulk-email-20261018
+      - feature/site-security-loans-filter-20261018
     paths:
       - shared/siteSecurityBulk.ts
       - server/siteSecurityBulk.test.ts
@@ -46,7 +47,7 @@ jobs:
         shell: bash
         run: |
           set -euo pipefail
-          BASE_SHA=bb9289590380390b2e877906476bfbb82d00a556
+          BASE_SHA=1a118f458c0d67dae18574811c1e0c07708af5f4
           BASE_DIR="$RUNNER_TEMP/site-security-base"
           git fetch --no-tags --depth=1 origin "$BASE_SHA"
           git worktree add --detach "$BASE_DIR" "$BASE_SHA"
