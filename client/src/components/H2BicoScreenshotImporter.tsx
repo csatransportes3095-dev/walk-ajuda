@@ -174,10 +174,14 @@ export default function H2BicoScreenshotImporter(){
               source:file.name,photo,name:p.name,cpf:p.cpf,cpfSuggestion:p.cpfSuggestion,crop:p.crop,
                photoLayout:p.photoLayout,confidence:p.confidence,
                nameBox:p.nameBox,
+               whiteCrop:p.whitePhotoCrop||null,
+               cropMode:p.whitePhotoCrop?"white":"original",
+               whiteChecked:true,
               width:analysis.width,height:analysis.height,
               existing:p.alreadyExists,
-              selected:!p.alreadyExists&&p.validCpf&&p.name.length>5&&p.confidence>=70&&
-                 !p.warnings.some(w=>w.includes("CONFIRA O NUMERO")||w.includes("CONFIRA RECORTE")||w.includes("associação")),
+              selected:false, // never save automatically: confirm face/name/CPF association
+              /* legacy check disabled intentionally !p.alreadyExists&&p.validCpf&&p.name.length>5&&p.confidence>=70&&
+                 !p.warnings.some(w=>w.includes("CONFIRA O NUMERO")||w.includes("CONFIRA RECORTE")||w.includes("associação")), */
               warnings:[...p.warnings],
             }));
             setItems(current=>{
@@ -192,7 +196,8 @@ export default function H2BicoScreenshotImporter(){
               }
               return merged;
             });
-            for(const person of incoming)void autoPreviewWhite(person);
+            // The server has already located portraits on the full source image.
+            // Never overwrite these coordinates with the old proximity-based detector.
           }else toast.warning(file.name+": nenhum CPF identificado.");
         }catch(error){
           toast.error(file.name+": "+(error instanceof Error?error.message:"Falha na leitura"));
@@ -278,6 +283,7 @@ export default function H2BicoScreenshotImporter(){
         }
         setStatus("Salvando "+item.name+"...");
         try{
+          if(item.cropMode!=="white"||!item.whiteCrop){update(item.id,{error:"Foto com fundo branco não identificada automaticamente. Salvamento bloqueado.",selected:false});errors++;continue;}
           const base64=await cropPhoto(item);
           const result=await save.mutateAsync({cpf:item.cpf,name:item.name,base64,photoMode:item.cropMode==="white"?"white":"original"});
           if(result.result==="imported"){imported++;update(item.id,{saved:true,selected:false,error:undefined});}
@@ -288,7 +294,7 @@ export default function H2BicoScreenshotImporter(){
       toast.info("Concluído: "+imported+" novo(s), "+duplicates+" duplicado(s), "+errors+" erro(s).");
     }finally{savingRef.current=false;setSaving(false);setStatus("");}
   };
-  const selected=items.filter(item=>item.selected&&!item.saved);
+  const selected=items.filter(item=>item.selected&&!item.saved&&!item.existing);
   return <Card className="border-cyan-500/30 bg-gray-900 p-4 space-y-3 text-white">
     <div>
       <div className="text-xs font-black uppercase tracking-widest text-cyan-300">Extrator inteligente de prints</div>
@@ -345,7 +351,7 @@ export default function H2BicoScreenshotImporter(){
                 }}>CONFERI NO PRINT — USAR CPF SUGERIDO</Button>
               </div>}
               <label className="inline-flex items-center gap-2 text-sm">
-                <input type="checkbox" checked={item.selected} disabled={saving||item.saved||item.existing}
+                <input type="checkbox" checked={item.selected} disabled={saving||item.saved||item.existing||!item.whiteCrop&&item.cropMode!=="original"}
                   onChange={e=>update(item.id,{selected:e.target.checked})}/>
                 {item.saved?"SALVO":item.existing?"CPF JÁ CADASTRADO":isValidCpf(item.cpf)?"Conferido — salvar":"CPF INVÁLIDO"}
               </label>
