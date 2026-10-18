@@ -10,7 +10,7 @@ param(
 
 $ErrorActionPreference = "Stop"
 $ProgressPreference = "SilentlyContinue"
-$AgentVersion = "1.4.0"
+$AgentVersion = "1.4.1"
 $WorkerDirectory = Join-Path $env:LOCALAPPDATA "H2AdsWorker"
 $ConfigPath = Join-Path $WorkerDirectory "worker.json"
 $InstalledScriptPath = Join-Path $WorkerDirectory "H2AdsWorker.ps1"
@@ -24,8 +24,8 @@ $PackagePath = Join-Path $WorkerDirectory "package.json"
 $ProxyChainPackagePath = Join-Path $WorkerDirectory "node_modules\proxy-chain\package.json"
 $DedicatedBrowserDirectory = Join-Path $WorkerDirectory "browser\chrome"
 $DedicatedChromePath = Join-Path $DedicatedBrowserDirectory "chrome.exe"
-$TestingDirectory = Join-Path $WorkerDirectory "browser\\chrome-for-testing"
-$TestingChromePath = Join-Path $TestingDirectory "chrome-win64\\chrome.exe"
+$TestingDirectory = Join-Path $WorkerDirectory "browser\chrome-for-testing"
+$TestingChromePath = Join-Path $TestingDirectory "chrome-win64\chrome.exe"
 $TestingV4Rule = "H2ADS Testing Chrome - Block Direct IPv4"
 $TestingV6Rule = "H2ADS Testing Chrome - Block Direct IPv6"
 $TestingRelease = "156.0.8078.12"
@@ -83,7 +83,12 @@ function Test-H2AdsTestingFirewall {
     $rule = Get-NetFirewallRule -DisplayName $name -ErrorAction SilentlyContinue | Where-Object { $_.Enabled -eq "True" -and $_.Direction -eq "Outbound" -and $_.Action -eq "Block" } | Select-Object -First 1
     if (!$rule) { return $false }
     $filter = $rule | Get-NetFirewallApplicationFilter
-    if (!$filter -or !([string]$filter.Program).Equals($TestingChromePath, [StringComparison]::OrdinalIgnoreCase)) { return $false }
+    if (!$filter -or [string]::IsNullOrWhiteSpace([string]$filter.Program)) { return $false }
+    try {
+      $programPath = [System.IO.Path]::GetFullPath([string]$filter.Program)
+      $expectedPath = [System.IO.Path]::GetFullPath($TestingChromePath)
+      if (!$programPath.Equals($expectedPath, [StringComparison]::OrdinalIgnoreCase)) { return $false }
+    } catch { return $false }
   }
   return $true
 }
@@ -126,7 +131,7 @@ function Install-H2AdsTestingBrowser {
     if ((Get-Item $archive).Length -lt 10000000) { throw "Arquivo do Chrome for Testing incompleto." }
     $staging = Join-Path $temp "unpacked"
     Expand-Archive -LiteralPath $archive -DestinationPath $staging -Force
-    $stagedExecutable = Join-Path $staging "chrome-win64\\chrome.exe"
+    $stagedExecutable = Join-Path $staging "chrome-win64\chrome.exe"
     if (!(Test-Path $stagedExecutable)) { throw "Pacote oficial invalido." }
     if ((Get-Item $stagedExecutable).VersionInfo.ProductVersion -ne $TestingRelease) { throw "Versao do navegador nao corresponde ao pacote solicitado." }
     # Never overwrite the signed Chrome installation. The testing binary stays in a separate directory.
@@ -248,7 +253,16 @@ function Test-H2AdsProfileBusy([string]$ProfileDirectory) {
 
   $processes = @(Get-CimInstance Win32_Process -Filter "Name = 'chrome.exe'" -ErrorAction Stop)
   foreach ($process in $processes) {
-    if (-not [string]::Equals([string]$process.ExecutablePath, $DedicatedChromePath, [StringComparison]::OrdinalIgnoreCase)) { continue }
+    # Both supported H2ADS executables may use this profile. Never snapshot while either one is running.
+    $executable = [string]$process.ExecutablePath
+    if ([string]::IsNullOrWhiteSpace($executable)) { return $true }
+    try {
+      $normalized = [System.IO.Path]::GetFullPath($executable)
+      $oldChrome = [System.IO.Path]::GetFullPath($DedicatedChromePath)
+      $testingChrome = [System.IO.Path]::GetFullPath($TestingChromePath)
+      if (!$normalized.Equals($oldChrome, [StringComparison]::OrdinalIgnoreCase) -and
+          !$normalized.Equals($testingChrome, [StringComparison]::OrdinalIgnoreCase)) { continue }
+    } catch { return $true }
     $commandLine = [string]$process.CommandLine
     if ([string]::IsNullOrWhiteSpace($commandLine)) { return $true }
     if ($commandLine.IndexOf("--user-data-dir=", [StringComparison]::OrdinalIgnoreCase) -ge 0 -and
