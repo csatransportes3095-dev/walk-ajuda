@@ -75,6 +75,7 @@ export default function AdminSiteSecurity() {
      <option value="delivered">Pedido entregue</option>
      <option value="in_progress">Pedido em andamento</option>
      <option value="without_orders">Sem pedido</option>
+     <option value="with_loans">Todos com empréstimos (antigos ou ativos)</option>
     </select>
     <input aria-label="Pesquisar clientes" value={bulkSearch} disabled={bulkRunning} onChange={e=>{setBulkSearch(e.target.value);setSelectedIds([])}} placeholder="Nome, e-mail ou telefone" className="bg-[#292939] border border-white/20 rounded-lg p-3"/>
    </div>
@@ -87,7 +88,7 @@ export default function AdminSiteSecurity() {
    <div className="max-h-80 overflow-y-auto space-y-1 border border-white/10 rounded-xl p-2">
     {candidates.map(c=><label key={c.id} className="flex items-center gap-3 px-2 py-2 rounded-lg hover:bg-white/5 text-sm">
      <input type="checkbox" className="h-4 w-4 shrink-0" disabled={c.alreadyAuthorized||bulkRunning} checked={selected.includes(c.id)} onChange={e=>setSelectedIds(previous=>e.target.checked?[...previous,c.id]:previous.filter(id=>id!==c.id))}/>
-     <span className="flex-1 min-w-0"><span className="font-bold">{c.name}</span><span className="block text-xs text-white/60 break-all">{c.email} · {c.orderCount} pedido(s)</span></span>
+     <span className="flex-1 min-w-0"><span className="font-bold">{c.name}</span><span className="block text-xs text-white/60 break-all">{c.email} · {c.orderCount} pedido(s){bulkFilter==="with_loans"?" · "+c.loanCount+" empréstimo(s)":""}</span></span>
      {c.alreadyAuthorized&&<span className="text-xs text-white/50">Já autorizado</span>}
     </label>)}
     {!bulk.isLoading&&!bulk.error&&candidates.length===0&&<p className="p-3 text-white/60">Nenhum cliente encontrado nesse filtro.</p>}
