@@ -91,9 +91,10 @@ export const siteSecurityRouter = router({
     await db.transaction(async tx=>{
       for(const c of available) {
         const email=siteBulkEmail(c.email);
-        const result=await tx.insert(siteAccessEntries).values({displayName:c.name,email,phone:c.phone,customerId:c.id,createdBy:actor})
-          .onDuplicateKeyUpdate({set:{email:sql`${siteAccessEntries.email}`}});
-        const affected=Number((result as any)[0]?.affectedRows ?? (result as any).affectedRows ?? 0);
+        const [result]=await tx.execute(sql`INSERT IGNORE INTO siteAccessEntries
+          (displayName,email,phone,customerId,createdBy)
+          VALUES (${c.name},${email},${c.phone},${c.id},${actor})`);
+        const affected=Number((result as any)?.affectedRows ?? 0);
         if(affected===1)added++;else already++;
       }
       await tx.insert(siteAccessAudit).values({actor,action:"BULK_ACCESS_ADDED",subject:JSON.stringify({added,already,total:ids.length})});
