@@ -8,6 +8,7 @@ import { join } from "node:path";
 import { isValidCpf } from "../../client/src/lib/h2bicoCpfExtractor";
 import { parseScreenshotTsv, normalizeScreenshotName, isReviewableName } from "../h2bicoScreenshotOcr";
 import { alignScreenshotPhotoCrops } from "../h2bicoScreenshotCrop";
+import { detectWhitePortraitCrops } from "../h2bicoScreenshotWhitePhoto";
 import { suggestCpfFromMisreadDigits } from "../h2bicoCpfOcrSuggestion";
 import { autoReadCpfLine } from "../h2bicoScreenshotAutoCpf";
 const execFileAsync = promisify(execFile);
@@ -262,7 +263,18 @@ export const h2bicoRouter = router({
           person.warnings.push("CPF corrigido automaticamente por leituras independentes e digitos verificadores.");
         }
       }
-      const proposed=found.map(row=>({...row,cpfSuggestion:suggestCpfFromMisreadDigits(row.cpf)}));
+      // Match real bright photo rectangles across the complete screenshot.
+      // This is independent of the legacy assumed left-side square crop.
+      const brightCrops=await detectWhitePortraitCrops(prepared,width,height,found.map(row=>({
+        nameBox:row.nameBox?{
+          left:row.nameBox.left*width/ocrWidth,top:row.nameBox.top*height/ocrHeight,
+          width:row.nameBox.width*width/ocrWidth,height:row.nameBox.height*height/ocrHeight,
+        }:undefined,
+      })));
+      const proposed=found.map((row,index)=>({
+        ...row,whitePhotoCrop:brightCrops[index]||null,
+        cpfSuggestion:suggestCpfFromMisreadDigits(row.cpf),
+      }));
       const cpfs=[...new Set(proposed.filter(row=>isValidCpf(row.cpf)).map(row=>row.cpf))];
       const db=await dbOrThrow();
       const existing=new Set<string>();
