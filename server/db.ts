@@ -465,6 +465,25 @@ export async function updateProduct(id: number, data: Partial<{
 }>): Promise<void> {
   const db = await getDb();
   if (!db) return;
+  if(data.name!==undefined){
+    const newName=data.name.trim();
+    if(!newName)throw new Error("Nome do produto obrigatorio.");
+    await db.transaction(async tx=>{
+      const rows=await tx.execute(sql`SELECT name FROM products WHERE id=${id} FOR UPDATE`);
+      const oldName=String((rows[0] as Array<{name:string}>)[0]?.name||"");
+      if(!oldName)throw new Error("Produto nao encontrado.");
+      if(oldName!==newName){
+        const {ensureProductScheduleAliasTable,captureAliasesBeforeProductRename}=await import("./productScheduleAliases");
+        await ensureProductScheduleAliasTable(tx);
+        await captureAliasesBeforeProductRename(tx,id,oldName);
+        // Pedidos antigos somente com correspondencia EXATA do nome salvo.
+        // Nao altera opcao de compra, status, garantia ou preco.
+        await tx.execute(sql`UPDATE orderStatusHistory SET serviceName=${newName} WHERE serviceName=${oldName}`);
+      }
+      await tx.update(products).set({...data,name:newName}).where(eq(products.id,id));
+    });
+    return;
+  }
   await db.update(products).set(data).where(eq(products.id, id));
 }
 
