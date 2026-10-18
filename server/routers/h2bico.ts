@@ -215,6 +215,12 @@ export const h2bicoRouter = router({
       const aligned=await alignScreenshotPhotoCrops(processed,parseScreenshotTsv(stdout,ocrWidth,ocrHeight),ocrWidth,ocrHeight);
       const found=aligned.map(person=>({
         ...person,
+        nameBox:person.nameBox?{
+          left:person.nameBox.left*width/ocrWidth,
+          top:person.nameBox.top*height/ocrHeight,
+          width:person.nameBox.width*width/ocrWidth,
+          height:person.nameBox.height*height/ocrHeight,
+        }:undefined,
         crop:{
           x:Math.round(person.crop.x*width/ocrWidth),
           y:Math.round(person.crop.y*height/ocrHeight),
