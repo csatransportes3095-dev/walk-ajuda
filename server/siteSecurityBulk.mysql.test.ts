@@ -29,7 +29,7 @@ beforeAll(async () => {
   pool = createPool(process.env.TEST_MYSQL_URL || "mysql://root:integration-only@127.0.0.1:3306/h2_bulk_test");
   mockState.db = drizzle(pool);
   const statements = [
-    "CREATE TABLE IF NOT EXISTS customers (id INT NOT NULL AUTO_INCREMENT PRIMARY KEY, name VARCHAR(128) NOT NULL, email VARCHAR(320), phone VARCHAR(32) NOT NULL, cpf VARCHAR(14), blocked INT NOT NULL DEFAULT 0, deletedAt TIMESTAMP NULL) ENGINE=InnoDB",
+    "CREATE TABLE IF NOT EXISTS customers (id INT NOT NULL AUTO_INCREMENT PRIMARY KEY, name VARCHAR(128) NOT NULL, email VARCHAR(320), phone VARCHAR(32) NOT NULL, cpf VARCHAR(14), profilePhotoUrl TEXT, blocked INT NOT NULL DEFAULT 0, deletedAt TIMESTAMP NULL) ENGINE=InnoDB",
     "CREATE TABLE IF NOT EXISTS orderStatusHistory (id INT NOT NULL AUTO_INCREMENT PRIMARY KEY, registrationId INT NOT NULL, customerPhone VARCHAR(32) NOT NULL, status VARCHAR(64) NOT NULL) ENGINE=InnoDB",
     "CREATE TABLE IF NOT EXISTS hiddenSubOrders (registrationId INT NOT NULL, subOrderIndex INT NOT NULL) ENGINE=InnoDB",
     "CREATE TABLE IF NOT EXISTS orderStatusTypes (id INT NOT NULL AUTO_INCREMENT PRIMARY KEY, `key` VARCHAR(64) NOT NULL, sortOrder INT NOT NULL DEFAULT 0, isActive INT NOT NULL DEFAULT 1, isGlobal INT NOT NULL DEFAULT 1) ENGINE=InnoDB",
@@ -78,6 +78,15 @@ describe("Site Security bulk import - disposable MySQL integration", () => {
     expect(rows.find(x => x.email === "bruno@exemplo.com")).toMatchObject({ status: "suspended", sessionVersion: 1 });
     const [audit] = await pool.query<any[]>("SELECT action FROM siteAccessAudit ORDER BY id");
     expect(audit).toHaveLength(2);
+  });
+  it("returns registered profile thumbnails without modifying access", async()=>{
+    await pool.query("UPDATE customers SET profilePhotoUrl='https://images.example.test/ana.jpg' WHERE id=1");
+    await pool.query("UPDATE customers SET profilePhotoUrl='https://images.example.test/bruno.jpg' WHERE id=2");
+    await pool.query("INSERT INTO siteAccessEntries (displayName,email,customerId,status,createdBy) VALUES ('Ana','ana@exemplo.com',1,'active','integration-owner')");
+    const people=await caller.list();
+    expect(people.find(p=>p.email==="ana@exemplo.com")?.profilePhotoUrl).toBe("https://images.example.test/ana.jpg");
+    expect(people.find(p=>p.email==="bruno@exemplo.com")?.profilePhotoUrl).toBe("https://images.example.test/bruno.jpg");
+    expect(people.every(p=>p.status==="active"||p.status==="suspended")).toBe(true);
   });
   it("rejects blocked and deleted selections before writing", async () => {
     await expect(caller.bulkAdd({ customerIds: [1,5] })).rejects.toThrow();
