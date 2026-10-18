@@ -18,7 +18,7 @@ jobs:
           cache: pnpm
       - run: pnpm install --frozen-lockfile
       - name: Test WMI reference lookup
-        run: pnpm exec vitest run shared/chassisWmiReference.test.ts
+        run: pnpm exec vitest run server/chassisWmiReference.test.ts
       - name: Ensure synthetic VIN generator remains unchanged
         run: |
           git fetch --no-tags --depth=1 origin 945259659ae9e3be0863da4af048512f6322fe2a
