@@ -22,6 +22,16 @@ describe("H2BICO: conferencia persistente",()=>{
   expect(core).toContain('(row as any).reviewState==="discarded"');
   expect(router).toContain("h2bicoReview: h2bicoReviewRouter");
  });
+ it("desfaz em massa somente CPFs confirmados sem tocar descartados",()=>{
+  expect(server).toContain("unconfirmLot:adminProcedure.input");
+  expect(server).toContain("rv.reviewState='confirmed'");
+  expect(server).toContain("AND reviewState='confirmed'");
+  expect(server).toContain("review_unconfirmed");
+  expect(ui).toContain("SELECIONAR TODOS DO LOTE");
+  expect(ui).toContain("SELECIONAR CONFIRMADOS");
+  expect(ui).toContain("DESFAZER CONFIRMAÇÃO DO LOTE");
+  expect(ui).toContain("unconfirmLot.mutateAsync");
+ });
  it("somente endpoints administrativos e confirmação antes de alteração",()=>{
   for(const key of ["stats","runs","createRun","lots","lot","decide","confirmLot"])
     expect(server).toMatch(new RegExp(key+":adminProcedure"));
