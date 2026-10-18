@@ -88,7 +88,7 @@ export default function H2BicoReviewLotes(){
   return <Card className="border-emerald-500/30 bg-gray-900 p-4 space-y-3 text-white">
     <div className="text-xs font-bold tracking-widest text-emerald-300">H2BICO · CONFERÊNCIA PERSISTENTE</div>
     <h2 className="text-xl font-black">COPIAR CPFs EM LOTES DE 1.500</h2>
-    <p className="text-sm text-gray-400">O lote fica salvo para continuar depois. Descartar arquiva e bloqueia a reentrada automática; nada é apagado. COM EAR e SEM EAR permanecem independentes.</p>
+    <p className="text-sm text-gray-400">Esta área serve apenas para copiar CPFs em lotes de 1.500. Confirmação e descarte ficam na Gestão em Massa abaixo.</p>
     <div className="grid grid-cols-2 md:grid-cols-4 gap-2 text-center">
       {([["Total",stats.data?.total],["Pendentes",stats.data?.pending],["Confirmados",stats.data?.confirmed],["Descartados",stats.data?.discarded]] as const).map(([label,count])=>
         <div key={label} className="bg-gray-950 rounded-lg p-2"><p className="text-xs text-gray-400">{label}</p><p className="text-xl font-bold">{count??"..."}</p></div>)}
@@ -118,33 +118,8 @@ export default function H2BicoReviewLotes(){
     {!!runId&&current.isLoading&&<p role="status">Carregando lote...</p>}
     {!!current.data&&<div className="space-y-3 border-t border-white/10 pt-3">
       <p className="font-bold">LOTE {index+1} · {current.data.total} CPFs | {current.data.confirmed} confirmados | {current.data.discarded} descartados | {current.data.pending} pendentes</p>
-      <div className="flex flex-wrap gap-2">
-        <Button disabled={busy||!rows.length} onClick={()=>void copy()}>COPIAR CPFs DO LOTE</Button>
-        <Button disabled={busy||!pending.length} onClick={()=>void doConfirmLot()}>CONFIRMAR {pending.length} PENDENTES</Button>
-        <Button variant="outline" disabled={busy||!rows.length} onClick={()=>setSelected(rows.map(r=>r.cpf))}>SELECIONAR TODOS DO LOTE</Button>
-        <Button variant="outline" disabled={busy||!confirmed.length} onClick={()=>setSelected(confirmed.map(r=>r.cpf))}>SELECIONAR CONFIRMADOS ({confirmed.length})</Button>
-        <Button variant="outline" disabled={busy||!pending.length} onClick={()=>setSelected(pending.map(r=>r.cpf))}>SELECIONAR PENDENTES</Button>
-        <Button variant="destructive" disabled={busy||!confirmed.length} onClick={()=>void undoConfirmedLot()}>DESFAZER CONFIRMAÇÃO DO LOTE ({confirmed.length})</Button>
-        <Button variant="outline" onClick={()=>setSelected([])}>DESMARCAR</Button>
-      </div>
-      <div className="max-h-64 overflow-y-auto space-y-1 border border-gray-700 rounded-lg p-2">
-        {rows.map(r=><label key={r.id} className="flex items-center gap-2 text-xs border-b border-white/5 py-1">
-          <input type="checkbox" checked={selected.includes(r.cpf)}
-            onChange={e=>setSelected(v=>e.target.checked?[...new Set([...v,r.cpf])]:v.filter(x=>x!==r.cpf))}/>
-          <span className="font-mono">{r.cpf}</span><span className="truncate flex-1">{r.name}</span>
-          <span className={r.reviewState==="confirmed"?"text-emerald-300":r.reviewState==="discarded"?"text-red-300":"text-amber-200"}>{r.reviewState==="confirmed"?"CONFIRMADO":r.reviewState==="discarded"?"DESCARTADO":"PENDENTE"}</span>
-        </label>)}
-      </div>
-      <div className="space-y-2">
-        <Textarea value={manual} onChange={e=>setManual(e.target.value)} placeholder="Cole aqui os CPFs do lote que precisam ser descartados ou corrigidos, um por linha." className="min-h-24 font-mono"/>
-        <p className="text-xs text-gray-400">Para aplicar uma ação, use os CPFs selecionados acima OU os colados neste campo.</p>
-        <div className="flex flex-wrap gap-2">
-          <Button disabled={busy} onClick={()=>void doDecision("discard",!!manual.trim())} variant="destructive">DESCARTAR / ARQUIVAR</Button>
-          <Button disabled={busy} onClick={()=>void doDecision("confirm",!!manual.trim())}>CONFIRMAR SELECIONADOS</Button>
-          <Button disabled={busy} variant="outline" onClick={()=>void doDecision("unconfirm",!!manual.trim())}>VOLTAR A PENDENTE</Button>
-          <Button disabled={busy} variant="outline" onClick={()=>void doDecision("restore",!!manual.trim())}>RESTAURAR DESCARTADOS</Button>
-        </div>
-      </div>
+      <div className="flex flex-wrap gap-2"><Button disabled={busy||!rows.length} onClick={()=>void copy()}>COPIAR CPFs DO LOTE</Button></div>
+      <p className="text-xs text-gray-400">Para confirmar, cole a lista conferida na Gestão em Massa abaixo.</p>
       {!!copied&&<details><summary className="text-xs">Visualizar CPFs copiados</summary><Textarea className="font-mono min-h-24" readOnly value={copied}/></details>}
     </div>}
   </Card>;
