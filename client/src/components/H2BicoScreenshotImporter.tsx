@@ -13,6 +13,7 @@ type Item={
   photo:string; crop:{x:number;y:number;size:number};
   width:number;height:number; existing:boolean; selected:boolean; warnings:string[];
   error?:string; saved?:boolean; cpfSuggestion?:string|null;
+  photoLayout?:"left"|"right"|"above"; confidence?:number;
 };
 const digits=(value:string)=>value.replace(/\D/g,"");
 const readBase64=(file:File)=>new Promise<string>((resolve,reject)=>{
@@ -90,9 +91,11 @@ export default function H2BicoScreenshotImporter(){
             const incoming:Item[]=analysis.persons.map((p,i)=>({
               id:Date.now()+"-"+number+"-"+i+"-"+Math.random(),
               source:file.name,photo,name:p.name,cpf:p.cpf,cpfSuggestion:p.cpfSuggestion,crop:p.crop,
+               photoLayout:p.photoLayout,confidence:p.confidence,
               width:analysis.width,height:analysis.height,
               existing:p.alreadyExists,
-              selected:!p.alreadyExists&&p.validCpf&&p.name.length>5&&p.confidence>=70&&!p.warnings.some(w=>w.includes("CONFIRA O NUMERO")),
+              selected:!p.alreadyExists&&p.validCpf&&p.name.length>5&&p.confidence>=70&&
+                 !p.warnings.some(w=>w.includes("CONFIRA O NUMERO")||w.includes("CONFIRA RECORTE")||w.includes("associação")),
               warnings:[...p.warnings],
             }));
             setItems(current=>{
@@ -237,7 +240,16 @@ export default function H2BicoScreenshotImporter(){
           <div className="flex flex-wrap items-start gap-3">
             <CropPreview item={item}/>
             <div className="min-w-[210px] flex-1 space-y-2">
-              <div className="text-xs text-gray-400 break-all">{item.source}</div>
+              <div className="flex flex-wrap items-center justify-between gap-2">
+                 <div className="text-xs text-gray-400 break-all">{item.source}</div>
+                 <Button type="button" variant="outline" size="sm" onClick={()=>window.open(item.photo,"_blank","noopener,noreferrer")}>
+                   VER PRINT ORIGINAL
+                 </Button>
+               </div>
+               <div className="text-xs text-cyan-200">
+                 OCR {item.confidence??0}% • foto {item.photoLayout==="right"?"à direita":item.photoLayout==="above"?"acima":"à esquerda"}
+                 {item.photoLayout!=="left"?" • confirme o recorte antes de marcar":""}
+               </div>
               <Input aria-label="Nome completo" disabled={saving||item.saved||item.existing} value={item.name}
                 onChange={e=>update(item.id,{name:e.target.value,error:undefined})} placeholder="NOME COMPLETO" />
               <Input aria-label="CPF" disabled={saving||item.saved||item.existing} value={item.cpf}
