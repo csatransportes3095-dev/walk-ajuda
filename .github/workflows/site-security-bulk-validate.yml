@@ -6,6 +6,7 @@ on:
     paths:
       - shared/siteSecurityBulk.ts
       - server/siteSecurityBulk.test.ts
+      - server/siteSecurityBulk.mysql.test.ts
       - server/siteSecurityRouter.ts
       - client/src/pages/AdminSiteSecurity.tsx
       - .github/workflows/site-security-bulk-validate.yml
@@ -25,6 +26,12 @@ jobs:
       - run: pnpm install --frozen-lockfile
       - name: Test bulk filters, suborders and batching
         run: pnpm exec vitest run server/siteSecurityBulk.test.ts
+      - name: Disposable MySQL integration tests
+        run: |
+          sudo systemctl start mysql
+          sudo mysql -e "ALTER USER 'root'@'localhost' IDENTIFIED WITH mysql_native_password BY 'integration-only';" || sudo mysql -e "ALTER USER 'root'@'localhost' IDENTIFIED BY 'integration-only';"
+          sudo mysql -uroot -pintegration-only -e 'CREATE DATABASE IF NOT EXISTS h2_bulk_test'
+          TEST_MYSQL_URL=mysql://root:integration-only@127.0.0.1:3306/h2_bulk_test pnpm exec vitest run server/siteSecurityBulk.mysql.test.ts
       - name: Compare TypeScript with unchanged production baseline
         shell: bash
         run: |
