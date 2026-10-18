@@ -1,0 +1,33 @@
+name: H2BICO white photo crop validation
+on:
+  push:
+    branches:
+      - feat/h2bico-photo-white-background-crop-20261018
+  pull_request:
+    branches:
+      - recovery/organizar-salvos-2026-08-24
+    paths:
+      - 'client/src/components/H2BicoScreenshotImporter.tsx'
+      - 'client/src/lib/h2bicoWhitePhotoCrop.ts'
+      - 'server/routers/h2bico.ts'
+      - 'server/h2bicoWhitePhotoCrop.test.ts'
+      - '.github/workflows/h2bico-white-crop-validate.yml'
+  workflow_dispatch:
+permissions:
+  contents: read
+jobs:
+  validate:
+    runs-on: ubuntu-latest
+    timeout-minutes: 25
+    steps:
+      - uses: actions/checkout@v4
+      - uses: pnpm/action-setup@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '22'
+          cache: pnpm
+      - run: pnpm install --frozen-lockfile
+      - name: New white-background detector and existing OCR tests
+        run: pnpm exec vitest run server/h2bicoWhitePhotoCrop.test.ts server/h2bicoScreenshotOcr.test.ts
+      - name: Production build
+        run: pnpm build
