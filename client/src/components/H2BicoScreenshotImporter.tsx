@@ -7,7 +7,7 @@ import { isValidCpf } from "@/lib/h2bicoCpfExtractor";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Card } from "@/components/ui/card";
-import { findWhitePhotoCrop, type WhitePhotoCrop } from "@/lib/h2bicoWhitePhotoCrop";
+import { findWhitePhotoCrop, locateWhitePortrait, type WhitePhotoCrop } from "@/lib/h2bicoWhitePhotoCrop";
 
 type Item={
   id:string; source:string; name:string; cpf:string;
@@ -15,6 +15,7 @@ type Item={
   width:number;height:number; existing:boolean; selected:boolean; warnings:string[];
   error?:string; saved?:boolean; cpfSuggestion?:string|null;
   photoLayout?:"left"|"right"|"above"; confidence?:number;
+  nameBox?:{left:number;top:number;width:number;height:number};
   cropMode?:"original"|"white"; whiteCrop?:WhitePhotoCrop|null; whiteChecked?:boolean;
 };
 const digits=(value:string)=>value.replace(/\D/g,"");
@@ -81,19 +82,31 @@ export default function H2BicoScreenshotImporter(){
     try{
       const img=new Image();img.src=item.photo;await img.decode();
       const canvas=document.createElement("canvas");
-      const regionX=Math.max(0,Math.floor(item.crop.x-item.crop.size*.4));
-      const regionY=Math.max(0,Math.floor(item.crop.y-item.crop.size*.4));
-      const regionW=Math.min(img.naturalWidth-regionX,Math.ceil(item.crop.size*1.8));
-      const regionH=Math.min(img.naturalHeight-regionY,Math.ceil(item.crop.size*1.8));
-      canvas.width=regionW;canvas.height=regionH;
+      const scale=Math.min(1,1400/Math.max(img.naturalWidth,img.naturalHeight));
+      canvas.width=Math.max(1,Math.round(img.naturalWidth*scale));
+      canvas.height=Math.max(1,Math.round(img.naturalHeight*scale));
       const ctx=canvas.getContext("2d",{willReadFrequently:true});
       if(!ctx)throw new Error("Não foi possível analisar a foto.");
-      ctx.drawImage(img,regionX,regionY,regionW,regionH,0,0,regionW,regionH);
-      const pixels=ctx.getImageData(0,0,regionW,regionH).data;
-      const found=findWhitePhotoCrop(pixels,regionW,regionH,regionX,regionY,item.crop);
-      update(item.id,{whiteChecked:true,whiteCrop:found,cropMode:found?"white":"original",
-        selected:false,error:found?undefined:"Fundo branco não localizado com segurança. Recorte antigo preservado. Confira o print original."});
-      if(found)toast.success("Foto padrão: somente a área branca foi selecionada. Confira o preview.");
+      ctx.drawImage(img,0,0,canvas.width,canvas.height);
+      const pixels=ctx.getImageData(0,0,canvas.width,canvas.height).data;
+      const anchor=item.nameBox;
+      const candidate=anchor?locateWhitePortrait(pixels,canvas.width,canvas.height,
+        anchor.left*scale,anchor.top*scale,anchor.width*scale):null;
+      const located=candidate?{
+        x:Math.round(candidate.x/scale),y:Math.round(candidate.y/scale),
+        width:Math.round(candidate.width/scale),height:Math.round(candidate.height/scale)
+      }:null;
+      // Compatibilidade: caso o print use o layout antigo, tenta o detector legado.
+      const found=located||findWhitePhotoCrop(pixels,canvas.width,canvas.height,0,0,{
+        x:item.crop.x*scale,y:item.crop.y*scale,size:item.crop.size*scale
+      });
+      const finalCrop=located|| (found?{
+        x:Math.round(found.x/scale),y:Math.round(found.y/scale),
+        width:Math.round(found.width/scale),height:Math.round(found.height/scale)
+      }:null);
+      update(item.id,{whiteChecked:true,whiteCrop:finalCrop,cropMode:finalCrop?"white":"original",
+        selected:false,error:finalCrop?undefined:"Fundo branco não localizado com segurança. Recorte antigo preservado. Confira o print original."});
+      if(finalCrop)toast.success("Foto padrão: somente a área branca foi selecionada. Confira o preview.");
       else toast.warning("Fundo branco não localizado; nenhum recorte foi substituído.");
     }catch(error){update(item.id,{selected:false,error:error instanceof Error?error.message:"Erro ao analisar fundo branco."});}
   };
@@ -121,6 +134,7 @@ export default function H2BicoScreenshotImporter(){
               id:Date.now()+"-"+number+"-"+i+"-"+Math.random(),
               source:file.name,photo,name:p.name,cpf:p.cpf,cpfSuggestion:p.cpfSuggestion,crop:p.crop,
                photoLayout:p.photoLayout,confidence:p.confidence,
+               nameBox:p.nameBox,
               width:analysis.width,height:analysis.height,
               existing:p.alreadyExists,
               selected:!p.alreadyExists&&p.validCpf&&p.name.length>5&&p.confidence>=70&&
@@ -300,7 +314,7 @@ export default function H2BicoScreenshotImporter(){
               {item.error&&<p className="text-xs text-red-300">{item.error}</p>}
             </div>
           </div>
-          {!item.saved&&!item.existing&&<div className="mt-3 space-y-2">
+          {!item.saved&&<div className="mt-3 space-y-2">
             <div className="flex flex-wrap items-center gap-2">
               <Button type="button" size="sm" variant={item.cropMode==="white"?"default":"outline"} disabled={saving||busy} onClick={()=>void applyWhitePreset(item)}>
                 USAR RECORTE PADRÃO DA FOTO — FUNDO BRANCO
@@ -310,14 +324,15 @@ export default function H2BicoScreenshotImporter(){
               </Button>
             </div>
             <p className="text-xs text-gray-400">Novo modo separado: começa no fundo branco, exclui a borda escura e mantém retrato vertical 4:5. Confira a prévia antes de marcar para salvar.</p>
-            <div className="grid grid-cols-3 gap-2">
+            {item.existing&&<p className="text-xs text-amber-200">Já cadastrado: pode conferir o recorte, mas não é possível sobrescrever a foto salva.</p>}
+            {!item.existing&&<div className="grid grid-cols-3 gap-2">
             {(["x","y","size"] as const).map(key=><label key={key} className="text-xs text-gray-400">
               {key==="x"?"Foto horizontal":key==="y"?"Foto vertical":"Tamanho do recorte"}
               <Input type="number" className="mt-1" min={key==="size"?48:0}
                 value={item.crop[key]} disabled={saving}
                 onChange={e=>update(item.id,{crop:{...item.crop,[key]:Number(e.target.value)}})}/>
             </label>)}
-            </div>
+            </div>}
           </div>}
         </div>)}
       </div>

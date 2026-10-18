@@ -1,5 +1,5 @@
 import { describe, it, expect } from "vitest";
-import { findWhitePhotoCrop } from "../client/src/lib/h2bicoWhitePhotoCrop";
+import { findWhitePhotoCrop, locateWhitePortrait } from "../client/src/lib/h2bicoWhitePhotoCrop";
 
 function sample(bg: [number,number,number]=[12,18,30]) {
   const width=300,height=300;
@@ -45,4 +45,29 @@ describe("H2BICO foto padrão com fundo branco",()=>{
     expect(found?.x).toBeGreaterThanOrEqual(272);
     expect(found?.y).toBeGreaterThanOrEqual(210);
   });
+});
+
+describe("H2BICO: retrato acima do nome",()=>{
+ it("acha o retângulo claro mesmo quando crop legado aponta para a área escura",()=>{
+  const w=700,h=640,data=new Uint8ClampedArray(w*h*4);
+  for(let y=0;y<h;y++)for(let x=0;x<w;x++){
+   const i=(y*w+x)*4,white=x>=230&&x<390&&y>=65&&y<270;
+   data[i]=white?252:22;data[i+1]=white?252:23;data[i+2]=white?252:31;data[i+3]=255;
+  }
+  // Rosto dentro da área branca (descontinuidade central).
+  for(let y=95;y<208;y++)for(let x=275;x<340;x++){
+   const i=(y*w+x)*4;data[i]=174;data[i+1]=132;data[i+2]=117;
+  }
+  const crop=locateWhitePortrait(data,w,h,255,305,118);
+  expect(crop).not.toBeNull();
+  expect(crop!.x).toBeGreaterThanOrEqual(230);
+  expect(crop!.y).toBe(65);
+  expect(crop!.x+crop!.width).toBeLessThanOrEqual(390);
+  expect(crop!.height/crop!.width).toBeCloseTo(1.25,1);
+ });
+ it("não seleciona região quando print é inteiramente escuro",()=>{
+  const w=360,h=360,data=new Uint8ClampedArray(w*h*4);
+  for(let i=0;i<data.length;i+=4){data[i]=17;data[i+1]=19;data[i+2]=26;data[i+3]=255;}
+  expect(locateWhitePortrait(data,w,h,120,290,90)).toBeNull();
+ });
 });
