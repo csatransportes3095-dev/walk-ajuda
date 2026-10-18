@@ -2,7 +2,7 @@ import { z } from "zod";
 import { TRPCError } from "@trpc/server";
 import { eq, sql, inArray } from "drizzle-orm";
 import { customers, orderStatusHistory } from "../drizzle/schema";
-import { prepareSiteBulkCandidates, filterSiteBulkCandidates, siteBulkFilters, siteBulkEmail, validSiteBulkEmail, selectVisibleSiteBulkOrders } from "./siteSecurityBulk";
+import { prepareSiteBulkCandidates, filterSiteBulkCandidates, siteBulkFilters, siteBulkEmail, validSiteBulkEmail, selectVisibleSiteBulkOrders } from "../shared/siteSecurityBulk";
 import jwt from "jsonwebtoken";
 import { parse as parseCookieHeader } from "cookie";
 import { adminProcedure, router } from "./_core/trpc";
