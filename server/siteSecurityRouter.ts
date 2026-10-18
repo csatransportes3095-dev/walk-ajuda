@@ -9,6 +9,7 @@ import { adminProcedure, router } from "./_core/trpc";
 import { getDb, getAdminCredential } from "./db";
 import { getAdminJwtSecret } from "./adminJwt";
 import { siteAccessConfig, siteAccessEntries, siteAccessAudit } from "./siteAccessSchema";
+import { attachSiteAccessProfilePhotos } from "./siteSecurityProfilePhotos";
 import { configuredActivationState, modeActivationFailure } from "./siteAccessActivation";
 
 export const SITE_ACCESS_MODE = ["public", "restricted", "blocked"] as const;
@@ -53,8 +54,15 @@ export const siteSecurityRouter = router({
     await requireSiteOwner(ctx.req);
     const db=await getDb();
     if(!db) throw new TRPCError({code:"INTERNAL_SERVER_ERROR"});
-    return db.select({id:siteAccessEntries.id,displayName:siteAccessEntries.displayName,email:siteAccessEntries.email,phone:siteAccessEntries.phone,status:siteAccessEntries.status,expiresAt:siteAccessEntries.expiresAt,createdAt:siteAccessEntries.createdAt})
+    const entries=await db.select({id:siteAccessEntries.id,customerId:siteAccessEntries.customerId,displayName:siteAccessEntries.displayName,email:siteAccessEntries.email,phone:siteAccessEntries.phone,status:siteAccessEntries.status,expiresAt:siteAccessEntries.expiresAt,createdAt:siteAccessEntries.createdAt})
       .from(siteAccessEntries).orderBy(siteAccessEntries.id);
+    if (!entries.length) return [];
+    const emails=[...new Set(entries.map(e=>e.email.trim().toLowerCase()))];
+    const ids=[...new Set(entries.map(e=>e.customerId).filter((id):id is number=>id!==null))];
+    const matching=await db.select({id:customers.id,email:customers.email,profilePhotoUrl:customers.profilePhotoUrl,deletedAt:customers.deletedAt})
+      .from(customers)
+      .where(sql`(${ids.length?inArray(customers.id,ids):sql`FALSE`}) OR LOWER(TRIM(${customers.email})) IN (${sql.join(emails.map(x=>sql`${x}`),sql`,`)})`);
+    return attachSiteAccessProfilePhotos(entries,matching);
   }),
 
   bulkCandidates: adminProcedure.input(z.object({filter:z.enum(siteBulkFilters).default("all"), search:z.string().max(160).default("")})).query(async ({ctx,input})=>{
