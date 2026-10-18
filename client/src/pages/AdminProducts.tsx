@@ -540,7 +540,7 @@ function OptionCard({ opt, productId, onUpdate, onAutoScheduleChange, onDelete, 
       cardTextColor: cardTextColor || null,
       cardButtonColor: cardButtonColor || null,
       cardAccentColor: cardAccentColor || null,
-      autoScheduleEnabled: autoScheduleEnabled ? 1 : 0,
+      // Regras operacionais sao salvas SOMENTE pelo botao dedicado.
     });
     setDirty(false);
   };
