@@ -1,5 +1,6 @@
 import type { Express, Request, Response } from "express";
 import { safeH2AdsWorkerRoute } from "./h2adsWorkerErrorGuard";
+import { listH2AdsGlobalExtensions } from "./h2adsGlobalExtensions";
 import path from "node:path";
 import { and, eq, lt } from "drizzle-orm";
 import { h2AdsWorkerBrowserCommands, h2AdsWorkerCommands } from "../drizzle/schema";
@@ -87,6 +88,20 @@ async function requeueStaleWorkerCommands(workerId: number): Promise<void> {
 }
 
 export function registerH2AdsWorkerRoute(app: Express): void {
+  app.get("/api/h2ads/worker/extensions/enabled", safeH2AdsWorkerRoute(async (req: Request, res: Response) => {
+    noStore(res);
+    const worker = await authenticateRequest(req, res);
+    if (!worker) return;
+    const enabled = (await listH2AdsGlobalExtensions()).filter(item => item.enabled).map(item => ({ id: item.id }));
+    res.status(200).json(enabled);
+  }));
+  app.get("/api/h2ads/worker/windows-extension-sync.mjs", (_req: Request, res: Response) => {
+    noStore(res);
+    res.download(path.resolve(process.cwd(), "workers", "windows", "h2ads-extension-sync.mjs"), "h2ads-extension-sync.mjs", error => {
+      if (error && !res.headersSent) res.status(404).json({ error: "Componente de extensoes indisponivel." });
+    });
+  });
+
   app.get("/api/h2ads/worker/windows-agent.ps1", (_req: Request, res: Response) => {
     noStore(res);
     const scriptPath = path.resolve(process.cwd(), "workers", "windows", "H2AdsWorker.ps1");
