@@ -239,8 +239,8 @@ export default function AdminOrderLoginQuickEnhancer() {
         try {
           const formatted = formatPhone(generatePhoneRaw());
           setReactInputValue(input, formatted);
-          await clickExistingSaveButton(input);
-          toast.success(`Telefone gerado e enviado para os dados de login: ${formatted}`);
+          // The native form's credential autosave receives this React input change.
+          toast.success(`Telefone gerado. Salvamento automático iniciado: ${formatted}`);
         } catch (error) {
           toast.error(error instanceof Error ? error.message : "Não foi possível gerar o telefone.");
         } finally {
