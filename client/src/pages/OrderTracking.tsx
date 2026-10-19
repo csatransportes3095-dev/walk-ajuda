@@ -1265,8 +1265,7 @@ export default function OrderTracking() {
                   <span className="relative inline-flex h-2.5 w-2.5 rounded-full bg-emerald-400" />
                 </span>
                 <div className="min-w-0">
-                  <p className="text-[11px] font-black uppercase tracking-[0.14em] text-emerald-300">Acompanhamento ao vivo</p>
-                  <p className="truncate text-[10px] text-white/35">{statusQuery.isFetching ? 'Sincronizando agora...' : 'Atualiza automaticamente a cada 5 segundos'}</p>
+                  <p className="text-sm font-black uppercase leading-tight tracking-[0.06em] text-emerald-300 drop-shadow-[0_0_10px_rgba(52,211,153,0.32)] sm:text-base">Acompanhamento ao vivo</p>
                 </div>
               </div>
               <button
@@ -1412,12 +1411,12 @@ export default function OrderTracking() {
                     {presentation.showTimeline && (
                       <details
                         key={String(registrationId) + ":" + String(selectedOrderIdx) + ":" + latestStatus}
-                        className="group mt-3 overflow-hidden rounded-xl border border-white/10 bg-white/[0.025]"
+                        className="group mt-3 overflow-hidden rounded-xl border border-cyan-400/75 bg-gradient-to-r from-cyan-500/20 via-sky-500/10 to-blue-500/20 shadow-[0_0_0_1px_rgba(34,211,238,0.30),0_0_18px_rgba(34,211,238,0.22)] transition-colors open:border-cyan-300/80"
                       >
-                        <summary className="flex cursor-pointer list-none items-center gap-2 px-3 py-3 text-sm font-semibold text-white/90 hover:bg-white/5 focus-visible:outline focus-visible:outline-2 focus-visible:outline-cyan-400 [&::-webkit-details-marker]:hidden">
+                        <summary className="flex cursor-pointer list-none items-center gap-2 px-4 py-3.5 text-sm font-extrabold text-cyan-100 motion-safe:animate-[pulse_2.4s_ease-in-out_infinite] hover:bg-cyan-400/10 focus-visible:outline focus-visible:outline-2 focus-visible:outline-cyan-300 [&::-webkit-details-marker]:hidden sm:text-base">
                           <span className="min-w-0 flex-1">Ver todas as etapas</span>
-                          <span className="whitespace-nowrap text-xs font-normal text-white/45">{presentation.visibleKeys.length} etapas</span>
-                          <ChevronRight className="h-4 w-4 flex-shrink-0 text-cyan-300 transition-transform group-open:rotate-90" />
+                          <span className="whitespace-nowrap rounded-full border border-cyan-300/40 bg-cyan-400/10 px-2.5 py-1 text-xs font-bold text-cyan-200">{presentation.visibleKeys.length} etapas</span>
+                          <ChevronRight className="h-5 w-5 flex-shrink-0 text-cyan-200 transition-transform duration-300 group-open:rotate-90" />
                         </summary>
                         <div className="divide-y divide-white/[0.07] border-t border-white/10 px-3 py-1">
                           {progressSteps.filter((step: any) => presentation.visibleKeys.includes(step.key)).map((step: any) => {
