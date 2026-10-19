@@ -1411,12 +1411,17 @@ export default function OrderTracking() {
                     {presentation.showTimeline && (
                       <details
                         key={String(registrationId) + ":" + String(selectedOrderIdx) + ":" + latestStatus}
-                        className="group mt-3 overflow-hidden rounded-xl border border-cyan-400/75 bg-gradient-to-r from-cyan-500/20 via-sky-500/10 to-blue-500/20 shadow-[0_0_0_1px_rgba(34,211,238,0.30),0_0_18px_rgba(34,211,238,0.22)] transition-colors open:border-cyan-300/80"
+                        className="group relative mt-3 overflow-hidden rounded-2xl border-2 border-lime-300 bg-[#0d1526] shadow-[0_0_0_2px_rgba(163,230,53,0.38),0_0_26px_rgba(132,204,22,0.52)]"
                       >
-                        <summary className="flex cursor-pointer list-none items-center gap-2 px-4 py-3.5 text-sm font-extrabold text-cyan-100 motion-safe:animate-[pulse_2.4s_ease-in-out_infinite] hover:bg-cyan-400/10 focus-visible:outline focus-visible:outline-2 focus-visible:outline-cyan-300 [&::-webkit-details-marker]:hidden sm:text-base">
-                          <span className="min-w-0 flex-1">Ver todas as etapas</span>
-                          <span className="whitespace-nowrap rounded-full border border-cyan-300/40 bg-cyan-400/10 px-2.5 py-1 text-xs font-bold text-cyan-200">{presentation.visibleKeys.length} etapas</span>
-                          <ChevronRight className="h-5 w-5 flex-shrink-0 text-cyan-200 transition-transform duration-300 group-open:rotate-90" />
+                        <summary
+                          className="relative flex min-h-[72px] cursor-pointer list-none items-center gap-2.5 bg-lime-400 px-4 py-4 text-[18px] font-black tracking-[0.01em] text-slate-950 hover:brightness-110 focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-[-4px] focus-visible:outline-slate-950 [&::-webkit-details-marker]:hidden sm:text-[20px]"
+                          style={{ backgroundImage: "linear-gradient(100deg, #bef264 0%, #a3e635 48%, #22c55e 100%)" }}
+                        >
+                          {/* Animate the border sheen only: never fade the text or green background. */}
+                          <span aria-hidden="true" className="pointer-events-none absolute inset-0 ring-2 ring-inset ring-white/45 motion-safe:animate-[pulse_2.8s_ease-in-out_infinite]" />
+                          <span className="relative z-10 min-w-0 flex-1 leading-tight text-slate-950">Ver todas as etapas</span>
+                          <span className="relative z-10 whitespace-nowrap rounded-full border border-slate-900/20 bg-slate-900/15 px-3 py-1.5 text-[14px] font-extrabold leading-none text-slate-950 sm:text-[15px]">{presentation.visibleKeys.length} {presentation.visibleKeys.length === 1 ? "etapa" : "etapas"}</span>
+                          <ChevronRight className="relative z-10 h-6 w-6 flex-shrink-0 text-slate-950 transition-transform duration-300 group-open:rotate-90" />
                         </summary>
                         <div className="divide-y divide-white/[0.07] border-t border-white/10 px-3 py-1">
                           {progressSteps.filter((step: any) => presentation.visibleKeys.includes(step.key)).map((step: any) => {
