@@ -1,0 +1,110 @@
+name: Tracking schedule top card
+on:
+  push:
+    branches: [feature/tracking-schedule-top-card-20261019]
+  pull_request:
+    branches: [recovery/organizar-salvos-2026-08-24]
+    paths:
+      - 'client/src/pages/OrderTracking.tsx'
+      - 'client/src/components/TrackingScheduleTopCard.tsx'
+      - 'client/src/styles/tracking-schedule-top-card.css'
+      - 'shared/trackingScheduleCard.ts'
+      - 'server/routers/schedule.ts'
+      - 'server/trackingScheduleTopCard.test.ts'
+      - 'scripts/*tracking-schedule-card*'
+      - '.github/workflows/tracking-schedule-card-validation.yml'
+permissions:
+  contents: read
+concurrency:
+  group: tracking-schedule-card-${{ github.ref }}
+  cancel-in-progress: true
+jobs:
+  integrate:
+    if: github.event_name == 'push' && github.ref == 'refs/heads/feature/tracking-schedule-top-card-20261019'
+    runs-on: ubuntu-latest
+    timeout-minutes: 3
+    permissions:
+      contents: write
+    outputs:
+      sha: ${{ steps.commit.outputs.sha }}
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          ref: ${{ github.sha }}
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+      - name: Integrate only the tracking page and existing read endpoint
+        id: commit
+        run: |
+          set -euo pipefail
+          node scripts/integrate-tracking-schedule-card.mjs
+          git diff --check
+          if ! git diff --quiet; then
+            test "$(git diff --name-only | wc -l)" -le 2
+            git diff --name-only | grep -Ev '^(client/src/pages/OrderTracking.tsx|server/routers/schedule.ts)$' && exit 1 || true
+            git add client/src/pages/OrderTracking.tsx server/routers/schedule.ts
+            git -c user.name='github-actions[bot]' -c user.email='41898282+github-actions[bot]@users.noreply.github.com' commit -m 'feat(tracking): wire verified schedule shortcut into authenticated order page'
+            git push origin HEAD:refs/heads/feature/tracking-schedule-top-card-20261019
+          fi
+          echo "sha=$(git rev-parse HEAD)" >> "$GITHUB_OUTPUT"
+  validate:
+    needs: integrate
+    if: always() && (needs.integrate.result == 'success' || needs.integrate.result == 'skipped')
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          ref: ${{ needs.integrate.outputs.sha || github.sha }}
+          persist-credentials: false
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+      - name: Install locked application dependencies
+        run: |
+          npm install -g pnpm@10.4.1
+          pnpm install --frozen-lockfile
+          mkdir -p /tmp/tracking-schedule-evidence
+      - name: Verify source integration is already committed
+        run: |
+          node scripts/integrate-tracking-schedule-card.mjs
+          git diff --exit-code -- client/src/pages/OrderTracking.tsx server/routers/schedule.ts
+      - name: Card and existing scheduling regression tests
+        run: |
+          set -o pipefail
+          pnpm exec vitest run server/trackingScheduleTopCard.test.ts server/analysisSchedulePriority.test.ts server/scheduleOrderLifecycle.test.ts server/scheduleAppointmentResolution.test.ts server/autoScheduleIsolation.test.ts server/autoScheduleActivationWiring.test.ts server/autoScheduleLegacyProduct.test.ts server/postOrderScheduleFlow.test.ts 2>&1 | tee /tmp/tracking-schedule-evidence/tests-before-render.txt
+      - name: Apply exact Render source preparation
+        run: |
+          node --input-type=module <<'JS'
+          import fs from 'node:fs';
+          import {execFileSync} from 'node:child_process';
+          const scripts=[...fs.readFileSync('Dockerfile','utf8').matchAll(/&& node (scripts\/[^\s]+)/g)].map(match=>match[1]);
+          if(!scripts.length)throw new Error('No Render preparation scripts found');
+          for(const script of scripts){
+            if(!/^scripts\/[A-Za-z0-9._/-]+\.mjs$/.test(script))throw new Error('Invalid script path');
+            execFileSync(process.execPath,[script],{stdio:'inherit'});
+          }
+          JS
+      - name: Recheck regressions after Render preparation
+        run: |
+          set -o pipefail
+          pnpm exec vitest run server/trackingScheduleTopCard.test.ts server/analysisSchedulePriority.test.ts server/scheduleOrderLifecycle.test.ts server/scheduleAppointmentResolution.test.ts server/autoScheduleIsolation.test.ts server/autoScheduleActivationWiring.test.ts server/autoScheduleLegacyProduct.test.ts server/postOrderScheduleFlow.test.ts 2>&1 | tee /tmp/tracking-schedule-evidence/tests-after-render.txt
+      - name: Production build
+        run: |
+          set -o pipefail
+          pnpm build 2>&1 | tee /tmp/tracking-schedule-evidence/build.txt
+      - name: Install isolated browser tooling, not application dependencies
+        run: |
+          npm install --prefix /tmp/h2-card-browser --no-package-lock playwright@1.56.1
+          /tmp/h2-card-browser/node_modules/.bin/playwright install --with-deps chromium
+      - name: Test real rendering at mobile and desktop widths
+        env:
+          H2_PLAYWRIGHT_MODULE: /tmp/h2-card-browser/node_modules/playwright/index.mjs
+        run: node scripts/check-tracking-schedule-card-browser.mjs
+      - uses: actions/upload-artifact@v4
+        if: always()
+        with:
+          name: tracking-schedule-card-evidence
+          path: /tmp/tracking-schedule-evidence
+          retention-days: 3

@@ -636,6 +636,7 @@ export const scheduleRouter = router({
         .filter(a => a.status !== "cancelled" && a.status !== "completed")
         .map(a => ({
           id: a.id,
+          registrationId: a.registrationId,
           token: a.token,
           subOrderIndex: a.subOrderIndex,
           serviceName: a.serviceName,
