@@ -131,6 +131,28 @@ export default function AdminStatusTypes() {
     onError: (e) => toast.error(e.message || "Não foi possível enviar a imagem."),
   });
 
+  const [visibilityStatus, setVisibilityStatus] = useState<StatusType | null>(null);
+  const [visibilityFlowId, setVisibilityFlowId] = useState<number>(0);
+  const [visibilityMode, setVisibilityMode] = useState<"normal"|"hide_selected"|"current_only">("normal");
+  const [hiddenVisibilityKeys, setHiddenVisibilityKeys] = useState<string[]>([]);
+  const [visibilityNext, setVisibilityNext] = useState(true);
+  const [visibilityProgress, setVisibilityProgress] = useState(true);
+  const defaultFlowId = Number((flowsQuery.data ?? []).find((f:any)=>f.isDefault===1)?.id ?? 0);
+  const effectiveVisibilityFlowId = visibilityFlowId || defaultFlowId;
+  const visibilityRulesQuery = trpc.statusVisibility.list.useQuery({flowId:effectiveVisibilityFlowId},{enabled:!!visibilityStatus&&effectiveVisibilityFlowId>0});
+  const visibilitySave = trpc.statusVisibility.save.useMutation({
+    onSuccess:()=>{toast.success("Visibilidade salva!");void utils.statusVisibility.list.invalidate();void utils.statusVisibility.forOrder.invalidate();},
+    onError:e=>toast.error(e.message),
+  });
+  const openVisibility = (status:StatusType) => {
+    setVisibilityStatus(status);setVisibilityFlowId(defaultFlowId);setVisibilityMode("normal");
+    setHiddenVisibilityKeys([]);setVisibilityNext(true);setVisibilityProgress(true);
+  };
+  const selectedVisibilityRule=visibilityRulesQuery.data?.find(r=>r.currentStatusKey===visibilityStatus?.key);
+  const visibilityCatalog=(statuses as StatusType[]).filter(st=>st.isActive===1&&st.key!==visibilityStatus?.key && (
+    effectiveVisibilityFlowId===defaultFlowId ? st.isGlobal===1 :
+    (flowsQuery.data??[]).find(f=>f.id===effectiveVisibilityFlowId)?.statusKeys.includes(st.key)
+  ));
   const [showCreate, setShowCreate] = useState(!!requestedFlowId);
   const [form, setForm] = useState<FormData>({ ...defaultForm, flowId: requestedFlowId, key: restoreKey });
   const [editingId, setEditingId] = useState<number | null>(null);
@@ -249,6 +271,25 @@ export default function AdminStatusTypes() {
       } />
       <div className="p-4 md:p-6">
       <div className="max-w-3xl mx-auto space-y-6">
+        {visibilityStatus && <section className="rounded-2xl border border-cyan-400/40 bg-[#101b2e] p-4 space-y-3">
+          <div className="flex items-center justify-between gap-3"><h2 className="font-bold">Visibilidade: {visibilityStatus.label}</h2><button type="button" onClick={()=>setVisibilityStatus(null)} aria-label="Fechar visibilidade"><X className="w-5 h-5"/></button></div>
+          <label className="block text-sm">Aplicar na sequência
+            <select className="mt-1 block w-full rounded-lg border border-white/20 bg-[#0d0d1a] p-2" value={effectiveVisibilityFlowId} onChange={e=>{setVisibilityFlowId(Number(e.target.value));setVisibilityMode("normal");setHiddenVisibilityKeys([]);}}>
+              {(flowsQuery.data??[]).filter(flow=>flow.isActive===1 && (flow.isDefault===1 || flow.statusKeys.includes(visibilityStatus.key))).map(flow=><option key={flow.id} value={flow.id}>{flow.name}</option>)}
+            </select>
+          </label>
+          {visibilityRulesQuery.isLoading ? <p className="text-sm text-white/60">Carregando regras...</p> : <button type="button" className="text-sm text-cyan-200 underline" onClick={()=>{const r=selectedVisibilityRule;setVisibilityMode(r?.mode??"normal");setHiddenVisibilityKeys(r?.hiddenStatusKeys??[]);setVisibilityNext(r?.showNextStep!==false);setVisibilityProgress(r?.showProgress!==false);}}>Carregar configuração salva nesta sequência</button>}
+          <div className="space-y-2">{(["normal","hide_selected","current_only"] as const).map(mode=><label key={mode} className="flex items-center gap-2 rounded-lg border border-white/10 p-2 text-sm"><input type="radio" checked={visibilityMode===mode} onChange={()=>setVisibilityMode(mode)}/>{mode==="normal"?"Exibir normalmente":mode==="hide_selected"?"Ocultar etapas selecionadas":"Mostrar somente status atual"}</label>)}</div>
+          {visibilityMode==="hide_selected" && <div className="space-y-2 rounded-lg border border-white/10 p-3">
+            <p className="text-sm font-semibold">Ocultar enquanto {visibilityStatus.label} estiver ativo:</p>
+            <div className="max-h-52 space-y-2 overflow-y-auto">{visibilityCatalog.map(st=><label key={st.key} className="flex items-center gap-2 text-sm"><input type="checkbox" checked={hiddenVisibilityKeys.includes(st.key)} onChange={e=>setHiddenVisibilityKeys(prev=>e.target.checked?[...prev,st.key]:prev.filter(v=>v!==st.key))}/>{st.label}</label>)}</div>
+            <label className="flex items-center gap-2 text-sm"><input type="checkbox" checked={visibilityNext} onChange={e=>setVisibilityNext(e.target.checked)}/>Mostrar próximo passo</label>
+            <label className="flex items-center gap-2 text-sm"><input type="checkbox" checked={visibilityProgress} onChange={e=>setVisibilityProgress(e.target.checked)}/>Mostrar barra de progresso</label>
+          </div>}
+          <p className="text-xs text-white/50">Isso altera somente a apresentação em /acompanhar. Nenhum status é apagado ou desativado.</p>
+          <Button disabled={visibilitySave.isPending||!effectiveVisibilityFlowId||visibilityRulesQuery.isLoading} className="w-full bg-emerald-600" onClick={()=>visibilitySave.mutate({flowId:effectiveVisibilityFlowId,currentStatusKey:visibilityStatus.key,mode:visibilityMode,hiddenStatusKeys:visibilityMode==="hide_selected"?hiddenVisibilityKeys:[],showNextStep:visibilityMode==="hide_selected"?visibilityNext:true,showProgress:visibilityMode==="hide_selected"?visibilityProgress:true})}>Salvar visibilidade</Button>
+        </section>}
+
         <div className="rounded-xl border border-cyan-400/20 bg-cyan-500/5 p-4 text-sm text-cyan-100/80">
           Global e personalizado agora tem participacao separada. Use <strong>Retirar do global</strong> para ocultar apenas do Padrao H2.
           Excluir ou desativar um cadastro em uso fica bloqueado para preservar outras sequencias e o historico.
@@ -558,6 +599,7 @@ export default function AdminStatusTypes() {
                       <button type="button" disabled={updateMutation.isPending} title="Altera somente a participacao no global; preserva todos os vinculos personalizados" onClick={() => {
                         if (confirm(isGlobalStatus(s) ? 'Retirar somente do global? As sequencias personalizadas continuam usando este status.' : 'Adicionar este status ao global?')) updateMutation.mutate({ id: s.id, isGlobal: isGlobalStatus(s) ? 0 : 1 });
                       }} className="rounded-lg border border-cyan-400/25 px-2 py-1 text-[10px] text-cyan-100 disabled:opacity-40">{isGlobalStatus(s) ? 'Retirar do global' : 'Adicionar ao global'}</button>
+                      <button type="button" title="Configurar visibilidade apenas para o cliente" onClick={()=>openVisibility(s)} className="rounded-lg border border-cyan-400/30 bg-cyan-500/10 px-2 py-1 text-xs font-bold text-cyan-200">Visibilidade</button>
                       {/* Ativar/Desativar */}
                       <button
                         title={s.isActive ? "Desativar cadastro inteiro (bloqueado quando em uso)" : "Ativar cadastro"}
