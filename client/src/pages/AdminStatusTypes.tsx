@@ -131,6 +131,17 @@ export default function AdminStatusTypes() {
     onError: (e) => toast.error(e.message || "Não foi possível enviar a imagem."),
   });
 
+  const visibilityQuery=trpc.statusVisibility.get.useQuery();
+  const visibilitySave=trpc.statusVisibility.save.useMutation({onSuccess:()=>{void visibilityQuery.refetch();toast.success("Visibilidade do cliente salva.");},onError:e=>toast.error(e.message)});
+  const [visibilityEdit,setVisibilityEdit]=useState<Record<number,{flowId:number;mode:"normal"|"selected"|"current_only";hiddenKeys:string[];showNext:boolean;showProgress:boolean}>>({});
+  function visibilityFor(status:StatusType){
+    const selected=visibilityEdit[status.id];if(selected)return selected;
+    const stored=(visibilityQuery.data??[]).find(r=>r.flowId===0&&r.triggerKey===status.key);
+    return {flowId:0,mode:stored?.mode??"normal",hiddenKeys:stored?.hiddenKeys??[],showNext:stored?.showNext??true,showProgress:stored?.showProgress??true};
+  }
+  function changeVisibility(status:StatusType,patch:Partial<ReturnType<typeof visibilityFor>>){
+    setVisibilityEdit(prev=>({...prev,[status.id]:{...visibilityFor(status),...patch}}));
+  }
   const [showCreate, setShowCreate] = useState(!!requestedFlowId);
   const [form, setForm] = useState<FormData>({ ...defaultForm, flowId: requestedFlowId, key: restoreKey });
   const [editingId, setEditingId] = useState<number | null>(null);
@@ -503,6 +514,24 @@ export default function AdminStatusTypes() {
                         </div>
                       </div>
                     </div>
+                    <section className="space-y-3 rounded-xl border border-cyan-400/25 bg-cyan-500/5 p-3">
+                      <p className="text-sm font-bold text-cyan-100">Visibilidade para o cliente — quando este status estiver ativo</p>
+                      <label className="block text-xs text-white/70">Modo de exibição
+                        <select className={`${inputCls} mt-1 w-full`} value={visibilityFor(s).mode} onChange={e=>changeVisibility(s,{mode:e.target.value as "normal"|"selected"|"current_only"})}>
+                          <option value="normal">Exibir normalmente</option><option value="selected">Ocultar status selecionados</option><option value="current_only">Mostrar somente status atual</option>
+                        </select>
+                      </label>
+                      {visibilityFor(s).mode==="selected"&&<div className="space-y-2">
+                        <p className="text-xs text-white/60">Etapas ocultas somente da tela do cliente</p>
+                        {(statuses as StatusType[]).filter(other=>other.isActive===1&&other.key!==s.key).map(other=><label key={other.id} className="flex items-center gap-2 text-xs text-white/80">
+                          <input type="checkbox" checked={visibilityFor(s).hiddenKeys.includes(other.key)} onChange={e=>changeVisibility(s,{hiddenKeys:e.target.checked?[...visibilityFor(s).hiddenKeys,other.key]:visibilityFor(s).hiddenKeys.filter(k=>k!==other.key)})}/>{other.label}
+                        </label>)}
+                        <label className="flex items-center gap-2 text-xs text-white/80"><input type="checkbox" checked={visibilityFor(s).showNext} onChange={e=>changeVisibility(s,{showNext:e.target.checked})}/>Mostrar próximo passo</label>
+                        <label className="flex items-center gap-2 text-xs text-white/80"><input type="checkbox" checked={visibilityFor(s).showProgress} onChange={e=>changeVisibility(s,{showProgress:e.target.checked})}/>Mostrar porcentagem</label>
+                      </div>}
+                      <Button type="button" disabled={visibilitySave.isPending} className="bg-cyan-700 hover:bg-cyan-600" onClick={()=>visibilitySave.mutate({triggerKey:s.key,...visibilityFor(s)})}>Salvar visibilidade</Button>
+                      <p className="text-[11px] text-white/50">Não altera histórico, ordem ou regras internas. Aplica-se ao padrão global.</p>
+                    </section>
                     <div className="rounded-xl border border-purple-500/20 bg-purple-500/5 p-3 text-xs text-white/45">
                       A sequência exibida ao cliente é configurada uma única vez em <b>Pedidos → Sequência do Cliente</b>.
                     </div>
