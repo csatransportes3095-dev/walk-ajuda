@@ -106,19 +106,7 @@ type Order = {
 const getOrderKey = (order: Order): string => `${order.id}_${order.subOrderIndex ?? 0}`;
 const getIdFromKey = (key: string): number => parseInt(key.split('_')[0], 10);
 
-function generateOrderLoginPassword(length = 10): string {
-  const chars = "ABCDEFGHJKLMNPQRSTUVWXYZabcdefghijkmnopqrstuvwxyz23456789";
-  let value = "";
-  const cryptoObj = typeof window !== "undefined" ? window.crypto : undefined;
-  if (cryptoObj?.getRandomValues) {
-    const bytes = new Uint32Array(length);
-    cryptoObj.getRandomValues(bytes);
-    for (let i = 0; i < length; i++) value += chars[bytes[i] % chars.length];
-    return value;
-  }
-  for (let i = 0; i < length; i++) value += chars[Math.floor(Math.random() * chars.length)];
-  return value;
-}
+const STANDARD_ORDER_LOGIN_PASSWORD = "fusca123";
 
 function buildH2EmailGeneratorUrl(order: any): string {
   const params = new URLSearchParams({ from: "pedido" });
@@ -4406,18 +4394,18 @@ export default function AdminOrders() {
                                                       className="inline-flex min-h-8 items-center gap-1 rounded-lg border border-lime-400/30 bg-lime-500/10 px-2.5 py-1.5 text-[11px] font-bold text-lime-200 hover:bg-lime-500/20 disabled:opacity-50"
                                                       title="Gerar e-mail H2 usando exclusivamente o código do cadastro principal"
                                                     >{generateOrderH2EmailMut.isPending ? 'Gerando...' : '⚡ Gerar H2'}</button>
-                                                    <button type="button" onClick={() => setField('loginPassword', generateOrderLoginPassword())} className="inline-flex min-h-8 items-center gap-1 rounded-lg border border-amber-400/30 bg-amber-500/10 px-2.5 py-1.5 text-[11px] font-bold text-amber-200 hover:bg-amber-500/20" title="Gerar senha segura e preencher o campo">🔐 Senha</button><button type="button" disabled={generateOrderH2EmailMut.isPending || saveCredentialsMut.isPending}
+                                                    <button type="button" onClick={() => setField('loginPassword', STANDARD_ORDER_LOGIN_PASSWORD)} className="inline-flex min-h-8 items-center gap-1 rounded-lg border border-amber-400/30 bg-amber-500/10 px-2.5 py-1.5 text-[11px] font-bold text-amber-200 hover:bg-amber-500/20" title="Gerar senha segura e preencher o campo">🔐 Senha</button><div className="order-login-generate-all-row w-full basis-full pt-2"><button type="button" disabled={generateOrderH2EmailMut.isPending || saveCredentialsMut.isPending}
  onClick={async()=>{try{
   if((fields.loginPhone||fields.loginEmail||fields.loginPassword)&&!window.confirm('Gerar novos dados de login e substituir os três campos?'))return;
   const generated=await generateOrderH2EmailMut.mutateAsync({registrationId:ar.registrationId});
   const raw=Array.from(crypto.getRandomValues(new Uint32Array(9))).map(n=>String(n%10)).join('');
   const ddd=['71','73','74','75','77','79','81','82','83','84','85','86','87','88','89','91','92','93','94','95','96','97','98','99'][raw.charCodeAt(0)%24];
   const phone='('+ddd+') 9'+raw.slice(0,4)+'-'+raw.slice(4,8);
-  const values={loginPhone:phone,loginEmail:generated.email,loginPassword:generateOrderLoginPassword()};
+  const values={loginPhone:phone,loginEmail:generated.email,loginPassword:STANDARD_ORDER_LOGIN_PASSWORD};
   await saveCredentialsNow(ar.registrationId,arKey,values);
   toast.success('Telefone, e-mail e senha gerados e salvos.');
  }catch(error:any){toast.error(error?.message||'Falha ao gerar tudo.');}}}
- className="inline-flex min-h-8 items-center gap-1 rounded-lg border border-violet-400/50 bg-violet-600/25 px-3 py-1.5 text-[11px] font-extrabold text-violet-100 disabled:opacity-40">⚡ Gerar Tudo</button>
+ className="order-login-generate-all-button flex w-full min-h-12 items-center justify-center rounded-xl border-2 border-violet-300 bg-violet-600 px-4 py-3 text-sm font-black tracking-wide text-white shadow-lg shadow-violet-500/30 transition hover:bg-violet-500 disabled:opacity-40">⚡ GERAR TUDO — TELEFONE + E-MAIL + SENHA</button></div>
                                                   </div>
                                                 </div>
                                                 <fieldset disabled={loginDataQuery.isPending || loginDataQuery.isError || saveLoginDataMut.isPending} className="order-login-fields-grid disabled:opacity-60">
@@ -4877,18 +4865,18 @@ export default function AdminOrders() {
                                                       className="inline-flex min-h-8 items-center gap-1 rounded-lg border border-lime-400/30 bg-lime-500/10 px-2.5 py-1.5 text-[11px] font-bold text-lime-200 hover:bg-lime-500/20 disabled:opacity-50"
                                                       title="Gerar e-mail H2 usando exclusivamente o código do cadastro principal"
                                                     >{generateOrderH2EmailMut.isPending ? 'Gerando...' : '⚡ Gerar H2'}</button>
-                                                                <button type="button" onClick={() => setField('loginPassword', generateOrderLoginPassword())} className="inline-flex min-h-8 items-center gap-1 rounded-lg border border-amber-400/30 bg-amber-500/10 px-2.5 py-1.5 text-[11px] font-bold text-amber-200 hover:bg-amber-500/20" title="Gerar senha segura e preencher o campo">🔐 Senha</button><button type="button" disabled={generateOrderH2EmailMut.isPending || saveCredentialsMut.isPending}
+                                                                <button type="button" onClick={() => setField('loginPassword', STANDARD_ORDER_LOGIN_PASSWORD)} className="inline-flex min-h-8 items-center gap-1 rounded-lg border border-amber-400/30 bg-amber-500/10 px-2.5 py-1.5 text-[11px] font-bold text-amber-200 hover:bg-amber-500/20" title="Gerar senha segura e preencher o campo">🔐 Senha</button><div className="order-login-generate-all-row w-full basis-full pt-2"><button type="button" disabled={generateOrderH2EmailMut.isPending || saveCredentialsMut.isPending}
  onClick={async()=>{try{
   if((fields.loginPhone||fields.loginEmail||fields.loginPassword)&&!window.confirm('Gerar novos dados de login e substituir os três campos?'))return;
   const generated=await generateOrderH2EmailMut.mutateAsync({registrationId:ar.registrationId});
   const raw=Array.from(crypto.getRandomValues(new Uint32Array(9))).map(n=>String(n%10)).join('');
   const ddd=['71','73','74','75','77','79','81','82','83','84','85','86','87','88','89','91','92','93','94','95','96','97','98','99'][raw.charCodeAt(0)%24];
   const phone='('+ddd+') 9'+raw.slice(0,4)+'-'+raw.slice(4,8);
-  const values={loginPhone:phone,loginEmail:generated.email,loginPassword:generateOrderLoginPassword()};
+  const values={loginPhone:phone,loginEmail:generated.email,loginPassword:STANDARD_ORDER_LOGIN_PASSWORD};
   await saveCredentialsNow(ar.registrationId,arKey,values);
   toast.success('Telefone, e-mail e senha gerados e salvos.');
  }catch(error:any){toast.error(error?.message||'Falha ao gerar tudo.');}}}
- className="inline-flex min-h-8 items-center gap-1 rounded-lg border border-violet-400/50 bg-violet-600/25 px-3 py-1.5 text-[11px] font-extrabold text-violet-100 disabled:opacity-40">⚡ Gerar Tudo</button>
+ className="order-login-generate-all-button flex w-full min-h-12 items-center justify-center rounded-xl border-2 border-violet-300 bg-violet-600 px-4 py-3 text-sm font-black tracking-wide text-white shadow-lg shadow-violet-500/30 transition hover:bg-violet-500 disabled:opacity-40">⚡ GERAR TUDO — TELEFONE + E-MAIL + SENHA</button></div>
                                                               </div>
                                                             </div>
                                                             <fieldset disabled={loginDataQuery.isPending || loginDataQuery.isError || saveLoginDataMut.isPending} className="order-login-fields-grid disabled:opacity-60">
@@ -6844,18 +6832,18 @@ export default function AdminOrders() {
                                                       className="inline-flex min-h-8 items-center gap-1 rounded-lg border border-lime-400/30 bg-lime-500/10 px-2.5 py-1.5 text-[11px] font-bold text-lime-200 hover:bg-lime-500/20 disabled:opacity-50"
                                                       title="Gerar e-mail H2 usando exclusivamente o código do cadastro principal"
                                                     >{generateOrderH2EmailMut.isPending ? 'Gerando...' : '⚡ Gerar H2'}</button>
-                                <button type="button" onClick={() => setField('loginPassword', generateOrderLoginPassword())} className="inline-flex min-h-8 items-center gap-1 rounded-lg border border-amber-400/30 bg-amber-500/10 px-2.5 py-1.5 text-[11px] font-bold text-amber-200 hover:bg-amber-500/20" title="Gerar senha segura e preencher o campo">🔐 Senha</button><button type="button" disabled={generateOrderH2EmailMut.isPending || saveCredentialsMut.isPending}
+                                <button type="button" onClick={() => setField('loginPassword', STANDARD_ORDER_LOGIN_PASSWORD)} className="inline-flex min-h-8 items-center gap-1 rounded-lg border border-amber-400/30 bg-amber-500/10 px-2.5 py-1.5 text-[11px] font-bold text-amber-200 hover:bg-amber-500/20" title="Gerar senha segura e preencher o campo">🔐 Senha</button><div className="order-login-generate-all-row w-full basis-full pt-2"><button type="button" disabled={generateOrderH2EmailMut.isPending || saveCredentialsMut.isPending}
  onClick={async()=>{try{
   if((fields.loginPhone||fields.loginEmail||fields.loginPassword)&&!window.confirm('Gerar novos dados de login e substituir os três campos?'))return;
   const generated=await generateOrderH2EmailMut.mutateAsync({registrationId:order.id});
   const raw=Array.from(crypto.getRandomValues(new Uint32Array(9))).map(n=>String(n%10)).join('');
   const ddd=['71','73','74','75','77','79','81','82','83','84','85','86','87','88','89','91','92','93','94','95','96','97','98','99'][raw.charCodeAt(0)%24];
   const phone='('+ddd+') 9'+raw.slice(0,4)+'-'+raw.slice(4,8);
-  const values={loginPhone:phone,loginEmail:generated.email,loginPassword:generateOrderLoginPassword()};
+  const values={loginPhone:phone,loginEmail:generated.email,loginPassword:STANDARD_ORDER_LOGIN_PASSWORD};
   await saveCredentialsNow(order.id,key,values);
   toast.success('Telefone, e-mail e senha gerados e salvos.');
  }catch(error:any){toast.error(error?.message||'Falha ao gerar tudo.');}}}
- className="inline-flex min-h-8 items-center gap-1 rounded-lg border border-violet-400/50 bg-violet-600/25 px-3 py-1.5 text-[11px] font-extrabold text-violet-100 disabled:opacity-40">⚡ Gerar Tudo</button>
+ className="order-login-generate-all-button flex w-full min-h-12 items-center justify-center rounded-xl border-2 border-violet-300 bg-violet-600 px-4 py-3 text-sm font-black tracking-wide text-white shadow-lg shadow-violet-500/30 transition hover:bg-violet-500 disabled:opacity-40">⚡ GERAR TUDO — TELEFONE + E-MAIL + SENHA</button></div>
                               </div>
                             </div>
                             <fieldset disabled={loginDataQuery.isPending || loginDataQuery.isError || saveLoginDataMut.isPending} className="order-login-fields-grid disabled:opacity-60">

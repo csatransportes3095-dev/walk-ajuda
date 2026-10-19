@@ -26,3 +26,7 @@
   .order-login-generator-actions { width:100%; display:grid !important; grid-template-columns:repeat(3,minmax(0,1fr)); }
   .order-login-generator-actions > button { justify-content:center; min-width:0; }
 }
+
+/* Full-width one-click generator, explicitly visible in desktop and mobile. */
+.order-login-generator-actions .order-login-generate-all-row { width:100%; flex:1 0 100%; display:block; grid-column:1/-1; }
+.order-login-generator-actions .order-login-generate-all-button { display:flex !important; visibility:visible !important; width:100%; min-height:48px; white-space:normal; }
