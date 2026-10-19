@@ -1,5 +1,6 @@
 import { isGlobalStatus } from "@shared/orderStatusScope";
 import { useEffect, useRef, useState } from "react";
+import { createPortal } from "react-dom";
 import { trpc } from "@/lib/trpc";
 import { useAdminAuth } from "@/hooks/useAdminAuth";
 import { Button } from "@/components/ui/button";
@@ -139,6 +140,7 @@ export default function AdminStatusTypes() {
   const [visibilityNext, setVisibilityNext] = useState(true);
   const [visibilityProgress, setVisibilityProgress] = useState(true);
   const loadedVisibilityContext = useRef<string | null>(null);
+  const visibilityDialogRef = useRef<HTMLElement | null>(null);
   const defaultFlowId = Number((flowsQuery.data ?? []).find(f => f.isDefault === 1)?.id ?? 0);
   const visibilityFlowOptions = (flowsQuery.data ?? []).filter(flow =>
     flow.isActive === 1 && !!visibilityStatus &&
@@ -182,6 +184,24 @@ export default function AdminStatusTypes() {
     setVisibilityNext(true);
     setVisibilityProgress(true);
   };
+  // Keep the editor above the clicked status card, regardless of page scroll.
+  // Focus the dialog, lock background scrolling and restore both on close.
+  useEffect(() => {
+    if (!visibilityStatus) return;
+    const originalOverflow = document.body.style.overflow;
+    const previousFocus = document.activeElement instanceof HTMLElement ? document.activeElement : null;
+    document.body.style.overflow = "hidden";
+    visibilityDialogRef.current?.focus();
+    const onKeyDown = (event: KeyboardEvent) => {
+      if (event.key === "Escape") setVisibilityStatus(null);
+    };
+    document.addEventListener("keydown", onKeyDown);
+    return () => {
+      document.removeEventListener("keydown", onKeyDown);
+      document.body.style.overflow = originalOverflow;
+      previousFocus?.focus();
+    };
+  }, [visibilityStatus]);
   const visibilityCatalog = (statuses as StatusType[]).filter(status =>
     status.isActive === 1 && status.key !== visibilityStatus?.key &&
     (effectiveVisibilityFlowId === defaultFlowId
@@ -306,8 +326,10 @@ export default function AdminStatusTypes() {
       } />
       <div className="p-4 md:p-6">
       <div className="max-w-3xl mx-auto space-y-6">
-        {visibilityStatus && <section className="rounded-2xl border border-cyan-400/40 bg-[#101b2e] p-4 space-y-3">
-          <div className="flex items-center justify-between gap-3"><h2 className="font-bold">Visibilidade: {visibilityStatus.label}</h2><button type="button" onClick={()=>setVisibilityStatus(null)} aria-label="Fechar visibilidade"><X className="w-5 h-5"/></button></div>
+        {visibilityStatus && createPortal(
+          <div className="fixed inset-0 z-[9999] flex items-center justify-center bg-black/80 p-3 backdrop-blur-sm sm:p-6" onMouseDown={event => { if (event.target === event.currentTarget) setVisibilityStatus(null); }}>
+            <section ref={visibilityDialogRef} role="dialog" aria-modal="true" aria-labelledby="visibility-dialog-heading" tabIndex={-1} className="w-full max-w-xl max-h-[calc(100dvh-2rem)] overflow-y-auto rounded-2xl border border-cyan-400/40 bg-[#101b2e] p-4 space-y-3 shadow-2xl outline-none sm:p-6">
+          <div className="flex items-center justify-between gap-3"><h2 id="visibility-dialog-heading" className="font-bold text-base">Visibilidade: {visibilityStatus.label}</h2><button type="button" onClick={()=>setVisibilityStatus(null)} aria-label="Fechar visibilidade" className="rounded-lg border border-white/20 p-2 text-white hover:bg-white/10"><X className="w-5 h-5"/></button></div>
           <label className="block text-sm">Aplicar na sequência
             <select className="mt-1 block w-full rounded-lg border border-white/20 bg-[#0d0d1a] p-2" value={effectiveVisibilityFlowId} onChange={e=>{loadedVisibilityContext.current=null;setVisibilityFlowId(Number(e.target.value));setVisibilityMode("normal");setHiddenVisibilityKeys([]);setVisibilityNext(true);setVisibilityProgress(true);}}>
               {visibilityFlowOptions.map(flow=><option key={flow.id} value={flow.id}>{flow.name}</option>)}
@@ -323,7 +345,10 @@ export default function AdminStatusTypes() {
           </div>}
           <p className="text-xs text-white/50">Isso altera somente a apresentação em /acompanhar. Nenhum status é apagado ou desativado.</p>
           <Button disabled={visibilitySave.isPending||!effectiveVisibilityFlowId||!visibilityRulesQuery.isSuccess||loadedVisibilityContext.current !== `${visibilityStatus.key}:${effectiveVisibilityFlowId}`} className="w-full bg-emerald-600" onClick={()=>visibilitySave.mutate({flowId:effectiveVisibilityFlowId,currentStatusKey:visibilityStatus.key,mode:visibilityMode,hiddenStatusKeys:visibilityMode==="hide_selected"?hiddenVisibilityKeys:[],showNextStep:visibilityMode==="hide_selected"?visibilityNext:true,showProgress:visibilityMode==="hide_selected"?visibilityProgress:true})}>Salvar visibilidade</Button>
-        </section>}
+            </section>
+          </div>,
+          document.body
+        )}
 
         <div className="rounded-xl border border-cyan-400/20 bg-cyan-500/5 p-4 text-sm text-cyan-100/80">
           Global e personalizado agora tem participacao separada. Use <strong>Retirar do global</strong> para ocultar apenas do Padrao H2.
