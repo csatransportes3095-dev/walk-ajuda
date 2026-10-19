@@ -6794,6 +6794,31 @@ export const appRouter = router({
   }),
 
   // Sequências de status por produto
+  statusVisibility: router({
+    get: publicProcedure.query(async () => {
+      const raw = await getSetting("order_status_visibility_rules_v1");
+      try { return JSON.parse(raw || "[]") as Array<{flowId:number;triggerKey:string;mode:"normal"|"selected"|"current_only";hiddenKeys:string[];showNext:boolean;showProgress:boolean}>; }
+      catch { return []; }
+    }),
+    save: adminProcedure.input(z.object({
+      flowId:z.number().int().min(0),triggerKey:z.string().min(1).max(64),
+      mode:z.enum(["normal","selected","current_only"]),
+      hiddenKeys:z.array(z.string().min(1).max(64)).max(64),
+      showNext:z.boolean(),showProgress:z.boolean(),
+    })).mutation(async ({input})=>{
+      const statuses=await listOrderStatusTypes();
+      const active=new Set(statuses.filter((s:any)=>s.isActive===1).map((s:any)=>s.key));
+      if(!active.has(input.triggerKey)||input.hiddenKeys.some(k=>!active.has(k)))
+        throw new TRPCError({code:"BAD_REQUEST",message:"Revise os status selecionados."});
+      const raw=await getSetting("order_status_visibility_rules_v1");
+      let rules:any[]=[];
+      try {const parsed=JSON.parse(raw||"[]");if(Array.isArray(parsed))rules=parsed;}catch{}
+      const filtered=rules.filter(r=>!(r.flowId===input.flowId&&r.triggerKey===input.triggerKey));
+      filtered.push({...input,hiddenKeys:input.hiddenKeys.filter(k=>k!==input.triggerKey)});
+      await upsertSetting("order_status_visibility_rules_v1",JSON.stringify(filtered));
+      return {success:true};
+    }),
+  }),
   statusFlows: router({
     list: adminProcedure.query(async () => {
       const { listOrderStatusFlowsDetailed } = await import('./db');
