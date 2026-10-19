@@ -1414,14 +1414,18 @@ export default function OrderTracking() {
                         className="group relative mt-3 overflow-hidden rounded-2xl border-2 border-lime-300 bg-[#0d1526] shadow-[0_0_0_2px_rgba(163,230,53,0.38),0_0_26px_rgba(132,204,22,0.52)]"
                       >
                         <summary
-                          className="relative flex min-h-[72px] cursor-pointer list-none items-center gap-2.5 bg-lime-400 px-4 py-4 text-[18px] font-black tracking-[0.01em] text-slate-950 hover:brightness-110 focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-[-4px] focus-visible:outline-slate-950 [&::-webkit-details-marker]:hidden sm:text-[20px]"
+                          className="relative flex min-h-[76px] cursor-pointer list-none items-center gap-3 bg-lime-400 px-5 py-4 text-slate-950 hover:brightness-110 focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-[-4px] focus-visible:outline-slate-950 [&::-webkit-details-marker]:hidden"
                           style={{ backgroundImage: "linear-gradient(100deg, #bef264 0%, #a3e635 48%, #22c55e 100%)" }}
                         >
                           {/* Animate the border sheen only: never fade the text or green background. */}
                           <span aria-hidden="true" className="pointer-events-none absolute inset-0 ring-2 ring-inset ring-white/45 motion-safe:animate-[pulse_2.8s_ease-in-out_infinite]" />
-                          <span className="relative z-10 min-w-0 flex-1 leading-tight text-slate-950">Ver todas as etapas</span>
-                          <span className="relative z-10 whitespace-nowrap rounded-full border border-slate-900/20 bg-slate-900/15 px-3 py-1.5 text-[14px] font-extrabold leading-none text-slate-950 sm:text-[15px]">{presentation.visibleKeys.length} {presentation.visibleKeys.length === 1 ? "etapa" : "etapas"}</span>
-                          <ChevronRight className="relative z-10 h-6 w-6 flex-shrink-0 text-slate-950 transition-transform duration-300 group-open:rotate-90" />
+                          <span className="relative z-10 min-w-0 flex-1 text-[17px] font-black uppercase tracking-[0.05em] leading-tight text-slate-950 sm:text-[19px]">
+                            VER TODAS AS ETAPAS
+                          </span>
+                          <span className="relative z-10 whitespace-nowrap rounded-full border border-slate-900/20 bg-slate-900/10 px-3.5 py-2 text-[13px] font-black uppercase tracking-[0.04em] leading-none text-slate-950 sm:text-[14px]">
+                            {presentation.visibleKeys.length} {presentation.visibleKeys.length === 1 ? "ETAPA" : "ETAPAS"}
+                          </span>
+                          <ChevronRight className="relative z-10 h-6 w-6 flex-shrink-0 text-slate-950 transition-transform duration-300 group-open:rotate-90" strokeWidth={3} />
                         </summary>
                         <div className="divide-y divide-white/[0.07] border-t border-white/10 px-3 py-1">
                           {progressSteps.filter((step: any) => presentation.visibleKeys.includes(step.key)).map((step: any) => {
