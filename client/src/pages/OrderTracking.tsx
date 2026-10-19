@@ -1411,36 +1411,52 @@ export default function OrderTracking() {
                     {presentation.showTimeline && (
                       <details
                         key={String(registrationId) + ":" + String(selectedOrderIdx) + ":" + latestStatus}
-                        className="group relative mt-3 overflow-hidden rounded-2xl border-2 border-lime-300 bg-[#0d1526] shadow-[0_0_0_2px_rgba(163,230,53,0.38),0_0_26px_rgba(132,204,22,0.52)]"
+                        className="group relative mt-3 overflow-hidden rounded-2xl border-2 border-lime-400 bg-[#071522] shadow-[0_0_0_1px_rgba(34,211,238,0.40),0_0_25px_rgba(34,211,238,0.22),0_0_30px_rgba(163,230,53,0.26)]"
                       >
                         <summary
-                          className="relative flex min-h-[76px] cursor-pointer list-none items-center gap-3 bg-lime-400 px-5 py-4 text-slate-950 hover:brightness-110 focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-[-4px] focus-visible:outline-slate-950 [&::-webkit-details-marker]:hidden"
-                          style={{ backgroundImage: "linear-gradient(100deg, #bef264 0%, #a3e635 48%, #22c55e 100%)" }}
+                          className="relative isolate flex min-h-[96px] cursor-pointer flex-col justify-center gap-3 overflow-hidden px-4 py-4 text-white transition-[filter] duration-300 hover:brightness-110 focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-[-4px] focus-visible:outline-cyan-300 [&::-webkit-details-marker]:hidden sm:min-h-[88px] sm:flex-row sm:items-center sm:gap-4 sm:px-5"
+                          style={{ backgroundImage: "linear-gradient(115deg, #051523 0%, #0b2935 52%, #0b2b1d 100%)" }}
                         >
-                          {/* Animate the border sheen only: never fade the text or green background. */}
-                          <span aria-hidden="true" className="pointer-events-none absolute inset-0 ring-2 ring-inset ring-white/45 motion-safe:animate-[pulse_2.8s_ease-in-out_infinite]" />
+                          {/* Cyberpunk HUD: light scan grid, neon rails, and a subtle indicator pulse. */}
                           <span
-                            className="relative z-10 min-w-0 flex-1 text-[18px] font-black uppercase tracking-[0.025em] leading-[1.1] text-slate-950 sm:text-[21px]"
-                            style={{
-                              fontFamily: 'Impact, "Arial Black", "Roboto Black", sans-serif',
-                              fontWeight: 900,
-                              WebkitTextStroke: "1px #020617",
-                              textShadow: "0.4px 0 #020617, -0.4px 0 #020617",
-                            }}
-                          >
-                            VER TODAS AS ETAPAS
-                          </span>
-                          <span
-                            className="relative z-10 whitespace-nowrap rounded-full border border-slate-900/20 bg-slate-900/10 px-3.5 py-2 text-[14px] font-black uppercase tracking-[0.025em] leading-none text-slate-950 sm:text-[15px]"
-                            style={{
-                              fontFamily: 'Impact, "Arial Black", "Roboto Black", sans-serif',
-                              fontWeight: 900,
-                              WebkitTextStroke: "0.55px #020617",
-                            }}
-                          >
-                            {presentation.visibleKeys.length} {presentation.visibleKeys.length === 1 ? "ETAPA" : "ETAPAS"}
-                          </span>
-                          <ChevronRight className="relative z-10 h-6 w-6 flex-shrink-0 text-slate-950 transition-transform duration-300 group-open:rotate-90" strokeWidth={3} />
+                            aria-hidden="true"
+                            className="pointer-events-none absolute inset-0 opacity-75"
+                            style={{ backgroundImage: "repeating-linear-gradient(125deg, transparent 0px, transparent 29px, rgba(125,211,252,0.055) 30px, transparent 31px)" }}
+                          />
+                          <span aria-hidden="true" className="pointer-events-none absolute inset-x-0 top-0 h-[2px] bg-gradient-to-r from-lime-300 via-cyan-300 to-lime-300 shadow-[0_0_14px_rgba(34,211,238,0.75)]" />
+                          <span aria-hidden="true" className="pointer-events-none absolute inset-x-0 bottom-0 h-[2px] bg-gradient-to-r from-cyan-300 via-lime-300 to-cyan-300 shadow-[0_0_12px_rgba(163,230,53,0.65)]" />
+                          <div className="relative z-10 flex w-full min-w-0 items-center gap-3 sm:flex-1">
+                            <span className="relative flex h-11 w-11 shrink-0 items-center justify-center rounded-xl border border-cyan-300/70 bg-cyan-400/10 text-lime-300 shadow-[0_0_16px_rgba(34,211,238,0.32)]">
+                              <Zap className="h-6 w-6" fill="currentColor" strokeWidth={2.25} />
+                              <span aria-hidden="true" className="absolute -right-1 -top-1 h-2.5 w-2.5 rounded-full border border-[#051523] bg-lime-300 shadow-[0_0_10px_rgba(163,230,53,0.95)] motion-safe:animate-pulse" />
+                            </span>
+                            <div className="min-w-0 flex-1">
+                              <span className="block text-[9px] font-bold uppercase tracking-[0.22em] text-cyan-200/80 sm:text-[10px]">
+                                PAINEL DE ETAPAS
+                              </span>
+                              <span
+                                className="block text-[16px] font-extrabold uppercase leading-snug tracking-[0.015em] text-white sm:text-[19px]"
+                                style={{
+                                  fontFamily: '"Orbitron", "Poppins", sans-serif',
+                                  fontWeight: 800,
+                                  textShadow: "0 0 10px rgba(34,211,238,0.30)",
+                                }}
+                              >
+                                VER TODAS AS ETAPAS
+                              </span>
+                            </div>
+                          </div>
+                          <div className="relative z-10 flex w-full items-center justify-between gap-3 pl-14 sm:w-auto sm:shrink-0 sm:pl-0">
+                            <span
+                              className="whitespace-nowrap rounded-lg border border-cyan-300/75 bg-cyan-400/15 px-3 py-2 text-[12px] font-extrabold uppercase tracking-[0.025em] text-cyan-50 shadow-[0_0_15px_rgba(34,211,238,0.22)] sm:text-[13px]"
+                              style={{ fontFamily: '"Orbitron", "Poppins", sans-serif', fontWeight: 800 }}
+                            >
+                              {presentation.visibleKeys.length} {presentation.visibleKeys.length === 1 ? "ETAPA" : "ETAPAS"}
+                            </span>
+                            <span className="flex h-9 w-9 shrink-0 items-center justify-center rounded-lg border border-lime-300/70 bg-lime-400/15 text-lime-200 shadow-[0_0_12px_rgba(163,230,53,0.25)]">
+                              <ChevronRight className="h-5 w-5 transition-transform duration-300 group-open:rotate-90" strokeWidth={2.5} />
+                            </span>
+                          </div>
                         </summary>
                         <div className="divide-y divide-white/[0.07] border-t border-white/10 px-3 py-1">
                           {progressSteps.filter((step: any) => presentation.visibleKeys.includes(step.key)).map((step: any) => {
