@@ -165,7 +165,7 @@ describe.skipIf(!isolatedUrl)('manual authorization: real isolated MySQL + real 
       expect(await caller().add(input)).toMatchObject({created:true,status:'active'});
       expect(await rows('siteAccessEntries')).toHaveLength(1);
     } finally {
-      await pool.query("ALTER TABLE siteAccessEntries ALTER status SET DEFAULT 'active', ALTER sessionVersion SET DEFAULT 1, ALTER createdAt SET DEFAULT CURRENT_TIMESTAMP, ALTER updatedAt SET DEFAULT CURRENT_TIMESTAMP");
+      await pool.query("ALTER TABLE siteAccessEntries MODIFY status VARCHAR(16) NOT NULL DEFAULT 'active', MODIFY sessionVersion INT NOT NULL DEFAULT 1, MODIFY createdAt TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP, MODIFY updatedAt TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP");
     }
   });
 
