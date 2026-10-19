@@ -26,11 +26,25 @@ describe("agendamento automatico isolado", () => {
     expect(router).toContain("scheduleUrl: automaticScheduleUrl ?? null");
   });
 
-  it("impede duplicacao automatica e preserva reabertura manual", () => {
+  it("reutiliza agenda ativa no checkout e preserva regeneracao separada", () => {
     const service = read("server/autoSchedule.ts");
-    expect(service).toContain("const existing = await getAppointmentByOrder");
-    expect(service).toContain("if (existing)");
-    expect(service).toContain("Reabertura/cancelamento continuam exclusivamente sob controle do ADM");
+    const start = service.indexOf("export async function ensureAutomaticScheduleForOrder(");
+    const end = service.indexOf("export async function regenerateScheduleForOrder(", start);
+    expect(start).toBeGreaterThanOrEqual(0);
+    expect(end).toBeGreaterThan(start);
+    const checkout = service.slice(start, end);
+    // Check the actual guard, not a legacy comment that prohibited the now-approved
+    // automatic reopening on return to Em Analise (covered by analysisSchedulePriority).
+    expect(checkout).toContain("const existing = await getAppointmentByOrder(registrationId, subOrderIndex)");
+    expect(checkout).toContain('if (existing && (existing.status === "pending" || existing.status === "confirmed"))');
+    const reuse = checkout.slice(checkout.indexOf('if (existing && (existing.status === "pending"'), checkout.indexOf('if (existing && (existing.status === "completed"'));
+    expect(reuse).toContain("created: false");
+    expect(reuse).toContain("appointmentId: existing.id");
+    expect(reuse).toContain("token: existing.token");
+    expect(reuse).not.toContain("createAppointment(");
+    expect(service).toContain("export async function ensureActiveAutomaticScheduleForAnalysis(");
+    expect(service).toContain("forceNewOnReturn?: boolean");
+    expect(service).toContain("await completeOpenAppointmentsForOrder(registrationId, subOrderIndex, customerPhone, false)");
   });
 
   it("sincroniza pedido antigo somente em acesso autenticado", () => {
