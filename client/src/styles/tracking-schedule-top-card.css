@@ -1,0 +1,129 @@
+/* Only the tracking shortcut is affected; no global layout or font overrides. */
+.h2-schedule-top-card {
+  --h2-schedule-accent: #fb525e;
+  --h2-schedule-soft: #fecdd3;
+  --h2-schedule-button: #bc1730;
+  position: relative;
+  min-width: 0;
+  width: 100%;
+  box-sizing: border-box;
+  border: 2px solid var(--h2-schedule-accent);
+  border-radius: 20px;
+  padding: 18px;
+  color: #fff;
+  background: linear-gradient(135deg, #351322, #19111f);
+  box-shadow: 0 0 15px rgba(251, 82, 94, .18);
+  overflow-wrap: anywhere;
+}
+.h2-schedule-top-card[data-state="pending"][data-motion="on"] {
+  animation: h2-schedule-soft-pulse 2s ease-in-out infinite;
+}
+.h2-schedule-top-card[data-state="confirmed"] {
+  --h2-schedule-accent: #4ade80;
+  --h2-schedule-soft: #bbf7d0;
+  --h2-schedule-button: #126638;
+  background: linear-gradient(135deg, #103525, #101e20);
+  box-shadow: 0 0 15px rgba(74, 222, 128, .12);
+  animation: none;
+}
+.h2-schedule-top-card__heading {
+  display: flex;
+  align-items: flex-start;
+  gap: 12px;
+  min-width: 0;
+}
+.h2-schedule-top-card__icon {
+  display: flex;
+  flex: 0 0 44px;
+  width: 44px;
+  height: 48px;
+  align-items: center;
+  justify-content: center;
+  border: 1px solid var(--h2-schedule-accent);
+  border-radius: 13px;
+  background: rgba(0, 0, 0, .18);
+  color: var(--h2-schedule-accent);
+}
+.h2-schedule-top-card__copy { flex: 1; min-width: 0; }
+.h2-schedule-top-card .h2-schedule-top-card__eyebrow {
+  margin: 0 0 5px;
+  color: var(--h2-schedule-soft);
+  font-size: 12px;
+  font-weight: 700;
+  line-height: 1.45;
+}
+.h2-schedule-top-card .h2-schedule-top-card__title {
+  margin: 0;
+  color: #fff;
+  font-size: clamp(18px, 4.8vw, 24px);
+  font-weight: 800;
+  line-height: 1.25;
+  letter-spacing: .01em;
+  white-space: normal;
+  overflow-wrap: anywhere;
+}
+.h2-schedule-top-card .h2-schedule-top-card__description {
+  margin: 14px 0 0;
+  color: #f3f4f6;
+  font-size: 15px;
+  line-height: 1.6;
+}
+.h2-schedule-top-card .h2-schedule-top-card__description strong { color: var(--h2-schedule-soft); }
+.h2-schedule-top-card .h2-schedule-top-card__service {
+  margin: 7px 0 0;
+  color: var(--h2-schedule-soft);
+  font-size: 13px;
+  line-height: 1.5;
+  overflow-wrap: anywhere;
+}
+.h2-schedule-top-card .h2-schedule-top-card__action {
+  display: flex;
+  width: 100%;
+  min-width: 0;
+  min-height: 52px;
+  box-sizing: border-box;
+  align-items: center;
+  justify-content: center;
+  gap: 10px;
+  margin-top: 14px;
+  padding: 12px;
+  border: 1px solid var(--h2-schedule-accent);
+  border-radius: 12px;
+  background: var(--h2-schedule-button);
+  color: #fff;
+  font-size: 16px;
+  font-weight: 800;
+  line-height: 1.4;
+  text-align: center;
+  text-decoration: none;
+}
+.h2-schedule-top-card__action svg { flex-shrink: 0; }
+.h2-schedule-top-card__action span { min-width: 0; }
+.h2-schedule-top-card__action:focus-visible,
+.h2-schedule-top-card__motion:focus-visible { outline: 3px solid #fff; outline-offset: 4px; }
+.h2-schedule-top-card .h2-schedule-top-card__motion {
+  display: block;
+  min-height: 30px;
+  margin: 6px 0 -4px auto;
+  padding: 4px 2px;
+  border: 0;
+  background: transparent;
+  color: var(--h2-schedule-soft);
+  font-size: 12px;
+  line-height: 1.5;
+  text-decoration: underline;
+  cursor: pointer;
+}
+/* A slow glow, never flashing/hiding the text or changing layout. */
+@keyframes h2-schedule-soft-pulse {
+  0%, 100% { box-shadow: 0 0 8px rgba(251, 82, 94, .12); }
+  50% { box-shadow: 0 0 25px rgba(251, 82, 94, .40); }
+}
+@media (prefers-reduced-motion: reduce) {
+  .h2-schedule-top-card[data-state="pending"][data-motion="on"] { animation: none; }
+  .h2-schedule-top-card__motion { display: none !important; }
+}
+@media (max-width: 359px) {
+  .h2-schedule-top-card { padding: 14px; }
+  .h2-schedule-top-card__heading { gap: 9px; }
+}
