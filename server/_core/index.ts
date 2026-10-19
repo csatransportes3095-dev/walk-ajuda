@@ -1,3 +1,4 @@
+import { backfillCustomerTextNormalization } from "../customerTextNormalizationBackfill";
 import { isChassisAdminPath } from "../../shared/chassisRoute";
 // Force UTC timezone before any imports to ensure consistent date handling
 // This prevents Drizzle ORM from misinterpreting MySQL timestamps based on server locale
@@ -200,6 +201,12 @@ async function startServer() {
     await ensureCustomerIdentityInfrastructure();
   } catch (error) {
     console.error('[CustomerIdentity] infraestrutura não inicializada:', error);
+  }
+  try {
+    const outcome=await backfillCustomerTextNormalization();
+    if(outcome.normalized)console.info("[CustomerText] cadastros normalizados:",outcome.normalized);
+  } catch (error) {
+    console.warn("[CustomerText] normalização recuperável pendente, sem bloquear o site:",error);
   }
   try {
     await ensureZohoOAuthInfrastructure();

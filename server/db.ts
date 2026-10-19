@@ -1,3 +1,4 @@
+import { normalizeCustomerText } from "../shared/customerTextNormalization";
 import { TRPCError } from "@trpc/server";
 import { ensureStatusScopeSchema, withStatusScopeLock, archiveScopeDefinition, assertStatusCanBeRemoved, assertNotInitialStatus, scopeRows } from "./orderStatusScope";
 import { orderedFlowKeys } from "../shared/orderStatusScope";
@@ -1044,13 +1045,13 @@ export async function createCustomer(data: MainCustomerProfileInput): Promise<Cu
   const nextNum = await generateNextCustomerNumber(db);
   await db.insert(customers).values({
     customerNumber: nextNum,
-    name: data.name ? data.name.toUpperCase().trim() : data.name,
+    name: data.name ? normalizeCustomerText(data.name) : data.name,
     phone: required.phone,
     email: required.email,
-    city: data.city ? data.city.toUpperCase().trim() : null,
-    uf: data.uf ? data.uf.toUpperCase().trim() : null,
+    city: data.city ? normalizeCustomerText(data.city) : null,
+    uf: data.uf ? normalizeCustomerText(data.uf) : null,
     cpf: required.cpf,
-    referredBy: data.referredBy ? data.referredBy.toUpperCase().trim() : null,
+    referredBy: data.referredBy ? normalizeCustomerText(data.referredBy) : null,
     referredByPhone: data.referredByPhone ? normalizeMainCustomerPhone(data.referredByPhone) : null,
     profilePhotoUrl: required.photoUrl,
   });
@@ -1075,14 +1076,18 @@ export async function updateCustomer(id: number, data: { name?: string; phone?: 
   const db = await getDb();
   if (!db) return null;
   const updateSet: Record<string, unknown> = {};
-  if (data.name !== undefined) updateSet.name = data.name ? data.name.toUpperCase().trim() : data.name;
+  if (data.name !== undefined) updateSet.name = data.name ? normalizeCustomerText(data.name) : data.name;
   if (data.phone !== undefined) updateSet.phone = normalizeMainCustomerPhone(data.phone);
   if (data.email !== undefined) updateSet.email = data.email ? data.email.trim().toLowerCase() : data.email;
-  if (data.city !== undefined) updateSet.city = data.city ? data.city.toUpperCase().trim() : data.city;
-  if (data.uf !== undefined) updateSet.uf = data.uf ? data.uf.toUpperCase().trim() : data.uf;
+  if (data.city !== undefined) updateSet.city = data.city ? normalizeCustomerText(data.city) : data.city;
+  if (data.uf !== undefined) updateSet.uf = data.uf ? normalizeCustomerText(data.uf) : data.uf;
   if (data.cpf !== undefined) updateSet.cpf = data.cpf ? data.cpf.replace(/\D/g, '') : data.cpf;
-  if (data.referredBy !== undefined) updateSet.referredBy = data.referredBy ? data.referredBy.toUpperCase().trim() : data.referredBy;
+  if (data.referredBy !== undefined) updateSet.referredBy = data.referredBy ? normalizeCustomerText(data.referredBy) : data.referredBy;
   if (data.referredByPhone !== undefined) updateSet.referredByPhone = data.referredByPhone ? normalizeMainCustomerPhone(data.referredByPhone) : data.referredByPhone;
+  for (const key of ["street","addressNumber","neighborhood","addressComplement"] as const) {
+    const value = (data as any)[key];
+    if (value !== undefined) updateSet[key] = value ? normalizeCustomerText(String(value)) : value;
+  }
   if (data.profilePhotoUrl !== undefined) updateSet.profilePhotoUrl = data.profilePhotoUrl;
   if (data.customerNumber !== undefined) updateSet.customerNumber = data.customerNumber;
   if (data.adminNotes !== undefined) updateSet.adminNotes = data.adminNotes;

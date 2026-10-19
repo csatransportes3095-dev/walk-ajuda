@@ -1,3 +1,4 @@
+import { normalizeCustomerText } from "../../shared/customerTextNormalization";
 import { randomBytes } from "crypto";
 import bcrypt from "bcryptjs";
 import { TRPCError } from "@trpc/server";
@@ -315,8 +316,8 @@ export const customerUpdateRouter = router({
       }
 
       const customerNumber = await generateNextCustomerNumber(db);
-      const name = String(input.name || "").trim().replace(/\s+/g, " ") || "CADASTRO RECUPERADO";
-      const city = String(input.city || "").trim().replace(/\s+/g, " ");
+      const name = normalizeCustomerText(String(input.name || "")) || "CADASTRO RECUPERADO";
+      const city = normalizeCustomerText(String(input.city || ""));
       const profilePhotoUrl = String(input.profilePhotoUrl || "").trim();
 
       await db.execute(sql`
@@ -326,7 +327,7 @@ export const customerUpdateRouter = router({
         ) VALUES (
           ${customerNumber}, ${name.toUpperCase()}, ${phone}, ${email || null},
           ${city ? city.toUpperCase() : null}, ${uf || null}, ${cpf || null},
-          ${referredBy ? referredBy.toUpperCase() : null}, ${referredByPhone || null}, ${profilePhotoUrl || null}
+          ${referredBy ? normalizeCustomerText(referredBy) : null}, ${referredByPhone || null}, ${profilePhotoUrl || null}
         )
       `);
 
@@ -459,16 +460,16 @@ export const customerUpdateRouter = router({
       if (await customerUpdateAlreadyCompleted(db, customer)) throw alreadyUpdatedError();
       const selected = new Set([...missingFields(customer), "cep", "street", "addressNumber", "neighborhood", "city", "uf"]);
       await ensureCustomerIdentityInfrastructure(db);
-      const name = selected.has("name") ? String(input.name || "").trim().replace(/\s+/g, " ") : String(customer.name || "").trim();
+      const name = normalizeCustomerText(selected.has("name") ? String(input.name || "") : String(customer.name || ""));
       const phone = normalizeCustomerPhone(customer.phone);
       const email = selected.has("email") ? normalizeCustomerEmail(input.email || "") : normalizeCustomerEmail(customer.email);
       const cpf = selected.has("cpf") ? normalizeCustomerCpf(input.cpf || "") : normalizeCustomerCpf(customer.cpf);
       const cep = String(input.cep || customer.cep || "").replace(/\D/g, "").slice(0, 8);
-      const street = String(input.street || customer.street || "").trim().replace(/\s+/g, " ");
-      const addressNumber = String(input.addressNumber || customer.addressNumber || "").trim().replace(/\s+/g, " ");
-      const neighborhood = String(input.neighborhood || customer.neighborhood || "").trim().replace(/\s+/g, " ");
-      const addressComplement = String(input.addressComplement ?? customer.addressComplement ?? "").trim().replace(/\s+/g, " ");
-      const city = selected.has("city") ? String(input.city || "").trim().replace(/\s+/g, " ") : String(customer.city || "").trim();
+      const street = normalizeCustomerText(String(input.street || customer.street || ""));
+      const addressNumber = normalizeCustomerText(String(input.addressNumber || customer.addressNumber || ""));
+      const neighborhood = normalizeCustomerText(String(input.neighborhood || customer.neighborhood || ""));
+      const addressComplement = normalizeCustomerText(String(input.addressComplement ?? customer.addressComplement ?? ""));
+      const city = normalizeCustomerText(selected.has("city") ? String(input.city || "") : String(customer.city || ""));
       const uf = selected.has("uf") ? String(input.uf || "").trim().toUpperCase() : String(customer.uf || "").trim().toUpperCase();
       if (selected.has("name") && (name.length < 2 || isRecoveredCustomerName(name))) throw new TRPCError({ code: "BAD_REQUEST", message: "Informe seu nome completo, sem a indicação de cadastro recuperado." });
       if (selected.has("email") && !email) throw new TRPCError({ code: "BAD_REQUEST", message: "E-mail inválido." });
@@ -498,16 +499,16 @@ export const customerUpdateRouter = router({
       // O telefone não participa do UPDATE: continua sendo a identidade fixa do cliente.
       await db.execute(sql`
         UPDATE customers SET
-          name=${name},
+          name=${normalizeCustomerText(name)},
           email=${email},
           cpf=${cpf},
           cep=${cep},
-          street=${street},
-          addressNumber=${addressNumber},
-          neighborhood=${neighborhood},
+          street=${normalizeCustomerText(street)},
+          addressNumber=${normalizeCustomerText(addressNumber)},
+          neighborhood=${normalizeCustomerText(neighborhood)},
           addressComplement=${addressComplement || null},
-          city=${city},
-          uf=${uf},
+          city=${normalizeCustomerText(city)},
+          uf=${normalizeCustomerText(uf)},
           normalizedCpf=${cpf},
           normalizedEmail=${email},
           updatedAt=NOW()
