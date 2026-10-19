@@ -1373,8 +1373,6 @@ export default function OrderTracking() {
                     <div className="mt-3 h-2 overflow-hidden rounded-full bg-white/5">
                       <div className="h-full rounded-full bg-gradient-to-r from-emerald-400 via-cyan-400 to-blue-500 transition-all duration-700" style={{ width: `${progressPercent}%` }} />
                     </div>
-                  </div>
-
                   </div>}
                   <div className="space-y-3 p-4 sm:p-5">
                     <div className={`rounded-2xl border-2 p-4 ${latestCfg.bg} ${latestCfg.border}`}>
