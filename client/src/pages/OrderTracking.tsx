@@ -1,3 +1,5 @@
+import TrackingScheduleTopCard from "@/components/TrackingScheduleTopCard";
+import { selectTrackingSchedule } from "@shared/trackingScheduleCard";
 import { resolveStatusVisibility, getNextVisibleStatusKey } from "@shared/orderStatusVisibility";
 import { compactCurrentDescription } from "@shared/orderTrackingPresentation";
 import { globalActiveStatuses, unavailableFlowKeys } from "@shared/orderStatusScope";
@@ -491,16 +493,6 @@ export default function OrderTracking() {
   // Pegar o status mais recente para a timeline
   const latestStatus = history.length > 0 ? history[0].status : null;
   const latestCfg = latestStatus ? getStatusCfg(latestStatus) : null;
-  const latestStatusSemantic = String(latestCfg?.label || latestStatus || '')
-    .normalize('NFD')
-    .replace(/[\u0300-\u036f]/g, '')
-    .replace(/[_-]+/g, ' ')
-    .replace(/\s+/g, ' ')
-    .trim()
-    .toLowerCase();
-  const canShowScheduleForCurrentOrder =
-    latestStatusSemantic === 'em analise' ||
-    latestStatusSemantic === 'agendamento confirmado';
   const previousLiveStatusRef = React.useRef<string | null>(null);
   useEffect(() => {
     if (!latestStatus) return;
@@ -774,8 +766,15 @@ export default function OrderTracking() {
   // Agendamentos deste cliente (busca por telefone — chave confiável)
   const scheduleQuery = trpc.schedule.listForTrackingByPhone.useQuery(
     { phone: searchPhone, cpToken: !admMode && pwdToken.length >= 32 ? pwdToken : undefined },
-    { enabled: canAccess && !!searchPhone && searchPhone.length >= 10, refetchInterval: 30000 }
+    { enabled: canAccess && !!searchPhone && searchPhone.length >= 10, staleTime: 0, refetchInterval: 15000, refetchOnWindowFocus: true, refetchOnReconnect: true }
   );
+  // Appointment state, not a translated/renamed order status, controls the shortcut.
+  const currentTrackingSchedule = !scheduleQuery.isError
+    ? selectTrackingSchedule(scheduleQuery.data, registrationId)
+    : null;
+  useEffect(() => {
+    if (canAccess && searchPhone.length >= 10 && registrationId > 0) void scheduleQuery.refetch();
+  }, [canAccess, searchPhone, registrationId, latestStatus]);
   return (
     <div className="min-h-screen bg-[#0d0d1a] text-white">
       {/* ========== MODAL DE PROPAGANDA OBRIGATÓRIA ========== */}
@@ -1257,6 +1256,9 @@ export default function OrderTracking() {
               </div>
             )}
 
+            {/* Atalho de agendamento real do pedido, antes da situação atual. */}
+            <TrackingScheduleTopCard key={currentTrackingSchedule?.token ?? registrationId} appointment={currentTrackingSchedule} />
+
             {/* Sincronização automática — botão manual fica apenas como contingência */}
             <div className="flex items-center justify-between gap-3 rounded-xl border border-emerald-500/20 bg-emerald-500/5 px-3 py-2.5">
               <div className="flex min-w-0 items-center gap-2">
@@ -1635,9 +1637,9 @@ export default function OrderTracking() {
             )}
 
             {/* === AGENDAMENTO DE ATENDIMENTO === */}
-            {canAccess && canShowScheduleForCurrentOrder && (scheduleQuery.data?.length ?? 0) > 0 && (
+            {canAccess && currentTrackingSchedule && (
               <div className="space-y-3">
-                {scheduleQuery.data!.map((a) => {
+                {[currentTrackingSchedule].map((a) => {
                   const link = publicSiteUrl(`/agendar/${a.token}`);
 
                   // ── CONFIRMADO ──────────────────────────────────────────
