@@ -1503,23 +1503,24 @@ export default function OrderTracking() {
 
             {/* Dados do pedido */}
             {orderInfo && (
-              <div className="bg-[#12122a] rounded-2xl border border-white/10 p-5 space-y-3">
+              <div className="bg-[#12122a] rounded-2xl border border-white/10 p-5 space-y-3 min-w-0">
                 <p className="text-xs text-white/50 font-medium uppercase tracking-wider">Detalhes do Pedido</p>
-                <div className="space-y-2">
+                <div className="space-y-2 min-w-0">
                   {clientNameQuery.data?.name && (
-                    <div className="flex justify-between items-center text-sm">
-                      <span className="text-white/50">Nome</span>
-                      <span className="text-white font-medium">{clientNameQuery.data.name}</span>
+                    <div className="grid min-w-0 grid-cols-[96px_minmax(0,1fr)] items-start gap-2 text-sm">
+                      <span className="min-w-0 leading-snug text-white/50">Nome</span>
+                      <span className="min-w-0 whitespace-pre-wrap break-words [overflow-wrap:anywhere] text-right leading-snug text-white font-medium">{clientNameQuery.data.name}</span>
                     </div>
                   )}
                   {orderInfo.orderNumber && (
-                    <div className="flex justify-between items-center text-sm">
-                      <span className="text-white/50">Nº do Pedido</span>
-                      <div className="flex items-center gap-2">
-                        <span className="text-white font-bold font-mono">#{orderInfo.orderNumber}</span>
+                    <div className="grid min-w-0 grid-cols-[96px_minmax(0,1fr)] items-start gap-2 text-sm">
+                      <span className="min-w-0 leading-snug text-white/50">Nº do Pedido</span>
+                      <div className="flex min-w-0 items-start justify-end gap-2">
+                        <span className="min-w-0 break-all text-right leading-snug text-white font-bold font-mono">#{orderInfo.orderNumber}</span>
                         <button
+                          type="button"
                           onClick={() => handleCopyOrderNumber(orderInfo.orderNumber!)}
-                          className="p-1 rounded-lg hover:bg-white/10 transition-colors text-white/40 hover:text-white/80"
+                          className="shrink-0 p-1 rounded-lg hover:bg-white/10 transition-colors text-white/40 hover:text-white/80"
                           title="Copiar número do pedido"
                         >
                           {copied ? <Check className="w-3.5 h-3.5 text-green-400" /> : <Copy className="w-3.5 h-3.5" />}
@@ -1528,20 +1529,20 @@ export default function OrderTracking() {
                     </div>
                   )}
                   {orderInfo.serviceName && (
-                    <div className="flex justify-between items-center text-sm">
-                      <span className="text-white/50">Serviço</span>
-                      <span className="text-white font-medium">{orderInfo.serviceName}</span>
+                    <div className="grid min-w-0 grid-cols-[96px_minmax(0,1fr)] items-start gap-2 text-sm">
+                      <span className="min-w-0 leading-snug text-white/50">Serviço</span>
+                      <span className="min-w-0 whitespace-pre-wrap break-words [overflow-wrap:anywhere] text-right leading-snug text-white font-medium">{orderInfo.serviceName}</span>
                     </div>
                   )}
                   {orderInfo.serviceOption && (
-                    <div className="flex justify-between items-center text-sm">
-                      <span className="text-white/50">Opção</span>
-                      <span className="text-white font-medium">{orderInfo.serviceOption}</span>
+                    <div className="grid min-w-0 grid-cols-[96px_minmax(0,1fr)] items-start gap-2 text-sm">
+                      <span className="min-w-0 leading-snug text-white/50">Opção</span>
+                      <span className="min-w-0 whitespace-pre-wrap break-words [overflow-wrap:anywhere] text-right leading-snug text-white font-medium">{orderInfo.serviceOption}</span>
                     </div>
                   )}
-                  <div className="flex justify-between items-center text-sm">
-                    <span className="text-white/50">Telefone</span>
-                    <span className="text-white font-medium font-mono">{formatPhone(searchPhone)}</span>
+                  <div className="grid min-w-0 grid-cols-[96px_minmax(0,1fr)] items-start gap-2 text-sm">
+                    <span className="min-w-0 leading-snug text-white/50">Telefone</span>
+                    <span className="min-w-0 whitespace-pre-wrap break-words [overflow-wrap:anywhere] text-right leading-snug text-white font-medium font-mono">{formatPhone(searchPhone)}</span>
                   </div>
                   {/* Respostas do formulário */}
                   {(() => {
