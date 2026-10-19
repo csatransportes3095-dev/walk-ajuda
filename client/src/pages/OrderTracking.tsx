@@ -1480,8 +1480,8 @@ export default function OrderTracking() {
                           );
                         })}
                       </div>
-                    </div>
-                  </div>}
+                    </div>}
+                  </div>
                 </div>
               );
             })()}
