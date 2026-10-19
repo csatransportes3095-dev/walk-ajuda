@@ -1549,20 +1549,68 @@ export default function OrderTracking() {
                     if (!answersRaw) return null;
                     try {
                       const parsed = JSON.parse(answersRaw);
-                      const entries = Array.isArray(parsed)
-                        ? parsed.filter((a: any) => a.question && a.answer)
+                      const entries: Array<{ question: string; answer: unknown }> = Array.isArray(parsed)
+                        ? parsed.filter((a: any) => a.question && a.answer).map((a: any) => ({ question: String(a.question), answer: a.answer }))
                         : Object.entries(parsed).map(([q, a]) => ({ question: q, answer: a }));
                       if (!entries.length) return null;
+
+                      // Agrupamento apenas visual: mantém cada pergunta e resposta original.
+                      const answerGroups = [
+                        { title: "Cadastro e histórico", items: [] as typeof entries },
+                        { title: "Foto e orientações", items: [] as typeof entries },
+                        { title: "Aparelho e veículo", items: [] as typeof entries },
+                        { title: "Outras perguntas", items: [] as typeof entries },
+                      ];
+                      for (const entry of entries) {
+                        const question = entry.question.toLocaleLowerCase("pt-BR");
+                        const groupIndex = /aparelho|celular|android|iphone|veículo|veiculo|carro|placa/.test(question)
+                          ? 2
+                          : /barba|maquiagem|óculos|oculos|foto|perfil|agendamento/.test(question)
+                            ? 1
+                            : /conta|fake|quantas|cadastro|nome|histórico|historico/.test(question)
+                              ? 0
+                              : 3;
+                        answerGroups[groupIndex].items.push(entry);
+                      }
+
                       return (
-                        <>
-                          <div className="border-t border-white/10 pt-2 mt-1" />
-                          {entries.map((a: any, i: number) => (
-                            <div key={i} className="flex flex-col gap-0.5 text-sm">
-                              <span className="text-white/40 text-xs">{a.question}</span>
-                              <span className="text-white font-medium">{String(a.answer)}</span>
-                            </div>
-                          ))}
-                        </>
+                        <details
+                          key={`primary-answers-${registrationId}-${selectedOrderIdx}`}
+                          className="group mt-2 overflow-hidden rounded-xl border border-cyan-400/30 bg-[#0a2030]/70"
+                        >
+                          <summary className="flex min-h-[62px] cursor-pointer list-none items-center gap-3 px-3 py-3 transition-colors hover:bg-cyan-400/10 focus-visible:outline focus-visible:outline-2 focus-visible:outline-cyan-300 [&::-webkit-details-marker]:hidden">
+                            <span className="flex h-9 w-9 shrink-0 items-center justify-center rounded-lg border border-cyan-400/35 bg-cyan-400/10 text-cyan-300">
+                              <FileCheck className="h-4.5 w-4.5" />
+                            </span>
+                            <span className="min-w-0 flex-1">
+                              <span className="block text-[12px] font-black uppercase tracking-[0.07em] text-cyan-200">PERGUNTAS PRINCIPAIS</span>
+                              <span className="block text-[11px] text-white/55">
+                                {entries.length} {entries.length === 1 ? "resposta cadastrada" : "respostas cadastradas"} · Toque para visualizar
+                              </span>
+                            </span>
+                            <ChevronRight className="h-5 w-5 shrink-0 text-cyan-300 transition-transform duration-200 group-open:rotate-90" />
+                          </summary>
+                          <div className="space-y-3 border-t border-cyan-400/20 px-3 py-3">
+                            {answerGroups.filter(group => group.items.length > 0).map(group => (
+                              <section key={group.title} className="min-w-0">
+                                <div className="mb-2 flex items-center justify-between gap-2">
+                                  <h4 className="text-[11px] font-extrabold uppercase tracking-wide text-white/75">{group.title}</h4>
+                                  <span className="shrink-0 rounded-full bg-white/5 px-2 py-0.5 text-[10px] font-semibold text-white/50">
+                                    {group.items.length}
+                                  </span>
+                                </div>
+                                <div className="grid grid-cols-1 gap-1.5 sm:grid-cols-2">
+                                  {group.items.map((entry, i) => (
+                                    <div key={i} className="grid min-w-0 grid-cols-[minmax(0,1fr)_auto] items-start gap-2 rounded-lg border border-white/[0.06] bg-black/20 px-2.5 py-2.5 sm:grid-cols-1 sm:gap-1">
+                                      <span className="min-w-0 break-words text-[12px] leading-snug text-white/65">{entry.question}</span>
+                                      <span className="max-w-[9rem] whitespace-pre-wrap break-words text-right text-[12px] font-bold leading-snug text-cyan-100 sm:max-w-none sm:text-left">{String(entry.answer)}</span>
+                                    </div>
+                                  ))}
+                                </div>
+                              </section>
+                            ))}
+                          </div>
+                        </details>
                       );
                     } catch { return null; }
                   })()}
