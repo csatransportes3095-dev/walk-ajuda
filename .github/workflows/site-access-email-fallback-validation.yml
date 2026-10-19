@@ -1,0 +1,80 @@
+name: Site access OTP email fallback
+on:
+  push:
+    branches: [fix/site-access-email-fallback-20261019]
+  pull_request:
+    branches: [recovery/organizar-salvos-2026-08-24]
+    paths:
+      - 'server/siteAccessIdentity.ts'
+      - 'server/siteAccessEmailFallback.test.ts'
+      - '.github/workflows/site-access-email-fallback-validation.yml'
+permissions:
+  contents: read
+concurrency:
+  group: site-access-email-${{ github.ref }}
+  cancel-in-progress: true
+jobs:
+  validate:
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          persist-credentials: false
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+      - name: Install locked dependencies
+        run: |
+          npm install -g pnpm@10.4.1
+          pnpm install --frozen-lockfile
+          mkdir -p /tmp/site-access-email-evidence
+      - name: Confirm verification, cookies, global mailer and scheduling remain unchanged
+        run: |
+          git fetch --depth=1 origin 1d8f3351e281157c0d7823c94f7a903443d05320
+          node --input-type=module <<'JS'
+          import fs from 'node:fs';
+          import assert from 'node:assert/strict';
+          import {execFileSync} from 'node:child_process';
+          const base='1d8f3351e281157c0d7823c94f7a903443d05320';
+          const before=p=>execFileSync('git',['show',base+':'+p],{encoding:'utf8'});
+          const target='server/siteAccessIdentity.ts';
+          const old=before(target), current=fs.readFileSync(target,'utf8');
+          const verification='  app.post("/api/site-access/verify",';
+          assert(old.includes(verification) && current.includes(verification));
+          assert.equal(current.slice(current.indexOf(verification)),old.slice(old.indexOf(verification)));
+          for(const p of ['server/_core/mailer.ts','server/_core/sendMailDirect.ts','server/autoSchedule.ts','server/siteAccessSchema.ts']) {
+            assert.equal(fs.readFileSync(p,'utf8'),before(p),p+' unexpectedly changed');
+          }
+          console.log('Verification, session/cookie policies, schema, global mailers and automatic scheduling unchanged.');
+          JS
+      - name: OTP delivery, security and adjacent scheduling regression
+        run: |
+          set -o pipefail
+          pnpm exec vitest run server/siteAccessEmailFallback.test.ts server/trackingScheduleTopCard.test.ts server/analysisSchedulePriority.test.ts server/orderStatusVisibility.test.ts 2>&1 | tee /tmp/site-access-email-evidence/tests-before.txt
+      - name: Apply the exact Render source preparation
+        run: |
+          node --input-type=module <<'JS'
+          import fs from 'node:fs';
+          import {execFileSync} from 'node:child_process';
+          const scripts=[...fs.readFileSync('Dockerfile','utf8').matchAll(/&& node (scripts\/[^\s]+)/g)].map(m=>m[1]);
+          if(!scripts.length)throw new Error('Missing Render preparation steps');
+          for(const script of scripts){
+            if(!/^scripts\/[A-Za-z0-9._/-]+\.mjs$/.test(script))throw new Error('Unexpected preparation path');
+            execFileSync(process.execPath,[script],{stdio:'inherit'});
+          }
+          JS
+      - name: Repeat regressions after Render preparation
+        run: |
+          set -o pipefail
+          pnpm exec vitest run server/siteAccessEmailFallback.test.ts server/trackingScheduleTopCard.test.ts server/analysisSchedulePriority.test.ts server/orderStatusVisibility.test.ts 2>&1 | tee /tmp/site-access-email-evidence/tests-after.txt
+      - name: Build production application
+        run: |
+          set -o pipefail
+          pnpm build 2>&1 | tee /tmp/site-access-email-evidence/build.txt
+      - uses: actions/upload-artifact@v4
+        if: always()
+        with:
+          name: site-access-email-evidence
+          path: /tmp/site-access-email-evidence
+          retention-days: 3

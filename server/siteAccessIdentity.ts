@@ -5,7 +5,7 @@ import { parse as parseCookieHeader } from "cookie";
 import { and, eq, lt, sql } from "drizzle-orm";
 import { getDb } from "./db";
 import { siteAccessEntries, siteAccessChallenges, siteAccessRateLimits } from "./siteAccessSchema";
-import { sendMail } from "./_core/mailer";
+import { sendMailDirect } from "./_core/sendMailDirect";
 
 const COOKIE = "h2_site_auth";
 const normalizeEmail = (value: unknown): string =>
@@ -107,10 +107,18 @@ export function registerSiteIdentity(app: Express): void {
       await db.insert(siteAccessChallenges).values({
         email, codeHash, attempts: 0, expiresAt, requestedAt: now,
       }).onDuplicateKeyUpdate({set:{codeHash, attempts:0, expiresAt, requestedAt:now}});
-      await sendMail({
+      // The existing direct sender retries via SMTP on Resend quota/provider failure.
+      // Await acceptance by a channel; never grant access or report success on failure.
+      await sendMailDirect({
         to: email,
         subject: "H2 Colombiano - Código de acesso",
         text: "Seu código de acesso é: " + code + ". Válido por 10 minutos. Não compartilhe.",
+        html: '<div style="font-family:Arial,sans-serif;max-width:480px;margin:auto;padding:24px">'
+          + '<h2>H2 Colombiano — Código de acesso</h2>'
+          + '<p>Seu código para acessar o site H2 Colombiano:</p>'
+          + '<p style="font-size:32px;font-weight:bold;letter-spacing:6px">' + code + '</p>'
+          + '<p>Válido por 10 minutos. Não compartilhe este código.</p>'
+          + '<p>Se você não solicitou o acesso, ignore este e-mail.</p></div>',
       });
       return generic();
     } catch (error) {
