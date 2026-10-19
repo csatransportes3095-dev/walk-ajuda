@@ -11,6 +11,7 @@ import { getAdminJwtSecret } from "./adminJwt";
 import { siteAccessConfig, siteAccessEntries, siteAccessAudit } from "./siteAccessSchema";
 import { attachSiteAccessProfilePhotos } from "./siteSecurityProfilePhotos";
 import { configuredActivationState, modeActivationFailure } from "./siteAccessActivation";
+import { addManualSiteAccess } from "./siteAccessManualAdd";
 
 export const SITE_ACCESS_MODE = ["public", "restricted", "blocked"] as const;
 export type SiteAccessMode = (typeof SITE_ACCESS_MODE)[number];
@@ -44,7 +45,7 @@ async function audit(actor: string, action: string, subject?: string) {
   if (!db) throw new TRPCError({code:"INTERNAL_SERVER_ERROR"});
   await db.insert(siteAccessAudit).values({ actor, action, subject: subject || null });
 }
-const emailSchema = z.string().email().max(320).transform(s => s.trim().toLowerCase());
+const emailSchema = z.string().trim().email().max(320).transform(s => s.toLowerCase());
 export const siteSecurityRouter = router({
   status: adminProcedure.query(async ({ ctx }) => {
     await requireSiteOwner(ctx.req);
@@ -132,12 +133,8 @@ export const siteSecurityRouter = router({
   }),
   add: adminProcedure.input(z.object({displayName:z.string().trim().min(2).max(128),email:emailSchema,phone:z.string().max(32).optional(),expiresAt:z.string().datetime().nullable().optional()})).mutation(async ({ctx,input})=>{
     const actor=await requireSiteOwner(ctx.req);
-    const db=await getDb(); if(!db) throw new TRPCError({code:"INTERNAL_SERVER_ERROR"});
-    const expire=input.expiresAt?new Date(input.expiresAt):null;
-    if(expire && expire.getTime()<=Date.now()) throw new TRPCError({code:"BAD_REQUEST",message:"Data de vencimento já passou."});
-    await db.insert(siteAccessEntries).values({displayName:input.displayName,email:input.email,phone:input.phone||null,expiresAt:expire,createdBy:actor});
-    await audit(actor,"ACCESS_ADDED",input.email);
-    return {success:true};
+    const db=await getDb(); if(!db) throw new TRPCError({code:"INTERNAL_SERVER_ERROR",message:"Não foi possível salvar a autorização. Tente novamente. Código: SAE_ADD."});
+    return addManualSiteAccess(db,actor,input);
   }),
   changeStatus: adminProcedure.input(z.object({id:z.number().int().positive(),status:z.enum(["active","suspended"])})).mutation(async ({ctx,input})=>{
     const actor=await requireSiteOwner(ctx.req);
