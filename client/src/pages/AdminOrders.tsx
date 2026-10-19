@@ -1,3 +1,4 @@
+import { OrderLoginCopyButton } from "@/components/OrderLoginCopyButton";
 import { globalActiveStatuses, isGlobalStatus, statusChoicesForFlow } from "@shared/orderStatusScope";
 import React, { useState, useRef, useEffect, useMemo } from "react";
 import { createPortal } from "react-dom";
@@ -1734,6 +1735,40 @@ export default function AdminOrders() {
     });
   // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [loginDataQuery.data, expandedId]);
+  const saveCredentialsMut = trpc.loginData.saveCredentials.useMutation();
+  const latestLoginFieldsRef = useRef(loginFields);
+  latestLoginFieldsRef.current = loginFields;
+  const credentialTimersRef = useRef<Record<string,ReturnType<typeof setTimeout>>>({});
+  const pendingCredentialJobsRef = useRef<Record<string,Promise<void>>>({});
+  const queueCredentialSave = (registrationId:number, key:string, updates:{loginPhone?:string;loginEmail?:string;loginPassword?:string})=>{
+    const queueKey=String(registrationId);
+    if(credentialTimersRef.current[queueKey])clearTimeout(credentialTimersRef.current[queueKey]);
+    credentialTimersRef.current[queueKey]=setTimeout(()=>{
+      const current=latestLoginFieldsRef.current[key];
+      const credentials={
+        loginPhone: current?.loginPhone ?? updates.loginPhone ?? '',
+        loginEmail: current?.loginEmail ?? updates.loginEmail ?? '',
+        loginPassword: current?.loginPassword ?? updates.loginPassword ?? '',
+      };
+      const previous=pendingCredentialJobsRef.current[queueKey]||Promise.resolve();
+      const job=previous.catch(()=>{}).then(async()=>{
+        await saveCredentialsMut.mutateAsync({registrationId,...credentials});
+        void trpcUtils.loginData.get.invalidate({registrationId});
+      });
+      pendingCredentialJobsRef.current[queueKey]=job;
+      void job.catch(error=>toast.error(error?.message||'Erro ao salvar dados de login automaticamente.'));
+    },600);
+  };
+  const saveCredentialsNow=async(registrationId:number,key:string,values:{loginPhone:string;loginEmail:string;loginPassword:string})=>{
+    const queueKey=String(registrationId);
+    if(credentialTimersRef.current[queueKey])clearTimeout(credentialTimersRef.current[queueKey]);
+    setLoginFields(prev=>({...prev,[key]:{...prev[key],...values}}));
+    const previous=pendingCredentialJobsRef.current[queueKey]||Promise.resolve();
+    const job=previous.catch(()=>{}).then(async()=>{await saveCredentialsMut.mutateAsync({registrationId,...values});});
+    pendingCredentialJobsRef.current[queueKey]=job;
+    await job;
+    void trpcUtils.loginData.get.invalidate({registrationId});
+  };
   const generateOrderH2EmailMut = trpc.loginData.generateOrderH2Email.useMutation();
 
   const saveLoginDataMut = trpc.loginData.save.useMutation({
@@ -4320,8 +4355,11 @@ export default function AdminOrders() {
                                           const arKey = `arquivo_${ar.registrationId}`;
                                           const saved = loginDataQuery.data;
                                           const fields = loginFields[arKey] ?? loginFormFromSaved(saved?.registrationId === ar.registrationId ? saved : null);
-                                          const setField = (f: 'loginPhone'|'loginEmail'|'loginPassword'|'authCode'|'cnhCode'|'emailLink'|'loginNotes'|'loginGroupLink', v: string) =>
-                                            setLoginFields(prev => ({ ...prev, [arKey]: { ...(prev[arKey] ?? fields), [f]: v } }));
+                                          const setField = (f: 'loginPhone'|'loginEmail'|'loginPassword'|'authCode'|'cnhCode'|'emailLink'|'loginNotes'|'loginGroupLink', v: string) => {
+    setLoginFields(prev => ({ ...prev, [arKey]: { ...(prev[arKey] ?? fields), [f]: v } }));
+    if(f==='loginPhone'||f==='loginEmail'||f==='loginPassword')
+      queueCredentialSave(ar.registrationId,arKey,{[f]:v});
+  };
                                           const waPhone = ar.customerPhone ? (ar.customerPhone.replace(/\D/g, '').startsWith('55') ? ar.customerPhone.replace(/\D/g, '') : `55${ar.customerPhone.replace(/\D/g, '')}`) : '';
                                           const hasLoginData = fields.cnhCode || fields.loginPhone || fields.loginEmail || fields.loginPassword || fields.authCode || fields.emailLink || fields.loginNotes || fields.loginGroupLink;
                                           return (
@@ -4368,12 +4406,23 @@ export default function AdminOrders() {
                                                       className="inline-flex min-h-8 items-center gap-1 rounded-lg border border-lime-400/30 bg-lime-500/10 px-2.5 py-1.5 text-[11px] font-bold text-lime-200 hover:bg-lime-500/20 disabled:opacity-50"
                                                       title="Gerar e-mail H2 usando exclusivamente o código do cadastro principal"
                                                     >{generateOrderH2EmailMut.isPending ? 'Gerando...' : '⚡ Gerar H2'}</button>
-                                                    <button type="button" onClick={() => setField('loginPassword', generateOrderLoginPassword())} className="inline-flex min-h-8 items-center gap-1 rounded-lg border border-amber-400/30 bg-amber-500/10 px-2.5 py-1.5 text-[11px] font-bold text-amber-200 hover:bg-amber-500/20" title="Gerar senha segura e preencher o campo">🔐 Senha</button>
+                                                    <button type="button" onClick={() => setField('loginPassword', generateOrderLoginPassword())} className="inline-flex min-h-8 items-center gap-1 rounded-lg border border-amber-400/30 bg-amber-500/10 px-2.5 py-1.5 text-[11px] font-bold text-amber-200 hover:bg-amber-500/20" title="Gerar senha segura e preencher o campo">🔐 Senha</button><button type="button" disabled={generateOrderH2EmailMut.isPending || saveCredentialsMut.isPending}
+ onClick={async()=>{try{
+  if((fields.loginPhone||fields.loginEmail||fields.loginPassword)&&!window.confirm('Gerar novos dados de login e substituir os três campos?'))return;
+  const generated=await generateOrderH2EmailMut.mutateAsync({registrationId:ar.registrationId});
+  const raw=Array.from(crypto.getRandomValues(new Uint32Array(9))).map(n=>String(n%10)).join('');
+  const ddd=['71','73','74','75','77','79','81','82','83','84','85','86','87','88','89','91','92','93','94','95','96','97','98','99'][raw.charCodeAt(0)%24];
+  const phone='('+ddd+') 9'+raw.slice(0,4)+'-'+raw.slice(4,8);
+  const values={loginPhone:phone,loginEmail:generated.email,loginPassword:generateOrderLoginPassword()};
+  await saveCredentialsNow(ar.registrationId,arKey,values);
+  toast.success('Telefone, e-mail e senha gerados e salvos.');
+ }catch(error:any){toast.error(error?.message||'Falha ao gerar tudo.');}}}
+ className="inline-flex min-h-8 items-center gap-1 rounded-lg border border-violet-400/50 bg-violet-600/25 px-3 py-1.5 text-[11px] font-extrabold text-violet-100 disabled:opacity-40">⚡ Gerar Tudo</button>
                                                   </div>
                                                 </div>
                                                 <fieldset disabled={loginDataQuery.isPending || loginDataQuery.isError || saveLoginDataMut.isPending} className="order-login-fields-grid disabled:opacity-60">
-                                                  <div><label className="text-xs text-muted-foreground mb-1 block">📱 Login 1 — Telefone <span className="text-lime-400/70">(cliente pode usar este para entrar)</span></label><div className="flex gap-1"><input type="text" value={fields.loginPhone} onChange={e => setField('loginPhone', e.target.value)} placeholder="Ex: (21) 99999-9999" className="flex-1 px-3 py-1.5 bg-background border border-border rounded-lg text-xs text-foreground placeholder:text-muted-foreground focus:outline-none focus:border-lime-500/60" />{fields.loginPhone && <button onClick={() => setField('loginPhone', '')} className="px-2 py-1.5 bg-red-500/10 border border-red-500/30 text-red-400 rounded-lg text-xs hover:bg-red-500/20 transition-colors">✕</button>}</div></div><div><label className="text-xs text-muted-foreground mb-1 block">✉️ Login 2 — Email <span className="text-lime-400/70">(cliente pode usar este para entrar)</span></label><div className="flex gap-1"><input type="text" value={fields.loginEmail} onChange={e => setField('loginEmail', e.target.value)} placeholder="Ex: usuario@email.com" className="flex-1 px-3 py-1.5 bg-background border border-border rounded-lg text-xs text-foreground placeholder:text-muted-foreground focus:outline-none focus:border-lime-500/60" /><button data-h2-inline-order-email-generator="true" type="button" disabled={generateOrderH2EmailMut.isPending} onClick={async () => { try { const generated = await generateOrderH2EmailMut.mutateAsync({ registrationId: ar.registrationId }); setField('loginEmail', generated.email); setField('loginPassword', 'fusca123'); toast.success(`E-mail H2 gerado com o cadastro *${generated.customerNumber}: ${generated.email}`); } catch (error: any) { toast.error(error?.message || 'Não foi possível gerar o e-mail H2 deste pedido.'); } }} className="shrink-0 rounded-lg border border-lime-400/30 bg-lime-500/10 px-2.5 py-1.5 text-[11px] font-bold text-lime-200 hover:bg-lime-500/20 disabled:opacity-50" title="Gerar H2 usando o código do cadastro principal">{generateOrderH2EmailMut.isPending ? 'Gerando...' : '⚡ Gerar H2'}</button>{fields.loginEmail && <button onClick={() => setField('loginEmail', '')} className="px-2 py-1.5 bg-red-500/10 border border-red-500/30 text-red-400 rounded-lg text-xs hover:bg-red-500/20 transition-colors">✕</button>}</div></div>
-                                                  <div><label className="text-xs text-muted-foreground mb-1 block">Senha para entrar na sua conta</label><div className="flex gap-1"><input type="text" value={fields.loginPassword} onChange={e => setField('loginPassword', e.target.value)} placeholder="Ex: senha123" className="flex-1 px-3 py-1.5 bg-background border border-border rounded-lg text-xs text-foreground placeholder:text-muted-foreground focus:outline-none focus:border-lime-500/60" />{fields.loginPassword && <button onClick={() => setField('loginPassword', '')} className="px-2 py-1.5 bg-red-500/10 border border-red-500/30 text-red-400 rounded-lg text-xs hover:bg-red-500/20 transition-colors">✕</button>}</div></div>
+                                                  <div><label className="text-xs text-muted-foreground mb-1 block">📱 Login 1 — Telefone <span className="text-lime-400/70">(cliente pode usar este para entrar)</span></label><div className="flex gap-1"><input type="text" value={fields.loginPhone} onChange={e => setField('loginPhone', e.target.value)} placeholder="Ex: (21) 99999-9999" className="flex-1 px-3 py-1.5 bg-background border border-border rounded-lg text-xs text-foreground placeholder:text-muted-foreground focus:outline-none focus:border-lime-500/60" /><OrderLoginCopyButton value={fields.loginPhone} label="Telefone" /><OrderLoginCopyButton value={fields.loginPhone} label="Telefone" />{fields.loginPhone && <button onClick={() => setField('loginPhone', '')} className="px-2 py-1.5 bg-red-500/10 border border-red-500/30 text-red-400 rounded-lg text-xs hover:bg-red-500/20 transition-colors">✕</button>}</div></div><div><label className="text-xs text-muted-foreground mb-1 block">✉️ Login 2 — Email <span className="text-lime-400/70">(cliente pode usar este para entrar)</span></label><div className="flex gap-1"><input type="text" value={fields.loginEmail} onChange={e => setField('loginEmail', e.target.value)} placeholder="Ex: usuario@email.com" className="flex-1 px-3 py-1.5 bg-background border border-border rounded-lg text-xs text-foreground placeholder:text-muted-foreground focus:outline-none focus:border-lime-500/60" /><OrderLoginCopyButton value={fields.loginEmail} label="E-mail" /><button data-h2-inline-order-email-generator="true" type="button" disabled={generateOrderH2EmailMut.isPending} onClick={async () => { try { const generated = await generateOrderH2EmailMut.mutateAsync({ registrationId: ar.registrationId }); setField('loginEmail', generated.email); setField('loginPassword', 'fusca123'); toast.success(`E-mail H2 gerado com o cadastro *${generated.customerNumber}: ${generated.email}`); } catch (error: any) { toast.error(error?.message || 'Não foi possível gerar o e-mail H2 deste pedido.'); } }} className="shrink-0 rounded-lg border border-lime-400/30 bg-lime-500/10 px-2.5 py-1.5 text-[11px] font-bold text-lime-200 hover:bg-lime-500/20 disabled:opacity-50" title="Gerar H2 usando o código do cadastro principal">{generateOrderH2EmailMut.isPending ? 'Gerando...' : '⚡ Gerar H2'}</button>{fields.loginEmail && <button onClick={() => setField('loginEmail', '')} className="px-2 py-1.5 bg-red-500/10 border border-red-500/30 text-red-400 rounded-lg text-xs hover:bg-red-500/20 transition-colors">✕</button>}</div></div>
+                                                  <div><label className="text-xs text-muted-foreground mb-1 block">Senha para entrar na sua conta</label><div className="flex gap-1"><input type="text" value={fields.loginPassword} onChange={e => setField('loginPassword', e.target.value)} placeholder="Ex: senha123" className="flex-1 px-3 py-1.5 bg-background border border-border rounded-lg text-xs text-foreground placeholder:text-muted-foreground focus:outline-none focus:border-lime-500/60" /><OrderLoginCopyButton value={fields.loginPassword} label="Senha" /><OrderLoginCopyButton value={fields.loginPassword} label="Senha" />{fields.loginPassword && <button onClick={() => setField('loginPassword', '')} className="px-2 py-1.5 bg-red-500/10 border border-red-500/30 text-red-400 rounded-lg text-xs hover:bg-red-500/20 transition-colors">✕</button>}</div></div>
 
                                                   <OrderLoginCnhField value={fields.cnhCode} onChange={value => setField('cnhCode', value)} />
 <OrderLoginGlobalGroup legacyLink={fields.loginGroupLink} />
@@ -4777,8 +4826,11 @@ export default function AdminOrders() {
                                                       const arKey = `rgcnh_${ar.registrationId}`;
                                                       const saved = loginDataQuery.data;
                                                       const fields = loginFields[arKey] ?? loginFormFromSaved(saved?.registrationId === ar.registrationId ? saved : null);
-                                                      const setField = (f: 'loginPhone'|'loginEmail'|'loginPassword'|'authCode'|'cnhCode'|'emailLink'|'loginNotes'|'loginGroupLink', v: string) =>
-                                                        setLoginFields(prev => ({ ...prev, [arKey]: { ...(prev[arKey] ?? fields), [f]: v } }));
+                                                      const setField = (f: 'loginPhone'|'loginEmail'|'loginPassword'|'authCode'|'cnhCode'|'emailLink'|'loginNotes'|'loginGroupLink', v: string) => {
+    setLoginFields(prev => ({ ...prev, [arKey]: { ...(prev[arKey] ?? fields), [f]: v } }));
+    if(f==='loginPhone'||f==='loginEmail'||f==='loginPassword')
+      queueCredentialSave(ar.registrationId,arKey,{[f]:v});
+  };
                                                       const waPhone = ar.customerPhone ? (ar.customerPhone.replace(/\D/g, '').startsWith('55') ? ar.customerPhone.replace(/\D/g, '') : `55${ar.customerPhone.replace(/\D/g, '')}`) : '';
                                                       const hasLoginData = fields.cnhCode || fields.loginPhone || fields.loginEmail || fields.loginPassword || fields.authCode || fields.emailLink || fields.loginNotes || fields.loginGroupLink;
                                                       return (
@@ -4825,12 +4877,23 @@ export default function AdminOrders() {
                                                       className="inline-flex min-h-8 items-center gap-1 rounded-lg border border-lime-400/30 bg-lime-500/10 px-2.5 py-1.5 text-[11px] font-bold text-lime-200 hover:bg-lime-500/20 disabled:opacity-50"
                                                       title="Gerar e-mail H2 usando exclusivamente o código do cadastro principal"
                                                     >{generateOrderH2EmailMut.isPending ? 'Gerando...' : '⚡ Gerar H2'}</button>
-                                                                <button type="button" onClick={() => setField('loginPassword', generateOrderLoginPassword())} className="inline-flex min-h-8 items-center gap-1 rounded-lg border border-amber-400/30 bg-amber-500/10 px-2.5 py-1.5 text-[11px] font-bold text-amber-200 hover:bg-amber-500/20" title="Gerar senha segura e preencher o campo">🔐 Senha</button>
+                                                                <button type="button" onClick={() => setField('loginPassword', generateOrderLoginPassword())} className="inline-flex min-h-8 items-center gap-1 rounded-lg border border-amber-400/30 bg-amber-500/10 px-2.5 py-1.5 text-[11px] font-bold text-amber-200 hover:bg-amber-500/20" title="Gerar senha segura e preencher o campo">🔐 Senha</button><button type="button" disabled={generateOrderH2EmailMut.isPending || saveCredentialsMut.isPending}
+ onClick={async()=>{try{
+  if((fields.loginPhone||fields.loginEmail||fields.loginPassword)&&!window.confirm('Gerar novos dados de login e substituir os três campos?'))return;
+  const generated=await generateOrderH2EmailMut.mutateAsync({registrationId:ar.registrationId});
+  const raw=Array.from(crypto.getRandomValues(new Uint32Array(9))).map(n=>String(n%10)).join('');
+  const ddd=['71','73','74','75','77','79','81','82','83','84','85','86','87','88','89','91','92','93','94','95','96','97','98','99'][raw.charCodeAt(0)%24];
+  const phone='('+ddd+') 9'+raw.slice(0,4)+'-'+raw.slice(4,8);
+  const values={loginPhone:phone,loginEmail:generated.email,loginPassword:generateOrderLoginPassword()};
+  await saveCredentialsNow(ar.registrationId,arKey,values);
+  toast.success('Telefone, e-mail e senha gerados e salvos.');
+ }catch(error:any){toast.error(error?.message||'Falha ao gerar tudo.');}}}
+ className="inline-flex min-h-8 items-center gap-1 rounded-lg border border-violet-400/50 bg-violet-600/25 px-3 py-1.5 text-[11px] font-extrabold text-violet-100 disabled:opacity-40">⚡ Gerar Tudo</button>
                                                               </div>
                                                             </div>
                                                             <fieldset disabled={loginDataQuery.isPending || loginDataQuery.isError || saveLoginDataMut.isPending} className="order-login-fields-grid disabled:opacity-60">
-                                                              <div><label className="text-xs text-muted-foreground mb-1 block">📱 Login 1 — Telefone <span className="text-lime-400/70">(cliente pode usar este para entrar)</span></label><div className="flex gap-1"><input type="text" value={fields.loginPhone} onChange={e => setField('loginPhone', e.target.value)} placeholder="Ex: (21) 99999-9999" className="flex-1 px-3 py-1.5 bg-background border border-border rounded-lg text-xs text-foreground placeholder:text-muted-foreground focus:outline-none focus:border-lime-500/60" />{fields.loginPhone && <button onClick={() => setField('loginPhone', '')} className="px-2 py-1.5 bg-red-500/10 border border-red-500/30 text-red-400 rounded-lg text-xs hover:bg-red-500/20 transition-colors">✕</button>}</div></div><div><label className="text-xs text-muted-foreground mb-1 block">✉️ Login 2 — Email <span className="text-lime-400/70">(cliente pode usar este para entrar)</span></label><div className="flex gap-1"><input type="text" value={fields.loginEmail} onChange={e => setField('loginEmail', e.target.value)} placeholder="Ex: usuario@email.com" className="flex-1 px-3 py-1.5 bg-background border border-border rounded-lg text-xs text-foreground placeholder:text-muted-foreground focus:outline-none focus:border-lime-500/60" /><button data-h2-inline-order-email-generator="true" type="button" disabled={generateOrderH2EmailMut.isPending} onClick={async () => { try { const generated = await generateOrderH2EmailMut.mutateAsync({ registrationId: ar.registrationId }); setField('loginEmail', generated.email); setField('loginPassword', 'fusca123'); toast.success(`E-mail H2 gerado com o cadastro *${generated.customerNumber}: ${generated.email}`); } catch (error: any) { toast.error(error?.message || 'Não foi possível gerar o e-mail H2 deste pedido.'); } }} className="shrink-0 rounded-lg border border-lime-400/30 bg-lime-500/10 px-2.5 py-1.5 text-[11px] font-bold text-lime-200 hover:bg-lime-500/20 disabled:opacity-50" title="Gerar H2 usando o código do cadastro principal">{generateOrderH2EmailMut.isPending ? 'Gerando...' : '⚡ Gerar H2'}</button>{fields.loginEmail && <button onClick={() => setField('loginEmail', '')} className="px-2 py-1.5 bg-red-500/10 border border-red-500/30 text-red-400 rounded-lg text-xs hover:bg-red-500/20 transition-colors">✕</button>}</div></div>
-                                                              <div><label className="text-xs text-muted-foreground mb-1 block">Senha para entrar na sua conta</label><div className="flex gap-1"><input type="text" value={fields.loginPassword} onChange={e => setField('loginPassword', e.target.value)} placeholder="Ex: senha123" className="flex-1 px-3 py-1.5 bg-background border border-border rounded-lg text-xs text-foreground placeholder:text-muted-foreground focus:outline-none focus:border-lime-500/60" />{fields.loginPassword && <button onClick={() => setField('loginPassword', '')} className="px-2 py-1.5 bg-red-500/10 border border-red-500/30 text-red-400 rounded-lg text-xs hover:bg-red-500/20 transition-colors">✕</button>}</div></div>
+                                                              <div><label className="text-xs text-muted-foreground mb-1 block">📱 Login 1 — Telefone <span className="text-lime-400/70">(cliente pode usar este para entrar)</span></label><div className="flex gap-1"><input type="text" value={fields.loginPhone} onChange={e => setField('loginPhone', e.target.value)} placeholder="Ex: (21) 99999-9999" className="flex-1 px-3 py-1.5 bg-background border border-border rounded-lg text-xs text-foreground placeholder:text-muted-foreground focus:outline-none focus:border-lime-500/60" /><OrderLoginCopyButton value={fields.loginPhone} label="Telefone" /><OrderLoginCopyButton value={fields.loginPhone} label="Telefone" />{fields.loginPhone && <button onClick={() => setField('loginPhone', '')} className="px-2 py-1.5 bg-red-500/10 border border-red-500/30 text-red-400 rounded-lg text-xs hover:bg-red-500/20 transition-colors">✕</button>}</div></div><div><label className="text-xs text-muted-foreground mb-1 block">✉️ Login 2 — Email <span className="text-lime-400/70">(cliente pode usar este para entrar)</span></label><div className="flex gap-1"><input type="text" value={fields.loginEmail} onChange={e => setField('loginEmail', e.target.value)} placeholder="Ex: usuario@email.com" className="flex-1 px-3 py-1.5 bg-background border border-border rounded-lg text-xs text-foreground placeholder:text-muted-foreground focus:outline-none focus:border-lime-500/60" /><OrderLoginCopyButton value={fields.loginEmail} label="E-mail" /><button data-h2-inline-order-email-generator="true" type="button" disabled={generateOrderH2EmailMut.isPending} onClick={async () => { try { const generated = await generateOrderH2EmailMut.mutateAsync({ registrationId: ar.registrationId }); setField('loginEmail', generated.email); setField('loginPassword', 'fusca123'); toast.success(`E-mail H2 gerado com o cadastro *${generated.customerNumber}: ${generated.email}`); } catch (error: any) { toast.error(error?.message || 'Não foi possível gerar o e-mail H2 deste pedido.'); } }} className="shrink-0 rounded-lg border border-lime-400/30 bg-lime-500/10 px-2.5 py-1.5 text-[11px] font-bold text-lime-200 hover:bg-lime-500/20 disabled:opacity-50" title="Gerar H2 usando o código do cadastro principal">{generateOrderH2EmailMut.isPending ? 'Gerando...' : '⚡ Gerar H2'}</button>{fields.loginEmail && <button onClick={() => setField('loginEmail', '')} className="px-2 py-1.5 bg-red-500/10 border border-red-500/30 text-red-400 rounded-lg text-xs hover:bg-red-500/20 transition-colors">✕</button>}</div></div>
+                                                              <div><label className="text-xs text-muted-foreground mb-1 block">Senha para entrar na sua conta</label><div className="flex gap-1"><input type="text" value={fields.loginPassword} onChange={e => setField('loginPassword', e.target.value)} placeholder="Ex: senha123" className="flex-1 px-3 py-1.5 bg-background border border-border rounded-lg text-xs text-foreground placeholder:text-muted-foreground focus:outline-none focus:border-lime-500/60" /><OrderLoginCopyButton value={fields.loginPassword} label="Senha" /><OrderLoginCopyButton value={fields.loginPassword} label="Senha" />{fields.loginPassword && <button onClick={() => setField('loginPassword', '')} className="px-2 py-1.5 bg-red-500/10 border border-red-500/30 text-red-400 rounded-lg text-xs hover:bg-red-500/20 transition-colors">✕</button>}</div></div>
             
                                                               <OrderLoginCnhField value={fields.cnhCode} onChange={value => setField('cnhCode', value)} />
 <OrderLoginGlobalGroup legacyLink={fields.loginGroupLink} />
@@ -6465,8 +6528,11 @@ export default function AdminOrders() {
                         // Usar loginFields[key] se existir (editado pelo admin ou inicializado pelo useEffect)
                         // Fallback vazio — o useEffect popula os campos quando os dados chegam do banco
                         const fields = loginFields[key] ?? loginFormFromSaved(saved?.registrationId === order.id ? saved : null);
-                        const setField = (f: 'loginPhone'|'loginEmail'|'loginPassword'|'authCode'|'cnhCode'|'emailLink'|'loginNotes'|'loginGroupLink', v: string) =>
-                          setLoginFields(prev => ({ ...prev, [key]: { ...(prev[key] ?? fields), [f]: v } }));
+                        const setField = (f: 'loginPhone'|'loginEmail'|'loginPassword'|'authCode'|'cnhCode'|'emailLink'|'loginNotes'|'loginGroupLink', v: string) => {
+    setLoginFields(prev => ({ ...prev, [key]: { ...(prev[key] ?? fields), [f]: v } }));
+    if(f==='loginPhone'||f==='loginEmail'||f==='loginPassword')
+      queueCredentialSave(order.id,key,{[f]:v});
+  };
                         // Montar mensagem WhatsApp com dados de login
                         const buildLoginWaMsg = () => {
                           const nome = order.customerName || order.codeClientName || '';
@@ -6778,7 +6844,18 @@ export default function AdminOrders() {
                                                       className="inline-flex min-h-8 items-center gap-1 rounded-lg border border-lime-400/30 bg-lime-500/10 px-2.5 py-1.5 text-[11px] font-bold text-lime-200 hover:bg-lime-500/20 disabled:opacity-50"
                                                       title="Gerar e-mail H2 usando exclusivamente o código do cadastro principal"
                                                     >{generateOrderH2EmailMut.isPending ? 'Gerando...' : '⚡ Gerar H2'}</button>
-                                <button type="button" onClick={() => setField('loginPassword', generateOrderLoginPassword())} className="inline-flex min-h-8 items-center gap-1 rounded-lg border border-amber-400/30 bg-amber-500/10 px-2.5 py-1.5 text-[11px] font-bold text-amber-200 hover:bg-amber-500/20" title="Gerar senha segura e preencher o campo">🔐 Senha</button>
+                                <button type="button" onClick={() => setField('loginPassword', generateOrderLoginPassword())} className="inline-flex min-h-8 items-center gap-1 rounded-lg border border-amber-400/30 bg-amber-500/10 px-2.5 py-1.5 text-[11px] font-bold text-amber-200 hover:bg-amber-500/20" title="Gerar senha segura e preencher o campo">🔐 Senha</button><button type="button" disabled={generateOrderH2EmailMut.isPending || saveCredentialsMut.isPending}
+ onClick={async()=>{try{
+  if((fields.loginPhone||fields.loginEmail||fields.loginPassword)&&!window.confirm('Gerar novos dados de login e substituir os três campos?'))return;
+  const generated=await generateOrderH2EmailMut.mutateAsync({registrationId:order.id});
+  const raw=Array.from(crypto.getRandomValues(new Uint32Array(9))).map(n=>String(n%10)).join('');
+  const ddd=['71','73','74','75','77','79','81','82','83','84','85','86','87','88','89','91','92','93','94','95','96','97','98','99'][raw.charCodeAt(0)%24];
+  const phone='('+ddd+') 9'+raw.slice(0,4)+'-'+raw.slice(4,8);
+  const values={loginPhone:phone,loginEmail:generated.email,loginPassword:generateOrderLoginPassword()};
+  await saveCredentialsNow(order.id,key,values);
+  toast.success('Telefone, e-mail e senha gerados e salvos.');
+ }catch(error:any){toast.error(error?.message||'Falha ao gerar tudo.');}}}
+ className="inline-flex min-h-8 items-center gap-1 rounded-lg border border-violet-400/50 bg-violet-600/25 px-3 py-1.5 text-[11px] font-extrabold text-violet-100 disabled:opacity-40">⚡ Gerar Tudo</button>
                               </div>
                             </div>
                             <fieldset disabled={loginDataQuery.isPending || loginDataQuery.isError || saveLoginDataMut.isPending} className="order-login-fields-grid disabled:opacity-60">
@@ -6787,7 +6864,7 @@ export default function AdminOrders() {
                                 <div className="flex gap-1">
                                   <input type="text" value={fields.loginPhone} onChange={e => setField('loginPhone', e.target.value)}
                                     placeholder="Ex: (21) 99999-9999"
-                                    className="flex-1 px-3 py-1.5 bg-background border border-border rounded-lg text-xs text-foreground placeholder:text-muted-foreground focus:outline-none focus:border-lime-500/60" />
+                                    className="flex-1 px-3 py-1.5 bg-background border border-border rounded-lg text-xs text-foreground placeholder:text-muted-foreground focus:outline-none focus:border-lime-500/60" /><OrderLoginCopyButton value={fields.loginPhone} label="Telefone" />
                                   {fields.loginPhone && <button onClick={() => setField('loginPhone', '')} className="px-2 py-1.5 bg-red-500/10 border border-red-500/30 text-red-400 rounded-lg text-xs hover:bg-red-500/20 transition-colors" title="Limpar">✕</button>}
                                 </div>
                               </div>
@@ -6796,7 +6873,7 @@ export default function AdminOrders() {
                                 <div className="flex gap-1">
                                   <input type="text" value={fields.loginEmail} onChange={e => setField('loginEmail', e.target.value)}
                                     placeholder="Ex: usuario@email.com ou (11) 99999-9999"
-                                    className="flex-1 px-3 py-1.5 bg-background border border-border rounded-lg text-xs text-foreground placeholder:text-muted-foreground focus:outline-none focus:border-lime-500/60" />
+                                    className="flex-1 px-3 py-1.5 bg-background border border-border rounded-lg text-xs text-foreground placeholder:text-muted-foreground focus:outline-none focus:border-lime-500/60" /><OrderLoginCopyButton value={fields.loginEmail} label="E-mail" />
                                   <button
                                     data-h2-inline-order-email-generator="true"
                                     type="button"
@@ -6824,7 +6901,7 @@ export default function AdminOrders() {
                                 <div className="flex gap-1">
                                   <input type="text" value={fields.loginPassword} onChange={e => setField('loginPassword', e.target.value)}
                                     placeholder="Ex: senha123"
-                                    className="flex-1 px-3 py-1.5 bg-background border border-border rounded-lg text-xs text-foreground placeholder:text-muted-foreground focus:outline-none focus:border-lime-500/60" />
+                                    className="flex-1 px-3 py-1.5 bg-background border border-border rounded-lg text-xs text-foreground placeholder:text-muted-foreground focus:outline-none focus:border-lime-500/60" /><OrderLoginCopyButton value={fields.loginPassword} label="Senha" />
                                   {fields.loginPassword && <button onClick={() => setField('loginPassword', '')} className="px-2 py-1.5 bg-red-500/10 border border-red-500/30 text-red-400 rounded-lg text-xs hover:bg-red-500/20 transition-colors" title="Limpar">✕</button>}
                                 </div>
                               </div>
