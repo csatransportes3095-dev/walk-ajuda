@@ -1,4 +1,5 @@
 import { prepareWhatsappMessage } from "@shared/whatsappMessageText";
+import { formatRaffleWhatsappParticipant, joinRaffleWhatsappParticipants } from "@shared/raffleWhatsappList";
 import { buildWhatsappMessageUrl } from "@shared/whatsappUrl";
 import { useState, useEffect } from "react";
 import { trpc } from "@/lib/trpc";
@@ -467,10 +468,7 @@ export default function AdminRaffles() {
     const modeLabel = mode === "paid" ? "SOMENTE PAGOS" : mode === "pending" ? "AGUARDANDO PAGAMENTO" : "TODOS OS ESCOLHIDOS";
 
     const lines = filtered.map(entry => {
-      const number = String(entry.number).padStart(2, "0");
-      const icon = entry.paymentStatus === "paid" ? whatsappEmoji.paid : whatsappEmoji.pending;
-      const payment = entry.paymentStatus === "paid" ? `${whatsappEmoji.paid} PAGO` : `${whatsappEmoji.pending} AGUARDANDO`;
-      return `${icon} *${number}* — ${entry.customerName} — ${formatPhone(entry.customerPhone)} — ${payment}`;
+      return formatRaffleWhatsappParticipant({ number: entry.number, customerName: entry.customerName, formattedPhone: formatPhone(entry.customerPhone), paymentStatus: entry.paymentStatus });
     });
 
     return [
@@ -478,7 +476,7 @@ export default function AdminRaffles() {
       `${whatsappEmoji.trophy} *${raffle.title}*`,
       `${whatsappEmoji.clipboard} *${modeLabel}*`,
       "",
-      ...(lines.length ? lines : ["Nenhum número nesta categoria."]),
+      joinRaffleWhatsappParticipants(lines),
       "",
       `${whatsappEmoji.chart} *RESUMO*`,
       `${whatsappEmoji.ticket} Escolhidos: *${allEntries.length}*`,
