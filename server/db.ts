@@ -1443,15 +1443,11 @@ export async function updateLastOrderStatus(data: {
 
   // Os status são editáveis pelo ADM. A regra operacional usa a label real
   // do banco para distinguir EM ANÁLISE de FOTO EM ANÁLISE, sem depender da chave.
-  const [targetStatusLabel, previousStatusLabel] = await Promise.all([
-    getStatusLabelFromDb(data.status).catch(() => data.status),
-    getStatusLabelFromDb(latestEntry.status).catch(() => latestEntry.status),
-  ]);
+  const targetStatusLabel = await getStatusLabelFromDb(data.status);
   const targetIsAnalysis = isAnalysisOrderStatusSemantic(data.status, targetStatusLabel);
-  const previousIsAnalysis = isAnalysisOrderStatusSemantic(latestEntry.status, previousStatusLabel);
   const lifecycleOrderNumber = [...subHistory].reverse()
     .find(history => history.orderNumber != null)?.orderNumber ?? latestEntry.orderNumber;
-  const shouldCloseSchedule = await isScheduleClosedByOrderStatus({
+  const shouldCloseSchedule = targetIsAnalysis ? false : await isScheduleClosedByOrderStatus({
     registrationId: data.registrationId,
     orderNumber: lifecycleOrderNumber,
     statusKey: data.status,
@@ -1489,6 +1485,7 @@ export async function updateLastOrderStatus(data: {
         });
       } catch (error) {
         console.error('[AutoSchedule] Falha ao garantir agenda ativa em EM ANÁLISE:', error);
+        return { success: false, error: 'Status salvo, mas o agendamento obrigatorio nao foi criado. Abra o pedido novamente para tentar a recuperacao.' };
       }
     } else if (shouldCloseSchedule) {
       try {
@@ -1532,7 +1529,7 @@ export async function updateLastOrderStatus(data: {
   // Regra central: qualquer fluxo que mova o subpedido para EM ANÁLISE
   // garante agenda ativa; FOTO EM ANÁLISE e etapas posteriores encerram a agenda.
 
-  if (targetIsAnalysis && !previousIsAnalysis) {
+  if (targetIsAnalysis) {
     try {
       const { ensureActiveAutomaticScheduleForAnalysis } = await import('./autoSchedule');
       const result = await ensureActiveAutomaticScheduleForAnalysis({
@@ -1541,6 +1538,7 @@ export async function updateLastOrderStatus(data: {
         customerPhone: latestEntry.customerPhone,
         serviceName: sourceForService.serviceName ?? null,
         serviceOption: sourceForService.serviceOption ?? null,
+        forceNewOnReturn: true,
       });
       console.info('[AutoSchedule][status]', {
         registrationId: data.registrationId,
@@ -1552,6 +1550,7 @@ export async function updateLastOrderStatus(data: {
       });
     } catch (error) {
       console.error('[AutoSchedule] Falha ao aplicar regra central de Em Análise:', error);
+      return { success: false, error: 'Status salvo, mas o agendamento obrigatorio nao foi criado. Abra o pedido novamente para tentar a recuperacao.' };
     }
   } else if (shouldCloseSchedule) {
     try {
@@ -1585,6 +1584,66 @@ export async function getOrderStatusHistory(registrationId: number): Promise<Ord
   return await db.select().from(orderStatusHistory)
     .where(eq(orderStatusHistory.registrationId, registrationId))
     .orderBy(sql`${orderStatusHistory.createdAt} DESC`);
+}
+
+/**
+ * Status real do subpedido, usando a mesma separação (índice mais recente = 0)
+ * de updateLastOrderStatus. A consulta de agenda não deve confiar no status
+ * enviado pelo navegador para criar novos agendamentos.
+ */
+export async function getCurrentSubOrderStatusSnapshot(
+  registrationId: number,
+  subOrderIndex: number,
+): Promise<{
+  status: string;
+  id: number;
+  createdAt: Date;
+  orderNumber: number | null;
+  customerPhone: string;
+  serviceName: string | null;
+  serviceOption: string | null;
+} | null> {
+  if (!Number.isInteger(registrationId) || registrationId <= 0 ||
+      !Number.isInteger(subOrderIndex) || subOrderIndex < 0) return null;
+  const db = await getDb();
+  if (!db) return null;
+
+  const history = await db.select().from(orderStatusHistory)
+    .where(eq(orderStatusHistory.registrationId, registrationId))
+    .orderBy(asc(orderStatusHistory.createdAt), asc(orderStatusHistory.id));
+  if (!history.length) return null;
+
+  let initialStatus = 'recebido';
+  try {
+    const result = await db.execute(sql`SELECT \`key\` FROM orderStatusTypes WHERE isActive = 1 AND isGlobal = 1 ORDER BY sortOrder ASC, id ASC LIMIT 1`);
+    const rows = (result as any)[0] as any[];
+    if (rows?.[0]?.key) initialStatus = String(rows[0].key);
+  } catch { /* compatibilidade com o fluxo inicial legado */ }
+
+  const groups: OrderStatusHistory[][] = [];
+  let current: OrderStatusHistory[] = [];
+  for (const entry of history) {
+    if ((entry.status === initialStatus || entry.status === 'recebido') && current.length) {
+      groups.push(current);
+      current = [];
+    }
+    current.push(entry);
+  }
+  if (current.length) groups.push(current);
+
+  const selected = groups.reverse()[subOrderIndex];
+  if (!selected?.length) return null;
+  const latest = selected[selected.length - 1];
+  const service = [...selected].reverse().find(row => row.serviceName || row.serviceOption) || latest;
+  return {
+    status: latest.status,
+    id: latest.id,
+    createdAt: latest.createdAt,
+    orderNumber: [...selected].reverse().find(row => row.orderNumber != null)?.orderNumber ?? null,
+    customerPhone: latest.customerPhone,
+    serviceName: service.serviceName ?? null,
+    serviceOption: service.serviceOption ?? null,
+  };
 }
 
 export async function getLatestOrderStatus(registrationId: number): Promise<OrderStatusHistory | null> {

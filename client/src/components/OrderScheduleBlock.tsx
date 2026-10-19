@@ -1,3 +1,4 @@
+import { isAnalysisOrderStatusSemantic } from "@shared/scheduleOrderLifecycle";
 import { encodeWhatsappMessage } from "@shared/whatsappMessageText";
 import { trpc } from "@/lib/trpc";
 import { useState } from "react";
@@ -30,7 +31,7 @@ function formatDate(d: string): string {
 export default function OrderScheduleBlock({ registrationId, subOrderIndex, customerPhone, customerName, customerEmail, customerPhotoUrl }: Props) {
   const utils = trpc.useUtils();
   const scheduleQueryInput = { registrationId, subOrderIndex, customerPhone: customerPhone || undefined };
-  const apptQuery = trpc.schedule.getForOrder.useQuery(scheduleQueryInput);
+  const apptQuery = trpc.schedule.getForOrder.useQuery(scheduleQueryInput, { staleTime: 0, refetchOnWindowFocus: true });
   const allAppointmentsQuery = trpc.schedule.listAppointments.useQuery(undefined, { staleTime: 10000 });
   const templatesQuery = trpc.schedule.listTemplates.useQuery();
   const cfgQuery = trpc.schedule.getConfig.useQuery();
@@ -40,11 +41,13 @@ export default function OrderScheduleBlock({ registrationId, subOrderIndex, cust
   const [templateId, setTemplateId] = useState<number | null>(null);
   const [open, setOpen] = useState(false);
 
-  const appt = selectEffectiveScheduleAppointment(
-    apptQuery.data as any,
-    (allAppointmentsQuery.data || []) as any[],
-    customerPhone,
-  ) as any;
+  const appt = (isAnalysisOrderStatusSemantic(apptQuery.data?.orderStatusKey, apptQuery.data?.orderStatusLabel)
+    ? apptQuery.data
+    : selectEffectiveScheduleAppointment(
+        apptQuery.data as any,
+        (allAppointmentsQuery.data || []) as any[],
+        customerPhone,
+      )) as any;
   const origin = PUBLIC_SITE_ORIGIN;
   const link = appt ? publicSiteUrl(`/agendar/${appt.token}`) : "";
 

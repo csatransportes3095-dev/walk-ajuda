@@ -10,41 +10,46 @@ export const SCHEDULE_CLOSED_STATUS_FALLBACK = new Set([
   'entregue', 'pedido_entregue', 'cancelado',
 ]);
 
+/** Ignore decorations, accents and separators, never rewrite stored keys. */
 export function normalizeOrderStatusSemantic(value: unknown): string {
   return String(value ?? '')
     .normalize('NFD')
     .replace(/[\u0300-\u036f]/g, '')
-    .replace(/[_-]+/g, ' ')
-    .replace(/\s+/g, ' ')
-    .trim()
-    .toLowerCase();
+    .toLowerCase()
+    .replace(/[^a-z0-9]+/g, ' ')
+    .trim();
+}
+
+/** A configured display label wins over a legacy key renamed by the ADM. */
+function effectiveStatusSemantic(key: unknown, label: unknown): string {
+  return normalizeOrderStatusSemantic(label) || normalizeOrderStatusSemantic(key);
 }
 
 export function isAnalysisOrderStatusSemantic(key: unknown, label: unknown): boolean {
-  return normalizeOrderStatusSemantic(label) === 'em analise'
-    || normalizeOrderStatusSemantic(key) === 'em analise';
+  return effectiveStatusSemantic(key, label) === 'em analise';
 }
 
 export function isPhotoAnalysisOrderStatusSemantic(key: unknown, label: unknown): boolean {
-  return normalizeOrderStatusSemantic(label) === 'foto em analise'
-    || normalizeOrderStatusSemantic(key) === 'foto em analise';
+  const semantic = effectiveStatusSemantic(key, label);
+  return semantic === 'foto em analise' || semantic === 'foto em anal' || semantic === 'foto analise';
 }
 
-/** Retorna true para FOTO EM ANALISE e toda etapa posterior na sequencia real. */
+/** EM ANALISE is always open, even when its key/position is inherited from an old flow. */
 export function isScheduleClosedStatusInFlow(input: {
   targetKey: string;
   targetLabel?: string | null;
   flowStatusKeys: string[];
   statuses: ScheduleStatusDescriptor[];
 }): boolean {
-  if (isPhotoAnalysisOrderStatusSemantic(input.targetKey, input.targetLabel)) return true;
+  const labelByKey = new Map(input.statuses.map(status => [status.key, status.label ?? status.key]));
+  const targetLabel = input.targetLabel || labelByKey.get(input.targetKey) || input.targetKey;
+  if (isAnalysisOrderStatusSemantic(input.targetKey, targetLabel)) return false;
+  if (isPhotoAnalysisOrderStatusSemantic(input.targetKey, targetLabel)) return true;
   if (SCHEDULE_CLOSED_STATUS_FALLBACK.has(input.targetKey)) return true;
 
-  const labelByKey = new Map(input.statuses.map(status => [status.key, status.label ?? status.key]));
   const photoAnalysisIndex = input.flowStatusKeys.findIndex(key =>
     isPhotoAnalysisOrderStatusSemantic(key, labelByKey.get(key) ?? key)
   );
   const targetIndex = input.flowStatusKeys.indexOf(input.targetKey);
-
   return photoAnalysisIndex >= 0 && targetIndex > photoAnalysisIndex;
 }

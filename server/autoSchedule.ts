@@ -318,7 +318,25 @@ export async function regenerateScheduleForOrder(input: {
   };
 }
 
-export async function ensureActiveAutomaticScheduleForAnalysis(input: {
+const analysisScheduleInFlight = new Map<string, Promise<AutomaticScheduleResult>>();
+
+/** Coalesce simultaneous reads from the badge and expanded card for one order. */
+export async function ensureActiveAutomaticScheduleForAnalysis(
+  input: Parameters<typeof ensureAnalysisScheduleUnlocked>[0],
+): Promise<AutomaticScheduleResult> {
+  const key = `${input.registrationId}:${input.subOrderIndex ?? 0}`;
+  const existing = analysisScheduleInFlight.get(key);
+  if (existing) return existing;
+  const running = ensureAnalysisScheduleUnlocked(input);
+  analysisScheduleInFlight.set(key, running);
+  try {
+    return await running;
+  } finally {
+    if (analysisScheduleInFlight.get(key) === running) analysisScheduleInFlight.delete(key);
+  }
+}
+
+async function ensureAnalysisScheduleUnlocked(input: {
   registrationId: number;
   customerPhone: string;
   serviceName?: string | null;
@@ -327,6 +345,7 @@ export async function ensureActiveAutomaticScheduleForAnalysis(input: {
   customerEmail?: string | null;
   subOrderIndex?: number;
   forceNewOnReturn?: boolean;
+  notifyCustomer?: boolean;
 }): Promise<AutomaticScheduleResult> {
   const registrationId = Number(input.registrationId);
   const subOrderIndex = Number.isInteger(input.subOrderIndex) ? Number(input.subOrderIndex) : 0;
@@ -357,7 +376,7 @@ export async function ensureActiveAutomaticScheduleForAnalysis(input: {
     customerEmail: input.customerEmail,
     serviceName: input.serviceName?.trim() || input.serviceOption?.trim() || 'Atendimento para foto de perfil',
     subOrderIndex,
-    notifyCustomer: true,
+    notifyCustomer: input.notifyCustomer !== false,
   });
   if (!result.created || !result.appointmentId || !result.token) {
     throw new Error('[AutoSchedule] EM ANÁLISE: não foi possível gerar o novo agendamento.');

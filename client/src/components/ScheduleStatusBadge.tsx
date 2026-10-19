@@ -114,15 +114,18 @@ export default function ScheduleStatusBadge({ registrationId, subOrderIndex, cus
   const summaryIsClosed = exactSummary?.status === "completed" || exactSummary?.status === "cancelled";
   const registrationIsClosed = newestRegistrationRow?.status === "completed";
 
-  const resolvedAppointment = summaryIsClosed
+  const recoveredAnalysis = isAnalysisOrderStatusSemantic(apptQuery.data?.orderStatusKey, apptQuery.data?.orderStatusLabel)
+    && ["pending", "confirmed"].includes(String(apptQuery.data?.status)) ? apptQuery.data : null;
+  const resolvedAppointment = recoveredAnalysis ?? (summaryIsClosed
     ? exactSummary
     : registrationIsClosed
       ? newestRegistrationRow
-      : confirmedRegistrationRow ?? baseResolvedAppointment ?? newestRegistrationRow;
+      : confirmedRegistrationRow ?? baseResolvedAppointment ?? newestRegistrationRow);
 
   const status = String(orderStatus || '');
-  const orderIsInAnalysis = isAnalysisOrderStatusSemantic(status, status);
-  const scheduleClosedByOrder = [
+  const persistedLabel = apptQuery.data?.orderStatusKey === status ? apptQuery.data?.orderStatusLabel : status;
+  const orderIsInAnalysis = isAnalysisOrderStatusSemantic(status, persistedLabel);
+  const scheduleClosedByOrder = !orderIsInAnalysis && [
     // EM ANÁLISE pode manter agenda ativa; FOTO EM ANÁLISE encerra a agenda.
     'foto_em_anal', 'foto_em_analise', 'foto_analise',
     'documentos_aprovados', 'foto_aprovada', 'foto_perfil_aprovada',
