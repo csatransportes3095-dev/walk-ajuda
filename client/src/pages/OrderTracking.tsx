@@ -1419,10 +1419,25 @@ export default function OrderTracking() {
                         >
                           {/* Animate the border sheen only: never fade the text or green background. */}
                           <span aria-hidden="true" className="pointer-events-none absolute inset-0 ring-2 ring-inset ring-white/45 motion-safe:animate-[pulse_2.8s_ease-in-out_infinite]" />
-                          <span className="relative z-10 min-w-0 flex-1 text-[17px] font-black uppercase tracking-[0.05em] leading-tight text-slate-950 sm:text-[19px]">
+                          <span
+                            className="relative z-10 min-w-0 flex-1 text-[18px] font-black uppercase tracking-[0.025em] leading-[1.1] text-slate-950 sm:text-[21px]"
+                            style={{
+                              fontFamily: 'Impact, "Arial Black", "Roboto Black", sans-serif',
+                              fontWeight: 900,
+                              WebkitTextStroke: "1px #020617",
+                              textShadow: "0.4px 0 #020617, -0.4px 0 #020617",
+                            }}
+                          >
                             VER TODAS AS ETAPAS
                           </span>
-                          <span className="relative z-10 whitespace-nowrap rounded-full border border-slate-900/20 bg-slate-900/10 px-3.5 py-2 text-[13px] font-black uppercase tracking-[0.04em] leading-none text-slate-950 sm:text-[14px]">
+                          <span
+                            className="relative z-10 whitespace-nowrap rounded-full border border-slate-900/20 bg-slate-900/10 px-3.5 py-2 text-[14px] font-black uppercase tracking-[0.025em] leading-none text-slate-950 sm:text-[15px]"
+                            style={{
+                              fontFamily: 'Impact, "Arial Black", "Roboto Black", sans-serif',
+                              fontWeight: 900,
+                              WebkitTextStroke: "0.55px #020617",
+                            }}
+                          >
                             {presentation.visibleKeys.length} {presentation.visibleKeys.length === 1 ? "ETAPA" : "ETAPAS"}
                           </span>
                           <ChevronRight className="relative z-10 h-6 w-6 flex-shrink-0 text-slate-950 transition-transform duration-300 group-open:rotate-90" strokeWidth={3} />
