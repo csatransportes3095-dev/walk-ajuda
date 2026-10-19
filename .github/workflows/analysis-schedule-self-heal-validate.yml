@@ -1,0 +1,77 @@
+name: Analysis schedule self-heal validation
+on:
+  push:
+    branches: [fix/analysis-schedule-self-heal-admin-20261019]
+    paths:
+      - '.github/workflows/analysis-schedule-self-heal-validate.yml'
+      - 'scripts/apply-analysis-schedule-self-heal-20261019.py'
+      - 'server/analysisScheduleReconcile.ts'
+      - 'server/analysisSchedulePriority.test.ts'
+      - 'shared/scheduleOrderLifecycle.ts'
+  workflow_dispatch:
+permissions:
+  contents: write
+concurrency:
+  group: analysis-schedule-self-heal
+  cancel-in-progress: true
+jobs:
+  integrate-and-validate:
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          ref: fix/analysis-schedule-self-heal-admin-20261019
+          fetch-depth: 0
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '22'
+      - name: Install locked dependencies
+        run: |
+          npm install -g pnpm@10.4.1
+          pnpm install --frozen-lockfile
+      - name: Apply isolated integration and verify checkout unchanged
+        run: |
+          python3 scripts/apply-analysis-schedule-self-heal-20261019.py
+          git diff --check
+          git add server/db.ts server/autoSchedule.ts server/routers/schedule.ts client/src/components/OrderScheduleBlock.tsx client/src/components/ScheduleStatusBadge.tsx
+      - name: Lifecycle and new-order regression tests
+        run: |
+          pnpm exec vitest run server/analysisSchedulePriority.test.ts server/scheduleOrderLifecycle.test.ts server/autoScheduleLegacyProduct.test.ts server/autoScheduleActivationWiring.test.ts server/postOrderScheduleFlow.test.ts server/schedulePreserveConfirmedEdit.test.ts --reporter=verbose
+      - name: Prepare exact Render sources
+        run: |
+          node --input-type=module <<'JS'
+          import fs from 'node:fs';
+          import {execFileSync} from 'node:child_process';
+          const scripts = [...fs.readFileSync('Dockerfile', 'utf8').matchAll(/&& node (scripts\/[^\s]+)/g)].map(m => m[1]);
+          if (!scripts.length) throw new Error('No Docker preparation scripts');
+          for (const script of scripts) {
+            if (!/^scripts\/[A-Za-z0-9._/-]+\.mjs$/.test(script)) throw new Error('Unsafe preparation path');
+            execFileSync(process.execPath, [script], {stdio: 'inherit'});
+          }
+          JS
+      - name: Recheck lifecycle after Render preparation
+        run: pnpm exec vitest run server/analysisSchedulePriority.test.ts server/scheduleOrderLifecycle.test.ts server/autoScheduleLegacyProduct.test.ts server/autoScheduleActivationWiring.test.ts server/postOrderScheduleFlow.test.ts server/schedulePreserveConfirmedEdit.test.ts --reporter=verbose
+      - name: Production build
+        run: pnpm build
+      - name: Read-only current status key audit
+        continue-on-error: true
+        run: |
+          node --input-type=module <<'JS'
+          const r = await fetch('https://h2colombiano.com/api/trpc/statusTypes.list', {signal: AbortSignal.timeout(20000)});
+          if (!r.ok) throw new Error('Status catalog HTTP ' + r.status);
+          const data = await r.json();
+          const rows = data.result?.data?.json ?? data.result?.data;
+          if (!Array.isArray(rows)) throw new Error('Unexpected catalog response');
+          console.log(JSON.stringify(rows.map(s => ({key:s.key, label:s.label, active:s.isActive})), null, 2));
+          JS
+      - name: Commit only validated integration to feature branch
+        run: |
+          git config user.name 'github-actions[bot]'
+          git config user.email '41898282+github-actions[bot]@users.noreply.github.com'
+          if git diff --cached --quiet; then
+            echo 'Validated integration already committed.'
+          else
+            git commit -m 'fix(schedule): integrar recuperacao validada e renovar agenda no retorno'
+            git push origin HEAD:fix/analysis-schedule-self-heal-admin-20261019
+          fi
