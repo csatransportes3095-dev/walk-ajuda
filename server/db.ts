@@ -1443,15 +1443,11 @@ export async function updateLastOrderStatus(data: {
 
   // Os status são editáveis pelo ADM. A regra operacional usa a label real
   // do banco para distinguir EM ANÁLISE de FOTO EM ANÁLISE, sem depender da chave.
-  const [targetStatusLabel, previousStatusLabel] = await Promise.all([
-    getStatusLabelFromDb(data.status).catch(() => data.status),
-    getStatusLabelFromDb(latestEntry.status).catch(() => latestEntry.status),
-  ]);
+  const targetStatusLabel = await getStatusLabelFromDb(data.status);
   const targetIsAnalysis = isAnalysisOrderStatusSemantic(data.status, targetStatusLabel);
-  const previousIsAnalysis = isAnalysisOrderStatusSemantic(latestEntry.status, previousStatusLabel);
   const lifecycleOrderNumber = [...subHistory].reverse()
     .find(history => history.orderNumber != null)?.orderNumber ?? latestEntry.orderNumber;
-  const shouldCloseSchedule = await isScheduleClosedByOrderStatus({
+  const shouldCloseSchedule = targetIsAnalysis ? false : await isScheduleClosedByOrderStatus({
     registrationId: data.registrationId,
     orderNumber: lifecycleOrderNumber,
     statusKey: data.status,
@@ -1489,6 +1485,7 @@ export async function updateLastOrderStatus(data: {
         });
       } catch (error) {
         console.error('[AutoSchedule] Falha ao garantir agenda ativa em EM ANÁLISE:', error);
+        return { success: false, error: 'Status salvo, mas o agendamento obrigatorio nao foi criado. Abra o pedido novamente para tentar a recuperacao.' };
       }
     } else if (shouldCloseSchedule) {
       try {
@@ -1532,7 +1529,7 @@ export async function updateLastOrderStatus(data: {
   // Regra central: qualquer fluxo que mova o subpedido para EM ANÁLISE
   // garante agenda ativa; FOTO EM ANÁLISE e etapas posteriores encerram a agenda.
 
-  if (targetIsAnalysis && !previousIsAnalysis) {
+  if (targetIsAnalysis) {
     try {
       const { ensureActiveAutomaticScheduleForAnalysis } = await import('./autoSchedule');
       const result = await ensureActiveAutomaticScheduleForAnalysis({
@@ -1541,6 +1538,7 @@ export async function updateLastOrderStatus(data: {
         customerPhone: latestEntry.customerPhone,
         serviceName: sourceForService.serviceName ?? null,
         serviceOption: sourceForService.serviceOption ?? null,
+        forceNewOnReturn: true,
       });
       console.info('[AutoSchedule][status]', {
         registrationId: data.registrationId,
@@ -1552,6 +1550,7 @@ export async function updateLastOrderStatus(data: {
       });
     } catch (error) {
       console.error('[AutoSchedule] Falha ao aplicar regra central de Em Análise:', error);
+      return { success: false, error: 'Status salvo, mas o agendamento obrigatorio nao foi criado. Abra o pedido novamente para tentar a recuperacao.' };
     }
   } else if (shouldCloseSchedule) {
     try {
@@ -1597,6 +1596,9 @@ export async function getCurrentSubOrderStatusSnapshot(
   subOrderIndex: number,
 ): Promise<{
   status: string;
+  id: number;
+  createdAt: Date;
+  orderNumber: number | null;
   customerPhone: string;
   serviceName: string | null;
   serviceOption: string | null;
@@ -1635,6 +1637,9 @@ export async function getCurrentSubOrderStatusSnapshot(
   const service = [...selected].reverse().find(row => row.serviceName || row.serviceOption) || latest;
   return {
     status: latest.status,
+    id: latest.id,
+    createdAt: latest.createdAt,
+    orderNumber: [...selected].reverse().find(row => row.orderNumber != null)?.orderNumber ?? null,
     customerPhone: latest.customerPhone,
     serviceName: service.serviceName ?? null,
     serviceOption: service.serviceOption ?? null,

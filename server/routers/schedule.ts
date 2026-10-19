@@ -1,3 +1,4 @@
+import { reconcileAnalysisScheduleForOrder } from '../analysisScheduleReconcile';
 import { buildWhatsappMessageUrl } from "@shared/whatsappUrl";
 import { router, publicProcedure, adminProcedure } from "../_core/trpc";
 import { TRPCError } from "@trpc/server";
@@ -368,110 +369,31 @@ export const scheduleRouter = router({
 
   getForOrder: adminProcedure
     .input(z.object({
-      registrationId: z.number(),
-      subOrderIndex: z.number().default(0),
+      registrationId: z.number().int().positive(),
+      subOrderIndex: z.number().int().nonnegative().default(0),
       customerPhone: z.string().optional(),
       orderStatus: z.string().optional(),
     }))
     .query(async ({ input }) => {
-      let appt = await getAppointmentByOrder(input.registrationId, input.subOrderIndex);
-
-      let currentStatusKey = String(input.orderStatus || '');
-      let currentStatusLabel = currentStatusKey;
-      try {
-        if (currentStatusKey) currentStatusLabel = await getStatusLabelFromDb(currentStatusKey);
-      } catch {}
-      const normalizeSemantic = (value: unknown) => String(value ?? '')
-        .normalize('NFD')
-        .replace(/[\u0300-\u036f]/g, '')
-        .replace(/[_-]+/g, ' ')
-        .replace(/\s+/g, ' ')
-        .trim()
-        .toLowerCase();
-      const currentStatusSemantic = normalizeSemantic(currentStatusLabel);
-      const currentStatusKeySemantic = normalizeSemantic(currentStatusKey);
-      const isAnalysis = currentStatusSemantic === 'em analise'
-        || currentStatusKeySemantic === 'em analise';
-      const isPhotoAnalysis = currentStatusSemantic === 'foto em analise'
-        || currentStatusKeySemantic === 'foto em analise';
-
-      // Reconciliação segura: somente o agendamento EXATO deste pedido/subpedido
-      // pode corrigir o status principal. Nunca usa o fallback por telefone para isso.
-      if (appt && appt.status === 'confirmed' && (!currentStatusKey || isAnalysis)) {
-        try {
-          const confirmedStatusKey = await resolveConfirmedScheduleOrderStatusKey(input.registrationId, null);
-          if (!confirmedStatusKey) throw new Error('Status ativo de AGENDAMENTO CONFIRMADO não encontrado no catálogo/fluxo.');
-          const statusResult = await updateLastOrderStatus({
-            registrationId: input.registrationId,
-            subOrderIndex: input.subOrderIndex,
-            status: confirmedStatusKey,
-            note: null,
-          });
-          if (statusResult.success) {
-            currentStatusKey = confirmedStatusKey;
-            currentStatusLabel = await getStatusLabelFromDb(confirmedStatusKey).catch(() => 'AGENDAMENTO CONFIRMADO');
-            console.info('[Schedule][reconcile] Status principal corrigido para AGENDAMENTO CONFIRMADO:', {
-              registrationId: input.registrationId,
-              subOrderIndex: input.subOrderIndex,
-              appointmentId: appt.id,
-            });
-          } else {
-            console.error('[Schedule][reconcile] Agendamento confirmado, mas não foi possível corrigir o status principal:', {
-              registrationId: input.registrationId,
-              subOrderIndex: input.subOrderIndex,
-              appointmentId: appt.id,
-              error: statusResult.error,
-            });
-          }
-        } catch (error) {
-          console.error('[Schedule][reconcile] Falha ao reconciliar AGENDAMENTO CONFIRMADO:', error);
-        }
-      }
-
-      // Autocorreção dos pedidos que já ficaram presos antes desta correção:
-      // FOTO EM ANÁLISE encerra qualquer agenda pending/confirmed do mesmo pedido/subpedido.
-      if (isPhotoAnalysis) {
-        if (appt && (appt.status === 'pending' || appt.status === 'confirmed')) {
-          await completeAppointment(appt.id);
-          appt = await getAppointmentByOrder(input.registrationId, input.subOrderIndex);
-        }
-        // Nunca ressuscitar agenda de outro pedido pelo fallback de telefone
-        // quando este card já está em FOTO EM ANÁLISE.
-        if (!appt || appt.status === 'completed' || appt.status === 'cancelled') {
-          return appt ?? null;
-        }
-      }
-
-      // Fallback por TELEFONE: agendamentos podem ter sido vinculados a um
-      // registrationId antigo/diferente do mesmo cliente (re-cadastro). Se não
-      // encontrar pela chave do pedido, casa pelo telefone (chave confiável),
-      // priorizando o agendamento confirmado mais recente.
-      if (!appt && input.customerPhone && !isPhotoAnalysis) {
+      const state = await reconcileAnalysisScheduleForOrder(input.registrationId, input.subOrderIndex);
+      let appt = state.appointment;
+      // Legacy phone fallback is read-only, and never overrides the analysis cycle.
+      if (!appt && input.customerPhone && !state.isAnalysis && !state.closedByOrder) {
         const byPhone = await listAppointmentsByPhone(input.customerPhone);
-        if (byPhone.length > 0) {
-          appt = byPhone.find(a => a.status === "confirmed")
-            ?? byPhone.find(a => a.status === "pending")
-            ?? byPhone[0];
-        }
+        appt = byPhone.find(a => a.status === 'confirmed')
+          ?? byPhone.find(a => a.status === 'pending') ?? byPhone[0] ?? null;
       }
       if (!appt) return null;
-      // Busca o texto de WhatsApp do modelo associado (se houver)
       let templateWhatsappMessage: string | null = null;
       if (appt.templateId) {
-        const tpl = await getScheduleTemplateById(appt.templateId);
-        templateWhatsappMessage = tpl?.whatsappMessage ?? null;
+        const template = await getScheduleTemplateById(appt.templateId);
+        templateWhatsappMessage = template?.whatsappMessage ?? null;
       }
-      // Enriquecer com o status mais recente do pedido
-      let orderStatusKey: string | null = null;
-      let orderStatusLabel: string | null = null;
-      try {
-        const latestStatus = await getLatestOrderStatus(appt.registrationId);
-        if (latestStatus?.status) {
-          orderStatusKey = latestStatus.status;
-          orderStatusLabel = await getStatusLabelFromDb(latestStatus.status);
-        }
-      } catch (e) { /* silently ignore */ }
-      return { ...appt, templateWhatsappMessage, orderStatusKey, orderStatusLabel };
+      return {
+        ...appt, templateWhatsappMessage,
+        orderStatusKey: state.statusKey || null,
+        orderStatusLabel: state.statusLabel || null,
+      };
     }),
 
   // Cria (ou recria) o link individual de agendamento para um pedido
