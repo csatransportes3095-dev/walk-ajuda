@@ -35,12 +35,12 @@ export async function getStatusVisibilityRule(flowId:number,currentStatusKey:str
   await ensureTable();
   const db=await getDb();if(!db)throw new Error("Banco indisponível");
   const r=await db.execute(sql`SELECT mode,hiddenKeysJson,showNextStep,showProgress FROM orderStatusVisibilityRules WHERE flowId=${flowId} AND currentStatusKey=${currentStatusKey} LIMIT 1`);
-  return (r[0] as any[])[0]?toPolicy((r[0] as any[])[0]):DEFAULT_STATUS_VISIBILITY;
+  return (r[0] as unknown as any[])[0]?toPolicy((r[0] as unknown as any[])[0]):DEFAULT_STATUS_VISIBILITY;
 }
 export async function listStatusVisibilityRules(flowId:number){
   await ensureTable();const db=await getDb();if(!db)throw new Error("Banco indisponível");
   const r=await db.execute(sql`SELECT currentStatusKey,mode,hiddenKeysJson,showNextStep,showProgress FROM orderStatusVisibilityRules WHERE flowId=${flowId}`);
-  return (r[0] as any[]).map(row=>({currentStatusKey:row.currentStatusKey,...toPolicy(row)}));
+  return (r[0] as unknown as any[]).map(row=>({currentStatusKey:row.currentStatusKey,...toPolicy(row)}));
 }
 export async function saveStatusVisibilityRule(input:{flowId:number;currentStatusKey:string}&StatusVisibilityPolicy) {
   await ensureTable();
