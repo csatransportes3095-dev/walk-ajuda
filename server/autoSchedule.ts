@@ -326,50 +326,43 @@ export async function ensureActiveAutomaticScheduleForAnalysis(input: {
   customerName?: string | null;
   customerEmail?: string | null;
   subOrderIndex?: number;
+  forceNewOnReturn?: boolean;
 }): Promise<AutomaticScheduleResult> {
   const registrationId = Number(input.registrationId);
   const subOrderIndex = Number.isInteger(input.subOrderIndex) ? Number(input.subOrderIndex) : 0;
   const customerPhone = normalizeCustomerPhone(input.customerPhone);
   if (!Number.isInteger(registrationId) || registrationId <= 0 || !customerPhone) {
-    return { created: false };
+    throw new Error('[AutoSchedule] EM ANÁLISE: pedido ou telefone inválido.');
   }
 
-  const automaticOptions = await loadAutomaticOptions();
-  const option = findAutomaticOption(automaticOptions, input.serviceName, input.serviceOption);
-  if (!option) {
-    console.warn('[AutoSchedule] EM ANÁLISE sem opção automática compatível:', {
-      registrationId,
-      subOrderIndex,
-      serviceName: input.serviceName || null,
-      serviceOption: input.serviceOption || null,
-    });
-    return { created: false, registrationId };
-  }
-
-  // Invariante de EM ANÁLISE: se já existe agenda ativa, não duplica.
-  // Se a última agenda está completed/cancelled (ou não existe), cria link NOVO.
+  // Regra prioritária da etapa EM ANÁLISE, independente de habilitação automática
+  // no produto. O checkout continua usando ensureAutomaticScheduleForOrder acima.
+  // Em transição real para EM ANÁLISE, a agenda deve receber um token novo.
+  // Reconsultas e salvamento de observação mantêm uma agenda ainda ativa.
   const existing = await getAppointmentByOrder(registrationId, subOrderIndex);
-  if (existing && (existing.status === 'pending' || existing.status === 'confirmed')) {
+  if (!input.forceNewOnReturn && existing && (existing.status === 'pending' || existing.status === 'confirmed')) {
     return {
       created: false,
       appointmentId: existing.id,
       token: existing.token,
       url: publicSiteUrl(`/agendar/${existing.token}`),
       registrationId,
-      optionId: option.id,
     };
   }
 
-  return regenerateScheduleForOrder({
+  const result = await regenerateScheduleForOrder({
     registrationId,
     customerPhone,
     customerName: input.customerName,
     customerEmail: input.customerEmail,
-    serviceName: input.serviceName || [option.productName, option.label].filter(Boolean).join(" — "),
+    serviceName: input.serviceName?.trim() || input.serviceOption?.trim() || 'Atendimento para foto de perfil',
     subOrderIndex,
-    optionId: option.id,
     notifyCustomer: true,
   });
+  if (!result.created || !result.appointmentId || !result.token) {
+    throw new Error('[AutoSchedule] EM ANÁLISE: não foi possível gerar o novo agendamento.');
+  }
+  return result;
 }
 
 export async function regenerateAutomaticScheduleForOrder(input: {
