@@ -1,7 +1,9 @@
-import { useState } from "react";
-import { splitSiteBulkBatches } from "@shared/siteSecurityBulk";
+import { useMemo, useState } from "react";
+import { splitSiteBulkBatches, siteBulkEmail } from "@shared/siteSecurityBulk";
 import type { SiteBulkFilter } from "@shared/siteSecurityBulk";
 import { manualSiteAccessFeedback, manualSiteAccessErrorMessage } from "@shared/siteSecurityManualFeedback";
+import { indexFilteredSiteAccess } from "@shared/siteSecurityFilteredAccess";
+import { SiteSecurityFilteredCandidate } from "@/components/SiteSecurityFilteredCandidate";
 import { useLocation } from "wouter";
 import { ShieldCheck, ArrowLeft, UserPlus, Trash2, RefreshCcw, Image as ImageIcon, Expand, X } from "lucide-react";
 import { trpc } from "@/lib/trpc";
@@ -11,6 +13,7 @@ export default function AdminSiteSecurity() {
  const [, navigate]=useLocation();
  const status=trpc.siteSecurity.status.useQuery(undefined,{retry:false,refetchOnWindowFocus:true});
  const people=trpc.siteSecurity.list.useQuery(undefined,{retry:false});
+ const accessByEmail=useMemo(()=>indexFilteredSiteAccess(people.isError?[]:people.data??[]),[people.data,people.isError]);
  const utils=trpc.useUtils();
  const [name,setName]=useState("");const [email,setEmail]=useState("");const [phone,setPhone]=useState("");
  const setMode=trpc.siteSecurity.setMode.useMutation({onSuccess:()=>{void utils.siteSecurity.status.invalidate();toast.success("Modo atualizado.");},onError:e=>toast.error(e.message)});
@@ -24,7 +27,13 @@ export default function AdminSiteSecurity() {
   },
   onError:e=>toast.error(manualSiteAccessErrorMessage(e.data?.code)),
  });
- const change=trpc.siteSecurity.changeStatus.useMutation({onSuccess:()=>void people.refetch(),onError:e=>toast.error(e.message)});
+ const change=trpc.siteSecurity.changeStatus.useMutation({
+  onSuccess:async(_,input)=>{
+   await Promise.all([utils.siteSecurity.list.invalidate(),utils.siteSecurity.bulkCandidates.invalidate()]);
+   toast.success(input.status==="suspended"?"Acesso suspenso.":"Acesso reativado.");
+  },
+  onError:e=>toast.error(e.data?.code==="FORBIDDEN"||e.data?.code==="UNAUTHORIZED"?"Acesso reservado ao Super Admin. Entre novamente no ADM.":"Não foi possível atualizar a autorização. Atualize a lista e tente novamente."),
+ });
  const remove=trpc.siteSecurity.remove.useMutation({onSuccess:()=>void people.refetch(),onError:e=>toast.error(e.message)});
  const [photoModal,setPhotoModal]=useState<{url:string;name:string}|null>(null);
  const [brokenPhotos,setBrokenPhotos]=useState<string[]>([]);
@@ -98,11 +107,14 @@ export default function AdminSiteSecurity() {
     <span className="text-yellow-200 font-bold">{selected.length} selecionado(s)</span>
    </div>}
    <div className="max-h-80 overflow-y-auto space-y-1 border border-white/10 rounded-xl p-2">
-    {candidates.map(c=><label key={c.id} className="flex items-center gap-3 px-2 py-2 rounded-lg hover:bg-white/5 text-sm">
-     <input type="checkbox" className="h-4 w-4 shrink-0" disabled={c.alreadyAuthorized||bulkRunning} checked={selected.includes(c.id)} onChange={e=>setSelectedIds(previous=>e.target.checked?[...previous,c.id]:previous.filter(id=>id!==c.id))}/>
-     <span className="flex-1 min-w-0"><span className="font-bold">{c.name}</span><span className="block text-xs text-white/60 break-all">{c.email} · {c.orderCount} pedido(s){bulkFilter==="with_loans"?" · "+c.loanCount+" empréstimo(s)":""}</span></span>
-     {c.alreadyAuthorized&&<span className="text-xs text-white/50">Já autorizado</span>}
-    </label>)}
+    {candidates.map(c=><SiteSecurityFilteredCandidate
+     key={c.id} candidate={c} authorization={accessByEmail.get(siteBulkEmail(c.email))}
+     selected={selected.includes(c.id)} bulkRunning={bulkRunning} showLoans={bulkFilter==="with_loans"}
+     actionDisabled={change.isPending||people.isFetching||people.isError||bulk.isFetching||bulk.isError}
+     actionPending={change.isPending&&change.variables?.id===accessByEmail.get(siteBulkEmail(c.email))?.id}
+     onSelect={(id,checked)=>setSelectedIds(previous=>checked?[...previous,id]:previous.filter(value=>value!==id))}
+     onChangeStatus={input=>{if(change.isPending||bulkRunning||people.isFetching||people.isError||bulk.isFetching||bulk.isError)return;change.mutate(input);}}
+    />)}
     {!bulk.isLoading&&!bulk.error&&candidates.length===0&&<p className="p-3 text-white/60">Nenhum cliente encontrado nesse filtro.</p>}
    </div>
    <button type="button" disabled={bulkRunning||bulkAdd.isPending||selected.length===0} onClick={()=>void runBulk()} className="w-full bg-yellow-500 disabled:opacity-50 text-black font-black p-3 rounded-lg">{bulkRunning?"Processando "+bulkProgress.done+" de "+bulkProgress.total+"...":"Autorizar "+selected.length+" cliente(s) selecionado(s)"}</button>
@@ -117,7 +129,7 @@ export default function AdminSiteSecurity() {
  </button>:<div aria-label="Foto não disponível" className="w-14 h-14 rounded-lg flex items-center justify-center bg-white/5 border border-white/15"><ImageIcon size={22} className="text-white/35"/></div>}
  </div>
  <div className="min-w-0"><p className="font-bold break-words">{p.displayName}</p><p className="text-xs text-white/55 break-all">{p.email} · {p.status}</p></div>
- </div><div className="flex gap-2"><button onClick={()=>change.mutate({id:p.id,status:p.status==="active"?"suspended":"active"})} className="rounded-lg border border-white/20 p-2 text-xs">{p.status==="active"?"Suspender":"Reativar"}</button><button aria-label={"Remover "+p.displayName} onClick={()=>{if(window.confirm("Remover autorização?"))remove.mutate({id:p.id});}} className="rounded-lg border border-red-500/30 p-2 text-red-300"><Trash2 size={16}/></button></div></div>)}
+ </div><div className="flex gap-2"><button disabled={change.isPending||bulkRunning||people.isFetching} onClick={()=>change.mutate({id:p.id,status:p.status==="active"?"suspended":"active"})} className="rounded-lg border border-white/20 p-2 text-xs">{p.status==="active"?"Suspender":"Reativar"}</button><button aria-label={"Remover "+p.displayName} onClick={()=>{if(window.confirm("Remover autorização?"))remove.mutate({id:p.id});}} className="rounded-lg border border-red-500/30 p-2 text-red-300"><Trash2 size={16}/></button></div></div>)}
  </section>
  {photoModal&&<div className="fixed inset-0 z-[100] flex items-center justify-center bg-black/85 p-4" role="presentation" onMouseDown={e=>{if(e.target===e.currentTarget)setPhotoModal(null)}}>
   <div role="dialog" aria-modal="true" aria-label={"Foto de "+photoModal.name} className="relative w-full max-w-2xl rounded-2xl border border-white/20 bg-[#10101f] p-4 shadow-2xl">

@@ -1,7 +1,7 @@
 name: Site security manual authorization
 on:
   push:
-    branches: [fix/site-security-manual-registration-20261019]
+    branches: [fix/site-security-manual-registration-20261019, fix/site-security-filter-suspend-20261019]
   pull_request:
     branches: [recovery/organizar-salvos-2026-08-24]
     paths:
@@ -9,6 +9,9 @@ on:
       - 'server/siteAccessManualAdd*'
       - 'shared/siteSecurityManualFeedback.ts'
       - 'client/src/pages/AdminSiteSecurity.tsx'
+      - 'client/src/components/SiteSecurityFilteredCandidate.tsx'
+      - 'shared/siteSecurityFilteredAccess.ts'
+      - 'server/siteSecurityFilteredActions.test.ts'
       - '.github/workflows/site-security-manual-registration-validation.yml'
 permissions:
   contents: read
@@ -40,7 +43,7 @@ jobs:
       - uses: actions/checkout@v4
         with:
           persist-credentials: false
-          fetch-depth: 20
+          fetch-depth: 40
       - uses: actions/setup-node@v4
         with:
           node-version: 22
@@ -59,25 +62,31 @@ jobs:
           const db=await createConnection(process.env.SITE_ACCESS_TEST_DB_URL);
           try{await db.query('CREATE DATABASE IF NOT EXISTS h2_bulk_test');}finally{await db.end();}
           JS
-      - name: Confirm only manual authorization and its feedback changed
+      - name: Confirm filter actions leave server, manual registration and remaining layout unchanged
         run: |
           node --input-type=module <<'JS'
           import fs from 'node:fs';
           import assert from 'node:assert/strict';
           import {execFileSync} from 'node:child_process';
-          const base='edbd6c2dd669f0b6e75c4b6efd08bc7f3b48f413';
+          const base='6b968019fe3650c543ac977302cc851f4bd78d86';
           const before=p=>execFileSync('git',['show',base+':'+p],{encoding:'utf8'});
           const read=p=>fs.readFileSync(p,'utf8');
-          for(const p of ['server/siteAccessSchema.ts','server/siteAccessIdentity.ts','server/autoSchedule.ts','server/routers/schedule.ts','server/_core/trpc.ts','server/_core/sendMailDirect.ts','server/db.ts','shared/siteSecurityBulk.ts','client/src/pages/OrderTracking.tsx','Dockerfile']) {
+          for(const p of ['server/siteSecurityRouter.ts','server/siteAccessManualAdd.ts','shared/siteSecurityManualFeedback.ts','server/siteAccessSchema.ts','server/siteAccessIdentity.ts','server/autoSchedule.ts','server/routers/schedule.ts','server/_core/trpc.ts','server/_core/sendMailDirect.ts','server/db.ts','shared/siteSecurityBulk.ts','client/src/pages/OrderTracking.tsx','Dockerfile','package.json','pnpm-lock.yaml']) {
             assert.equal(read(p),before(p),p+' unexpectedly changed');
           }
-          const stripRouter=s=>s.replace(/^import \{ addManualSiteAccess \} from "\.\/siteAccessManualAdd";\r?\n/m,'').replace(/^const emailSchema = .*;\r?\n/m,'').replace(/  add: adminProcedure[\s\S]*?(?=  changeStatus: adminProcedure)/,'');
-          assert.equal(stripRouter(read('server/siteSecurityRouter.ts')),stripRouter(before('server/siteSecurityRouter.ts')),'Unrelated router behavior changed');
-          const stripUi=s=>s.replace(/^import \{ manualSiteAccessFeedback, manualSiteAccessErrorMessage \} from "@shared\/siteSecurityManualFeedback";\r?\n/m,'').replace(/ const add=trpc\.siteSecurity\.add\.useMutation\([\s\S]*?(?= const change=)/,'').replace('if(add.isPending)return;','');
-          assert.equal(stripUi(read('client/src/pages/AdminSiteSecurity.tsx')),stripUi(before('client/src/pages/AdminSiteSecurity.tsx')),'Unrelated UI or layout changed');
-          console.log('PASS: schema, OTP/session, authorization controls, bulk actions, scheduling, layout and all other router actions unchanged.');
+          const stripUi=s=>s
+            .replace('import { useMemo, useState } from "react";','import { useState } from "react";')
+            .replace('import { splitSiteBulkBatches, siteBulkEmail } from "@shared/siteSecurityBulk";','import { splitSiteBulkBatches } from "@shared/siteSecurityBulk";')
+            .replace(/^import \{ indexFilteredSiteAccess \} from "@shared\/siteSecurityFilteredAccess";\r?\n/m,'')
+            .replace(/^import \{ SiteSecurityFilteredCandidate \} from "@\/components\/SiteSecurityFilteredCandidate";\r?\n/m,'')
+            .replace(/^ const accessByEmail=.*\r?\n/m,'')
+            .replace(/ const change=trpc\.siteSecurity\.changeStatus\.useMutation\([\s\S]*?(?= const remove=)/,'')
+            .replace(/    \{candidates\.map\(c=>[\s\S]*?(?=    \{!bulk\.isLoading)/,'')
+            .replace(' disabled={change.isPending||bulkRunning||people.isFetching}','');
+          assert.equal(stripUi(read('client/src/pages/AdminSiteSecurity.tsx')),stripUi(before('client/src/pages/AdminSiteSecurity.tsx')),'UI changed outside filtered rows/status feedback');
+          console.log('PASS: entire server, permissions, manual registration, OTP/session, bulk persistence, scheduling and layout outside filtered actions unchanged.');
           JS
-      - name: Real MySQL duplicate submission and security regressions
+      - name: Filter actions, real MySQL duplicate submission and security regressions
         run: |
           set -o pipefail
           mapfile -t tests < <(find server -maxdepth 1 -type f -name 'site*.test.ts' | sort)
