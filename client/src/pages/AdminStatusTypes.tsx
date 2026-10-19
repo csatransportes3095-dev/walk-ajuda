@@ -521,6 +521,16 @@ export default function AdminStatusTypes() {
                           <option value="normal">Exibir normalmente</option><option value="selected">Ocultar status selecionados</option><option value="current_only">Mostrar somente status atual</option>
                         </select>
                       </label>
+                      <label className="block text-xs text-white/70">Aplicar à sequência
+                        <select className={`${inputCls} mt-1 w-full`} value={visibilityFor(s).flowId} onChange={e=>{
+                          const id=Number(e.target.value);
+                          const saved=(visibilityQuery.data??[]).find(r=>r.flowId===id&&r.triggerKey===s.key);
+                          changeVisibility(s,{flowId:id,mode:saved?.mode??"normal",hiddenKeys:saved?.hiddenKeys??[],showNext:saved?.showNext??true,showProgress:saved?.showProgress??true});
+                        }}>
+                          <option value={0}>Todas as sequências (padrão global)</option>
+                          {(flowsQuery.data??[]).filter(f=>f.isDefault!==1).map(f=><option value={f.id} key={f.id}>{f.name}</option>)}
+                        </select>
+                      </label>
                       {visibilityFor(s).mode==="selected"&&<div className="space-y-2">
                         <p className="text-xs text-white/60">Etapas ocultas somente da tela do cliente</p>
                         {(statuses as StatusType[]).filter(other=>other.isActive===1&&other.key!==s.key).map(other=><label key={other.id} className="flex items-center gap-2 text-xs text-white/80">
@@ -530,7 +540,7 @@ export default function AdminStatusTypes() {
                         <label className="flex items-center gap-2 text-xs text-white/80"><input type="checkbox" checked={visibilityFor(s).showProgress} onChange={e=>changeVisibility(s,{showProgress:e.target.checked})}/>Mostrar porcentagem</label>
                       </div>}
                       <Button type="button" disabled={visibilitySave.isPending} className="bg-cyan-700 hover:bg-cyan-600" onClick={()=>visibilitySave.mutate({triggerKey:s.key,...visibilityFor(s)})}>Salvar visibilidade</Button>
-                      <p className="text-[11px] text-white/50">Não altera histórico, ordem ou regras internas. Aplica-se ao padrão global.</p>
+                      <p className="text-[11px] text-white/50">Não altera histórico, ordem ou regras internas. É possível configurar exceções por sequência.</p>
                     </section>
                     <div className="rounded-xl border border-purple-500/20 bg-purple-500/5 p-3 text-xs text-white/45">
                       A sequência exibida ao cliente é configurada uma única vez em <b>Pedidos → Sequência do Cliente</b>.
