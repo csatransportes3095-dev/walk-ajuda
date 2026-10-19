@@ -1,3 +1,4 @@
+import { resolveStatusVisibility, getNextVisibleStatusKey } from "@shared/orderStatusVisibility";
 import { globalActiveStatuses, unavailableFlowKeys } from "@shared/orderStatusScope";
 import React, { useState, useMemo, useEffect } from "react";
 import { toast } from "sonner";
@@ -587,6 +588,10 @@ export default function OrderTracking() {
   // Dados de login liberado
   const registrationId = history.length > 0 ? ((history[0] as any).registrationId ?? 0) : 0;
   const selectedOrderNumber = history.find((entry: any) => entry.orderNumber != null)?.orderNumber ?? null;
+  const statusVisibilityQuery = trpc.statusVisibility.forOrder.useQuery(
+    { registrationId, orderNumber:selectedOrderNumber ?? null, currentStatusKey:latestStatus || "recebido" },
+    { enabled:canAccess && registrationId>0 && !!latestStatus, refetchInterval:15000, refetchOnWindowFocus:true }
+  );
   const statusFlowForOrderQuery = trpc.statusFlows.forOrder.useQuery(
     { registrationId, orderNumber: selectedOrderNumber ?? undefined },
     { enabled: canAccess && registrationId > 0, staleTime: 0, refetchInterval: 15_000, refetchOnWindowFocus: true }
@@ -1329,6 +1334,8 @@ export default function OrderTracking() {
               if (progressSteps.length === 0) return null;
 
               const keys = progressSteps.map((status: any) => status.key);
+              // Visibility only affects the client rendering. Retain original stages for operational progress.
+              const presentation = resolveStatusVisibility(keys, latestStatus, statusVisibilityQuery.data);
               const exactCurrentIdx = findProgressStatusIndex(keys, latestStatus);
               const progressPosition = resolveProgressPosition({
                 progressKeys: keys,
@@ -1338,7 +1345,8 @@ export default function OrderTracking() {
               const baseIdx = Math.max(0, Math.min(progressSteps.length - 1, progressPosition.currentIndex));
               const currentIdx = exactCurrentIdx >= 0 ? exactCurrentIdx : baseIdx;
               const nextIdx = !progressPosition.cancelled && currentIdx < progressSteps.length - 1 ? currentIdx + 1 : -1;
-              const nextStep = nextIdx >= 0 ? progressSteps[nextIdx] : null;
+              const nextVisibleKey = getNextVisibleStatusKey(keys,presentation.visibleKeys,currentIdx);
+              const nextStep = nextVisibleKey ? progressSteps.find((step:any)=>step.key===nextVisibleKey) : null;
               const nextCfg = nextStep ? getStatusCfg(nextStep.key) : null;
               const totalSteps = progressSteps.length;
               const stageNumber = Math.min(totalSteps, Math.max(1, currentIdx + 1));
@@ -1349,7 +1357,7 @@ export default function OrderTracking() {
 
               return (
                 <div className="overflow-hidden rounded-2xl border border-cyan-400/20 bg-gradient-to-b from-[#0b1725] via-[#0c1220] to-[#101020] shadow-2xl shadow-cyan-950/20">
-                  <div className="border-b border-white/10 bg-cyan-500/[0.06] p-4 sm:p-5">
+                  {presentation.showProgress && <div className="border-b border-white/10 bg-cyan-500/[0.06] p-4 sm:p-5">
                     <div className="flex items-start justify-between gap-4">
                       <div>
                         <p className="text-[10px] font-black uppercase tracking-[0.2em] text-cyan-300/70">Jornada do seu pedido</p>
@@ -1365,8 +1373,7 @@ export default function OrderTracking() {
                     <div className="mt-3 h-2 overflow-hidden rounded-full bg-white/5">
                       <div className="h-full rounded-full bg-gradient-to-r from-emerald-400 via-cyan-400 to-blue-500 transition-all duration-700" style={{ width: `${progressPercent}%` }} />
                     </div>
-                  </div>
-
+                  </div>}
                   <div className="space-y-3 p-4 sm:p-5">
                     <div className={`rounded-2xl border-2 p-4 ${latestCfg.bg} ${latestCfg.border}`}>
                       <div className="flex items-start gap-3">
@@ -1394,7 +1401,7 @@ export default function OrderTracking() {
                       )}
                     </div>
 
-                    {!progressPosition.cancelled && nextStep && nextCfg && (
+                    {presentation.showNextStep && !progressPosition.cancelled && nextStep && nextCfg && (
                       <div className="rounded-2xl border border-violet-400/30 bg-violet-500/10 p-4">
                         <div className="flex items-start gap-3">
                           <div className="flex h-10 w-10 flex-shrink-0 items-center justify-center rounded-full border border-violet-400/30 bg-violet-400/10 text-violet-300">
@@ -1415,7 +1422,7 @@ export default function OrderTracking() {
                       <div className="rounded-xl border border-red-500/30 bg-red-500/10 p-3 text-xs font-semibold text-red-300">Pedido cancelado. Não existem próximas etapas.</div>
                     )}
 
-                    <div className="pt-1">
+                    {presentation.showTimeline && <div className="pt-1">
                       <div className="mb-3 flex items-center justify-between gap-3">
                         <div>
                           <p className="text-xs font-black uppercase tracking-[0.16em] text-white/70">Todas as etapas</p>
@@ -1425,7 +1432,7 @@ export default function OrderTracking() {
                       </div>
 
                       <div className="relative ml-4 space-y-3 border-l border-white/10 pl-6">
-                        {progressSteps.map((step: any, idx: number) => {
+                        {progressSteps.filter((step:any)=>presentation.visibleKeys.includes(step.key)).map((step: any) => { const idx=progressSteps.findIndex((s:any)=>s.key===step.key);
                           const cfg = getStatusCfg(step.key);
                           const isDone = !progressPosition.cancelled && idx < currentIdx;
                           const isCurrent = !progressPosition.cancelled && idx === currentIdx;
@@ -1473,7 +1480,7 @@ export default function OrderTracking() {
                           );
                         })}
                       </div>
-                    </div>
+                    </div>}
                   </div>
                 </div>
               );

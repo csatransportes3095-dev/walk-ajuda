@@ -1,3 +1,4 @@
+import { getStatusVisibilityRule, listStatusVisibilityRules, saveStatusVisibilityRule, getOrderStatusVisibilityForClient } from "./orderStatusVisibility";
 import { siteSecurityRouter } from "./siteSecurityRouter";
 import { vinRegistryRouter } from "./routers/vinRegistry";
 import { chassisServiceRouter } from "./routers/chassisService";
@@ -6673,6 +6674,18 @@ export const appRouter = router({
         `);
         return { success: true };
       }),
+  }),
+  statusVisibility: router({
+    list: adminProcedure.input(z.object({flowId:z.number().int().positive()})).query(({input})=>listStatusVisibilityRules(input.flowId)),
+    save: adminProcedure.input(z.object({
+      flowId:z.number().int().positive(),currentStatusKey:z.string().min(1).max(64),
+      mode:z.enum(["normal","hide_selected","current_only"]),hiddenStatusKeys:z.array(z.string().min(1).max(64)).max(64),
+      showNextStep:z.boolean(),showProgress:z.boolean(),
+    })).mutation(({input})=>saveStatusVisibilityRule(input)),
+    forOrder: publicProcedure.input(z.object({
+      registrationId:z.number().int().positive(),orderNumber:z.number().int().positive().nullable(),
+      currentStatusKey:z.string().min(1).max(64),
+    })).query(({input})=>getOrderStatusVisibilityForClient(input.registrationId,input.orderNumber,input.currentStatusKey)),
   }),
   // Status de pedido editáveis pelo admin
   statusTypes: router({
