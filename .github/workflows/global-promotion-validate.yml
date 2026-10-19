@@ -19,7 +19,7 @@ jobs:
           node-version: '22'
           cache: pnpm
       - run: pnpm install --frozen-lockfile
-      - run: pnpm exec vitest run shared/globalPromotion.test.ts server/vipPricing.test.ts server/customerTextNormalization.test.ts
+      - run: pnpm exec vitest run shared/globalPromotion.test.ts server/vipPricing.test.ts server/customerTextNormalization.test.ts server/storefrontCategories.test.ts
       - run: pnpm build
       - name: Ensure no new TypeScript errors versus production
         run: |
