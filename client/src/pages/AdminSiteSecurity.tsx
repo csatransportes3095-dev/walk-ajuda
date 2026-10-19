@@ -1,6 +1,7 @@
 import { useState } from "react";
 import { splitSiteBulkBatches } from "@shared/siteSecurityBulk";
 import type { SiteBulkFilter } from "@shared/siteSecurityBulk";
+import { manualSiteAccessFeedback, manualSiteAccessErrorMessage } from "@shared/siteSecurityManualFeedback";
 import { useLocation } from "wouter";
 import { ShieldCheck, ArrowLeft, UserPlus, Trash2, RefreshCcw, Image as ImageIcon, Expand, X } from "lucide-react";
 import { trpc } from "@/lib/trpc";
@@ -13,7 +14,16 @@ export default function AdminSiteSecurity() {
  const utils=trpc.useUtils();
  const [name,setName]=useState("");const [email,setEmail]=useState("");const [phone,setPhone]=useState("");
  const setMode=trpc.siteSecurity.setMode.useMutation({onSuccess:()=>{void utils.siteSecurity.status.invalidate();toast.success("Modo atualizado.");},onError:e=>toast.error(e.message)});
- const add=trpc.siteSecurity.add.useMutation({onSuccess:()=>{void people.refetch();setName("");setEmail("");setPhone("");toast.success("Autorização registrada.");},onError:e=>toast.error(e.message)});
+ const add=trpc.siteSecurity.add.useMutation({
+  onSuccess:result=>{
+   void utils.siteSecurity.list.invalidate();
+   void utils.siteSecurity.bulkCandidates.invalidate();
+   const feedback=manualSiteAccessFeedback(result);
+   if(feedback.clearForm){setName("");setEmail("");setPhone("");}
+   if(feedback.kind==="success")toast.success(feedback.message);else toast.warning(feedback.message);
+  },
+  onError:e=>toast.error(manualSiteAccessErrorMessage(e.data?.code)),
+ });
  const change=trpc.siteSecurity.changeStatus.useMutation({onSuccess:()=>void people.refetch(),onError:e=>toast.error(e.message)});
  const remove=trpc.siteSecurity.remove.useMutation({onSuccess:()=>void people.refetch(),onError:e=>toast.error(e.message)});
  const [photoModal,setPhotoModal]=useState<{url:string;name:string}|null>(null);
@@ -60,7 +70,7 @@ export default function AdminSiteSecurity() {
  <div className="grid grid-cols-1 sm:grid-cols-3 gap-3">{([["public","🟢 Público"],["restricted","🔐 Restrito"],["blocked","⛔ Bloqueado 403"]] as const).map(([value,label])=><button key={value} type="button" disabled={!current||setMode.isPending||current===value} onClick={()=>choose(value)} className={`rounded-xl border p-3 font-bold text-sm disabled:opacity-60 ${current===value?"border-green-500 bg-green-600/20":"border-white/20 bg-white/10 hover:border-yellow-400"}`}>{label}</button>)}</div>
  <p className="text-xs text-white/50">Modo Restrito e Bloqueado só podem ser usados quando a proteção do servidor estiver validada na homologação.</p></section>
  <section className="rounded-2xl border border-white/10 bg-white/5 p-4 space-y-4"><div className="flex items-center justify-between"><h2 className="font-bold">Pessoas autorizadas</h2><button aria-label="Atualizar lista" onClick={()=>void people.refetch()} className="p-2 rounded bg-white/10"><RefreshCcw size={18}/></button></div>
- <form className="grid gap-2 sm:grid-cols-3" onSubmit={e=>{e.preventDefault();add.mutate({displayName:name.trim(),email:email.trim(),phone:phone.trim()||undefined});}}>
+ <form className="grid gap-2 sm:grid-cols-3" onSubmit={e=>{e.preventDefault();if(add.isPending)return;add.mutate({displayName:name.trim(),email:email.trim(),phone:phone.trim()||undefined});}}>
  <input required minLength={2} maxLength={128} value={name} onChange={e=>setName(e.target.value)} placeholder="Nome" className="w-full rounded-lg p-3 bg-white/10 border border-white/20"/>
  <input required type="email" value={email} onChange={e=>setEmail(e.target.value)} placeholder="E-mail autorizado" className="w-full rounded-lg p-3 bg-white/10 border border-white/20"/>
  <input value={phone} onChange={e=>setPhone(e.target.value)} placeholder="Telefone (opcional)" className="w-full rounded-lg p-3 bg-white/10 border border-white/20"/>

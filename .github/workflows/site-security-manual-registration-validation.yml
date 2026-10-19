@@ -1,0 +1,111 @@
+name: Site security manual authorization
+on:
+  push:
+    branches: [fix/site-security-manual-registration-20261019]
+  pull_request:
+    branches: [recovery/organizar-salvos-2026-08-24]
+    paths:
+      - 'server/siteSecurityRouter.ts'
+      - 'server/siteAccessManualAdd*'
+      - 'shared/siteSecurityManualFeedback.ts'
+      - 'client/src/pages/AdminSiteSecurity.tsx'
+      - '.github/workflows/site-security-manual-registration-validation.yml'
+permissions:
+  contents: read
+concurrency:
+  group: site-security-manual-${{ github.ref }}
+  cancel-in-progress: true
+jobs:
+  validate:
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    services:
+      mysql:
+        image: mysql:8.0
+        env:
+          MYSQL_ROOT_PASSWORD: test-isolated-only
+          MYSQL_DATABASE: h2_site_access_test
+        ports:
+          - 33306:3306
+        options: >-
+          --health-cmd="mysqladmin ping -h 127.0.0.1 -ptest-isolated-only"
+          --health-interval=5s
+          --health-timeout=5s
+          --health-retries=20
+    env:
+      TZ: UTC
+      SITE_ACCESS_TEST_DB_URL: mysql://root:test-isolated-only@127.0.0.1:33306/h2_site_access_test
+      TEST_MYSQL_URL: mysql://root:test-isolated-only@127.0.0.1:33306/h2_bulk_test
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          persist-credentials: false
+          fetch-depth: 20
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+      - name: Install locked dependencies
+        run: |
+          npm install -g pnpm@10.4.1
+          pnpm install --frozen-lockfile
+          mkdir -p /tmp/site-security-manual-evidence
+      - name: Initialize separate disposable bulk database
+        run: |
+          node --input-type=module <<'JS'
+          import {createConnection} from 'mysql2/promise';
+          const url=new URL(process.env.SITE_ACCESS_TEST_DB_URL);
+          const bulk=new URL(process.env.TEST_MYSQL_URL);
+          if(url.hostname!=='127.0.0.1'||url.port!=='33306'||url.pathname!=='/h2_site_access_test'||bulk.origin!==url.origin||bulk.pathname!=='/h2_bulk_test')throw new Error('Refusing non-local test database');
+          const db=await createConnection(process.env.SITE_ACCESS_TEST_DB_URL);
+          try{await db.query('CREATE DATABASE IF NOT EXISTS h2_bulk_test');}finally{await db.end();}
+          JS
+      - name: Confirm only manual authorization and its feedback changed
+        run: |
+          node --input-type=module <<'JS'
+          import fs from 'node:fs';
+          import assert from 'node:assert/strict';
+          import {execFileSync} from 'node:child_process';
+          const base='edbd6c2dd669f0b6e75c4b6efd08bc7f3b48f413';
+          const before=p=>execFileSync('git',['show',base+':'+p],{encoding:'utf8'});
+          const read=p=>fs.readFileSync(p,'utf8');
+          for(const p of ['server/siteAccessSchema.ts','server/siteAccessIdentity.ts','server/autoSchedule.ts','server/routers/schedule.ts','server/_core/trpc.ts','server/_core/sendMailDirect.ts','server/db.ts','shared/siteSecurityBulk.ts','client/src/pages/OrderTracking.tsx','Dockerfile']) {
+            assert.equal(read(p),before(p),p+' unexpectedly changed');
+          }
+          const stripRouter=s=>s.replace(/^import \{ addManualSiteAccess \} from "\.\/siteAccessManualAdd";\r?\n/m,'').replace(/^const emailSchema = .*;\r?\n/m,'').replace(/  add: adminProcedure[\s\S]*?(?=  changeStatus: adminProcedure)/,'');
+          assert.equal(stripRouter(read('server/siteSecurityRouter.ts')),stripRouter(before('server/siteSecurityRouter.ts')),'Unrelated router behavior changed');
+          const stripUi=s=>s.replace(/^import \{ manualSiteAccessFeedback, manualSiteAccessErrorMessage \} from "@shared\/siteSecurityManualFeedback";\r?\n/m,'').replace(/ const add=trpc\.siteSecurity\.add\.useMutation\([\s\S]*?(?= const change=)/,'').replace('if(add.isPending)return;','');
+          assert.equal(stripUi(read('client/src/pages/AdminSiteSecurity.tsx')),stripUi(before('client/src/pages/AdminSiteSecurity.tsx')),'Unrelated UI or layout changed');
+          console.log('PASS: schema, OTP/session, authorization controls, bulk actions, scheduling, layout and all other router actions unchanged.');
+          JS
+      - name: Real MySQL duplicate submission and security regressions
+        run: |
+          set -o pipefail
+          mapfile -t tests < <(find server -maxdepth 1 -type f -name 'site*.test.ts' | sort)
+          pnpm exec vitest run "${tests[@]}" server/trackingScheduleTopCard.test.ts server/analysisSchedulePriority.test.ts server/orderStatusVisibility.test.ts 2>&1 | tee /tmp/site-security-manual-evidence/tests-before.txt
+      - name: Apply exact Render source preparation
+        run: |
+          node --input-type=module <<'JS'
+          import fs from 'node:fs';
+          import {execFileSync} from 'node:child_process';
+          const scripts=[...fs.readFileSync('Dockerfile','utf8').matchAll(/&& node (scripts\/[^\s]+)/g)].map(m=>m[1]);
+          if(!scripts.length)throw new Error('Missing Render preparation');
+          for(const script of scripts){
+            if(!/^scripts\/[A-Za-z0-9._/-]+\.mjs$/.test(script))throw new Error('Unexpected preparation path');
+            execFileSync(process.execPath,[script],{stdio:'inherit'});
+          }
+          JS
+      - name: Repeat after Render preparation
+        run: |
+          set -o pipefail
+          mapfile -t tests < <(find server -maxdepth 1 -type f -name 'site*.test.ts' | sort)
+          pnpm exec vitest run "${tests[@]}" server/trackingScheduleTopCard.test.ts server/analysisSchedulePriority.test.ts server/orderStatusVisibility.test.ts 2>&1 | tee /tmp/site-security-manual-evidence/tests-after.txt
+      - name: Build production application
+        run: |
+          set -o pipefail
+          pnpm build 2>&1 | tee /tmp/site-security-manual-evidence/build.txt
+      - uses: actions/upload-artifact@v4
+        if: always()
+        with:
+          name: site-security-manual-evidence
+          path: /tmp/site-security-manual-evidence
+          retention-days: 3
