@@ -1602,10 +1602,25 @@ export default function OrderTracking() {
                                 </div>
                                 <div className="grid grid-cols-1 gap-1.5 sm:grid-cols-2">
                                   {group.items.map((entry, i) => (
-                                    <div key={i} className="grid min-w-0 grid-cols-[minmax(0,1fr)_auto] items-start gap-2 rounded-lg border border-white/[0.06] bg-black/20 px-2.5 py-2.5 sm:grid-cols-1 sm:gap-1">
-                                      <span className="min-w-0 break-words text-[12px] leading-snug text-white/65">{entry.question}</span>
-                                      <span className="max-w-[9rem] whitespace-pre-wrap break-words text-right text-[12px] font-bold leading-snug text-cyan-100 sm:max-w-none sm:text-left">{String(entry.answer)}</span>
-                                    </div>
+                                    group.title === "Cadastro e histórico" && i === 0 ? (
+                                      // The first question needs full-width text and an independent answer row on narrow screens.
+                                      <article key={i} className="relative isolate min-w-0 overflow-hidden rounded-lg border border-cyan-400/20 bg-[#091929] px-3 py-3">
+                                        <p className="block min-w-0 w-full whitespace-normal break-words [overflow-wrap:anywhere] text-[12px] leading-5 text-white/75">
+                                          {entry.question}
+                                        </p>
+                                        <div className="mt-2 flex min-w-0 w-full flex-wrap items-center gap-2 border-t border-white/10 pt-2">
+                                          <span className="shrink-0 text-[11px] font-medium text-white/50">Resposta</span>
+                                          <span className="inline-block min-w-[2.5rem] max-w-full whitespace-normal break-words [overflow-wrap:anywhere] rounded-md bg-cyan-400/10 px-2 py-1 text-[12px] font-bold leading-5 text-cyan-100">
+                                            {String(entry.answer)}
+                                          </span>
+                                        </div>
+                                      </article>
+                                    ) : (
+                                      <div key={i} className="grid min-w-0 grid-cols-[minmax(0,1fr)_auto] items-start gap-2 rounded-lg border border-white/[0.06] bg-black/20 px-2.5 py-2.5 sm:grid-cols-1 sm:gap-1">
+                                        <span className="min-w-0 break-words text-[12px] leading-snug text-white/65">{entry.question}</span>
+                                        <span className="max-w-[9rem] whitespace-pre-wrap break-words text-right text-[12px] font-bold leading-snug text-cyan-100 sm:max-w-none sm:text-left">{String(entry.answer)}</span>
+                                      </div>
+                                    )
                                   ))}
                                 </div>
                               </section>
