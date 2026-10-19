@@ -13,9 +13,13 @@ export function manualSiteAccessFeedback(result: {created: boolean; status: stri
     kind: 'warning', clearForm: false,
     message: 'Este e-mail já está cadastrado. Confira a situação na lista antes de liberar o acesso.',
   };
+  if (!result.created) return {
+    kind: 'warning', clearForm: false,
+    message: 'Este e-mail já está autorizado. Não é necessário adicioná-lo novamente.',
+  };
   return {
     kind: 'success', clearForm: true,
-    message: result.created ? 'Autorização registrada.' : 'Este e-mail já está autorizado. Não foi criado outro cadastro.',
+    message: 'Autorização registrada.',
   };
 }
 
