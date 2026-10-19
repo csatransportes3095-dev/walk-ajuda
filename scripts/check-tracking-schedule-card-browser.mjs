@@ -90,14 +90,18 @@ try {
     await page.emulateMedia({reducedMotion:'reduce'});
     assert.equal(await card.evaluate(el=>getComputedStyle(el).animationName),'none');
     await page.emulateMedia({reducedMotion:'no-preference'});
-    await card.locator('a').focus();
+    // :focus-visible deliberately does not activate after pointer clicks. Test
+    // actual keyboard navigation from the pause button to the preceding link.
+    await card.locator('button').focus();
+    await page.keyboard.press('Shift+Tab');
+    assert.equal(await card.locator('a').evaluate(el=>el===document.activeElement),true);
     assert.equal(await card.locator('a').evaluate(el=>getComputedStyle(el).outlineWidth),'3px');
     await page.evaluate(()=>window.setCardState('completed'));
     await card.waitFor({state:'detached'});
   }
   assert.deepEqual(pageErrors,[]);
-  fs.writeFileSync(path.join(evidence,'browser-results.json'),JSON.stringify({success:true,results,checks:['pause','reduced-motion','focus','same-tab-link','completed-hidden']},null,2));
-  console.log('Browser checks passed: 5 widths, pending/confirmed, no overflow/overlap, reduced motion, pause, focus, closed-hidden.');
+  fs.writeFileSync(path.join(evidence,'browser-results.json'),JSON.stringify({success:true,results,checks:['pause','reduced-motion','keyboard-focus','same-tab-link','completed-hidden']},null,2));
+  console.log('Browser checks passed: 5 widths, pending/confirmed, no overflow/overlap, reduced motion, pause, keyboard focus, closed-hidden.');
 } finally {
   await browser.close();
   await new Promise(resolve=>server.close(resolve));
