@@ -1587,6 +1587,60 @@ export async function getOrderStatusHistory(registrationId: number): Promise<Ord
     .orderBy(sql`${orderStatusHistory.createdAt} DESC`);
 }
 
+/**
+ * Status real do subpedido, usando a mesma separação (índice mais recente = 0)
+ * de updateLastOrderStatus. A consulta de agenda não deve confiar no status
+ * enviado pelo navegador para criar novos agendamentos.
+ */
+export async function getCurrentSubOrderStatusSnapshot(
+  registrationId: number,
+  subOrderIndex: number,
+): Promise<{
+  status: string;
+  customerPhone: string;
+  serviceName: string | null;
+  serviceOption: string | null;
+} | null> {
+  if (!Number.isInteger(registrationId) || registrationId <= 0 ||
+      !Number.isInteger(subOrderIndex) || subOrderIndex < 0) return null;
+  const db = await getDb();
+  if (!db) return null;
+
+  const history = await db.select().from(orderStatusHistory)
+    .where(eq(orderStatusHistory.registrationId, registrationId))
+    .orderBy(asc(orderStatusHistory.createdAt), asc(orderStatusHistory.id));
+  if (!history.length) return null;
+
+  let initialStatus = 'recebido';
+  try {
+    const result = await db.execute(sql`SELECT \`key\` FROM orderStatusTypes WHERE isActive = 1 AND isGlobal = 1 ORDER BY sortOrder ASC, id ASC LIMIT 1`);
+    const rows = (result as any)[0] as any[];
+    if (rows?.[0]?.key) initialStatus = String(rows[0].key);
+  } catch { /* compatibilidade com o fluxo inicial legado */ }
+
+  const groups: OrderStatusHistory[][] = [];
+  let current: OrderStatusHistory[] = [];
+  for (const entry of history) {
+    if ((entry.status === initialStatus || entry.status === 'recebido') && current.length) {
+      groups.push(current);
+      current = [];
+    }
+    current.push(entry);
+  }
+  if (current.length) groups.push(current);
+
+  const selected = groups.reverse()[subOrderIndex];
+  if (!selected?.length) return null;
+  const latest = selected[selected.length - 1];
+  const service = [...selected].reverse().find(row => row.serviceName || row.serviceOption) || latest;
+  return {
+    status: latest.status,
+    customerPhone: latest.customerPhone,
+    serviceName: service.serviceName ?? null,
+    serviceOption: service.serviceOption ?? null,
+  };
+}
+
 export async function getLatestOrderStatus(registrationId: number): Promise<OrderStatusHistory | null> {
   const db = await getDb();
   if (!db) return null;
