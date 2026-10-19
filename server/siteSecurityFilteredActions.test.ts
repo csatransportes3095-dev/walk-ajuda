@@ -2,7 +2,7 @@ import React, { type ReactElement, type ReactNode } from 'react';
 import { renderToStaticMarkup } from 'react-dom/server';
 import { readFileSync } from 'node:fs';
 import { afterEach, describe, expect, it, vi } from 'vitest';
-import { filteredSiteAccessAction, indexFilteredSiteAccess, type FilteredSiteAccessEntry } from '../shared/siteSecurityFilteredAccess';
+import { filteredSiteAccessAction, indexFilteredSiteAccess } from '../shared/siteSecurityFilteredAccess';
 import { SiteSecurityFilteredCandidate, type SiteSecurityFilteredCandidateProps } from '../client/src/components/SiteSecurityFilteredCandidate';
 
 const entry = {id: 81, email: 'person@example.test', status: 'active', expiresAt: null};
@@ -100,7 +100,8 @@ describe('filtered row rendering and actions', () => {
   it('click dispatches only the matched authorization id and the explicit target status', () => {
     const p = props();
     elements(SiteSecurityFilteredCandidate(p),'button')[0].props.onClick();
-    expect(p.onChangeStatus).toHaveBeenCalledExactlyOnceWith({id:81,status:'suspended'});
+    expect(p.onChangeStatus).toHaveBeenCalledTimes(1);
+    expect(p.onChangeStatus).toHaveBeenCalledWith({id:81,status:'suspended'});
     expect(p.onSelect).not.toHaveBeenCalled();
   });
   it('changes to Reativar after the confirmed data has status suspended', () => {
@@ -109,7 +110,8 @@ describe('filtered row rendering and actions', () => {
     expect(renderToStaticMarkup(tree)).toContain('>Reativar</button>');
     expect(renderToStaticMarkup(tree)).toContain('Suspenso');
     elements(tree,'button')[0].props.onClick();
-    expect(p.onChangeStatus).toHaveBeenCalledExactlyOnceWith({id:81,status:'active'});
+    expect(p.onChangeStatus).toHaveBeenCalledTimes(1);
+    expect(p.onChangeStatus).toHaveBeenCalledWith({id:81,status:'active'});
   });
   it.each(['actionDisabled','actionPending','bulkRunning'] as const)('blocks mutation while %s is true', field => {
     const p = props({[field]:true});
@@ -134,7 +136,8 @@ describe('filtered row rendering and actions', () => {
     expect(checkbox.props.disabled).toBe(false);
     expect(elements(tree,'button')).toHaveLength(0);
     checkbox.props.onChange({target:{checked:true}});
-    expect(p.onSelect).toHaveBeenCalledExactlyOnceWith(227,true);
+    expect(p.onSelect).toHaveBeenCalledTimes(1);
+    expect(p.onSelect).toHaveBeenCalledWith(227,true);
     expect(p.onChangeStatus).not.toHaveBeenCalled();
   });
   it('keeps the loans filter information', () => {
