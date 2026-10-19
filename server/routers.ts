@@ -7027,6 +7027,39 @@ export const appRouter = router({
         const { authenticatorQrStorageKey, authenticatorQrMimeType, authenticatorQrUpdatedAt, ...safeRow } = row;
         return { ...safeRow, hasAuthenticatorQr: Boolean(authenticatorQrStorageKey), authenticatorQrUpdatedAt: authenticatorQrUpdatedAt ?? null };
       }),
+    // Safe partial update: never erase authenticator, QR, CNH, notes or global group.
+    saveCredentials: adminProcedure
+      .input(z.object({
+        registrationId: z.number().int().positive(),
+        loginPhone: z.string().max(64).optional(),
+        loginEmail: z.string().max(320).optional(),
+        loginPassword: z.string().max(256).optional(),
+      }).refine(value => value.loginPhone !== undefined || value.loginEmail !== undefined || value.loginPassword !== undefined))
+      .mutation(async ({ input }) => {
+        const { getDb } = await import('./db');
+        const { orderLoginData, orderStatusHistory } = await import('../drizzle/schema');
+        const { eq, desc } = await import('drizzle-orm');
+        const db = await getDb();
+        if (!db) throw new TRPCError({ code: 'INTERNAL_SERVER_ERROR', message: 'Banco indisponível.' });
+        const history = await db.select({customerPhone:orderStatusHistory.customerPhone})
+          .from(orderStatusHistory).where(eq(orderStatusHistory.registrationId,input.registrationId))
+          .orderBy(desc(orderStatusHistory.createdAt)).limit(1);
+        const customerPhone=history[0]?.customerPhone;
+        if (!customerPhone) throw new TRPCError({code:'NOT_FOUND',message:'Pedido não encontrado.'});
+        const updates={
+          ...(input.loginPhone !== undefined ? {loginPhone:input.loginPhone} : {}),
+          ...(input.loginEmail !== undefined ? {loginEmail:input.loginEmail} : {}),
+          ...(input.loginPassword !== undefined ? {loginPassword:input.loginPassword} : {}),
+        };
+        const existing=await db.select({id:orderLoginData.id}).from(orderLoginData)
+          .where(eq(orderLoginData.registrationId,input.registrationId)).limit(1);
+        if(existing.length){
+          await db.update(orderLoginData).set(updates).where(eq(orderLoginData.registrationId,input.registrationId));
+        }else{
+          await db.insert(orderLoginData).values({registrationId:input.registrationId,customerPhone,...updates});
+        }
+        return {success:true};
+      }),
     // Admin lê a imagem cifrada apenas para prévia, ampliação e edição.
     getAuthenticatorQrForAdmin: adminProcedure
       .input(z.object({ registrationId: z.number().int().positive() }))
