@@ -48,8 +48,8 @@ describe('manual authorization feedback',()=>{
   it('announces a newly persisted authorization',()=>{
     expect(manualSiteAccessFeedback({created:true,status:'active',expired:false})).toEqual({kind:'success',clearForm:true,message:'Autorização registrada.'});
   });
-  it('distinguishes an already authorized email from a new record',()=>{
-    expect(manualSiteAccessFeedback({created:false,status:'active',expired:false})).toMatchObject({kind:'success',clearForm:true,message:expect.stringContaining('já está autorizado')});
+  it('warns clearly when the email is already authorized without claiming a new registration',()=>{
+    expect(manualSiteAccessFeedback({created:false,status:'active',expired:false})).toEqual({kind:'warning',clearForm:false,message:'Este e-mail já está autorizado. Não é necessário adicioná-lo novamente.'});
   });
   it('does not claim that adding an existing suspended email reactivates it',()=>{
     expect(manualSiteAccessFeedback({created:false,status:'suspended',expired:false})).toMatchObject({kind:'warning',clearForm:false,message:expect.stringContaining('continua suspenso')});
