@@ -1,4 +1,5 @@
 import { resolveStatusVisibility, getNextVisibleStatusKey } from "@shared/orderStatusVisibility";
+import { compactCurrentDescription } from "@shared/orderTrackingPresentation";
 import { globalActiveStatuses, unavailableFlowKeys } from "@shared/orderStatusScope";
 import React, { useState, useMemo, useEffect } from "react";
 import { toast } from "sonner";
@@ -1344,143 +1345,101 @@ export default function OrderTracking() {
               });
               const baseIdx = Math.max(0, Math.min(progressSteps.length - 1, progressPosition.currentIndex));
               const currentIdx = exactCurrentIdx >= 0 ? exactCurrentIdx : baseIdx;
-              const nextIdx = !progressPosition.cancelled && currentIdx < progressSteps.length - 1 ? currentIdx + 1 : -1;
               const nextVisibleKey = getNextVisibleStatusKey(keys,presentation.visibleKeys,currentIdx);
               const nextStep = nextVisibleKey ? progressSteps.find((step:any)=>step.key===nextVisibleKey) : null;
               const nextCfg = nextStep ? getStatusCfg(nextStep.key) : null;
               const totalSteps = progressSteps.length;
               const stageNumber = Math.min(totalSteps, Math.max(1, currentIdx + 1));
               const progressPercent = Math.round((stageNumber / totalSteps) * 100);
-              const syncTime = statusQuery.dataUpdatedAt
-                ? new Date(statusQuery.dataUpdatedAt).toLocaleTimeString('pt-BR', { hour: '2-digit', minute: '2-digit', second: '2-digit', timeZone: 'America/Sao_Paulo' })
-                : null;
+              const currentDescription = compactCurrentDescription(latestCfg.description, latestCfg.label);
 
               return (
-                <div className="overflow-hidden rounded-2xl border border-cyan-400/20 bg-gradient-to-b from-[#0b1725] via-[#0c1220] to-[#101020] shadow-2xl shadow-cyan-950/20">
-                  {presentation.showProgress && <div className="border-b border-white/10 bg-cyan-500/[0.06] p-4 sm:p-5">
-                    <div className="flex items-start justify-between gap-4">
-                      <div>
-                        <p className="text-[10px] font-black uppercase tracking-[0.2em] text-cyan-300/70">Jornada do seu pedido</p>
-                        <div className="mt-1 flex flex-wrap items-end gap-x-3 gap-y-1">
-                          <p className="text-2xl font-black text-white">ETAPA {stageNumber} DE {totalSteps}</p>
-                          <p className="pb-0.5 text-sm font-black text-cyan-300">{progressPercent}%</p>
-                        </div>
-                      </div>
-                      <div className="rounded-full border border-emerald-400/20 bg-emerald-400/10 px-2.5 py-1 text-[9px] font-bold uppercase tracking-wider text-emerald-300">
-                        {syncTime ? `Sincronizado ${syncTime}` : 'Sincronizando'}
-                      </div>
-                    </div>
-                    <div className="mt-3 h-2 overflow-hidden rounded-full bg-white/5">
-                      <div className="h-full rounded-full bg-gradient-to-r from-emerald-400 via-cyan-400 to-blue-500 transition-all duration-700" style={{ width: `${progressPercent}%` }} />
-                    </div>
-                  </div>}
-                  <div className="space-y-3 p-4 sm:p-5">
-                    <div className={`rounded-2xl border-2 p-4 ${latestCfg.bg} ${latestCfg.border}`}>
+                <div className="rounded-2xl border border-cyan-400/20 bg-[#101827] shadow-lg shadow-black/20">
+                  <div className="p-3.5 sm:p-5">
+                    {/* A single source of truth for the client's current status. */}
+                    <section aria-label="Situação atual do pedido" className="rounded-xl border border-cyan-400/25 bg-cyan-500/[0.07] p-3.5 sm:p-4">
                       <div className="flex items-start gap-3">
-                        <div className="relative flex h-20 w-20 flex-shrink-0 items-center justify-center">
-                          <span className="absolute h-20 w-20 animate-ping rounded-full opacity-15" style={{ backgroundColor: latestCfg.pulseColor ?? '#22d3ee', animationDuration: '2.1s' }} />
-                          <span className="absolute h-[74px] w-[74px] rounded-full opacity-25 blur-md" style={{ backgroundColor: latestCfg.pulseColor ?? '#22d3ee' }} />
-                          <div className={`relative z-10 flex h-[72px] w-[72px] items-center justify-center overflow-hidden rounded-full border-[3px] bg-black/20 shadow-[0_0_0_3px_rgba(255,255,255,0.08),0_0_22px_rgba(34,211,238,0.55)] ${latestCfg.border} ${latestCfg.color}`}>
-                            {latestCfg.icon}
-                          </div>
+                        <div className={"flex h-11 w-11 flex-shrink-0 items-center justify-center overflow-hidden rounded-xl border bg-black/20 " + latestCfg.border + " " + latestCfg.color}>
+                          {latestCfg.icon}
                         </div>
                         <div className="min-w-0 flex-1">
-                          <p className="text-[10px] font-black uppercase tracking-[0.18em] text-white/45">Acontecendo agora</p>
-                          <p className={`mt-0.5 text-xl font-black leading-tight ${latestCfg.color}`}>{latestCfg.label}</p>
-                          <p className="mt-1 text-[10px] text-white/35">Atualizado em {formatDate(history[0].createdAt)}</p>
+                          <p className="text-[11px] font-bold uppercase tracking-wider text-cyan-300">Situação atual</p>
+                          <h2 className="mt-1 break-words text-lg font-bold leading-snug text-white sm:text-xl">{latestCfg.label}</h2>
+                          <p className="mt-1 text-xs text-white/50">Atualizado em {formatDate(history[0].createdAt)}</p>
                         </div>
                       </div>
-                      {latestCfg.description && (
-                        <div className="mt-3 rounded-xl border border-white/10 bg-black/10 p-3">
-                          <p className="mb-1 text-[10px] font-black uppercase tracking-wider text-white/40">O que está acontecendo</p>
-                          <div className="text-xs leading-relaxed text-white/70">{renderTextWithLinks(latestCfg.description)}</div>
+                      {currentDescription && (
+                        <div className="mt-3 whitespace-pre-line break-words text-sm leading-relaxed text-white/75">
+                          {renderTextWithLinks(currentDescription)}
                         </div>
                       )}
                       {currentNote && (
-                        <div className="mt-2 rounded-xl border border-white/10 bg-white/5 p-3 text-xs leading-relaxed text-white/75 whitespace-pre-line">{currentNote}</div>
+                        <div className="mt-3 rounded-lg border border-white/10 bg-white/5 p-3">
+                          <p className="mb-1 text-xs font-semibold text-white/55">Observação do atendimento</p>
+                          <p className="whitespace-pre-line break-words text-sm leading-relaxed text-white/85">{currentNote}</p>
+                        </div>
                       )}
-                    </div>
 
-                    {presentation.showNextStep && !progressPosition.cancelled && nextStep && nextCfg && (
-                      <div className="rounded-2xl border border-violet-400/30 bg-violet-500/10 p-4">
-                        <div className="flex items-start gap-3">
-                          <div className="flex h-10 w-10 flex-shrink-0 items-center justify-center rounded-full border border-violet-400/30 bg-violet-400/10 text-violet-300">
-                            <ChevronRight className="h-5 w-5" />
-                          </div>
-                          <div className="min-w-0 flex-1">
-                            <p className="text-[10px] font-black uppercase tracking-[0.18em] text-violet-300/70">Próximo passo</p>
-                            <p className="mt-0.5 text-base font-black text-white">{nextCfg.label}</p>
-                            <p className="mt-1 text-xs leading-relaxed text-white/50">
-                              {nextCfg.description || 'Assim que a etapa atual for concluída, seu pedido seguirá automaticamente para esta fase.'}
-                            </p>
+                      {/* Keep the future step small, and do not repeat its long description. */}
+                      {presentation.showNextStep && !progressPosition.cancelled && nextStep && nextCfg && (
+                        <div className="mt-4 flex items-start gap-2 border-t border-white/10 pt-3">
+                          <ChevronRight className="mt-0.5 h-4 w-4 flex-shrink-0 text-cyan-300/80" />
+                          <div className="min-w-0">
+                            <p className="text-[11px] font-semibold uppercase tracking-wide text-white/55">O que vem depois</p>
+                            <p className="mt-0.5 break-words text-sm font-semibold text-white/90">{nextCfg.label}</p>
                           </div>
                         </div>
-                      </div>
-                    )}
+                      )}
+                    </section>
 
                     {progressPosition.cancelled && (
-                      <div className="rounded-xl border border-red-500/30 bg-red-500/10 p-3 text-xs font-semibold text-red-300">Pedido cancelado. Não existem próximas etapas.</div>
+                      <div className="mt-3 rounded-xl border border-red-500/30 bg-red-500/10 p-3 text-sm font-medium text-red-300">Pedido cancelado. Não existem próximas etapas.</div>
                     )}
 
-                    {presentation.showTimeline && <div className="pt-1">
-                      <div className="mb-3 flex items-center justify-between gap-3">
-                        <div>
-                          <p className="text-xs font-black uppercase tracking-[0.16em] text-white/70">Todas as etapas</p>
-                          <p className="mt-0.5 text-[10px] text-white/30">Acompanhe todo o caminho até a conclusão.</p>
+                    {presentation.showProgress && (
+                      <div className="mt-3 rounded-xl border border-white/10 bg-white/[0.025] px-3 py-3">
+                        <div className="flex flex-wrap items-center justify-between gap-2 text-xs">
+                          <span className="font-semibold text-white/75">Andamento do pedido</span>
+                          <span className="font-medium text-white/50">Etapa {stageNumber} de {totalSteps}</span>
                         </div>
-                        <span className="rounded-full border border-white/10 bg-white/5 px-2.5 py-1 text-[9px] font-bold text-white/35">{totalSteps} etapas</span>
+                        <div className="mt-2 h-1.5 overflow-hidden rounded-full bg-white/10" role="progressbar" aria-label="Progresso do pedido" aria-valuemin={0} aria-valuemax={100} aria-valuenow={progressPercent}>
+                          <div className="h-full rounded-full bg-cyan-400 transition-all duration-500" style={{ width: progressPercent + "%" }} />
+                        </div>
                       </div>
+                    )}
 
-                      <div className="relative ml-4 space-y-3 border-l border-white/10 pl-6">
-                        {progressSteps.filter((step:any)=>presentation.visibleKeys.includes(step.key)).map((step: any) => { const idx=progressSteps.findIndex((s:any)=>s.key===step.key);
-                          const cfg = getStatusCfg(step.key);
-                          const isDone = !progressPosition.cancelled && idx < currentIdx;
-                          const isCurrent = !progressPosition.cancelled && idx === currentIdx;
-                          const isNext = !progressPosition.cancelled && idx === nextIdx;
-                          const stateLabel = isDone ? 'CONCLUÍDO' : isCurrent ? 'AGORA' : isNext ? 'PRÓXIMO' : 'DEPOIS';
-                          return (
-                            <div key={step.id ?? step.key} className={`relative rounded-xl border p-3 transition-all ${
-                              isCurrent
-                                ? `${cfg.bg} ${cfg.border} shadow-lg`
-                                : isNext
-                                  ? 'border-violet-400/30 bg-violet-500/[0.07]'
-                                  : isDone
-                                    ? 'border-emerald-500/20 bg-emerald-500/[0.05]'
-                                    : 'border-white/[0.07] bg-white/[0.025]'
-                            }`}>
-                              <div className={`absolute -left-[39px] top-4 flex h-6 w-6 items-center justify-center rounded-full border-2 ${
-                                isDone
-                                  ? 'border-emerald-400 bg-emerald-500 text-white'
-                                  : isCurrent
-                                    ? `${cfg.border} ${cfg.bg} ${cfg.color} ring-4 ring-cyan-400/10`
-                                    : isNext
-                                      ? 'border-violet-400 bg-violet-500/20 text-violet-300'
-                                      : 'border-white/15 bg-[#0d1220] text-white/25'
-                              }`}>
-                                {isDone ? <Check className="h-3.5 w-3.5" /> : isCurrent ? <span className="h-2 w-2 animate-pulse rounded-full bg-current" /> : <span className="text-[9px] font-black">{idx + 1}</span>}
+                    {/* Native details: collapsed by default, resets when switching order/status. */}
+                    {presentation.showTimeline && (
+                      <details
+                        key={String(registrationId) + ":" + String(selectedOrderIdx) + ":" + latestStatus}
+                        className="group mt-3 overflow-hidden rounded-xl border border-white/10 bg-white/[0.025]"
+                      >
+                        <summary className="flex cursor-pointer list-none items-center gap-2 px-3 py-3 text-sm font-semibold text-white/90 hover:bg-white/5 focus-visible:outline focus-visible:outline-2 focus-visible:outline-cyan-400 [&::-webkit-details-marker]:hidden">
+                          <span className="min-w-0 flex-1">Ver todas as etapas</span>
+                          <span className="whitespace-nowrap text-xs font-normal text-white/45">{presentation.visibleKeys.length} etapas</span>
+                          <ChevronRight className="h-4 w-4 flex-shrink-0 text-cyan-300 transition-transform group-open:rotate-90" />
+                        </summary>
+                        <div className="divide-y divide-white/[0.07] border-t border-white/10 px-3 py-1">
+                          {progressSteps.filter((step: any) => presentation.visibleKeys.includes(step.key)).map((step: any) => {
+                            const idx = progressSteps.findIndex((item: any) => item.key === step.key);
+                            const cfg = getStatusCfg(step.key);
+                            const isDone = !progressPosition.cancelled && idx < currentIdx;
+                            const isCurrent = !progressPosition.cancelled && idx === currentIdx;
+                            const isNext = presentation.showNextStep && !progressPosition.cancelled && step.key === nextVisibleKey;
+                            const stateLabel = isDone ? "Concluído" : isCurrent ? "Atual" : isNext ? "Próximo" : "Pendente";
+                            return (
+                              <div key={step.id ?? step.key} className="flex min-w-0 items-center gap-2.5 py-2.5">
+                                <span aria-hidden="true" className={"flex h-6 w-6 flex-shrink-0 items-center justify-center rounded-full border text-[10px] font-bold " + (isDone ? "border-emerald-400/40 bg-emerald-400/10 text-emerald-300" : isCurrent ? "border-cyan-400/50 bg-cyan-400/15 text-cyan-200" : "border-white/15 bg-white/5 text-white/40")}>
+                                  {isDone ? <Check className="h-3.5 w-3.5" /> : isCurrent ? <span className="h-2 w-2 rounded-full bg-current" /> : idx + 1}
+                                </span>
+                                <p className={"min-w-0 flex-1 break-words text-sm font-medium " + (isCurrent ? "text-cyan-200" : isDone ? "text-emerald-300" : "text-white/65")}>{cfg.label}</p>
+                                <span className={"flex-shrink-0 whitespace-nowrap rounded-full px-2 py-1 text-[10px] font-medium " + (isDone ? "bg-emerald-400/10 text-emerald-300" : isCurrent ? "bg-cyan-400/10 text-cyan-200" : isNext ? "bg-violet-400/10 text-violet-200" : "bg-white/5 text-white/45")}>{stateLabel}</span>
                               </div>
-                              <div className="flex items-start justify-between gap-3">
-                                <div className="min-w-0">
-                                  <p className={`text-sm font-bold ${isCurrent ? cfg.color : isDone ? 'text-emerald-300' : isNext ? 'text-violet-200' : 'text-white/40'}`}>{cfg.label}</p>
-                                  {(isCurrent || isNext) && cfg.description && (
-                                    <p className="mt-1 whitespace-pre-line break-words text-[11px] leading-relaxed text-white/45">{cfg.description}</p>
-                                  )}
-                                </div>
-                                <span className={`flex-shrink-0 rounded-full px-2 py-1 text-[8px] font-black tracking-wider ${
-                                  isDone
-                                    ? 'bg-emerald-500/15 text-emerald-300'
-                                    : isCurrent
-                                      ? 'bg-cyan-500/15 text-cyan-300'
-                                      : isNext
-                                        ? 'bg-violet-500/15 text-violet-300'
-                                        : 'bg-white/5 text-white/25'
-                                }`}>{stateLabel}</span>
-                              </div>
-                            </div>
-                          );
-                        })}
-                      </div>
-                    </div>}
+                            );
+                          })}
+                        </div>
+                      </details>
+                    )}
                   </div>
                 </div>
               );
