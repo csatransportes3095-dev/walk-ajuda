@@ -1,5 +1,5 @@
 import { isGlobalStatus } from "@shared/orderStatusScope";
-import { useState } from "react";
+import { useEffect, useRef, useState } from "react";
 import { trpc } from "@/lib/trpc";
 import { useAdminAuth } from "@/hooks/useAdminAuth";
 import { Button } from "@/components/ui/button";
@@ -131,28 +131,63 @@ export default function AdminStatusTypes() {
     onError: (e) => toast.error(e.message || "Não foi possível enviar a imagem."),
   });
 
+  // Presentation-only status rules: select only flows that contain the selected status.
   const [visibilityStatus, setVisibilityStatus] = useState<StatusType | null>(null);
   const [visibilityFlowId, setVisibilityFlowId] = useState<number>(0);
-  const [visibilityMode, setVisibilityMode] = useState<"normal"|"hide_selected"|"current_only">("normal");
+  const [visibilityMode, setVisibilityMode] = useState<"normal" | "hide_selected" | "current_only">("normal");
   const [hiddenVisibilityKeys, setHiddenVisibilityKeys] = useState<string[]>([]);
   const [visibilityNext, setVisibilityNext] = useState(true);
   const [visibilityProgress, setVisibilityProgress] = useState(true);
-  const defaultFlowId = Number((flowsQuery.data ?? []).find((f:any)=>f.isDefault===1)?.id ?? 0);
-  const effectiveVisibilityFlowId = visibilityFlowId || defaultFlowId;
-  const visibilityRulesQuery = trpc.statusVisibility.list.useQuery({flowId:effectiveVisibilityFlowId},{enabled:!!visibilityStatus&&effectiveVisibilityFlowId>0});
+  const loadedVisibilityContext = useRef<string | null>(null);
+  const defaultFlowId = Number((flowsQuery.data ?? []).find(f => f.isDefault === 1)?.id ?? 0);
+  const visibilityFlowOptions = (flowsQuery.data ?? []).filter(flow =>
+    flow.isActive === 1 && !!visibilityStatus &&
+    (flow.isDefault === 1 ? isGlobalStatus(visibilityStatus) : flow.statusKeys.includes(visibilityStatus.key))
+  );
+  const suggestedVisibilityFlowId = visibilityFlowOptions.find(flow => flow.isDefault === 1)?.id ?? visibilityFlowOptions[0]?.id ?? 0;
+  const effectiveVisibilityFlowId = visibilityFlowId || suggestedVisibilityFlowId;
+  const visibilityRulesQuery = trpc.statusVisibility.list.useQuery(
+    { flowId: effectiveVisibilityFlowId },
+    { enabled: !!visibilityStatus && effectiveVisibilityFlowId > 0 }
+  );
+  const selectedVisibilityRule = visibilityRulesQuery.data?.find(rule => rule.currentStatusKey === visibilityStatus?.key);
+
+  // Hydrate once per status and flow. Prevent accidentally resetting an existing rule by clicking Save.
+  useEffect(() => {
+    if (!visibilityStatus || !effectiveVisibilityFlowId || !visibilityRulesQuery.isSuccess) return;
+    const contextKey = `${visibilityStatus.key}:${effectiveVisibilityFlowId}`;
+    if (loadedVisibilityContext.current === contextKey) return;
+    const saved = visibilityRulesQuery.data?.find(rule => rule.currentStatusKey === visibilityStatus.key);
+    setVisibilityMode(saved?.mode ?? "normal");
+    setHiddenVisibilityKeys(saved?.hiddenStatusKeys ?? []);
+    setVisibilityNext(saved?.showNextStep !== false);
+    setVisibilityProgress(saved?.showProgress !== false);
+    loadedVisibilityContext.current = contextKey;
+  }, [visibilityStatus?.key, effectiveVisibilityFlowId, visibilityRulesQuery.isSuccess, visibilityRulesQuery.data]);
+
   const visibilitySave = trpc.statusVisibility.save.useMutation({
-    onSuccess:()=>{toast.success("Visibilidade salva!");void utils.statusVisibility.list.invalidate();void utils.statusVisibility.forOrder.invalidate();},
-    onError:e=>toast.error(e.message),
+    onSuccess: () => {
+      toast.success("Visibilidade salva!");
+      void utils.statusVisibility.list.invalidate();
+      void utils.statusVisibility.forOrder.invalidate();
+    },
+    onError: error => toast.error(error.message),
   });
-  const openVisibility = (status:StatusType) => {
-    setVisibilityStatus(status);setVisibilityFlowId(defaultFlowId);setVisibilityMode("normal");
-    setHiddenVisibilityKeys([]);setVisibilityNext(true);setVisibilityProgress(true);
+  const openVisibility = (status: StatusType) => {
+    loadedVisibilityContext.current = null;
+    setVisibilityStatus(status);
+    setVisibilityFlowId(0);
+    setVisibilityMode("normal");
+    setHiddenVisibilityKeys([]);
+    setVisibilityNext(true);
+    setVisibilityProgress(true);
   };
-  const selectedVisibilityRule=visibilityRulesQuery.data?.find(r=>r.currentStatusKey===visibilityStatus?.key);
-  const visibilityCatalog=(statuses as StatusType[]).filter(st=>st.isActive===1&&st.key!==visibilityStatus?.key && (
-    effectiveVisibilityFlowId===defaultFlowId ? st.isGlobal===1 :
-    (flowsQuery.data??[]).find(f=>f.id===effectiveVisibilityFlowId)?.statusKeys.includes(st.key)
-  ));
+  const visibilityCatalog = (statuses as StatusType[]).filter(status =>
+    status.isActive === 1 && status.key !== visibilityStatus?.key &&
+    (effectiveVisibilityFlowId === defaultFlowId
+      ? isGlobalStatus(status)
+      : (flowsQuery.data ?? []).find(flow => flow.id === effectiveVisibilityFlowId)?.statusKeys.includes(status.key))
+  );
   const [showCreate, setShowCreate] = useState(!!requestedFlowId);
   const [form, setForm] = useState<FormData>({ ...defaultForm, flowId: requestedFlowId, key: restoreKey });
   const [editingId, setEditingId] = useState<number | null>(null);
@@ -274,11 +309,11 @@ export default function AdminStatusTypes() {
         {visibilityStatus && <section className="rounded-2xl border border-cyan-400/40 bg-[#101b2e] p-4 space-y-3">
           <div className="flex items-center justify-between gap-3"><h2 className="font-bold">Visibilidade: {visibilityStatus.label}</h2><button type="button" onClick={()=>setVisibilityStatus(null)} aria-label="Fechar visibilidade"><X className="w-5 h-5"/></button></div>
           <label className="block text-sm">Aplicar na sequência
-            <select className="mt-1 block w-full rounded-lg border border-white/20 bg-[#0d0d1a] p-2" value={effectiveVisibilityFlowId} onChange={e=>{setVisibilityFlowId(Number(e.target.value));setVisibilityMode("normal");setHiddenVisibilityKeys([]);}}>
-              {(flowsQuery.data??[]).filter(flow=>flow.isActive===1 && (flow.isDefault===1 || flow.statusKeys.includes(visibilityStatus.key))).map(flow=><option key={flow.id} value={flow.id}>{flow.name}</option>)}
+            <select className="mt-1 block w-full rounded-lg border border-white/20 bg-[#0d0d1a] p-2" value={effectiveVisibilityFlowId} onChange={e=>{loadedVisibilityContext.current=null;setVisibilityFlowId(Number(e.target.value));setVisibilityMode("normal");setHiddenVisibilityKeys([]);setVisibilityNext(true);setVisibilityProgress(true);}}>
+              {visibilityFlowOptions.map(flow=><option key={flow.id} value={flow.id}>{flow.name}</option>)}
             </select>
           </label>
-          {visibilityRulesQuery.isLoading ? <p className="text-sm text-white/60">Carregando regras...</p> : <button type="button" className="text-sm text-cyan-200 underline" onClick={()=>{const r=selectedVisibilityRule;setVisibilityMode(r?.mode??"normal");setHiddenVisibilityKeys(r?.hiddenStatusKeys??[]);setVisibilityNext(r?.showNextStep!==false);setVisibilityProgress(r?.showProgress!==false);}}>Carregar configuração salva nesta sequência</button>}
+          {visibilityRulesQuery.isLoading ? <p className="text-sm text-white/60">Carregando configuração salva...</p> : visibilityRulesQuery.isError ? <p className="text-sm text-red-300">Não foi possível carregar a configuração. Tente novamente.</p> : <p className="text-sm text-cyan-200/70">{selectedVisibilityRule ? "Configuração salva carregada automaticamente." : "Nenhuma regra salva nesta sequência: exibição normal."}</p>}
           <div className="space-y-2">{(["normal","hide_selected","current_only"] as const).map(mode=><label key={mode} className="flex items-center gap-2 rounded-lg border border-white/10 p-2 text-sm"><input type="radio" checked={visibilityMode===mode} onChange={()=>setVisibilityMode(mode)}/>{mode==="normal"?"Exibir normalmente":mode==="hide_selected"?"Ocultar etapas selecionadas":"Mostrar somente status atual"}</label>)}</div>
           {visibilityMode==="hide_selected" && <div className="space-y-2 rounded-lg border border-white/10 p-3">
             <p className="text-sm font-semibold">Ocultar enquanto {visibilityStatus.label} estiver ativo:</p>
@@ -287,7 +322,7 @@ export default function AdminStatusTypes() {
             <label className="flex items-center gap-2 text-sm"><input type="checkbox" checked={visibilityProgress} onChange={e=>setVisibilityProgress(e.target.checked)}/>Mostrar barra de progresso</label>
           </div>}
           <p className="text-xs text-white/50">Isso altera somente a apresentação em /acompanhar. Nenhum status é apagado ou desativado.</p>
-          <Button disabled={visibilitySave.isPending||!effectiveVisibilityFlowId||visibilityRulesQuery.isLoading} className="w-full bg-emerald-600" onClick={()=>visibilitySave.mutate({flowId:effectiveVisibilityFlowId,currentStatusKey:visibilityStatus.key,mode:visibilityMode,hiddenStatusKeys:visibilityMode==="hide_selected"?hiddenVisibilityKeys:[],showNextStep:visibilityMode==="hide_selected"?visibilityNext:true,showProgress:visibilityMode==="hide_selected"?visibilityProgress:true})}>Salvar visibilidade</Button>
+          <Button disabled={visibilitySave.isPending||!effectiveVisibilityFlowId||!visibilityRulesQuery.isSuccess||loadedVisibilityContext.current !== `${visibilityStatus.key}:${effectiveVisibilityFlowId}`} className="w-full bg-emerald-600" onClick={()=>visibilitySave.mutate({flowId:effectiveVisibilityFlowId,currentStatusKey:visibilityStatus.key,mode:visibilityMode,hiddenStatusKeys:visibilityMode==="hide_selected"?hiddenVisibilityKeys:[],showNextStep:visibilityMode==="hide_selected"?visibilityNext:true,showProgress:visibilityMode==="hide_selected"?visibilityProgress:true})}>Salvar visibilidade</Button>
         </section>}
 
         <div className="rounded-xl border border-cyan-400/20 bg-cyan-500/5 p-4 text-sm text-cyan-100/80">
