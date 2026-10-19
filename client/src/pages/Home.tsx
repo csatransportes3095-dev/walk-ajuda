@@ -15,6 +15,7 @@ import VipInstallmentCheckoutBox, { type VipInstallmentCheckoutSelection } from 
 import { ColombiaBot } from "@/components/ColombiaBot";
 import { StorefrontProductCard, type StorefrontCatalogItem, type StorefrontWarrantyTier } from "@/components/StorefrontProductCard";
 import { StorefrontFilters } from "@/components/StorefrontFilters";
+import { getCatalogCategory, catalogCategoryAvailability } from "@/lib/storefrontCategories";
 import { QuestionAudioRecorder, type AudioDraft } from "@/components/QuestionAudioRecorder";
 import { uploadOrderFileReliably } from "@/lib/reliableOrderUpload";
 import { isPersistedOrderResult } from "@shared/orderSubmission";
@@ -79,16 +80,6 @@ type Product = {
   deliveryDays?: string | null;
   options: ProductOption[];
 };
-
-const CATALOG_CATEGORIES = ["Todos", "Uber", "Táxi", "Documentos", "99"] as const;
-
-function getCatalogCategory(product: Product): string {
-  const value = `${product.name} ${product.description || ""}`.toLowerCase();
-  if (value.includes("crlv") || value.includes("doc") || value.includes("veiculo")) return "Documentos";
-  if (value.includes("99")) return "99";
-  if (value.includes("taxi")) return "Táxi";
-  return "Uber";
-}
 
 // ── Componente PromoCard com cronômetro decrescente ────────────────────────
 function useCountdown(endsAt: number | null | undefined) {
@@ -5174,9 +5165,11 @@ export default function Home() {
                 category: getCatalogCategory(product),
               }))
             );
+            const { categories: availableCategories, counts: categoryCounts } = catalogCategoryAvailability(catalogItems);
+            const selectedCatalogCategory = availableCategories.includes(catalogCategory as typeof availableCategories[number]) ? catalogCategory : 'Todos';
             const normalizedSearch = catalogSearch.trim().toLocaleLowerCase('pt-BR');
             const filteredCatalogItems = catalogItems.filter((item) => {
-              const categoryMatches = catalogCategory === 'Todos' || item.category === catalogCategory;
+              const categoryMatches = selectedCatalogCategory === 'Todos' || item.category === selectedCatalogCategory;
               if (!categoryMatches) return false;
               if (!normalizedSearch) return true;
               const searchable = [
@@ -5194,8 +5187,9 @@ export default function Home() {
                 <StorefrontFilters
                   search={catalogSearch}
                   onSearchChange={setCatalogSearch}
-                  categories={[...CATALOG_CATEGORIES]}
-                  activeCategory={catalogCategory}
+                  categories={availableCategories}
+                  categoryCounts={categoryCounts}
+                  activeCategory={selectedCatalogCategory}
                   onCategoryChange={setCatalogCategory}
                   resultCount={filteredCatalogItems.length}
                 />
