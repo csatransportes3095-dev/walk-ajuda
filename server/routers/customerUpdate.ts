@@ -1,3 +1,4 @@
+import { normalizeCustomerText } from "../../shared/customerTextNormalization";
 import { randomBytes } from "crypto";
 import bcrypt from "bcryptjs";
 import { TRPCError } from "@trpc/server";
@@ -315,8 +316,8 @@ export const customerUpdateRouter = router({
       }
 
       const customerNumber = await generateNextCustomerNumber(db);
-      const name = String(input.name || "").trim().replace(/\s+/g, " ") || "CADASTRO RECUPERADO";
-      const city = String(input.city || "").trim().replace(/\s+/g, " ");
+      const name = normalizeCustomerText(String(input.name || "")) || "CADASTRO RECUPERADO";
+      const city = normalizeCustomerText(String(input.city || ""));
       const profilePhotoUrl = String(input.profilePhotoUrl || "").trim();
 
       await db.execute(sql`
@@ -326,7 +327,7 @@ export const customerUpdateRouter = router({
         ) VALUES (
           ${customerNumber}, ${name.toUpperCase()}, ${phone}, ${email || null},
           ${city ? city.toUpperCase() : null}, ${uf || null}, ${cpf || null},
-          ${referredBy ? referredBy.toUpperCase() : null}, ${referredByPhone || null}, ${profilePhotoUrl || null}
+          ${referredBy ? normalizeCustomerText(referredBy) : null}, ${referredByPhone || null}, ${profilePhotoUrl || null}
         )
       `);
 
@@ -498,16 +499,16 @@ export const customerUpdateRouter = router({
       // O telefone não participa do UPDATE: continua sendo a identidade fixa do cliente.
       await db.execute(sql`
         UPDATE customers SET
-          name=${name},
+          name=${normalizeCustomerText(name)},
           email=${email},
           cpf=${cpf},
           cep=${cep},
-          street=${street},
-          addressNumber=${addressNumber},
-          neighborhood=${neighborhood},
+          street=${normalizeCustomerText(street)},
+          addressNumber=${normalizeCustomerText(addressNumber)},
+          neighborhood=${normalizeCustomerText(neighborhood)},
           addressComplement=${addressComplement || null},
-          city=${city},
-          uf=${uf},
+          city=${normalizeCustomerText(city)},
+          uf=${normalizeCustomerText(uf)},
           normalizedCpf=${cpf},
           normalizedEmail=${email},
           updatedAt=NOW()
