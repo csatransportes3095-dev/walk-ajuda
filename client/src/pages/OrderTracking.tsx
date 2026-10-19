@@ -1,3 +1,4 @@
+import { resolveVisibility } from "@shared/statusVisibility";
 import { globalActiveStatuses, unavailableFlowKeys } from "@shared/orderStatusScope";
 import React, { useState, useMemo, useEffect } from "react";
 import { toast } from "sonner";
@@ -335,6 +336,7 @@ export default function OrderTracking() {
     return () => clearInterval(timer);
   }, [adVisible, adCampaign?.id]);
 
+  const statusVisibilityQuery=trpc.statusVisibility.get.useQuery(undefined,{refetchInterval:15000});
   // Query de status dinâmicos do banco
   const statusTypesQuery = trpc.statusTypes.list.useQuery(undefined, {
     staleTime: 5_000,
@@ -1343,13 +1345,22 @@ export default function OrderTracking() {
               const totalSteps = progressSteps.length;
               const stageNumber = Math.min(totalSteps, Math.max(1, currentIdx + 1));
               const progressPercent = Math.round((stageNumber / totalSteps) * 100);
+              const presentation = resolveVisibility({
+                flowId:customFlow ? Number(statusFlowForOrderQuery.data?.id??0):0,
+                currentKey:String(latestStatus),
+                keys,
+                rules:statusVisibilityQuery.data??[],
+              });
+              const visibleSteps=progressSteps.filter((step:any)=>presentation.keys.includes(step.key));
+              const hideTimeline=presentation.keys.length===1 && presentation.keys[0]===String(latestStatus) && !presentation.showProgress && !presentation.showNext;
+
               const syncTime = statusQuery.dataUpdatedAt
                 ? new Date(statusQuery.dataUpdatedAt).toLocaleTimeString('pt-BR', { hour: '2-digit', minute: '2-digit', second: '2-digit', timeZone: 'America/Sao_Paulo' })
                 : null;
 
               return (
                 <div className="overflow-hidden rounded-2xl border border-cyan-400/20 bg-gradient-to-b from-[#0b1725] via-[#0c1220] to-[#101020] shadow-2xl shadow-cyan-950/20">
-                  <div className="border-b border-white/10 bg-cyan-500/[0.06] p-4 sm:p-5">
+                  {presentation.showProgress && <div className="border-b border-white/10 bg-cyan-500/[0.06] p-4 sm:p-5">
                     <div className="flex items-start justify-between gap-4">
                       <div>
                         <p className="text-[10px] font-black uppercase tracking-[0.2em] text-cyan-300/70">Jornada do seu pedido</p>
@@ -1365,8 +1376,7 @@ export default function OrderTracking() {
                     <div className="mt-3 h-2 overflow-hidden rounded-full bg-white/5">
                       <div className="h-full rounded-full bg-gradient-to-r from-emerald-400 via-cyan-400 to-blue-500 transition-all duration-700" style={{ width: `${progressPercent}%` }} />
                     </div>
-                  </div>
-
+                  </div>                  </div>}
                   <div className="space-y-3 p-4 sm:p-5">
                     <div className={`rounded-2xl border-2 p-4 ${latestCfg.bg} ${latestCfg.border}`}>
                       <div className="flex items-start gap-3">
@@ -1394,7 +1404,7 @@ export default function OrderTracking() {
                       )}
                     </div>
 
-                    {!progressPosition.cancelled && nextStep && nextCfg && (
+                    {presentation.showNext && !progressPosition.cancelled && nextStep && nextCfg && (
                       <div className="rounded-2xl border border-violet-400/30 bg-violet-500/10 p-4">
                         <div className="flex items-start gap-3">
                           <div className="flex h-10 w-10 flex-shrink-0 items-center justify-center rounded-full border border-violet-400/30 bg-violet-400/10 text-violet-300">
@@ -1415,21 +1425,22 @@ export default function OrderTracking() {
                       <div className="rounded-xl border border-red-500/30 bg-red-500/10 p-3 text-xs font-semibold text-red-300">Pedido cancelado. Não existem próximas etapas.</div>
                     )}
 
-                    <div className="pt-1">
+                    {!hideTimeline && <div className="pt-1">
                       <div className="mb-3 flex items-center justify-between gap-3">
                         <div>
                           <p className="text-xs font-black uppercase tracking-[0.16em] text-white/70">Todas as etapas</p>
                           <p className="mt-0.5 text-[10px] text-white/30">Acompanhe todo o caminho até a conclusão.</p>
                         </div>
-                        <span className="rounded-full border border-white/10 bg-white/5 px-2.5 py-1 text-[9px] font-bold text-white/35">{totalSteps} etapas</span>
+                        <span className="rounded-full border border-white/10 bg-white/5 px-2.5 py-1 text-[9px] font-bold text-white/35">{visibleSteps.length} etapas</span>
                       </div>
 
                       <div className="relative ml-4 space-y-3 border-l border-white/10 pl-6">
-                        {progressSteps.map((step: any, idx: number) => {
+                        {visibleSteps.map((step: any, idx: number) => {
                           const cfg = getStatusCfg(step.key);
-                          const isDone = !progressPosition.cancelled && idx < currentIdx;
-                          const isCurrent = !progressPosition.cancelled && idx === currentIdx;
-                          const isNext = !progressPosition.cancelled && idx === nextIdx;
+                          const realIdx=keys.indexOf(step.key);
+                          const isDone = !progressPosition.cancelled && realIdx < currentIdx;
+                          const isCurrent = !progressPosition.cancelled && realIdx === currentIdx;
+                          const isNext = !progressPosition.cancelled && realIdx === nextIdx;
                           const stateLabel = isDone ? 'CONCLUÍDO' : isCurrent ? 'AGORA' : isNext ? 'PRÓXIMO' : 'DEPOIS';
                           return (
                             <div key={step.id ?? step.key} className={`relative rounded-xl border p-3 transition-all ${
@@ -1474,7 +1485,7 @@ export default function OrderTracking() {
                         })}
                       </div>
                     </div>
-                  </div>
+                  </div>}
                 </div>
               );
             })()}
