@@ -36,6 +36,7 @@ import { useEffect } from "react";
 import ErrorBoundary from "./components/ErrorBoundary";
 import { ThemeProvider } from "./contexts/ThemeContext";
 import Home from "./pages/Home";
+import HomeRouteCards from "./pages/HomeRouteCards";
 import AdminCodes from "./pages/AdminCodes";
 import AdminSiteSecurity from "./pages/AdminSiteSecurity";
 import SiteAccess from "./pages/SiteAccess";
@@ -389,7 +390,7 @@ function Router() {
       <Route path={"/app"} component={AppDownloadPage} />
       <Route path={"/app-pro"} component={AppProDownloadPage} />
       <Route path={"/vip"} component={VipPage} />
-      <Route path={"/"} component={Home} />
+      <Route path={"/"} component={HomeRouteCards} />
       <Route path={"/404"} component={NotFound} />
       <Route component={NotFound} />
     </Switch>
@@ -544,11 +545,9 @@ function AppContent() {
     return <MaintenanceManifestGate config={maintenanceManifest} />;
   }
 
-  // A vitrine de cards antiga foi retirada da raiz do site.
-  // Preserva links e o fluxo de autenticacao de clientes em /login.
+  // Public landing page: keep the service entry routes visible at the root.
   if (location === "/") {
-    const suffix = typeof window === "undefined" ? "" : window.location.search + window.location.hash;
-    return <Redirect to={"/login" + suffix} />;
+    return <Router />;
   }
 
   // Rota /vip é pública — vitrine e contratação do plano H2 VIP
