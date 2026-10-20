@@ -1,3 +1,4 @@
+import { addH2AdsStartupSite, listH2AdsStartupSites, toggleH2AdsStartupSite, removeH2AdsStartupSite } from "../h2adsGlobalStartupSites";
 import { TRPCError } from "@trpc/server";
 import { addH2AdsGlobalExtension, listH2AdsGlobalExtensions, removeH2AdsGlobalExtension, setH2AdsGlobalExtension } from "../h2adsGlobalExtensions";
 import { z } from "zod";
@@ -181,6 +182,10 @@ async function requireConfigurableInstance(instanceId: number) {
 export const h2AdsRouter = {
   ...h2AdsOrderLinkRouterPart,
   listDashboard: adminProcedure.query(async () => listH2AdsDashboard()),
+  startupSites: adminProcedure.query(async () => listH2AdsStartupSites()),
+  addStartupSite: adminProcedure.input(z.object({ url: z.string().max(500), name: z.string().trim().min(1).max(90) }).strict()).mutation(async ({ input }) => addH2AdsStartupSite(input.url, input.name)),
+  toggleStartupSite: adminProcedure.input(z.object({ id: z.string().uuid(), enabled: z.boolean() }).strict()).mutation(async ({ input }) => toggleH2AdsStartupSite(input.id, input.enabled)),
+  removeStartupSite: adminProcedure.input(z.object({ id: z.string().uuid() }).strict()).mutation(async ({ input }) => removeH2AdsStartupSite(input.id)),
   globalExtensions: adminProcedure.query(async () => listH2AdsGlobalExtensions()),
   addGlobalExtension: adminProcedure.input(z.object({ url: z.string().max(500), name: z.string().trim().min(1).max(90) }).strict()).mutation(async ({ input }) => addH2AdsGlobalExtension(input.url, input.name)),
   toggleGlobalExtension: adminProcedure.input(z.object({ id: z.string().regex(/^[a-p]{32}$/), enabled: z.boolean() }).strict()).mutation(async ({ input }) => setH2AdsGlobalExtension(input.id, input.enabled)),
