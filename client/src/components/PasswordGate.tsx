@@ -634,8 +634,8 @@ export default function PasswordGate({ children }: PasswordGateProps) {
     }
   };
 
-  // O manifesto já confirmou este telefone. Reaproveitamos a confirmação e seguimos direto
-  // para senha, criação de senha ou foto pendente, sem exibir novamente o campo de telefone.
+  // Quando o telefone vier do fluxo anterior, reaproveitamos apenas o número.
+  // A confirmação do e-mail continua obrigatória antes de seguir para senha, cadastro ou foto.
   useEffect(() => {
     const storedPhone = sessionStorage.getItem('walk_home_existing_phone');
     if (!storedPhone || manifestPhoneHandled.current || accessGranted) return;
@@ -2071,7 +2071,7 @@ export default function PasswordGate({ children }: PasswordGateProps) {
                   <div className="mt-1.5 flex items-start gap-1.5 bg-yellow-500/20 border border-yellow-500/40 rounded-lg px-2.5 py-2">
                     <span className="text-yellow-400 text-xs flex-shrink-0 mt-0.5">⚠️</span>
                     <p className="text-yellow-200 text-xs leading-relaxed">
-                      <strong>O email não é para criar conta.</strong> Usado apenas para receber atualizações do seu pedido.
+                      <strong>E-mail confirmado.</strong> Ele será usado para segurança do acesso, confirmação por código e atualizações do seu pedido.
                     </p>
                   </div>
                 </div>
