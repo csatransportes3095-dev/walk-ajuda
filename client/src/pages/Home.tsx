@@ -1811,7 +1811,7 @@ export default function Home() {
               email: clientEmail.trim(),
               accessCode: accessCode || undefined,
               cpToken: cpTokenForSubmit || undefined,
-              couponCode: !sitePromoOverrides && couponValid ? couponCode : undefined,
+              couponCode: !sitePromoOverrides && couponDiscount && couponCode.trim() ? couponCode.trim().toUpperCase() : undefined,
               // Comprovante PIX: apenas no primeiro item (cartItemIndex=0)
               paymentProof: undefined,
               paymentProofUrl: i === 0 ? paymentProofUploadedUrl : undefined,
@@ -1833,7 +1833,7 @@ export default function Home() {
               // Campos de agrupamento de carrinho
               cartGroupId,
               cartTotal: cartTotalValue,
-              cartCouponCode: !sitePromoOverrides && couponValid ? couponCode : undefined,
+              cartCouponCode: !sitePromoOverrides && couponDiscount && couponCode.trim() ? couponCode.trim().toUpperCase() : undefined,
               cartCouponDiscount: sitePromoOverrides ? undefined : cartCouponDiscountValue,
               cartItemIndex: i,
               cartItemCount: cartItems.length,
@@ -1930,7 +1930,7 @@ export default function Home() {
         email: clientEmail.trim(),
         accessCode: accessCode || undefined,
         cpToken: cpTokenForSubmit || undefined,
-        couponCode: !sitePromoOverrides && couponValid ? couponCode : undefined,
+        couponCode: !sitePromoOverrides && couponDiscount && couponCode.trim() ? couponCode.trim().toUpperCase() : undefined,
         vipInstallmentCheckoutToken: vipInstallmentActive ? vipCheckoutTokenRef.current : undefined,
         paymentProof: undefined,
         paymentProofUrl: paymentProofUploadedUrl,
@@ -4218,7 +4218,7 @@ export default function Home() {
                       phone: clientPhone.trim() || undefined,
                       checkoutToken,
                       items: [{ productId: selectedProduct.id, optionId: selectedOption.id, priceModelId: selectedPriceModel?.id || null, warrantyTierId: selectedTier?.id || null }],
-                      couponCode: !sitePromoOverrides && couponValid ? couponCode : undefined,
+                      couponCode: !sitePromoOverrides && couponDiscount && couponCode.trim() ? couponCode.trim().toUpperCase() : undefined,
                       installmentCount: vipInstallmentSelection.installmentCount,
                       frequency: vipInstallmentSelection.frequency,
                     });
