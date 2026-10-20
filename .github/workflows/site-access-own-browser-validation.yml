@@ -1,0 +1,47 @@
+name: Site access own-code browser validation
+on:
+  push:
+    branches: [feature/site-access-own-codes-24h-20261020]
+  pull_request:
+    branches: [recovery/organizar-salvos-2026-08-24]
+    paths:
+      - 'client/src/pages/SiteAccess.tsx'
+      - 'client/src/components/SiteAccessSessionBoundary.tsx'
+      - 'client/src/lib/siteAccess*.ts'
+      - 'shared/siteAccessCodePolicy.ts'
+      - 'scripts/test-site-access-own-browser.mjs'
+      - '.github/workflows/site-access-own-browser-validation.yml'
+permissions:
+  contents: read
+concurrency:
+  group: site-own-browser-${{ github.ref }}
+  cancel-in-progress: true
+jobs:
+  browser:
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    env:
+      SITE_UI_TOOLS: /tmp/h2-site-ui
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          persist-credentials: false
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+      - name: Install isolated test tools and locked application dependencies
+        run: |
+          npm install -g pnpm@10.4.1
+          pnpm install --frozen-lockfile
+          npm install --prefix /tmp/h2-site-ui --no-package-lock playwright@1.58.2
+          /tmp/h2-site-ui/node_modules/.bin/playwright install --with-deps chromium
+      - name: Build application and run browser-only harness with synthetic responses
+        run: |
+          pnpm build
+          node scripts/test-site-access-own-browser.mjs
+      - uses: actions/upload-artifact@v4
+        if: always()
+        with:
+          name: site-own-browser-evidence
+          path: /tmp/site-own-browser-evidence
+          retention-days: 3

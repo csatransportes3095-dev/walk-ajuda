@@ -9,6 +9,7 @@ import { useEffect } from "react";
 import superjson from "superjson";
 import App from "./App";
 import SiteAccess from "./pages/SiteAccess";
+import SiteAccessSessionBoundary from "./components/SiteAccessSessionBoundary";
 import ChassisCustomerPage from "./pages/ChassisCustomerPage";
 import { isChassisCustomerLocation } from "@shared/chassisService";
 import { useLocation } from "wouter";
@@ -170,7 +171,9 @@ function RootMaintenanceBoundary() {
 createRoot(document.getElementById("root")!).render(
   <trpc.Provider client={trpcClient} queryClient={queryClient}>
     <QueryClientProvider client={queryClient}>
-      <RootMaintenanceBoundary />
+      <SiteAccessSessionBoundary onClear={()=>queryClient.clear()}>
+        <RootMaintenanceBoundary />
+      </SiteAccessSessionBoundary>
     </QueryClientProvider>
   </trpc.Provider>
 );
