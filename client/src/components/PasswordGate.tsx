@@ -83,7 +83,7 @@ function useInstallPWA() {
   return { isInstallable, isInstalled, dismissed, install, dismiss, deferredPrompt };
 }
 
-type GateStep = "phone" | "newUser" | "indicador" | "registration" | "profilePhoto" | "referral" | "password" | "blocked" | "updateCpf" | "cpwd_create" | "cpwd_pending" | "cpwd_add_cpf" | "route_blocked";
+type GateStep = "phone" | "email" | "emailCode" | "newUser" | "indicador" | "registration" | "profilePhoto" | "referral" | "password" | "blocked" | "updateCpf" | "cpwd_create" | "cpwd_pending" | "cpwd_add_cpf" | "route_blocked";
 
 export default function PasswordGate({ children }: PasswordGateProps) {
   const [accessGranted, setAccessGranted] = useState(() => !!localStorage.getItem(CP_TOKEN_KEY) || localStorage.getItem(SESSION_KEY) === "true");
@@ -91,6 +91,12 @@ export default function PasswordGate({ children }: PasswordGateProps) {
   const [blockedRoutes, setBlockedRoutes] = useState<string[]>([]);
   const [clientPhone, setClientPhone] = useState("");
   const [clientCpf, setClientCpf] = useState("");
+  const [loginEmail, setLoginEmail] = useState("");
+  const [loginEmailCode, setLoginEmailCode] = useState("");
+  const [emailVerificationToken, setEmailVerificationToken] = useState("");
+  const [maskedLoginEmail, setMaskedLoginEmail] = useState("");
+  const [isSendingEmailCode, setIsSendingEmailCode] = useState(false);
+  const [isVerifyingEmailCode, setIsVerifyingEmailCode] = useState(false);
   const manifestPhoneHandled = useRef(false);
   const [password, setPassword] = useState("");
   const [showPassword, setShowPassword] = useState(false);
@@ -168,7 +174,9 @@ export default function PasswordGate({ children }: PasswordGateProps) {
   const validateMutation = trpc.access.validate.useMutation();
   // Novo sistema de senha unificado
   const cpwdCheckStatusMutation = trpc.customerPassword.checkStatusMutation.useMutation();
-  const cpwdLoginMutation = trpc.customerPassword.login.useMutation();
+  const startEmailVerificationMutation = trpc.customerPassword.startEmailVerification.useMutation();
+  const verifyEmailCodeMutation = trpc.customerPassword.verifyEmailCode.useMutation();
+  const cpwdLoginMutation = trpc.customerPassword.loginVerified.useMutation();
   const cpwdCreateAutoMutation = trpc.customerPassword.clientCreateAuto.useMutation();
   const cpwdCreateManualMutation = trpc.customerPassword.clientCreateManual.useMutation();
   const cpwdSaveCpfMutation = trpc.customerPassword.saveCpf.useMutation();
@@ -353,6 +361,7 @@ export default function PasswordGate({ children }: PasswordGateProps) {
           if (window.location.pathname !== '/atualizarcadastro') navigate('/atualizarcadastro');
           return;
         }
+        setEmailVerificationToken("");
         setAccessGranted(true);
         setAccessType('customer');
       } else {
@@ -423,32 +432,30 @@ export default function PasswordGate({ children }: PasswordGateProps) {
   // Helper: obtém o telefone canônico para operações (resolvedPhone se disponível, senão clientPhone)
   const getCanonicalPhone = () => resolvedPhone || getPhoneDigits(clientPhone);
 
-  // Step 1: Verificar telefone ou CPF
-  const handlePhoneSubmit = async (e: React.FormEvent, recognizedPhone?: string) => {
+  // Step 1: telefone. Antes do fluxo normal, confirmar o e-mail por código.
+  const handlePhoneSubmit = async (e: React.FormEvent, recognizedPhone?: string, emailVerified = false) => {
     e.preventDefault();
     const phoneDigits = recognizedPhone ? getPhoneDigits(recognizedPhone) : getPhoneDigits(clientPhone);
-    const cpfDigits = normalizeCpf(clientCpf);
-    if (cpfDigits.length === 11 && !isValidCPF(cpfDigits)) {
-      toast.error('CPF inválido. Digite um CPF válido para continuar.');
+    const inputDigits = phoneDigits;
+    if (inputDigits.length !== 11) {
+      toast.error("Telefone deve ter 11 dígitos (DDD + número)");
       return;
     }
-    // Usar telefone se preenchido, senão CPF
-    const inputDigits = phoneDigits.length === 11 ? phoneDigits : cpfDigits;
-    if (inputDigits.length !== 11) {
-      if (phoneDigits.length > 0 && phoneDigits.length !== 11) {
-        toast.error("Telefone deve ter 11 dígitos (DDD + número)");
-      } else if (cpfDigits.length > 0 && cpfDigits.length !== 11) {
-        toast.error("CPF deve ter 11 dígitos");
-      } else {
-        toast.error("Preencha o telefone ou o CPF para continuar");
-      }
+    setClientPhone(inputDigits);
+    sessionStorage.setItem('reg_phone_temp', inputDigits);
+    if (!emailVerified) {
+      setLoginEmail("");
+      setLoginEmailCode("");
+      setEmailVerificationToken("");
+      setMaskedLoginEmail("");
+      setGateStep("email");
       return;
     }
     setIsCheckingPhone(true);
     setProfileUpdateRequiredAfterPasswordSetup(false);
     try {
       // Verificar status da senha (aceita telefone ou CPF)
-      const cpwdStatus = await cpwdCheckStatusMutation.mutateAsync({ phone: inputDigits, isCpf: phoneDigits.length !== 11 && cpfDigits.length === 11 });
+      const cpwdStatus = await cpwdCheckStatusMutation.mutateAsync({ phone: inputDigits });
       const status = cpwdStatus?.status;
       setProfileUpdateRequiredAfterPasswordSetup(!!(cpwdStatus as any)?.profileUpdateRequired);
 
@@ -475,18 +482,12 @@ export default function PasswordGate({ children }: PasswordGateProps) {
         } else {
           setCustomerExists(false);
           setRegReferredByPhone("");
-          // Se entrou pelo CPF, pré-preencher o CPF no formulário e deixar telefone livre
-          const byCpf = clientCpf.replace(/\D/g, '').length === 11;
-          setEnteredByCpf(byCpf);
-          if (byCpf) {
-            setRegCpf(clientCpf); // pré-preencher CPF
-            setRegPhone(""); // telefone livre
-          } else {
-            // Garantir que clientPhone está definido com os dígitos corretos
-            setClientPhone(inputDigits);
-            sessionStorage.setItem('reg_phone_temp', inputDigits);
-            setRegCpf(""); // CPF livre
-          }
+          setEnteredByCpf(false);
+          setClientPhone(inputDigits);
+          sessionStorage.setItem('reg_phone_temp', inputDigits);
+          setRegPhone("");
+          setRegCpf("");
+          setRegEmail(loginEmail);
           setGateStep("registration");
         }
         return;
@@ -566,10 +567,70 @@ export default function PasswordGate({ children }: PasswordGateProps) {
         setCustomerExists(false);
         setClientPhone(inputDigits);
         sessionStorage.setItem('reg_phone_temp', inputDigits);
+        setEnteredByCpf(false);
+        setRegEmail(loginEmail);
         setGateStep("registration");
       }
     } finally {
       setIsCheckingPhone(false);
+    }
+  };
+
+  const handleEmailSubmit = async (e: React.FormEvent) => {
+    e.preventDefault();
+    const email = loginEmail.trim().toLowerCase();
+    if (!/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(email)) {
+      toast.error("Digite um e-mail válido.");
+      return;
+    }
+    setIsSendingEmailCode(true);
+    try {
+      const result = await startEmailVerificationMutation.mutateAsync({
+        phone: getPhoneDigits(clientPhone),
+        email,
+      });
+      if (!result.success) {
+        toast.error(result.message || "Não foi possível enviar o código.");
+        return;
+      }
+      setLoginEmail(email);
+      setMaskedLoginEmail(result.maskedEmail || email);
+      setLoginEmailCode("");
+      setGateStep("emailCode");
+      toast.success("Código enviado para seu e-mail.");
+    } catch (err: any) {
+      toast.error(err?.message || "Não foi possível enviar o código. Tente novamente.");
+    } finally {
+      setIsSendingEmailCode(false);
+    }
+  };
+
+  const handleEmailCodeSubmit = async (e: React.FormEvent) => {
+    e.preventDefault();
+    const code = loginEmailCode.replace(/\D/g, "");
+    if (code.length !== 6) {
+      toast.error("Digite o código de 6 números.");
+      return;
+    }
+    setIsVerifyingEmailCode(true);
+    try {
+      const result = await verifyEmailCodeMutation.mutateAsync({
+        phone: getPhoneDigits(clientPhone),
+        email: loginEmail.trim().toLowerCase(),
+        code,
+      });
+      if (!result.success || !result.verificationToken) {
+        toast.error(result.message || "Código incorreto.");
+        return;
+      }
+      setEmailVerificationToken(result.verificationToken);
+      setRegEmail(result.email || loginEmail.trim().toLowerCase());
+      toast.success("E-mail confirmado.");
+      await handlePhoneSubmit({ preventDefault: () => undefined } as React.FormEvent, getPhoneDigits(clientPhone), true);
+    } catch (err: any) {
+      toast.error(err?.message || "Não foi possível confirmar o código.");
+    } finally {
+      setIsVerifyingEmailCode(false);
     }
   };
 
@@ -645,8 +706,8 @@ export default function PasswordGate({ children }: PasswordGateProps) {
   const handleRegistration = async (e: React.FormEvent) => {
     e.preventDefault();
     if (!regName.trim()) { toast.error("Preencha seu nome completo"); return; }
-    if (!regEmail.trim()) { toast.error("Preencha seu email"); return; }
-    if (!/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(regEmail.trim())) { toast.error("Email inválido"); return; }
+    if (!regEmail.trim() && !loginEmail.trim()) { toast.error("Confirme seu e-mail antes de continuar"); return; }
+    if (!/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test((regEmail || loginEmail).trim())) { toast.error("Email inválido"); return; }
     if (!regCpf.trim() || regCpf.replace(/\D/g,'').length !== 11) { toast.error("Preencha o CPF"); return; }
     if (!isValidCPF(regCpf)) { toast.error("CPF inválido. Verifique os números e tente novamente."); return; }
     if (!enteredByCpf && cpfDuplicado) { toast.error("Este CPF já está cadastrado no sistema."); return; }
@@ -716,7 +777,7 @@ export default function PasswordGate({ children }: PasswordGateProps) {
       const result = await registerMutation.mutateAsync({
         name: regName.trim(),
         phone: clientPhoneDigits,
-        email: regEmail.trim(),
+        email: (regEmail || loginEmail).trim(),
         cpf: regCpf.trim(),
         cep: regCep.trim(),
         street: regStreet.trim(),
@@ -1060,7 +1121,7 @@ export default function PasswordGate({ children }: PasswordGateProps) {
     }
     setIsValidating(true);
     try {
-      const result = await cpwdLoginMutation.mutateAsync({ phone: getCanonicalPhone(), password });
+      const result = await cpwdLoginMutation.mutateAsync({ phone: getCanonicalPhone(), password, emailVerificationToken });
       if (result.success && result.token) {
         localStorage.setItem(CP_TOKEN_KEY, result.token);
         localStorage.setItem(SESSION_PHONE_KEY, getCanonicalPhone());
@@ -1508,6 +1569,8 @@ export default function PasswordGate({ children }: PasswordGateProps) {
             )}
             <p className="text-white/60 text-sm mt-1">
               {gateStep === "phone" && loginShowSubtitle && loginSubtitle}
+              {gateStep === "email" && "Confirme seu e-mail"}
+              {gateStep === "emailCode" && "Digite o código recebido"}
               {gateStep === "registration" && "Cadastre-se"}
               {gateStep === "profilePhoto" && "Foto de Perfil"}
               {gateStep === "password" && "Acesso com senha do cadastro"}
@@ -1521,6 +1584,8 @@ export default function PasswordGate({ children }: PasswordGateProps) {
           <div className="flex justify-center mb-6">
             <div className="w-12 h-12 bg-white/5 border border-white/10 rounded-full flex items-center justify-center">
               {gateStep === "phone" && <Phone className="w-6 h-6 text-primary" />}
+              {gateStep === "email" && <Mail className="w-6 h-6 text-primary" />}
+              {gateStep === "emailCode" && <Mail className="w-6 h-6 text-green-400" />}
               {gateStep === "registration" && <UserPlus className="w-6 h-6 text-green-400" />}
               {gateStep === "profilePhoto" && <UserPlus className="w-6 h-6 text-blue-400" />}
               {gateStep === "password" && <Lock className="w-6 h-6 text-primary" />}
@@ -1537,7 +1602,7 @@ export default function PasswordGate({ children }: PasswordGateProps) {
               {/* Instrução de acesso */}
               <div className="bg-white/5 border border-white/10 rounded-xl px-4 py-3 text-center">
                 <p className="text-white/90 text-sm font-semibold">Identifique-se para acessar</p>
-                <p className="text-white/50 text-xs mt-0.5">Use o telefone ou CPF cadastrado na Walk Ajuda</p>
+                <p className="text-white/50 text-xs mt-0.5">Digite seu telefone com DDD para continuar</p>
               </div>
 
               {/* Campo Telefone */}
@@ -1565,7 +1630,7 @@ export default function PasswordGate({ children }: PasswordGateProps) {
                         ? 'border-green-500 bg-green-500/10'
                         : 'border-white/20 focus:border-primary focus:ring-2 focus:ring-primary/30'
                     }`}
-                    disabled={isCheckingPhone || clientCpf.replace(/\D/g,'').length > 0}
+                    disabled={isCheckingPhone}
                     autoFocus
                   />
                   {getPhoneDigits(clientPhone).length > 0 && getPhoneDigits(clientPhone).length !== 11 && (
@@ -1577,54 +1642,9 @@ export default function PasswordGate({ children }: PasswordGateProps) {
                 </div>
               </div>
 
-              {/* Divisor OU */}
-              <div className="flex items-center gap-3">
-                <div className="flex-1 h-px bg-white/15" />
-                <span className="text-white/30 text-xs font-bold tracking-widest">OU ACESSE COM</span>
-                <div className="flex-1 h-px bg-white/15" />
-              </div>
-
-              {/* Campo CPF */}
-              <div>
-                <label className="block text-xs font-bold text-white/60 mb-2 uppercase tracking-widest flex items-center gap-1.5">
-                  <CreditCard className="w-3.5 h-3.5" /> CPF (somente números)
-                </label>
-                <div className="relative">
-                  <input
-                    type="text"
-                    inputMode="numeric"
-                    value={clientCpf}
-                    onChange={(e) => {
-                      const digits = e.target.value.replace(/\D/g, '').slice(0, 11);
-                      let formatted = digits;
-                      if (digits.length > 9) formatted = `${digits.slice(0,3)}.${digits.slice(3,6)}.${digits.slice(6,9)}-${digits.slice(9)}`;
-                      else if (digits.length > 6) formatted = `${digits.slice(0,3)}.${digits.slice(3,6)}.${digits.slice(6)}`;
-                      else if (digits.length > 3) formatted = `${digits.slice(0,3)}.${digits.slice(3)}`;
-                      setClientCpf(formatted);
-                      if (digits.length > 0) setClientPhone('');
-                    }}
-                    placeholder="000.000.000-00"
-                    className={`w-full px-4 py-4 bg-white/10 text-white text-lg text-center font-bold rounded-xl border-2 outline-none transition-all placeholder:text-white/25 ${
-                      clientCpf.replace(/\D/g,'').length > 0 && clientCpf.replace(/\D/g,'').length !== 11
-                        ? 'border-red-500 bg-red-500/10'
-                        : clientCpf.replace(/\D/g,'').length === 11
-                        ? 'border-green-500 bg-green-500/10'
-                        : 'border-white/20 focus:border-primary focus:ring-2 focus:ring-primary/30'
-                    }`}
-                    disabled={isCheckingPhone || getPhoneDigits(clientPhone).length > 0}
-                  />
-                  {clientCpf.replace(/\D/g,'').length > 0 && clientCpf.replace(/\D/g,'').length !== 11 && (
-                    <p className="text-red-400 text-xs mt-1">CPF deve ter 11 dígitos</p>
-                  )}
-                  {clientCpf.replace(/\D/g,'').length === 11 && (
-                    <p className="text-green-400 text-xs mt-1 flex items-center gap-1"><CheckCircle2 className="w-3 h-3" /> CPF válido</p>
-                  )}
-                </div>
-              </div>
-
               <button
                 type="submit"
-                disabled={isCheckingPhone || isValidating || (getPhoneDigits(clientPhone).length !== 11 && clientCpf.replace(/\D/g,'').length !== 11)}
+                disabled={isCheckingPhone || isValidating || getPhoneDigits(clientPhone).length !== 11}
                 className="w-full px-4 py-4 bg-gradient-to-r from-primary to-purple-600 hover:from-primary/90 hover:to-purple-600/90 disabled:opacity-40 disabled:cursor-not-allowed text-white font-black text-xl rounded-xl transition-all duration-200 active:scale-[0.98] shadow-xl shadow-primary/40"
               >
                 {(isCheckingPhone || isValidating) ? (
@@ -1900,6 +1920,93 @@ export default function PasswordGate({ children }: PasswordGateProps) {
             </form>
           )}
 
+          {/* ===== STEP 2: E-MAIL ===== */}
+          {gateStep === "email" && (
+            <form onSubmit={handleEmailSubmit} className="space-y-5">
+              <div className="bg-white/5 border border-white/10 rounded-xl px-4 py-3 text-center">
+                <p className="text-white/90 text-sm font-semibold">Confirme seu e-mail</p>
+                <p className="text-white/50 text-xs mt-1">Enviaremos um código de 6 números antes de continuar.</p>
+              </div>
+              <div>
+                <label className="block text-xs font-bold text-white/60 mb-2 uppercase tracking-widest flex items-center gap-1.5">
+                  <Mail className="w-3.5 h-3.5" /> E-mail
+                </label>
+                <input
+                  type="email"
+                  autoComplete="email"
+                  value={loginEmail}
+                  onChange={(e) => setLoginEmail(e.target.value)}
+                  placeholder="seu@email.com"
+                  className="w-full px-4 py-4 bg-white/10 text-white text-lg text-center font-semibold rounded-xl border-2 border-white/20 focus:border-primary focus:ring-2 focus:ring-primary/30 outline-none transition-all placeholder:text-white/25"
+                  autoFocus
+                  disabled={isSendingEmailCode}
+                />
+              </div>
+              <button
+                type="submit"
+                disabled={isSendingEmailCode || !loginEmail.trim()}
+                className="w-full px-4 py-4 bg-gradient-to-r from-primary to-purple-600 disabled:opacity-50 text-white font-black text-lg rounded-xl transition-all shadow-xl shadow-primary/40"
+              >
+                {isSendingEmailCode ? "ENVIANDO CÓDIGO..." : "ENVIAR CÓDIGO →"}
+              </button>
+              <button
+                type="button"
+                onClick={() => { setGateStep("phone"); setLoginEmail(""); }}
+                className="w-full text-white/45 text-xs hover:text-white/75 transition-colors"
+              >
+                ← Trocar número de telefone
+              </button>
+            </form>
+          )}
+
+          {/* ===== STEP 3: CÓDIGO DO E-MAIL ===== */}
+          {gateStep === "emailCode" && (
+            <form onSubmit={handleEmailCodeSubmit} className="space-y-5">
+              <div className="bg-green-500/10 border border-green-500/30 rounded-xl px-4 py-3 text-center">
+                <p className="text-green-300 text-sm font-semibold">Código enviado</p>
+                <p className="text-white/55 text-xs mt-1">Enviamos para {maskedLoginEmail || loginEmail}.</p>
+              </div>
+              <div>
+                <label className="block text-xs font-bold text-white/60 mb-2 uppercase tracking-widest text-center">
+                  Código de confirmação
+                </label>
+                <input
+                  type="text"
+                  inputMode="numeric"
+                  autoComplete="one-time-code"
+                  value={loginEmailCode}
+                  onChange={(e) => setLoginEmailCode(e.target.value.replace(/\D/g, "").slice(0, 6))}
+                  placeholder="000000"
+                  className="w-full px-4 py-4 bg-white/10 text-white text-2xl text-center font-black tracking-[0.35em] rounded-xl border-2 border-white/20 focus:border-green-500 focus:ring-2 focus:ring-green-500/30 outline-none transition-all placeholder:text-white/20"
+                  autoFocus
+                  disabled={isVerifyingEmailCode}
+                />
+              </div>
+              <button
+                type="submit"
+                disabled={isVerifyingEmailCode || loginEmailCode.length !== 6}
+                className="w-full px-4 py-4 bg-gradient-to-r from-green-600 to-emerald-600 disabled:opacity-50 text-white font-black text-lg rounded-xl transition-all shadow-lg shadow-green-500/30"
+              >
+                {isVerifyingEmailCode ? "CONFIRMANDO..." : "CONFIRMAR CÓDIGO →"}
+              </button>
+              <button
+                type="button"
+                disabled={isSendingEmailCode}
+                onClick={() => void handleEmailSubmit({ preventDefault: () => undefined } as React.FormEvent)}
+                className="w-full text-primary text-xs font-semibold hover:text-primary/80 disabled:opacity-50"
+              >
+                Reenviar código
+              </button>
+              <button
+                type="button"
+                onClick={() => { setGateStep("email"); setLoginEmailCode(""); }}
+                className="w-full text-white/45 text-xs hover:text-white/75 transition-colors"
+              >
+                ← Corrigir e-mail
+              </button>
+            </form>
+          )}
+
           {/* ===== STEP 2: CADASTRO ===== */}
           {gateStep === "registration" && (
             <form onSubmit={handleRegistration} className="space-y-5">
@@ -1958,8 +2065,9 @@ export default function PasswordGate({ children }: PasswordGateProps) {
 
                 <div>
                   <label className="text-white mb-2 block text-sm font-medium">Email <span className="text-red-400">*</span></label>
-                  <input type="email" placeholder="seu@email.com" value={regEmail} onChange={(e) => setRegEmail(e.target.value)}
-                    className="w-full px-4 py-4 bg-white text-black text-lg text-center font-medium rounded-xl border-2 border-black focus:border-primary focus:ring-2 focus:ring-primary/30 outline-none transition-all" />
+                  <input type="email" value={regEmail || loginEmail} readOnly
+                    className="w-full px-4 py-4 bg-gray-200 text-black text-lg text-center font-medium rounded-xl border-2 border-green-500 opacity-90" />
+                  <p className="text-green-400 text-xs mt-1 flex items-center gap-1"><CheckCircle2 className="w-3 h-3" /> E-mail confirmado</p>
                   <div className="mt-1.5 flex items-start gap-1.5 bg-yellow-500/20 border border-yellow-500/40 rounded-lg px-2.5 py-2">
                     <span className="text-yellow-400 text-xs flex-shrink-0 mt-0.5">⚠️</span>
                     <p className="text-yellow-200 text-xs leading-relaxed">
@@ -2738,7 +2846,7 @@ export default function PasswordGate({ children }: PasswordGateProps) {
               <div className="flex flex-col items-center gap-3 pt-1">
                 <button
                   type="button"
-                  onClick={() => { setGateStep("phone"); setPassword(""); }}
+                  onClick={() => { setGateStep("phone"); setPassword(""); setEmailVerificationToken(""); setLoginEmail(""); setLoginEmailCode(""); }}
                   className="text-white/40 text-xs hover:text-white/70 transition-colors underline underline-offset-2"
                 >
                   ← Trocar número de telefone
