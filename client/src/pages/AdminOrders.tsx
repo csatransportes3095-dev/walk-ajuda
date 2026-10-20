@@ -33,6 +33,11 @@ import { getConfiguredGlobalProgressKeys, getDefaultGlobalProgressKeys } from "@
 
 type OrderStatus = "recebido" | "pagamento_recebido" | "em_andamento" | "em_montagem" | "documentos_aprovados" | "conta_ativa" | "aguardando_ativa" | "pedido_entregue" | "cancelado";
 
+const LEGACY_COUPON_DISPLAY: Record<number, { original: number; code: string; discount: number; final: number }> = {
+  2080000: { original: 600, code: "DSC8200", discount: 200, final: 400 },
+  2080001: { original: 600, code: "DSC8200", discount: 200, final: 400 },
+};
+
 const STATUS_CONFIG: Record<OrderStatus, { label: string; color: string; bg: string; icon: React.ReactNode }> = {
   recebido:            { label: "Recebido",       color: "text-orange-400",  bg: "bg-orange-500/20 border-orange-500/40",   icon: <Package className="w-4 h-4" /> },
   pagamento_recebido:  { label: "Pgto. Recebido", color: "text-amber-400",   bg: "bg-amber-500/20 border-amber-500/40",     icon: <DollarSign className="w-4 h-4" /> },
@@ -5921,16 +5926,24 @@ export default function AdminOrders() {
                             </span>
                           )}
                         </div>
-                        {!isCartGroup && order.cartCouponCode && order.cartTotal != null && order.cartCouponDiscount != null && Number(order.cartCouponDiscount) > 0 && (
-                          <div className="mt-2 rounded-xl border-2 border-yellow-300 bg-black/55 px-3 py-2 shadow-[0_0_14px_rgba(250,204,21,0.55)]">
-                            <div className="text-[10px] font-black uppercase tracking-widest text-yellow-300 mb-1">🏷️ DESCONTO APLICADO</div>
-                            <div className="flex flex-wrap items-center gap-x-3 gap-y-1 text-sm">
-                              <span className="text-white/80">Original: <strong className="line-through">R$ {Number(order.cartTotal).toFixed(2).replace('.', ',')}</strong></span>
-                              <span className="font-black text-yellow-300">{order.cartCouponCode}: -R$ {Number(order.cartCouponDiscount).toFixed(2).replace('.', ',')}</span>
-                              <span className="font-black text-green-300">FINAL: {order.pricePaid || `R$ ${Math.max(0, Number(order.cartTotal) - Number(order.cartCouponDiscount)).toFixed(2).replace('.', ',')}`}</span>
+                        {!isCartGroup && (() => {
+                          const legacy = order.orderNumber ? LEGACY_COUPON_DISPLAY[Number(order.orderNumber)] : undefined;
+                          const original = order.cartTotal != null ? Number(order.cartTotal) : legacy?.original;
+                          const code = order.cartCouponCode || legacy?.code;
+                          const discount = order.cartCouponDiscount != null ? Number(order.cartCouponDiscount) : legacy?.discount;
+                          const finalValue = order.pricePaid || (legacy ? `R$ ${legacy.final.toFixed(2).replace('.', ',')}` : undefined);
+                          if (!code || original == null || discount == null || discount <= 0) return null;
+                          return (
+                            <div className="mt-2 rounded-xl border-2 border-yellow-300 bg-black/55 px-3 py-2 shadow-[0_0_14px_rgba(250,204,21,0.55)]">
+                              <div className="text-[10px] font-black uppercase tracking-widest text-yellow-300 mb-1">🏷️ DESCONTO APLICADO</div>
+                              <div className="flex flex-wrap items-center gap-x-3 gap-y-1 text-sm">
+                                <span className="text-white/80">Original: <strong className="line-through">R$ {original.toFixed(2).replace('.', ',')}</strong></span>
+                                <span className="font-black text-yellow-300">{code}: -R$ {discount.toFixed(2).replace('.', ',')}</span>
+                                <span className="font-black text-green-300">FINAL: {finalValue || `R$ ${Math.max(0, original - discount).toFixed(2).replace('.', ',')}`}</span>
+                              </div>
                             </div>
-                          </div>
-                        )}
+                          );
+                        })()}
                         {/* Bloco de carrinho: lista todos os produtos se for grupo de carrinho */}
                         {isCartGroup && cgItems.length > 1 ? (
                           <div className="mt-1 space-y-1">
