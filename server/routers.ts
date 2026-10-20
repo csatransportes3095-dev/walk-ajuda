@@ -643,7 +643,18 @@ export const appRouter = router({
           });
           return { success: true, coupon };
         } catch (error) {
-          return { success: false, message: 'Erro ao criar cupom. Código já existe?' };
+          const outer = error as { message?: string; code?: string; errno?: number; cause?: unknown };
+          const cause = (outer?.cause || {}) as { message?: string; code?: string; errno?: number };
+          const code = outer?.code || cause?.code;
+          const errno = outer?.errno || cause?.errno;
+          if (code === 'ER_DUP_ENTRY' || errno === 1062) {
+            return { success: false, message: 'Já existe um cupom com este código.' };
+          }
+          console.error('[coupons.create] Falha ao criar cupom:', error);
+          return {
+            success: false,
+            message: cause?.message || outer?.message || 'Erro ao criar cupom.',
+          };
         }
       }),
 
