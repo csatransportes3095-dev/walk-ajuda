@@ -1006,6 +1006,11 @@ export type MainCustomerProfileInput = {
   phone: string;
   email?: string;
   cpf?: string;
+  cep?: string;
+  street?: string;
+  addressNumber?: string;
+  neighborhood?: string;
+  addressComplement?: string;
   city?: string;
   uf?: string;
   referredBy?: string;
@@ -1027,11 +1032,23 @@ export function validateMainCustomerProfile(data: MainCustomerProfileInput): { p
   const cpf = normalizeCpf(data.cpf);
   const email = String(data.email || '').trim().toLowerCase();
   const photoUrl = String(data.profilePhotoUrl || '').trim();
+  const cep = String(data.cep || '').replace(/\D/g, '');
+  const street = String(data.street || '').trim();
+  const addressNumber = String(data.addressNumber || '').trim();
+  const neighborhood = String(data.neighborhood || '').trim();
+  const city = String(data.city || '').trim();
+  const uf = String(data.uf || '').trim().toUpperCase();
   const missing: string[] = [];
   if (!String(data.name || '').trim()) missing.push('nome');
   if (!/^\d{10,11}$/.test(phone)) missing.push('telefone');
   if (!isValidMainCustomerCpf(cpf)) missing.push('CPF válido');
   if (!/^\S+@\S+\.\S+$/.test(email)) missing.push('e-mail');
+  if (!/^\d{8}$/.test(cep)) missing.push('CEP');
+  if (street.length < 2) missing.push('rua/logradouro');
+  if (!addressNumber) missing.push('número');
+  if (neighborhood.length < 2) missing.push('bairro');
+  if (city.length < 2) missing.push('cidade');
+  if (!/^[A-Z]{2}$/.test(uf)) missing.push('UF');
   if (!photoUrl) missing.push('foto de perfil');
   if (missing.length) throw new Error(`Cadastro principal exige: ${missing.join(', ')}.`);
   return { phone, cpf, email, photoUrl };
@@ -1048,8 +1065,13 @@ export async function createCustomer(data: MainCustomerProfileInput): Promise<Cu
     name: data.name ? normalizeCustomerText(data.name) : data.name,
     phone: required.phone,
     email: required.email,
+    cep: data.cep ? String(data.cep).replace(/\D/g, '').slice(0, 8) : null,
+    street: data.street ? normalizeCustomerText(data.street) : null,
+    addressNumber: data.addressNumber ? normalizeCustomerText(data.addressNumber) : null,
+    neighborhood: data.neighborhood ? normalizeCustomerText(data.neighborhood) : null,
+    addressComplement: data.addressComplement ? normalizeCustomerText(data.addressComplement) : null,
     city: data.city ? normalizeCustomerText(data.city) : null,
-    uf: data.uf ? normalizeCustomerText(data.uf) : null,
+    uf: data.uf ? normalizeCustomerText(data.uf).toUpperCase() : null,
     cpf: required.cpf,
     referredBy: data.referredBy ? normalizeCustomerText(data.referredBy) : null,
     referredByPhone: data.referredByPhone ? normalizeMainCustomerPhone(data.referredByPhone) : null,
