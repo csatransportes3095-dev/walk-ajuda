@@ -30,7 +30,7 @@ describe.skipIf(!url)('own site codes: isolated MySQL, actual HTTP routes and ga
   const request=(value:any=email,headers:Record<string,string>={})=>call('/api/site-access/request',{email:value},headers);
   const verify=(code:string,value=email)=>call('/api/site-access/verify',{email:value,code});
   const session=(cookie:string)=>call('/api/site-access/session',{}, {cookie},'GET');
-  async function issue(value=email){const response=await request(value);expect(response.status).toBe(200);return delivery.mock.calls.at(-1)![1] as string;}
+  async function issue(value=email){const response=await request(value);expect(response.status).toBe(200);expect(response.body.codeLength).toBe(6);const code=delivery.mock.calls.at(-1)![1] as string;expect(code).toMatch(/^[0-9]{6}$/);return code;}
   async function login(value=email){const code=await issue(value);const result=await verify(code,value);expect(result.status).toBe(200);return {code,result,cookie:result.headers['set-cookie']![0].split(';')[0]};}
   beforeAll(async()=>{
     const parsed=new URL(url!);
@@ -73,7 +73,7 @@ describe.skipIf(!url)('own site codes: isolated MySQL, actual HTTP routes and ga
     const code=await issue();const [record]=await query('SELECT * FROM siteAccessCodeLedgerV2');
     expect(record.fingerprint).toBe(ownCodeFingerprint(code));
     expect(record.codeHash).toBe(createHmac('sha256',secret).update('otp:'+email+':'+code).digest('hex'));
-    expect(JSON.stringify(record)).not.toContain(code);expect(JSON.stringify(record)).not.toContain(email);
+    expect(record).not.toHaveProperty('code');expect(Object.values(record)).not.toContain(code);expect(JSON.stringify(record)).not.toContain(email);
     expect(Number(record.expiresAt)-Number(record.issuedAt)).toBe(600000);
   });
   it('sets a secure 24-hour opaque cookie, not an admin credential',async()=>{
@@ -86,8 +86,17 @@ describe.skipIf(!url)('own site codes: isolated MySQL, actual HTTP routes and ga
     const code=await issue();expect((await verify(code,other)).status).toBe(401);expect((await verify(code)).status).toBe(200);
   });
   it('consumes a code once and refuses replay',async()=>{const {code}=await login();expect((await verify(code)).status).toBe(401);});
-  it('accepts pasted grouped lowercase codes',async()=>{
-    const code=await issue();expect((await verify(code.toLowerCase().replace(/(.{4})(?=.)/g,'$1-'))).status).toBe(200);
+  it('accepts pasted six-digit codes with optional separators',async()=>{
+    const code=await issue();expect((await verify(' '+code.slice(0,3)+'-'+code.slice(3)+' ')).status).toBe(200);
+  });
+  it('preserves all leading zeroes through reserve, delivery and verification',async()=>{
+    const reserved=await reserveOwnSiteCode(db,email,now,()=> '000012');
+    expect(reserved?.code).toBe('000012');await finishOwnSiteCodeDelivery(db,reserved!.fingerprint,{channel:'smtp',messageId:'zero-test'});
+    const response=await verify('000012');expect(response.status).toBe(200);expect(response.body.expiresAt-now).toBe(SITE_ACCESS_LIFETIME_MS);
+    expect((await verify('000012')).status).toBe(401);
+  });
+  it.each(['1234ABCDEFGH','0123456','12345','O12345','１２３４５６'])('rejects wrong length or letters without a session: %s',async value=>{
+    const response=await verify(value);expect(response.status).toBe(401);expect(response.headers['set-cookie']).toBeUndefined();expect(await query('SELECT * FROM siteAccessSessionsV2')).toHaveLength(0);
   });
   it('does not grant a session before confirming a code',async()=>{
     const response=await request();expect(response.headers['set-cookie']).toBeUndefined();expect(response.body).not.toHaveProperty('code');
@@ -107,21 +116,21 @@ describe.skipIf(!url)('own site codes: isolated MySQL, actual HTTP routes and ga
     const first=await issue();now+=60001;const second=await issue();expect(second).not.toBe(first);expect(await query('SELECT * FROM siteAccessCodeLedgerV2')).toHaveLength(2);
   });
   it('never reissues a previously generated value, even for another email',async()=>{
-    const reused='1234ABCDEFGH',fresh='2345ABCDEFGH';
+    const reused='012345',fresh='234567';
     await reserveOwnSiteCode(db,email,now,()=>reused);
     const sequence=vi.fn().mockReturnValueOnce(reused).mockReturnValue(fresh);
     expect((await reserveOwnSiteCode(db,other,now,sequence))?.code).toBe(fresh);expect(sequence).toHaveBeenCalledTimes(2);
   });
   it('retains uniqueness across a new database handle/restart and after user removal',async()=>{
-    const reused='1234ABCDEFGH';await reserveOwnSiteCode(db,email,now,()=>reused);
+    const reused='012345';await reserveOwnSiteCode(db,email,now,()=>reused);
     await query('DELETE FROM siteAccessEntries WHERE id=1');
-    const second=drizzle(pool),sequence=vi.fn().mockReturnValueOnce(reused).mockReturnValue('2345ABCDEFGH');
-    expect((await reserveOwnSiteCode(second,other,now,sequence))?.code).toBe('2345ABCDEFGH');
+    const second=drizzle(pool),sequence=vi.fn().mockReturnValueOnce(reused).mockReturnValue('234567');
+    expect((await reserveOwnSiteCode(second,other,now,sequence))?.code).toBe('234567');
     expect(await query('SELECT * FROM siteAccessCodeLedgerV2')).toHaveLength(2);
   });
   it('fails rather than repeating if a broken generator repeatedly collides',async()=>{
-    await reserveOwnSiteCode(db,email,now,()=> '1234ABCDEFGH');
-    await expect(reserveOwnSiteCode(db,email,now,()=> '1234ABCDEFGH')).rejects.toThrow('UNIQUENESS');
+    await reserveOwnSiteCode(db,email,now,()=> '012345');
+    await expect(reserveOwnSiteCode(db,email,now,()=> '012345')).rejects.toThrow('UNIQUENESS');
     expect(await query('SELECT * FROM siteAccessCodeLedgerV2')).toHaveLength(1);
   });
   it('expires the code at ten minutes',async()=>{const code=await issue();now+=600000;expect((await verify(code)).status).toBe(401);});
@@ -167,8 +176,8 @@ describe.skipIf(!url)('own site codes: isolated MySQL, actual HTTP routes and ga
     delivery.mockRejectedValue(new Error('test-only-failure'));expect((await request()).status).toBe(503);
     const code=delivery.mock.calls[0][1];expect((await verify(code)).status).toBe(401);
   });
-  it('blocks after five wrong guesses even when a correct code is later supplied',async()=>{
-    const code=await issue();for(let i=0;i<5;i++)expect((await verify('ZZZZZZZZZZZZ')).status).toBe(401);
+  it('blocks after five wrong numeric guesses even when a correct code is later supplied',async()=>{
+    const code=await issue(),wrong=code==='000000'?'000001':'000000';for(let i=0;i<5;i++)expect((await verify(wrong)).status).toBe(401);
     expect((await verify(code)).status).toBe(401);
   });
   it('creates only one session under concurrent verification',async()=>{
@@ -185,7 +194,9 @@ describe.skipIf(!url)('own site codes: isolated MySQL, actual HTTP routes and ga
   it('makes no customer records and changes no authorization fields while issuing/verifying',async()=>{
     const before=await query('SELECT * FROM siteAccessEntries ORDER BY id');await login();expect(await query('SELECT * FROM siteAccessEntries ORDER BY id')).toEqual(before);
   });
-  it('uses the specified alphabet and sufficient length for every generated sample',()=>{
-    const values=Array.from({length:500},()=>generateOwnSiteCode());expect(values.every(validSiteCode)).toBe(true);expect(new Set(values).size).toBe(500);
+  it('generates only six digits; uniqueness is enforced by reservation, not by chance',async()=>{
+    const values=Array.from({length:500},()=>generateOwnSiteCode());expect(values.every(value=>validSiteCode(value)&&value.length===6)).toBe(true);
+    const saved=[];for(let i=0;i<25;i++)saved.push((await reserveOwnSiteCode(db,email,now))!.code);
+    expect(new Set(saved).size).toBe(25);expect(await query('SELECT * FROM siteAccessCodeLedgerV2')).toHaveLength(25);
   });
 });
