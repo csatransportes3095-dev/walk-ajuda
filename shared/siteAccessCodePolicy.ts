@@ -3,6 +3,8 @@ export const SITE_CODE_ALPHABET = '0123456789';
 export const SITE_CODE_LIFETIME_MS = 10 * 60 * 1000;
 export const SITE_ACCESS_LIFETIME_MS = 24 * 60 * 60 * 1000;
 export const SITE_CODE_RESEND_SECONDS = 60;
+export const SITE_ACCESS_DENIED_CODE = 'SITE_ACCESS_NOT_AUTHORIZED';
+export const SITE_ACCESS_DENIED_MESSAGE = 'Você não está autorizado a acessar a comunidade H2.';
 
 export function normalizeSiteCode(value: unknown): string {
   if (typeof value !== 'string' || value.length > 80) return '';

@@ -5,9 +5,9 @@ import { parse as parseCookieHeader } from 'cookie';
 import { sql } from 'drizzle-orm';
 import { getDb } from './db';
 import { getAdminJwtSecret } from './adminJwt';
-import { ensureOwnSiteCodeStore, takeOwnSiteLimit, reserveOwnSiteCode, finishOwnSiteCodeDelivery, consumeOwnSiteCode, readOwnSiteSession, revokeOwnSiteSession, ownSiteErrorCode } from './siteAccessOwnCodes';
+import { ensureOwnSiteCodeStore, takeOwnSiteLimit, isOwnSiteEmailAuthorized, reserveOwnSiteCode, finishOwnSiteCodeDelivery, consumeOwnSiteCode, readOwnSiteSession, revokeOwnSiteSession, ownSiteErrorCode } from './siteAccessOwnCodes';
 import { deliverOwnSiteCode } from './siteAccessCodeDelivery';
-import { SITE_CODE_LENGTH, SITE_CODE_RESEND_SECONDS, normalizeSiteCode, validSiteCode } from '../shared/siteAccessCodePolicy';
+import { SITE_CODE_LENGTH, SITE_CODE_RESEND_SECONDS, SITE_ACCESS_DENIED_CODE, SITE_ACCESS_DENIED_MESSAGE, normalizeSiteCode, validSiteCode } from '../shared/siteAccessCodePolicy';
 
 const COOKIE='h2_site_auth';
 const normalizeEmail=(value:unknown):string=>typeof value==='string'?value.trim().toLowerCase():'';
@@ -75,13 +75,17 @@ export function registerSiteIdentity(app:Express,deps:SiteIdentityDependencies=d
       const network=String(req.ip||req.socket.remoteAddress||'shared');
       const networkWait=await takeOwnSiteLimit(db,'request-network:'+network,300,windowMs,now);
       if(networkWait)return limited(res,networkWait);
+      const denied=()=>{
+        console.info('[SiteCode] request='+requestId+' state=not-authorized');
+        return res.status(403).json({ok:false,code:SITE_ACCESS_DENIED_CODE,error:SITE_ACCESS_DENIED_MESSAGE});
+      };
+      if(!await isOwnSiteEmailAuthorized(db,email,now))return denied();
       const emailWait=await takeOwnSiteLimit(db,'request-email:'+email,6,windowMs,now);
       if(emailWait)return limited(res,emailWait);
       const resendWait=await takeOwnSiteLimit(db,'resend-email:'+email,1,SITE_CODE_RESEND_SECONDS*1000,now);
       if(resendWait)return limited(res,resendWait);
       const reserved=await reserveOwnSiteCode(db,email,now);
-      const generic=()=>res.json({ok:true,message:'Se este e-mail estiver autorizado, o código será enviado. Confira também o spam.',retryAfter:SITE_CODE_RESEND_SECONDS,codeLength:SITE_CODE_LENGTH,codeValidFor:600});
-      if(!reserved){console.info('[SiteCode] request='+requestId+' state=not-issued');return generic();}
+      if(!reserved)return denied();
       try {
         const outcome=await deps.delivery(email,reserved.code);
         await finishOwnSiteCodeDelivery(db,reserved.fingerprint,outcome);
@@ -90,7 +94,7 @@ export function registerSiteIdentity(app:Express,deps:SiteIdentityDependencies=d
         await finishOwnSiteCodeDelivery(db,reserved.fingerprint,null).catch(()=>{});
         return failure(res,error,'delivery',requestId);
       }
-      return generic();
+      return res.json({ok:true,codeSent:true,message:'Código enviado. Confira a caixa de entrada e o spam.',retryAfter:SITE_CODE_RESEND_SECONDS,codeLength:SITE_CODE_LENGTH,codeValidFor:600});
     }catch(error){return failure(res,error,'request',requestId);}
   });
 
