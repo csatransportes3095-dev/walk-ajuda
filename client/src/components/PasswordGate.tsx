@@ -711,6 +711,10 @@ export default function PasswordGate({ children }: PasswordGateProps) {
     if (!regCpf.trim() || regCpf.replace(/\D/g,'').length !== 11) { toast.error("Preencha o CPF"); return; }
     if (!isValidCPF(regCpf)) { toast.error("CPF inválido. Verifique os números e tente novamente."); return; }
     if (!enteredByCpf && cpfDuplicado) { toast.error("Este CPF já está cadastrado no sistema."); return; }
+    if (regCep.replace(/\D/g, '').length !== 8) { toast.error("Preencha um CEP válido com 8 dígitos"); return; }
+    if (regStreet.trim().length < 2) { toast.error("Preencha a rua / logradouro"); return; }
+    if (!regAddressNumber.trim()) { toast.error("Preencha o número do endereço"); return; }
+    if (regNeighborhood.trim().length < 2) { toast.error("Preencha o bairro"); return; }
     // Quando entrou pelo CPF, telefone é obrigatório
     if (enteredByCpf && getPhoneDigits(regPhone).length !== 11) { toast.error("Preencha o telefone com DDD (11 dígitos)"); return; }
     if (!regCity.trim()) { toast.error("Selecione a cidade"); return; }
