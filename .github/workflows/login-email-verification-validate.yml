@@ -1,0 +1,50 @@
+name: Validate login email verification
+on:
+  push:
+    branches: [fix/login-email-verification-20261020]
+  pull_request:
+    paths:
+      - 'client/src/components/PasswordGate.tsx'
+      - 'server/routers/customerPassword.ts'
+      - '.github/workflows/login-email-verification-validate.yml'
+permissions:
+  contents: read
+jobs:
+  validate:
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+    steps:
+      - uses: actions/checkout@v4
+      - uses: pnpm/action-setup@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '22'
+          cache: pnpm
+      - run: pnpm install --frozen-lockfile
+      - name: Build production site
+        run: pnpm build
+      - name: Assert login sequence
+        run: |
+          node - <<'NODE'
+          const fs = require('fs');
+          const ui = fs.readFileSync('client/src/components/PasswordGate.tsx','utf8');
+          const api = fs.readFileSync('server/routers/customerPassword.ts','utf8');
+          const requiredUi = [
+            'type GateStep = "phone" | "email" | "emailCode"',
+            'startEmailVerification.useMutation()',
+            'verifyEmailCode.useMutation()',
+            'loginVerified.useMutation()',
+            'Digite seu telefone com DDD para continuar',
+            'Código de confirmação',
+          ];
+          for (const marker of requiredUi) if (!ui.includes(marker)) throw new Error('UI marker missing: '+marker);
+          const phoneStart = ui.indexOf('{gateStep === "phone"');
+          const emailStart = ui.indexOf('{gateStep === "email"');
+          const phoneBlock = ui.slice(phoneStart, emailStart);
+          if (phoneBlock.includes('CPF (somente números)') || phoneBlock.includes('OU ACESSE COM')) throw new Error('CPF still visible on login');
+          for (const marker of ['startEmailVerification:', 'verifyEmailCode:', 'loginVerified:']) {
+            if (!api.includes(marker)) throw new Error('API marker missing: '+marker);
+          }
+          if (!api.includes('Este e-mail não está autorizado para este cadastro.')) throw new Error('authorization error missing');
+          console.log('Login sequence assertions OK');
+          NODE
