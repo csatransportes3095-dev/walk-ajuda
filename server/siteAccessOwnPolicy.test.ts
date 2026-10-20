@@ -1,15 +1,17 @@
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import { readFileSync } from 'node:fs';
-import { SITE_CODE_ALPHABET, SITE_ACCESS_LIFETIME_MS, normalizeSiteCode, validSiteCode, displaySiteCode, siteAccessReturnPath } from '../shared/siteAccessCodePolicy';
+import { SITE_CODE_LENGTH, SITE_CODE_ALPHABET, SITE_ACCESS_LIFETIME_MS, normalizeSiteCode, validSiteCode, displaySiteCode, siteAccessReturnPath } from '../shared/siteAccessCodePolicy';
 import { clearSiteCustomerState, closeSiteAccessSession, SITE_LOGOUT_PENDING, SITE_HAD_CUSTOMER, siteCustomerLogoutDetected, siteSessionDeadlineExpired } from '../client/src/lib/siteAccessSessionClient';
 function storage(){const values=new Map<string,string>();return {getItem:(key:string)=>values.get(key)??null,setItem:(key:string,value:string)=>values.set(key,value),removeItem:(key:string)=>{values.delete(key);}};}
 beforeEach(()=>{vi.stubGlobal('localStorage',storage());vi.stubGlobal('sessionStorage',storage());vi.stubGlobal('window',{dispatchEvent:vi.fn()});});
 afterEach(()=>{vi.unstubAllGlobals();vi.restoreAllMocks();});
 describe('own site code presentation',()=>{
-  it('uses a 32-symbol nonambiguous alphabet and a 24-hour access lifetime',()=>{expect(SITE_CODE_ALPHABET.length).toBe(32);expect(new Set(SITE_CODE_ALPHABET).size).toBe(32);expect(SITE_ACCESS_LIFETIME_MS).toBe(86400000);});
-  it('normalizes spaces, grouping, letter case and common visual ambiguities',()=>{expect(normalizeSiteCode(' 1234-abcd-efgh ')).toBe('1234ABCDEFGH');expect(normalizeSiteCode('oIl')).toBe('011');});
-  it.each(['123456','1234ABCDEFG','1234ABCDEFGH1','<script>x</script>','1234ABCDUFGH'])('rejects a malformed/legacy code %s',value=>expect(validSiteCode(value)).toBe(false));
-  it('formats a valid code for readable delivery',()=>expect(displaySiteCode('1234ABCDEFGH')).toBe('1234-ABCD-EFGH'));
+  it('uses exactly six decimal digits and keeps the 24-hour access lifetime',()=>{expect(SITE_CODE_LENGTH).toBe(6);expect(SITE_CODE_ALPHABET).toBe('0123456789');expect(SITE_ACCESS_LIFETIME_MS).toBe(86400000);});
+  it('normalizes pasted separators without losing leading zeroes or converting letters',()=>{expect(normalizeSiteCode(' 012-345 ')).toBe('012345');expect(normalizeSiteCode('oIl')).toBe('oIl');expect(validSiteCode(normalizeSiteCode('o12345'))).toBe(false);});
+  it.each(['000000','012345','123456','999999'])('accepts exactly six numeric characters %s',value=>expect(validSiteCode(value)).toBe(true));
+  it.each(['','12345','1234567','1234ABCDEFGH','<script>x</script>','12345A','１２３４５６','1e0000','+12345'])('rejects nonnumeric, old or wrong-size code %s',value=>expect(validSiteCode(value)).toBe(false));
+  it('displays the six digits without hyphens or other characters',()=>expect(displaySiteCode('012345')).toBe('012345'));
+  it.each([null,undefined,123456,{},'1'.repeat(81)])('safely rejects nontext or oversized input %j',value=>expect(normalizeSiteCode(value)).toBe(''));
   it.each([null,'https://evil.test','//evil.test','/\\evil.test','/admin/login','/api/ping','/site-access','/\nattack'])('blocks unsafe return paths %s',value=>expect(siteAccessReturnPath(value)).toBe('/'));
   it('keeps a valid same-site destination',()=>expect(siteAccessReturnPath('/acompanhar?pedido=1')).toBe('/acompanhar?pedido=1'));
 });
