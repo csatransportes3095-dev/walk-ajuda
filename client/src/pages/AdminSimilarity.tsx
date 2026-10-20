@@ -349,6 +349,7 @@ export default function AdminSimilarity() {
   const [candidates, setCandidates] = useState<CandidatePhoto[]>([]);
   const [cropTarget, setCropTarget] = useState<FaceCropTarget | null>(null);
   const [results, setResults] = useState<ComparisonResult[]>([]);
+  const [selectedResultId, setSelectedResultId] = useState<string | null>(null);
   const [pairwiseResults, setPairwiseResults] = useState<PairwiseResult[]>([]);
   const [analyzing, setAnalyzing] = useState(false);
   const [progress, setProgress] = useState({ current: 0, total: 0, name: "" });
@@ -448,6 +449,21 @@ export default function AdminSimilarity() {
         }),
     [results]
   );
+
+  useEffect(() => {
+    if (!selectedResultId) return;
+    const closeOnEscape = (event: KeyboardEvent) => {
+      if (event.key === "Escape") setSelectedResultId(null);
+    };
+    window.addEventListener("keydown", closeOnEscape);
+    return () => window.removeEventListener("keydown", closeOnEscape);
+  }, [selectedResultId]);
+
+  useEffect(() => {
+    if (selectedResultId && !rankedResults.some((result) => result.id === selectedResultId)) {
+      setSelectedResultId(null);
+    }
+  }, [selectedResultId, rankedResults]);
 
   const setMaster = (file?: File) => {
     if (!file) return;
@@ -1472,15 +1488,123 @@ export default function AdminSimilarity() {
                   <span className="rounded-full border border-cyan-400/20 bg-cyan-400/5 px-3 py-1 text-xs font-bold text-cyan-200">Exibindo somente 75% ou mais</span>
                 </div>
 
-                {rankedResults.map((result, index) => (
+                {/* Cards compactos: a largura disponível determina a quantidade por linha. */}
+                <div
+                  className="grid min-w-0 items-start gap-2.5"
+                  style={{ gridTemplateColumns: "repeat(auto-fill, minmax(min(100%, 156px), 1fr))" }}
+                  aria-label="Resultados de similaridade em cards compactos"
+                >
+                  {rankedResults.map((result, index) => {
+                    const highlighted = shouldPulseSimilarity(result.similarity, result.reliability);
+                    return (
+                      <article
+                        key={result.id}
+                        className={
+                          "min-w-0 overflow-hidden rounded-xl border shadow-sm transition-colors " +
+                          (highlighted
+                            ? "border-emerald-400/60 bg-emerald-950/30 hover:border-emerald-300"
+                            : "border-white/15 bg-[#0c111c]/95 hover:border-cyan-400/65")
+                        }
+                      >
+                        <button
+                          type="button"
+                          aria-label={"Abrir detalhes de " + result.name + ": " + formatScore(result.similarity)}
+                          onClick={() => setSelectedResultId(result.id)}
+                          className="group flex h-full w-full min-w-0 flex-col text-left outline-none focus-visible:ring-2 focus-visible:ring-inset focus-visible:ring-cyan-300"
+                        >
+                          <div className="relative aspect-square w-full overflow-hidden bg-black/50">
+                            <img
+                              src={result.preview}
+                              alt={result.name}
+                              loading="lazy"
+                              decoding="async"
+                              className="h-full w-full object-contain"
+                            />
+                            <span className="absolute left-2 top-2 rounded-md bg-black/85 px-2 py-1 text-[11px] font-black text-white">
+                              #{index + 1}
+                            </span>
+                            {highlighted && (
+                              <span className="absolute right-2 top-2 rounded-full bg-emerald-500/90 p-1 text-white" title="Similaridade destacada">
+                                <ShieldCheck className="h-3.5 w-3.5" />
+                              </span>
+                            )}
+                          </div>
+                          <div className="flex w-full min-w-0 flex-1 flex-col gap-2 p-2.5">
+                            <p className="w-full truncate text-xs font-bold text-slate-200" title={result.name}>
+                              {result.name}
+                            </p>
+                            <div>
+                              <p className="text-[29px] font-black leading-none tracking-tight text-cyan-300">
+                                {formatScore(result.similarity)}
+                              </p>
+                              <p className="mt-1 text-[10px] font-bold uppercase tracking-wide text-slate-400">
+                                {result.referenceEngine ? "H2 Face" : "Índice H2"}
+                              </p>
+                            </div>
+                            <div className="grid grid-cols-2 gap-1.5 text-[10px]">
+                              <div className="min-w-0 rounded-md bg-black/25 px-1.5 py-1.5">
+                                <p className="truncate text-slate-400">Confiança</p>
+                                <p className="mt-0.5 font-black text-slate-100">
+                                  {result.reliability == null ? "—" : result.reliability.toFixed(0) + "%"}
+                                </p>
+                              </div>
+                              <div className="min-w-0 rounded-md bg-black/25 px-1.5 py-1.5">
+                                <p className="truncate text-slate-400">Geometria</p>
+                                <p className="mt-0.5 font-black text-slate-100">
+                                  {result.geometryScore == null ? "—" : result.geometryScore.toFixed(1) + "%"}
+                                </p>
+                              </div>
+                            </div>
+                            <span className="mt-auto flex w-full items-center justify-center gap-1 rounded-md border border-cyan-400/20 bg-cyan-400/[0.06] px-1.5 py-2 text-[11px] font-bold text-cyan-200 group-hover:bg-cyan-400/[0.14]">
+                              <ScanFace className="h-3.5 w-3.5" /> Ver detalhes
+                            </span>
+                          </div>
+                        </button>
+                      </article>
+                    );
+                  })}
+                </div>
+
+                {/* Diagnóstico completo sob demanda: sem repetir blocos altos no ranking. */}
+                {selectedResultId && rankedResults.some((result) => result.id === selectedResultId) && (
+                  <div
+                    className="fixed inset-0 z-[95] overflow-y-auto bg-black/90 px-3 py-4 backdrop-blur-sm sm:px-6 sm:py-6"
+                    role="dialog"
+                    aria-modal="true"
+                    aria-label="Detalhes completos da similaridade facial"
+                    onClick={(event) => {
+                      if (event.currentTarget === event.target) setSelectedResultId(null);
+                    }}
+                  >
+                    <div className="mx-auto w-full max-w-[1100px] space-y-3">
+                      <div className="sticky top-0 z-20 flex items-center justify-between gap-3 rounded-xl border border-cyan-400/25 bg-[#0b1220]/95 p-3 shadow-xl backdrop-blur">
+                        <div className="min-w-0">
+                          <p className="text-[10px] font-black uppercase tracking-widest text-cyan-300">H2 Face — diagnóstico detalhado</p>
+                          <p className="truncate text-sm font-bold text-slate-200">
+                            {rankedResults.find((result) => result.id === selectedResultId)?.name}
+                          </p>
+                        </div>
+                        <button
+                          type="button"
+                          onClick={() => setSelectedResultId(null)}
+                          className="inline-flex shrink-0 items-center gap-1.5 rounded-lg border border-white/20 bg-white/10 px-3 py-2 text-xs font-bold text-white hover:bg-white/20"
+                          aria-label="Fechar detalhes e voltar ao ranking"
+                        >
+                          <X className="h-4 w-4" /> Fechar
+                        </button>
+                      </div>
+
+                      {rankedResults
+                        .filter((result) => result.id === selectedResultId)
+                        .map((result) => (
                   <article
                     key={result.id}
-                    className={`overflow-hidden rounded-2xl border ${shouldPulseSimilarity(result.similarity, result.reliability) ? "h2-result-pulse border-emerald-300/60 bg-emerald-500/[0.07]" : "border-white/10 bg-white/[0.035]"}`}
+                    className={`overflow-hidden rounded-2xl border ${shouldPulseSimilarity(result.similarity, result.reliability) ? "border-emerald-300/60 bg-emerald-500/[0.07]" : "border-white/10 bg-white/[0.035]"}`}
                   >
                     <div className="flex flex-col gap-4 p-4 sm:flex-row">
                       <div className="relative h-32 w-full shrink-0 overflow-hidden rounded-xl bg-black/40 sm:h-28 sm:w-28">
                         <img src={result.preview} alt={result.name} className="h-full w-full object-cover" />
-                        <span className="absolute left-2 top-2 rounded-md bg-black/75 px-2 py-1 text-xs font-black">#{index + 1}</span>
+                        <span className="absolute left-2 top-2 rounded-md bg-black/75 px-2 py-1 text-xs font-black">#{rankedResults.findIndex((item) => item.id === result.id) + 1}</span>
                       </div>
 
                       <div className="min-w-0 flex-1">
@@ -1628,6 +1752,9 @@ export default function AdminSimilarity() {
                     )}
                   </article>
                 ))}
+                    </div>
+                  </div>
+                )}
               </div>
             )}
 
