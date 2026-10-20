@@ -1774,9 +1774,9 @@ export default function Home() {
         let cartCouponDiscountValue: number | undefined;
         if (!sitePromoOverrides && couponDiscount) {
           if (couponDiscount.type === 'percentage') {
-            cartCouponDiscountValue = cartTotalValue * couponDiscount.value / 100;
+            cartCouponDiscountValue = Math.min(cartTotalValue, cartTotalValue * couponDiscount.value / 100);
           } else {
-            cartCouponDiscountValue = couponDiscount.value;
+            cartCouponDiscountValue = Math.min(cartTotalValue, couponDiscount.value);
           }
         }
         // Enviar um pedido por item do carrinho
@@ -1836,6 +1836,7 @@ export default function Home() {
               cartCouponCode: !sitePromoOverrides && couponValid ? couponCode : undefined,
               cartCouponDiscount: sitePromoOverrides ? undefined : cartCouponDiscountValue,
               cartItemIndex: i,
+              cartItemCount: cartItems.length,
             });
             if (!isPersistedOrderResult(itemResult)) {
               throw new Error('O servidor não confirmou o registro deste pedido.');
@@ -1942,6 +1943,7 @@ export default function Home() {
         audioDraftIds: optionHasAudioQuestions ? audioDraftIdsForSubmit : undefined,
         docNameMode: selectedOption?.docNameMode || 'none',
         docCustomName: selectedOption?.docCustomName || '',
+        originalPrice: getPriceModelServiceValue(selectedPriceModel) || (selectedTier ? globalPromotionPrice(selectedTier, globalPromotion) : selectedOption ? globalPromotionPrice(selectedOption, globalPromotion) : undefined),
         price: (() => {
           const rawPrice = getPriceModelServiceValue(selectedPriceModel) || (selectedTier ? globalPromotionPrice(selectedTier, globalPromotion) : selectedOption ? globalPromotionPrice(selectedOption, globalPromotion) : undefined);
           if (!rawPrice) return undefined;
