@@ -53,6 +53,7 @@ export const accessCodePhones = mysqlTable("accessCodePhones", {
   deletedReason: varchar('deletedReason', { length: 256 }), // Motivo da exclusÃ£o
   // Revendedor: nome do cliente final (terceiro) e desconto aplicado
   thirdPartyName: varchar('thirdPartyName', { length: 128 }), // nome do cliente final (terceiro)
+  thirdPartyPhone: varchar('thirdPartyPhone', { length: 32 }), // telefone do cliente final (revendedor)
   resellerDiscountApplied: decimal('resellerDiscountApplied', { precision: 10, scale: 2 }), // valor do desconto aplicado em R$
   // Agrupamento de carrinho: mÃºltiplos produtos em um Ãºnico pagamento
   cartGroupId: varchar('cartGroupId', { length: 64 }), // ID Ãºnico do grupo de carrinho (null = pedido Ãºnico)
