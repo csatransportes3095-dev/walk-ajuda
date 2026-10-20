@@ -706,8 +706,8 @@ export default function PasswordGate({ children }: PasswordGateProps) {
   const handleRegistration = async (e: React.FormEvent) => {
     e.preventDefault();
     if (!regName.trim()) { toast.error("Preencha seu nome completo"); return; }
-    if (!regEmail.trim() && !loginEmail.trim()) { toast.error("Confirme seu e-mail antes de continuar"); return; }
-    if (!/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test((regEmail || loginEmail).trim())) { toast.error("Email inválido"); return; }
+    if (!emailVerificationToken || !loginEmail.trim()) { toast.error("Confirme seu e-mail antes de continuar"); return; }
+    if (!/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(loginEmail.trim())) { toast.error("E-mail confirmado inválido. Volte e confirme novamente."); return; }
     if (!regCpf.trim() || regCpf.replace(/\D/g,'').length !== 11) { toast.error("Preencha o CPF"); return; }
     if (!isValidCPF(regCpf)) { toast.error("CPF inválido. Verifique os números e tente novamente."); return; }
     if (!enteredByCpf && cpfDuplicado) { toast.error("Este CPF já está cadastrado no sistema."); return; }
@@ -777,7 +777,7 @@ export default function PasswordGate({ children }: PasswordGateProps) {
       const result = await registerMutation.mutateAsync({
         name: regName.trim(),
         phone: clientPhoneDigits,
-        email: (regEmail || loginEmail).trim(),
+        email: loginEmail.trim().toLowerCase(),
         cpf: regCpf.trim(),
         cep: regCep.trim(),
         street: regStreet.trim(),
@@ -2065,13 +2065,13 @@ export default function PasswordGate({ children }: PasswordGateProps) {
 
                 <div>
                   <label className="text-white mb-2 block text-sm font-medium">Email <span className="text-red-400">*</span></label>
-                  <input type="email" value={regEmail || loginEmail} readOnly
+                  <input type="email" value={loginEmail} readOnly tabIndex={-1}
                     className="w-full px-4 py-4 bg-gray-200 text-black text-lg text-center font-medium rounded-xl border-2 border-green-500 opacity-90" />
                   <p className="text-green-400 text-xs mt-1 flex items-center gap-1"><CheckCircle2 className="w-3 h-3" /> E-mail confirmado</p>
                   <div className="mt-1.5 flex items-start gap-1.5 bg-yellow-500/20 border border-yellow-500/40 rounded-lg px-2.5 py-2">
                     <span className="text-yellow-400 text-xs flex-shrink-0 mt-0.5">⚠️</span>
                     <p className="text-yellow-200 text-xs leading-relaxed">
-                      <strong>E-mail confirmado.</strong> Ele será usado para segurança do acesso, confirmação por código e atualizações do seu pedido.
+                      <strong>E-mail confirmado e bloqueado.</strong> Este é o e-mail validado pelo código e não pode ser alterado durante o cadastro.
                     </p>
                   </div>
                 </div>
