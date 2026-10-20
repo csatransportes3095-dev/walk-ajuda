@@ -5999,6 +5999,22 @@ export default function AdminOrders() {
                           );
                         })()
                         )}
+                        {!isCartGroup && order.cartCouponCode && order.cartTotal != null && order.cartCouponDiscount != null && order.cartCouponDiscount > 0 && (
+                          <div className="mt-2 bg-green-500/10 border border-green-500/30 rounded-lg px-2 py-1.5 space-y-0.5">
+                            <div className="flex items-center justify-between text-[10px]">
+                              <span className="text-muted-foreground">Valor original:</span>
+                              <span className="text-muted-foreground">R$ {Number(order.cartTotal).toFixed(2).replace('.', ',')}</span>
+                            </div>
+                            <div className="flex items-center justify-between text-[10px]">
+                              <span className="text-amber-400">🏷️ Cupom ({order.cartCouponCode}):</span>
+                              <span className="text-amber-400 font-bold">-R$ {Number(order.cartCouponDiscount).toFixed(2).replace('.', ',')}</span>
+                            </div>
+                            <div className="flex items-center justify-between">
+                              <span className="text-xs font-bold text-green-300">💰 Valor final:</span>
+                              <span className="text-sm font-black text-green-300">{order.pricePaid || `R$ ${Math.max(0, Number(order.cartTotal) - Number(order.cartCouponDiscount)).toFixed(2).replace('.', ',')}`}</span>
+                            </div>
+                          </div>
+                        )}
                         <div className="flex items-center gap-1.5 mt-1 flex-wrap">
                             {order.customerReferredBy === 'Não informou' ? (
                               <span className="inline-flex items-center gap-1 px-2 py-0.5 rounded-full text-[10px] font-bold bg-red-500/20 border border-red-500/50 text-red-400">
