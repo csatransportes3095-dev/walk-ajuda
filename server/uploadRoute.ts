@@ -15,6 +15,7 @@
 import type { Express, Request, Response } from "express";
 import express from "express";
 import multer from "multer";
+import sharp from "sharp";
 import jwt from "jsonwebtoken";
 import { parse as parseCookieHeader } from "cookie";
 import { r2PutObject, r2GetObjectBuffer, r2DeleteObjects } from "./r2Storage";
@@ -1733,6 +1734,80 @@ export function registerUploadRoute(app: Express) {
       } catch (err: any) {
         console.error("[UploadRoute] client-file error:", err);
         res.status(500).json({ error: err?.message ?? "Upload failed" });
+      }
+    }
+  );
+
+  // ─── FOTO DE PERFIL DO CADASTRO NOVO — upload direto, sem Base64 no celular ───
+  // O arquivo chega via multipart e é reduzido/converter no servidor com Sharp.
+  // Isso evita estouro de memória em celulares com fotos de câmera muito grandes.
+  app.post(
+    "/api/upload/registration-profile-photo",
+    (req: Request, res: Response, next: import('express').NextFunction) => {
+      uploadDirect.single("file")(req, res, (err: any) => {
+        if (err) {
+          const msg = err.code === "LIMIT_FILE_SIZE"
+            ? "Foto muito grande. Máximo 20MB."
+            : (err.message || "Erro no upload da foto");
+          res.status(400).json({ error: msg });
+          return;
+        }
+        next();
+      });
+    },
+    async (req: Request, res: Response) => {
+      try {
+        const file = req.file;
+        if (!file || !file.buffer?.length) {
+          res.status(400).json({ error: "Nenhuma foto recebida." });
+          return;
+        }
+        const phone = String(req.body?.phone || "").replace(/\D/g, "").slice(-11);
+        if (!/^\d{10,11}$/.test(phone)) {
+          res.status(400).json({ error: "Telefone inválido para o cadastro." });
+          return;
+        }
+
+        let output: Buffer;
+        try {
+          output = await sharp(file.buffer, { failOn: "none" })
+            .rotate()
+            .resize({
+              width: 1200,
+              height: 1200,
+              fit: "inside",
+              withoutEnlargement: true,
+            })
+            .jpeg({ quality: 84, mozjpeg: true })
+            .toBuffer();
+        } catch (error) {
+          console.error("[UploadRoute] registration-profile-photo sharp error:", error);
+          res.status(400).json({
+            error: "Não foi possível processar esta foto. Tente tirar outra foto pela câmera ou escolha uma imagem JPG/PNG.",
+          });
+          return;
+        }
+
+        if (!output.length || output.length > 5 * 1024 * 1024) {
+          res.status(400).json({ error: "A foto processada ficou muito grande. Tente outra imagem." });
+          return;
+        }
+
+        const randomSuffix = Math.random().toString(36).substring(2, 10);
+        const fileKey = `profile-photos/${phone}-${Date.now()}-${randomSuffix}.jpg`;
+        const { url } = await r2PutObject(fileKey, output, "image/jpeg");
+        res.json({
+          success: true,
+          url,
+          fileUrl: url,
+          fileKey,
+          mimeType: "image/jpeg",
+          originalBytes: file.size,
+          storedBytes: output.length,
+        });
+      } catch (err: any) {
+        console.error("[UploadRoute] registration-profile-photo error:", err);
+        res.status(500).json({ error: err?.message || "Erro ao enviar foto." });
       }
     }
   );
