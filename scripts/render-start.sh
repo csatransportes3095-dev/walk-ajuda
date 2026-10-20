@@ -62,6 +62,7 @@ run_boot_step "bulk-activate-all-main-customers" pnpm exec tsx scripts/activate-
 run_boot_step "audit-customer-profile-integrity" pnpm exec tsx scripts/audit-customer-profile-integrity.ts
 
 run_boot_step "faq-guidelines-20261020" pnpm exec tsx scripts/apply-faq-guidelines-20261020.ts
+run_boot_step "coupon-backfill-order-2080000-20261020" pnpm exec tsx scripts/backfill-order-2080000-coupon-20261020.ts
 
 echo "[BOOT-DIAG] START server timestamp=$(date -u +%Y-%m-%dT%H:%M:%SZ)"
 echo "Iniciando servidor..."
