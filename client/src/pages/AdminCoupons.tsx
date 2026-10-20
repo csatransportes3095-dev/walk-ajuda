@@ -50,8 +50,8 @@ export default function AdminCoupons() {
       }
       setIsCreating(false);
     },
-    onError: () => {
-      toast.error("Erro ao criar cupom");
+    onError: (error) => {
+      toast.error(error?.message || "Erro ao criar cupom");
       setIsCreating(false);
     },
   });
