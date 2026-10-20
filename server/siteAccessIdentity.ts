@@ -1,192 +1,142 @@
-import { createHmac, randomInt, timingSafeEqual } from "node:crypto";
-import type { Express, Request } from "express";
-import jwt from "jsonwebtoken";
-import { parse as parseCookieHeader } from "cookie";
-import { and, eq, lt, sql } from "drizzle-orm";
-import { getDb } from "./db";
-import { siteAccessEntries, siteAccessChallenges, siteAccessRateLimits } from "./siteAccessSchema";
-import { sendMailDirect } from "./_core/sendMailDirect";
+import { randomBytes } from 'node:crypto';
+import type { Express, Request, Response } from 'express';
+import jwt from 'jsonwebtoken';
+import { parse as parseCookieHeader } from 'cookie';
+import { sql } from 'drizzle-orm';
+import { getDb } from './db';
+import { getAdminJwtSecret } from './adminJwt';
+import { ensureOwnSiteCodeStore, takeOwnSiteLimit, reserveOwnSiteCode, finishOwnSiteCodeDelivery, consumeOwnSiteCode, readOwnSiteSession, revokeOwnSiteSession, ownSiteErrorCode } from './siteAccessOwnCodes';
+import { deliverOwnSiteCode } from './siteAccessCodeDelivery';
+import { SITE_CODE_RESEND_SECONDS, normalizeSiteCode, validSiteCode } from '../shared/siteAccessCodePolicy';
 
-const COOKIE = "h2_site_auth";
-const normalizeEmail = (value: unknown): string =>
-  typeof value === "string" ? value.trim().toLowerCase() : "";
-
-export function isSiteAccessEmail(email: string): boolean {
-  return email.length <= 320 && /^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(email);
+const COOKIE='h2_site_auth';
+const normalizeEmail=(value:unknown):string=>typeof value==='string'?value.trim().toLowerCase():'';
+export function isSiteAccessEmail(email:string):boolean { return email.length<=320 && /^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(email); }
+export function isSameOriginSiteRequest(req:Pick<Request,'headers'>):boolean {
+  const origin=req.headers.origin,host=req.headers.host;
+  if (!origin||!host||typeof origin!=='string') return false;
+  try {const url=new URL(origin);return (url.protocol==='https:'||(process.env.NODE_ENV!=='production'&&url.protocol==='http:'))&&url.host.toLowerCase()===host.toLowerCase();}
+  catch {return false;}
 }
-
-export function isSameOriginSiteRequest(req: Pick<Request, "headers">): boolean {
-  const origin = req.headers.origin;
-  const host = req.headers.host;
-  if (!origin || !host || typeof origin !== "string") return false;
+function tokenFrom(req:Request):string {
+  try{return parseCookieHeader(req.headers.cookie||'')[COOKIE]||'';}catch{return '';}
+}
+function ownerSession(req:Request):boolean {
   try {
-    const url = new URL(origin);
-    return (url.protocol === "https:" || (process.env.NODE_ENV !== "production" && url.protocol === "http:"))
-      && url.host.toLowerCase() === host.toLowerCase();
-  } catch { return false; }
+    const secret=getAdminJwtSecret(),owner=process.env.H2_SITE_SECURITY_OWNER?.trim();
+    const token=parseCookieHeader(req.headers.cookie||'').admin_token;
+    if(!secret||!owner||!token)return false;
+    const payload=jwt.verify(token,secret,{algorithms:['HS256']}) as jwt.JwtPayload;
+    return payload.role==='admin'&&payload.sub===owner;
+  }catch{return false;}
 }
-
-function siteSecret(): string {
-  const secret = process.env.H2_SITE_ACCESS_SECRET || "";
-  if (secret.length < 32) throw new Error("H2_SITE_ACCESS_SECRET must be configured securely");
-  return secret;
+export async function authorizedSiteVisitor(req:Request):Promise<boolean> {
+  const token=tokenFrom(req);
+  if(!/^[a-f0-9]{64}$/.test(token))return false;
+  const db=await getDb();
+  if(!db)return false;
+  return !!await readOwnSiteSession(db,token);
 }
-
-function keyedHash(value: string): string {
-  return createHmac("sha256", siteSecret()).update(value).digest("hex");
+function noStore(res:Response) {
+  res.setHeader('Cache-Control','private, no-store, max-age=0');
+  res.setHeader('CDN-Cache-Control','no-store');
+  res.setHeader('Cloudflare-CDN-Cache-Control','no-store');
 }
-
-async function getAuthorizedPerson(email: string) {
-  const db = await getDb();
-  if (!db) throw new Error("Database unavailable");
-  const [person] = await db.select().from(siteAccessEntries)
-    .where(eq(siteAccessEntries.email, email)).limit(1);
-  return person?.status === "active" &&
-    (!person.expiresAt || person.expiresAt.getTime() > Date.now()) ? person : null;
+function limited(res:Response,seconds:number) {
+  res.setHeader('Retry-After',String(seconds));
+  return res.status(429).json({error:'Aguarde antes de tentar novamente.',retryAfter:seconds});
 }
-
-/** Atomic MySQL counter. Resists multi-instance requests without in-memory rate-limit state. */
-async function limit(key: string, max: number, minutes = 15): Promise<boolean> {
-  const db = await getDb();
-  if (!db) throw new Error("Database unavailable");
-  const limitKey = keyedHash("rate:" + key);
-  const now = Date.now(), cutoff = now - minutes * 60_000;
-  await db.execute(sql`
-    INSERT INTO siteAccessRateLimits (limitKey, windowStartedAt, hits)
-    VALUES (${limitKey}, ${now}, 1)
-    ON DUPLICATE KEY UPDATE
-      hits = IF(windowStartedAt < ${cutoff}, 1, hits + 1),
-      windowStartedAt = IF(windowStartedAt < ${cutoff}, ${now}, windowStartedAt)
-  `);
-  const [row] = await db.select({ hits: siteAccessRateLimits.hits })
-    .from(siteAccessRateLimits).where(eq(siteAccessRateLimits.limitKey, limitKey)).limit(1);
-  return !!row && row.hits <= max;
+function failure(res:Response,error:unknown,stage:string,requestId:string) {
+  console.error('[SiteCode] request='+requestId+' stage='+stage+' code='+ownSiteErrorCode(error));
+  return res.status(503).json({error:'Não foi possível concluir agora. Aguarde e tente novamente.',requestId});
 }
+export type SiteIdentityDependencies = {
+  db: typeof getDb;
+  delivery: typeof deliverOwnSiteCode;
+  now: ()=>number;
+};
+const defaultDependencies:SiteIdentityDependencies={db:getDb,delivery:deliverOwnSiteCode,now:Date.now};
+export function registerSiteIdentity(app:Express,deps:SiteIdentityDependencies=defaultDependencies):void {
+  // Warm additive tables. A failure never opens restricted routes; later requests retry safely.
+  void deps.db().then(db=>db?ensureOwnSiteCodeStore(db):undefined).then(()=>{
+    console.info('[SiteCode] internal generator storage ready');
+  }).catch(error=>console.error('[SiteCode] initialization code='+ownSiteErrorCode(error)));
 
-export async function authorizedSiteVisitor(req: Request): Promise<boolean> {
-  const token = parseCookieHeader(req.headers.cookie || "")[COOKIE];
-  if (!token) return false;
-  let payload: {sub?: string; kind?: string; v?: number};
-  try {
-    payload = jwt.verify(token, siteSecret(), { algorithms: ["HS256"] }) as typeof payload;
-  } catch { return false; }
-  if (payload.kind !== "site" || !payload.sub || !Number.isSafeInteger(payload.v)) return false;
-  const person = await getAuthorizedPerson(payload.sub);
-  return !!person && person.sessionVersion === payload.v;
-}
-
-function noStore(res: import("express").Response) {
-  res.setHeader("Cache-Control", "private, no-store, max-age=0");
-  res.setHeader("CDN-Cache-Control", "no-store");
-}
-
-function wrongCode(res: import("express").Response) {
-  return res.status(401).json({ error: "Código inválido ou expirado." });
-}
-
-export function registerSiteIdentity(app: Express): void {
-  app.post("/api/site-access/request", async (req, res) => {
+  app.post('/api/site-access/request',async(req,res)=>{
     noStore(res);
-    if (!isSameOriginSiteRequest(req)) return res.status(403).json({ error: "Origem não autorizada." });
-    const email = normalizeEmail(req.body?.email);
-    const generic = () => res.json({ok:true,message:"Se o e-mail estiver autorizado, você receberá um código."});
-    if (!isSiteAccessEmail(email)) return generic();
+    if(!isSameOriginSiteRequest(req))return res.status(403).json({error:'Origem não autorizada.'});
+    const email=normalizeEmail(req.body?.email),requestId=randomBytes(8).toString('hex');
+    if(!isSiteAccessEmail(email))return res.status(400).json({error:'Informe um e-mail válido.'});
     try {
-      const ip = String(req.ip || req.socket.remoteAddress || "unknown");
-      const byIp = await limit("request-ip:" + ip, 15);
-      const byEmail = await limit("request-email:" + email, 3);
-      if (!byIp || !byEmail) return generic();
-      const person = await getAuthorizedPerson(email);
-      if (!person) return generic();
-      const code = String(randomInt(100000, 1000000));
-      const codeHash = keyedHash("otp:" + email + ":" + code);
-      const db = await getDb();
-      if (!db) throw new Error("Database unavailable");
-      const now = new Date();
-      const expiresAt = new Date(now.getTime() + 10 * 60_000);
-      await db.insert(siteAccessChallenges).values({
-        email, codeHash, attempts: 0, expiresAt, requestedAt: now,
-      }).onDuplicateKeyUpdate({set:{codeHash, attempts:0, expiresAt, requestedAt:now}});
-      // The existing direct sender retries via SMTP on Resend quota/provider failure.
-      // Await acceptance by a channel; never grant access or report success on failure.
-      await sendMailDirect({
-        to: email,
-        subject: "H2 Colombiano - Código de acesso",
-        text: "Seu código de acesso é: " + code + ". Válido por 10 minutos. Não compartilhe.",
-        html: '<div style="font-family:Arial,sans-serif;max-width:480px;margin:auto;padding:24px">'
-          + '<h2>H2 Colombiano — Código de acesso</h2>'
-          + '<p>Seu código para acessar o site H2 Colombiano:</p>'
-          + '<p style="font-size:32px;font-weight:bold;letter-spacing:6px">' + code + '</p>'
-          + '<p>Válido por 10 minutos. Não compartilhe este código.</p>'
-          + '<p>Se você não solicitou o acesso, ignore este e-mail.</p></div>',
-      });
-      return generic();
-    } catch (error) {
-      console.error("[SiteAccess] Falha ao solicitar acesso:", error instanceof Error ? error.message : String(error));
-      return res.status(503).json({ error: "Serviço temporariamente indisponível." });
-    }
-  });
-
-  app.post("/api/site-access/verify", async (req, res) => {
-    noStore(res);
-    if (!isSameOriginSiteRequest(req)) return res.status(403).json({ error: "Origem não autorizada." });
-    const email = normalizeEmail(req.body?.email);
-    const code = typeof req.body?.code === "string" ? req.body.code : "";
-    if (!isSiteAccessEmail(email) || !/^\d{6}$/.test(code)) return wrongCode(res);
-    try {
-      const ip = String(req.ip || req.socket.remoteAddress || "unknown");
-      const byIp = await limit("verify-ip:" + ip, 25);
-      const byEmail = await limit("verify-email:" + email, 10);
-      if (!byIp || !byEmail) return res.status(429).json({error:"Limite de tentativas. Aguarde alguns minutos."});
-      const db = await getDb();
-      if (!db) throw new Error("Database unavailable");
-      const [record] = await db.select().from(siteAccessChallenges)
-        .where(eq(siteAccessChallenges.email, email)).limit(1);
-      if (!record || record.attempts >= 5 || record.expiresAt.getTime() <= Date.now()) return wrongCode(res);
-      const expected = keyedHash("otp:" + email + ":" + code);
-      const typed = Buffer.from(expected, "hex"), actual = Buffer.from(record.codeHash, "hex");
-      const valid = typed.length === actual.length && timingSafeEqual(typed,actual);
-      if (!valid) {
-        await db.update(siteAccessChallenges).set({ attempts: sql`attempts + 1` })
-          .where(and(eq(siteAccessChallenges.email,email), lt(siteAccessChallenges.attempts,5)));
-        return wrongCode(res);
+      const db=await deps.db();if(!db)throw new Error('DATABASE_UNAVAILABLE');
+      const now=deps.now(),windowMs=15*60_000;
+      // Origin proxy addresses may be shared by many legitimate customers. Keep a high
+      // aggregate ceiling, with the strict limits scoped to each normalized email.
+      const network=String(req.ip||req.socket.remoteAddress||'shared');
+      const networkWait=await takeOwnSiteLimit(db,'request-network:'+network,300,windowMs,now);
+      if(networkWait)return limited(res,networkWait);
+      const emailWait=await takeOwnSiteLimit(db,'request-email:'+email,6,windowMs,now);
+      if(emailWait)return limited(res,emailWait);
+      const resendWait=await takeOwnSiteLimit(db,'resend-email:'+email,1,SITE_CODE_RESEND_SECONDS*1000,now);
+      if(resendWait)return limited(res,resendWait);
+      const reserved=await reserveOwnSiteCode(db,email,now);
+      const generic=()=>res.json({ok:true,message:'Se este e-mail estiver autorizado, o código será enviado. Confira também o spam.',retryAfter:SITE_CODE_RESEND_SECONDS,codeLength:12,codeValidFor:600});
+      if(!reserved){console.info('[SiteCode] request='+requestId+' state=not-issued');return generic();}
+      try {
+        const outcome=await deps.delivery(email,reserved.code);
+        await finishOwnSiteCodeDelivery(db,reserved.fingerprint,outcome);
+        console.info('[SiteCode] request='+requestId+' state=accepted channel='+outcome.channel);
+      }catch(error){
+        await finishOwnSiteCodeDelivery(db,reserved.fingerprint,null).catch(()=>{});
+        return failure(res,error,'delivery',requestId);
       }
-      const person = await getAuthorizedPerson(email);
-      if (!person) return wrongCode(res);
-      // Consume the exact challenge atomically so concurrent requests cannot reuse an OTP.
-      const [deleted] = await db.execute(sql`
-        DELETE FROM siteAccessChallenges
-        WHERE email = ${email} AND codeHash = ${expected}
-          AND attempts < 5 AND expiresAt > ${new Date()}
-      `);
-      if (Number((deleted as {affectedRows?:number}).affectedRows) !== 1) return wrongCode(res);
-      // Recheck authorization after OTP consumption, so suspension blocks new sessions.
-      const fresh = await getAuthorizedPerson(email);
-      if (!fresh || fresh.sessionVersion !== person.sessionVersion) return wrongCode(res);
-      const token = jwt.sign({sub:email, kind:"site", v:fresh.sessionVersion}, siteSecret(), {
-        algorithm:"HS256",expiresIn:"12h",
-      });
-      res.cookie(COOKIE, token, {
-        httpOnly:true, secure:process.env.NODE_ENV==="production",
-        sameSite:"lax",path:"/",maxAge:12*60*60*1000,
-      });
+      return generic();
+    }catch(error){return failure(res,error,'request',requestId);}
+  });
+
+  app.post('/api/site-access/verify',async(req,res)=>{
+    noStore(res);
+    if(!isSameOriginSiteRequest(req))return res.status(403).json({error:'Origem não autorizada.'});
+    const email=normalizeEmail(req.body?.email),code=normalizeSiteCode(req.body?.code);
+    const wrong=()=>res.status(401).json({error:'Código inválido, expirado, já utilizado ou acesso não autorizado.'});
+    if(!isSiteAccessEmail(email)||!validSiteCode(code))return wrong();
+    const requestId=randomBytes(8).toString('hex');
+    try {
+      const db=await deps.db();if(!db)throw new Error('DATABASE_UNAVAILABLE');
+      const now=deps.now(),network=String(req.ip||req.socket.remoteAddress||'shared');
+      const waitNetwork=await takeOwnSiteLimit(db,'verify-network:'+network,300,15*60_000,now);
+      if(waitNetwork)return limited(res,waitNetwork);
+      const waitEmail=await takeOwnSiteLimit(db,'verify-email:'+email,10,15*60_000,now);
+      if(waitEmail)return limited(res,waitEmail);
+      const session=await consumeOwnSiteCode(db,email,code,now);
+      if(!session)return wrong();
+      res.cookie(COOKIE,session.token,{httpOnly:true,secure:process.env.NODE_ENV==='production',sameSite:'lax',path:'/',maxAge:session.expiresAt-now});
+      return res.json({ok:true,expiresAt:session.expiresAt});
+    }catch(error){return failure(res,error,'verify',requestId);}
+  });
+
+  app.get('/api/site-access/session',async(req,res)=>{
+    noStore(res);
+    try {
+      if(process.env.H2_SITE_ACCESS_ENFORCE!=='true')return res.json({required:false,authorized:false});
+      if(ownerSession(req))return res.json({required:false,authorized:false,ownerBypass:true});
+      const db=await deps.db();if(!db)throw new Error('DATABASE_UNAVAILABLE');
+      const result=await db.execute(sql`SELECT mode FROM siteAccessConfig WHERE id=1 LIMIT 1`);
+      const mode=(result[0] as unknown as {mode:string}[])[0]?.mode||'public';
+      if(mode==='public')return res.json({required:false,authorized:false});
+      if(mode!=='restricted')return res.status(403).json({required:true,authorized:false});
+      const session=await readOwnSiteSession(db,tokenFrom(req),deps.now());
+      return res.json({required:true,authorized:!!session,expiresAt:session?.expiresAt??null});
+    }catch(error){console.error('[SiteCode] session code='+ownSiteErrorCode(error));return res.status(503).json({required:true,authorized:false});}
+  });
+  app.post('/api/site-access/logout',async(req,res)=>{
+    noStore(res);
+    if(!isSameOriginSiteRequest(req))return res.status(403).json({error:'Origem não autorizada.'});
+    try {
+      const db=await deps.db();if(!db)throw new Error('DATABASE_UNAVAILABLE');
+      await revokeOwnSiteSession(db,tokenFrom(req),deps.now());
+      res.clearCookie(COOKIE,{path:'/',httpOnly:true,secure:process.env.NODE_ENV==='production',sameSite:'lax'});
       return res.json({ok:true});
-    } catch(error) {
-      console.error("[SiteAccess] Falha ao validar código:", error instanceof Error ? error.message : String(error));
-      return res.status(503).json({error:"Serviço temporariamente indisponível."});
-    }
-  });
-
-  app.get("/api/site-access/session", async (req,res) => {
-    noStore(res);
-    try { return res.json({authorized:await authorizedSiteVisitor(req)}); }
-    catch { return res.status(503).json({authorized:false}); }
-  });
-
-  app.post("/api/site-access/logout", (req,res) => {
-    noStore(res);
-    if (!isSameOriginSiteRequest(req)) return res.status(403).json({error:"Origem não autorizada."});
-    res.clearCookie(COOKIE,{path:"/",sameSite:"lax"});
-    return res.json({ok:true});
+    }catch(error){return failure(res,error,'logout',randomBytes(8).toString('hex'));}
   });
 }
