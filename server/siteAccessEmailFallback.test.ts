@@ -2,7 +2,7 @@ import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import { deliverOwnSiteCode } from './siteAccessCodeDelivery';
 const mocks=vi.hoisted(()=>({send:vi.fn(),close:vi.fn(),transport:vi.fn(),fetch:vi.fn()}));
 vi.mock('nodemailer',()=>({default:{createTransport:mocks.transport}}));
-const email='authorized@example.test',code='1234ABCDEFGH';
+const email='authorized@example.test',code='012345';
 beforeEach(()=>{
   vi.stubEnv('SMTP_HOST','smtp.example.test');vi.stubEnv('SMTP_PORT','465');vi.stubEnv('SMTP_SECURE','true');
   vi.stubEnv('SMTP_USER','sender@example.test');vi.stubEnv('SMTP_FROM','sender@example.test');vi.stubEnv('SMTP_PASS','test-only-password');vi.stubEnv('ZOHO_EMAIL_PASSWORD','');vi.stubEnv('RESEND_API_KEY','test-only-api-key');
@@ -35,10 +35,14 @@ describe('own code delivery: direct SMTP with HTTPS contingency',()=>{
     mocks.send.mockRejectedValue(new Error('network'));await deliverOwnSiteCode(email,code);
     const smtp=mocks.send.mock.calls[0][0],api=JSON.parse(mocks.fetch.mock.calls[0][1].body);
     expect(smtp.text).toBe(api.text);expect(smtp.html).toBe(api.html);expect(api.to).toEqual([email]);
+    expect(api.text).toContain('012345');expect(api.html).toContain('012345');
   });
   it('separates 10-minute code validity from 24-hour access',async()=>{
     await deliverOwnSiteCode(email,code);const message=mocks.send.mock.calls[0][0];
-    expect(message.text).toContain('1234-ABCD-EFGH');expect(message.text).toContain('10 minutos');expect(message.text).toContain('24 horas');expect(message.subject).not.toContain(code);
+    expect(message.text).toContain('012345');expect(message.html).toContain('012345');
+    expect(message.text).toContain('6 números');expect(message.html).toContain('6 números');
+    expect(message.text).not.toContain('12 caracteres');expect(message.html).not.toContain('12 caracteres');
+    expect(message.text).toContain('10 minutos');expect(message.text).toContain('24 horas');expect(message.subject).not.toContain(code);
   });
   it('never logs plaintext code, recipient or password',async()=>{
     mocks.send.mockRejectedValue(Object.assign(new Error(email+' '+code+' test-only-password'),{code:'EAUTH'}));await deliverOwnSiteCode(email,code);
@@ -64,7 +68,7 @@ describe('own code delivery: direct SMTP with HTTPS contingency',()=>{
     vi.stubEnv('SMTP_PASS','');vi.stubEnv('RESEND_API_KEY','');await expect(deliverOwnSiteCode(email,code)).rejects.toThrow('UNAVAILABLE');
     expect(mocks.send).not.toHaveBeenCalled();expect(mocks.fetch).not.toHaveBeenCalled();
   });
-  it('rejects malformed codes before any provider contact',async()=>{
-    await expect(deliverOwnSiteCode(email,'<script>')).rejects.toThrow('INVALID_GENERATED_CODE');expect(mocks.send).not.toHaveBeenCalled();expect(mocks.fetch).not.toHaveBeenCalled();
+  it.each(['<script>','1234ABCDEFGH','12345','1234567','1O2345'])('rejects malformed codes before any provider contact: %s',async value=>{
+    await expect(deliverOwnSiteCode(email,value)).rejects.toThrow('INVALID_GENERATED_CODE');expect(mocks.send).not.toHaveBeenCalled();expect(mocks.fetch).not.toHaveBeenCalled();
   });
 });
