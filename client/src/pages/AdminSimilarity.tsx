@@ -1,7 +1,7 @@
 import { useEffect, useMemo, useRef, useState } from "react";
 import AdminHeader from "@/components/AdminHeader";
 import FacePhotoCropModal from "@/components/FacePhotoCropModal";
-import { AlertTriangle, Camera, ClipboardPaste, Crop, FolderOpen, ImagePlus, Play, RotateCcw, ScanFace, ShieldCheck, Trash2, X } from "lucide-react";
+import { AlertTriangle, Camera, ChevronDown, ClipboardPaste, Crop, FolderOpen, ImagePlus, Play, RotateCcw, ScanFace, ShieldCheck, Trash2, X } from "lucide-react";
 import { toast } from "sonner";
 import { compareFaceGeometry, evaluateFaceGeometryQuality, type FaceLandmark, type RegionScores } from "@/lib/faceGeometry";
 import { createCanonicalFaceCanvases } from "@/lib/facePreprocess";
@@ -351,6 +351,7 @@ export default function AdminSimilarity() {
   const [results, setResults] = useState<ComparisonResult[]>([]);
   const [selectedResultId, setSelectedResultId] = useState<string | null>(null);
   const [pairwiseResults, setPairwiseResults] = useState<PairwiseResult[]>([]);
+  const [showPairwiseSummary, setShowPairwiseSummary] = useState(false);
   const [analyzing, setAnalyzing] = useState(false);
   const [progress, setProgress] = useState({ current: 0, total: 0, name: "" });
   const [masterQuality, setMasterQuality] = useState<{ score: number; warnings: string[]; imageScore: number; capture: FaceCaptureQuality } | null>(null);
@@ -724,6 +725,7 @@ export default function AdminSimilarity() {
     setAnalyzing(true);
     setResults([]);
     setPairwiseResults([]);
+    setShowPairwiseSummary(false);
     setProgress({ current: 0, total: candidates.length, name: "Preparando motor facial..." });
 
     try {
@@ -1767,16 +1769,35 @@ export default function AdminSimilarity() {
                 : 0;
 
               return (
-                <section className="rounded-2xl border border-cyan-400/20 bg-[#091018]/90 p-4 sm:p-5">
-                  <div className="flex flex-col gap-1 sm:flex-row sm:items-end sm:justify-between">
-                    <div>
-                      <p className="text-xs font-bold uppercase tracking-[0.16em] text-cyan-300">Todas as combinações</p>
-                      <h2 className="text-xl font-black">Resumo entre todas as fotos</h2>
+                <section className="overflow-hidden rounded-2xl border border-cyan-400/20 bg-[#091018]/90">
+                  <button
+                    type="button"
+                    aria-expanded={showPairwiseSummary}
+                    aria-controls="h2-similaridade-todas-combinacoes"
+                    onClick={() => setShowPairwiseSummary((open) => !open)}
+                    className="flex w-full min-w-0 items-center justify-between gap-3 px-4 py-3 text-left transition hover:bg-cyan-400/[0.05] focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-[-2px] focus-visible:outline-cyan-300 sm:px-5"
+                  >
+                    <div className="min-w-0">
+                      <p className="text-[11px] font-bold uppercase tracking-[0.14em] text-cyan-300">
+                        Grupo opcional • Todas as combinações
+                      </p>
+                      <h2 className="mt-0.5 text-sm font-black text-white sm:text-base">
+                        Resumo entre todas as fotos
+                      </h2>
                     </div>
-                    <span className="text-xs text-slate-500">{valid.length} combinação(ões)</span>
-                  </div>
-
-                  <div className="mt-4 grid gap-2 sm:grid-cols-3">
+                    <div className="flex shrink-0 items-center gap-2 text-right">
+                      <span className="rounded-full border border-cyan-400/20 bg-cyan-400/5 px-2 py-1 text-[11px] font-bold text-cyan-200">
+                        {valid.length} combinações
+                      </span>
+                      <ChevronDown
+                        aria-hidden="true"
+                        className={"h-4 w-4 shrink-0 text-cyan-300 transition-transform" + (showPairwiseSummary ? " rotate-180" : "")}
+                      />
+                    </div>
+                  </button>
+                  {showPairwiseSummary && (
+                    <div id="h2-similaridade-todas-combinacoes" className="border-t border-cyan-400/15 px-4 pb-4 sm:px-5 sm:pb-5">
+                      <div className="mt-4 grid gap-2 sm:grid-cols-3">
                     <div className="rounded-xl border border-emerald-400/20 bg-emerald-500/5 p-3">
                       <p className="text-[10px] uppercase text-slate-500">Maior similaridade</p>
                       <p className="mt-1 text-2xl font-black text-emerald-200">{highest?.similarity.toFixed(1) ?? "—"}%</p>
@@ -1810,7 +1831,9 @@ export default function AdminSimilarity() {
                         </div>
                       </div>
                     ))}
-                  </div>
+                      </div>
+                    </div>
+                  )}
                 </section>
               );
             })()}
