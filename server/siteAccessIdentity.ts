@@ -7,7 +7,7 @@ import { getDb } from './db';
 import { getAdminJwtSecret } from './adminJwt';
 import { ensureOwnSiteCodeStore, takeOwnSiteLimit, reserveOwnSiteCode, finishOwnSiteCodeDelivery, consumeOwnSiteCode, readOwnSiteSession, revokeOwnSiteSession, ownSiteErrorCode } from './siteAccessOwnCodes';
 import { deliverOwnSiteCode } from './siteAccessCodeDelivery';
-import { SITE_CODE_RESEND_SECONDS, normalizeSiteCode, validSiteCode } from '../shared/siteAccessCodePolicy';
+import { SITE_CODE_LENGTH, SITE_CODE_RESEND_SECONDS, normalizeSiteCode, validSiteCode } from '../shared/siteAccessCodePolicy';
 
 const COOKIE='h2_site_auth';
 const normalizeEmail=(value:unknown):string=>typeof value==='string'?value.trim().toLowerCase():'';
@@ -80,7 +80,7 @@ export function registerSiteIdentity(app:Express,deps:SiteIdentityDependencies=d
       const resendWait=await takeOwnSiteLimit(db,'resend-email:'+email,1,SITE_CODE_RESEND_SECONDS*1000,now);
       if(resendWait)return limited(res,resendWait);
       const reserved=await reserveOwnSiteCode(db,email,now);
-      const generic=()=>res.json({ok:true,message:'Se este e-mail estiver autorizado, o código será enviado. Confira também o spam.',retryAfter:SITE_CODE_RESEND_SECONDS,codeLength:12,codeValidFor:600});
+      const generic=()=>res.json({ok:true,message:'Se este e-mail estiver autorizado, o código será enviado. Confira também o spam.',retryAfter:SITE_CODE_RESEND_SECONDS,codeLength:SITE_CODE_LENGTH,codeValidFor:600});
       if(!reserved){console.info('[SiteCode] request='+requestId+' state=not-issued');return generic();}
       try {
         const outcome=await deps.delivery(email,reserved.code);
