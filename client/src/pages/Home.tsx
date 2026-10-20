@@ -429,65 +429,19 @@ export default function Home() {
     profilePhotoUrl?: string;
   } | null>(null);
 
-  // Um pedido já gravado deve poder retomar a confirmação, sem refazer a compra.
+  // A tela pós-pedido existe apenas na navegação atual.
+  // Atualizar a página ou voltar ao site nunca deve prender o cliente novamente nela.
   useEffect(() => {
-    try {
-      const raw = sessionStorage.getItem(POST_ORDER_CONFIRMATION_KEY);
-      if (!raw) return;
-      const saved = JSON.parse(raw);
-      const elapsed = Date.now() - Number(saved?.savedAt);
-      if (!saved?.submittedOrderData || !Number.isFinite(elapsed) || elapsed < 0 || elapsed > 24 * 60 * 60 * 1000) {
-        sessionStorage.removeItem(POST_ORDER_CONFIRMATION_KEY);
-        return;
-      }
-      const links = Array.isArray(saved.scheduleLinks)
-        ? saved.scheduleLinks.filter((link: unknown) => typeof link === 'string' && !!scheduleTokenFromUrl(link))
-        : [];
-      const decision = saved.scheduleDecision;
-      setSubmittedOrderData(saved.submittedOrderData);
-      setAutomaticScheduleLinks(links);
-      setPostOrderScheduleDecision(links.length > 0 && (decision === 'choose' || decision === 'later' || decision === 'completed')
-        ? decision : 'completed');
-      setPostOrderReferralStep('done');
-      setStep('success');
-    } catch {
-      try { sessionStorage.removeItem(POST_ORDER_CONFIRMATION_KEY); } catch {}
-    }
-  }, []);
-  useEffect(() => {
+    try { sessionStorage.removeItem(POST_ORDER_CONFIRMATION_KEY); } catch {}
     try {
       const raw = sessionStorage.getItem(POST_ORDER_FLOW_KEY);
       if (!raw) return;
       const saved = JSON.parse(raw);
-      const links = Array.isArray(saved?.scheduleLinks)
-        ? saved.scheduleLinks.filter((link: unknown) => typeof link === 'string' && scheduleTokenFromUrl(link))
-        : [];
-      if (links.length === 0 || saved?.completed !== true) return;
-
-      setAutomaticScheduleLinks(links);
-      if (saved?.submittedOrderData && typeof saved.submittedOrderData === 'object') {
-        setSubmittedOrderData(saved.submittedOrderData);
-      }
-      setPostOrderScheduleDecision('completed');
-      setPostOrderReferralStep('done');
-      setStep('success');
+      if (saved?.completed === true) sessionStorage.removeItem(POST_ORDER_FLOW_KEY);
     } catch {
-      sessionStorage.removeItem(POST_ORDER_FLOW_KEY);
+      try { sessionStorage.removeItem(POST_ORDER_FLOW_KEY); } catch {}
     }
   }, []);
-
-  // Persistir apenas nesta aba a etapa pós-compra, para recuperar WhatsApp/agendamento.
-  useEffect(() => {
-    if (step !== 'success' || !submittedOrderData) return;
-    try {
-      sessionStorage.setItem(POST_ORDER_CONFIRMATION_KEY, JSON.stringify({
-        savedAt: Date.now(),
-        submittedOrderData,
-        scheduleLinks: automaticScheduleLinks,
-        scheduleDecision: postOrderScheduleDecision === 'now' ? 'choose' : postOrderScheduleDecision,
-      }));
-    } catch { /* O pedido permanece gravado no servidor. */ }
-  }, [step, submittedOrderData, automaticScheduleLinks, postOrderScheduleDecision]);
 
   // ===== PROPAGANDA OBRIGATÓRIA =====
   const [adVisible, setAdVisible] = useState(false);
