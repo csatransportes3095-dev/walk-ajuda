@@ -67,6 +67,12 @@ export default function H2Ads() {
   const utils = trpc.useUtils();
   const dashboard = trpc.h2Ads.listDashboard.useQuery(undefined, { retry: false, staleTime: 0, refetchInterval: 1_000, refetchIntervalInBackground: true, refetchOnWindowFocus: true });
   const proxySecurityStatus = trpc.h2Ads.proxySecurityStatus.useQuery(undefined, { retry: false });
+  const startupSites = trpc.h2Ads.startupSites.useQuery(undefined, { retry: false });
+  const addStartupSite = trpc.h2Ads.addStartupSite.useMutation();
+  const toggleStartupSite = trpc.h2Ads.toggleStartupSite.useMutation();
+  const removeStartupSite = trpc.h2Ads.removeStartupSite.useMutation();
+  const [newSiteUrl, setNewSiteUrl] = useState("");
+  const [newSiteName, setNewSiteName] = useState("");
   const globalExtensions = trpc.h2Ads.globalExtensions.useQuery(undefined, { retry: false });
   const addGlobalExtension = trpc.h2Ads.addGlobalExtension.useMutation();
   const toggleGlobalExtension = trpc.h2Ads.toggleGlobalExtension.useMutation();
@@ -528,6 +534,25 @@ Isso encerra somente os browsers abertos. Grupos, clientes vinculados, proxies e
             </div>
           </div>)}
           {!globalExtensions.isLoading && !globalExtensions.isError && (globalExtensions.data ?? []).length === 0 && <p className="text-xs text-slate-400">Nenhuma extensão cadastrada.</p>}
+        </div>
+      </section>
+      <section className="mt-6 rounded-3xl border border-[#148CFF]/25 bg-[#0D1016]/90 p-5 sm:p-6">
+        <header className="mb-4"><h3 className="text-xl font-black text-white">Sites para abrir</h3><p className="mt-1 text-xs leading-5 text-slate-400">Links HTTPS abertos em abas separadas na proxima inicializacao de cada instancia. Nao altera as abas de instancias ja abertas.</p></header>
+        <form className="grid gap-2 sm:grid-cols-[1fr_180px_auto]" onSubmit={async event => { event.preventDefault(); try { await addStartupSite.mutateAsync({ url: newSiteUrl, name: newSiteName }); setNewSiteUrl(""); setNewSiteName(""); await startupSites.refetch(); toast.success("Site adicionado."); } catch (error) { toast.error(errorText(error, "Nao foi possivel adicionar o site.")); } }}>
+          <input type="url" required value={newSiteUrl} onChange={event => setNewSiteUrl(event.target.value)} placeholder="https://exemplo.com" aria-label="Link do site" className="min-w-0 rounded-xl border border-white/10 bg-black/30 p-3 text-sm text-white" />
+          <input type="text" required maxLength={90} value={newSiteName} onChange={event => setNewSiteName(event.target.value)} placeholder="Nome do site" aria-label="Nome do site" className="min-w-0 rounded-xl border border-white/10 bg-black/30 p-3 text-sm text-white" />
+          <button type="submit" disabled={addStartupSite.isPending} className="rounded-xl bg-[#F5B800] px-4 py-3 text-sm font-black text-black disabled:opacity-50">Adicionar</button>
+        </form>
+        {startupSites.isError && <p role="alert" className="mt-3 text-xs text-rose-300">Sites indisponiveis. Tente novamente.</p>}
+        <div className="mt-4 space-y-2">
+          {(startupSites.data ?? []).map(site => <div key={site.id} className="flex flex-wrap items-center justify-between gap-3 rounded-xl border border-white/10 bg-black/20 p-3">
+            <div className="min-w-0 flex-1"><strong className="block break-words text-sm text-white">{site.name}</strong><span className="block break-all text-xs text-slate-400">{site.url}</span><span className="text-xs text-slate-400">{site.enabled ? "Ativo na proxima abertura" : "Desativado"}</span></div>
+            <div className="flex flex-wrap items-center gap-2">
+              <button type="button" disabled={toggleStartupSite.isPending} className="rounded-lg border border-[#148CFF]/35 px-3 py-2 text-xs font-bold text-[#8CC8FF]" onClick={async () => { try { await toggleStartupSite.mutateAsync({ id: site.id, enabled: !site.enabled }); await startupSites.refetch(); } catch (error) { toast.error(errorText(error, "Nao foi possivel alterar.")); } }}>{site.enabled ? "Desativar" : "Ativar"}</button>
+              <button type="button" disabled={removeStartupSite.isPending} className="rounded-lg border border-rose-400/30 px-3 py-2 text-xs font-bold text-rose-200" onClick={async () => { if (!window.confirm("Remover este site?")) return; try { await removeStartupSite.mutateAsync({ id: site.id }); await startupSites.refetch(); } catch (error) { toast.error(errorText(error, "Nao foi possivel remover.")); } }}>Remover</button>
+            </div>
+          </div>)}
+          {!startupSites.isLoading && !startupSites.isError && !startupSites.data?.length && <p className="text-xs text-slate-400">Nenhum site cadastrado.</p>}
         </div>
       </section>
       <WorkerPanel workers={browserWorkers} onCreate={() => { setPairingCode(null); setWorkerForm({ ...emptyWorker }); }} onRevoke={disableWorker} busy={saving} />
