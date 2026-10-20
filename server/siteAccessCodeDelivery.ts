@@ -13,11 +13,11 @@ export async function deliverOwnSiteCode(email: string, code: string): Promise<S
   const from=process.env.SMTP_FROM || process.env.SMTP_USER || 'h2@h2colombiano.com';
   const subject='H2 Colombiano - Código de acesso';
   const formatted=displaySiteCode(code);
-  const text=`Seu código para acessar o site H2 Colombiano: ${formatted}\n\nDigite ou cole os 12 caracteres. Este código é de uso único e vale por 10 minutos. Após confirmar, seu acesso vale por até 24 horas, ou até você sair.\n\nNão compartilhe. Se não solicitou o acesso, ignore esta mensagem.`;
+  const text=`Seu código para acessar o site H2 Colombiano: ${formatted}\n\nDigite ou cole os 6 números. Este código é de uso único e vale por 10 minutos. Após confirmar, seu acesso vale por até 24 horas, ou até você sair.\n\nNão compartilhe. Se não solicitou o acesso, ignore esta mensagem.`;
   const html='<div style="font-family:Arial,sans-serif;max-width:480px;margin:auto;padding:24px">'
     +'<h2>H2 Colombiano</h2><p>Código para acessar o site:</p>'
     +'<p style="font-size:28px;font-weight:bold;letter-spacing:2px">'+formatted+'</p>'
-    +'<p>Digite ou cole os 12 caracteres. Uso único, válido por 10 minutos.</p>'
+    +'<p>Digite ou cole os 6 números. Uso único, válido por 10 minutos.</p>'
     +'<p>Após a confirmação, o acesso vale por até 24 horas, ou até você sair.</p>'
     +'<p>Não compartilhe. Se não solicitou o acesso, ignore esta mensagem.</p></div>';
   const pass=process.env.SMTP_PASS || process.env.ZOHO_EMAIL_PASSWORD || '';
