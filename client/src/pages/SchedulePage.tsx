@@ -49,13 +49,9 @@ function continuePostOrderScheduleFlow(currentToken: string) {
     return true;
   }
 
-  // Manter a confirmação recuperável mesmo se o navegador não abrir o WhatsApp.
-  sessionStorage.setItem(POST_ORDER_FLOW_KEY, JSON.stringify({
-    ...flow.saved,
-    currentIndex: flow.index,
-    completed: true,
-    completedAt: Date.now(),
-  }));
+  // Fluxo concluído: limpar antes de abrir WhatsApp/voltar ao site.
+  // Isso impede a Home de restaurar eternamente a tela pós-pedido.
+  sessionStorage.removeItem(POST_ORDER_FLOW_KEY);
 
   const whatsappUrl = typeof flow.saved?.whatsappUrl === 'string' ? flow.saved.whatsappUrl : '';
   if (whatsappUrl.startsWith('https://wa.me/')) {
