@@ -5921,6 +5921,13 @@ export default function AdminOrders() {
                             </span>
                           )}
                         </div>
+                        {!isCartGroup && order.cartCouponCode && order.cartTotal != null && order.cartCouponDiscount != null && Number(order.cartCouponDiscount) > 0 && (
+                          <div className="mt-1.5 inline-flex flex-wrap items-center gap-x-2 gap-y-1 rounded-lg border border-amber-400/50 bg-black/25 px-2.5 py-1.5 text-[11px]">
+                            <span className="text-white/70 line-through">R$ {Number(order.cartTotal).toFixed(2).replace('.', ',')}</span>
+                            <span className="font-bold text-amber-300">🏷️ {order.cartCouponCode}: -R$ {Number(order.cartCouponDiscount).toFixed(2).replace('.', ',')}</span>
+                            <span className="font-black text-green-300">= {order.pricePaid || `R$ ${Math.max(0, Number(order.cartTotal) - Number(order.cartCouponDiscount)).toFixed(2).replace('.', ',')}`}</span>
+                          </div>
+                        )}
                         {/* Bloco de carrinho: lista todos os produtos se for grupo de carrinho */}
                         {isCartGroup && cgItems.length > 1 ? (
                           <div className="mt-1 space-y-1">
@@ -5998,22 +6005,6 @@ export default function AdminOrders() {
                             </div>
                           );
                         })()
-                        )}
-                        {!isCartGroup && order.cartCouponCode && order.cartTotal != null && order.cartCouponDiscount != null && order.cartCouponDiscount > 0 && (
-                          <div className="mt-2 bg-green-500/10 border border-green-500/30 rounded-lg px-2 py-1.5 space-y-0.5">
-                            <div className="flex items-center justify-between text-[10px]">
-                              <span className="text-muted-foreground">Valor original:</span>
-                              <span className="text-muted-foreground">R$ {Number(order.cartTotal).toFixed(2).replace('.', ',')}</span>
-                            </div>
-                            <div className="flex items-center justify-between text-[10px]">
-                              <span className="text-amber-400">🏷️ Cupom ({order.cartCouponCode}):</span>
-                              <span className="text-amber-400 font-bold">-R$ {Number(order.cartCouponDiscount).toFixed(2).replace('.', ',')}</span>
-                            </div>
-                            <div className="flex items-center justify-between">
-                              <span className="text-xs font-bold text-green-300">💰 Valor final:</span>
-                              <span className="text-sm font-black text-green-300">{order.pricePaid || `R$ ${Math.max(0, Number(order.cartTotal) - Number(order.cartCouponDiscount)).toFixed(2).replace('.', ',')}`}</span>
-                            </div>
-                          </div>
                         )}
                         <div className="flex items-center gap-1.5 mt-1 flex-wrap">
                             {order.customerReferredBy === 'Não informou' ? (
