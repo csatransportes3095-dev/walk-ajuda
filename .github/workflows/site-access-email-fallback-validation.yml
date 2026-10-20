@@ -1,7 +1,7 @@
 name: Site access own codes and 24h sessions
 on:
   push:
-    branches: [feature/site-access-own-codes-24h-20261020]
+    branches: [feature/site-access-own-codes-24h-20261020, fix/site-access-six-digits-20261020]
   pull_request:
     branches: [recovery/organizar-salvos-2026-08-24]
     paths:
@@ -56,20 +56,23 @@ jobs:
           const db=await createConnection(process.env.SITE_ACCESS_TEST_DB_URL);
           try{await db.query('CREATE DATABASE IF NOT EXISTS h2_bulk_test');await db.query('CREATE DATABASE IF NOT EXISTS h2_site_code_test');}finally{await db.end();}
           JS
-      - name: Protect scheduling, owner permissions, directory, customer data and global mailers
+      - name: Protect uniqueness, sessions, scheduling and delivery configuration
         run: |
           node --input-type=module <<'JS'
           import fs from 'node:fs';
           import assert from 'node:assert/strict';
           import {execFileSync} from 'node:child_process';
-          const base='2f27a2a5dd5b9cac30dee777ba2ac59e95318888';
+          const base='2aec97a17e975306072684e8773cd6c369da7a03';
           const before=p=>execFileSync('git',['show',base+':'+p],{encoding:'utf8'});
-          for(const p of ['server/siteSecurityRouter.ts','server/siteAccessSchema.ts','server/siteAccessGateway.ts','server/siteAccessPolicy.ts','server/siteAccessManualAdd.ts','server/siteSecurityDirectory.ts','server/autoSchedule.ts','server/routers/schedule.ts','server/routers/customerPassword.ts','server/_core/trpc.ts','server/_core/mailer.ts','server/_core/sendMailDirect.ts','server/db.ts','client/src/pages/AdminSiteSecurity.tsx','client/src/pages/OrderTracking.tsx','client/src/App.tsx','Dockerfile','package.json','pnpm-lock.yaml'])assert.equal(fs.readFileSync(p,'utf8'),before(p),p+' unexpectedly changed');
-          const normalize=s=>s.replace(/^import SiteAccessSessionBoundary.*\n/m,'').replace(/      <SiteAccessSessionBoundary onClear=\{\(\)=>queryClient.clear\(\)\}>\n        <RootMaintenanceBoundary \/>\n      <\/SiteAccessSessionBoundary>/,'      <RootMaintenanceBoundary />');
-          assert.equal(normalize(fs.readFileSync('client/src/main.tsx','utf8')),normalize(before('client/src/main.tsx')),'Unrelated root behavior changed');
-          console.log('PASS: customer/scheduling operations, owner permissions, directory, global mailers, existing schema and unrelated runtime unchanged.');
+          const read=p=>fs.readFileSync(p,'utf8');
+          for(const p of ['server/siteAccessOwnCodes.ts','server/siteSecurityRouter.ts','server/siteAccessSchema.ts','server/siteAccessGateway.ts','server/siteAccessPolicy.ts','server/siteAccessManualAdd.ts','server/siteSecurityDirectory.ts','server/autoSchedule.ts','server/routers/schedule.ts','server/routers/customerPassword.ts','server/_core/trpc.ts','server/_core/mailer.ts','server/_core/sendMailDirect.ts','server/db.ts','client/src/pages/AdminSiteSecurity.tsx','client/src/pages/OrderTracking.tsx','client/src/App.tsx','client/src/main.tsx','client/src/components/SiteAccessSessionBoundary.tsx','client/src/lib/siteAccessSessionClient.ts','Dockerfile','package.json','pnpm-lock.yaml'])assert.equal(read(p),before(p),p+' unexpectedly changed');
+          const identity=s=>s.replace('SITE_CODE_LENGTH, ','').replace(/codeLength:(?:12|SITE_CODE_LENGTH)/g,'codeLength:EXPECTED');
+          assert.equal(identity(read('server/siteAccessIdentity.ts')),identity(before('server/siteAccessIdentity.ts')),'Identity changed outside size metadata');
+          const delivery=s=>s.replace(/12 caracteres|6 números/g,'EXPECTED');
+          assert.equal(delivery(read('server/siteAccessCodeDelivery.ts')),delivery(before('server/siteAccessCodeDelivery.ts')),'Delivery changed outside code instructions');
+          console.log('PASS: only numeric format, code field, API size metadata and email instructions changed; persistence, uniqueness, sessions, limits, transport and other operations unchanged.');
           JS
-      - name: Test own-code lifecycle and all site regressions
+      - name: Test six-digit lifecycle and all site regressions
         run: |
           set -o pipefail
           mapfile -t tests < <(find server -maxdepth 1 -type f -name 'site*.test.ts' | sort)
