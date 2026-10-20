@@ -7,13 +7,31 @@ type Step = typeof steps[number];
 type Route = 'site' | 'acompanhar' | 'gastos' | 'emprestimo';
 type Props = { conversationId: number; visitorId: string; onBack: () => void; onDone: () => void; initialRoute?: 'gastos' | 'emprestimo' | null };
 
-function toBase64(file: File) {
-  return new Promise<string>((resolve, reject) => {
-    const reader = new FileReader();
-    reader.onload = () => resolve(String(reader.result));
-    reader.onerror = reject;
-    reader.readAsDataURL(file);
+async function uploadRegistrationProfilePhoto(file: File, phone: string) {
+  const cleanPhone = phone.replace(/\D/g, "");
+  if (!/^\d{10,11}$/.test(cleanPhone)) {
+    throw new Error("Telefone inválido para enviar a foto.");
+  }
+  if (!file.size) {
+    throw new Error("A foto selecionada está vazia.");
+  }
+  if (file.size > 20 * 1024 * 1024) {
+    throw new Error("A foto é muito grande. Escolha uma imagem de até 20 MB.");
+  }
+
+  const form = new FormData();
+  form.append("file", file, file.name || "foto.jpg");
+  form.append("phone", cleanPhone);
+
+  const response = await fetch("/api/upload/registration-profile-photo", {
+    method: "POST",
+    body: form,
   });
+  const result = await response.json().catch(() => ({}));
+  if (!response.ok || !result?.url) {
+    throw new Error(result?.error || "Não foi possível enviar a foto. Tente outra imagem.");
+  }
+  return result as { url: string };
 }
 
 export function OnlineRegistrationPanel({ conversationId, visitorId, onBack, onDone, initialRoute = null }: Props) {
@@ -22,6 +40,7 @@ export function OnlineRegistrationPanel({ conversationId, visitorId, onBack, onD
   const [data, setData] = useState({ name: '', phone: '', cpf: '', email: '', cep: '', street: '', addressNumber: '', neighborhood: '', city: '', uf: '', referrerPhone: '', profilePhotoUrl: '' });
   const [value, setValue] = useState('');
   const [file, setFile] = useState<File | null>(null);
+  const [isUploadingPhoto, setIsUploadingPhoto] = useState(false);
   const [error, setError] = useState('');
   const [existingCustomer, setExistingCustomer] = useState<{ name: string; customerNumber: number | null } | null>(null);
   const [password, setPassword] = useState('');
@@ -33,7 +52,6 @@ export function OnlineRegistrationPanel({ conversationId, visitorId, onBack, onD
   const step = steps[index];
   const utils = trpc.useUtils();
   const saveDraft = trpc.onlineSupport.registrationDraftSave.useMutation();
-  const uploadPhoto = trpc.customers.uploadProfilePhoto.useMutation();
   const register = trpc.customers.register.useMutation();
   const passwordMode = trpc.customerPassword.getMode.useQuery();
   const createPasswordAuto = trpc.customerPassword.clientCreateAuto.useMutation();
@@ -78,12 +96,19 @@ export function OnlineRegistrationPanel({ conversationId, visitorId, onBack, onD
     }
     if (step === 'photo') {
       if (!file) { setError('A foto é obrigatória.'); return; }
-      const imageBase64 = await toBase64(file);
-      const result = await uploadPhoto.mutateAsync({ imageBase64, phone: data.phone.replace(/\D/g, '') });
-      const profilePhotoUrl = result.url;
-      setData(old => ({ ...old, profilePhotoUrl }));
-      await saveDraft.mutateAsync({ conversationId, visitorId, requestedRoute: route, step, field: 'profilePhotoUrl', value: profilePhotoUrl });
-      setIndex(index + 1);
+      setIsUploadingPhoto(true);
+      try {
+        const result = await uploadRegistrationProfilePhoto(file, data.phone);
+        const profilePhotoUrl = result.url;
+        setData(old => ({ ...old, profilePhotoUrl }));
+        await saveDraft.mutateAsync({ conversationId, visitorId, requestedRoute: route, step, field: 'profilePhotoUrl', value: profilePhotoUrl });
+        setFile(null);
+        setIndex(index + 1);
+      } catch (e: any) {
+        setError(e?.message || 'Não foi possível enviar a foto. Tente outra imagem.');
+      } finally {
+        setIsUploadingPhoto(false);
+      }
       return;
     }
     if (step === 'confirm') {
@@ -153,7 +178,7 @@ export function OnlineRegistrationPanel({ conversationId, visitorId, onBack, onD
     }
   };
 
-  const loading = saveDraft.isPending || uploadPhoto.isPending || register.isPending || createPasswordAuto.isPending || createPasswordManual.isPending || passwordMode.isLoading;
+  const loading = isUploadingPhoto || saveDraft.isPending || register.isPending || createPasswordAuto.isPending || createPasswordManual.isPending || passwordMode.isLoading;
   const passwordIsManual = passwordMode.data?.mode === 'manual';
 
   return <div style={{ display: 'flex', flexDirection: 'column', gap: 12 }}>
@@ -172,7 +197,7 @@ export function OnlineRegistrationPanel({ conversationId, visitorId, onBack, onD
           <input value={value} onChange={e => { setValue(e.target.value.replace(/\D/g, '').slice(0, 11)); setError(''); }} placeholder="(11) 99999-9999" inputMode="numeric" style={input} />
         </div>
       ) : step === 'photo' ? (
-        <label style={{ ...choice, display: 'block', textAlign: 'center' }}><Camera size={22} style={{ marginBottom: 6 }} /><div>{file ? file.name : 'Escolher foto'}</div><input type="file" accept="image/*" capture="user" onChange={e => setFile(e.target.files?.[0] || null)} style={{ display: 'none' }} /></label>
+        <label style={{ ...choice, display: 'block', textAlign: 'center' }}><Camera size={22} style={{ marginBottom: 6 }} /><div>{file ? file.name : 'Escolher foto'}</div><input type="file" accept="image/*" capture="user" onChange={e => { setFile(e.target.files?.[0] || null); setError(''); }} style={{ display: 'none' }} /></label>
       ) : step === 'confirm' ? (
         <div style={{ fontSize: 12, color: 'rgba(255,255,255,.7)', lineHeight: 1.7 }}><div><b>Área:</b> {route}</div><div><b>Nome:</b> {data.name}</div><div><b>Telefone:</b> {data.phone}</div><div><b>CPF:</b> {data.cpf}</div><div><b>E-mail:</b> {data.email}</div><div><b>CEP:</b> {data.cep}</div><div><b>Rua:</b> {data.street}</div><div><b>Número:</b> {data.addressNumber}</div><div><b>Bairro:</b> {data.neighborhood}</div><div><b>Cidade/UF:</b> {data.city}/{data.uf}</div><div><b>Indicador:</b> {data.referrerPhone}</div></div>
       ) : step === 'password' ? (
