@@ -1,4 +1,5 @@
 import { calculateBiofacialConsensus } from "./biofacialConsensus";
+import { H2_FACE_MINIMUM_PERCENT } from "./faceSimilarityPolicy";
 
 export type MatchVerdict =
   | "strong"
@@ -121,7 +122,7 @@ export function decideFaceMatch(input: FaceMatchDecisionInput): FaceMatchDecisio
     };
   }
 
-  if (finalScore >= 86) {
+  if (finalScore >= H2_FACE_MINIMUM_PERCENT) {
     return {
       finalScore,
       identityScore,

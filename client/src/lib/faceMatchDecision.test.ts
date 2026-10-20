@@ -77,7 +77,7 @@ describe("facial resemblance scoring", () => {
     expect(result.finalScore).toBeGreaterThanOrEqual(82);
     expect(result.verdict).not.toBe("low");
   });
-  it("reserves high-similarity verdict for scores at or above 86", () => {
+  it("reserves high-similarity verdict for scores at or above 75", () => {
     const base = {
       identityRawSimilarity: 0.60,
       geometrySimilarity: 84,
@@ -100,7 +100,7 @@ describe("facial resemblance scoring", () => {
     };
 
     const result = decideFaceMatch(base);
-    if (result.finalScore < 86) {
+    if (result.finalScore < 75) {
       expect(result.verdict).not.toBe("near");
       expect(result.verdict).not.toBe("strong");
     }
@@ -132,4 +132,17 @@ describe("facial resemblance scoring", () => {
     expect(result.verdict).toBe("near");
   });
 
+});
+
+describe("H2 Face: limite de alta similaridade", () => {
+  const sample = { identityRawSimilarity: 0.7, geometrySimilarity: 83, geometryCriticalMean: 80, geometryCriticalFloor: 65, reliability: 95 };
+  it("classifica 75% como alta sem alterar o score do motor", () => {
+    const decision = decideFaceMatch({ ...sample, primarySimilarityScore: 75 });
+    expect(decision.finalScore).toBe(75);
+    expect(decision.verdict).toBe("near");
+  });
+  it("mantém 74.9% abaixo do limite de alta", () => {
+    const decision = decideFaceMatch({ ...sample, primarySimilarityScore: 74.9 });
+    expect(decision.verdict).toBe("partial");
+  });
 });

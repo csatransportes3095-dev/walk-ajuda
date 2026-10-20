@@ -1,0 +1,46 @@
+name: Validate H2BICO face fast path and 75 percent
+on:
+  push:
+    branches:
+      - fix/h2bico-fast-scoring-min75-20261020
+  pull_request:
+    branches:
+      - recovery/organizar-salvos-2026-08-24
+permissions:
+  contents: read
+jobs:
+  validate:
+    runs-on: ubuntu-latest
+    timeout-minutes: 30
+    steps:
+      - uses: actions/checkout@v4
+      - uses: pnpm/action-setup@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: "22"
+          cache: pnpm
+      - run: pnpm install --frozen-lockfile
+      - name: Face ranking and score tests
+        run: pnpm exec vitest run client/src/lib/faceSimilarityPolicy.test.ts client/src/lib/faceMatchDecision.test.ts server/similarFaceReference.test.ts
+      - name: Production build
+        run: pnpm build
+      - name: Ensure no additional TypeScript errors
+        run: |
+          git fetch --no-tags origin recovery/organizar-salvos-2026-08-24
+          git worktree add --detach /tmp/h2bico-baseline FETCH_HEAD
+          ln -s "$PWD/node_modules" /tmp/h2bico-baseline/node_modules
+          (cd /tmp/h2bico-baseline && pnpm check > /tmp/h2bico-before.log 2>&1) || true
+          pnpm check > /tmp/h2bico-after.log 2>&1 || true
+          python3 - <<'PY'
+          import re
+          from collections import Counter
+          from pathlib import Path
+          def errors(path):
+              return Counter(re.sub(r'\([0-9]+,[0-9]+\)', '', line) for line in Path(path).read_text().splitlines() if 'error TS' in line)
+          a=errors('/tmp/h2bico-before.log')
+          b=errors('/tmp/h2bico-after.log')
+          added=b-a
+          print('PREEXISTING',sum(a.values()), 'CURRENT',sum(b.values()), 'NEW',sum(added.values()))
+          for line,n in added.items(): print(n,line)
+          if added: raise SystemExit(1)
+          PY

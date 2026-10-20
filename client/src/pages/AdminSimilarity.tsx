@@ -12,6 +12,7 @@ import { decideFaceMatch, type MatchVerdict } from "@/lib/faceMatchDecision";
 import { getCachedH2FaceModelBytes, loadH2FaceRuntimeFromBytes, loadH2FaceRuntimeFromUrls, type SimilarFaceRuntime } from "@/lib/similarFaceTfliteRuntime";
 import { cosineSimilarity512, similarFaceScorePercent } from "@/lib/similarFaceReference";
 import { trpc } from "@/lib/trpc";
+import { H2_FACE_MINIMUM_PERCENT, meetsH2FaceMinimum, canHighlightH2Face, needsDetailedH2BicoAnalysis } from "@/lib/faceSimilarityPolicy";
 
 type FaceCropTarget = { kind: "master" } | { kind: "candidate"; id: string };
 
@@ -278,16 +279,14 @@ function formatScore(score: number | null) {
   return score === null ? "—" : `${score.toFixed(1)}%`;
 }
 
-function shouldPulseSimilarity(score: number | null) {
-  if (score === null) return false;
-  const displayed = Math.round(score * 10) / 10;
-  return displayed > 85.5;
+function shouldPulseSimilarity(score: number | null, reliability: number | null) {
+  return canHighlightH2Face(score, reliability);
 }
 
 function scoreLabel(score: number | null) {
   if (score === null) return "Sem leitura";
   if (score >= 92) return "Muito alta";
-  if (score >= 86) return "Alta";
+  if (score >= H2_FACE_MINIMUM_PERCENT) return "Alta";
   if (score >= 65) return "Moderada";
   if (score >= 45) return "Parcial";
   return "Baixa";
@@ -299,10 +298,10 @@ function verdictFor(result: ComparisonResult) {
   }
 
   if (result.referenceEngine) {
-    if (shouldPulseSimilarity(result.similarity)) {
+    if (shouldPulseSimilarity(result.similarity, result.reliability)) {
       return {
-        label: "✓ FOTO BOA PARA USAR",
-        detail: "Resultado H2 Face acima de 85,5%. A foto entrou na faixa destacada para uso.",
+        label: "✓ SIMILARIDADE DESTACADA",
+        detail: "Resultado H2 Face a partir de 75%, com confiabilidade suficiente para destaque. O índice não garante identidade.",
         tone: "text-emerald-100 border-emerald-300/40 bg-emerald-500/10",
       };
     }
@@ -441,7 +440,7 @@ export default function AdminSimilarity() {
   const rankedResults = useMemo(
     () =>
       results
-        .filter((result) => (result.similarity ?? -1) >= 75)
+        .filter((result) => meetsH2FaceMinimum(result.similarity))
         .sort((a, b) => {
           const similarityDiff = (b.similarity ?? -1) - (a.similarity ?? -1);
           if (similarityDiff !== 0) return similarityDiff;
@@ -802,6 +801,20 @@ export default function AdminSimilarity() {
         setProgress({ current: index + 1, total: candidates.length, name: candidate.file.name });
 
         try {
+          // H2BICO: pontuar com o mesmo motor TFLite antes do diagnostico geométrico.
+          let precomputedH2BicoEmbedding: Float32Array | null = null;
+          if (isH2BicoBatch && candidate.h2bicoId && masterReferenceEmbedding && similarRuntime) {
+            precomputedH2BicoEmbedding = await similarRuntime.embedFile(candidate.file);
+            const fastScore = similarFaceScorePercent(cosineSimilarity512(masterReferenceEmbedding, precomputedH2BicoEmbedding));
+            if (!needsDetailedH2BicoAnalysis(fastScore)) {
+              nextResults.push({ id: candidate.id, name: candidate.file.name, preview: candidate.preview,
+                similarity: fastScore, reliability: null, referenceEngine: true,
+                warnings: ["Abaixo do limite de exibição (75%). Diagnóstico geométrico dispensado."],
+              });
+              if ((index + 1) % 10 === 0 || index === candidates.length - 1) setResults([...nextResults]);
+              continue;
+            }
+          }
           const candidateDetected = await detectFace(candidate.file);
           if (!candidateDetected) {
             nextResults.push({
@@ -842,7 +855,7 @@ export default function AdminSimilarity() {
           if (similarRuntime && masterReferenceEmbedding) {
             try {
               setProgress({ current: index + 1, total: candidates.length, name: `${candidate.file.name} • H2 Face` });
-              candidateReferenceEmbedding = await similarRuntime.embedFile(candidate.file);
+              candidateReferenceEmbedding = precomputedH2BicoEmbedding ?? await similarRuntime.embedFile(candidate.file);
               primaryCosine = cosineSimilarity512(masterReferenceEmbedding, candidateReferenceEmbedding);
               primaryScore = similarFaceScorePercent(primaryCosine);
               faceXGlobalScore = primaryScore;
@@ -1353,7 +1366,7 @@ export default function AdminSimilarity() {
               <div className="mt-4 rounded-xl border border-white/10 bg-black/20 p-3">
                 <div className="flex items-center justify-between gap-3 text-sm">
                   <span className="text-slate-400">{candidates.length} imagem(ns) pronta(s) para comparar</span>
-                  {results.length > 0 && <span className="text-[11px] font-bold text-cyan-300">{rankedResults.length} resultado(s) acima de 75%</span>}
+                  {results.length > 0 && <span className="text-[11px] font-bold text-cyan-300">{rankedResults.length} resultado(s) a partir de 75%</span>}
                 </div>
 
                 <div className="mt-3 grid gap-2 sm:grid-cols-3 lg:grid-cols-1 2xl:grid-cols-3">
@@ -1444,7 +1457,7 @@ export default function AdminSimilarity() {
             {results.length > 0 && rankedResults.length === 0 && !analyzing && (
               <div className="rounded-2xl border border-white/10 bg-white/[0.03] px-6 py-10 text-center">
                 <p className="text-xs font-bold uppercase tracking-[0.16em] text-cyan-300">Resultado final</p>
-                <h2 className="mt-2 text-2xl font-black text-white">Nenhum resultado acima de 75%</h2>
+                <h2 className="mt-2 text-2xl font-black text-white">Nenhum resultado a partir de 75%</h2>
                 <p className="mt-2 text-sm text-slate-400">A análise foi concluída, mas nenhum registro atingiu o limite mínimo de exibição.</p>
               </div>
             )}
@@ -1454,7 +1467,7 @@ export default function AdminSimilarity() {
                 <div className="flex flex-col gap-1 sm:flex-row sm:items-end sm:justify-between">
                   <div>
                     <p className="text-xs font-bold uppercase tracking-[0.16em] text-cyan-300">Ranking</p>
-                    <h2 className="text-xl font-black">Resultados acima de 75%</h2>
+                    <h2 className="text-xl font-black">Resultados a partir de 75%</h2>
                   </div>
                   <span className="rounded-full border border-cyan-400/20 bg-cyan-400/5 px-3 py-1 text-xs font-bold text-cyan-200">Exibindo somente 75% ou mais</span>
                 </div>
@@ -1462,7 +1475,7 @@ export default function AdminSimilarity() {
                 {rankedResults.map((result, index) => (
                   <article
                     key={result.id}
-                    className={`overflow-hidden rounded-2xl border ${shouldPulseSimilarity(result.similarity) ? "h2-result-pulse border-emerald-300/60 bg-emerald-500/[0.07]" : "border-white/10 bg-white/[0.035]"}`}
+                    className={`overflow-hidden rounded-2xl border ${shouldPulseSimilarity(result.similarity, result.reliability) ? "h2-result-pulse border-emerald-300/60 bg-emerald-500/[0.07]" : "border-white/10 bg-white/[0.035]"}`}
                   >
                     <div className="flex flex-col gap-4 p-4 sm:flex-row">
                       <div className="relative h-32 w-full shrink-0 overflow-hidden rounded-xl bg-black/40 sm:h-28 sm:w-28">
@@ -1478,10 +1491,10 @@ export default function AdminSimilarity() {
                               {formatScore(result.similarity)}
                             </p>
                             <p className="text-xs font-bold uppercase tracking-wide text-slate-500">{result.referenceEngine ? "H2 Face • motor principal" : result.faceXGlobalScore !== undefined ? "Índice H2 • escala própria" : `${scoreLabel(result.similarity)} semelhança facial`}</p>
-                            {shouldPulseSimilarity(result.similarity) && (
+                            {shouldPulseSimilarity(result.similarity, result.reliability) && (
                               <div className="mt-2 inline-flex items-center gap-1.5 rounded-full border border-emerald-300/40 bg-emerald-400/10 px-3 py-1 text-[11px] font-black uppercase tracking-wide text-emerald-200">
                                 <ShieldCheck className="h-3.5 w-3.5" />
-                                FOTO BOA PARA USAR
+                                SIMILARIDADE DESTACADA
                               </div>
                             )}
                           </div>
