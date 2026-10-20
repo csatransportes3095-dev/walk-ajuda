@@ -1,3 +1,4 @@
+import React from 'react';
 import { siteDirectoryFilters, type SiteDirectoryFilter } from '@shared/siteSecurityDirectory';
 
 export type SiteSecurityDirectoryControlsProps = {
