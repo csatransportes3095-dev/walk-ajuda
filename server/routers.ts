@@ -1479,7 +1479,8 @@ export const appRouter = router({
         audioDraftIds: z.array(z.string().uuid()).max(20).optional(),
         docNameMode: z.string().optional(),
         docCustomName: z.string().optional(),
-        price: z.string().optional(), // valor pago pelo cliente (ex: "R$ 350,00")
+        price: z.string().optional(), // valor final pago pelo cliente
+        originalPrice: z.string().optional(), // valor antes do cupom; servidor recalcula o desconto
         priceModelId: z.number().int().positive().optional(), // modelo/categoria de preço escolhido
         thirdPartyName: z.string().optional(), // nome do cliente final (revendedor)
         thirdPartyPhone: z.string().optional(), // telefone do cliente final (revendedor)
@@ -1590,6 +1591,53 @@ export const appRouter = router({
             input.resellerDiscountApplied = undefined;
             // O total do carrinho deve ser recomputado no cliente e validado pelo
             // servidor de cada item, sem aceitar um desconto complementar.
+          }
+
+          // Cupom: o servidor é a fonte oficial do valor final.
+          // Nunca confia no desconto calculado pelo navegador.
+          if (!globalPromotionOverridesIndividual(globalPromo) && input.couponCode) {
+            const couponCheck = await validateCoupon(input.couponCode);
+            if (!couponCheck.valid || !couponCheck.discountType || couponCheck.discountValue == null) {
+              return { success: false, message: couponCheck.reason || 'Cupom inválido ou indisponível.' };
+            }
+
+            const parseMoney = (value?: string | null) => {
+              if (!value) return 0;
+              const cleaned = String(value).replace(/[^0-9,.-]/g, '');
+              if (cleaned.includes(',')) return Number(cleaned.replace(/\./g, '').replace(',', '.')) || 0;
+              return Number(cleaned) || 0;
+            };
+            const formatMoney = (value: number) => `R$ ${Math.max(0, value).toFixed(2).replace('.', ',')}`;
+            const calcDiscount = (base: number) => {
+              if (base <= 0) return 0;
+              const raw = couponCheck.discountType === 'percentage'
+                ? base * Number(couponCheck.discountValue) / 100
+                : Number(couponCheck.discountValue);
+              return Math.min(base, Math.max(0, raw));
+            };
+
+            if (input.cartGroupId) {
+              const officialCartBase = Math.max(0, Number(input.cartTotal || 0));
+              if (officialCartBase <= 0) {
+                return { success: false, message: 'Não foi possível validar o total do carrinho para aplicar o cupom.' };
+              }
+              const officialDiscount = calcDiscount(officialCartBase);
+              input.cartTotal = officialCartBase;
+              input.cartCouponCode = input.couponCode.trim().toUpperCase();
+              input.cartCouponDiscount = officialDiscount;
+            } else {
+              const officialBase = parseMoney(input.originalPrice || input.price);
+              if (officialBase <= 0) {
+                return { success: false, message: 'Não foi possível validar o valor do pedido para aplicar o cupom.' };
+              }
+              const officialDiscount = calcDiscount(officialBase);
+              const officialFinal = Math.max(0, officialBase - officialDiscount);
+              input.price = formatMoney(officialFinal);
+              // Reutiliza os campos já existentes para o ADM exibir a composição do preço.
+              input.cartTotal = officialBase;
+              input.cartCouponCode = input.couponCode.trim().toUpperCase();
+              input.cartCouponDiscount = officialDiscount;
+            }
           }
 
           const emailTo = await getSetting('email_to') || 'h2@h2colombiano.com';
@@ -2088,7 +2136,13 @@ export const appRouter = router({
             } catch (e) { console.error('[Customer] Erro ao salvar dados do cliente:', e); }
           }
           if (input.couponCode) {
-            try { await consumeCoupon(input.couponCode, input.clientName); } catch (e) { console.error('[Coupon] Erro:', e); }
+            const isSingleOrder = !input.cartGroupId;
+            const isLastCartItem = !!input.cartGroupId
+              && Number(input.cartItemCount || 0) > 0
+              && Number(input.cartItemIndex ?? -1) === Number(input.cartItemCount) - 1;
+            if (isSingleOrder || isLastCartItem) {
+              try { await consumeCoupon(input.couponCode, input.clientName); } catch (e) { console.error('[Coupon] Erro:', e); }
+            }
           }
 
           // O acompanhamento usa exclusivamente customerPassword (senha universal).
