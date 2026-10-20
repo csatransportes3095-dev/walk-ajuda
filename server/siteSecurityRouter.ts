@@ -12,6 +12,7 @@ import { siteAccessConfig, siteAccessEntries, siteAccessAudit } from "./siteAcce
 import { attachSiteAccessProfilePhotos } from "./siteSecurityProfilePhotos";
 import { configuredActivationState, modeActivationFailure } from "./siteAccessActivation";
 import { addManualSiteAccess } from "./siteAccessManualAdd";
+import { loadSiteDirectory } from "./siteSecurityDirectory";
 
 export const SITE_ACCESS_MODE = ["public", "restricted", "blocked"] as const;
 export type SiteAccessMode = (typeof SITE_ACCESS_MODE)[number];
@@ -60,10 +61,10 @@ export const siteSecurityRouter = router({
     if (!entries.length) return [];
     const emails=[...new Set(entries.map(e=>e.email.trim().toLowerCase()))];
     const ids=[...new Set(entries.map(e=>e.customerId).filter((id):id is number=>id!==null))];
-    const matching=await db.select({id:customers.id,email:customers.email,profilePhotoUrl:customers.profilePhotoUrl,deletedAt:customers.deletedAt})
+    const matching=await db.select({id:customers.id,name:customers.name,phone:customers.phone,email:customers.email,profilePhotoUrl:customers.profilePhotoUrl,deletedAt:customers.deletedAt})
       .from(customers)
       .where(sql`(${ids.length?inArray(customers.id,ids):sql`FALSE`}) OR LOWER(TRIM(${customers.email})) IN (${sql.join(emails.map(x=>sql`${x}`),sql`,`)})`);
-    return attachSiteAccessProfilePhotos(entries,matching);
+    return loadSiteDirectory(db,attachSiteAccessProfilePhotos(entries,matching),matching);
   }),
 
   bulkCandidates: adminProcedure.input(z.object({filter:z.enum(siteBulkFilters).default("all"), search:z.string().max(160).default("")})).query(async ({ctx,input})=>{
