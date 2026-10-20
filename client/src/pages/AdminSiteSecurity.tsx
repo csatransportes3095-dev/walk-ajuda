@@ -4,6 +4,8 @@ import type { SiteBulkFilter } from "@shared/siteSecurityBulk";
 import { manualSiteAccessFeedback, manualSiteAccessErrorMessage } from "@shared/siteSecurityManualFeedback";
 import { indexFilteredSiteAccess } from "@shared/siteSecurityFilteredAccess";
 import { SiteSecurityFilteredCandidate } from "@/components/SiteSecurityFilteredCandidate";
+import { filterSiteDirectory, siteDirectoryRegistrationLabel, siteDirectoryAccessLabel, type SiteDirectoryFilter } from "@shared/siteSecurityDirectory";
+import { SiteSecurityDirectoryControls } from "@/components/SiteSecurityDirectoryControls";
 import { useLocation } from "wouter";
 import { ShieldCheck, ArrowLeft, UserPlus, Trash2, RefreshCcw, Image as ImageIcon, Expand, X } from "lucide-react";
 import { trpc } from "@/lib/trpc";
@@ -14,6 +16,9 @@ export default function AdminSiteSecurity() {
  const status=trpc.siteSecurity.status.useQuery(undefined,{retry:false,refetchOnWindowFocus:true});
  const people=trpc.siteSecurity.list.useQuery(undefined,{retry:false});
  const accessByEmail=useMemo(()=>indexFilteredSiteAccess(people.isError?[]:people.data??[]),[people.data,people.isError]);
+ const [directoryFilter,setDirectoryFilter]=useState<SiteDirectoryFilter>("all");
+ const [directorySearch,setDirectorySearch]=useState("");
+ const directoryPeople=useMemo(()=>filterSiteDirectory(people.isError?[]:people.data??[],directoryFilter,directorySearch),[people.data,people.isError,directoryFilter,directorySearch]);
  const utils=trpc.useUtils();
  const [name,setName]=useState("");const [email,setEmail]=useState("");const [phone,setPhone]=useState("");
  const setMode=trpc.siteSecurity.setMode.useMutation({onSuccess:()=>{void utils.siteSecurity.status.invalidate();toast.success("Modo atualizado.");},onError:e=>toast.error(e.message)});
@@ -121,14 +126,15 @@ export default function AdminSiteSecurity() {
    {bulkRunning&&<p role="status" className="text-sm text-yellow-200">Concluídos: {bulkProgress.done} / {bulkProgress.total} · Novos: {bulkProgress.added} · Já existentes: {bulkProgress.already}. Aguarde a finalização.</p>}
   </div>}
  </div>
- {people.isLoading?<p>Carregando lista...</p>:people.error?<p className="text-red-300">Não foi possível carregar as autorizações.</p>:people.data?.length===0?<p className="text-white/50 text-sm">Nenhuma pessoa autorizada cadastrada.</p>:(people.data||[]).map(p=><div key={p.id} className="rounded-xl bg-black/20 border border-white/10 p-3 flex flex-wrap justify-between items-center gap-3"><div className="flex items-center gap-3 min-w-0 flex-1">
+ <SiteSecurityDirectoryControls filter={directoryFilter} search={directorySearch} found={directoryPeople.length} total={people.data?.length??0} loading={people.isFetching} onFilter={setDirectoryFilter} onSearch={setDirectorySearch} onClear={()=>{setDirectorySearch("");setDirectoryFilter("all");}}/>
+ {people.isLoading?<p>Carregando lista...</p>:people.error?<p className="text-red-300">Não foi possível carregar as autorizações.</p>:people.data?.length===0?<p className="text-white/50 text-sm">Nenhuma pessoa autorizada cadastrada.</p>:directoryPeople.length===0?<p className="text-white/60 text-sm">Nenhuma autorização encontrada nessa busca.</p>:directoryPeople.map(p=><div key={p.id} className="rounded-xl bg-black/20 border border-white/10 p-3 flex flex-wrap justify-between items-center gap-3"><div className="flex items-center gap-3 min-w-0 flex-1">
  <div className="shrink-0">
  {p.profilePhotoUrl && !brokenPhotos.includes(p.profilePhotoUrl)?<button type="button" onClick={()=>setPhotoModal({url:p.profilePhotoUrl!,name:p.displayName})} aria-label={"Expandir foto de "+p.displayName} title="Ampliar foto" className="relative rounded-lg overflow-hidden border border-white/20 focus-visible:ring-2 focus-visible:ring-yellow-400 group">
   <img loading="lazy" src={p.profilePhotoUrl} onError={()=>setBrokenPhotos(prev=>[...prev,p.profilePhotoUrl!])} alt={"Foto de "+p.displayName} className="w-14 h-14 object-cover"/>
   <Expand size={13} className="absolute bottom-0.5 right-0.5 text-white drop-shadow-md" aria-hidden="true"/>
  </button>:<div aria-label="Foto não disponível" className="w-14 h-14 rounded-lg flex items-center justify-center bg-white/5 border border-white/15"><ImageIcon size={22} className="text-white/35"/></div>}
  </div>
- <div className="min-w-0"><p className="font-bold break-words">{p.displayName}</p><p className="text-xs text-white/55 break-all">{p.email} · {p.status}</p></div>
+ <div className="min-w-0"><p className="font-bold break-words">{p.displayName}</p><p className="text-xs text-white/55 break-all">{p.email} · {siteDirectoryAccessLabel(p)}</p><p className="text-xs text-yellow-200/80 break-words">{siteDirectoryRegistrationLabel(p)}</p>{(p.phone||p.registeredPhone)&&<p className="text-xs text-white/55 break-words">{p.phone||p.registeredPhone}</p>}</div>
  </div><div className="flex gap-2"><button disabled={change.isPending||bulkRunning||people.isFetching} onClick={()=>change.mutate({id:p.id,status:p.status==="active"?"suspended":"active"})} className="rounded-lg border border-white/20 p-2 text-xs">{p.status==="active"?"Suspender":"Reativar"}</button><button aria-label={"Remover "+p.displayName} onClick={()=>{if(window.confirm("Remover autorização?"))remove.mutate({id:p.id});}} className="rounded-lg border border-red-500/30 p-2 text-red-300"><Trash2 size={16}/></button></div></div>)}
  </section>
  {photoModal&&<div className="fixed inset-0 z-[100] flex items-center justify-center bg-black/85 p-4" role="presentation" onMouseDown={e=>{if(e.target===e.currentTarget)setPhotoModal(null)}}>
