@@ -5922,10 +5922,13 @@ export default function AdminOrders() {
                           )}
                         </div>
                         {!isCartGroup && order.cartCouponCode && order.cartTotal != null && order.cartCouponDiscount != null && Number(order.cartCouponDiscount) > 0 && (
-                          <div className="mt-1.5 inline-flex flex-wrap items-center gap-x-2 gap-y-1 rounded-lg border border-amber-400/50 bg-black/25 px-2.5 py-1.5 text-[11px]">
-                            <span className="text-white/70 line-through">R$ {Number(order.cartTotal).toFixed(2).replace('.', ',')}</span>
-                            <span className="font-bold text-amber-300">🏷️ {order.cartCouponCode}: -R$ {Number(order.cartCouponDiscount).toFixed(2).replace('.', ',')}</span>
-                            <span className="font-black text-green-300">= {order.pricePaid || `R$ ${Math.max(0, Number(order.cartTotal) - Number(order.cartCouponDiscount)).toFixed(2).replace('.', ',')}`}</span>
+                          <div className="mt-2 rounded-xl border-2 border-yellow-300 bg-black/55 px-3 py-2 shadow-[0_0_14px_rgba(250,204,21,0.55)]">
+                            <div className="text-[10px] font-black uppercase tracking-widest text-yellow-300 mb-1">🏷️ DESCONTO APLICADO</div>
+                            <div className="flex flex-wrap items-center gap-x-3 gap-y-1 text-sm">
+                              <span className="text-white/80">Original: <strong className="line-through">R$ {Number(order.cartTotal).toFixed(2).replace('.', ',')}</strong></span>
+                              <span className="font-black text-yellow-300">{order.cartCouponCode}: -R$ {Number(order.cartCouponDiscount).toFixed(2).replace('.', ',')}</span>
+                              <span className="font-black text-green-300">FINAL: {order.pricePaid || `R$ ${Math.max(0, Number(order.cartTotal) - Number(order.cartCouponDiscount)).toFixed(2).replace('.', ',')}`}</span>
+                            </div>
                           </div>
                         )}
                         {/* Bloco de carrinho: lista todos os produtos se for grupo de carrinho */}
