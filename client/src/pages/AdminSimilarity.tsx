@@ -1,6 +1,7 @@
 import { useEffect, useMemo, useRef, useState } from "react";
 import AdminHeader from "@/components/AdminHeader";
-import { AlertTriangle, ClipboardPaste, FolderOpen, ImagePlus, Play, RotateCcw, ScanFace, ShieldCheck, Trash2, X } from "lucide-react";
+import FacePhotoCropModal from "@/components/FacePhotoCropModal";
+import { AlertTriangle, Camera, ClipboardPaste, Crop, FolderOpen, ImagePlus, Play, RotateCcw, ScanFace, ShieldCheck, Trash2, X } from "lucide-react";
 import { toast } from "sonner";
 import { compareFaceGeometry, evaluateFaceGeometryQuality, type FaceLandmark, type RegionScores } from "@/lib/faceGeometry";
 import { createCanonicalFaceCanvases } from "@/lib/facePreprocess";
@@ -11,6 +12,8 @@ import { decideFaceMatch, type MatchVerdict } from "@/lib/faceMatchDecision";
 import { getCachedH2FaceModelBytes, loadH2FaceRuntimeFromBytes, loadH2FaceRuntimeFromUrls, type SimilarFaceRuntime } from "@/lib/similarFaceTfliteRuntime";
 import { cosineSimilarity512, similarFaceScorePercent } from "@/lib/similarFaceReference";
 import { trpc } from "@/lib/trpc";
+
+type FaceCropTarget = { kind: "master" } | { kind: "candidate"; id: string };
 
 type CandidatePhoto = {
   id: string;
@@ -337,12 +340,15 @@ const H2_LOGO = "/h2-brand-192.png";
 
 export default function AdminSimilarity() {
   const masterInputRef = useRef<HTMLInputElement>(null);
+  const masterCameraInputRef = useRef<HTMLInputElement>(null);
+  const candidateCameraInputRef = useRef<HTMLInputElement>(null);
   const filesInputRef = useRef<HTMLInputElement>(null);
   const folderInputRef = useRef<HTMLInputElement>(null);
 
   const [masterFile, setMasterFile] = useState<File | null>(null);
   const [masterPreview, setMasterPreview] = useState<string | null>(null);
   const [candidates, setCandidates] = useState<CandidatePhoto[]>([]);
+  const [cropTarget, setCropTarget] = useState<FaceCropTarget | null>(null);
   const [results, setResults] = useState<ComparisonResult[]>([]);
   const [pairwiseResults, setPairwiseResults] = useState<PairwiseResult[]>([]);
   const [analyzing, setAnalyzing] = useState(false);
@@ -456,6 +462,28 @@ export default function AdminSimilarity() {
     setMasterQuality(null);
     setResults([]);
     setPairwiseResults([]);
+  };
+
+  const cropFile = cropTarget?.kind === "master"
+    ? masterFile
+    : cropTarget?.kind === "candidate"
+      ? candidates.find((item) => item.id === cropTarget.id)?.file ?? null
+      : null;
+
+  const handleCropConfirm = (croppedFile: File) => {
+    if (!cropTarget) return;
+    if (cropTarget.kind === "master") {
+      setMaster(croppedFile);
+    } else {
+      setCandidates((current) => current.map((candidate) => {
+        if (candidate.id !== cropTarget.id) return candidate;
+        URL.revokeObjectURL(candidate.preview);
+        return { ...candidate, file: croppedFile, preview: URL.createObjectURL(croppedFile) };
+      }));
+      setResults([]);
+      setPairwiseResults([]);
+    }
+    setCropTarget(null);
   };
 
   const loadH2BicoCandidates = async () => {
@@ -1171,6 +1199,38 @@ export default function AdminSimilarity() {
                 }}
               />
 
+              <div className="mt-2 flex flex-wrap gap-2">
+                <button
+                  type="button"
+                  disabled={analyzing}
+                  onClick={() => masterCameraInputRef.current?.click()}
+                  className="inline-flex items-center gap-2 rounded-lg border border-cyan-400/25 px-3 py-2 text-xs font-bold text-cyan-200 hover:bg-cyan-400/10 disabled:opacity-40"
+                >
+                  <Camera className="h-4 w-4" /> Tirar foto
+                </button>
+                {masterFile && (
+                  <button
+                    type="button"
+                    disabled={analyzing}
+                    onClick={() => setCropTarget({ kind: "master" })}
+                    className="inline-flex items-center gap-2 rounded-lg border border-amber-400/25 px-3 py-2 text-xs font-bold text-amber-200 hover:bg-amber-400/10 disabled:opacity-40"
+                  >
+                    <Crop className="h-4 w-4" /> Recortar rosto
+                  </button>
+                )}
+              </div>
+              <input
+                ref={masterCameraInputRef}
+                type="file"
+                accept="image/jpeg,image/png,image/webp"
+                capture="user"
+                className="hidden"
+                onChange={(event) => {
+                  setMaster(event.currentTarget.files?.[0]);
+                  event.currentTarget.value = "";
+                }}
+              />
+
               {masterQuality && (
                 <div className="mt-3 rounded-xl border border-white/10 bg-black/25 p-3 text-sm">
                   <div className="flex items-center justify-between">
@@ -1245,6 +1305,15 @@ export default function AdminSimilarity() {
                 </button>
               </div>
 
+              <button
+                type="button"
+                disabled={analyzing}
+                onClick={() => candidateCameraInputRef.current?.click()}
+                className="mt-2 inline-flex items-center gap-2 rounded-lg border border-cyan-400/25 px-3 py-2 text-xs font-bold text-cyan-200 hover:bg-cyan-400/10 disabled:opacity-40"
+              >
+                <Camera className="h-4 w-4" /> Câmera para comparar
+              </button>
+
               <input
                 ref={filesInputRef}
                 type="file"
@@ -1266,6 +1335,18 @@ export default function AdminSimilarity() {
                 onChange={(e) => {
                   if (e.target.files) addFiles(e.target.files);
                   e.currentTarget.value = "";
+                }}
+              />
+
+              <input
+                ref={candidateCameraInputRef}
+                type="file"
+                accept="image/jpeg,image/png,image/webp"
+                capture="user"
+                className="hidden"
+                onChange={(event) => {
+                  if (event.currentTarget.files) addFiles(event.currentTarget.files);
+                  event.currentTarget.value = "";
                 }}
               />
 
@@ -1343,6 +1424,15 @@ export default function AdminSimilarity() {
                         className="absolute right-2 top-2 rounded-lg bg-black/70 p-1.5 text-white opacity-80 hover:bg-red-600"
                       >
                         <X className="h-3.5 w-3.5" />
+                      </button>
+                      <button
+                        type="button"
+                        disabled={analyzing}
+                        onClick={() => setCropTarget({ kind: "candidate", id: candidate.id })}
+                        className="absolute bottom-10 right-2 inline-flex items-center gap-1 rounded-md border border-cyan-400/25 bg-black/80 px-2 py-1 text-[10px] font-bold text-cyan-100 hover:bg-cyan-700 disabled:opacity-40"
+                        title="Recortar esta foto antes de comparar"
+                      >
+                        <Crop className="h-3 w-3" /> Recortar
                       </button>
                       <p className="truncate px-2 py-2 text-[11px] text-slate-300">{candidate.file.name}</p>
                     </div>
@@ -1600,6 +1690,13 @@ export default function AdminSimilarity() {
         </section>
         </main>
       </div>
+      {cropFile && (
+        <FacePhotoCropModal
+          file={cropFile}
+          onCancel={() => setCropTarget(null)}
+          onConfirm={handleCropConfirm}
+        />
+      )}
     </div>
   );
 }
