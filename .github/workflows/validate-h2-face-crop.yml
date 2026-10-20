@@ -1,0 +1,46 @@
+name: Validate H2 Face capture and crop
+
+on:
+  push:
+    branches:
+      - feat/h2-face-captura-recorte-20261020
+    paths:
+      - "client/src/pages/AdminSimilarity.tsx"
+      - "client/src/components/FacePhotoCropModal.tsx"
+      - "client/src/lib/facePhotoCropMath.ts"
+      - "client/src/lib/facePhotoCropMath.test.ts"
+      - ".github/workflows/validate-h2-face-crop.yml"
+  pull_request:
+    branches:
+      - recovery/organizar-salvos-2026-08-24
+    paths:
+      - "client/src/pages/AdminSimilarity.tsx"
+      - "client/src/components/FacePhotoCropModal.tsx"
+      - "client/src/lib/facePhotoCropMath.ts"
+      - "client/src/lib/facePhotoCropMath.test.ts"
+
+permissions:
+  contents: read
+
+jobs:
+  validate:
+    runs-on: ubuntu-latest
+    timeout-minutes: 30
+    steps:
+      - name: Checkout source
+        uses: actions/checkout@v4
+      - name: Setup pnpm
+        uses: pnpm/action-setup@v4
+      - name: Setup Node 22
+        uses: actions/setup-node@v4
+        with:
+          node-version: "22"
+          cache: pnpm
+      - name: Install dependencies
+        run: pnpm install --frozen-lockfile
+      - name: Validate face crop and existing facial comparison tests
+        run: pnpm exec vitest run client/src/lib/facePhotoCropMath.test.ts client/src/lib/faceMatchDecision.test.ts client/src/lib/faceQuality.test.ts client/src/lib/facePreprocess.test.ts server/similarFaceReference.test.ts
+      - name: Build production bundle
+        run: pnpm build
+      - name: Typecheck
+        run: pnpm check
