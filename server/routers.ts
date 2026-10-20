@@ -2102,18 +2102,39 @@ export const appRouter = router({
                   })));
                   await deleteQuestionAudioDrafts(audioDraftsForOrder.map(draft => draft.id));
                 }
-                // Salvar thirdPartyName, resellerDiscountApplied e campos de carrinho no registro do pedido
-                const hasExtraFields = input.thirdPartyName || input.resellerDiscountApplied || input.cartGroupId || input.cartTotal !== undefined || input.cartCouponCode || input.cartCouponDiscount !== undefined || input.cartItemIndex !== undefined;
-                if (hasExtraFields) {
+                // Persistência crítica de preço/cupom fica isolada dos campos opcionais.
+                // Uma falha em revendedor nunca mais pode apagar o histórico do desconto.
+                const hasPricingAudit = input.cartGroupId || input.cartTotal !== undefined || input.cartCouponCode || input.cartCouponDiscount !== undefined || input.cartItemIndex !== undefined;
+                if (hasPricingAudit) {
                   try {
                     const cartGroupIdSql = input.cartGroupId ? `'${input.cartGroupId.replace(/'/g, "''")}'` : 'NULL';
                     const cartTotalSql = input.cartTotal !== undefined ? String(input.cartTotal) : 'NULL';
                     const cartCouponCodeSql = input.cartCouponCode ? `'${input.cartCouponCode.replace(/'/g, "''")}'` : 'NULL';
                     const cartCouponDiscountSql = input.cartCouponDiscount !== undefined ? String(input.cartCouponDiscount) : 'NULL';
                     const cartItemIndexSql = input.cartItemIndex !== undefined ? String(input.cartItemIndex) : '0';
+                    await db2.execute(`UPDATE accessCodePhones SET cartGroupId = ${cartGroupIdSql}, cartTotal = ${cartTotalSql}, cartCouponCode = ${cartCouponCodeSql}, cartCouponDiscount = ${cartCouponDiscountSql}, cartItemIndex = ${cartItemIndexSql} WHERE id = ${regId}`);
+                    console.log('[CouponAudit] preço/cupom persistidos', {
+                      registrationId: regId,
+                      orderNumber: orderNum,
+                      cartTotal: input.cartTotal ?? null,
+                      couponCode: input.cartCouponCode ?? null,
+                      couponDiscount: input.cartCouponDiscount ?? null,
+                      pricePaid: input.price ?? null,
+                    });
+                  } catch (e) {
+                    console.error('[CouponAudit] FALHA CRÍTICA ao salvar preço/cupom:', e);
+                  }
+                }
+
+                const hasResellerFields = input.thirdPartyName || input.thirdPartyPhone || input.resellerDiscountApplied !== undefined;
+                if (hasResellerFields) {
+                  try {
+                    const thirdPartyNameSql = input.thirdPartyName ? `'${input.thirdPartyName.replace(/'/g, "''")}'` : 'NULL';
                     const thirdPartyPhoneSql = input.thirdPartyPhone ? `'${input.thirdPartyPhone.replace(/'/g, "''")}'` : 'NULL';
-                    await db2.execute(`UPDATE accessCodePhones SET thirdPartyName = ${input.thirdPartyName ? `'${input.thirdPartyName.replace(/'/g, "''")}'` : 'NULL'}, thirdPartyPhone = ${thirdPartyPhoneSql}, resellerDiscountApplied = ${input.resellerDiscountApplied ?? 'NULL'}, cartGroupId = ${cartGroupIdSql}, cartTotal = ${cartTotalSql}, cartCouponCode = ${cartCouponCodeSql}, cartCouponDiscount = ${cartCouponDiscountSql}, cartItemIndex = ${cartItemIndexSql} WHERE id = ${regId}`);
-                  } catch (e) { console.error('[Cart] Erro ao salvar dados de carrinho/revendedor:', e); }
+                    await db2.execute(`UPDATE accessCodePhones SET thirdPartyName = ${thirdPartyNameSql}, thirdPartyPhone = ${thirdPartyPhoneSql}, resellerDiscountApplied = ${input.resellerDiscountApplied ?? 'NULL'} WHERE id = ${regId}`);
+                  } catch (e) {
+                    console.error('[Reseller] Erro ao salvar dados opcionais do revendedor:', e);
+                  }
                 }
 
           await notifyOnlyAfterPersistence(persistedOrder, notifyAdminAfterPersistence);
