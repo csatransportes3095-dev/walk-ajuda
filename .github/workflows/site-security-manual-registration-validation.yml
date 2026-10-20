@@ -1,7 +1,7 @@
 name: Site security manual authorization
 on:
   push:
-    branches: [fix/site-security-manual-registration-20261019, fix/site-security-filter-suspend-20261019]
+    branches: [fix/site-security-manual-registration-20261019, fix/site-security-filter-suspend-20261019, feature/site-security-authorizations-directory-20261019]
   pull_request:
     branches: [recovery/organizar-salvos-2026-08-24]
     paths:
@@ -12,6 +12,9 @@ on:
       - 'client/src/components/SiteSecurityFilteredCandidate.tsx'
       - 'shared/siteSecurityFilteredAccess.ts'
       - 'server/siteSecurityFilteredActions.test.ts'
+      - 'client/src/components/SiteSecurityDirectoryControls.tsx'
+      - 'shared/siteSecurityDirectory.ts'
+      - 'server/siteSecurityDirectory*'
       - '.github/workflows/site-security-manual-registration-validation.yml'
 permissions:
   contents: read
@@ -62,31 +65,30 @@ jobs:
           const db=await createConnection(process.env.SITE_ACCESS_TEST_DB_URL);
           try{await db.query('CREATE DATABASE IF NOT EXISTS h2_bulk_test');}finally{await db.end();}
           JS
-      - name: Confirm filter actions leave server, manual registration and remaining layout unchanged
+      - name: Confirm only directory reads and its list presentation changed
         run: |
           node --input-type=module <<'JS'
           import fs from 'node:fs';
           import assert from 'node:assert/strict';
           import {execFileSync} from 'node:child_process';
-          const base='6b968019fe3650c543ac977302cc851f4bd78d86';
+          const base='f43add9ede2f63b698ddb944841381381bab496a';
           const before=p=>execFileSync('git',['show',base+':'+p],{encoding:'utf8'});
           const read=p=>fs.readFileSync(p,'utf8');
-          for(const p of ['server/siteSecurityRouter.ts','server/siteAccessManualAdd.ts','shared/siteSecurityManualFeedback.ts','server/siteAccessSchema.ts','server/siteAccessIdentity.ts','server/autoSchedule.ts','server/routers/schedule.ts','server/_core/trpc.ts','server/_core/sendMailDirect.ts','server/db.ts','shared/siteSecurityBulk.ts','client/src/pages/OrderTracking.tsx','Dockerfile','package.json','pnpm-lock.yaml']) {
+          for(const p of ['server/siteAccessManualAdd.ts','shared/siteSecurityManualFeedback.ts','server/siteAccessSchema.ts','server/siteAccessIdentity.ts','server/autoSchedule.ts','server/routers/schedule.ts','server/_core/trpc.ts','server/_core/sendMailDirect.ts','server/db.ts','shared/siteSecurityBulk.ts','shared/siteSecurityFilteredAccess.ts','server/siteSecurityProfilePhotos.ts','client/src/components/SiteSecurityFilteredCandidate.tsx','client/src/pages/OrderTracking.tsx','Dockerfile','package.json','pnpm-lock.yaml']) {
             assert.equal(read(p),before(p),p+' unexpectedly changed');
           }
+          const stripRouter=s=>s.replace(/^import \{ loadSiteDirectory \} from "\.\/siteSecurityDirectory";\r?\n/m,'').replace(/  list: adminProcedure[\s\S]*?(?=  bulkCandidates:)/,'');
+          assert.equal(stripRouter(read('server/siteSecurityRouter.ts')),stripRouter(before('server/siteSecurityRouter.ts')),'Mutation or permission code changed');
           const stripUi=s=>s
-            .replace('import { useMemo, useState } from "react";','import { useState } from "react";')
-            .replace('import { splitSiteBulkBatches, siteBulkEmail } from "@shared/siteSecurityBulk";','import { splitSiteBulkBatches } from "@shared/siteSecurityBulk";')
-            .replace(/^import \{ indexFilteredSiteAccess \} from "@shared\/siteSecurityFilteredAccess";\r?\n/m,'')
-            .replace(/^import \{ SiteSecurityFilteredCandidate \} from "@\/components\/SiteSecurityFilteredCandidate";\r?\n/m,'')
-            .replace(/^ const accessByEmail=.*\r?\n/m,'')
-            .replace(/ const change=trpc\.siteSecurity\.changeStatus\.useMutation\([\s\S]*?(?= const remove=)/,'')
-            .replace(/    \{candidates\.map\(c=>[\s\S]*?(?=    \{!bulk\.isLoading)/,'')
-            .replace(' disabled={change.isPending||bulkRunning||people.isFetching}','');
-          assert.equal(stripUi(read('client/src/pages/AdminSiteSecurity.tsx')),stripUi(before('client/src/pages/AdminSiteSecurity.tsx')),'UI changed outside filtered rows/status feedback');
-          console.log('PASS: entire server, permissions, manual registration, OTP/session, bulk persistence, scheduling and layout outside filtered actions unchanged.');
+            .replace(/^import .* from "(?:@shared\/siteSecurityDirectory|@\/components\/SiteSecurityDirectoryControls)";\r?\n/gm,'')
+            .replace(/^ const \[directory(?:Filter|Search),.*\r?\n/gm,'')
+            .replace(/^ const directoryPeople=.*\r?\n/m,'')
+            .replace(/^ <SiteSecurityDirectoryControls .*\r?\n/m,'')
+            .replace(/ \{people\.isLoading\?[\s\S]*?(?=\n <\/section>\n \{photoModal)/,'');
+          assert.equal(stripUi(read('client/src/pages/AdminSiteSecurity.tsx')),stripUi(before('client/src/pages/AdminSiteSecurity.tsx')),'UI outside directory state/list changed');
+          console.log('PASS: only list metadata, independent search and directory row presentation changed. All writes, permissions, OTP, schema, bulk operations and scheduling preserved.');
           JS
-      - name: Filter actions, real MySQL duplicate submission and security regressions
+      - name: Directory, filter actions, isolated MySQL and security regressions
         run: |
           set -o pipefail
           mapfile -t tests < <(find server -maxdepth 1 -type f -name 'site*.test.ts' | sort)
