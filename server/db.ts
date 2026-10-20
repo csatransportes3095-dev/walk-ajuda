@@ -343,8 +343,16 @@ async function ensureCouponScheduleInfrastructure(): Promise<void> {
       try {
         await db.execute(sql`ALTER TABLE coupons ADD COLUMN startsAt TIMESTAMP NULL AFTER currentUses`);
       } catch (error) {
-        const mysqlError = error as { code?: string; errno?: number };
-        if (mysqlError.code !== 'ER_DUP_FIELDNAME' && mysqlError.errno !== 1060) throw error;
+        // drizzle-orm pode encapsular o erro do mysql em `cause`.
+        // Coluna já existente é estado válido e não pode derrubar listagem/criação.
+        const outer = error as { code?: string; errno?: number; cause?: unknown };
+        const cause = (outer?.cause || {}) as { code?: string; errno?: number };
+        const code = outer?.code || cause?.code;
+        const errno = outer?.errno || cause?.errno;
+        if (code !== 'ER_DUP_FIELDNAME' && errno !== 1060) {
+          console.error('[coupons] Falha ao garantir coluna startsAt:', error);
+          throw error;
+        }
       }
     })().catch((error) => {
       couponScheduleInfrastructurePromise = null;
