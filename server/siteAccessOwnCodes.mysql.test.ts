@@ -8,7 +8,7 @@ import { createHmac } from 'node:crypto';
 import { registerSiteIdentity } from './siteAccessIdentity';
 import { createSiteAccessGateway } from './siteAccessGateway';
 import { ensureOwnSiteCodeStore, reserveOwnSiteCode, finishOwnSiteCodeDelivery, consumeOwnSiteCode, readOwnSiteSession, ownCodeFingerprint, generateOwnSiteCode } from './siteAccessOwnCodes';
-import { SITE_ACCESS_LIFETIME_MS, validSiteCode } from '../shared/siteAccessCodePolicy';
+import { SITE_ACCESS_LIFETIME_MS, SITE_ACCESS_DENIED_CODE, SITE_ACCESS_DENIED_MESSAGE, validSiteCode } from '../shared/siteAccessCodePolicy';
 
 const url=process.env.SITE_CODE_TEST_DB_URL;
 describe.skipIf(!url)('own site codes: isolated MySQL, actual HTTP routes and gateway',()=>{
@@ -30,7 +30,7 @@ describe.skipIf(!url)('own site codes: isolated MySQL, actual HTTP routes and ga
   const request=(value:any=email,headers:Record<string,string>={})=>call('/api/site-access/request',{email:value},headers);
   const verify=(code:string,value=email)=>call('/api/site-access/verify',{email:value,code});
   const session=(cookie:string)=>call('/api/site-access/session',{}, {cookie},'GET');
-  async function issue(value=email){const response=await request(value);expect(response.status).toBe(200);expect(response.body.codeLength).toBe(6);const code=delivery.mock.calls.at(-1)![1] as string;expect(code).toMatch(/^[0-9]{6}$/);return code;}
+  async function issue(value=email){const response=await request(value);expect(response.status).toBe(200);expect(response.body).toMatchObject({ok:true,codeSent:true,codeLength:6,message:'Código enviado. Confira a caixa de entrada e o spam.'});const code=delivery.mock.calls.at(-1)![1] as string;expect(code).toMatch(/^[0-9]{6}$/);return code;}
   async function login(value=email){const code=await issue(value);const result=await verify(code,value);expect(result.status).toBe(200);return {code,result,cookie:result.headers['set-cookie']![0].split(';')[0]};}
   beforeAll(async()=>{
     const parsed=new URL(url!);
@@ -102,14 +102,40 @@ describe.skipIf(!url)('own site codes: isolated MySQL, actual HTTP routes and ga
     const response=await request();expect(response.headers['set-cookie']).toBeUndefined();expect(response.body).not.toHaveProperty('code');
     expect((await call('/private-probe',{}, {},'GET')).status).toBe(302);
   });
-  it.each(['unknown@example.test','suspended@example.test','expired@example.test'])('does not issue for %s and does not enumerate approval',async value=>{
-    const response=await request(value);expect(response.status).toBe(200);expect(response.body.message).toContain('Se este e-mail');
+  it.each(['unknown@example.test','suspended@example.test','expired@example.test'])('explicitly refuses %s on repeated attempts without issuing a code or session',async value=>{
+    for(let attempt=0;attempt<8;attempt++){
+      const response=await request(value);
+      expect(response.status).toBe(403);
+      expect(response.body).toEqual({ok:false,code:SITE_ACCESS_DENIED_CODE,error:SITE_ACCESS_DENIED_MESSAGE});
+      expect(response.headers['retry-after']).toBeUndefined();expect(response.headers['set-cookie']).toBeUndefined();
+    }
     expect(delivery).not.toHaveBeenCalled();expect(await query('SELECT * FROM siteAccessCodeLedgerV2')).toHaveLength(0);
+    expect(await query('SELECT * FROM siteAccessSessionsV2')).toHaveLength(0);
+    // Denied attempts must not consume the email quota or the resend cooldown.
+    await query("INSERT INTO siteAccessEntries (email,status,sessionVersion,expiresAt) VALUES (?,'active',1,NULL) ON DUPLICATE KEY UPDATE status='active',expiresAt=NULL,sessionVersion=sessionVersion+1",[value]);
+    await issue(value);expect(delivery).toHaveBeenCalledTimes(1);
+  });
+  it.each(['unknown@example.test','suspended@example.test','expired@example.test'])('checks %s before even calling the code generator',async value=>{
+    const generator=vi.fn(()=> '012345');
+    expect(await reserveOwnSiteCode(db,value,now,generator)).toBeNull();
+    expect(generator).not.toHaveBeenCalled();expect(await query('SELECT * FROM siteAccessCodeLedgerV2')).toHaveLength(0);
   });
   it.each(['invalid','',null,{}])('rejects malformed email %j',async value=>{expect((await request(value)).status).toBe(400);expect(delivery).not.toHaveBeenCalled();});
   it.each(['','https://evil.example.test','http://h2colombiano.com'])('rejects foreign/missing origin %s',async origin=>{expect((await request(email,{origin})).status).toBe(403);expect(delivery).not.toHaveBeenCalled();});
   it('returns an explicit retry time instead of pretending a second email was sent',async()=>{
     await issue();const response=await request();expect(response.status).toBe(429);expect(response.body.retryAfter).toBe(60);expect(response.headers['retry-after']).toBe('60');expect(delivery).toHaveBeenCalledTimes(1);
+  });
+  it('reports revoked authorization even during the existing resend cooldown',async()=>{
+    const code=await issue();now+=1000;
+    await query("UPDATE siteAccessEntries SET status='suspended',sessionVersion=sessionVersion+1 WHERE id=1");
+    for(const advance of [0,60000]){
+      now+=advance;const response=await request();
+      expect(response.status).toBe(403);
+      expect(response.body).toEqual({ok:false,code:SITE_ACCESS_DENIED_CODE,error:SITE_ACCESS_DENIED_MESSAGE});
+      expect(response.headers['retry-after']).toBeUndefined();expect(response.headers['set-cookie']).toBeUndefined();
+    }
+    expect(delivery).toHaveBeenCalledTimes(1);expect(await query('SELECT * FROM siteAccessCodeLedgerV2')).toHaveLength(1);
+    expect((await verify(code)).status).toBe(401);expect(await query('SELECT * FROM siteAccessSessionsV2')).toHaveLength(0);
   });
   it('allows another authorized email behind the same reverse proxy',async()=>{await issue();await issue(other);expect(delivery).toHaveBeenCalledTimes(2);});
   it('generates a fresh code after the resend interval',async()=>{

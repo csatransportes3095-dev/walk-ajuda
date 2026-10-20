@@ -88,6 +88,10 @@ async function personForEmail(db: Executor, email: string, lock=false): Promise<
   // Do not guess which authorization applies if a legacy database has ambiguous duplicates.
   return found.length===1?found[0]:undefined;
 }
+/** Check authorization before applying resend limits; reservation still rechecks under a lock. */
+export async function isOwnSiteEmailAuthorized(db: Db, email: string, now=Date.now()): Promise<boolean> {
+  return active(await personForEmail(db,email.trim().toLowerCase()),now);
+}
 /** Returns seconds until the fixed window resets, or zero when allowed. No sliding lockout. */
 export async function takeOwnSiteLimit(db: Db, key: string, max: number, windowMs: number, now=Date.now()): Promise<number> {
   await ensureOwnSiteCodeStore(db);
@@ -107,13 +111,13 @@ export async function reserveOwnSiteCode(db: Db, email: string, now=Date.now(), 
   const normalized=email.trim().toLowerCase();
   const emailKey=ownSiteHash('email:'+normalized);
   for (let attempt=0;attempt<8;attempt++) {
-    const code=generator();
-    if (!validSiteCode(code)) throw new Error('SITE_GENERATOR_INVALID_OUTPUT');
-    const fingerprint=ownCodeFingerprint(code);
     try {
       return await db.transaction(async tx=>{
         const person=await personForEmail(tx,normalized,true);
         if (!active(person,now)) return null;
+        const code=generator();
+        if (!validSiteCode(code)) throw new Error('SITE_GENERATOR_INVALID_OUTPUT');
+        const fingerprint=ownCodeFingerprint(code);
         const expiresAt=Math.min(now+SITE_CODE_LIFETIME_MS,person.expiresMs===null?Infinity:Number(person.expiresMs));
         await tx.execute(sql`INSERT INTO siteAccessCodeLedgerV2
           (fingerprint,emailKey,accessId,sessionVersion,codeHash,issuedAt,expiresAt,attempts,deliveryState)

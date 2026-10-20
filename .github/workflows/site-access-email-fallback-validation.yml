@@ -56,21 +56,41 @@ jobs:
           const db=await createConnection(process.env.SITE_ACCESS_TEST_DB_URL);
           try{await db.query('CREATE DATABASE IF NOT EXISTS h2_bulk_test');await db.query('CREATE DATABASE IF NOT EXISTS h2_site_code_test');}finally{await db.end();}
           JS
-      - name: Protect uniqueness, sessions, scheduling and delivery configuration
+      - name: Protect code generation, sessions, scheduling and delivery configuration
         run: |
           node --input-type=module <<'JS'
           import fs from 'node:fs';
           import assert from 'node:assert/strict';
           import {execFileSync} from 'node:child_process';
-          const base='2aec97a17e975306072684e8773cd6c369da7a03';
+          import ts from 'typescript';
+          const base='0183a51750d3556cb4d2b345e29af57f7931c32d';
           const before=p=>execFileSync('git',['show',base+':'+p],{encoding:'utf8'});
           const read=p=>fs.readFileSync(p,'utf8');
-          for(const p of ['server/siteAccessOwnCodes.ts','server/siteSecurityRouter.ts','server/siteAccessSchema.ts','server/siteAccessGateway.ts','server/siteAccessPolicy.ts','server/siteAccessManualAdd.ts','server/siteSecurityDirectory.ts','server/autoSchedule.ts','server/routers/schedule.ts','server/routers/customerPassword.ts','server/_core/trpc.ts','server/_core/mailer.ts','server/_core/sendMailDirect.ts','server/db.ts','client/src/pages/AdminSiteSecurity.tsx','client/src/pages/OrderTracking.tsx','client/src/App.tsx','client/src/main.tsx','client/src/components/SiteAccessSessionBoundary.tsx','client/src/lib/siteAccessSessionClient.ts','Dockerfile','package.json','pnpm-lock.yaml'])assert.equal(read(p),before(p),p+' unexpectedly changed');
-          const identity=s=>s.replace('SITE_CODE_LENGTH, ','').replace(/codeLength:(?:12|SITE_CODE_LENGTH)/g,'codeLength:EXPECTED');
-          assert.equal(identity(read('server/siteAccessIdentity.ts')),identity(before('server/siteAccessIdentity.ts')),'Identity changed outside size metadata');
-          const delivery=s=>s.replace(/12 caracteres|6 números/g,'EXPECTED');
-          assert.equal(delivery(read('server/siteAccessCodeDelivery.ts')),delivery(before('server/siteAccessCodeDelivery.ts')),'Delivery changed outside code instructions');
-          console.log('PASS: only numeric format, code field, API size metadata and email instructions changed; persistence, uniqueness, sessions, limits, transport and other operations unchanged.');
+          for(const p of ['server/siteAccessCodeDelivery.ts','server/siteSecurityRouter.ts','server/siteAccessSchema.ts','server/siteAccessGateway.ts','server/siteAccessPolicy.ts','server/siteAccessManualAdd.ts','server/siteSecurityDirectory.ts','server/autoSchedule.ts','server/routers/schedule.ts','server/routers/customerPassword.ts','server/_core/trpc.ts','server/_core/mailer.ts','server/_core/sendMailDirect.ts','server/db.ts','client/src/pages/AdminSiteSecurity.tsx','client/src/pages/OrderTracking.tsx','client/src/App.tsx','client/src/main.tsx','client/src/components/SiteAccessSessionBoundary.tsx','client/src/lib/siteAccessSessionClient.ts','Dockerfile','package.json','pnpm-lock.yaml'])assert.equal(read(p),before(p),p+' unexpectedly changed');
+          const parse=(p,source)=>ts.createSourceFile(p,source,ts.ScriptTarget.Latest,true);
+          const functions=(p,source)=>new Map(parse(p,source).statements.filter(ts.isFunctionDeclaration).map(node=>[node.name?.text,node.getText()]));
+          for(const [p,names] of [
+            ['server/siteAccessOwnCodes.ts',['secret','ownSiteHash','ownCodeFingerprint','generateOwnSiteCode','ownSiteErrorCode','rows','ensureOwnSiteCodeStore','active','personForEmail','takeOwnSiteLimit','finishOwnSiteCodeDelivery','consumeOwnSiteCode','readOwnSiteSession','revokeOwnSiteSession']],
+            ['server/siteAccessIdentity.ts',['isSiteAccessEmail','isSameOriginSiteRequest','tokenFrom','ownerSession','authorizedSiteVisitor','noStore','limited','failure']],
+          ]){
+            const previous=functions(p,before(p)),current=functions(p,read(p));
+            for(const name of names){assert(previous.has(name)&&current.has(name),p+' missing '+name);assert.equal(current.get(name),previous.get(name),p+' changed '+name);}
+          }
+          const protectedRoutes=source=>{
+            const found=new Map(),file=parse('identity.ts',source);
+            const visit=node=>{
+              if(ts.isCallExpression(node)&&/^app\.(post|get)$/.test(node.expression.getText())&&ts.isStringLiteral(node.arguments[0])){
+                const route=node.arguments[0].text;
+                if(['/api/site-access/verify','/api/site-access/session','/api/site-access/logout'].includes(route)){assert(!found.has(route),'Duplicate protected route');found.set(route,node.getText());}
+              }
+              ts.forEachChild(node,visit);
+            };
+            visit(file);assert.equal(found.size,3);return found;
+          };
+          assert.deepEqual(protectedRoutes(read('server/siteAccessIdentity.ts')),protectedRoutes(before('server/siteAccessIdentity.ts')),'Verification or session routes changed');
+          const withoutDenial=source=>source.replace(/^export const SITE_ACCESS_DENIED_(?:CODE|MESSAGE) = .*;\r?\n/gm,'').trimEnd();
+          assert.equal(withoutDenial(read('shared/siteAccessCodePolicy.ts')),before('shared/siteAccessCodePolicy.ts').trimEnd(),'Code format or lifetime changed');
+          console.log('PASS: authorization request changes preserve the generator, ledger schema, rate-limit algorithm, verification, sessions, delivery transport and unrelated operations.');
           JS
       - name: Test six-digit lifecycle and all site regressions
         run: |
