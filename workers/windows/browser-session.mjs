@@ -568,6 +568,16 @@ async function run() {
       }
     }
     writeSession({ extensionSyncStatus, extensionPreparedCount: globalExtensionPaths.length, extensionSyncAt: new Date().toISOString() });
+    let startupSites = [];
+    try {
+      const response = await fetch(panelUrl.replace(/\/$/, "") + "/api/h2ads/worker/startup-sites", { headers: headers(), signal: AbortSignal.timeout(10000) });
+      if (response.ok) {
+        const urls = await response.json();
+        if (Array.isArray(urls)) startupSites = urls.filter(url => typeof url === "string" && url.startsWith("https://") && url.length <= 500).slice(0, 20);
+      }
+    } catch (error) {
+      console.error("[H2ADS] sites iniciais indisponiveis:", String(error?.message || error));
+    }
     const labelPageUrl = createInstanceLabelPage();
     const privacyGuardExtension = createGoogleSorryPrivacyGuard();
     browser = spawn(executable, [
@@ -575,7 +585,7 @@ async function run() {
       ...(mobileRemoteRequested ? ["--remote-debugging-pipe"] : []),
       "--user-data-dir=" + profileDirectory, "--proxy-server=http://127.0.0.1:" + relayPort, "--proxy-bypass-list=<-loopback>",
       "--disable-quic", "--dns-prefetch-disable", "--force-webrtc-ip-handling-policy=disable_non_proxied_udp",
-      "--load-extension=" + [privacyGuardExtension, ...globalExtensionPaths].join(","), "--no-first-run", "--no-default-browser-check", labelPageUrl,
+      "--load-extension=" + [privacyGuardExtension, ...globalExtensionPaths].join(","), "--no-first-run", "--no-default-browser-check", labelPageUrl, ...startupSites,
     ], { detached: false, stdio: mobileRemoteRequested ? ["ignore", "ignore", "ignore", "pipe", "pipe"] : "ignore", windowsHide: false });
 
     // Register before any network request to the panel: early exit is never lost.
