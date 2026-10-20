@@ -174,8 +174,9 @@ export default function PasswordGate({ children }: PasswordGateProps) {
   const validateMutation = trpc.access.validate.useMutation();
   // Novo sistema de senha unificado
   const cpwdCheckStatusMutation = trpc.customerPassword.checkStatusMutation.useMutation();
-  const checkLoginEmailMutation = trpc.customerPassword.checkLoginEmail.useMutation();
-  const cpwdLoginMutation = trpc.customerPassword.login.useMutation();
+  const startLoginEmailVerificationMutation = trpc.customerPassword.startLoginEmailVerification.useMutation();
+  const verifyLoginEmailCodeMutation = trpc.customerPassword.verifyLoginEmailCode.useMutation();
+  const cpwdLoginMutation = trpc.customerPassword.loginVerified.useMutation();
   const cpwdCreateAutoMutation = trpc.customerPassword.clientCreateAuto.useMutation();
   const cpwdCreateManualMutation = trpc.customerPassword.clientCreateManual.useMutation();
   const cpwdSaveCpfMutation = trpc.customerPassword.saveCpf.useMutation();
@@ -584,36 +585,14 @@ export default function PasswordGate({ children }: PasswordGateProps) {
     }
     setIsSendingEmailCode(true);
     try {
-      const relation = await checkLoginEmailMutation.mutateAsync({
+      const result = await startLoginEmailVerificationMutation.mutateAsync({
         phone: getPhoneDigits(clientPhone),
         email,
       });
-      if (!relation.success) {
-        toast.error(relation.message || "E-mail não corresponde ao cadastro.");
+      if (!result.success) {
+        toast.error(result.message || "Não foi possível enviar o código.");
         return;
       }
-
-      const response = await fetch("/api/site-access/request", {
-        method: "POST",
-        credentials: "same-origin",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ email }),
-      });
-      const result = await response.json().catch(() => ({} as any));
-
-      if (response.status === 403 && result?.code === "SITE_ACCESS_NOT_AUTHORIZED") {
-        toast.error(result?.error || "Você não está autorizado a acessar a comunidade H2.");
-        return;
-      }
-      if (response.status === 429) {
-        toast.error(result?.error || ("Aguarde " + (Number(result?.retryAfter) || 60) + "s para reenviar o código."));
-        return;
-      }
-      if (!response.ok || result?.ok !== true || result?.codeSent !== true) {
-        toast.error(result?.error || "Não foi possível enviar o código agora. Tente novamente.");
-        return;
-      }
-
       setLoginEmail(email);
       setMaskedLoginEmail(email);
       setLoginEmailCode("");
@@ -635,30 +614,17 @@ export default function PasswordGate({ children }: PasswordGateProps) {
     }
     setIsVerifyingEmailCode(true);
     try {
-      const response = await fetch("/api/site-access/verify", {
-        method: "POST",
-        credentials: "same-origin",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({
-          email: loginEmail.trim().toLowerCase(),
-          code,
-        }),
+      const result = await verifyLoginEmailCodeMutation.mutateAsync({
+        phone: getPhoneDigits(clientPhone),
+        email: loginEmail.trim().toLowerCase(),
+        code,
       });
-      const result = await response.json().catch(() => ({} as any));
-
-      if (response.status === 429) {
-        toast.error(result?.error || "Limite de tentativas. Aguarde antes de tentar novamente.");
+      if (!result.success || !result.verificationToken) {
+        toast.error(result.message || "Código incorreto.");
         return;
       }
-      if (!response.ok || result?.ok !== true) {
-        toast.error(response.status === 401
-          ? "Código inválido, expirado, já utilizado ou e-mail sem autorização ativa."
-          : (result?.error || "Não foi possível confirmar o código."));
-        return;
-      }
-
-      setEmailVerificationToken("site-access-confirmed");
-      setRegEmail(loginEmail.trim().toLowerCase());
+      setEmailVerificationToken(result.verificationToken);
+      setRegEmail(result.email || loginEmail.trim().toLowerCase());
       toast.success("E-mail confirmado.");
       await handlePhoneSubmit({ preventDefault: () => undefined } as React.FormEvent, getPhoneDigits(clientPhone), true);
     } catch (err: any) {
@@ -1155,7 +1121,7 @@ export default function PasswordGate({ children }: PasswordGateProps) {
     }
     setIsValidating(true);
     try {
-      const result = await cpwdLoginMutation.mutateAsync({ phone: getCanonicalPhone(), password });
+      const result = await cpwdLoginMutation.mutateAsync({ phone: getCanonicalPhone(), password, emailVerificationToken });
       if (result.success && result.token) {
         localStorage.setItem(CP_TOKEN_KEY, result.token);
         localStorage.setItem(SESSION_PHONE_KEY, getCanonicalPhone());
@@ -1959,7 +1925,7 @@ export default function PasswordGate({ children }: PasswordGateProps) {
             <form onSubmit={handleEmailSubmit} className="space-y-5">
               <div className="bg-white/5 border border-white/10 rounded-xl px-4 py-3 text-center">
                 <p className="text-white/90 text-sm font-semibold">Confirme seu e-mail</p>
-                <p className="text-white/50 text-xs mt-1">Usaremos o mesmo código de confirmação do e-mail autorizado da comunidade H2.</p>
+                <p className="text-white/50 text-xs mt-1">Enviaremos um código de 6 números para confirmar este e-mail antes de continuar.</p>
               </div>
               <div>
                 <label className="block text-xs font-bold text-white/60 mb-2 uppercase tracking-widest flex items-center gap-1.5">
