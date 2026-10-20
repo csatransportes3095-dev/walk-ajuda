@@ -1,3 +1,4 @@
+import { listH2AdsStartupSites } from "./h2adsGlobalStartupSites";
 import type { Express, Request, Response } from "express";
 import { safeH2AdsWorkerRoute } from "./h2adsWorkerErrorGuard";
 import { listH2AdsGlobalExtensions } from "./h2adsGlobalExtensions";
@@ -88,6 +89,12 @@ async function requeueStaleWorkerCommands(workerId: number): Promise<void> {
 }
 
 export function registerH2AdsWorkerRoute(app: Express): void {
+  app.get("/api/h2ads/worker/startup-sites", safeH2AdsWorkerRoute(async (req: Request, res: Response) => {
+    noStore(res);
+    const worker = await authenticateRequest(req, res);
+    if (!worker) return;
+    res.status(200).json((await listH2AdsStartupSites()).filter(item => item.enabled).map(item => item.url));
+  }));
   app.get("/api/h2ads/worker/extensions/enabled", safeH2AdsWorkerRoute(async (req: Request, res: Response) => {
     noStore(res);
     const worker = await authenticateRequest(req, res);
