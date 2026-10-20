@@ -1,7 +1,7 @@
 // Router de senha do sistema de cadastro (h2colombiano.com/admin/customers)
 // Mesma lógica do Gestor de Gastos (spreadsheet), adaptada para a tabela customers
 
-import { randomBytes } from "crypto";
+import { createHash, randomBytes } from "crypto";
 import { TRPCError } from "@trpc/server";
 import { z } from "zod";
 import { publicProcedure, adminProcedure, router } from "../_core/trpc";
@@ -20,8 +20,48 @@ import { eq, and, sql, or } from "drizzle-orm";
 import bcrypt from "bcryptjs";
 import { ensureCustomerIdentityInfrastructure, getRouteAccess, setCustomerRoutePermissions, type CustomerRoute } from "../customerAccess";
 import { getMissingCustomerProfileFields } from "../customerProfileRequirements";
+import { deliverOwnSiteCode } from "../siteAccessCodeDelivery";
+import { generateOwnSiteCode } from "../siteAccessOwnCodes";
 
 const SESSION_DURATION_MS = 90 * 24 * 60 * 60 * 1000; // 90 dias
+const LOGIN_EMAIL_CODE_TTL_MS = 10 * 60 * 1000;
+const LOGIN_EMAIL_CODE_RESEND_MS = 60 * 1000;
+const LOGIN_EMAIL_PROOF_TTL_MS = 20 * 60 * 1000;
+
+type LoginEmailPending = {
+  phone: string;
+  email: string;
+  codeHash: string;
+  expiresAt: number;
+  lastSentAt: number;
+  attempts: number;
+};
+
+type LoginEmailProof = {
+  phone: string;
+  email: string;
+  expiresAt: number;
+};
+
+const loginEmailPending = new Map<string, LoginEmailPending>();
+const loginEmailProofs = new Map<string, LoginEmailProof>();
+
+function loginEmailKey(phone: string, email: string) {
+  return phone + "|" + email.trim().toLowerCase();
+}
+
+function loginEmailCodeHash(phone: string, email: string, code: string) {
+  return createHash("sha256").update("h2-login-email|" + phone + "|" + email.trim().toLowerCase() + "|" + code).digest("hex");
+}
+
+function assertLoginEmailProof(phone: string, token: string) {
+  const proof = loginEmailProofs.get(token);
+  if (!proof || proof.phone !== phone || proof.expiresAt < Date.now()) {
+    if (proof) loginEmailProofs.delete(token);
+    throw new TRPCError({ code: "UNAUTHORIZED", message: "Confirmação de e-mail expirada. Confirme o código novamente." });
+  }
+  return proof;
+}
 function getProfileUpdateMeta(customer: any) {
   const fields = customer ? getMissingCustomerProfileFields(customer) : [];
   return { profileUpdateRequired: fields.length > 0, profileUpdateFields: fields };
@@ -128,10 +168,10 @@ export const customerPasswordRouter = router({
       return { success: true, mode: input.mode };
     }),
 
-  // O código de e-mail do login usa o mesmo mecanismo de E-MAIL AUTORIZADO
-  // já existente em /api/site-access/request e /api/site-access/verify.
-  // Aqui apenas vinculamos telefone + e-mail do cadastro existente.
-  checkLoginEmail: publicProcedure
+  // Confirmação de e-mail do login/cadastro.
+  // Usa o mesmo gerador e entrega dos códigos de e-mail, mas NÃO consulta
+  // a lista de e-mails autorizados do Acesso Restrito.
+  startLoginEmailVerification: publicProcedure
     .input(z.object({
       phone: z.string().min(10).max(32),
       email: z.string().email().max(320),
@@ -144,29 +184,86 @@ export const customerPasswordRouter = router({
       const email = input.email.trim().toLowerCase();
       const customer = await getCustomerByCleanPhone(cleanPhone);
 
-      if (!customer) {
-        return { success: true, existingCustomer: false, email };
+      // Cliente existente precisa confirmar exatamente o e-mail salvo no cadastro.
+      // Cliente novo pode confirmar qualquer e-mail válido informado por ele.
+      if (customer) {
+        const registeredEmail = String((customer as any).email || "").trim().toLowerCase();
+        if (!registeredEmail) {
+          return { success: false, error: "email_missing" as const, message: "Este cadastro não possui e-mail. Entre em contato com o atendimento." };
+        }
+        if (registeredEmail !== email) {
+          return { success: false, error: "email_mismatch" as const, message: "O e-mail informado não corresponde ao cadastro deste telefone." };
+        }
       }
 
-      const registeredEmail = String((customer as any).email || "").trim().toLowerCase();
-      if (!registeredEmail) {
-        return {
-          success: false,
-          existingCustomer: true,
-          error: "email_missing" as const,
-          message: "Este cadastro não possui e-mail. Entre em contato com o atendimento.",
-        };
-      }
-      if (registeredEmail !== email) {
-        return {
-          success: false,
-          existingCustomer: true,
-          error: "email_mismatch" as const,
-          message: "O e-mail informado não corresponde ao cadastro deste telefone.",
-        };
+      const key = loginEmailKey(cleanPhone, email);
+      const current = loginEmailPending.get(key);
+      if (current && Date.now() - current.lastSentAt < LOGIN_EMAIL_CODE_RESEND_MS) {
+        const retryAfter = Math.ceil((LOGIN_EMAIL_CODE_RESEND_MS - (Date.now() - current.lastSentAt)) / 1000);
+        return { success: false, error: "cooldown" as const, retryAfter, message: "Aguarde " + retryAfter + "s para reenviar o código." };
       }
 
-      return { success: true, existingCustomer: true, email };
+      const code = generateOwnSiteCode();
+      loginEmailPending.set(key, {
+        phone: cleanPhone,
+        email,
+        codeHash: loginEmailCodeHash(cleanPhone, email, code),
+        expiresAt: Date.now() + LOGIN_EMAIL_CODE_TTL_MS,
+        lastSentAt: Date.now(),
+        attempts: 0,
+      });
+
+      try {
+        await deliverOwnSiteCode(email, code);
+      } catch (error) {
+        loginEmailPending.delete(key);
+        console.error("[customerPassword] login email code delivery failed", error instanceof Error ? error.message : String(error));
+        throw new TRPCError({ code: "INTERNAL_SERVER_ERROR", message: "Não foi possível enviar o código agora. Tente novamente." });
+      }
+
+      return {
+        success: true,
+        existingCustomer: !!customer,
+        email,
+        expiresIn: Math.floor(LOGIN_EMAIL_CODE_TTL_MS / 1000),
+      };
+    }),
+
+  verifyLoginEmailCode: publicProcedure
+    .input(z.object({
+      phone: z.string().min(10).max(32),
+      email: z.string().email().max(320),
+      code: z.string().regex(/^\d{6}$/),
+    }))
+    .mutation(async ({ input }) => {
+      const cleanPhone = input.phone.replace(/\D/g, "");
+      const email = input.email.trim().toLowerCase();
+      const key = loginEmailKey(cleanPhone, email);
+      const pending = loginEmailPending.get(key);
+
+      if (!pending) return { success: false, error: "missing" as const, message: "Solicite um novo código." };
+      if (pending.expiresAt < Date.now()) {
+        loginEmailPending.delete(key);
+        return { success: false, error: "expired" as const, message: "Código expirado. Solicite um novo código." };
+      }
+      if (pending.attempts >= 5) {
+        loginEmailPending.delete(key);
+        return { success: false, error: "locked" as const, message: "Muitas tentativas. Solicite um novo código." };
+      }
+
+      pending.attempts += 1;
+      if (loginEmailCodeHash(cleanPhone, email, input.code) !== pending.codeHash) {
+        return { success: false, error: "invalid_code" as const, message: "Código incorreto." };
+      }
+
+      loginEmailPending.delete(key);
+      const verificationToken = randomBytes(32).toString("hex");
+      loginEmailProofs.set(verificationToken, {
+        phone: cleanPhone,
+        email,
+        expiresAt: Date.now() + LOGIN_EMAIL_PROOF_TTL_MS,
+      });
+      return { success: true, verificationToken, email };
     }),
 
   // â”€â”€ Verificar status do cliente (para a tela de login) â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
@@ -334,6 +431,54 @@ export const customerPasswordRouter = router({
       });
 
       return { success: true, pending: true };
+    }),
+
+  // Login principal: exige que o e-mail tenha sido confirmado nesta tentativa.
+  loginVerified: publicProcedure
+    .input(z.object({
+      phone: z.string(),
+      password: z.string(),
+      emailVerificationToken: z.string().min(32),
+    }))
+    .mutation(async ({ input }) => {
+      const db = (await getDb()) as any;
+      if (!db) throw new TRPCError({ code: "INTERNAL_SERVER_ERROR", message: "Banco indisponível" });
+      const cleanPhone = input.phone.replace(/\D/g, "");
+      assertLoginEmailProof(cleanPhone, input.emailVerificationToken);
+
+      try {
+        const custRows = await db.select().from(customers).where(eq(customers.phone, cleanPhone)).limit(1);
+        const custForBlock = custRows?.[0];
+        if (custForBlock && (custForBlock as any).blocked === 1) {
+          return { success: false, error: "blocked" as const, blockReason: (custForBlock as any).blockReason || "Acesso bloqueado" };
+        }
+      } catch {}
+
+      const pwd = await getActivePassword(cleanPhone);
+      if (!pwd) return { success: false, error: "no_password" as const };
+      if (pwd.pendingApproval === 1) return { success: false, error: "pending_approval" as const };
+      if (!pwd.expiresAt || new Date(pwd.expiresAt) < new Date()) return { success: false, error: "expired" as const };
+
+      const match = await bcrypt.compare(input.password, pwd.password);
+      if (!match) return { success: false, error: "wrong_password" as const };
+
+      const token = randomBytes(32).toString("hex");
+      const sessionExpiry = new Date(Date.now() + SESSION_DURATION_MS);
+      await db.insert(customerPasswordSessions).values({
+        phone: cleanPhone,
+        token,
+        expiresAt: sessionExpiry,
+        lastAccessAt: new Date(),
+      });
+
+      const customer = await getCustomerByCleanPhone(cleanPhone);
+      const profileUpdateMeta = getProfileUpdateMeta(customer);
+      try {
+        await db.insert(customerLoginHistory).values({ phone: cleanPhone, loginAt: new Date() });
+      } catch {}
+
+      loginEmailProofs.delete(input.emailVerificationToken);
+      return { success: true, token, ...profileUpdateMeta };
     }),
 
   // â”€â”€ Cliente faz login â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
