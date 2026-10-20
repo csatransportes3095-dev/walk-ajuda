@@ -1,0 +1,46 @@
+name: Validate FAQ guidelines import
+on:
+  push:
+    branches: [fix/faq-guidelines-20261020]
+  pull_request:
+    paths:
+      - 'scripts/data/faq-guidelines-20261020.json'
+      - 'scripts/apply-faq-guidelines-20261020.ts'
+      - 'scripts/faq-guidelines-20261020.test.ts'
+      - 'scripts/render-start.sh'
+      - '.github/workflows/faq-guidelines-validate.yml'
+permissions:
+  contents: read
+jobs:
+  validate:
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+    services:
+      mysql:
+        image: mysql:8.0
+        env:
+          MYSQL_ROOT_PASSWORD: faq-test-only
+          MYSQL_DATABASE: faq_guidelines_test
+        ports:
+          - 3306:3306
+        options: >-
+          --health-cmd="mysqladmin ping -h 127.0.0.1 -pfaq-test-only"
+          --health-interval=5s
+          --health-timeout=5s
+          --health-retries=20
+    steps:
+      - uses: actions/checkout@v4
+      - uses: pnpm/action-setup@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '22'
+          cache: pnpm
+      - run: pnpm install --frozen-lockfile
+      - name: Validate one-time import against MySQL
+        env:
+          FAQ_TEST_DATABASE_URL: mysql://root:faq-test-only@127.0.0.1:3306/faq_guidelines_test
+        run: node --import tsx --test scripts/faq-guidelines-20261020.test.ts
+      - name: Check production startup syntax
+        run: sh -n scripts/render-start.sh
+      - name: Build production site
+        run: pnpm build

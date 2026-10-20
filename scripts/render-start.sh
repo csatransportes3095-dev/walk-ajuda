@@ -61,6 +61,8 @@ run_boot_step "normalize-product-manifests-portuguese" pnpm exec tsx scripts/nor
 run_boot_step "bulk-activate-all-main-customers" pnpm exec tsx scripts/activate-all-main-customers-20260905.ts
 run_boot_step "audit-customer-profile-integrity" pnpm exec tsx scripts/audit-customer-profile-integrity.ts
 
+run_boot_step "faq-guidelines-20261020" pnpm exec tsx scripts/apply-faq-guidelines-20261020.ts
+
 echo "[BOOT-DIAG] START server timestamp=$(date -u +%Y-%m-%dT%H:%M:%SZ)"
 echo "Iniciando servidor..."
 exec node dist/index.js
