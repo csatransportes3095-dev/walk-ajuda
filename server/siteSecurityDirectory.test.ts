@@ -100,7 +100,8 @@ describe('independent directory filters and search',()=>{
     expect(filterSiteDirectory(entries,'without_registration','suspended')).toMatchObject([{id:84,status:'suspended'}]);
   });
   it('combines search and filter rather than searching a different data set',()=>{
-    expect(filterSiteDirectory(entries,'with_orders','novo')).toEqual([]);
+    expect(filterSiteDirectory(entries,'all','novo@example.test').map(p=>p.id)).toEqual([81]);
+    expect(filterSiteDirectory(entries,'with_orders','novo@example.test')).toEqual([]);
   });
   it('is safe for a temporarily cached row without the new metadata',()=>{
     expect(filterSiteDirectory([person()],'all')).toHaveLength(1);
