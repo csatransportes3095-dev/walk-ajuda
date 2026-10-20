@@ -5934,12 +5934,21 @@ export default function AdminOrders() {
                           const finalValue = order.pricePaid || (legacy ? `R$ ${legacy.final.toFixed(2).replace('.', ',')}` : undefined);
                           if (!code || original == null || discount == null || discount <= 0) return null;
                           return (
-                            <div className="mt-2 rounded-xl border-2 border-yellow-300 bg-black/55 px-3 py-2 shadow-[0_0_14px_rgba(250,204,21,0.55)]">
-                              <div className="text-[10px] font-black uppercase tracking-widest text-yellow-300 mb-1">🏷️ DESCONTO APLICADO</div>
-                              <div className="flex flex-wrap items-center gap-x-3 gap-y-1 text-sm">
-                                <span className="text-white/80">Original: <strong className="line-through">R$ {original.toFixed(2).replace('.', ',')}</strong></span>
-                                <span className="font-black text-yellow-300">{code}: -R$ {discount.toFixed(2).replace('.', ',')}</span>
-                                <span className="font-black text-green-300">FINAL: {finalValue || `R$ ${Math.max(0, original - discount).toFixed(2).replace('.', ',')}`}</span>
+                            <div className="mt-2 rounded-xl border border-white/15 bg-black/45 px-3 py-2.5">
+                              <div className="text-[10px] font-black uppercase tracking-widest text-yellow-300 mb-2">🏷️ DESCONTO APLICADO</div>
+                              <div className="grid grid-cols-1 sm:grid-cols-3 gap-2">
+                                <div className="rounded-lg border border-blue-400/40 bg-blue-500/15 px-2.5 py-2">
+                                  <div className="text-[9px] font-black uppercase tracking-wider text-blue-300">ORIGINAL</div>
+                                  <div className="mt-0.5 text-sm font-black text-white">R$ {original.toFixed(2).replace('.', ',')}</div>
+                                </div>
+                                <div className="rounded-lg border border-orange-400/50 bg-orange-500/15 px-2.5 py-2">
+                                  <div className="text-[9px] font-black uppercase tracking-wider text-orange-300">{code}</div>
+                                  <div className="mt-0.5 text-sm font-black text-orange-200">- R$ {discount.toFixed(2).replace('.', ',')}</div>
+                                </div>
+                                <div className="rounded-lg border border-green-400/55 bg-green-500/20 px-2.5 py-2">
+                                  <div className="text-[9px] font-black uppercase tracking-wider text-green-300">FINAL</div>
+                                  <div className="mt-0.5 text-sm font-black text-green-200">{finalValue || `R$ ${Math.max(0, original - discount).toFixed(2).replace('.', ',')}`}</div>
+                                </div>
                               </div>
                             </div>
                           );
@@ -5979,25 +5988,33 @@ export default function AdminOrders() {
                               if (!cartTotalVal) return null;
                               const totalPago = cartDiscount ? cartTotalVal - cartDiscount : cartTotalVal;
                               return (
-                                <div className="bg-green-500/10 border border-green-500/30 rounded-lg px-2 py-1.5 space-y-0.5">
-                                  {cartDiscount && cartDiscount > 0 && (
-                                    <div className="flex items-center justify-between text-[10px]">
-                                      <span className="text-muted-foreground">Subtotal:</span>
-                                      <span className="text-muted-foreground">R$ {cartTotalVal.toFixed(2).replace('.', ',')}</span>
+                                <div className="rounded-xl border border-white/15 bg-black/45 px-2.5 py-2.5">
+                                  {cartDiscount && cartDiscount > 0 ? (
+                                    <>
+                                      <div className="text-[10px] font-black uppercase tracking-widest text-yellow-300 mb-2">🏷️ DESCONTO APLICADO</div>
+                                      <div className="grid grid-cols-1 sm:grid-cols-3 gap-2">
+                                        <div className="rounded-lg border border-blue-400/40 bg-blue-500/15 px-2.5 py-2">
+                                          <div className="text-[9px] font-black uppercase tracking-wider text-blue-300">ORIGINAL</div>
+                                          <div className="mt-0.5 text-sm font-black text-white">R$ {cartTotalVal.toFixed(2).replace('.', ',')}</div>
+                                        </div>
+                                        <div className="rounded-lg border border-orange-400/50 bg-orange-500/15 px-2.5 py-2">
+                                          <div className="text-[9px] font-black uppercase tracking-wider text-orange-300">
+                                            {order.cartCouponCode ? `CUPOM ${order.cartCouponCode}` : 'CUPOM'}
+                                          </div>
+                                          <div className="mt-0.5 text-sm font-black text-orange-200">- R$ {cartDiscount.toFixed(2).replace('.', ',')}</div>
+                                        </div>
+                                        <div className="rounded-lg border border-green-400/55 bg-green-500/20 px-2.5 py-2">
+                                          <div className="text-[9px] font-black uppercase tracking-wider text-green-300">FINAL</div>
+                                          <div className="mt-0.5 text-sm font-black text-green-200">R$ {totalPago.toFixed(2).replace('.', ',')}</div>
+                                        </div>
+                                      </div>
+                                    </>
+                                  ) : (
+                                    <div className="flex items-center justify-between">
+                                      <span className="text-xs font-bold text-green-300">💰 Total Pago:</span>
+                                      <span className="text-sm font-black text-green-300">R$ {totalPago.toFixed(2).replace('.', ',')}</span>
                                     </div>
                                   )}
-                                  {cartDiscount && cartDiscount > 0 && (
-                                    <div className="flex items-center justify-between text-[10px]">
-                                      <span className="text-amber-400">
-                                        🏷️ Cupom{order.cartCouponCode ? ` (${order.cartCouponCode})` : ''}:
-                                      </span>
-                                      <span className="text-amber-400 font-bold">-R$ {cartDiscount.toFixed(2).replace('.', ',')}</span>
-                                    </div>
-                                  )}
-                                  <div className="flex items-center justify-between">
-                                    <span className="text-xs font-bold text-green-300">💰 Total Pago:</span>
-                                    <span className="text-sm font-black text-green-300">R$ {totalPago.toFixed(2).replace('.', ',')}</span>
-                                  </div>
                                 </div>
                               );
                             })()}
