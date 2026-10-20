@@ -754,7 +754,7 @@ export default function PasswordGate({ children }: PasswordGateProps) {
       if (!finalPhotoUrl) {
         setIsUploadingPhoto(true);
         try {
-          finalPhotoUrl = await uploadPhotoWithRetry(regProfilePhoto);
+          finalPhotoUrl = await uploadNewRegistrationPhoto(regProfilePhoto);
           setUploadedPhotoUrl(finalPhotoUrl);
           setUploadedPhotoFile(regProfilePhoto);
           setPhotoUploadFailed(false);
@@ -935,6 +935,28 @@ export default function PasswordGate({ children }: PasswordGateProps) {
     });
   };
 
+  // Cadastro novo: envia o arquivo diretamente ao servidor.
+  // Não converte para canvas/base64 no celular, evitando pico de memória.
+  const uploadNewRegistrationPhoto = async (file: File): Promise<string> => {
+    const form = new FormData();
+    form.append("file", file, file.name || "foto-perfil.jpg");
+    form.append("phone", getCanonicalPhone() || getPhoneDigits(clientPhone));
+    const response = await withTimeout(
+      fetch("/api/upload/registration-profile-photo", {
+        method: "POST",
+        body: form,
+        credentials: "same-origin",
+      }),
+      60000,
+      "enviando a foto"
+    );
+    const payload = await response.json().catch(() => ({} as any));
+    if (!response.ok || !payload?.url) {
+      throw new Error(payload?.error || "Erro ao enviar foto.");
+    }
+    return String(payload.url);
+  };
+
   const uploadPhotoWithRetry = async (file: File): Promise<string> => {
     let lastErr: unknown = null;
     for (let attempt = 1; attempt <= 3; attempt++) {
@@ -1076,8 +1098,8 @@ export default function PasswordGate({ children }: PasswordGateProps) {
         return;
       }
       // Limite maior porque a imagem sera comprimida no envio (fotos de iPhone sao grandes)
-      if (file.size > 25 * 1024 * 1024) {
-        toast.error("A foto deve ter no máximo 25MB");
+      if (file.size > 20 * 1024 * 1024) {
+        toast.error("A foto deve ter no máximo 20MB");
         return;
       }
       setRegProfilePhoto(file);
@@ -1103,7 +1125,7 @@ export default function PasswordGate({ children }: PasswordGateProps) {
     setPhotoUploadFailed(false);
     setIsUploadingPhoto(true);
     try {
-      const url = await uploadPhotoWithRetry(file);
+      const url = customerExists === false ? await uploadNewRegistrationPhoto(file) : await uploadPhotoWithRetry(file);
       setUploadedPhotoUrl(url);
       setUploadedPhotoFile(file);
       setPhotoUploadFailed(false);
