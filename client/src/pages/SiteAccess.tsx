@@ -35,7 +35,7 @@ export default function SiteAccess() {
   async function verify(event:React.FormEvent) {
     event.preventDefault();if(busy)return;
     const normalized=normalizeSiteCode(code);
-    if(!validSiteCode(normalized)){setMessage('Digite os 12 caracteres do código recebido, incluindo letras e números.');return;}
+    if(!validSiteCode(normalized)){setMessage('Digite os 6 números do código recebido.');return;}
     setBusy(true);setMessage('');
     try {
       const response=await fetch('/api/site-access/verify',{
@@ -60,7 +60,7 @@ export default function SiteAccess() {
         <button disabled={busy||remaining>0} className="w-full p-3 rounded-lg bg-yellow-400 disabled:opacity-50 text-black font-bold">{busy?'Enviando...':remaining>0?`Aguarde ${remaining}s`:'Enviar código'}</button>
       </form>:<form onSubmit={verify} className="space-y-3">
         <p className="text-sm text-white/70 break-all">{email}</p>
-        <label className="block text-sm">Código de 12 caracteres<input type="text" inputMode="text" autoCapitalize="characters" autoCorrect="off" spellCheck={false} maxLength={24} required autoComplete="one-time-code" value={code} disabled={busy} onChange={event=>setCode(event.target.value.toUpperCase())} placeholder="XXXX-XXXX-XXXX" className="mt-1 block w-full min-w-0 p-3 rounded-lg bg-white/10 border border-white/20 tracking-wider font-mono"/></label>
+        <label className="block text-sm">Código de 6 números<input type="text" inputMode="numeric" pattern="[0-9]{6}" autoCapitalize="none" autoCorrect="off" spellCheck={false} maxLength={6} required autoComplete="one-time-code" value={code} disabled={busy} onChange={event=>{const value=normalizeSiteCode(event.target.value);if(/^[0-9]{0,6}$/.test(value))setCode(value);}} onPaste={event=>{event.preventDefault();const value=normalizeSiteCode(event.clipboardData.getData('text'));if(validSiteCode(value))setCode(value);else setMessage('Cole um código com 6 números, sem letras.');}} placeholder="000000" className="mt-1 block w-full min-w-0 p-3 rounded-lg bg-white/10 border border-white/20 tracking-wider font-mono"/></label>
         <p className="text-xs text-white/60">O código é de uso único e vale por 10 minutos. Depois de confirmar, o acesso vale por até 24 horas ou até você sair.</p>
         <button disabled={busy} className="w-full p-3 rounded-lg bg-yellow-400 disabled:opacity-50 text-black font-bold">{busy?'Aguarde...':'Confirmar e entrar'}</button>
         <button type="button" disabled={busy||remaining>0} onClick={()=>void request()} className="w-full rounded-lg border border-yellow-400/30 p-3 text-sm text-yellow-200 disabled:opacity-50">{remaining>0?`Reenviar em ${remaining}s`:'Reenviar código'}</button>

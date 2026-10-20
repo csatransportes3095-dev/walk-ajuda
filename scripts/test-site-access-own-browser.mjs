@@ -26,10 +26,10 @@ const server=http.createServer(async(req,res)=>{
   res.setHeader('Cache-Control','no-store');
   const json=(status,body)=>{res.statusCode=status;res.setHeader('Content-Type','application/json');res.end(JSON.stringify(body));};
   if(req.url==='/api/site-access/session')return json(state.sessionStatus,{required:true,authorized:state.authorized,expiresAt:state.expiresAt});
-  if(req.url==='/api/site-access/request'){state.sent++;return json(state.requestStatus,{ok:state.requestStatus===200,retryAfter:60,codeLength:12});}
+  if(req.url==='/api/site-access/request'){state.sent++;return json(state.requestStatus,{ok:state.requestStatus===200,retryAfter:60,codeLength:6});}
   if(req.url==='/api/site-access/verify'){
     let raw='';for await(const chunk of req)raw+=chunk;const body=JSON.parse(raw);state.verified++;
-    if(body.code!=='1234ABCDEFGH')return json(401,{});
+    if(body.code!=='012345')return json(401,{});
     state.authorized=true;state.expiresAt=Date.now()+86400000;return json(200,{ok:true,expiresAt:state.expiresAt});
   }
   if(req.url==='/api/site-access/logout'){state.loggedOut++;if(state.logoutStatus===200)state.authorized=false;return json(state.logoutStatus,{ok:state.logoutStatus===200});}
@@ -43,6 +43,8 @@ const origin='http://127.0.0.1:'+server.address().port;
 const browser=await chromium.launch({headless:true});
 const results=[];
 async function test(name,fn){reset();const context=await browser.newContext();const page=await context.newPage();page.setDefaultTimeout(7000);try{await fn(page,context);results.push({name,status:'passed'});console.log('PASS '+name);}catch(error){results.push({name,status:'failed',error:String(error)});await page.screenshot({path:path.join(out,'failure.png'),fullPage:true});throw error;}finally{await context.close();}}
+async function codeForm(page){state.authorized=false;await page.goto(origin+'/site-access?next=/protected');await page.getByLabel('E-mail autorizado').fill('authorized@example.test');await page.getByRole('button',{name:'Enviar código',exact:true}).click();const input=page.getByLabel('Código de 6 números');await input.waitFor();return input;}
+async function paste(input,text){await input.evaluate((element,value)=>{const clipboard=new DataTransfer();clipboard.setData('text/plain',value);element.dispatchEvent(new ClipboardEvent('paste',{clipboardData:clipboard,bubbles:true,cancelable:true}));},text);}
 try {
   await test('anonymous viewer is challenged before private content is mounted',async page=>{
     state.authorized=false;await page.goto(origin+'/protected');await page.waitForURL('**/site-access?*');assert.equal(await page.locator('#protected').count(),0);await page.getByRole('button',{name:'Enviar código',exact:true}).waitFor();
@@ -66,16 +68,28 @@ try {
     state.expiresAt=Date.now()+1800;await page.goto(origin+'/protected');await page.locator('#protected').waitFor();await page.waitForURL('**/site-access?*');assert.equal(await page.locator('#protected').count(),0);
   });
   await test('mail verification works in browsers missing AbortSignal.timeout',async(page,context)=>{
-    state.authorized=false;await context.addInitScript(()=>Object.defineProperty(AbortSignal,'timeout',{value:undefined,configurable:true,writable:true}));
-    await page.goto(origin+'/site-access?next=/protected');await page.getByLabel('E-mail autorizado').fill('authorized@example.test');await page.getByRole('button',{name:'Enviar código',exact:true}).click();
-    await page.getByLabel('Código de 12 caracteres').fill('1234-ABCD-EFGH');await page.getByRole('button',{name:'Confirmar e entrar',exact:true}).click();await page.waitForURL('**/protected');await page.locator('#protected').waitFor();assert.equal(state.verified,1);
+    await context.addInitScript(()=>Object.defineProperty(AbortSignal,'timeout',{value:undefined,configurable:true,writable:true}));
+    const input=await codeForm(page);await input.fill('012345');assert.equal(await input.inputValue(),'012345');await page.getByRole('button',{name:'Confirmar e entrar',exact:true}).click();await page.waitForURL('**/protected');await page.locator('#protected').waitFor();assert.equal(state.verified,1);
+  });
+  await test('numeric keyboard, six-digit limit and leading zeroes are preserved',async page=>{
+    const input=await codeForm(page);assert.equal(await input.getAttribute('inputmode'),'numeric');assert.equal(await input.getAttribute('maxlength'),'6');assert.equal(await input.getAttribute('pattern'),'[0-9]{6}');
+    await input.pressSequentially('0123456');assert.equal(await input.inputValue(),'012345');assert.equal(state.verified,0);
+  });
+  await test('letters cannot be entered or converted into digits',async page=>{
+    const input=await codeForm(page);await input.pressSequentially('OILabc');assert.equal(await input.inputValue(),'');assert.equal(state.verified,0);
+  });
+  await test('pasted numeric code with separators keeps its leading zero and verifies',async page=>{
+    const input=await codeForm(page);await paste(input,' 012-345 ');assert.equal(await input.inputValue(),'012345');await page.getByRole('button',{name:'Confirmar e entrar',exact:true}).click();await page.waitForURL('**/protected');assert.equal(state.verified,1);
+  });
+  await test('old alphanumeric and seven-digit pasted codes are rejected rather than truncated',async page=>{
+    const input=await codeForm(page);for(const value of ['1234ABCDEFGH','0123456']){await paste(input,value);await page.getByText('Cole um código com 6 números, sem letras.',{exact:true}).waitFor();assert.equal(await input.inputValue(),'');assert.equal(state.verified,0);}
   });
   await test('rate limiting shows an explicit countdown rather than a new-code form',async page=>{
     state.authorized=false;state.requestStatus=429;await page.goto(origin+'/site-access');await page.getByLabel('E-mail autorizado').fill('authorized@example.test');await page.getByRole('button',{name:'Enviar código',exact:true}).click();
-    await page.getByText('Muitas solicitações ou reenvio recente.',{exact:false}).waitFor();assert.equal(await page.getByLabel('Código de 12 caracteres').count(),0);assert(await page.getByRole('button',{name:/Aguarde \d+s/}).isDisabled());
+    await page.getByText('Muitas solicitações ou reenvio recente.',{exact:false}).waitFor();assert.equal(await page.getByLabel('Código de 6 números').count(),0);assert(await page.getByRole('button',{name:/Aguarde \d+s/}).isDisabled());
   });
   await test('delivery failure is not presented as a delivered code',async page=>{
-    state.authorized=false;state.requestStatus=503;await page.goto(origin+'/site-access');await page.getByLabel('E-mail autorizado').fill('authorized@example.test');await page.getByRole('button',{name:'Enviar código',exact:true}).click();await page.getByText('Não foi possível enviar o código agora.',{exact:false}).waitFor();assert.equal(await page.getByLabel('Código de 12 caracteres').count(),0);
+    state.authorized=false;state.requestStatus=503;await page.goto(origin+'/site-access');await page.getByLabel('E-mail autorizado').fill('authorized@example.test');await page.getByRole('button',{name:'Enviar código',exact:true}).click();await page.getByText('Não foi possível enviar o código agora.',{exact:false}).waitFor();assert.equal(await page.getByLabel('Código de 6 números').count(),0);
   });
   await test('session failure blocks content and offers a retry',async page=>{
     state.sessionStatus=503;await page.goto(origin+'/protected');await page.getByRole('button',{name:'Tentar novamente',exact:true}).waitFor();assert.equal(await page.locator('#protected').count(),0);
@@ -86,7 +100,7 @@ try {
     state.logoutStatus=200;await page.getByRole('button',{name:'Tentar novamente',exact:true}).click();await page.waitForURL('**/site-access?*');
   });
   for(const width of [320,375,390,768,1366])await test('code form stays inside viewport '+width,async page=>{
-    state.authorized=false;await page.setViewportSize({width,height:850});await page.goto(origin+'/site-access');await page.getByLabel('E-mail autorizado').fill('authorized@example.test');await page.getByRole('button',{name:'Enviar código',exact:true}).click();await page.getByLabel('Código de 12 caracteres').waitFor();assert(await page.evaluate(()=>document.documentElement.scrollWidth<=innerWidth+1));
+    state.authorized=false;await page.setViewportSize({width,height:850});await page.goto(origin+'/site-access');await page.getByLabel('E-mail autorizado').fill('authorized@example.test');await page.getByRole('button',{name:'Enviar código',exact:true}).click();await page.getByLabel('Código de 6 números').waitFor();assert(await page.evaluate(()=>document.documentElement.scrollWidth<=innerWidth+1));
   });
 }finally {
   await fs.writeFile(path.join(out,'browser-results.json'),JSON.stringify(results,null,2));await browser.close();server.closeAllConnections();await new Promise(resolve=>server.close(resolve));
