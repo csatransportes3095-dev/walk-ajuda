@@ -1,3 +1,4 @@
+import './siteAccessTimeoutCompat';
 export const SITE_LOGOUT_PENDING='h2_site_logout_pending';
 export const SITE_HAD_CUSTOMER='h2_site_had_customer_session';
 export const SITE_LOGOUT_EVENT='h2-site-access-logout';
