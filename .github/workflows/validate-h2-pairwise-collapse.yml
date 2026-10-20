@@ -1,0 +1,42 @@
+name: Validate H2 Face collapsible combinations
+on:
+  push:
+    branches: [fix/similaridade-resumo-combinacoes-recolhido-20261020]
+  pull_request:
+    branches: [recovery/organizar-salvos-2026-08-24]
+permissions:
+  contents: read
+jobs:
+  validate:
+    runs-on: ubuntu-latest
+    timeout-minutes: 25
+    steps:
+      - uses: actions/checkout@v4
+      - uses: pnpm/action-setup@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '22'
+          cache: pnpm
+      - run: pnpm install --frozen-lockfile
+      - name: Build production site
+        run: pnpm build
+      - name: Ensure no new TypeScript errors
+        run: |
+          git fetch --no-tags origin recovery/organizar-salvos-2026-08-24
+          git worktree add --detach /tmp/h2-layout-baseline FETCH_HEAD
+          ln -s "$PWD/node_modules" /tmp/h2-layout-baseline/node_modules
+          (cd /tmp/h2-layout-baseline && pnpm check > /tmp/h2-layout-before.log 2>&1) || true
+          pnpm check > /tmp/h2-layout-after.log 2>&1 || true
+          python3 - <<'PY'
+          import re
+          from collections import Counter
+          from pathlib import Path
+          def errors(path):
+              return Counter(re.sub(r'\([0-9]+,[0-9]+\)', '', line) for line in Path(path).read_text().splitlines() if 'error TS' in line)
+          old=errors('/tmp/h2-layout-before.log')
+          new=errors('/tmp/h2-layout-after.log')
+          extra=new-old
+          print('BEFORE',sum(old.values()),'AFTER',sum(new.values()),'NEW',sum(extra.values()))
+          for line,count in extra.items(): print(count,line)
+          if extra: raise SystemExit(1)
+          PY
