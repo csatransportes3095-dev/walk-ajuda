@@ -319,7 +319,7 @@ export const h2bicoRouter = router({
       if(!["jpeg","png","webp"].includes(meta.format||"") || (meta.width||0)<48 || (meta.height||0)<48)
         throw new Error("Imagem inválida");
       photo=input.photoMode==="white"
-        ? await sharp(buffer).rotate().resize({width:256,height:320,fit:"fill",withoutEnlargement:true}).jpeg({quality:90}).toBuffer()
+        ? await sharp(buffer).rotate().resize({width:256,height:320,fit:"contain",background:{r:255,g:255,b:255,alpha:1},withoutEnlargement:true}).jpeg({quality:90}).toBuffer()
         : await sharp(buffer).rotate().resize({width:320,height:320,fit:"cover",withoutEnlargement:true}).jpeg({quality:90}).toBuffer();
     }catch{throw new TRPCError({code:"BAD_REQUEST",message:"Recorte inválido."});}
     const key="h2bico/print-"+input.cpf+"-"+Date.now()+".jpg";
