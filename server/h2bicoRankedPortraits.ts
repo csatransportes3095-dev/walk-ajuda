@@ -47,7 +47,7 @@ export function pairRankedPortraits(photos:readonly Rect[],names:readonly (NameB
    const candidates=photos.map((p,index)=>{
      const rowDistance=Math.abs((p.y+p.height/2)-(name.top+name.height/2));
      const horizontalGap=name.left-(p.x+p.width);
-     const valid=horizontalGap>=-p.width*.2&&horizontalGap<=Math.max(500,p.width*7)&&rowDistance<=Math.max(p.height*.88,name.height*5);
+     const valid=horizontalGap>=-p.width*.2&&horizontalGap<=Math.min(500,p.width*2.9)&&rowDistance<=Math.max(p.height*.88,name.height*5);
      return {p,index,score:rowDistance/Math.max(p.height,1)+Math.max(0,horizontalGap)/Math.max(1,p.width*3),valid};
    }).filter(x=>x.valid&&!used.has(x.index)).sort((a,b)=>a.score-b.score);
    if(!candidates.length||(candidates.length>1&&candidates[1].score-candidates[0].score<.2))continue;
