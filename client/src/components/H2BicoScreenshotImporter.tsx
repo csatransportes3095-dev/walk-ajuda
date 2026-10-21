@@ -9,6 +9,7 @@ import { toast } from "sonner";
 import { trpc } from "@/lib/trpc";
 import { isValidCpf } from "@/lib/h2bicoCpfExtractor";
 import { resolveH2BicoCardName } from "@/lib/h2bicoCardName";
+import { applyStableAvatarResult, isValidAvatarReplacement, keepPreviewOnFailedPreset } from "@/lib/h2bicoStablePreview";
 import { shouldPreselectH2BicoPhoto } from "@/lib/h2bicoImportReview";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
@@ -110,6 +111,8 @@ export default function H2BicoScreenshotImporter(){
   },[existingRecords.data]);
   const utils=trpc.useUtils();
   const update=(id:string,patch:Partial<Item>)=>setItems(current=>current.map(item=>item.id===id?{...item,...patch}:item));
+  const scanTokens=useRef(new Map<string,number>());
+  const patchCurrent=(id:string,change:(item:Item)=>Item)=>setItems(current=>current.map(row=>row.id===id?change(row):row));
   const earFor=(item:Item):EarStatus|null=>item.earTouched
     ?item.earStatus??null
     :knownByCpf.get(digits(item.cpf))?.earStatus??null;
@@ -149,6 +152,8 @@ export default function H2BicoScreenshotImporter(){
   const itemsRef=useRef<Item[]>([]);
   useEffect(()=>{itemsRef.current=items;},[items]);
   const detectAvatar=async(item:Item,peopleInPrint?:Item[])=>{
+    const token=(scanTokens.current.get(item.id)||0)+1;
+    scanTokens.current.set(item.id,token);
     update(item.id,{avatarBusy:true,avatarError:undefined});
     try{
       const img=new Image();img.src=item.photo;await img.decode();
@@ -183,11 +188,13 @@ export default function H2BicoScreenshotImporter(){
       const matches=matchCpfAvatarFaces(anchors,options.map(option=>option.face),image);
       const currentIndex=people.findIndex(person=>person.id===item.id);
       const matched=matches[currentIndex<0?0:currentIndex];
-      update(item.id,{avatarBusy:false,avatarOptions:[],avatarCrop:matched?.crop||null,
-        matchedCpf:!!matched,cropMode:matched?"avatar":"original",selected:false,
-        avatarError:matched?undefined:"Não foi possível associar foto e CPF com segurança. Nenhuma foto será salva."});
+      if(scanTokens.current.get(item.id)!==token)return;
+      const verified=!!matched&&isValidAvatarReplacement(image,matched.crop,options[matched.faceIndex]?.face);
+      patchCurrent(item.id,current=>applyStableAvatarResult(current,matched?.crop||null,verified,
+        "Não foi possível associar foto e CPF com segurança. A última prévia foi mantida; salvamento bloqueado."));
     }catch{
-      update(item.id,{avatarBusy:false,avatarOptions:[],avatarError:"Detector H2 Face indisponível. Confira o recorte manualmente.",selected:false});
+      if(scanTokens.current.get(item.id)!==token)return;
+      patchCurrent(item.id,current=>keepPreviewOnFailedPreset(current,"Detector H2 Face indisponível. Prévia anterior preservada."));
     }
   };
   const autoPreviewWhite=async(item:Item)=>{
@@ -253,8 +260,8 @@ export default function H2BicoScreenshotImporter(){
         x:Math.round(found.x/scale),y:Math.round(found.y/scale),
         width:Math.round(found.width/scale),height:Math.round(found.height/scale)
       }:null);
-      update(item.id,{whiteChecked:true,whiteCrop:finalCrop,cropMode:finalCrop?"white":"original",
-        selected:false,error:finalCrop?undefined:"Fundo branco não localizado com segurança. Recorte antigo preservado. Confira o print original."});
+      patchCurrent(item.id,current=>finalCrop?{...current,whiteChecked:true,whiteCrop:finalCrop,cropMode:"white",selected:false,error:undefined}:
+        {...current,whiteChecked:true,selected:false,error:"Fundo branco não localizado. Recorte anterior preservado."});
       if(finalCrop)toast.success("Foto padrão: somente a área branca foi selecionada. Confira o preview.");
       else toast.warning("Fundo branco não localizado; nenhum recorte foi substituído.");
     }catch(error){update(item.id,{selected:false,error:error instanceof Error?error.message:"Erro ao analisar fundo branco."});}
@@ -384,6 +391,7 @@ export default function H2BicoScreenshotImporter(){
     for(const url of photoUrlsRef.current)URL.revokeObjectURL(url);
     photoUrlsRef.current.clear();
     avatarCache.current.clear();
+    scanTokens.current.clear();
     itemsRef.current=[];
     setItems([]);
     setProcessedCount(0);
@@ -490,7 +498,7 @@ export default function H2BicoScreenshotImporter(){
               <Input aria-label="Nome completo" disabled={saving||item.saved||item.existing} value={item.name}
                 onChange={e=>update(item.id,{name:e.target.value,nameSource:"ocr",error:undefined})} placeholder="NOME NÃO IDENTIFICADO" />
               <Input aria-label="CPF" disabled={saving||item.saved||item.existing} value={item.cpf}
-                onChange={e=>update(item.id,{cpf:digits(e.target.value).slice(0,11),error:undefined})} placeholder="CPF" />
+                onChange={e=>{scanTokens.current.set(item.id,(scanTokens.current.get(item.id)||0)+1);update(item.id,{cpf:digits(e.target.value).slice(0,11),matchedCpf:false,selected:false,error:undefined});}} placeholder="CPF" />
               {item.cpfSuggestion&&!item.saved&&!item.existing&&<div className="rounded-lg border border-amber-500/50 bg-amber-950/20 p-2 space-y-2">
                 <p className="text-xs font-bold text-amber-200">Possível erro de OCR. CPF sugerido: {item.cpfSuggestion.slice(0,3)}.{item.cpfSuggestion.slice(3,6)}.{item.cpfSuggestion.slice(6,9)}-{item.cpfSuggestion.slice(9)}. Compare com o print original.</p>
                 <Button type="button" variant="outline" size="sm" disabled={saving} onClick={()=>{
