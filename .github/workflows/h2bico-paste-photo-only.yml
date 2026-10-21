@@ -1,0 +1,19 @@
+name: H2BICO Paste Photo Only
+on:
+  push:
+    branches:
+      - fix/h2bico-paste-photo-only-no-ocr-20261021
+jobs:
+  validate:
+    runs-on: ubuntu-latest
+    timeout-minutes: 25
+    steps:
+      - uses: actions/checkout@v4
+      - uses: pnpm/action-setup@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: "22"
+          cache: pnpm
+      - run: pnpm install --frozen-lockfile
+      - run: pnpm exec vitest run server/h2bicoStandaloneAvatar.test.ts server/h2bicoManualPhotoCrop.test.ts
+      - run: pnpm run build

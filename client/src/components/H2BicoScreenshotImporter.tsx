@@ -90,6 +90,7 @@ export default function H2BicoScreenshotImporter(){
   const [replaceTargetId,setReplaceTargetId]=useState<string|null>(null);
   const avatarInput=useRef<HTMLInputElement>(null);
   const [avatarTargetId,setAvatarTargetId]=useState<string|null>(null);
+  const [pastedPhoto,setPastedPhoto]=useState<{id:string;url:string;width:number;height:number}|null>(null);
   // Fila sem limite artificial de quantidade: cada imagem e analisada separadamente.
   const pendingRef=useRef<File[]>([]);
   const runningRef=useRef(false);
@@ -411,7 +412,14 @@ export default function H2BicoScreenshotImporter(){
       const type=clips.flatMap(clip=>clip.types).find(value=>["image/png","image/jpeg","image/webp"].includes(value));
       if(!type)throw new Error("Copie primeiro uma imagem ou print.");
       const blob=await clips.find(clip=>clip.types.includes(type))!.getType(type);
-      await replacePrintForItem(item,new File([blob],"print-substituido-"+Date.now()+".png",{type}));
+      const file=new File([blob],"foto-colada-"+Date.now()+".png",{type});
+       const bitmap=await createImageBitmap(file);
+       try{
+         if(bitmap.width<70||bitmap.height<80||bitmap.width*bitmap.height>20_000_000)throw new Error("Print muito pequeno ou grande.");
+         const url=URL.createObjectURL(file);photoUrlsRef.current.add(url);
+         // Clipboard screenshots do not need identity OCR. Confirm the photo-only crop first.
+         setPastedPhoto({id:item.id,url,width:bitmap.width,height:bitmap.height});
+       }finally{bitmap.close();}
     }catch(error){toast.error(error instanceof Error?error.message:"O navegador não permitiu ler o print copiado.");}
   };
 
@@ -542,6 +550,7 @@ export default function H2BicoScreenshotImporter(){
     </div>
     {status&&<p role="status" className="text-sm text-amber-200">{status}</p>}
     {items.length>0&&<>
+      {pastedPhoto&&<H2BicoManualCropDialog open={true} onOpenChange={open=>{if(!open)setPastedPhoto(null);}} imageUrl={pastedPhoto.url} imageWidth={pastedPhoto.width} imageHeight={pastedPhoto.height} onConfirm={crop=>{const pending=pastedPhoto;if(!pending)return;scanTokens.current.set(pending.id,(scanTokens.current.get(pending.id)||0)+1);update(pending.id,{photo:pending.url,source:"print-colado-foto",width:pending.width,height:pending.height,manualCrop:crop,cropMode:"manual",avatarBusy:false,matchedCpf:false,selected:false,avatarCrop:null,whiteCrop:null,error:undefined});setPastedPhoto(null);toast.success("Somente a foto deste card mudou; CPF, nome e EAR preservados.");}}/>}
       {items.filter(item=>item.id===editingPhotoId).map(item=><H2BicoManualCropDialog key={item.id} open={true} onOpenChange={open=>{if(!open)setEditingPhotoId(null);}} imageUrl={item.photo} imageWidth={item.width} imageHeight={item.height} initialCrop={item.manualCrop||item.avatarCrop||item.whiteCrop||portraitFromLegacySquare(item.width,item.height,item.crop)} onConfirm={crop=>{scanTokens.current.set(item.id,(scanTokens.current.get(item.id)||0)+1);update(item.id,{manualCrop:crop,cropMode:"manual",avatarBusy:false,selected:false,error:undefined,avatarError:undefined});toast.success("Recorte atualizado. Somente a foto foi alterada.");}}/>)}
       <div className="flex flex-wrap items-center justify-between gap-2">
         <div className="text-sm font-bold">{items.length} identificado(s) • {items.filter(x=>x.existing).length} já cadastrado(s) • {selected.length} selecionado(s)</div>
