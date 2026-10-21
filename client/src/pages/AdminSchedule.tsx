@@ -5,7 +5,7 @@ import React, { useState, useMemo, useEffect, useCallback, useRef } from "react"
 import { toast } from "sonner";
 import AdminHeader from "@/components/AdminHeader";
 import "@/styles/h2-schedule-gamer.css";
-import { CalendarClock, Plus, Trash2, ToggleLeft, ToggleRight, Save, FileText, CalendarDays, MessageSquare, List, MessageCircle, Copy, Check, Calendar, Pencil, RefreshCw, XCircle, CheckCircle, Palette, Sparkles, Activity, Clock3, Users, Monitor, Smartphone, ChevronRight, Eye } from "lucide-react";
+import { CalendarClock, Plus, Trash2, ToggleLeft, ToggleRight, Save, FileText, CalendarDays, MessageSquare, List, MessageCircle, Copy, Check, Calendar, Pencil, RefreshCw, XCircle, CheckCircle, Palette, Sparkles, Activity, Clock3, Users, Monitor, Smartphone, ChevronRight, Eye, ShieldCheck } from "lucide-react";
 
 // Helper function to get local time with timezone offset (GMT-3) — v2
 function getLocalTime() {
