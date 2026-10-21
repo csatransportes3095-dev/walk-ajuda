@@ -302,7 +302,7 @@ export default function H2BicoScreenshotImporter(){
                whiteChecked:true,
               width:analysis.width,height:analysis.height,
               existing:p.alreadyExists,
-              selected:shouldPreselectH2BicoPhoto(p),
+              selected:shouldPreselectH2BicoPhoto({...p,crop:p.crop}),
               warnings:[...p.warnings,...(resolved.warning?[resolved.warning]:[])],
             });});
             setItems(current=>{
@@ -416,7 +416,6 @@ export default function H2BicoScreenshotImporter(){
         try{
           // Both legacy square and automatic white crops are already bounded to the portrait preview.
           if(item.avatarBusy)throw new Error("Aguarde a análise facial.");
-          if(!item.matchedCpf&&item.cropMode!=="manual")throw new Error("Foto não associada ao CPF. Importação bloqueada.");
           if(item.cropMode==="manual"&&(!item.manualCrop||!validateManualPhotoCrop(item.manualCrop,item.width,item.height)))throw new Error("Recorte manual inválido.");
           const base64=await cropPhoto(item);
           const result=await save.mutateAsync({cpf:item.cpf,name:item.name,base64,photoMode:item.cropMode==="white"||item.cropMode==="avatar"||item.cropMode==="manual"?"white":"original"});
@@ -447,8 +446,8 @@ export default function H2BicoScreenshotImporter(){
   };
   const eligible=(item:Item)=>!item.existing&&!item.saved&&isValidCpf(item.cpf)&&
     item.name.trim().split(/\s+/).length>=2&&item.confidence!==undefined&&item.confidence>=70&&
-    !item.cpfSuggestion&&!item.warnings.some(w=>/CONFIRA O N[UÚ]MERO|ASSOCIA|CPF REPETIDO|LEITURA DIVERGENTE/i.test(w))&&
-    (item.matchedCpf===true&&item.cropMode==="avatar"&&!!item.avatarCrop||item.cropMode==="manual"&&!!item.manualCrop&&validateManualPhotoCrop(item.manualCrop,item.width,item.height));
+    !item.cpfSuggestion&&!item.warnings.some(w=>/CONFIRA O N[UÚ]MERO|CPF REPETIDO|LEITURA DIVERGENTE/i.test(w))&&
+    (item.cropMode==="avatar"&&!!item.avatarCrop||item.cropMode==="white"&&!!item.whiteCrop||item.cropMode==="manual"&&!!item.manualCrop&&validateManualPhotoCrop(item.manualCrop,item.width,item.height)||item.cropMode==="original"&&item.crop.size>=48);
   const selected=items.filter(item=>item.selected&&!item.saved&&!item.existing);
   const selectable=items.filter(eligible);
   const selectAll=()=>setItems(current=>current.map(item=>({...item,selected:eligible(item)})));
@@ -541,7 +540,7 @@ export default function H2BicoScreenshotImporter(){
                   <p className="text-[11px] text-amber-200">Consultando o cadastro já existente para gravar o marcador.</p>}
               </div>
               <label className="inline-flex items-center gap-2 text-sm">
-                <input type="checkbox" checked={item.selected} disabled={saving||item.saved||item.existing||!(item.matchedCpf||item.cropMode==="manual"&&!!item.manualCrop)}
+                <input type="checkbox" checked={item.selected} disabled={saving||item.saved||item.existing||!isValidCpf(item.cpf)||item.name.trim().split(/\s+/).length<2}
                   onChange={e=>update(item.id,{selected:e.target.checked})}/>
                 {item.saved?"SALVO":item.existing?"CPF JÁ CADASTRADO":isValidCpf(item.cpf)?"Conferido — salvar":"CPF INVÁLIDO"}
               </label>
@@ -554,7 +553,7 @@ export default function H2BicoScreenshotImporter(){
             <div className="rounded-xl border border-cyan-500/30 bg-cyan-500/5 p-3 space-y-2">
               <div className="flex flex-wrap items-center justify-between gap-2"><span className="text-sm font-black text-cyan-300">RECORTE AVATAR INTELIGENTE • H2 FACE</span><Button type="button" size="sm" disabled={saving||busy||item.avatarBusy} onClick={()=>void detectAvatar(item)}>{item.avatarBusy?"ANALISANDO...":"LOCALIZAR ROSTO"}</Button></div>
               {item.avatarError&&<p role="alert" className="text-xs text-amber-200">{item.avatarError}</p>}
-              <p className="text-xs text-slate-400">{item.matchedCpf?"Foto localizada no card do CPF.":"CPF sem associação segura: salvamento bloqueado."}</p>
+              <p className="text-xs text-slate-400">{item.matchedCpf?"Foto localizada no card do CPF.":"Foto e CPF extraídos do print; confira o avatar antes de salvar."}</p>
             </div>
             <div className="flex flex-wrap items-center gap-2">
               <Button type="button" size="sm" variant={item.cropMode==="white"?"default":"outline"} disabled={saving||busy} onClick={()=>void applyWhitePreset(item)}>

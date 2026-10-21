@@ -34,7 +34,7 @@ describe("H2BICO: extracao de pessoas em prints",()=>{
   expect(router).toContain("alignScreenshotPhotoCrops(processed");
   expect(router).toContain("tessedit_char_whitelist=0123456789.-");
   expect(router).toContain("CONFIRA O NUMERO");
-  expect(ui).toContain("shouldPreselectH2BicoPhoto(p)");
+  expect(ui).toContain("shouldPreselectH2BicoPhoto({...p,crop:p.crop})");
   expect(readFileSync("client/src/lib/h2bicoImportReview.ts","utf8")).toContain("row.confidence<70");
   expect(ui).toContain("CONFIRA O NUMERO");
   expect(readFileSync("server/h2bicoScreenshotOcr.ts","utf8")).toContain("nameBox:{left:line.left");
