@@ -3,7 +3,7 @@ on:
   pull_request:
     paths:
       - "client/src/lib/h2bicoAvatarCrop.ts"
-      - "client/src/lib/h2bicoAvatarCrop.test.ts"
+      - "server/h2bicoAvatarCrop.test.ts"
       - "client/src/components/H2BicoScreenshotImporter.tsx"
       - "client/src/lib/similarFaceTfliteRuntime.ts"
       - ".github/workflows/h2bico-smart-avatar-validation.yml"
@@ -23,6 +23,6 @@ jobs:
           cache: pnpm
       - run: pnpm install --frozen-lockfile
       - name: Avatar crop unit tests
-        run: pnpm exec vitest run client/src/lib/h2bicoAvatarCrop.test.ts
+        run: pnpm exec vitest run server/h2bicoAvatarCrop.test.ts
       - name: Production build
         run: pnpm run build
