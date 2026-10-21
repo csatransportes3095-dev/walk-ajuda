@@ -57,13 +57,16 @@ jobs:
           try{await db.query('CREATE DATABASE IF NOT EXISTS h2_bulk_test');await db.query('CREATE DATABASE IF NOT EXISTS h2_site_code_test');}finally{await db.end();}
           JS
       - name: Protect code generation, sessions, scheduling and delivery configuration
+        env:
+          PULL_REQUEST_BASE_SHA: ${{ github.event.pull_request.base.sha }}
         run: |
           node --input-type=module <<'JS'
           import fs from 'node:fs';
           import assert from 'node:assert/strict';
           import {execFileSync} from 'node:child_process';
           import ts from 'typescript';
-          const base='0183a51750d3556cb4d2b345e29af57f7931c32d';
+          const base=process.env.PULL_REQUEST_BASE_SHA;
+          if(!/^[a-f0-9]{40}$/i.test(base||''))throw new Error('Invalid pull request base SHA');
           const normalizeLines=source=>source.replace(/\r\n/g,'\n');
           const before=p=>normalizeLines(execFileSync('git',['show',base+':'+p],{encoding:'utf8'}));
           const read=p=>normalizeLines(fs.readFileSync(p,'utf8'));
@@ -108,7 +111,7 @@ jobs:
           };
           assert.deepEqual(protectedRoutes(read('server/siteAccessIdentity.ts')),protectedRoutes(before('server/siteAccessIdentity.ts')),'Verification or session routes changed');
           const withoutDenial=source=>source.replace(/^export const SITE_ACCESS_DENIED_(?:CODE|MESSAGE) = .*;\r?\n/gm,'').trimEnd();
-          assert.equal(withoutDenial(read('shared/siteAccessCodePolicy.ts')),before('shared/siteAccessCodePolicy.ts').trimEnd(),'Code format or lifetime changed');
+          assert.equal(withoutDenial(read('shared/siteAccessCodePolicy.ts')),withoutDenial(before('shared/siteAccessCodePolicy.ts')),'Code format or lifetime changed');
           console.log('PASS: authorization request changes preserve the generator, ledger schema, rate-limit algorithm, verification, sessions, delivery transport and unrelated operations.');
           JS
       - name: Test six-digit lifecycle and all site regressions
