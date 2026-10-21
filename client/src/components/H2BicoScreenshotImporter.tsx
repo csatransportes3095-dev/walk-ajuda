@@ -411,7 +411,8 @@ export default function H2BicoScreenshotImporter(){
       const type=clips.flatMap(clip=>clip.types).find(value=>["image/png","image/jpeg","image/webp"].includes(value));
       if(!type)throw new Error("Copie primeiro uma imagem ou print.");
       const blob=await clips.find(clip=>clip.types.includes(type))!.getType(type);
-      await replacePrintForItem(item,new File([blob],"print-substituido-"+Date.now()+".png",{type}));
+      const file=new File([blob],"foto-colada-"+Date.now()+".png",{type});
+       await replaceOnlyAvatar(item,file);
     }catch(error){toast.error(error instanceof Error?error.message:"O navegador não permitiu ler o print copiado.");}
   };
 
