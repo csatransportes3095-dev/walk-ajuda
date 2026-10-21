@@ -140,7 +140,7 @@ export default function H2BicoScreenshotImporter(){
   };
   // Automatically try the independent white-background crop on every
   // imported print. Wrong legacy estimates must not silently save a dark box.
-  const detectAvatar=async(item:Item)=>{
+  const detectAvatar=async(item:Item,totalInPrint?:number)=>{
     update(item.id,{avatarBusy:true,avatarError:undefined});
     try{
       const img=new Image();img.src=item.photo;await img.decode();
@@ -149,7 +149,7 @@ export default function H2BicoScreenshotImporter(){
       ctx.drawImage(img,0,0);
       const faces=await detectH2AvatarFaces(canvas);
       const options=rankAvatarCandidates(faces,{data:ctx.getImageData(0,0,canvas.width,canvas.height).data,width:canvas.width,height:canvas.height},item.nameBox);
-      const single=shouldAutoSelectAvatar(options.length,items.filter(x=>x.source===item.source).length);
+      const single=shouldAutoSelectAvatar(options.length,totalInPrint??items.filter(x=>x.source===item.source).length);
       update(item.id,{avatarBusy:false,avatarOptions:options,avatarCrop:single?options[0]?.crop:null,
         cropMode:single?"avatar":item.cropMode,selected:false,
         avatarError:!options.length?"Nenhum recorte facial confiável. Ajuste manualmente.":!single?"Mais de um rosto ou cadastro: escolha o recorte correto.":undefined});
@@ -271,6 +271,11 @@ export default function H2BicoScreenshotImporter(){
               }
               return merged;
             });
+            // When the white photo detector misses, ask H2 Face to locate the avatar.
+            // Do this asynchronously; keep OCR processing and all previous crop modes.
+            for(const person of incoming){
+              if(!person.whiteCrop)void detectAvatar(person,incoming.length);
+            }
             // The server has already located portraits on the full source image.
             // Never overwrite these coordinates with the old proximity-based detector.
           }else toast.warning(file.name+": nenhum CPF identificado.");
