@@ -11,6 +11,8 @@ import { isValidCpf } from "@/lib/h2bicoCpfExtractor";
 import { resolveH2BicoCardName } from "@/lib/h2bicoCardName";
 import { applyStableAvatarResult, isValidAvatarReplacement, keepPreviewOnFailedPreset } from "@/lib/h2bicoStablePreview";
 import { shouldPreselectH2BicoPhoto } from "@/lib/h2bicoImportReview";
+import H2BicoManualCropDialog from "@/components/H2BicoManualCropDialog";
+import {validateManualPhotoCrop} from "@/lib/h2bicoManualPhotoCrop";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Card } from "@/components/ui/card";
@@ -27,7 +29,7 @@ type Item={
   nameBox?:{left:number;top:number;width:number;height:number};
   cpfBox?:{left:number;top:number;width:number;height:number}; matchedCpf?:boolean;
   nameSource?:"cadastro"|"ocr"|"pending";
-  cropMode?:"original"|"white"|"avatar"; whiteCrop?:WhitePhotoCrop|null; whiteChecked?:boolean;
+  cropMode?:"original"|"white"|"avatar"|"manual"; manualCrop?:WhitePhotoCrop|null; whiteCrop?:WhitePhotoCrop|null; whiteChecked?:boolean;
   avatarCrop?:WhitePhotoCrop|null; avatarOptions?:AvatarCandidate[]; avatarBusy?:boolean; avatarError?:string;
   // Marcador manual e independente de OCR, foto ou disponibilidade.
   earStatus?:EarStatus|null; earTouched?:boolean; earSynced?:boolean; savedRecordId?:number;
@@ -45,7 +47,7 @@ async function cropPhoto(item:Item):Promise<string>{
   await image.decode();
   const canvas=document.createElement("canvas");
   const size=Math.round(item.crop.size);
-  const white=item.cropMode==="avatar"?item.avatarCrop:item.cropMode==="white"?item.whiteCrop:null;
+  const white=item.cropMode==="manual"?item.manualCrop:item.cropMode==="avatar"?item.avatarCrop:item.cropMode==="white"?item.whiteCrop:null;
   const x=Math.round(item.crop.x);
   const y=Math.round(item.crop.y);
   if(!white&&(size<48||x<0||y<0||x+size>image.naturalWidth||y+size>image.naturalHeight))
@@ -67,9 +69,9 @@ async function cropPhoto(item:Item):Promise<string>{
 }
 function CropPreview({item}:{item:Item}){
   const {crop,width,height}=item;
-  const active=item.cropMode==="avatar"&&item.avatarCrop?item.avatarCrop:item.cropMode==="white"&&item.whiteCrop?item.whiteCrop:{x:crop.x,y:crop.y,width:crop.size,height:crop.size};
+  const active=item.cropMode==="manual"&&item.manualCrop?item.manualCrop:item.cropMode==="avatar"&&item.avatarCrop?item.avatarCrop:item.cropMode==="white"&&item.whiteCrop?item.whiteCrop:{x:crop.x,y:crop.y,width:crop.size,height:crop.size};
   const scale=112/Math.max(1,active.width);
-  return <div className={`relative ${item.cropMode==="white"||item.cropMode==="avatar"?"h-36":"h-28"} w-28 shrink-0 overflow-hidden rounded-lg border border-cyan-400/40 bg-black`}>
+  return <div className={`relative ${item.cropMode==="white"||item.cropMode==="avatar"||item.cropMode==="manual"?"h-36":"h-28"} w-28 shrink-0 overflow-hidden rounded-lg border border-cyan-400/40 bg-black`}>
     <img alt={"Recorte de "+item.name} src={item.photo} style={{
       position:"absolute",maxWidth:"none",width:width*scale,height:height*scale,
       left:-active.x*scale,top:-active.y*scale
@@ -82,6 +84,7 @@ export default function H2BicoScreenshotImporter(){
   const [busy,setBusy]=useState(false);
   const [saving,setSaving]=useState(false);
   const [status,setStatus]=useState("");
+  const [editingPhotoId,setEditingPhotoId]=useState<string|null>(null);
   // Fila sem limite artificial de quantidade: cada imagem e analisada separadamente.
   const pendingRef=useRef<File[]>([]);
   const runningRef=useRef(false);
@@ -393,6 +396,7 @@ export default function H2BicoScreenshotImporter(){
     avatarCache.current.clear();
     scanTokens.current.clear();
     itemsRef.current=[];
+    setEditingPhotoId(null);
     setItems([]);
     setProcessedCount(0);
     nextPrintNumber.current=0;
@@ -412,9 +416,10 @@ export default function H2BicoScreenshotImporter(){
         try{
           // Both legacy square and automatic white crops are already bounded to the portrait preview.
           if(item.avatarBusy)throw new Error("Aguarde a análise facial.");
-          if(!item.matchedCpf)throw new Error("Foto não associada ao CPF. Importação bloqueada.");
+          if(!item.matchedCpf&&item.cropMode!=="manual")throw new Error("Foto não associada ao CPF. Importação bloqueada.");
+          if(item.cropMode==="manual"&&(!item.manualCrop||!validateManualPhotoCrop(item.manualCrop,item.width,item.height)))throw new Error("Recorte manual inválido.");
           const base64=await cropPhoto(item);
-          const result=await save.mutateAsync({cpf:item.cpf,name:item.name,base64,photoMode:item.cropMode==="white"||item.cropMode==="avatar"?"white":"original"});
+          const result=await save.mutateAsync({cpf:item.cpf,name:item.name,base64,photoMode:item.cropMode==="white"||item.cropMode==="avatar"||item.cropMode==="manual"?"white":"original"});
           if(result.result==="imported"){
             imported++;
             const savedRecordId=Number(result.id)||undefined;
@@ -443,7 +448,7 @@ export default function H2BicoScreenshotImporter(){
   const eligible=(item:Item)=>!item.existing&&!item.saved&&isValidCpf(item.cpf)&&
     item.name.trim().split(/\s+/).length>=2&&item.confidence!==undefined&&item.confidence>=70&&
     !item.cpfSuggestion&&!item.warnings.some(w=>/CONFIRA O N[UÚ]MERO|ASSOCIA|CPF REPETIDO|LEITURA DIVERGENTE/i.test(w))&&
-    item.matchedCpf===true&&item.cropMode==="avatar"&&!!item.avatarCrop;
+    (item.matchedCpf===true&&item.cropMode==="avatar"&&!!item.avatarCrop||item.cropMode==="manual"&&!!item.manualCrop&&validateManualPhotoCrop(item.manualCrop,item.width,item.height));
   const selected=items.filter(item=>item.selected&&!item.saved&&!item.existing);
   const selectable=items.filter(eligible);
   const selectAll=()=>setItems(current=>current.map(item=>({...item,selected:eligible(item)})));
@@ -470,6 +475,7 @@ export default function H2BicoScreenshotImporter(){
     </div>
     {status&&<p role="status" className="text-sm text-amber-200">{status}</p>}
     {items.length>0&&<>
+      {items.filter(item=>item.id===editingPhotoId).map(item=><H2BicoManualCropDialog key={item.id} open={true} onOpenChange={open=>{if(!open)setEditingPhotoId(null);}} imageUrl={item.photo} imageWidth={item.width} imageHeight={item.height} initialCrop={item.manualCrop||item.avatarCrop||item.whiteCrop||null} onConfirm={crop=>{scanTokens.current.set(item.id,(scanTokens.current.get(item.id)||0)+1);update(item.id,{manualCrop:crop,cropMode:"manual",avatarBusy:false,selected:false,error:undefined,avatarError:undefined});toast.success("Recorte atualizado. Somente a foto foi alterada.");}}/>)}
       <div className="flex flex-wrap items-center justify-between gap-2">
         <div className="text-sm font-bold">{items.length} identificado(s) • {items.filter(x=>x.existing).length} já cadastrado(s) • {selected.length} selecionado(s)</div>
         <div className="flex gap-2">
@@ -482,7 +488,7 @@ export default function H2BicoScreenshotImporter(){
       <div className="grid grid-cols-1 gap-3 xl:grid-cols-2 2xl:grid-cols-3 items-start">
         {items.map(item=><div key={item.id} className="min-w-0 rounded-xl border border-white/10 bg-black/20 p-3">
           <div className="flex flex-wrap items-start gap-3">
-            <div className="space-y-2"><CropPreview item={item}/><p className="text-[11px] text-cyan-200">{item.cropMode==="white"?"Foto padrão 4:5":item.cropMode==="avatar"?"Avatar inteligente 4:5":"Recorte atual"}</p></div>
+            <div className="space-y-2"><CropPreview item={item}/><Button type="button" size="sm" variant="outline" disabled={saving||busy||item.saved} onClick={()=>setEditingPhotoId(item.id)} className="h-auto max-w-32 whitespace-normal text-xs">TROCAR RECORTE DA FOTO</Button><p className="text-[11px] text-cyan-200">{item.cropMode==="manual"?"Recorte ajustado 4:5":item.cropMode==="white"?"Foto padrão 4:5":item.cropMode==="avatar"?"Avatar inteligente 4:5":"Recorte atual"}</p></div>
             <div className="min-w-[210px] flex-1 space-y-2">
               <div className="flex flex-wrap items-center justify-between gap-2">
                  <div className="text-xs text-gray-400 break-all">{item.source}</div>
@@ -535,7 +541,7 @@ export default function H2BicoScreenshotImporter(){
                   <p className="text-[11px] text-amber-200">Consultando o cadastro já existente para gravar o marcador.</p>}
               </div>
               <label className="inline-flex items-center gap-2 text-sm">
-                <input type="checkbox" checked={item.selected} disabled={saving||item.saved||item.existing||!item.matchedCpf}
+                <input type="checkbox" checked={item.selected} disabled={saving||item.saved||item.existing||!(item.matchedCpf||item.cropMode==="manual"&&!!item.manualCrop)}
                   onChange={e=>update(item.id,{selected:e.target.checked})}/>
                 {item.saved?"SALVO":item.existing?"CPF JÁ CADASTRADO":isValidCpf(item.cpf)?"Conferido — salvar":"CPF INVÁLIDO"}
               </label>

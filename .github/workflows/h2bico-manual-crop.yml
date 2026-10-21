@@ -1,0 +1,24 @@
+name: H2BICO Manual Crop Validation
+on:
+  push:
+    branches:
+      - feat/h2bico-manual-4by5-photo-crop-20261021
+  pull_request:
+    paths:
+      - client/src/lib/h2bicoManualPhotoCrop.ts
+      - client/src/components/H2BicoManualCropDialog.tsx
+      - client/src/components/H2BicoScreenshotImporter.tsx
+jobs:
+  validate:
+    runs-on: ubuntu-latest
+    timeout-minutes: 25
+    steps:
+      - uses: actions/checkout@v4
+      - uses: pnpm/action-setup@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: "22"
+          cache: pnpm
+      - run: pnpm install --frozen-lockfile
+      - run: pnpm exec vitest run server/h2bicoManualPhotoCrop.test.ts server/h2bicoStablePreview.test.ts
+      - run: pnpm run build
