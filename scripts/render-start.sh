@@ -49,7 +49,12 @@ run_boot_step "db-migrate-h2ads-browser-manual-commands" pnpm run db:migrate:h2a
 run_boot_step "db-migrate-h2ads-order-links" pnpm run db:migrate:h2ads-order-links
 run_boot_step "db-migrate-h2ads-multi-instance" pnpm run db:migrate:h2ads-multi-instance
 run_boot_step "db-migrate-generated-vin-registry" pnpm exec tsx scripts/apply-generated-vin-registry-migration.ts
-run_boot_step "db-migrate-chassis-service" pnpm exec tsx scripts/apply-chassis-service-migration.ts
+echo "[BOOT-DIAG] START restore-chassis-only-20261013 timestamp=$(date -u +%Y-%m-%dT%H:%M:%SZ)"
+if pnpm exec tsx scripts/restore-chassis-only-20261013.ts; then
+  echo "[BOOT-DIAG] OK restore-chassis-only-20261013 code=0 timestamp=$(date -u +%Y-%m-%dT%H:%M:%SZ)"
+else
+  echo "[BOOT-DIAG] WARNING restore-chassis-only-20261013 failed; continuing server startup"
+fi
 run_boot_step "db-migrate-h2ads-group-card-color" pnpm run db:migrate:h2ads-group-card-color
 run_boot_step "db-migrate-h2ads-proxy-pool" pnpm run db:migrate:h2ads-proxy-pool
 run_boot_step "vehicle-question-catalog-2016" pnpm exec tsx scripts/apply-vehicle-question-catalog-2016.ts

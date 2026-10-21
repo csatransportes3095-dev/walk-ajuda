@@ -122,16 +122,16 @@ export const MONTADORAS_VIN: Montadora[] = [
   { wmi: '9BW', vds: 'AA0A5', nome: 'Volkswagen Brasil',    modelos: ['Gol', 'Polo', 'T-Cross', 'Virtus'] },
   { wmi: '9BF', vds: 'ZAA5G', nome: 'Ford Brasil',          modelos: ['Ka', 'EcoSport', 'Territory', 'Ranger'] },
   { wmi: '9BG', vds: 'RB48Y', nome: 'GM Chevrolet Brasil',  modelos: ['Onix', 'Tracker', 'S10', 'Montana'] },
-  { wmi: '9BD', vds: 'A3ANA', nome: 'Fiat Brasil',          modelos: ['Strada', 'Pulse', 'Toro', 'Argo'] },
+  { wmi: '9BS', vds: 'A3ANA', nome: 'Fiat Brasil',          modelos: ['Strada', 'Pulse', 'Toro', 'Argo'] },
   { wmi: '9BR', vds: 'B29BT', plant: '2', nome: 'Toyota Brasil', modelos: ['Etios', 'Etios Cross', 'Corolla', 'Hilux', 'SW4', 'Yaris'] },
   { wmi: '93H', vds: 'GEG75', nome: 'Honda Brasil',         modelos: ['Civic', 'HR-V', 'CR-V', 'City'] },
   { wmi: '9BD', vds: 'X5ANA', nome: 'Jeep Brasil (FCA)',    modelos: ['Renegade', 'Compass', 'Commander'] },
   { wmi: '9BH', vds: 'ZA3A4', nome: 'Hyundai Brasil',       modelos: ['HB20', 'Creta', 'Tucson', 'Santa Fe'] },
-  { wmi: '93Y', vds: 'RB5A3', nome: 'Renault Brasil',       modelos: ['Kwid', 'Sandero', 'Duster', 'Oroch'] },
-  { wmi: '94D', vds: 'ZAB5G', nome: 'Nissan Brasil',        modelos: ['Kicks', 'Versa', 'Frontier', 'March'] },
+  { wmi: '9BM', vds: 'RB5A3', nome: 'Renault Brasil',       modelos: ['Kwid', 'Sandero', 'Duster', 'Oroch'] },
+  { wmi: '9BN', vds: 'ZAB5G', nome: 'Nissan Brasil',        modelos: ['Kicks', 'Versa', 'Frontier', 'March'] },
   { wmi: 'LGX', vds: 'CE4CC', nome: 'BYD (China/Brasil)',    modelos: ['Dolphin', 'Seal', 'Atto 3', 'Han', 'Tan', 'Song Plus', 'King'] },
   { wmi: '9BK', vds: 'AA3B5', nome: 'Caoa Chery Brasil',          modelos: ['Tiggo 2', 'Tiggo 5x', 'Tiggo 7', 'Tiggo 8', 'Arrizo 6'] },
-  { wmi: '936', vds: 'ZAA4G', nome: 'Peugeot Brasil (Stellantis)', modelos: ['208', '2008', '3008', '408', 'Expert'] },
+  { wmi: '935', vds: 'ZAA4G', nome: 'Peugeot Brasil (Stellantis)', modelos: ['208', '2008', '3008', '408', 'Expert'] },
   { wmi: '935', vds: 'ZBB3H', nome: 'Citroën Brasil (Stellantis)', modelos: ['C3', 'C4 Cactus', 'Aircross', 'Jumpy'] },
   { wmi: '93X', vds: 'AA5A3', nome: 'Mitsubishi Brasil',           modelos: ['L200 Triton', 'Pajero Sport', 'Eclipse Cross', 'Outlander'] },
   { wmi: 'KNA', vds: 'GM4A5', nome: 'Kia (Coreia do Sul)',         modelos: ['Sportage', 'Sorento', 'Stinger', 'EV6', 'Carnival'] },
@@ -162,26 +162,13 @@ export function obterPerfilFabricanteOficial(
     valor
       .normalize("NFD")
       .replace(/[\u0300-\u036f]/g, "")
-      .replace(/\s*\b(s\.?a\.?|sa|do|da|de|del|e)\b\s*/gi, " ")
+      .replace(/\s*(s\.?a\.?|sa|do|da|de|del|e)\s*/gi, " ")
       .replace(/[^a-z0-9]/gi, " ")
       .replace(/\s+/g, " ")
       .trim()
       .toLowerCase();
 
-  const aliasesMarca: Array<[RegExp, string]> = [
-    [/^(vw|volkswagen)(\s+volkswagen)?$/i, "volkswagen"],
-    [/^(gm\s+)?chevrolet$/i, "chevrolet"],
-    [/^caoa\s+chery$/i, "chery"],
-    [/^gwm(\s+haval)?$/i, "gwm"],
-  ];
-
-  let marcaNormalizada = normalizarTexto(marca);
-  for (const [padrao, alias] of aliasesMarca) {
-    if (padrao.test(marcaNormalizada)) {
-      marcaNormalizada = alias;
-      break;
-    }
-  }
+  const marcaNormalizada = normalizarTexto(marca);
 
   const fabricanteDireto = MONTADORAS_VIN.find((item) => {
     const nomeFabricante = normalizarTexto(item.nome);

@@ -114,7 +114,6 @@ import VipPage from "./pages/VipPage";
 import VipInstallmentPayments from "./pages/VipInstallmentPayments";
 import Ajuda from "./pages/Ajuda";
 import GeradorChassiPublico from "./pages/GeradorChassiPublico";
-import AdminChassisPage from "./pages/AdminChassisPage";
 import ProtectedPhotoPage from "./pages/ProtectedPhotoPage";
 import ResellerLogin from "./pages/ResellerLogin";
 import ResellerDashboard from "./pages/ResellerDashboard";
@@ -380,7 +379,7 @@ function Router() {
       <Route path={"/cartoes/historico/:id"} component={CartaoHistoricoPage} />
       <Route path={"/cartoes/mercado"} component={CartaoMercadoPage} />
       <Route path={CHASSIS_ADMIN_PATH}>
-        <AdminGuard><AdminChassisPage /></AdminGuard>
+        <AdminGuard><GeradorChassiPublico /></AdminGuard>
       </Route>
       <Route path={"/ajuda"} component={Ajuda} />
       <Route path={"/video/tutorial"} component={VideoTutorial} />
