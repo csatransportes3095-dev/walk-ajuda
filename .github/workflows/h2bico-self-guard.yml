@@ -15,5 +15,5 @@ jobs:
           node-version: "22"
           cache: pnpm
       - run: pnpm install --frozen-lockfile
-      - run: pnpm exec vitest run server/h2bicoScreenGuard.test.ts server/h2bicoScreenshotOcr.test.ts
+      - run: pnpm exec vitest run server/h2bicoScreenGuard.test.ts server/h2bicoScreenshotOcr.test.ts server/h2bicoResponsivePrint.test.ts
       - run: pnpm run build
