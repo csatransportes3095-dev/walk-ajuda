@@ -23,7 +23,9 @@ export function initialManualPhotoCrop(
   const suggested=previous?.width&&Number.isFinite(previous.width)
     ?previous.width:Math.min(260,max*.42);
   const width=Math.round(clamp(suggested,48,max));
-  const height=Math.round(width*MANUAL_CROP_ASPECT);
+  const previousRatio=previous&&previous.width>0&&previous.height>0
+    ?previous.height/previous.width:MANUAL_CROP_ASPECT;
+  const height=Math.round(Math.min(imageHeight,width*clamp(previousRatio,.70,2.30)));
   const centerX=previous&&Number.isFinite(previous.x)&&Number.isFinite(previous.width)
     ?previous.x+previous.width/2:imageWidth/2;
   const centerY=previous&&Number.isFinite(previous.y)&&Number.isFinite(previous.height)
@@ -89,7 +91,8 @@ export function resizeManualPhotoCrop(
   const max=maxManualPhotoWidth(imageWidth,imageHeight);
   if(max<48)return crop;
   const width=Math.round(clamp(newWidth,48,max));
-  const height=Math.round(width*MANUAL_CROP_ASPECT);
+  const ratio=crop.width>0?crop.height/crop.width:MANUAL_CROP_ASPECT;
+  const height=Math.round(Math.min(imageHeight,width*clamp(ratio,.70,2.30)));
   const centerX=crop.x+crop.width/2;
   const centerY=crop.y+crop.height/2;
   return {

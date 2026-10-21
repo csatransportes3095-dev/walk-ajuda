@@ -36,8 +36,8 @@ export default function H2BicoManualCropDialog({open,onOpenChange,imageUrl,image
  return <Dialog open={open} onOpenChange={onOpenChange}>
    <DialogContent className="z-[80] flex max-h-[94dvh] w-[min(98vw,1100px)] max-w-none flex-col gap-3 overflow-y-auto border-cyan-500/40 bg-slate-950 text-white">
      <DialogHeader>
-       <DialogTitle>Trocar recorte da foto • 4:5</DialogTitle>
-       <DialogDescription className="text-slate-300">Arraste a moldura sobre a foto do condutor. Ajuste o tamanho; apenas o recorte será alterado. Nome, CPF e EAR permanecem iguais.</DialogDescription>
+       <DialogTitle>Trocar recorte da foto • proporção original</DialogTitle>
+       <DialogDescription className="text-slate-300">A moldura acompanha a proporção real da foto. Arraste e amplie/reduza sem cortar cabeça, queixo ou ombros; apenas o recorte será alterado.</DialogDescription>
      </DialogHeader>
      <div className="grid min-w-0 gap-4 lg:grid-cols-[minmax(0,1fr)_240px]">
        <div className="min-w-0">
@@ -53,7 +53,7 @@ export default function H2BicoManualCropDialog({open,onOpenChange,imageUrl,image
        <div className="min-w-0 space-y-4">
          <div className="rounded-xl border border-cyan-500/30 bg-slate-900 p-3">
            <p className="mb-2 text-sm font-bold">Prévia do novo recorte</p>
-           {crop&&<div className="relative mx-auto w-40 max-w-full overflow-hidden rounded-lg border border-cyan-400 bg-black" style={{aspectRatio:"4/5"}}>
+           {crop&&<div className="relative mx-auto w-40 max-w-full overflow-hidden rounded-lg border border-cyan-400 bg-black" style={{aspectRatio:crop.width+"/"+crop.height}}>
              <img src={imageUrl} alt="Prévia exata do recorte 4 por 5" draggable={false} className="absolute max-w-none" style={{width:(imageWidth/crop.width*100)+"%",height:(imageHeight/crop.height*100)+"%",left:(-crop.x/crop.width*100)+"%",top:(-crop.y/crop.height*100)+"%"}}/>
            </div>}
          </div>
@@ -72,7 +72,7 @@ export default function H2BicoManualCropDialog({open,onOpenChange,imageUrl,image
            <Button type="button" variant="outline" onClick={()=>setCrop(c=>c?moveManualPhotoCrop(c,imageWidth,imageHeight,0,Math.max(3,c.height*.09)):c)}>↓</Button>
            <span/>
          </div>
-         <p className="text-xs text-slate-400">Enquadramento vertical 4:5. Arraste a moldura ou utilize as setas; confira rosto e ombros antes de confirmar.</p>
+         <p className="text-xs text-slate-400">A proporção segue a foto detectada. Arraste a moldura ou utilize as setas; confira rosto e ombros antes de confirmar.</p>
          {error&&<p role="alert" className="text-sm text-red-300">{error}</p>}
        </div>
      </div>

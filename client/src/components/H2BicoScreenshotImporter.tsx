@@ -85,6 +85,8 @@ export default function H2BicoScreenshotImporter(){
   const [saving,setSaving]=useState(false);
   const [status,setStatus]=useState("");
   const [editingPhotoId,setEditingPhotoId]=useState<string|null>(null);
+  const replaceInput=useRef<HTMLInputElement>(null);
+  const [replaceTargetId,setReplaceTargetId]=useState<string|null>(null);
   // Fila sem limite artificial de quantidade: cada imagem e analisada separadamente.
   const pendingRef=useRef<File[]>([]);
   const runningRef=useRef(false);
@@ -353,6 +355,36 @@ export default function H2BicoScreenshotImporter(){
     void processQueue();
   },[processQueue]);
 
+  const replacePrintForItem=async(item:Item,file:File)=>{
+    try{
+      if(!["image/jpeg","image/png","image/webp"].includes(file.type)||file.size>10*1024*1024)
+        throw new Error("Use JPG, PNG ou WEBP com até 10 MB por imagem.");
+      setStatus("Substituindo print de "+item.name+"...");
+      const analysis=await analyze.mutateAsync({base64:await readBase64(file)});
+      const match=analysis.persons.find(person=>digits(person.cpf)===digits(item.cpf));
+      if(!match)throw new Error("O novo print não contém o mesmo CPF deste card; nada foi substituído.");
+      const photo=URL.createObjectURL(file);
+      photoUrlsRef.current.add(photo);
+      const portrait=match.whitePhotoCrop||portraitFromLegacySquare(analysis.width,analysis.height,match.crop);
+      update(item.id,{source:file.name,photo,crop:match.crop,width:analysis.width,height:analysis.height,
+        photoLayout:match.photoLayout,confidence:match.confidence,nameBox:match.nameBox,cpfBox:match.cpfBox,
+        whiteCrop:portrait,cropMode:portrait?"white":"original",whiteChecked:true,manualCrop:null,avatarCrop:null,
+        matchedCpf:false,avatarError:undefined,error:undefined,selected:false});
+      toast.success("Print substituído pelo CPF correto. Nome, CPF e EAR foram mantidos.");
+    }catch(error){toast.error(error instanceof Error?error.message:"Não foi possível substituir o print.");}
+    finally{setStatus("");setReplaceTargetId(null);}
+  };
+
+  const pasteReplacement=async(item:Item)=>{
+    try{
+      const clips=await navigator.clipboard.read();
+      const type=clips.flatMap(clip=>clip.types).find(value=>["image/png","image/jpeg","image/webp"].includes(value));
+      if(!type)throw new Error("Copie primeiro uma imagem ou print.");
+      const blob=await clips.find(clip=>clip.types.includes(type))!.getType(type);
+      await replacePrintForItem(item,new File([blob],"print-substituido-"+Date.now()+".png",{type}));
+    }catch(error){toast.error(error instanceof Error?error.message:"O navegador não permitiu ler o print copiado.");}
+  };
+
   // Botao explicito para ler imagens da area de transferencia.
   const pasteFromClipboard=async()=>{
     if(savingRef.current)return;
@@ -460,8 +492,10 @@ export default function H2BicoScreenshotImporter(){
       <h2 className="mt-1 text-xl font-black">Foto + nome + CPF → H2BICO</h2>
       <p className="mt-1 text-sm text-gray-400">Envie prints dos resultados. Confira cada foto, nome e CPF, selecione COM EAR ou SEM EAR e salve. A marcação usa o mesmo cadastro dos Cards de Clientes; fotos existentes não são substituídas.</p>
     </div>
-    <input ref={input} type="file" accept="image/png,image/jpeg,image/webp" multiple className="hidden"
-      onChange={e=>{if(e.target.files)void inspect(e.target.files);e.currentTarget.value="";}}/>
+     <input ref={input} type="file" accept="image/png,image/jpeg,image/webp" multiple className="hidden"
+       onChange={e=>{if(e.target.files)void inspect(e.target.files);e.currentTarget.value="";}}/>
+     <input ref={replaceInput} type="file" accept="image/png,image/jpeg,image/webp" className="hidden"
+       onChange={e=>{const item=items.find(row=>row.id===replaceTargetId);const file=e.target.files?.[0];if(item&&file)void replacePrintForItem(item,file);e.currentTarget.value="";}}/>
     <div onDragOver={e=>e.preventDefault()} onDrop={e=>{e.preventDefault();inspect(e.dataTransfer.files);}}
       className="rounded-xl border-2 border-dashed border-cyan-400/40 p-4 text-center">
       <div className="flex flex-wrap items-center justify-center gap-3">
@@ -489,13 +523,17 @@ export default function H2BicoScreenshotImporter(){
       <div className="grid grid-cols-1 gap-3 xl:grid-cols-2 2xl:grid-cols-3 items-start">
         {items.map(item=><div key={item.id} className="min-w-0 rounded-xl border border-white/10 bg-black/20 p-3">
           <div className="flex flex-wrap items-start gap-3">
-            <div className="space-y-2"><CropPreview item={item}/><Button type="button" size="sm" variant="outline" disabled={saving||busy||item.saved} onClick={()=>setEditingPhotoId(item.id)} className="h-auto max-w-32 whitespace-normal text-xs">TROCAR RECORTE DA FOTO</Button><p className="text-[11px] text-cyan-200">{item.cropMode==="manual"?"Recorte ajustado 4:5":item.cropMode==="white"?"Foto padrão 4:5":item.cropMode==="avatar"?"Avatar inteligente 4:5":"Recorte atual"}</p></div>
+             <div className="space-y-2"><CropPreview item={item}/><Button type="button" size="sm" variant="outline" disabled={saving||busy||item.saved} onClick={()=>setEditingPhotoId(item.id)} className="h-auto max-w-32 whitespace-normal text-xs">TROCAR RECORTE DA FOTO</Button><p className="text-[11px] text-cyan-200">{item.cropMode==="manual"?"Recorte manual da foto":item.cropMode==="white"?"Foto inteira detectada":item.cropMode==="avatar"?"Avatar inteligente":"Recorte atual"}</p></div>
             <div className="min-w-[210px] flex-1 space-y-2">
               <div className="flex flex-wrap items-center justify-between gap-2">
                  <div className="text-xs text-gray-400 break-all">{item.source}</div>
-                 <Button type="button" variant="outline" size="sm" onClick={()=>window.open(item.photo,"_blank","noopener,noreferrer")}>
-                   VER PRINT ORIGINAL
-                 </Button>
+                  <Button type="button" variant="outline" size="sm" onClick={()=>window.open(item.photo,"_blank","noopener,noreferrer")}>
+                    VER PRINT ORIGINAL
+                  </Button>
+                  {!item.saved&&<div className="flex flex-wrap gap-1">
+                    <Button type="button" variant="outline" size="sm" disabled={saving||busy} onClick={()=>{setReplaceTargetId(item.id);replaceInput.current?.click();}}>SUBSTITUIR PRINT</Button>
+                    <Button type="button" variant="outline" size="sm" disabled={saving||busy} onClick={()=>void pasteReplacement(item)}>COLAR OUTRO PRINT</Button>
+                  </div>}
                </div>
                <div className="text-xs text-cyan-200">
                  OCR {item.confidence??0}% • foto {item.photoLayout==="right"?"à direita":item.photoLayout==="above"?"acima":"à esquerda"}
@@ -558,14 +596,14 @@ export default function H2BicoScreenshotImporter(){
               <p className="text-xs text-slate-400">{item.matchedCpf?"Foto localizada no card do CPF.":"Foto e CPF extraídos do print; confira o avatar antes de salvar."}</p>
             </div>
             <div className="flex flex-wrap items-center gap-2">
-              <Button type="button" size="sm" variant={item.cropMode==="white"?"default":"outline"} disabled={saving||busy} onClick={()=>void applyWhitePreset(item)}>
-                USAR RECORTE PADRÃO DA FOTO — FUNDO BRANCO
+               <Button type="button" size="sm" variant={item.cropMode==="white"?"default":"outline"} disabled={saving||busy} onClick={()=>void applyWhitePreset(item)}>
+                 USAR RECORTE EXATO DA FOTO
               </Button>
               <Button type="button" size="sm" variant="outline" disabled={saving||busy} onClick={()=>update(item.id,{cropMode:"original",selected:false,error:undefined})}>
                 VOLTAR AO RECORTE ATUAL
               </Button>
             </div>
-            <p className="text-xs text-gray-400">Novo modo separado: começa no fundo branco, exclui a borda escura e mantém retrato vertical 4:5. Confira a prévia antes de marcar para salvar.</p>
+             <p className="text-xs text-gray-400">O recorte usa os limites reais da foto e exclui a borda escura. Confira rosto, queixo e ombros antes de marcar para salvar.</p>
             {item.existing&&<p className="text-xs text-amber-200">Já cadastrado: pode conferir o recorte, mas não é possível sobrescrever a foto salva.</p>}
             {!item.existing&&<div className="grid grid-cols-3 gap-2">
             {(["x","y","size"] as const).map(key=><label key={key} className="text-xs text-gray-400">

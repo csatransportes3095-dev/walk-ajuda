@@ -97,12 +97,12 @@ export function findWhitePhotoCrop(
     }
     if (samples < 5 || dark < 4) continue;
 
-    // Proporção vertical 4:5. Todo o retângulo fica DENTRO do fundo branco.
-    // Conservar a altura privilegia rosto inteiro e parte dos ombros.
-    const cropHeight = Math.floor(Math.min(photoHeight, photoWidth * 1.25));
-    const cropWidth = Math.floor(cropHeight * 0.8);
+    // Use a área inteira detectada. Não força 4:5: fotos de cadastro podem
+    // ser quase quadradas e o rosto/ombros não podem ser cortados nas laterais.
+    const cropWidth = photoWidth;
+    const cropHeight = photoHeight;
     if (cropWidth < 40 || cropHeight < 50) continue;
-    const cropX = minX + Math.floor((photoWidth - cropWidth) / 2);
+    const cropX = minX;
     const cropY = minY;
     const nearWhite = (x: number, y: number) =>
       x >= 0 && y >= 0 && x < width && y < height && light[y * width + x] === 1;
@@ -160,14 +160,10 @@ export function locateWhitePortrait(
   const rightOfName=left>nameX&&left<nameX+nameWidth+w*1.3&&
     Math.abs(top+h*.5-nameY)<Math.max(h*.9,70);
   if(!above&&!leftOfName&&!rightOfName)continue;
-  // On "photo above name" cards, hair/clothing can interrupt the WHITE
-  // region before the image ends. Use the full white width and a 4:5 height,
-  // instead of stopping at the last white pixel and cutting shoulders off.
-  // The candidate must still end above its associated name.
-  const safeAboveHeight=Math.floor(Math.min(height-top,nameY-top-12));
-  const outW=above?Math.min(w,Math.floor(safeAboveHeight/1.25)):
-    Math.floor(Math.min(h,w*1.25)*.8);
-  const outH=above?Math.floor(outW*1.25):Math.floor(Math.min(h,w*1.25));
+  // Use the complete connected photo bounds. The original image can be
+  // square or near-square; forcing 4:5 was cutting the sides and shoulders.
+  const outW=w;
+  const outH=h;
   if(outW<64||outH<80||top+outH>height)continue;
   const outX=left+Math.floor((w-outW)/2);
   if(!mark[(top+2)*width+outX+3]||!mark[(top+2)*width+outX+outW-4])continue;
@@ -191,8 +187,8 @@ export function isWhitePortraitAboveName(
  const distance=nameBox.top-(crop.y+crop.height);
  const center=crop.x+crop.width/2;
  const nameCenter=nameBox.left+nameBox.width/2;
- return distance>=7 &&
+  return distance>=7 &&
   distance<=Math.max(35,crop.height*.60) &&
   Math.abs(center-nameCenter)<Math.max(crop.width*.50,nameBox.width*.8) &&
-  Math.abs(crop.height/crop.width-1.25)<.025;
+  crop.height/crop.width>=.70 && crop.height/crop.width<=2.30;
 }

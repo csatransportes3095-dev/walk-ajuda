@@ -11,12 +11,12 @@ const clamp=(value:number,min:number,max:number)=>Math.max(min,Math.min(max,valu
 const finite=(value:number)=>Number.isFinite(value);
 export function isSafeAvatarRect(crop:AvatarRect,width:number,height:number):boolean {
   return [crop.x,crop.y,crop.width,crop.height,width,height].every(finite) &&
-    crop.width>=48 && crop.height>=60 &&
+    crop.width>=48 && crop.height>=60 && crop.height/crop.width>=.70 && crop.height/crop.width<=2.30 &&
     crop.x>=0 && crop.y>=0 && crop.x+crop.width<=width+0.01 && crop.y+crop.height<=height+0.01 &&
     Math.abs(crop.height/crop.width-1.25)<0.035;
 }
 
-/** Build a full 4:5 portrait around a detected face. Face is top-centered, leaving shoulders in view. */
+/** Build a portrait around a detected face. Face is top-centered, leaving shoulders in view. */
 export function portraitAroundFace(face:AvatarFace,width:number,height:number,scale=1.85):AvatarRect|null {
   if(![face.x,face.y,face.width,face.height,face.score,width,height].every(finite)||
      face.width<20||face.height<20||face.score<0.36||width<60||height<80)return null;
