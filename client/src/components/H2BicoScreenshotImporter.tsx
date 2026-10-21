@@ -45,7 +45,7 @@ async function cropPhoto(item:Item):Promise<string>{
   const white=item.cropMode==="avatar"?item.avatarCrop:item.cropMode==="white"?item.whiteCrop:null;
   const x=Math.round(item.crop.x);
   const y=Math.round(item.crop.y);
-  if(size<48||x<0||y<0||x+size>image.naturalWidth||y+size>image.naturalHeight)
+  if(!white&&(size<48||x<0||y<0||x+size>image.naturalWidth||y+size>image.naturalHeight))
     throw new Error("Ajuste o recorte da foto.");
   canvas.width=white ? Math.round(white.width) : size;
   canvas.height=white ? Math.round(white.height) : size;
@@ -402,7 +402,7 @@ export default function H2BicoScreenshotImporter(){
           if(item.avatarBusy)throw new Error("Aguarde a análise facial.");
           if(!item.matchedCpf)throw new Error("Foto não associada ao CPF. Importação bloqueada.");
           const base64=await cropPhoto(item);
-          const result=await save.mutateAsync({cpf:item.cpf,name:item.name,base64,photoMode:item.cropMode==="white"?"white":"original"});
+          const result=await save.mutateAsync({cpf:item.cpf,name:item.name,base64,photoMode:item.cropMode==="white"||item.cropMode==="avatar"?"white":"original"});
           if(result.result==="imported"){
             imported++;
             const savedRecordId=Number(result.id)||undefined;
