@@ -335,8 +335,7 @@ export function parseScreenshotTsv(tsv:string,width:number,height:number):Screen
       const top=Math.round(Math.max(0,Math.min(height-size,box.top-size-box.height*.6)));
       const left=Math.round(Math.max(0,Math.min(width-size,
         box.left+box.width*.5-size*.5)));
-      const crop=caption.line.top<reference.nameBox?.top!
-        ?{x:left,y:top,size}:reference.crop;
+      const crop={x:left,y:top,size};
       const warnings=reference.warnings.filter(w=>
         !/CPF n[aã]o reconhecido|CPF encontrado, mas nome n[aã]o identificado|foto estimada/i.test(w));
       return [{...reference,name:onlyName,cpf:onlyNumber.cpf,
