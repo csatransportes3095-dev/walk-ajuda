@@ -146,7 +146,7 @@ export default function H2BicoScreenshotImporter(){
   const avatarCache=useRef(new Map<string,Promise<AvatarCandidate[]>>());
   const itemsRef=useRef<Item[]>([]);
   useEffect(()=>{itemsRef.current=items;},[items]);
-  const detectAvatar=async(item:Item,totalInPrint?:number)=>{
+  const detectAvatar=async(item:Item,peopleInPrint?:Item[])=>{
     update(item.id,{avatarBusy:true,avatarError:undefined});
     try{
       const img=new Image();img.src=item.photo;await img.decode();
@@ -174,9 +174,9 @@ export default function H2BicoScreenshotImporter(){
         avatarCache.current.set(item.photo,work);
       }
       const options=await work;
-      const siblings=itemsRef.current.filter(row=>row.photo===item.photo);
+      const siblings=peopleInPrint ?? itemsRef.current.filter(row=>row.photo===item.photo);
       const people=siblings.length?siblings:[item];
-      const anchors:CpfAnchor[]=people.map(row=>({cpf:row.cpf,cpfBox:row.cpfBox}));
+      const anchors:CpfAnchor[]=people.map(row=>({cpf:row.cpf,cpfBox:row.cpfBox?{x:row.cpfBox.left,y:row.cpfBox.top,width:row.cpfBox.width,height:row.cpfBox.height}:undefined}));
       const image={data:ctx.getImageData(0,0,canvas.width,canvas.height).data,width:canvas.width,height:canvas.height};
       const matches=matchCpfAvatarFaces(anchors,options.map(option=>option.face),image);
       const currentIndex=people.findIndex(person=>person.id===item.id);
@@ -307,7 +307,7 @@ export default function H2BicoScreenshotImporter(){
             // Do this asynchronously; keep OCR processing and all previous crop modes.
             itemsRef.current=[...itemsRef.current,...incoming];
             for(const person of incoming){
-              void detectAvatar(person,incoming.length);
+              void detectAvatar(person,incoming);
             }
             // The server has already located portraits on the full source image.
             // Never overwrite these coordinates with the old proximity-based detector.
@@ -535,15 +535,6 @@ export default function H2BicoScreenshotImporter(){
             <div className="rounded-xl border border-cyan-500/30 bg-cyan-500/5 p-3 space-y-2">
               <div className="flex flex-wrap items-center justify-between gap-2"><span className="text-sm font-black text-cyan-300">RECORTE AVATAR INTELIGENTE • H2 FACE</span><Button type="button" size="sm" disabled={saving||busy||item.avatarBusy} onClick={()=>void detectAvatar(item)}>{item.avatarBusy?"ANALISANDO...":"LOCALIZAR ROSTO"}</Button></div>
               {item.avatarError&&<p role="alert" className="text-xs text-amber-200">{item.avatarError}</p>}
-              {false&&item.avatarOptions&&item.avatarOptions.length>0&&<div className="grid grid-cols-3 sm:grid-cols-4 gap-2">
-                {item.avatarOptions.map((option,index)=><button key={index} type="button" onClick={()=>update(item.id,{avatarCrop:option.crop,cropMode:"avatar",selected:false,avatarError:undefined})}
-                  className={`rounded-lg border px-3 py-2 text-xs font-bold ${item.cropMode==="avatar"&&item.avatarCrop===option.crop?"border-emerald-400 bg-emerald-600/30 text-white":"border-slate-600 bg-slate-900 text-slate-200"}`}><span className="block relative h-20 w-full overflow-hidden rounded bg-black">
-                  <img src={item.photo} alt={"Candidato de rosto "+(index+1)} style={{
-                    position:"absolute",maxWidth:"none",width:item.width*(76/option.crop.width),height:item.height*(76/option.crop.width),
-                    left:-option.crop.x*(76/option.crop.width),top:-option.crop.y*(76/option.crop.width)
-                  }}/>
-                </span><span className="block mt-1">ROSTO {index+1} • {Math.round(option.face.score*100)}%</span></button>)}
-              </div>}
               <p className="text-xs text-slate-400">{item.matchedCpf?"Foto localizada no card do CPF.":"CPF sem associação segura: salvamento bloqueado."}</p>
             </div>
             <div className="flex flex-wrap items-center gap-2">
