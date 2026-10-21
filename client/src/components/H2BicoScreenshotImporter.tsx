@@ -8,6 +8,7 @@ import { matchCpfAvatarFaces, type CpfAnchor } from "@/lib/h2bicoCpfAvatarMatche
 import { toast } from "sonner";
 import { trpc } from "@/lib/trpc";
 import { isValidCpf } from "@/lib/h2bicoCpfExtractor";
+import { resolveH2BicoCardName } from "@/lib/h2bicoCardName";
 import { shouldPreselectH2BicoPhoto } from "@/lib/h2bicoImportReview";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
@@ -24,6 +25,7 @@ type Item={
   photoLayout?:"left"|"right"|"above"; confidence?:number;
   nameBox?:{left:number;top:number;width:number;height:number};
   cpfBox?:{left:number;top:number;width:number;height:number}; matchedCpf?:boolean;
+  nameSource?:"cadastro"|"ocr"|"pending";
   cropMode?:"original"|"white"|"avatar"; whiteCrop?:WhitePhotoCrop|null; whiteChecked?:boolean;
   avatarCrop?:WhitePhotoCrop|null; avatarOptions?:AvatarCandidate[]; avatarBusy?:boolean; avatarError?:string;
   // Marcador manual e independente de OCR, foto ou disponibilidade.
@@ -277,9 +279,11 @@ export default function H2BicoScreenshotImporter(){
             // base64 grande para cada pessoa encontrada no mesmo print.
             const photo=URL.createObjectURL(file);
             photoUrlsRef.current.add(photo);
-            const incoming:Item[]=analysis.persons.map((p,i)=>({
+            const incoming:Item[]=analysis.persons.map((p,i)=>{
+              const resolved=resolveH2BicoCardName(p.name,p.existingName,p.alreadyExists);
+              return ({
               id:Date.now()+"-"+number+"-"+i+"-"+Math.random(),
-              source:file.name,photo,name:p.name,cpf:p.cpf,cpfSuggestion:p.cpfSuggestion,crop:p.crop,
+              source:file.name,photo,name:resolved.name,nameSource:resolved.source,cpf:p.cpf,cpfSuggestion:p.cpfSuggestion,crop:p.crop,
                photoLayout:p.photoLayout,confidence:p.confidence,
                nameBox:p.nameBox,
                cpfBox:p.cpfBox,
@@ -289,8 +293,8 @@ export default function H2BicoScreenshotImporter(){
               width:analysis.width,height:analysis.height,
               existing:p.alreadyExists,
               selected:shouldPreselectH2BicoPhoto(p),
-              warnings:[...p.warnings],
-            }));
+              warnings:[...p.warnings,...(resolved.warning?[resolved.warning]:[])],
+            });});
             setItems(current=>{
               const known=new Set(current.map(item=>digits(item.cpf)));
               const merged=[...current];
@@ -482,8 +486,9 @@ export default function H2BicoScreenshotImporter(){
                  OCR {item.confidence??0}% • foto {item.photoLayout==="right"?"à direita":item.photoLayout==="above"?"acima":"à esquerda"}
                  {item.photoLayout!=="left"?" • confirme o recorte antes de marcar":""}
                </div>
+              <div className="flex flex-wrap gap-2 text-xs text-slate-300 font-bold">NOME <span className={item.nameSource==="cadastro"?"text-emerald-300":item.nameSource==="ocr"?"text-cyan-300":"text-amber-300"}>{item.nameSource==="cadastro"?"DO CADASTRO DO CPF":item.nameSource==="ocr"?"DO PRINT":"NÃO IDENTIFICADO"}</span></div>
               <Input aria-label="Nome completo" disabled={saving||item.saved||item.existing} value={item.name}
-                onChange={e=>update(item.id,{name:e.target.value,error:undefined})} placeholder="NOME COMPLETO" />
+                onChange={e=>update(item.id,{name:e.target.value,nameSource:"ocr",error:undefined})} placeholder="NOME NÃO IDENTIFICADO" />
               <Input aria-label="CPF" disabled={saving||item.saved||item.existing} value={item.cpf}
                 onChange={e=>update(item.id,{cpf:digits(e.target.value).slice(0,11),error:undefined})} placeholder="CPF" />
               {item.cpfSuggestion&&!item.saved&&!item.existing&&<div className="rounded-lg border border-amber-500/50 bg-amber-950/20 p-2 space-y-2">
