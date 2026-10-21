@@ -1,0 +1,29 @@
+name: Schedule Gamer Visual Validation
+on:
+  pull_request:
+    paths:
+      - "client/src/pages/AdminSchedule.tsx"
+      - "client/src/pages/SchedulePage.tsx"
+      - "client/src/styles/h2-schedule-gamer.css"
+      - ".github/workflows/schedule-gamer-visual-validation.yml"
+  push:
+    branches:
+      - "feature/schedule-gamer-adm-client-20261020"
+jobs:
+  validate:
+    runs-on: ubuntu-latest
+    timeout-minutes: 25
+    steps:
+      - uses: actions/checkout@v4
+      - uses: pnpm/action-setup@v4
+        with:
+          version: 10.4.1
+      - uses: actions/setup-node@v4
+        with:
+          node-version: "22"
+          cache: pnpm
+      - run: pnpm install --frozen-lockfile
+      - name: TypeScript
+        run: pnpm exec tsc --noEmit
+      - name: Vite and API build
+        run: pnpm run build
