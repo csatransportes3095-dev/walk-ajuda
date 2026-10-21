@@ -1,0 +1,19 @@
+name: Validate H2BICO Self Screenshot Guard
+on:
+  push:
+    branches:
+      - fix/h2bico-block-self-ocr-20261021
+jobs:
+  validate:
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+    steps:
+      - uses: actions/checkout@v4
+      - uses: pnpm/action-setup@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: "22"
+          cache: pnpm
+      - run: pnpm install --frozen-lockfile
+      - run: pnpm exec vitest run server/h2bicoScreenGuard.test.ts server/h2bicoScreenshotOcr.test.ts
+      - run: pnpm run build
