@@ -39,7 +39,7 @@ export function portraitAroundFace(face:AvatarFace,width:number,height:number,sc
 /** Reject blank dark cards and near-uniform backgrounds, not just a dark center pixel. */
 export function measureAvatarQuality(image:PixelImage,crop:AvatarRect):AvatarQuality {
   const {data,width,height}=image;
-  if(width<1||height<1||data.length<width*height*4||!isSafeAvatarRect(crop,width,height))
+  if(width<1||height<1||data.length<width*height*4||![crop.x,crop.y,crop.width,crop.height].every(finite)||crop.width<40||crop.height<40||crop.x<0||crop.y<0||crop.x+crop.width>width||crop.y+crop.height>height)
     return {usable:false,brightness:0,variation:0,darkFraction:1,darkBorder:1};
   let n=0,total=0,sq=0,dark=0,edges=0,darkEdges=0;
   const cols=22,rows=27;
