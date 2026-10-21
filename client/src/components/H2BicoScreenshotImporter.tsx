@@ -4,6 +4,7 @@ import { ClipboardPaste } from "lucide-react";
 import { detectH2AvatarFaces } from "@/lib/similarFaceTfliteRuntime";
 import { rankAvatarCandidates, measureAvatarQuality, shouldAutoSelectAvatar, type AvatarCandidate } from "@/lib/h2bicoAvatarCrop";
 import { createH2FaceScanTiles, mergeH2FaceScanBoxes } from "@/lib/h2bicoFaceScanTiles";
+import { matchCpfAvatarFaces, type CpfAnchor } from "@/lib/h2bicoCpfAvatarMatcher";
 import { toast } from "sonner";
 import { trpc } from "@/lib/trpc";
 import { isValidCpf } from "@/lib/h2bicoCpfExtractor";
@@ -22,6 +23,7 @@ type Item={
   error?:string; saved?:boolean; cpfSuggestion?:string|null;
   photoLayout?:"left"|"right"|"above"; confidence?:number;
   nameBox?:{left:number;top:number;width:number;height:number};
+  cpfBox?:{left:number;top:number;width:number;height:number}; matchedCpf?:boolean;
   cropMode?:"original"|"white"|"avatar"; whiteCrop?:WhitePhotoCrop|null; whiteChecked?:boolean;
   avatarCrop?:WhitePhotoCrop|null; avatarOptions?:AvatarCandidate[]; avatarBusy?:boolean; avatarError?:string;
   // Marcador manual e independente de OCR, foto ou disponibilidade.
@@ -142,6 +144,8 @@ export default function H2BicoScreenshotImporter(){
   // Automatically try the independent white-background crop on every
   // imported print. Wrong legacy estimates must not silently save a dark box.
   const avatarCache=useRef(new Map<string,Promise<AvatarCandidate[]>>());
+  const itemsRef=useRef<Item[]>([]);
+  useEffect(()=>{itemsRef.current=items;},[items]);
   const detectAvatar=async(item:Item,totalInPrint?:number)=>{
     update(item.id,{avatarBusy:true,avatarError:undefined});
     try{
@@ -170,10 +174,16 @@ export default function H2BicoScreenshotImporter(){
         avatarCache.current.set(item.photo,work);
       }
       const options=await work;
-      const single=shouldAutoSelectAvatar(options.length,totalInPrint??items.filter(x=>x.source===item.source).length);
-      update(item.id,{avatarBusy:false,avatarOptions:options,avatarCrop:single?options[0]?.crop:null,
-        cropMode:single?"avatar":item.cropMode,selected:false,
-        avatarError:!options.length?"Nenhum recorte facial confiável. Ajuste manualmente.":!single?"Mais de um rosto ou cadastro: escolha o recorte correto.":undefined});
+      const siblings=itemsRef.current.filter(row=>row.photo===item.photo);
+      const people=siblings.length?siblings:[item];
+      const anchors:CpfAnchor[]=people.map(row=>({cpf:row.cpf,cpfBox:row.cpfBox}));
+      const image={data:ctx.getImageData(0,0,canvas.width,canvas.height).data,width:canvas.width,height:canvas.height};
+      const matches=matchCpfAvatarFaces(anchors,options.map(option=>option.face),image);
+      const currentIndex=people.findIndex(person=>person.id===item.id);
+      const matched=matches[currentIndex<0?0:currentIndex];
+      update(item.id,{avatarBusy:false,avatarOptions:[],avatarCrop:matched?.crop||null,
+        matchedCpf:!!matched,cropMode:matched?"avatar":"original",selected:false,
+        avatarError:matched?undefined:"Não foi possível associar foto e CPF com segurança. Nenhuma foto será salva."});
     }catch{
       update(item.id,{avatarBusy:false,avatarOptions:[],avatarError:"Detector H2 Face indisponível. Confira o recorte manualmente.",selected:false});
     }
@@ -272,6 +282,7 @@ export default function H2BicoScreenshotImporter(){
               source:file.name,photo,name:p.name,cpf:p.cpf,cpfSuggestion:p.cpfSuggestion,crop:p.crop,
                photoLayout:p.photoLayout,confidence:p.confidence,
                nameBox:p.nameBox,
+               cpfBox:p.cpfBox,
                whiteCrop:p.whitePhotoCrop||null,
                cropMode:p.whitePhotoCrop?"white":"original",
                whiteChecked:true,
@@ -294,8 +305,9 @@ export default function H2BicoScreenshotImporter(){
             });
             // When the white photo detector misses, ask H2 Face to locate the avatar.
             // Do this asynchronously; keep OCR processing and all previous crop modes.
+            itemsRef.current=[...itemsRef.current,...incoming];
             for(const person of incoming){
-              if(!person.whiteCrop)void detectAvatar(person,incoming.length);
+              void detectAvatar(person,incoming.length);
             }
             // The server has already located portraits on the full source image.
             // Never overwrite these coordinates with the old proximity-based detector.
@@ -368,6 +380,7 @@ export default function H2BicoScreenshotImporter(){
     for(const url of photoUrlsRef.current)URL.revokeObjectURL(url);
     photoUrlsRef.current.clear();
     avatarCache.current.clear();
+    itemsRef.current=[];
     setItems([]);
     setProcessedCount(0);
     nextPrintNumber.current=0;
@@ -387,6 +400,7 @@ export default function H2BicoScreenshotImporter(){
         try{
           // Both legacy square and automatic white crops are already bounded to the portrait preview.
           if(item.avatarBusy)throw new Error("Aguarde a análise facial.");
+          if(!item.matchedCpf)throw new Error("Foto não associada ao CPF. Importação bloqueada.");
           const base64=await cropPhoto(item);
           const result=await save.mutateAsync({cpf:item.cpf,name:item.name,base64,photoMode:item.cropMode==="white"?"white":"original"});
           if(result.result==="imported"){
@@ -417,7 +431,7 @@ export default function H2BicoScreenshotImporter(){
   const eligible=(item:Item)=>!item.existing&&!item.saved&&isValidCpf(item.cpf)&&
     item.name.trim().split(/\s+/).length>=2&&item.confidence!==undefined&&item.confidence>=70&&
     !item.cpfSuggestion&&!item.warnings.some(w=>/CONFIRA O N[UÚ]MERO|ASSOCIA|CPF REPETIDO|LEITURA DIVERGENTE/i.test(w))&&
-    (item.cropMode==="white"&&!!item.whiteCrop||item.cropMode==="avatar"&&!!item.avatarCrop||item.cropMode==="original"&&item.crop.size>=48);
+    item.matchedCpf===true&&item.cropMode==="avatar"&&!!item.avatarCrop;
   const selected=items.filter(item=>item.selected&&!item.saved&&!item.existing);
   const selectable=items.filter(eligible);
   const selectAll=()=>setItems(current=>current.map(item=>({...item,selected:eligible(item)})));
@@ -508,7 +522,7 @@ export default function H2BicoScreenshotImporter(){
                   <p className="text-[11px] text-amber-200">Consultando o cadastro já existente para gravar o marcador.</p>}
               </div>
               <label className="inline-flex items-center gap-2 text-sm">
-                <input type="checkbox" checked={item.selected} disabled={saving||item.saved||item.existing}
+                <input type="checkbox" checked={item.selected} disabled={saving||item.saved||item.existing||!item.matchedCpf}
                   onChange={e=>update(item.id,{selected:e.target.checked})}/>
                 {item.saved?"SALVO":item.existing?"CPF JÁ CADASTRADO":isValidCpf(item.cpf)?"Conferido — salvar":"CPF INVÁLIDO"}
               </label>
@@ -521,7 +535,7 @@ export default function H2BicoScreenshotImporter(){
             <div className="rounded-xl border border-cyan-500/30 bg-cyan-500/5 p-3 space-y-2">
               <div className="flex flex-wrap items-center justify-between gap-2"><span className="text-sm font-black text-cyan-300">RECORTE AVATAR INTELIGENTE • H2 FACE</span><Button type="button" size="sm" disabled={saving||busy||item.avatarBusy} onClick={()=>void detectAvatar(item)}>{item.avatarBusy?"ANALISANDO...":"LOCALIZAR ROSTO"}</Button></div>
               {item.avatarError&&<p role="alert" className="text-xs text-amber-200">{item.avatarError}</p>}
-              {item.avatarOptions&&item.avatarOptions.length>0&&<div className="grid grid-cols-3 sm:grid-cols-4 gap-2">
+              {false&&item.avatarOptions&&item.avatarOptions.length>0&&<div className="grid grid-cols-3 sm:grid-cols-4 gap-2">
                 {item.avatarOptions.map((option,index)=><button key={index} type="button" onClick={()=>update(item.id,{avatarCrop:option.crop,cropMode:"avatar",selected:false,avatarError:undefined})}
                   className={`rounded-lg border px-3 py-2 text-xs font-bold ${item.cropMode==="avatar"&&item.avatarCrop===option.crop?"border-emerald-400 bg-emerald-600/30 text-white":"border-slate-600 bg-slate-900 text-slate-200"}`}><span className="block relative h-20 w-full overflow-hidden rounded bg-black">
                   <img src={item.photo} alt={"Candidato de rosto "+(index+1)} style={{
@@ -530,7 +544,7 @@ export default function H2BicoScreenshotImporter(){
                   }}/>
                 </span><span className="block mt-1">ROSTO {index+1} • {Math.round(option.face.score*100)}%</span></button>)}
               </div>}
-              <p className="text-xs text-slate-400">Se houver vários rostos, escolha o avatar correto. Confira a prévia antes de salvar.</p>
+              <p className="text-xs text-slate-400">{item.matchedCpf?"Foto localizada no card do CPF.":"CPF sem associação segura: salvamento bloqueado."}</p>
             </div>
             <div className="flex flex-wrap items-center gap-2">
               <Button type="button" size="sm" variant={item.cropMode==="white"?"default":"outline"} disabled={saving||busy} onClick={()=>void applyWhitePreset(item)}>
