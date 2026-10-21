@@ -3,6 +3,7 @@
  * CPF suggestion for each card. Never infer/correct a CPF digit from its checksum.
  * Staff must review all data and crops before import into H2BICO.
  */
+import { isValidCpf } from "../client/src/lib/h2bicoCpfExtractor";
 export type ScreenshotCrop = {x:number;y:number;size:number};
 export type ScreenshotPerson = {
   name:string; cpf:string; crop:ScreenshotCrop; confidence:number; warnings:string[]; photoLayout?:"left"|"right"|"above"; nameBox?:{left:number;top:number;width:number;height:number}; cpfBox?:{left:number;top:number;width:number;height:number};
@@ -54,7 +55,7 @@ export function isH2BicoInterfaceScreenshot(text:string):boolean {
   ];
   return markers.filter(re=>re.test(normalized)).length>=3;
 }
-const uiNames=/\b(?:NOME DO PRINT|DESCARCAR TODOS|DESMARCAR TODOS|MARCACAO EAR|RECORTE AVATAR|LOCALIZAR ROSTO|CPF INVALIDO|CPF JA CADASTRADO|SELECIONAR TODOS|VER PRINT ORIGINAL|FOTO PADRAO|RECORTE ATUAL|USAR RECORTE|SALVAR NO H BICO)\b/iu;
+const uiNames=/\b(?:FOTO DO CONDUTOR|INFORMA[CÇ][OÕ]ES ENCONTRADAS|CHAT GLOBAL|NOME DO PRINT|DESCARCAR TODOS|DESMARCAR TODOS|MARCACAO EAR|RECORTE AVATAR|LOCALIZAR ROSTO|CPF INVALIDO|CPF JA CADASTRADO|SELECIONAR TODOS|VER PRINT ORIGINAL|FOTO PADRAO|RECORTE ATUAL|USAR RECORTE|SALVAR NO H BICO)\b/iu;
 function possibleName(value:string):string|null {
   // Some prints put the name on the SAME OCR line as CPF, or prefix it with
   // "Nome:"; strip these UI labels without changing a person's name.
@@ -102,7 +103,7 @@ function proximity(name:TextLine,number:TextLine,width:number):number|null {
 // blocks even when they appear on the same visual row. Recombine only nearby
 // boxes, without joining two distant columns or guessing any digits.
 function findCpfNumbers(lines:TextLine[],width:number):NumberAnchor[]{
-  const numbers=findCpfNumbers(lines,width);
+  const numbers:NumberAnchor[]=lines.flatMap(line=>cpfCandidatesInOcrLine(line.text).map(cpf=>({line,cpf})));
   const rows:TextLine[][]=[];
   for(const line of lines){
     const center=line.top+line.height/2;
@@ -174,8 +175,7 @@ export function parseScreenshotTsv(tsv:string,width:number,height:number):Screen
 
   // CPF and name candidates are independently located. We do NOT assume that
   // the card has the photo on the left or that its text is in uppercase.
-  const numbers:NumberAnchor[]=lines.flatMap(line=>
-    cpfCandidatesInOcrLine(line.text).map(cpf=>({line,cpf})));
+  const numbers:NumberAnchor[]=findCpfNumbers(lines,width);
   const nameParts:NameAnchor[]=lines.flatMap(line=>{
     if(line.confidence<45||line.left<0||line.left>width*.96)return [];
     const name=possibleName(line.text);
@@ -312,6 +312,41 @@ export function parseScreenshotTsv(tsv:string,width:number,height:number):Screen
         "CONFIRA RECORTE: foto estimada, ajuste a posição antes de salvar.",
       ],
     });
+  }
+  // Details screens often show a caption beneath the portrait, then repeat
+  // the SAME name beside the CPF far below. Screen height and sidebar width
+  // vary: match by unique validated CPF + unique readable name, not pixel gaps.
+  // A separate 11-digit "Registro" must not be treated as another CPF.
+  const validNumbers=[...new Map(
+    numbers.filter(number=>isValidCpf(number.cpf)).map(number=>[number.cpf,number] as const)
+  ).values()];
+  const distinctNames=[...new Set(nameParts.map(part=>part.name))];
+  if(validNumbers.length===1&&distinctNames.length===1){
+    const onlyNumber=validNumbers[0],onlyName=distinctNames[0];
+    const caption=[...nameParts].filter(part=>part.name===onlyName)
+      .sort((a,b)=>a.line.top-b.line.top)[0];
+    const reference=output.find(person=>person.cpf===onlyNumber.cpf)||
+      output.find(person=>person.name===onlyName);
+    if(reference&&caption){
+      const box=caption.line;
+      // The highest identical name is normally the photo caption; if the
+      // screenshot is cropped to its details, this is just the name row.
+      const size=Math.round(Math.max(48,Math.min(width*.42,height*.36,box.height*9.5)));
+      const top=Math.round(Math.max(0,Math.min(height-size,box.top-size-box.height*.6)));
+      const left=Math.round(Math.max(0,Math.min(width-size,
+        box.left+box.width*.5-size*.5)));
+      const crop=caption.line.top<reference.nameBox?.top!
+        ?{x:left,y:top,size}:reference.crop;
+      const warnings=reference.warnings.filter(w=>
+        !/CPF n[aã]o reconhecido|CPF encontrado, mas nome n[aã]o identificado|foto estimada/i.test(w));
+      return [{...reference,name:onlyName,cpf:onlyNumber.cpf,
+        crop,nameBox:{left:box.left,top:box.top,width:box.width,height:box.height},
+        cpfBox:{left:onlyNumber.line.left,top:onlyNumber.line.top,
+          width:onlyNumber.line.width,height:onlyNumber.line.height},
+        warnings:[...warnings,
+          "Foto, legenda e CPF agrupados pelo nome único e CPF validado; confira a prévia."]
+      }];
+    }
   }
   return output;
 }
