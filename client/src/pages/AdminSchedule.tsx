@@ -965,6 +965,7 @@ function AppointmentsTab() {
   const { data: templates } = trpc.schedule.listTemplates.useQuery();
   const [expandedPhoto, setExpandedPhoto] = useState<string | null>(null);
   const [searchTerm, setSearchTerm] = useState('');
+  const [statusFilter, setStatusFilter] = useState<'all' | 'pending' | 'confirmed' | 'cancelled'>('all');
   const [manualApptId, setManualApptId] = useState<number | null>(null);
   const [manualDate, setManualDate] = useState('');
   const [manualTime, setManualTime] = useState('');
@@ -1140,7 +1141,8 @@ function AppointmentsTab() {
   // Group appointments by date, then by time
   const groupedByDate = useMemo(() => {
     // Filtra por nome, telefone, serviço, *código do cadastro ou #pedido.
-    const list = filterAdminScheduleAppointments(appts || [], searchTerm);
+    const matches = filterAdminScheduleAppointments(appts || [], searchTerm);
+    const list = statusFilter === 'all' ? matches : matches.filter(a => a.status === statusFilter);
     const groups: { [key: string]: typeof list } = {};
     
     // Ordena: data menor (mais próxima) primeiro; sem data por último; mesmo dia: horário mais cedo primeiro
@@ -1167,7 +1169,7 @@ function AppointmentsTab() {
     });
     
     return groups;
-  }, [appts, searchTerm]);
+  }, [appts, searchTerm, statusFilter]);
   
   // Datas ordenadas: menor primeiro, 'Sem data' por último
   const dateSlots = Object.keys(groupedByDate).sort((a, b) => {
@@ -1242,13 +1244,23 @@ function AppointmentsTab() {
         </div>
       )}
 
-      <div className="bg-black/40 border border-white/10 rounded-2xl p-4 md:p-5">
-      <div className="flex items-center gap-2 mb-4">
-        <h2 className="text-base font-bold">Agendamentos</h2>
-        {(appts || []).length > 0 && <span className="text-xs text-white/40">{(appts || []).length} total</span>}
+      <div className="sg-appt-console rounded-2xl p-3 sm:p-5">
+      <div className="sg-appt-heading flex flex-wrap items-center justify-between gap-2 mb-4">
+        <h2 className="text-lg font-black text-white">Central de agendamentos</h2>
+        {(appts || []).length > 0 && <span className="sg-appt-count">{(appts || []).length} registros</span>}
       </div>
-      {/* Search bar */}
-      <div className="relative mb-4">
+      {/* Filtros visuais sem modificar dados salvos */}
+      <div className="sg-appt-filters" role="group" aria-label="Filtrar agendamentos">
+        {([
+          ['all', 'Todos', (appts || []).length],
+          ['pending', 'Aguardando', (appts || []).filter(a => a.status === 'pending').length],
+          ['confirmed', 'Confirmados', (appts || []).filter(a => a.status === 'confirmed').length],
+          ['cancelled', 'Cancelados', (appts || []).filter(a => a.status === 'cancelled').length],
+        ] as const).map(([key, label, count]) => (
+          <button type="button" key={key} aria-pressed={statusFilter === key} className="sg-filter-chip" onClick={() => setStatusFilter(key)}>{label} <span>{count}</span></button>
+        ))}
+      </div>
+      <div className="sg-appt-search relative mb-4">
         <svg className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-white/40" fill="none" stroke="currentColor" viewBox="0 0 24 24"><circle cx="11" cy="11" r="8"/><path d="m21 21-4.35-4.35"/></svg>
         <input
           type="text"
@@ -1271,35 +1283,36 @@ function AppointmentsTab() {
           {Object.values(groupedByDate).flat().length} resultado{Object.values(groupedByDate).flat().length !== 1 ? 's' : ''} para "{searchTerm}"
         </p>
       )}
-      {dateSlots.length === 0 ? <p className="text-white/50 text-sm">{searchTerm ? 'Nenhum resultado encontrado.' : 'Nenhum agendamento ainda.'}</p> :
+      {dateSlots.length === 0 ? <p className="text-white/50 text-sm">{searchTerm || statusFilter !== 'all' ? 'Nenhum agendamento neste filtro.' : 'Nenhum agendamento ainda.'}</p> :
         <div className="space-y-4">
           {dateSlots.map(date => (
-            <div key={date} className="border border-white/10 rounded-lg overflow-hidden">
-              <div className="bg-white/5 px-3 py-2 border-b border-white/10">
-                <p className="text-sm font-semibold text-fuchsia-300">{date}</p>
+            <div key={date} className="sg-appt-day">
+              <div className="sg-appt-day-heading">
+                <p className="sg-appt-day-title"><CalendarDays className="h-4 w-4" /> {date === "Sem data" ? "Sem data definida" : formatDate(date)}</p>
+                 <span className="sg-appt-day-count">{groupedByDate[date].length} agendamento(s)</span>
               </div>
-              <div className="space-y-2 p-3">
+              <div className="sg-appt-day-grid">
                 {groupedByDate[date].map((a: any) => (
-            <div key={a.id} className="flex flex-col md:flex-row md:items-start md:justify-between gap-3 bg-white/5 border border-white/10 rounded-lg p-3">
+            <div key={a.id} className="sg-appt-card" data-status={a.status}>
               <div className="min-w-0 flex-1">
-                <p className="text-sm font-semibold">Pedido #{a.registrationId} {a.serviceName ? `— ${a.serviceName}` : ""}{(a as any).serviceOption ? ` / ${(a as any).serviceOption}` : ""}</p>
-                <div className="flex flex-wrap items-center gap-2 mt-1">
-                  {a.customerPhotoUrl && (
+                <div className="sg-appt-orderline"><span className="sg-appt-order">Pedido #{a.registrationId}</span>{a.serviceName && <strong className="sg-appt-service">{a.serviceName}</strong>}{(a as any).serviceOption && <span className="sg-appt-service-option">{(a as any).serviceOption}</span>}</div>
+                <div className="sg-appt-customer flex flex-wrap items-center gap-2 mt-1">
+                   {a.customerPhotoUrl && (
                     <button
                       onClick={() => setExpandedPhoto(a.customerPhotoUrl)}
                       className="cursor-pointer hover:opacity-80 transition-opacity flex-shrink-0"
                       title="Clique para expandir a foto"
                     >
-                      <img src={a.customerPhotoUrl} alt={a.customerName} className="w-6 h-6 rounded-full object-cover" />
+                      <img src={a.customerPhotoUrl} alt={a.customerName} className="sg-appt-avatar object-cover" />
                     </button>
                   )}
                   <div className="flex flex-wrap items-center gap-1.5">
                     {(a as any).customerNumber && (
-                      <span className="flex-shrink-0 text-[11px] font-mono font-bold text-cyan-400/80 bg-cyan-500/10 border border-cyan-500/20 rounded px-1.5 py-0.5 leading-none" title="Número de cadastro">
+                      <span className="sg-appt-number" title="Número de cadastro">
                         *{(a as any).customerNumber}
                       </span>
                     )}
-                    <p className="text-xs text-white/60">{a.customerName || a.customerPhone}</p>
+                    <p className="sg-appt-name">{a.customerName || a.customerPhone}</p>
                   </div>
                   {a.customerPhone && (
                     <button
@@ -1324,8 +1337,8 @@ function AppointmentsTab() {
                       // Mark as ATRASADO if appointment date is in the past, OR same day but 15+ min ago
                       const isPast = a.slotDate < today || (a.slotDate === today && (slotTotalMin + 15) < currentTotalMin);
                       return (
-                        <div className="flex flex-wrap items-center gap-2 mt-1">
-                          <p className={`text-xs ${isPast ? 'text-red-400 font-semibold' : 'text-green-300'}`}>
+                        <div className={`sg-appt-status ${isPast ? "sg-appt-overdue" : "sg-appt-confirmed"} flex flex-wrap items-center gap-2`}>
+                           <p className="sg-appt-datetime"><CalendarClock className="h-4 w-4 shrink-0" />
                             Agendado: {a.slotDate ? formatDate(a.slotDate) : ""} às {a.slotTime}
                           </p>
                           {isPast && <span className="text-xs bg-red-600/30 border border-red-500/50 text-red-300 px-2 py-0.5 rounded font-semibold">ATRASADO</span>}
@@ -1333,13 +1346,14 @@ function AppointmentsTab() {
                       );
                     })()
                   : a.status === "cancelled"
-                    ? <p className="text-xs text-red-300 mt-1">Cancelado</p>
-                    : <p className="text-xs text-yellow-300 mt-1">Aguardando o cliente escolher</p>}
+                    ? <p className="sg-appt-status sg-appt-cancelled"><XCircle className="h-4 w-4" /> Cancelado</p>
+                    : <p className="sg-appt-status sg-appt-pending"><Clock3 className="h-4 w-4" /> Aguardando o cliente escolher</p>}
               </div>
-              <div className="flex flex-col gap-2 shrink-0 w-full md:w-auto mt-2 md:mt-0">
-                {/* Linha 1: Telefone + WhatsApp + Global */}
+              <div className="sg-appt-controls">
+                <p className="sg-appt-control-label">CONTATO</p>
+                 {/* Linha 1: Telefone + WhatsApp + Global */}
                 {a.customerPhone && (
-                  <div className="grid grid-cols-3 gap-1.5">
+                  <div className="sg-appt-action-row">
                     <button
                       onClick={() => {
                         const digitsOnly = a.customerPhone.replace(/\D/g, '');
@@ -1356,7 +1370,7 @@ function AppointmentsTab() {
                         navigator.clipboard.writeText(phoneWithCountry);
                         toast.success('Telefone copiado: ' + phoneWithCountry);
                       }}
-                      className="text-xs px-2 py-1.5 bg-blue-600/20 border border-blue-500/30 text-blue-300 hover:bg-blue-600/30 rounded-lg transition-colors flex items-center gap-1 justify-center truncate"
+                      className="sg-appt-action text-xs px-2 py-1.5 bg-blue-600/20 border border-blue-500/30 text-blue-300 hover:bg-blue-600/30 rounded-lg transition-colors flex items-center gap-1 justify-center truncate"
                       title="Copiar número com código do país"
                     >
                       📋 <span className="truncate">{a.customerPhone}</span>
@@ -1365,7 +1379,7 @@ function AppointmentsTab() {
                       href={buildWhatsappHref(a)}
                       target="_blank"
                       rel="noopener noreferrer"
-                      className="text-xs px-2 py-1.5 bg-green-600/20 border border-green-500/30 text-green-300 hover:bg-green-600/30 rounded-lg transition-colors flex items-center gap-1 justify-center"
+                      className="sg-appt-action text-xs px-2 py-1.5 bg-green-600/20 border border-green-500/30 text-green-300 hover:bg-green-600/30 rounded-lg transition-colors flex items-center gap-1 justify-center"
                       title="WhatsApp — mensagem do template"
                     >
                       <MessageCircle className="w-3 h-3 shrink-0" /> WhatsApp
@@ -1374,45 +1388,47 @@ function AppointmentsTab() {
                       href={buildWhatsappHrefGlobal(a)}
                       target="_blank"
                       rel="noopener noreferrer"
-                      className="text-xs px-2 py-1.5 bg-blue-600/20 border border-blue-500/30 text-blue-300 hover:bg-blue-600/30 rounded-lg transition-colors flex items-center gap-1 justify-center"
+                      className="sg-appt-action text-xs px-2 py-1.5 bg-blue-600/20 border border-blue-500/30 text-blue-300 hover:bg-blue-600/30 rounded-lg transition-colors flex items-center gap-1 justify-center"
                       title="WhatsApp — mensagem global"
                     >
                       <MessageCircle className="w-3 h-3 shrink-0" /> Global
                     </a>
                   </div>
                 )}
-                {/* Linha 2: Ver Pedido + Alterar/Agendar + Reagendar */}
-                <div className="grid grid-cols-3 gap-1.5">
+                <p className="sg-appt-control-label">ATENDIMENTO</p>
+                 {/* Linha 2: Ver Pedido + Alterar/Agendar + Reagendar */}
+                <div className="sg-appt-action-row">
                   {a.registrationId ? (
                     <a
                       href={`/admin/orders?open=${a.registrationId}`}
-                      className="text-xs px-2 py-1.5 bg-purple-600/20 border border-purple-500/30 text-purple-300 hover:bg-purple-600/30 rounded-lg transition-colors flex items-center gap-1 justify-center"
+                      className="sg-appt-action text-xs px-2 py-1.5 bg-purple-600/20 border border-purple-500/30 text-purple-300 hover:bg-purple-600/30 rounded-lg transition-colors flex items-center gap-1 justify-center"
                       title="Ver pedido completo"
                     >
                       <FileText className="w-3 h-3 shrink-0" /> Ver Pedido
                     </a>
                   ) : <div />}
                   {a.status === "pending" ? (
-                    <button onClick={() => openManualModal(a.id, a.slotDate, a.slotTime)} className="text-xs px-2 py-1.5 bg-fuchsia-600/20 border border-fuchsia-500/30 text-fuchsia-300 hover:bg-fuchsia-600/30 rounded-lg transition-colors flex items-center gap-1 justify-center"><Calendar className="w-3 h-3 shrink-0" /> Agendar</button>
+                    <button onClick={() => openManualModal(a.id, a.slotDate, a.slotTime)} className="sg-appt-action text-xs px-2 py-1.5 bg-fuchsia-600/20 border border-fuchsia-500/30 text-fuchsia-300 hover:bg-fuchsia-600/30 rounded-lg transition-colors flex items-center gap-1 justify-center"><Calendar className="w-3 h-3 shrink-0" /> Agendar</button>
                   ) : a.status === "confirmed" ? (
-                    <button onClick={() => openManualModal(a.id, a.slotDate, a.slotTime)} className="text-xs px-2 py-1.5 bg-fuchsia-600/20 border border-fuchsia-500/30 text-fuchsia-300 hover:bg-fuchsia-600/30 rounded-lg transition-colors flex items-center gap-1 justify-center"><Calendar className="w-3 h-3 shrink-0" /> Alterar</button>
+                    <button onClick={() => openManualModal(a.id, a.slotDate, a.slotTime)} className="sg-appt-action text-xs px-2 py-1.5 bg-fuchsia-600/20 border border-fuchsia-500/30 text-fuchsia-300 hover:bg-fuchsia-600/30 rounded-lg transition-colors flex items-center gap-1 justify-center"><Calendar className="w-3 h-3 shrink-0" /> Alterar</button>
                   ) : <div />}
                   {a.status === "confirmed" ? (
-                    <button onClick={() => reopenAndNotifyMut.mutate({ id: a.id, origin: window.location.origin })} disabled={reopenAndNotifyMut.isPending} className="text-xs px-2 py-1.5 bg-yellow-600/20 border border-yellow-500/30 text-yellow-300 rounded-lg disabled:opacity-50 flex items-center gap-1 justify-center">{reopenAndNotifyMut.isPending ? "..." : <><RefreshCw className="w-3 h-3 shrink-0" /> Reagendar</>}</button>
+                    <button onClick={() => reopenAndNotifyMut.mutate({ id: a.id, origin: window.location.origin })} disabled={reopenAndNotifyMut.isPending} className="sg-appt-action text-xs px-2 py-1.5 bg-yellow-600/20 border border-yellow-500/30 text-yellow-300 rounded-lg disabled:opacity-50 flex items-center gap-1 justify-center">{reopenAndNotifyMut.isPending ? "..." : <><RefreshCw className="w-3 h-3 shrink-0" /> Reagendar</>}</button>
                   ) : <div />}
                 </div>
-                {/* Linha 3: Cancelar + Finalizado + Excluir */}
-                <div className="grid grid-cols-3 gap-1.5">
+                <p className="sg-appt-control-label">GERENCIAMENTO</p>
+                 {/* Linha 3: Cancelar + Finalizado + Excluir */}
+                <div className="sg-appt-action-row">
                   {a.status !== "cancelled" ? (
-                    <button onClick={() => cancelMut.mutate({ id: a.id })} className="text-xs px-2 py-1.5 bg-red-600/20 border border-red-500/30 text-red-300 hover:bg-red-600/30 rounded-lg transition-colors flex items-center gap-1 justify-center"><XCircle className="w-3 h-3 shrink-0" /> Cancelar</button>
+                    <button onClick={() => cancelMut.mutate({ id: a.id })} className="sg-appt-action text-xs px-2 py-1.5 bg-red-600/20 border border-red-500/30 text-red-300 hover:bg-red-600/30 rounded-lg transition-colors flex items-center gap-1 justify-center"><XCircle className="w-3 h-3 shrink-0" /> Cancelar</button>
                   ) : <div />}
                   {a.status === "confirmed" ? (
-                    <button onClick={() => completeMut.mutate({ id: a.id })} disabled={completeMut.isPending} className="text-xs px-2 py-1.5 bg-green-600/20 border border-green-500/30 text-green-300 hover:bg-green-600/30 rounded-lg transition-colors disabled:opacity-50 flex items-center gap-1 justify-center"><CheckCircle className="w-3 h-3 shrink-0" /> Finalizado</button>
+                    <button onClick={() => completeMut.mutate({ id: a.id })} disabled={completeMut.isPending} className="sg-appt-action text-xs px-2 py-1.5 bg-green-600/20 border border-green-500/30 text-green-300 hover:bg-green-600/30 rounded-lg transition-colors disabled:opacity-50 flex items-center gap-1 justify-center"><CheckCircle className="w-3 h-3 shrink-0" /> Finalizado</button>
                   ) : <div />}
                   <button
                     onClick={() => { if (confirm("Excluir este agendamento da lista? Esta ação não pode ser desfeita.")) removeMut.mutate({ id: a.id }); }}
                     disabled={removeMut.isPending}
-                    className="text-xs px-2 py-1.5 bg-white/5 border border-white/15 text-white/60 hover:text-red-300 hover:border-red-500/40 rounded-lg transition-colors disabled:opacity-50 flex items-center gap-1 justify-center"
+                    className="sg-appt-action text-xs px-2 py-1.5 bg-white/5 border border-white/15 text-white/60 hover:text-red-300 hover:border-red-500/40 rounded-lg transition-colors disabled:opacity-50 flex items-center gap-1 justify-center"
                   ><Trash2 className="w-3 h-3 shrink-0" /> Excluir</button>
                 </div>
               </div>
