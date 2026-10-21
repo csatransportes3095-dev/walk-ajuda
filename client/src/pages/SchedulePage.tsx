@@ -897,7 +897,7 @@ export default function SchedulePage() {
           {appt.serviceName && <p className="sg-client-service">{appt.serviceName}</p>}
           <p className="sg-client-intro">{cfg?.introMessage || "Selecione o melhor dia e horário para o atendimento."}</p>
           <div className="sg-client-progress" aria-label="Etapas do agendamento"><span className={selectedDate ? "sg-step-done" : ""}>01 • DATA</span><span className={selectedSlot ? "sg-step-done" : ""}>02 • HORÁRIO</span><span>03 • CONFIRMAR</span></div>
-          {appt.instructions && <p className="sg-instruction-card w-full">{appt.instructions}</p>
+          {appt.instructions && <p className="sg-instruction-card w-full">{appt.instructions}</p>}
         </div>
 
         <ScheduleOrderContext order={data.order} onLogout={logout} />
