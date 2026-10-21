@@ -1,4 +1,5 @@
-import {isReviewableName,normalizeScreenshotName} from "../../server/h2bicoScreenshotOcr";
+const normalizeScreenshotName=(raw:string)=>raw.normalize("NFC").toLocaleUpperCase("pt-BR").replace(/[^A-ZÀ-ÖØ-Ý\s'-]/gu," ").replace(/\s+/g," ").trim().slice(0,200);
+const isReviewableName=(name:string)=>{const words=name.split(/\s+/).filter(Boolean);return words.length>=2&&name.length>=6&&words.every(word=>word.length>=2||["A","E","O"].includes(word));};
 export function resolveH2BicoCardName(ocrName:string,existingName:string|null|undefined,alreadyExists:boolean){
  const valid=(raw:string|null|undefined)=>{
    const name=normalizeScreenshotName(raw||"");
