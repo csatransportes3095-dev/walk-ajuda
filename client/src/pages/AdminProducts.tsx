@@ -304,6 +304,54 @@ function OptionPriceModelsEditor({ optionId }: { optionId: number }) {
 }
 
 // Componente completo para cada opção: documentos dinâmicos + perguntas
+// Configuração de fluxo por resposta: metadados no JSON de opções já existente.
+// Perguntas cadastradas e seus IDs não são modificados.
+function QuestionFlowEditor({ question, questions, save }: {
+  question: QuestionType;
+  questions: QuestionType[];
+  save: (id: number, options: string) => Promise<void>;
+}) {
+  const parsed = (() => {
+    try {
+      const raw = JSON.parse(question.options || '[]');
+      if (Array.isArray(raw)) return raw.map((item: any) => typeof item === 'string' ? { label: item } : { ...item });
+    } catch {}
+    return (question.options || '').split(',').map(label => label.trim()).filter(Boolean).map(label => ({ label }));
+  })() as Array<{label:string; color?:string; blocking?:boolean; flowAction?:string; flowTarget?:number; flowMessage?:string}>;
+  const [rows, setRows] = useState(parsed);
+  const [saving, setSaving] = useState(false);
+  const updateRow = (idx: number, patch: object) => setRows(prev => prev.map((row, i) => i === idx ? { ...row, ...patch } : row));
+  if (question.fieldType !== 'select' || !parsed.length) return null;
+  return <div className="mt-2 ml-6 rounded-lg border border-purple-500/30 bg-purple-500/5 p-3 space-y-3">
+    <p className="text-xs font-bold text-purple-300">Controle de fluxo por resposta</p>
+    <p className="text-[10px] text-gray-400">Sem configuração: segue o formulário atual. Encerrar termina apenas as perguntas, não o pedido.</p>
+    {rows.map((row, i) => <div key={i} className="rounded border border-white/10 p-2 space-y-2">
+      <p className="text-xs text-white">{row.label}</p>
+      <select aria-label={`Ação quando responder ${row.label}`} style={whiteInputStyle} value={row.flowAction || 'continue'} onChange={e => updateRow(i, {flowAction:e.target.value})}>
+        <option value="continue">Continuar normalmente</option>
+        <option value="jump">Pular para pergunta</option>
+        <option value="finish">Encerrar questionário</option>
+        <option value="message">Encerrar com mensagem</option>
+      </select>
+      {row.flowAction === 'jump' && <select aria-label="Pergunta de destino" style={whiteInputStyle} value={row.flowTarget || ''} onChange={e => updateRow(i, {flowTarget:Number(e.target.value)})}>
+        <option value="">Selecionar pergunta</option>
+        {questions.filter(q => q.id !== question.id && !q.parentQuestionId && q.sortOrder > question.sortOrder).map(q => <option key={q.id} value={q.id}>{q.question}</option>)}
+      </select>}
+      {row.flowAction === 'message' && <input aria-label="Mensagem de encerramento" style={whiteInputStyle} value={row.flowMessage || ''} placeholder="Mensagem apresentada ao cliente" onChange={e => updateRow(i, {flowMessage:e.target.value})}/>}
+    </div>)}
+    <button type="button" disabled={saving || rows.some(r => r.flowAction === 'jump' && !r.flowTarget)} onClick={async () => {
+      setSaving(true);
+      try {
+        await save(question.id, JSON.stringify(rows));
+        toast.success('Fluxo salvo sem alterar as perguntas');
+      } catch (error: any) { toast.error(error?.message || 'Erro ao salvar fluxo'); }
+      finally { setSaving(false); }
+    }} className="px-3 py-2 text-xs rounded bg-purple-600 text-white disabled:opacity-50">
+      {saving ? 'Salvando...' : 'Salvar fluxo'}
+    </button>
+  </div>;
+}
+
 function OptionCard({ opt, productId, onUpdate, onAutoScheduleChange, onDelete, allProducts, isFirst, isLast, onMoveUp, onMoveDown }: {
   opt: OptionType; productId: number;
   onUpdate: (data: any) => void; onDelete: () => void;
@@ -546,6 +594,13 @@ function OptionCard({ opt, productId, onUpdate, onAutoScheduleChange, onDelete, 
   };
 
   const totalQuestions = opt.questions?.length || 0;
+  const [flowEditorId, setFlowEditorId] = useState<number | null>(null);
+  const flowEditor = (question: QuestionType) => <div>
+    <button type="button" className="text-[10px] px-2 py-1 text-purple-300 border border-purple-500/40 rounded hover:bg-purple-500/10" onClick={() => setFlowEditorId(prev => prev === question.id ? null : question.id)}>⚙ Configurar fluxo</button>
+    {flowEditorId === question.id && <QuestionFlowEditor key={question.id} question={question} questions={opt.questions} save={async (id, options) => { await updateQMut.mutateAsync({id,options}); }} />}
+  </div>;
+
+
   const totalDocs = opt.documents?.length || 0;
 
   return (
@@ -1271,6 +1326,7 @@ function OptionCard({ opt, productId, onUpdate, onAutoScheduleChange, onDelete, 
                       {/* Botão Deletar */}
                       <button onClick={() => { if (confirm('Excluir esta pergunta?')) deleteQMut.mutate({ id: q.id }); }} className="p-1 text-red-400 hover:bg-red-500/20 rounded" title="Excluir"><Trash2 className="w-3 h-3" /></button>
                     </div>
+                    {flowEditor(q)}
                     {/* Botões de sub-pergunta por opção de resposta */}
                     {qParsedOpts.length > 0 && (
                       <div className="ml-6 flex flex-wrap gap-1">
@@ -1311,7 +1367,8 @@ function OptionCard({ opt, productId, onUpdate, onAutoScheduleChange, onDelete, 
                             </button>
                             <button onClick={() => { if (confirm('Excluir esta sub-pergunta?')) deleteQMut.mutate({ id: sq.id }); }} className="p-1 text-red-400 hover:bg-red-500/20 rounded" title="Excluir"><Trash2 className="w-3 h-3" /></button>
                           </div>
-                          {/* Botões de sub-sub-pergunta por opção da sub-pergunta */}
+                          {flowEditor(sq)}
+                    {/* Botões de sub-sub-pergunta por opção da sub-pergunta */}
                           {sqParsedOpts.length > 0 && (
                             <div className="ml-6 flex flex-wrap gap-1">
                               {sqParsedOpts.map(sqOptLabel => (
