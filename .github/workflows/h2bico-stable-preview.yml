@@ -1,0 +1,26 @@
+name: H2BICO Stable Preview Tests
+on:
+  push:
+    branches:
+      - fix/h2bico-stable-preview-no-black-20261021
+  pull_request:
+    paths:
+      - client/src/lib/h2bicoStablePreview.ts
+      - client/src/components/H2BicoScreenshotImporter.tsx
+      - server/h2bicoStablePreview.test.ts
+jobs:
+  validate:
+    runs-on: ubuntu-latest
+    timeout-minutes: 25
+    steps:
+      - uses: actions/checkout@v4
+      - uses: pnpm/action-setup@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: "22"
+          cache: pnpm
+      - run: pnpm install --frozen-lockfile
+      - name: Stable preview and regression tests
+        run: pnpm exec vitest run server/h2bicoStablePreview.test.ts server/h2bicoCpfAvatarMatcher.test.ts
+      - name: Production build
+        run: pnpm run build
