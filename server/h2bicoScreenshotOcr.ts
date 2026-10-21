@@ -43,6 +43,18 @@ type NumberAnchor={line:TextLine;cpf:string};
 
 const ignoredLabels = /^(?:COM FOTO|SEM FOTO|FOTO DISPON[IÍ]VEL|SEM IMAGEM|NOME COMPLETO|DOCUMENTO V[AÁ]LIDO|RESULTADOS?|BUSCAR PESSOA|BUSCA AVAN[CÇ]ADA|DATA DE NASCIMENTO|PESQUISAR NOME|SIMILARIDADE FACIAL|CONSULTA FINALIZADA|CONFIRMAR FOTO|FOTO APROVADA|FOTO EM AN[AÁ]LISE|CPF V[AÁ]LIDO|CPF INV[AÁ]LIDO|PESSOA LOCALIZADA|PESSOA ENCONTRADA|IMAGEM ORIGINAL|IMAGEM CAPTURADA|NENHUM RESULTADO)$/u;
 
+export function isH2BicoInterfaceScreenshot(text:string):boolean {
+  const normalized=text.normalize("NFD").replace(/[\u0300-\u036f]/g,"").toUpperCase();
+  const markers=[
+    /EXTRATOR INTELIGENTE DE PRINTS/,/RECORTE AVATAR INTELIGENTE/,
+    /LOCALIZAR ROSTO/,/MARCACAO EAR/,/SELECIONAR TODOS/,
+    /DESCARCAR TODOS|DESMARCAR TODOS/,/VER PRINT ORIGINAL/,
+    /SALVAR\s+\d*\s*NO H2BICO/,/FOTO\s*\+\s*NOME\s*\+\s*CPF/,
+    /CPF SEM ASSOCIACAO SEGURA/,/USAR RECORTE PADRAO DA FOTO/
+  ];
+  return markers.filter(re=>re.test(normalized)).length>=3;
+}
+const uiNames=/\b(?:NOME DO PRINT|DESCARCAR TODOS|DESMARCAR TODOS|MARCACAO EAR|RECORTE AVATAR|LOCALIZAR ROSTO|CPF INVALIDO|CPF JA CADASTRADO|SELECIONAR TODOS|VER PRINT ORIGINAL|FOTO PADRAO|RECORTE ATUAL|USAR RECORTE|SALVAR NO H BICO)\b/iu;
 function possibleName(value:string):string|null {
   // Some prints put the name on the SAME OCR line as CPF, or prefix it with
   // "Nome:"; strip these UI labels without changing a person's name.
@@ -55,7 +67,7 @@ function possibleName(value:string):string|null {
   const cleaned=normalizeScreenshotName(value
     .replace(/^\s*(?:NOME(?:\s+COMPLETO)?|TITULAR)\s*[:\-]\s*/iu,"")
     .replace(/\bCPF\s*[:\-]?/giu," "));
-  if(!isReviewableName(cleaned) || ignoredLabels.test(cleaned) || /FREQU[EÊ]NCIA\s+DE\s+FACE|(?:ALTA|M[EÉ]DIA)\s+SIMILARIDADE|FACE\s+DETECTADA|OLHOS\s+NARIZ\s+BOCA/iu.test(cleaned))return null;
+  if(!isReviewableName(cleaned) || ignoredLabels.test(cleaned) || uiNames.test(cleaned) || /FREQU[EÊ]NCIA\s+DE\s+FACE|(?:ALTA|M[EÉ]DIA)\s+SIMILARIDADE|FACE\s+DETECTADA|OLHOS\s+NARIZ\s+BOCA/iu.test(cleaned))return null;
   const words=cleaned.split(" ");
   if(words.length>9 || /\b(?:RESULTADOS?|CONSULTAR|VISUALIZAR|SELECIONAR|CARREGAR|DISPON[IÍ]VEL|CADASTRADO|CONFERIDO|APROVADA|DESCARTADO|SIMILARIDADE|DOCUMENTOS?|BUSCAR|PESQUISAR)\b/u.test(cleaned))return null;
   return cleaned;
@@ -137,6 +149,7 @@ function findCpfNumbers(lines:TextLine[],width:number):NumberAnchor[]{
 
 export function parseScreenshotTsv(tsv:string,width:number,height:number):ScreenshotPerson[]{
   if(!Number.isFinite(width)||!Number.isFinite(height)||width<200||height<200)return [];
+  if(isH2BicoInterfaceScreenshot(tsv))return [];
   const groups=new Map<string,Word[]>();
   for(const row of tsv.split(/\r?\n/).slice(1)){
     const columns=row.split("\t");
