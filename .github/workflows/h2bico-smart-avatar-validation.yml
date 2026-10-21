@@ -1,0 +1,28 @@
+name: Validate H2BICO Smart Avatar Crop
+on:
+  pull_request:
+    paths:
+      - "client/src/lib/h2bicoAvatarCrop.ts"
+      - "client/src/lib/h2bicoAvatarCrop.test.ts"
+      - "client/src/components/H2BicoScreenshotImporter.tsx"
+      - "client/src/lib/similarFaceTfliteRuntime.ts"
+      - ".github/workflows/h2bico-smart-avatar-validation.yml"
+  push:
+    branches:
+      - "feat/h2bico-smart-avatar-crop-20261021"
+jobs:
+  validate:
+    runs-on: ubuntu-latest
+    timeout-minutes: 25
+    steps:
+      - uses: actions/checkout@v4
+      - uses: pnpm/action-setup@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: "22"
+          cache: pnpm
+      - run: pnpm install --frozen-lockfile
+      - name: Avatar crop unit tests
+        run: pnpm exec vitest run client/src/lib/h2bicoAvatarCrop.test.ts
+      - name: Production build
+        run: pnpm run build
