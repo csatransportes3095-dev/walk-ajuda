@@ -3,6 +3,7 @@ import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { ClipboardPaste } from "lucide-react";
 import { detectH2AvatarFaces } from "@/lib/similarFaceTfliteRuntime";
 import { rankAvatarCandidates, measureAvatarQuality, shouldAutoSelectAvatar, type AvatarCandidate } from "@/lib/h2bicoAvatarCrop";
+import { createH2FaceScanTiles, mergeH2FaceScanBoxes } from "@/lib/h2bicoFaceScanTiles";
 import { toast } from "sonner";
 import { trpc } from "@/lib/trpc";
 import { isValidCpf } from "@/lib/h2bicoCpfExtractor";
@@ -140,6 +141,7 @@ export default function H2BicoScreenshotImporter(){
   };
   // Automatically try the independent white-background crop on every
   // imported print. Wrong legacy estimates must not silently save a dark box.
+  const avatarCache=useRef(new Map<string,Promise<AvatarCandidate[]>>());
   const detectAvatar=async(item:Item,totalInPrint?:number)=>{
     update(item.id,{avatarBusy:true,avatarError:undefined});
     try{
@@ -147,8 +149,27 @@ export default function H2BicoScreenshotImporter(){
       const canvas=document.createElement("canvas");canvas.width=img.naturalWidth;canvas.height=img.naturalHeight;
       const ctx=canvas.getContext("2d",{willReadFrequently:true});if(!ctx)throw new Error("Falha no canvas");
       ctx.drawImage(img,0,0);
-      const faces=await detectH2AvatarFaces(canvas);
-      const options=rankAvatarCandidates(faces,{data:ctx.getImageData(0,0,canvas.width,canvas.height).data,width:canvas.width,height:canvas.height},item.nameBox);
+      let work=avatarCache.current.get(item.photo);
+      if(!work){
+        work=(async()=>{
+          const all=[];
+          const tiles=createH2FaceScanTiles(canvas.width,canvas.height);
+          for(const tile of tiles){
+            const patch=document.createElement("canvas");
+            patch.width=tile.width;patch.height=tile.height;
+            const patchCtx=patch.getContext("2d");if(!patchCtx)continue;
+            patchCtx.drawImage(canvas,tile.x,tile.y,tile.width,tile.height,0,0,tile.width,tile.height);
+            try{
+              const found=await detectH2AvatarFaces(patch);
+              all.push(...found.map(face=>({...face,x:face.x+tile.x,y:face.y+tile.y})));
+            }catch{/* Continue analyzing other parts of the screenshot. */}
+          }
+          const faces=mergeH2FaceScanBoxes(all);
+          return rankAvatarCandidates(faces,{data:ctx.getImageData(0,0,canvas.width,canvas.height).data,width:canvas.width,height:canvas.height});
+        })();
+        avatarCache.current.set(item.photo,work);
+      }
+      const options=await work;
       const single=shouldAutoSelectAvatar(options.length,totalInPrint??items.filter(x=>x.source===item.source).length);
       update(item.id,{avatarBusy:false,avatarOptions:options,avatarCrop:single?options[0]?.crop:null,
         cropMode:single?"avatar":item.cropMode,selected:false,
@@ -346,6 +367,7 @@ export default function H2BicoScreenshotImporter(){
     if(runningRef.current||savingRef.current)return;
     for(const url of photoUrlsRef.current)URL.revokeObjectURL(url);
     photoUrlsRef.current.clear();
+    avatarCache.current.clear();
     setItems([]);
     setProcessedCount(0);
     nextPrintNumber.current=0;
@@ -431,8 +453,8 @@ export default function H2BicoScreenshotImporter(){
           <Button disabled={saving||busy||!selected.length} onClick={()=>void saveAll()}>{saving?"SALVANDO...":"SALVAR "+selected.length+" NO H2BICO"}</Button>
         </div>
       </div>
-      <div className="max-h-[600px] overflow-y-auto space-y-2">
-        {items.map(item=><div key={item.id} className="rounded-xl border border-white/10 bg-black/20 p-3">
+      <div className="grid grid-cols-1 gap-3 xl:grid-cols-2 2xl:grid-cols-3 items-start">
+        {items.map(item=><div key={item.id} className="min-w-0 rounded-xl border border-white/10 bg-black/20 p-3">
           <div className="flex flex-wrap items-start gap-3">
             <div className="space-y-2"><CropPreview item={item}/><p className="text-[11px] text-cyan-200">{item.cropMode==="white"?"Foto padrão 4:5":item.cropMode==="avatar"?"Avatar inteligente 4:5":"Recorte atual"}</p></div>
             <div className="min-w-[210px] flex-1 space-y-2">
@@ -499,9 +521,14 @@ export default function H2BicoScreenshotImporter(){
             <div className="rounded-xl border border-cyan-500/30 bg-cyan-500/5 p-3 space-y-2">
               <div className="flex flex-wrap items-center justify-between gap-2"><span className="text-sm font-black text-cyan-300">RECORTE AVATAR INTELIGENTE • H2 FACE</span><Button type="button" size="sm" disabled={saving||busy||item.avatarBusy} onClick={()=>void detectAvatar(item)}>{item.avatarBusy?"ANALISANDO...":"LOCALIZAR ROSTO"}</Button></div>
               {item.avatarError&&<p role="alert" className="text-xs text-amber-200">{item.avatarError}</p>}
-              {item.avatarOptions&&item.avatarOptions.length>0&&<div className="flex flex-wrap gap-2">
+              {item.avatarOptions&&item.avatarOptions.length>0&&<div className="grid grid-cols-3 sm:grid-cols-4 gap-2">
                 {item.avatarOptions.map((option,index)=><button key={index} type="button" onClick={()=>update(item.id,{avatarCrop:option.crop,cropMode:"avatar",selected:false,avatarError:undefined})}
-                  className={`rounded-lg border px-3 py-2 text-xs font-bold ${item.cropMode==="avatar"&&item.avatarCrop===option.crop?"border-emerald-400 bg-emerald-600/30 text-white":"border-slate-600 bg-slate-900 text-slate-200"}`}>ROSTO {index+1} • {Math.round(option.face.score*100)}%</button>)}
+                  className={`rounded-lg border px-3 py-2 text-xs font-bold ${item.cropMode==="avatar"&&item.avatarCrop===option.crop?"border-emerald-400 bg-emerald-600/30 text-white":"border-slate-600 bg-slate-900 text-slate-200"}`}><span className="block relative h-20 w-full overflow-hidden rounded bg-black">
+                  <img src={item.photo} alt={"Candidato de rosto "+(index+1)} style={{
+                    position:"absolute",maxWidth:"none",width:item.width*(76/option.crop.width),height:item.height*(76/option.crop.width),
+                    left:-option.crop.x*(76/option.crop.width),top:-option.crop.y*(76/option.crop.width)
+                  }}/>
+                </span><span className="block mt-1">ROSTO {index+1} • {Math.round(option.face.score*100)}%</span></button>)}
               </div>}
               <p className="text-xs text-slate-400">Se houver vários rostos, escolha o avatar correto. Confira a prévia antes de salvar.</p>
             </div>
