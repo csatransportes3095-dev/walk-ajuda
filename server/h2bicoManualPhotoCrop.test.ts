@@ -1,5 +1,5 @@
 import {describe,it,expect} from "vitest";
-import {initialManualPhotoCrop,moveManualPhotoCrop,resizeManualPhotoCrop,centerManualPhotoCrop,validateManualPhotoCrop} from "../client/src/lib/h2bicoManualPhotoCrop";
+import {initialManualPhotoCrop,moveManualPhotoCrop,portraitFromLegacySquare,resizeManualPhotoCrop,centerManualPhotoCrop,validateManualPhotoCrop} from "../client/src/lib/h2bicoManualPhotoCrop";
 describe("H2BICO manual photo-only crop",()=>{
  it("uses a valid exact 4:5 crop on tall screenshots",()=>{
   const crop=initialManualPhotoCrop(847,1313);
@@ -16,6 +16,13 @@ describe("H2BICO manual photo-only crop",()=>{
   const crop=initialManualPhotoCrop(847,1313)!;
   const far=moveManualPhotoCrop(crop,847,1313,5000,-5000);
   expect(far.y).toBe(0);expect(far.x+far.width).toBeLessThanOrEqual(847);
+ });
+ it("expands the legacy square below the face for head and shoulders",()=>{
+  const crop=portraitFromLegacySquare(859,1367,{x:18,y:30,size:154});
+  expect(crop).not.toBeNull();
+  expect(crop!.height/crop!.width).toBeCloseTo(1.25,1);
+  expect(crop!.y).toBeLessThan(30);
+  expect(crop!.y+crop!.height).toBeGreaterThan(30+154);
  });
  it("zoom and centering retain 4:5 aspect ratio",()=>{
   const crop=initialManualPhotoCrop(600,900)!;

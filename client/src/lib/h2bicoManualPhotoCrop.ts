@@ -36,6 +36,32 @@ export function initialManualPhotoCrop(
   return isSafeAvatarRect(crop,imageWidth,imageHeight)?crop:null;
 }
 
+/**
+ * Compatibilidade com o recorte quadrado antigo do OCR.
+ * O quadrado normalmente começa na testa e corta o queixo/ombros; ao abrir
+ * o editor ou receber um novo print, amplia para 4:5 e favorece a parte
+ * inferior do retrato, mantendo a cabeça dentro da moldura.
+ */
+export function portraitFromLegacySquare(
+  imageWidth:number,imageHeight:number,
+  square:{x:number;y:number;size:number}|null|undefined,
+):ManualPhotoCrop|null {
+  if(!square||![square.x,square.y,square.size].every(Number.isFinite)||square.size<48)return null;
+  const max=maxManualPhotoWidth(imageWidth,imageHeight);
+  if(max<48)return null;
+  const width=Math.round(clamp(square.size,48,max));
+  const height=Math.round(width*MANUAL_CROP_ASPECT);
+  const centerX=square.x+square.size*.5;
+  // Move the center down so the new space is added mostly below the face.
+  const centerY=square.y+square.size*.58;
+  const crop={
+    x:Math.round(clamp(centerX-width*.5,0,imageWidth-width)),
+    y:Math.round(clamp(centerY-height*.5,0,imageHeight-height)),
+    width,height,
+  };
+  return isSafeAvatarRect(crop,imageWidth,imageHeight)?crop:null;
+}
+
 export function moveManualPhotoCrop(
   crop:ManualPhotoCrop,imageWidth:number,imageHeight:number,
   dx:number,dy:number,

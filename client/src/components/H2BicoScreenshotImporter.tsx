@@ -12,7 +12,7 @@ import { resolveH2BicoCardName } from "@/lib/h2bicoCardName";
 import { applyStableAvatarResult, isValidAvatarReplacement, keepPreviewOnFailedPreset } from "@/lib/h2bicoStablePreview";
 import { shouldPreselectH2BicoPhoto } from "@/lib/h2bicoImportReview";
 import H2BicoManualCropDialog from "@/components/H2BicoManualCropDialog";
-import {validateManualPhotoCrop} from "@/lib/h2bicoManualPhotoCrop";
+import {portraitFromLegacySquare,validateManualPhotoCrop} from "@/lib/h2bicoManualPhotoCrop";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Card } from "@/components/ui/card";
@@ -291,14 +291,16 @@ export default function H2BicoScreenshotImporter(){
             photoUrlsRef.current.add(photo);
             const incoming:Item[]=analysis.persons.map((p,i)=>{
               const resolved=resolveH2BicoCardName(p.name,p.existingName,p.alreadyExists);
+              const legacyPortrait=portraitFromLegacySquare(analysis.width,analysis.height,p.crop);
+              const detectedPortrait=p.whitePhotoCrop||legacyPortrait;
               return ({
               id:Date.now()+"-"+number+"-"+i+"-"+Math.random(),
               source:file.name,photo,name:resolved.name,nameSource:resolved.source,cpf:p.cpf,cpfSuggestion:p.cpfSuggestion,crop:p.crop,
                photoLayout:p.photoLayout,confidence:p.confidence,
                nameBox:p.nameBox,
                cpfBox:p.cpfBox,
-               whiteCrop:p.whitePhotoCrop||null,
-               cropMode:p.whitePhotoCrop?"white":"original",
+               whiteCrop:detectedPortrait,
+               cropMode:detectedPortrait?"white":"original",
                whiteChecked:true,
               width:analysis.width,height:analysis.height,
               existing:p.alreadyExists,
@@ -474,7 +476,7 @@ export default function H2BicoScreenshotImporter(){
     </div>
     {status&&<p role="status" className="text-sm text-amber-200">{status}</p>}
     {items.length>0&&<>
-      {items.filter(item=>item.id===editingPhotoId).map(item=><H2BicoManualCropDialog key={item.id} open={true} onOpenChange={open=>{if(!open)setEditingPhotoId(null);}} imageUrl={item.photo} imageWidth={item.width} imageHeight={item.height} initialCrop={item.manualCrop||item.avatarCrop||item.whiteCrop||null} onConfirm={crop=>{scanTokens.current.set(item.id,(scanTokens.current.get(item.id)||0)+1);update(item.id,{manualCrop:crop,cropMode:"manual",avatarBusy:false,selected:false,error:undefined,avatarError:undefined});toast.success("Recorte atualizado. Somente a foto foi alterada.");}}/>)}
+      {items.filter(item=>item.id===editingPhotoId).map(item=><H2BicoManualCropDialog key={item.id} open={true} onOpenChange={open=>{if(!open)setEditingPhotoId(null);}} imageUrl={item.photo} imageWidth={item.width} imageHeight={item.height} initialCrop={item.manualCrop||item.avatarCrop||item.whiteCrop||portraitFromLegacySquare(item.width,item.height,item.crop)} onConfirm={crop=>{scanTokens.current.set(item.id,(scanTokens.current.get(item.id)||0)+1);update(item.id,{manualCrop:crop,cropMode:"manual",avatarBusy:false,selected:false,error:undefined,avatarError:undefined});toast.success("Recorte atualizado. Somente a foto foi alterada.");}}/>)}
       <div className="flex flex-wrap items-center justify-between gap-2">
         <div className="text-sm font-bold">{items.length} identificado(s) • {items.filter(x=>x.existing).length} já cadastrado(s) • {selected.length} selecionado(s)</div>
         <div className="flex gap-2">
