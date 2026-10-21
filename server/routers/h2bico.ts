@@ -11,6 +11,7 @@ import { alignScreenshotPhotoCrops } from "../h2bicoScreenshotCrop";
 import { detectWhitePortraitCrops } from "../h2bicoScreenshotWhitePhoto";
 import { suggestCpfFromMisreadDigits } from "../h2bicoCpfOcrSuggestion";
 import { autoReadCpfLine } from "../h2bicoScreenshotAutoCpf";
+import { mergeRepeatedNameWithCpf } from "../h2bicoScreenshotPersonLink";
 const execFileAsync = promisify(execFile);
 import { sql } from "drizzle-orm";
 import { z } from "zod";
@@ -213,7 +214,7 @@ export const h2bicoRouter = router({
       const {stdout}=await execFileAsync("tesseract",[filename,"stdout","-l","por+eng","--psm","11","tsv"],{
         timeout:45000,maxBuffer:12*1024*1024,encoding:"utf8",
       });
-      const aligned=await alignScreenshotPhotoCrops(processed,parseScreenshotTsv(stdout,ocrWidth,ocrHeight),ocrWidth,ocrHeight);
+      const aligned=await alignScreenshotPhotoCrops(processed,mergeRepeatedNameWithCpf(parseScreenshotTsv(stdout,ocrWidth,ocrHeight)),ocrWidth,ocrHeight);
       const found=aligned.map(person=>({
         ...person,
         crop:{
