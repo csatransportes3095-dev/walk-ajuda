@@ -12,6 +12,7 @@ import { detectWhitePortraitCrops } from "../h2bicoScreenshotWhitePhoto";
 import { suggestCpfFromMisreadDigits } from "../h2bicoCpfOcrSuggestion";
 import { autoReadCpfLine } from "../h2bicoScreenshotAutoCpf";
 import { mergeRepeatedNameWithCpf } from "../h2bicoScreenshotPersonLink";
+import { detectRankedPortraitCrops } from "../h2bicoRankedPortraits";
 const execFileAsync = promisify(execFile);
 import { sql } from "drizzle-orm";
 import { z } from "zod";
@@ -272,8 +273,12 @@ export const h2bicoRouter = router({
           width:row.nameBox.width*width/ocrWidth,height:row.nameBox.height*height/ocrHeight,
         }:undefined,
       })));
+      const rankedCrops=await detectRankedPortraitCrops(prepared,width,height,found.map(row=>({
+        nameBox:row.nameBox?{left:row.nameBox.left*width/ocrWidth,top:row.nameBox.top*height/ocrHeight,
+          width:row.nameBox.width*width/ocrWidth,height:row.nameBox.height*height/ocrHeight}:undefined
+      })));
       const proposed=found.map((row,index)=>({
-        ...row,whitePhotoCrop:brightCrops[index]||null,
+        ...row,whitePhotoCrop:rankedCrops[index]||brightCrops[index]||null,
         cpfSuggestion:suggestCpfFromMisreadDigits(row.cpf),
       }));
       const cpfs=[...new Set(proposed.filter(row=>isValidCpf(row.cpf)).map(row=>row.cpf))];
