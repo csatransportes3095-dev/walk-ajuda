@@ -1,5 +1,5 @@
 
-import { useCallback, useEffect, useRef, useState } from "react";
+import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { ClipboardPaste } from "lucide-react";
 import { toast } from "sonner";
 import { trpc } from "@/lib/trpc";
@@ -10,6 +10,8 @@ import { Input } from "@/components/ui/input";
 import { Card } from "@/components/ui/card";
 import { findWhitePhotoCrop, locateWhitePortrait, isWhitePortraitAboveName, type WhitePhotoCrop } from "@/lib/h2bicoWhitePhotoCrop";
 
+type EarStatus = "com_ear" | "sem_ear";
+
 type Item={
   id:string; source:string; name:string; cpf:string;
   photo:string; crop:{x:number;y:number;size:number};
@@ -18,6 +20,8 @@ type Item={
   photoLayout?:"left"|"right"|"above"; confidence?:number;
   nameBox?:{left:number;top:number;width:number;height:number};
   cropMode?:"original"|"white"; whiteCrop?:WhitePhotoCrop|null; whiteChecked?:boolean;
+  // Marcador manual e independente de OCR, foto ou disponibilidade.
+  earStatus?:EarStatus|null; earTouched?:boolean; earSynced?:boolean; savedRecordId?:number;
 };
 const digits=(value:string)=>value.replace(/\D/g,"");
 const readBase64=(file:File)=>new Promise<string>((resolve,reject)=>{
@@ -80,8 +84,56 @@ export default function H2BicoScreenshotImporter(){
   useEffect(()=>()=>{for(const url of photoUrlsRef.current)URL.revokeObjectURL(url);photoUrlsRef.current.clear();},[]);
   const analyze=trpc.h2bico.analyzeScreenshot.useMutation();
   const save=trpc.h2bico.importScreenshotRecord.useMutation();
+  // Reutiliza a mesma query/tabela e a mesma mutação dos "Cards de clientes".
+  const existingRecords=trpc.h2bico.list.useQuery({search:"",status:"all"},{staleTime:30_000});
+  const earMutation=trpc.h2bico.setEarMarker.useMutation();
+  const [savingEarIds,setSavingEarIds]=useState<Set<string>>(new Set());
+  const savingEarRef=useRef(new Set<string>());
+  const knownByCpf=useMemo(()=>{
+    const records=new Map<string,{id:number;earStatus:EarStatus|null}>();
+    for(const row of existingRecords.data||[]){
+      records.set(digits(String(row.cpf)),{
+        id:Number(row.id),
+        earStatus:row.earStatus==="com_ear"||row.earStatus==="sem_ear"?row.earStatus:null
+      });
+    }
+    return records;
+  },[existingRecords.data]);
   const utils=trpc.useUtils();
   const update=(id:string,patch:Partial<Item>)=>setItems(current=>current.map(item=>item.id===id?{...item,...patch}:item));
+  const earFor=(item:Item):EarStatus|null=>item.earTouched
+    ?item.earStatus??null
+    :knownByCpf.get(digits(item.cpf))?.earStatus??null;
+
+  const selectEar=async(item:Item,choice:EarStatus)=>{
+    if(savingRef.current||savingEarRef.current.has(item.id))return;
+    const current=earFor(item);
+    // Se o primeiro salvamento do marcador falhou, tocar novamente tenta gravá-lo,
+    // em vez de apagar a opção que o administrador acabou de escolher.
+    const next:EarStatus|null=current===choice&&item.earSynced!==false?null:choice;
+    if(!item.saved&&!item.existing){
+      update(item.id,{earStatus:next,earTouched:true,earSynced:false});
+      return;
+    }
+    const id=item.savedRecordId||knownByCpf.get(digits(item.cpf))?.id;
+    if(!id){
+      toast.warning("Aguarde carregar o cadastro existente para marcar EAR. Nenhuma foto será substituída.");
+      return;
+    }
+    savingEarRef.current.add(item.id);
+    setSavingEarIds(prev=>new Set(prev).add(item.id));
+    try{
+      await earMutation.mutateAsync({id,earStatus:next});
+      update(item.id,{earStatus:next,earTouched:true,earSynced:true,error:undefined});
+      await utils.h2bico.list.invalidate();
+      toast.success(next==="com_ear"?"Marcado COM EAR":next==="sem_ear"?"Marcado SEM EAR":"Marcação EAR removida");
+    }catch(error){
+      toast.error("Falha ao salvar EAR: "+(error instanceof Error?error.message:"tente novamente"));
+    }finally{
+      savingEarRef.current.delete(item.id);
+      setSavingEarIds(prev=>{const updated=new Set(prev);updated.delete(item.id);return updated;});
+    }
+  };
   // Automatically try the independent white-background crop on every
   // imported print. Wrong legacy estimates must not silently save a dark box.
   const autoPreviewWhite=async(item:Item)=>{
@@ -276,7 +328,7 @@ export default function H2BicoScreenshotImporter(){
     if(savingRef.current||runningRef.current||pendingRef.current.length)return;
     savingRef.current=true;
     setSaving(true);
-    let imported=0,duplicates=0,errors=0;
+    let imported=0,duplicates=0,errors=0,earErrors=0;
     try{
       // A validacao final e feita de novo no servidor, inclusive duplicidade.
       for(const item of items.filter(row=>row.selected&&!row.saved)){
@@ -288,12 +340,29 @@ export default function H2BicoScreenshotImporter(){
           // Both legacy square and automatic white crops are already bounded to the portrait preview.
           const base64=await cropPhoto(item);
           const result=await save.mutateAsync({cpf:item.cpf,name:item.name,base64,photoMode:item.cropMode==="white"?"white":"original"});
-          if(result.result==="imported"){imported++;update(item.id,{saved:true,selected:false,error:undefined});}
-          else{duplicates++;update(item.id,{selected:false,existing:true,error:"CPF já cadastrado."});}
+          if(result.result==="imported"){
+            imported++;
+            const savedRecordId=Number(result.id)||undefined;
+            update(item.id,{saved:true,selected:false,savedRecordId,earSynced:!item.earStatus,error:undefined});
+            if(item.earStatus){
+              try{
+                if(!savedRecordId)throw new Error("identificador do cadastro indisponível");
+                // A foto já foi salva: não repetir o import se a gravação do marcador falhar.
+                await earMutation.mutateAsync({id:savedRecordId,earStatus:item.earStatus});
+                update(item.id,{earSynced:true,error:undefined});
+              }catch(error){
+                earErrors++;
+                update(item.id,{earSynced:false,error:"Foto salva; marcação EAR pendente. Toque novamente na opção escolhida para tentar gravar."});
+              }
+            }
+          }else{
+            duplicates++;
+            update(item.id,{selected:false,existing:true,error:"CPF já cadastrado. Você pode marcar EAR aqui sem substituir a foto."});
+          }
         }catch(error){errors++;update(item.id,{error:error instanceof Error?error.message:"Falha ao salvar"});}
       }
       await utils.h2bico.invalidate();
-      toast.info("Concluído: "+imported+" novo(s), "+duplicates+" duplicado(s), "+errors+" erro(s).");
+      toast.info("Concluído: "+imported+" novo(s), "+duplicates+" duplicado(s), "+errors+" erro(s)"+(earErrors?" • "+earErrors+" marcação(ões) EAR pendente(s).":"."));
     }finally{savingRef.current=false;setSaving(false);setStatus("");}
   };
   const eligible=(item:Item)=>!item.existing&&!item.saved&&isValidCpf(item.cpf)&&
@@ -308,7 +377,7 @@ export default function H2BicoScreenshotImporter(){
     <div>
       <div className="text-xs font-black uppercase tracking-widest text-cyan-300">Extrator inteligente de prints</div>
       <h2 className="mt-1 text-xl font-black">Foto + nome + CPF → H2BICO</h2>
-      <p className="mt-1 text-sm text-gray-400">Envie prints dos resultados. Confira cada foto e corrija o nome ou CPF antes de salvar. Os dados existentes não são substituídos.</p>
+      <p className="mt-1 text-sm text-gray-400">Envie prints dos resultados. Confira cada foto, nome e CPF, selecione COM EAR ou SEM EAR e salve. A marcação usa o mesmo cadastro dos Cards de Clientes; fotos existentes não são substituídas.</p>
     </div>
     <input ref={input} type="file" accept="image/png,image/jpeg,image/webp" multiple className="hidden"
       onChange={e=>{if(e.target.files)void inspect(e.target.files);e.currentTarget.value="";}}/>
@@ -361,6 +430,34 @@ export default function H2BicoScreenshotImporter(){
                   update(item.id,{cpf:item.cpfSuggestion!,cpfSuggestion:null,selected:false,error:undefined});
                 }}>CONFERI NO PRINT — USAR CPF SUGERIDO</Button>
               </div>}
+              <div className="rounded-xl border border-white/15 bg-slate-950/40 p-3 space-y-2" role="group" aria-label={`Marcação EAR de ${item.name}`}>
+                <div className="flex flex-wrap items-center justify-between gap-2">
+                  <p className="text-xs font-black uppercase tracking-wide text-slate-200">MARCAÇÃO EAR</p>
+                  <span className="text-[11px] text-slate-400">
+                    {item.saved?"Registro salvo":item.existing?"Atualização direta do cadastro":"Salvará junto com o registro"}
+                  </span>
+                </div>
+                <div className="grid grid-cols-2 gap-2">
+                  {(["com_ear","sem_ear"] as const).map(option=>{
+                    const active=earFor(item)===option;
+                    const positive=option==="com_ear";
+                    return <button
+                      key={option} type="button" aria-pressed={active}
+                      disabled={saving||savingEarIds.has(item.id)}
+                      onClick={()=>void selectEar(item,option)}
+                      className={`min-h-11 rounded-lg border px-3 py-2.5 text-sm font-black transition focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 disabled:opacity-50 ${active
+                        ?positive?"border-emerald-400 bg-emerald-500/30 text-emerald-100 shadow-[inset_0_0_0_1px_rgba(52,211,153,.3)]":"border-red-400 bg-red-500/30 text-red-100 shadow-[inset_0_0_0_1px_rgba(248,113,113,.3)]"
+                        :positive?"border-emerald-500/35 bg-emerald-950/15 text-emerald-300/75 hover:bg-emerald-500/15":"border-red-500/35 bg-red-950/15 text-red-300/75 hover:bg-red-500/15"}`}
+                    >{positive?"🟢 COM EAR":"🔴 SEM EAR"} {active?"✓":""}</button>;
+                  })}
+                </div>
+                {item.saved&&item.earSynced===false&&item.earStatus&&
+                  <p role="alert" className="text-xs font-bold text-amber-200">Foto salva, mas EAR ainda não foi gravado. Toque novamente na marcação escolhida para tentar.</p>}
+                {!item.saved&&!item.existing&&
+                  <p className="text-[11px] text-slate-400">Escolha um marcador ou deixe sem classificação. Não interfere na confirmação da foto.</p>}
+                {item.existing&&!knownByCpf.has(digits(item.cpf))&&
+                  <p className="text-[11px] text-amber-200">Consultando o cadastro já existente para gravar o marcador.</p>}
+              </div>
               <label className="inline-flex items-center gap-2 text-sm">
                 <input type="checkbox" checked={item.selected} disabled={saving||item.saved||item.existing}
                   onChange={e=>update(item.id,{selected:e.target.checked})}/>
