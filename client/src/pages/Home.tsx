@@ -1,3 +1,4 @@
+import { extractFlowRules, applyQuestionFlow } from "@/lib/conditionalQuestionFlow";
 import { encodeWhatsappMessage } from "@shared/whatsappMessageText";
 import { useAuth } from "@/_core/hooks/useAuth";
 import { useRoute } from "wouter";
@@ -1681,10 +1682,25 @@ export default function Home() {
       };
       // Construir answersArray com ordenação hierárquica (pai → sub → sub-sub) e depth
       const allQs = selectedOption?.questions || [];
+      const includedFlowAnswers = new Set(applyQuestionFlow(
+        (() => {
+          const arranged: ProductQuestion[] = [];
+          const visit = (q: ProductQuestion) => {
+            if (arranged.some(item => item.id === q.id)) return;
+            arranged.push(q);
+            allQs.filter(child => child.parentQuestionId === q.id)
+              .sort((a,b)=>a.sortOrder-b.sortOrder).forEach(child => {
+                if(isQVisibleFinal(child)) visit(child);
+              });
+          };
+          allQs.filter(q=>!q.parentQuestionId).sort((a,b)=>a.sortOrder-b.sortOrder).forEach(visit);
+          return arranged;
+        })(), questionAnswers, extractFlowRules(allQs)
+      ).questions.map(q=>q.id));
       const orderedAnswers: Array<{ question: string; questionId: number; answer: string; answerType?: string; depth: number; optionsMeta?: string; audioUrl?: string; durationSeconds?: number }> = [];
       const addWithDepth = (q: ProductQuestion, depth: number) => {
         const audio = questionAudioAnswers[q.id];
-        if (!isQVisibleFinal(q) || (!audio && !questionAnswers[q.id]?.trim())) return;
+        if (!includedFlowAnswers.has(q.id) || !isQVisibleFinal(q) || (!audio && !questionAnswers[q.id]?.trim())) return;
         const base: { question: string; questionId: number; answer: string; answerType?: string; depth: number; optionsMeta?: string; audioUrl?: string; durationSeconds?: number } = audio
           ? { question: q.question, questionId: q.id, answer: 'Áudio anexado', answerType: 'audio', audioUrl: audio.audioUrl, durationSeconds: audio.durationSeconds, depth }
           : { question: q.question, questionId: q.id, answer: questionAnswers[q.id], depth };
@@ -3464,7 +3480,10 @@ export default function Home() {
           return result;
         };
 
-        const visibleQs = buildOrderedQs(questionAnswers);
+        const flowRules = extractFlowRules(allQsModal);
+        const resolveFlow = (answers: Record<number,string>) => applyQuestionFlow(buildOrderedQs(answers), answers, flowRules);
+        const flowState = resolveFlow(questionAnswers);
+        const visibleQs = flowState.questions;
         const totalQs = visibleQs.length;
         const safeIndex = Math.min(currentQuestionIndex, Math.max(0, totalQs - 1));
         const currentQ = visibleQs[safeIndex];
@@ -3473,7 +3492,7 @@ export default function Home() {
 
         // Calcula o próximo índice considerando sub-perguntas que podem aparecer após responder
         const getNextIndex = (newAnswers: Record<number, string>): number => {
-          const nextList = buildOrderedQs(newAnswers);
+          const nextList = resolveFlow(newAnswers).questions;
           // Encontrar a posição atual na nova lista
           const currentIdInNew = nextList.findIndex(q => q.id === currentQ?.id);
           if (currentIdInNew === -1) return safeIndex + 1;
@@ -3592,7 +3611,7 @@ export default function Home() {
                             // Usa getNextIndex com as novas respostas para incluir sub-perguntas que acabaram de ficar visíveis
                             const newAnswers = { ...questionAnswers, [q.id]: opt.label };
                             const nextIdx = getNextIndex(newAnswers);
-                            const nextList = buildOrderedQs(newAnswers);
+                            const nextList = resolveFlow(newAnswers).questions;
                             setTimeout(() => {
                               if (nextIdx < nextList.length) setCurrentQuestionIndex(nextIdx);
                             }, 100);
@@ -3653,7 +3672,7 @@ export default function Home() {
                         setBlockedByQuestion(null);
                         const newAnswers2 = { ...questionAnswers, [q.id]: opt };
                         const nextIdx2 = getNextIndex(newAnswers2);
-                        const nextList2 = buildOrderedQs(newAnswers2);
+                        const nextList2 = resolveFlow(newAnswers2).questions;
                         setTimeout(() => {
                           if (nextIdx2 < nextList2.length) setCurrentQuestionIndex(nextIdx2);
                         }, 350);
@@ -3773,6 +3792,9 @@ export default function Home() {
                 )}
                 <div>
                   {renderQuestionInput(currentQ)}
+                  {flowState.ended && flowState.message && questionAnswers[currentQ.id] && (
+                    <div className="mt-3 rounded border border-cyan-400/30 bg-cyan-500/10 p-3 text-sm text-cyan-100">{flowState.message}</div>
+                  )}
                 </div>
               </div>
             )}
