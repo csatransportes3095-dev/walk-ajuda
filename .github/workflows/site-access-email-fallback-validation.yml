@@ -64,9 +64,28 @@ jobs:
           import {execFileSync} from 'node:child_process';
           import ts from 'typescript';
           const base='0183a51750d3556cb4d2b345e29af57f7931c32d';
-          const before=p=>execFileSync('git',['show',base+':'+p],{encoding:'utf8'});
-          const read=p=>fs.readFileSync(p,'utf8');
-          for(const p of ['server/siteAccessCodeDelivery.ts','server/siteSecurityRouter.ts','server/siteAccessSchema.ts','server/siteAccessGateway.ts','server/siteAccessPolicy.ts','server/siteAccessManualAdd.ts','server/siteSecurityDirectory.ts','server/autoSchedule.ts','server/routers/schedule.ts','server/routers/customerPassword.ts','server/_core/trpc.ts','server/_core/mailer.ts','server/_core/sendMailDirect.ts','server/db.ts','client/src/pages/AdminSiteSecurity.tsx','client/src/pages/OrderTracking.tsx','client/src/App.tsx','client/src/main.tsx','client/src/components/SiteAccessSessionBoundary.tsx','client/src/lib/siteAccessSessionClient.ts','Dockerfile','package.json','pnpm-lock.yaml'])assert.equal(read(p),before(p),p+' unexpectedly changed');
+          const normalizeLines=source=>source.replace(/\r\n/g,'\n');
+          const before=p=>normalizeLines(execFileSync('git',['show',base+':'+p],{encoding:'utf8'}));
+          const read=p=>normalizeLines(fs.readFileSync(p,'utf8'));
+          const normalizeChassisIntegration=(p,source)=>{
+            if(p==='client/src/App.tsx')return source
+              .replace(/^import AdminChassisPage from "\.\/pages\/AdminChassisPage";\r?\n/m,'')
+              .replace('<AdminGuard><AdminChassisPage /></AdminGuard>','<AdminGuard><GeradorChassiPublico /></AdminGuard>');
+            if(p==='client/src/main.tsx')return source
+              .replace(/^import ChassisCustomerPage from "\.\/pages\/ChassisCustomerPage";\r?\nimport \{ isChassisCustomerLocation \} from "@shared\/chassisService";\r?\nimport \{ useLocation \} from "wouter";\r?\n/m,'')
+              .replace(/  const \[servicePath\] = useLocation\(\);\r?\n  \/\/ A rota .*\r?\n  if \(isChassisCustomerLocation\(servicePath, window\.location\.hostname\)\) return <ChassisCustomerPage \/>;\r?\n/,'')
+              .replace(' || isChassisCustomerLocation(pathname, window.location.hostname)','');
+            return source;
+          };
+          const protectedFiles=['server/siteAccessCodeDelivery.ts','server/siteSecurityRouter.ts','server/siteAccessSchema.ts','server/siteAccessGateway.ts','server/siteAccessPolicy.ts','server/siteAccessManualAdd.ts','server/siteSecurityDirectory.ts','server/autoSchedule.ts','server/routers/schedule.ts','server/routers/customerPassword.ts','server/_core/trpc.ts','server/_core/mailer.ts','server/_core/sendMailDirect.ts','server/db.ts','client/src/pages/AdminSiteSecurity.tsx','client/src/pages/OrderTracking.tsx','client/src/App.tsx','client/src/main.tsx','client/src/components/SiteAccessSessionBoundary.tsx','client/src/lib/siteAccessSessionClient.ts','Dockerfile','package.json','pnpm-lock.yaml'];
+          for(const p of protectedFiles){
+            const current=read(p),previous=before(p);
+            assert.equal(
+              p==='client/src/App.tsx'||p==='client/src/main.tsx' ? normalizeChassisIntegration(p,current) : current,
+              p==='client/src/App.tsx'||p==='client/src/main.tsx' ? normalizeChassisIntegration(p,previous) : previous,
+              p+' unexpectedly changed outside the chassis integration'
+            );
+          }
           const parse=(p,source)=>ts.createSourceFile(p,source,ts.ScriptTarget.Latest,true);
           const functions=(p,source)=>new Map(parse(p,source).statements.filter(ts.isFunctionDeclaration).map(node=>[node.name?.text,node.getText()]));
           for(const [p,names] of [
