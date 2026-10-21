@@ -1,0 +1,24 @@
+name: H2BICO Photo CPF Name Validation
+on:
+  push:
+    branches:
+      - fix/h2bico-photo-cpf-name-linked-cards-20261021
+  pull_request:
+    paths:
+      - client/src/lib/h2bicoCardName.ts
+      - client/src/components/H2BicoScreenshotImporter.tsx
+      - server/routers/h2bico.ts
+jobs:
+  validate:
+    runs-on: ubuntu-latest
+    timeout-minutes: 25
+    steps:
+      - uses: actions/checkout@v4
+      - uses: pnpm/action-setup@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: "22"
+          cache: pnpm
+      - run: pnpm install --frozen-lockfile
+      - run: pnpm exec vitest run server/h2bicoCardName.test.ts
+      - run: pnpm run build
