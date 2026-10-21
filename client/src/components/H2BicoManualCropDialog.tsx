@@ -1,7 +1,7 @@
 import {useEffect,useRef,useState} from "react";
 import {Button} from "@/components/ui/button";
 import {Dialog,DialogContent,DialogHeader,DialogTitle,DialogDescription,DialogFooter} from "@/components/ui/dialog";
-import {initialManualPhotoCrop,moveManualPhotoCrop,resizeManualPhotoCrop,centerManualPhotoCrop,validateManualPhotoCrop,maxManualPhotoWidth,type ManualPhotoCrop} from "@/lib/h2bicoManualPhotoCrop";
+import {initialManualPhotoCrop,suggestCompletePhotoCrop,moveManualPhotoCrop,resizeManualPhotoCrop,centerManualPhotoCrop,validateManualPhotoCrop,maxManualPhotoWidth,type ManualPhotoCrop} from "@/lib/h2bicoManualPhotoCrop";
 
 type Props={open:boolean;onOpenChange:(open:boolean)=>void;imageUrl:string;imageWidth:number;imageHeight:number;initialCrop?:ManualPhotoCrop|null;onConfirm:(crop:ManualPhotoCrop)=>void};
 export default function H2BicoManualCropDialog({open,onOpenChange,imageUrl,imageWidth,imageHeight,initialCrop,onConfirm}:Props){
@@ -11,11 +11,32 @@ export default function H2BicoManualCropDialog({open,onOpenChange,imageUrl,image
  const drag=useRef<{pointerId:number;x:number;y:number;crop:ManualPhotoCrop}|null>(null);
  useEffect(()=>{
    if(!open)return;
-   setCrop(initialManualPhotoCrop(imageWidth,imageHeight,initialCrop));
+   // A complete standalone photograph opens fully selected by default.
+   // Existing crop coordinates are only a fallback for bigger UI screenshots.
+   let alive=true;
+   const source=new Image();
+   source.onload=()=>{
+     if(!alive)return;
+     const scale=Math.min(1,900/Math.max(imageWidth,imageHeight));
+     const canvas=document.createElement("canvas");
+     canvas.width=Math.max(1,Math.round(imageWidth*scale));
+     canvas.height=Math.max(1,Math.round(imageHeight*scale));
+     const ctx=canvas.getContext("2d",{willReadFrequently:true});
+     let whole=null;
+     if(ctx){
+       ctx.drawImage(source,0,0,canvas.width,canvas.height);
+       whole=suggestCompletePhotoCrop({width:canvas.width,height:canvas.height,data:ctx.getImageData(0,0,canvas.width,canvas.height).data});
+     }
+     const proposed=whole?{x:Math.round(whole.x/scale),y:Math.round(whole.y/scale),width:Math.round(whole.width/scale),height:Math.round(whole.height/scale)}:null;
+     setCrop(initialManualPhotoCrop(imageWidth,imageHeight,proposed||initialCrop));
+   };
+   source.onerror=()=>{if(alive)setCrop(initialManualPhotoCrop(imageWidth,imageHeight,initialCrop));};
+   source.src=imageUrl;
    setError("");
    drag.current=null;
+   return ()=>{alive=false;source.onload=null;source.onerror=null;};
  },[open,imageUrl,imageWidth,imageHeight,initialCrop?.x,initialCrop?.y,initialCrop?.width,initialCrop?.height]);
- const maxWidth=maxManualPhotoWidth(imageWidth,imageHeight);
+ const maxWidth=maxManualPhotoWidth(imageWidth,imageHeight,crop&&crop.width>0?crop.height/crop.width:1.25);
  const valid=!!crop&&validateManualPhotoCrop(crop,imageWidth,imageHeight);
  const beginDrag=(event:React.PointerEvent<HTMLDivElement>)=>{
    if(!crop||!surface.current)return;
