@@ -1,0 +1,27 @@
+name: Validate H2BICO Fullscreen Face Gallery
+on:
+  push:
+    branches:
+      - fix/h2bico-fullscreen-face-gallery-20261021
+  pull_request:
+    paths:
+      - client/src/lib/h2bicoFaceScanTiles.ts
+      - client/src/components/H2BicoScreenshotImporter.tsx
+      - client/src/pages/AdminH2Bico.tsx
+      - client/src/lib/similarFaceTfliteRuntime.ts
+jobs:
+  validate:
+    runs-on: ubuntu-latest
+    timeout-minutes: 25
+    steps:
+      - uses: actions/checkout@v4
+      - uses: pnpm/action-setup@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: "22"
+          cache: pnpm
+      - run: pnpm install --frozen-lockfile
+      - name: Existing avatar tests
+        run: pnpm exec vitest run server/h2bicoAvatarCrop.test.ts
+      - name: Production build
+        run: pnpm run build

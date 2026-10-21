@@ -551,10 +551,17 @@ export async function clearCachedSimilarFaceRuntime() {
 /** Optional H2 Face detector for H2BICO crop coordinates; no recognizer or identity data. */
 let avatarDetectorPromise:Promise<TfliteModelLike>|null=null;
 async function getAvatarDetector(){
-  if(!avatarDetectorPromise) avatarDetectorPromise=(async()=>{
-    const response=await fetch("/api/h2-face/model/detector",{credentials:"same-origin"});
-    if(!response.ok)throw new Error("Modelo facial não disponível");
-    const bytes=new Uint8Array(await response.arrayBuffer());
+  if(!avatarDetectorPromise)avatarDetectorPromise=(async()=>{
+    let bytes:Uint8Array|null=null;
+    try{
+      const cached=await getCachedH2FaceModelBytes();
+      if(cached?.detector)bytes=cached.detector;
+    }catch{/* API remains a fallback. */}
+    if(!bytes){
+      const response=await fetch("/api/h2-face/model/detector",{credentials:"same-origin"});
+      if(!response.ok)throw new Error("Detector H2 Face indisponível.");
+      bytes=new Uint8Array(await response.arrayBuffer());
+    }
     assertH2FaceModel(bytes);
     return loadTfliteModel(bytes);
   })().catch(error=>{avatarDetectorPromise=null;throw error;});
@@ -563,17 +570,15 @@ async function getAvatarDetector(){
 export async function detectH2AvatarFaces(canvas:HTMLCanvasElement):Promise<Array<{x:number;y:number;width:number;height:number;score:number}>>{
   const detector=await getAvatarDetector();
   const side=Math.max(canvas.width,canvas.height);
-  const square=document.createElement("canvas");
-  square.width=640;square.height=640;
-  const ctx=square.getContext("2d",{willReadFrequently:true});
-  if(!ctx)throw new Error("Canvas facial indisponível");
-  ctx.fillStyle="#000";ctx.fillRect(0,0,640,640);
+  const ctxCanvas=document.createElement("canvas");ctxCanvas.width=640;ctxCanvas.height=640;
+  const ctx=ctxCanvas.getContext("2d",{willReadFrequently:true});if(!ctx)throw new Error("Canvas indisponível");
   const ratio=640/side;
+  ctx.fillStyle="#000";ctx.fillRect(0,0,640,640);
   ctx.drawImage(canvas,0,0,canvas.width*ratio,canvas.height*ratio);
-  const raw=await runModel(detector,detectorCanvasToFloatInput(square),[...SIMILAR_FACE_REFERENCE.detectorInput]);
+  const raw=await runModel(detector,detectorCanvasToFloatInput(ctxCanvas),[...SIMILAR_FACE_REFERENCE.detectorInput]);
   return parseDetectorRows(raw).map(face=>({
     x:Math.max(0,face.x1/ratio),y:Math.max(0,face.y1/ratio),
     width:Math.max(0,(face.x2-face.x1)/ratio),height:Math.max(0,(face.y2-face.y1)/ratio),score:face.score,
-  })).filter(face=>face.width>=20&&face.height>=20&&
+  })).filter(face=>face.width>=12&&face.height>=12&&
     face.x+face.width<=canvas.width+5&&face.y+face.height<=canvas.height+5);
 }

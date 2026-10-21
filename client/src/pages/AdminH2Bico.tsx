@@ -296,7 +296,7 @@ export default function AdminH2Bico(){
 
   return <div className="min-h-screen bg-gray-950 text-white">
     <AdminHeader title="H2BICO" backTo="/admin/codes"/>
-    <main className="max-w-7xl mx-auto p-3 sm:p-4 space-y-3">
+    <main className="w-full max-w-none mx-auto p-3 sm:p-4 lg:px-7 space-y-3">
 
       <div className="grid grid-cols-3 md:grid-cols-6 gap-2">
         {[["Total",stats.data?.total],["Disponíveis",stats.data?.available],["Reservados",stats.data?.reserved],["Em uso",stats.data?.in_use],["Usados",stats.data?.used],["Arquivados",stats.data?.archived]].map(([l,v])=>
