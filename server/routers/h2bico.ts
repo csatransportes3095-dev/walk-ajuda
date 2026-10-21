@@ -286,6 +286,7 @@ export const h2bicoRouter = router({
       return {width,height,persons:proposed.map(row=>({
         ...row,
         nameBox:row.nameBox?{left:row.nameBox.left*width/ocrWidth,top:row.nameBox.top*height/ocrHeight,width:row.nameBox.width*width/ocrWidth,height:row.nameBox.height*height/ocrHeight}:undefined,
+        cpfBox:row.cpfBox?{left:row.cpfBox.left*width/ocrWidth,top:row.cpfBox.top*height/ocrHeight,width:row.cpfBox.width*width/ocrWidth,height:row.cpfBox.height*height/ocrHeight}:undefined,
         validCpf:isValidCpf(row.cpf),alreadyExists:existing.has(row.cpf),
       }))};
     }catch(error){
