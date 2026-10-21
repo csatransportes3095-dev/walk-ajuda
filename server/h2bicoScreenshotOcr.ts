@@ -55,7 +55,7 @@ function possibleName(value:string):string|null {
   const cleaned=normalizeScreenshotName(value
     .replace(/^\s*(?:NOME(?:\s+COMPLETO)?|TITULAR)\s*[:\-]\s*/iu,"")
     .replace(/\bCPF\s*[:\-]?/giu," "));
-  if(!isReviewableName(cleaned) || ignoredLabels.test(cleaned))return null;
+  if(!isReviewableName(cleaned) || ignoredLabels.test(cleaned) || /FREQU[EÊ]NCIA\s+DE\s+FACE|(?:ALTA|M[EÉ]DIA)\s+SIMILARIDADE|FACE\s+DETECTADA|OLHOS\s+NARIZ\s+BOCA/iu.test(cleaned))return null;
   const words=cleaned.split(" ");
   if(words.length>9 || /\b(?:RESULTADOS?|CONSULTAR|VISUALIZAR|SELECIONAR|CARREGAR|DISPON[IÍ]VEL|CADASTRADO|CONFERIDO|APROVADA|DESCARTADO|SIMILARIDADE|DOCUMENTOS?|BUSCAR|PESQUISAR)\b/u.test(cleaned))return null;
   return cleaned;
