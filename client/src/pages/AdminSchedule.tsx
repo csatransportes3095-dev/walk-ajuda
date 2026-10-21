@@ -4,7 +4,8 @@ import { trpc } from "@/lib/trpc";
 import React, { useState, useMemo, useEffect, useCallback, useRef } from "react";
 import { toast } from "sonner";
 import AdminHeader from "@/components/AdminHeader";
-import { CalendarClock, Plus, Trash2, ToggleLeft, ToggleRight, Save, FileText, CalendarDays, MessageSquare, List, MessageCircle, Copy, Check, Calendar, Pencil, RefreshCw, XCircle, CheckCircle } from "lucide-react";
+import "@/styles/h2-schedule-gamer.css";
+import { CalendarClock, Plus, Trash2, ToggleLeft, ToggleRight, Save, FileText, CalendarDays, MessageSquare, List, MessageCircle, Copy, Check, Calendar, Pencil, RefreshCw, XCircle, CheckCircle, Palette, Sparkles, Activity, Clock3, Users, Monitor, Smartphone, ChevronRight, Eye } from "lucide-react";
 
 // Helper function to get local time with timezone offset (GMT-3) — v2
 function getLocalTime() {
@@ -23,39 +24,211 @@ function getLocalTime() {
   };
 }
 
-type Tab = "slots" | "templates" | "messages" | "appointments" | "finalizados";
+type Tab = "slots" | "appointments" | "finalizados" | "templates" | "visual" | "messages";
+
+const SCHEDULE_SECTIONS: Record<Tab, { title: string; description: string }> = {
+  slots: { title: "Central de horários", description: "Crie e gerencie vagas por data, hora e modelo." },
+  appointments: { title: "Agendamentos ativos", description: "Acompanhe clientes aguardando e horários confirmados." },
+  finalizados: { title: "Histórico concluído", description: "Consulte e gerencie atendimentos encerrados." },
+  templates: { title: "Modelos de atendimento", description: "Padronize procedimentos e instruções sem alterar os pedidos." },
+  visual: { title: "Visual gamer e banners", description: "Personalize cores e textos com prévia da tela do cliente." },
+  messages: { title: "Central de mensagens", description: "Configure WhatsApp, e-mail e instruções de confirmação." },
+};
 
 export default function AdminSchedule() {
   const [tab, setTab] = useState<Tab>("slots");
+  const { data: cfg } = trpc.schedule.getConfig.useQuery(undefined, { staleTime: 30_000 });
+  const section = SCHEDULE_SECTIONS[tab];
 
   return (
-    <div className="min-h-screen bg-[#0a0a1a] text-white">
+    <div
+      className="h2-schedule-adm min-h-screen text-white"
+      style={{ "--sg-accent": cfg?.accentColor || "#9964ff" } as React.CSSProperties}
+    >
       <AdminHeader icon={<CalendarClock className="w-5 h-5" />} title="Agendamentos" />
-      <div className="max-w-4xl mx-auto px-4 py-5">
-        {/* Tabs */}
-        <div className="flex flex-wrap gap-2 mb-5">
-          <TabBtn active={tab === "slots"} onClick={() => setTab("slots")} icon={<CalendarDays className="w-4 h-4" />} label="Horários" />
-          <TabBtn active={tab === "templates"} onClick={() => setTab("templates")} icon={<FileText className="w-4 h-4" />} label="Modelos prontos" />
-          <TabBtn active={tab === "messages"} onClick={() => setTab("messages")} icon={<MessageSquare className="w-4 h-4" />} label="Mensagens" />
-          <TabBtn active={tab === "appointments"} onClick={() => setTab("appointments")} icon={<List className="w-4 h-4" />} label="Agendados" />
-          <TabBtn active={tab === "finalizados"} onClick={() => setTab("finalizados")} icon={<Check className="w-4 h-4" />} label="Finalizados" />
-        </div>
+      <main className="sg-console">
+        <header className="sg-console-hero" aria-label="Central administrativa de agendamentos">
+          <div className="sg-eyebrow"><span className="sg-signal" /> H2 Colombiano / Schedule Command Center</div>
+          <h1>Controle total de agendamentos<span style={{ color: "var(--sg-cyan)" }}>.</span></h1>
+          <p className="mt-3 text-sm leading-relaxed text-slate-300">
+            Horários, clientes, modelos e banners em um único painel. A página do cliente utiliza as mesmas configurações salvas aqui.
+          </p>
+          <div className="sg-console-actions">
+            <button className="sg-action sg-action-primary" type="button" onClick={() => setTab("slots")}>
+              <Plus className="h-4 w-4" /> Gerenciar horários
+            </button>
+            <button className="sg-action" type="button" onClick={() => setTab("visual")}>
+              <Palette className="h-4 w-4" /> Editar banners
+            </button>
+            <button className="sg-action" type="button" onClick={() => setTab("appointments")}>
+              <Users className="h-4 w-4" /> Ver agendados <ChevronRight className="h-4 w-4" />
+            </button>
+          </div>
+        </header>
 
-        {tab === "slots" && <SlotsTab />}
-        {tab === "templates" && <TemplatesTab />}
-        {tab === "messages" && <MessagesTab />}
-        {tab === "appointments" && <AppointmentsTab />}
-        {tab === "finalizados" && <FinalizadosTab />}
-      </div>
+        <ScheduleCommandStats />
+
+        <nav className="sg-nav" role="tablist" aria-label="Seções dos agendamentos">
+          <TabBtn active={tab === "slots"} onClick={() => setTab("slots")} icon={<CalendarDays className="h-4 w-4" />} label="Horários" />
+          <TabBtn active={tab === "appointments"} onClick={() => setTab("appointments")} icon={<List className="h-4 w-4" />} label="Agendados" />
+          <TabBtn active={tab === "finalizados"} onClick={() => setTab("finalizados")} icon={<Check className="h-4 w-4" />} label="Finalizados" />
+          <TabBtn active={tab === "templates"} onClick={() => setTab("templates")} icon={<FileText className="h-4 w-4" />} label="Modelos" />
+          <TabBtn active={tab === "visual"} onClick={() => setTab("visual")} icon={<Palette className="h-4 w-4" />} label="Visual / Banners" />
+          <TabBtn active={tab === "messages"} onClick={() => setTab("messages")} icon={<MessageSquare className="h-4 w-4" />} label="Mensagens" />
+        </nav>
+
+        <section className="sg-content" role="tabpanel" aria-label={section.title}>
+          <div className="sg-content-heading">
+            <div>
+              <h2>{section.title}</h2>
+              <p className="mt-1">{section.description}</p>
+            </div>
+            <span className="sg-eyebrow"><Activity className="h-4 w-4" /> Painel integrado</span>
+          </div>
+          {tab === "slots" && <SlotsTab />}
+          {tab === "appointments" && <AppointmentsTab />}
+          {tab === "finalizados" && <FinalizadosTab />}
+          {tab === "templates" && <TemplatesTab />}
+          {tab === "visual" && <ScheduleVisualTab />}
+          {tab === "messages" && <MessagesTab />}
+        </section>
+      </main>
     </div>
   );
 }
 
 function TabBtn({ active, onClick, icon, label }: { active: boolean; onClick: () => void; icon: React.ReactNode; label: string }) {
   return (
-    <button onClick={onClick} className={`flex items-center gap-1.5 px-3 py-2 rounded-lg text-sm font-semibold transition-all ${active ? "bg-fuchsia-600 text-white" : "bg-white/5 text-white/60 hover:bg-white/10"}`}>
+    <button type="button" role="tab" aria-selected={active} onClick={onClick} className="sg-nav-tab">
       {icon}{label}
     </button>
+  );
+}
+
+function ScheduleCommandStats() {
+  const { data: appointments, isLoading: apptsLoading } = trpc.schedule.listAppointments.useQuery(undefined, {
+    staleTime: 20_000,
+    refetchInterval: 30_000,
+    refetchOnWindowFocus: true,
+  });
+  const { data: slots, isLoading: slotsLoading } = trpc.schedule.listSlots.useQuery(undefined, {
+    staleTime: 20_000,
+    refetchInterval: 30_000,
+    refetchOnWindowFocus: true,
+  });
+  const today = getLocalTime().date;
+  const pending = appointments?.filter(a => a.status === "pending").length;
+  const confirmed = appointments?.filter(a => a.status === "confirmed").length;
+  const appointmentsToday = appointments?.filter(a => a.status === "confirmed" && a.slotDate === today).length;
+  const freeSpots = slots?.filter(s => s.status === "available").reduce((total, s) => total + Math.max(0, s.capacity - s.bookedCount), 0);
+  const metrics = [
+    { label: "Aguardando", value: pending, loading: apptsLoading, icon: <Clock3 className="h-4 w-4" />, color: "#ff709a", footer: "Pendente de escolha" },
+    { label: "Confirmados", value: confirmed, loading: apptsLoading, icon: <CheckCircle className="h-4 w-4" />, color: "#56eeb0", footer: "Data e hora reservadas" },
+    { label: "Atendimentos hoje", value: appointmentsToday, loading: apptsLoading, icon: <CalendarClock className="h-4 w-4" />, color: "#52dafa", footer: "Confirmados para hoje" },
+    { label: "Vagas livres", value: freeSpots, loading: slotsLoading, icon: <Activity className="h-4 w-4" />, color: "#b58aff", footer: "Somente horários ativos" },
+  ];
+  return (
+    <div className="sg-stats" aria-label="Resumo atualizado dos agendamentos">
+      {metrics.map(metric => (
+        <div key={metric.label} className="sg-stat" style={{ "--stat-color": metric.color } as React.CSSProperties}>
+          <div className="sg-stat-label" style={{ color: metric.color }}>{metric.icon}<span>{metric.label}</span></div>
+          <strong className="sg-stat-value">{metric.loading || metric.value === undefined ? "—" : metric.value}</strong>
+          <p className="sg-stat-footer">{metric.footer}</p>
+        </div>
+      ))}
+    </div>
+  );
+}
+
+function ScheduleVisualTab() {
+  const utils = trpc.useUtils();
+  const { data: cfg, isLoading } = trpc.schedule.getConfig.useQuery(undefined, { refetchOnWindowFocus: true });
+  const [form, setForm] = useState<{ title: string; introMessage: string; accentColor: string } | null>(null);
+  const [previewStatus, setPreviewStatus] = useState<"pending" | "confirmed">("pending");
+  const [previewSize, setPreviewSize] = useState<"mobile" | "desktop">("mobile");
+  useEffect(() => {
+    if (!cfg) return;
+    setForm({
+      title: cfg.title || "",
+      introMessage: cfg.introMessage || "",
+      accentColor: cfg.accentColor || "#9964ff",
+    });
+  }, [cfg]);
+  const save = trpc.schedule.updateConfig.useMutation({
+    onSuccess: async () => {
+      toast.success("Visual salvo. O cliente receberá o banner atualizado.");
+      await utils.schedule.getConfig.invalidate();
+    },
+    onError: e => toast.error(e.message),
+  });
+  if (isLoading || !form) return <div className="sg-editor-panel text-sm text-slate-300">Carregando configurações visuais...</div>;
+  const set = (key: keyof typeof form, value: string) => setForm(current => current ? { ...current, [key]: value } : current);
+  const validColor = /^#[0-9a-f]{6}$/i.test(form.accentColor) ? form.accentColor : "#9964ff";
+  const dirty = form.title !== (cfg?.title || "") || form.introMessage !== (cfg?.introMessage || "") || validColor !== (cfg?.accentColor || "#9964ff");
+  const presets = ["#9964ff", "#00bdd8", "#ea4bff", "#008a77", "#fa7148", "#4285ff"];
+  return (
+    <div className="sg-editor-grid">
+      <div className="sg-editor-panel">
+        <div className="sg-eyebrow"><Sparkles className="h-4 w-4" /> Central de identidade visual</div>
+        <h3 className="mt-3 mb-2 text-xl font-black text-white">Personalizar a página do cliente</h3>
+        <p className="mb-6 text-sm leading-relaxed text-slate-400">
+          Ajuste o banner e a cor de destaque. O aviso pendente continua vermelho e a confirmação verde para identificar cada situação.
+        </p>
+        <label className="sg-field">
+          <span className="sg-field-label">Título principal do banner</span>
+          <input type="text" maxLength={160} value={form.title} onChange={e => set("title", e.target.value)} placeholder="Agende seu atendimento" />
+        </label>
+        <label className="sg-field">
+          <span className="sg-field-label">Texto de apresentação</span>
+          <textarea rows={4} maxLength={1000} value={form.introMessage} onChange={e => set("introMessage", e.target.value)} placeholder="Escolha abaixo a data e o horário para o seu atendimento." />
+        </label>
+        <div className="sg-field">
+          <span className="sg-field-label">Cor principal dos botões e detalhes</span>
+          <div className="sg-swatches" role="group" aria-label="Paletas de destaque">
+            {presets.map(color => (
+              <button key={color} type="button" aria-label={"Escolher cor " + color} aria-pressed={validColor.toLowerCase() === color.toLowerCase()} className="sg-swatch" style={{ background: color }} onClick={() => set("accentColor", color)} />
+            ))}
+          </div>
+          <label className="flex items-center gap-3 text-xs text-slate-300">
+            <input aria-label="Escolher outra cor" type="color" value={validColor} onChange={e => set("accentColor", e.target.value)} className="h-11 w-16 cursor-pointer rounded-lg border border-white/20 bg-transparent p-1" />
+            Cor personalizada: <span className="font-mono text-white">{validColor.toUpperCase()}</span>
+          </label>
+        </div>
+        <div className="rounded-xl border border-cyan-400/20 bg-cyan-400/5 px-4 py-3 text-xs leading-relaxed text-slate-300">
+          <ShieldCheck className="mb-1 inline h-4 w-4 text-cyan-300" /> A personalização altera apenas a aparência e os textos públicos. Datas, reservas, limites e regras do atendimento continuam iguais.
+        </div>
+        <button type="button" disabled={save.isPending || !dirty} onClick={() => save.mutate({ title: form.title, introMessage: form.introMessage, accentColor: validColor })} className="sg-action sg-action-primary mt-6 w-full disabled:cursor-not-allowed disabled:opacity-45">
+          <Save className="h-4 w-4" /> {save.isPending ? "Salvando..." : dirty ? "Salvar visual e sincronizar" : "Visual salvo e sincronizado"}
+        </button>
+      </div>
+      <div className="sg-preview-shell" style={{ "--sg-accent": validColor } as React.CSSProperties}>
+        <div className="sg-eyebrow"><Eye className="h-4 w-4" /> Prévia em tempo real</div>
+        <p className="mt-2 text-sm text-slate-400">Confira o banner antes de salvar. Os dados do exemplo não são de clientes reais.</p>
+        <div className="sg-preview-toggles" role="group" aria-label="Prévia dos estados do agendamento">
+          <button type="button" aria-pressed={previewStatus === "pending"} className="sg-preview-toggle" onClick={() => setPreviewStatus("pending")}>Pendente</button>
+          <button type="button" aria-pressed={previewStatus === "confirmed"} className="sg-preview-toggle" onClick={() => setPreviewStatus("confirmed")}>Confirmado</button>
+        </div>
+        <div className="sg-preview-toggles" role="group" aria-label="Largura da prévia">
+          <button type="button" aria-pressed={previewSize === "mobile"} className="sg-preview-toggle" onClick={() => setPreviewSize("mobile")}><Smartphone className="mr-1 inline h-4 w-4" /> Celular</button>
+          <button type="button" aria-pressed={previewSize === "desktop"} className="sg-preview-toggle" onClick={() => setPreviewSize("desktop")}><Monitor className="mr-1 inline h-4 w-4" /> Computador</button>
+        </div>
+        <div className={"sg-phone-preview" + (previewSize === "desktop" ? " sg-preview-wide" : "")}>
+          <div className="sg-preview-banner" style={previewStatus === "confirmed"
+            ? { "--banner-border": "rgba(81, 244, 170, .5)", "--banner-bg": "#0e302c" } as React.CSSProperties
+            : { "--banner-border": "rgba(255, 110, 141, .5)", "--banner-bg": "#301a28" } as React.CSSProperties}>
+            <div className="sg-preview-status" style={{ color: previewStatus === "confirmed" ? "#66f0b2" : "#ff859d" }}>
+              {previewStatus === "confirmed" ? "✓ AGENDAMENTO CONFIRMADO" : "● AGENDAMENTO DISPONÍVEL"}
+            </div>
+            <h3>{previewStatus === "confirmed" ? "Atendimento agendado!" : (form.title.trim() || "Agende seu atendimento")}</h3>
+            <p>{previewStatus === "confirmed" ? "Seu atendimento está confirmado. Confira os detalhes abaixo." : (form.introMessage.trim() || "Escolha o melhor dia e horário para o atendimento.")}</p>
+            {previewStatus === "confirmed" && <p className="mt-2 font-bold text-emerald-300">Data e horário: exemplo ilustrativo</p>}
+            {previewStatus === "pending" && <div className="sg-preview-sample"><span>Escolher dia</span><span>Selecionar horário</span><span>Confirmar</span></div>}
+            <div className="sg-preview-cta">{previewStatus === "confirmed" ? "VER AGENDAMENTO" : "ESCOLHER DATA E HORÁRIO"}</div>
+          </div>
+        </div>
+        <p className="mt-4 text-xs leading-relaxed text-slate-400">Após salvar, o cliente usa a nova configuração ao abrir o agendamento ou na próxima sincronização automática.</p>
+      </div>
+    </div>
   );
 }
 
@@ -637,9 +810,6 @@ function MessagesTab() {
         confirmationMessage: (cfg as any).confirmationMessage ?? "",
         emailSubject: (cfg as any).emailSubject ?? "",
         emailMessage: (cfg as any).emailMessage ?? "",
-        title: (cfg as any).title ?? "",
-        introMessage: (cfg as any).introMessage ?? "",
-        accentColor: (cfg as any).accentColor ?? "#8b5cf6",
       });
     }
   }, [cfg]);
@@ -767,59 +937,17 @@ function MessagesTab() {
         </Field>
       </SectionCard>
 
-      {/* SEÇÃO PÁGINA DO CLIENTE */}
-      <SectionCard color="#a855f7" icon={<MessageSquare className="w-4 h-4" />} title="Página de Agendamento do Cliente" subtitle="Textos exibidos na página onde o cliente escolhe data e hora">
-        <Field label="Título da página">
-          <input
-            value={val("title")}
-            onChange={e => set("title", e.target.value)}
-            placeholder="Ex: AGENDAMENTO DOS SERVIÇOS OBRIGATÓRIO"
-            className="w-full bg-[#1a1a2e] border border-white/10 focus:border-fuchsia-500/50 focus:ring-1 focus:ring-fuchsia-500/15 rounded-xl px-4 py-3 text-sm text-white placeholder-white/25 outline-none transition-all"
-          />
-        </Field>
-
-        <Field label="Mensagem de introdução" hint={<p className="text-xs text-white/40">Exibida acima do calendário de datas disponíveis</p>}>
-          <SmartTextarea
-            value={val("introMessage")}
-            onChange={v => set("introMessage", v)}
-            rows={3}
-            placeholder="Ex: Escolha abaixo a melhor data e horário para o seu atendimento."
-            vars={[
-              { label: '{nome}', value: '{nome}', color: '#a855f7' },
-              { label: '{servico}', value: '{servico}', color: '#a855f7' },
-            ]}
-          />
-        </Field>
-
+      {/* Instruções de confirmação continuam aqui; cor e banner ficam no editor Visual / Banners. */}
+      <SectionCard color="#a855f7" icon={<MessageSquare className="w-4 h-4" />} title="Orientações após agendar" subtitle="Instruções exibidas abaixo da data confirmada na página do cliente">
         <Field label="Mensagem de confirmação (após agendar)">
-          <SectionEditor
-            value={val("confirmationMessage")}
-            onChange={v => set("confirmationMessage", v)}
-          />
+          <SectionEditor value={val("confirmationMessage")} onChange={v => set("confirmationMessage", v)} />
         </Field>
-
-        <Field label="Cor de destaque">
-          <div className="flex items-center gap-3">
-            <div className="relative">
-              <input
-                type="color"
-                value={val("accentColor") || "#8b5cf6"}
-                onChange={e => set("accentColor", e.target.value)}
-                className="w-12 h-12 rounded-xl bg-transparent border border-white/10 cursor-pointer p-1"
-              />
-            </div>
-            <div>
-              <p className="text-sm font-mono text-white">{val("accentColor") || "#8b5cf6"}</p>
-              <p className="text-xs text-white/40">Cor dos botões e destaques na página do cliente</p>
-            </div>
-            <div className="ml-auto w-10 h-10 rounded-xl border border-white/10" style={{ background: val("accentColor") || "#8b5cf6" }} />
-          </div>
-        </Field>
+        <p className="text-xs text-violet-200/70">Para mudar o título, a apresentação ou a cor da página, use a aba Visual / Banners. As duas áreas ficam sincronizadas pelo mesmo cadastro de configurações.</p>
       </SectionCard>
 
       {/* BOTÃO SALVAR */}
       <button
-        onClick={() => form && saveMut.mutate(form)}
+        onClick={() => form && saveMut.mutate({ whatsappMessage: form.whatsappMessage, scheduledWhatsappMessage: form.scheduledWhatsappMessage, noShowWarning: form.noShowWarning, confirmationMessage: form.confirmationMessage, emailSubject: form.emailSubject, emailMessage: form.emailMessage })}
         disabled={saveMut.isPending}
         className="w-full flex items-center justify-center gap-2 bg-fuchsia-600 hover:bg-fuchsia-500 active:scale-[0.98] px-4 py-4 rounded-xl text-sm font-bold disabled:opacity-50 transition-all shadow-lg shadow-fuchsia-900/30"
       >

@@ -1,9 +1,10 @@
 import { trpc } from "@/lib/trpc";
 import { useParams } from "wouter";
-import { useState, useMemo, useEffect, type FormEvent } from "react";
+import { useState, useMemo, useEffect, type FormEvent, type CSSProperties } from "react";
 import { toast } from "sonner";
 import { CalendarClock, CheckCircle2, AlertTriangle, Clock, CalendarDays, Loader2, ShieldAlert, MessageCircle, AlertCircle, ShieldCheck, UserRoundCog, Upload } from "lucide-react";
 import { isValidCPF, normalizeCpf } from "@shared/cpf";
+import "@/styles/h2-schedule-gamer.css";
 
 const POST_ORDER_FLOW_KEY = 'h2_post_order_schedule_flow_v1';
 
@@ -367,7 +368,7 @@ export default function SchedulePage() {
 
   if (isLoading) {
     return (
-      <div className="min-h-screen bg-gradient-to-br from-[#0a0a1a] via-[#15102e] to-[#0a0a1a] flex items-center justify-center">
+      <div className="h2-schedule-client min-h-screen bg-gradient-to-br from-[#0a0a1a] via-[#15102e] to-[#0a0a1a] flex items-center justify-center">
         <Loader2 className="w-8 h-8 animate-spin text-fuchsia-400" />
       </div>
     );
@@ -375,7 +376,7 @@ export default function SchedulePage() {
 
   if (isError) {
     return (
-      <div className="min-h-screen bg-gradient-to-br from-[#0a0a1a] via-[#15102e] to-[#0a0a1a] flex items-center justify-center px-4 text-center">
+      <div className="h2-schedule-client min-h-screen bg-gradient-to-br from-[#0a0a1a] via-[#15102e] to-[#0a0a1a] flex items-center justify-center px-4 text-center">
         <div className="bg-black/40 border border-yellow-500/20 rounded-2xl p-8 max-w-md">
           <AlertTriangle className="w-10 h-10 text-yellow-400 mx-auto mb-3" />
           <h1 className="text-xl font-bold text-white mb-2">Agendamento temporariamente indisponível</h1>
@@ -387,7 +388,7 @@ export default function SchedulePage() {
 
   if (!data?.found) {
     return (
-      <div className="min-h-screen bg-gradient-to-br from-[#0a0a1a] via-[#15102e] to-[#0a0a1a] flex items-center justify-center px-4 text-center">
+      <div className="h2-schedule-client min-h-screen bg-gradient-to-br from-[#0a0a1a] via-[#15102e] to-[#0a0a1a] flex items-center justify-center px-4 text-center">
         <div className="bg-black/40 border border-white/10 rounded-2xl p-8 max-w-md">
           <AlertTriangle className="w-10 h-10 text-yellow-400 mx-auto mb-3" />
           <h1 className="text-xl font-bold text-white mb-2">Link inválido</h1>
@@ -403,7 +404,7 @@ export default function SchedulePage() {
     (!centralSessionTried || authorizeFromSessionMut.isPending)
   ) {
     return (
-      <div className="min-h-screen bg-gradient-to-br from-[#0a0a1a] via-[#15102e] to-[#0a0a1a] flex items-center justify-center">
+      <div className="h2-schedule-client min-h-screen bg-gradient-to-br from-[#0a0a1a] via-[#15102e] to-[#0a0a1a] flex items-center justify-center">
         <Loader2 className="w-8 h-8 animate-spin text-fuchsia-400" />
       </div>
     );
@@ -455,7 +456,7 @@ export default function SchedulePage() {
 
   if (profileUpdateRequired) {
     return (
-      <div className="min-h-screen bg-gradient-to-br from-[#0a0a1a] via-[#15102e] to-[#0a0a1a] flex items-center justify-center px-4 text-center">
+      <div className="h2-schedule-client min-h-screen bg-gradient-to-br from-[#0a0a1a] via-[#15102e] to-[#0a0a1a] flex items-center justify-center px-4 text-center">
         <div className="bg-black/40 border border-white/10 rounded-2xl p-8 max-w-md">
           <Loader2 className="w-8 h-8 animate-spin text-fuchsia-400 mx-auto mb-3" />
           <h1 className="text-xl font-bold text-white mb-2">Atualização necessária</h1>
@@ -524,7 +525,7 @@ export default function SchedulePage() {
     if (showChangeDate) {
       // Modal de alteração de data/hora
       return (
-        <div className="min-h-screen bg-gradient-to-br from-[#0a0a1a] via-[#15102e] to-[#0a0a1a] flex items-center justify-center px-4 py-8">
+        <div className="h2-schedule-client min-h-screen bg-gradient-to-br from-[#0a0a1a] via-[#15102e] to-[#0a0a1a] flex items-center justify-center px-4 py-8">
           <div className="w-full max-w-2xl">
             <button 
               onClick={() => {
@@ -581,7 +582,7 @@ export default function SchedulePage() {
                   </h3>
                   
                   {/* Filtros de período */}
-                  <div className="mb-4 flex gap-2 flex-wrap">
+                  <div className="sg-periods">
                     {(['all', 'morning', 'afternoon', 'night', 'midnight'] as const).map(period => (
                       <button
                         key={period}
@@ -701,12 +702,13 @@ export default function SchedulePage() {
 
     // Tela de confirmação de agendamento — layout profissional
     return (
-      <div className="min-h-screen bg-gradient-to-br from-[#0a0a1a] via-[#15102e] to-[#0a0a1a] px-4 py-8">
-        <div className="max-w-md mx-auto">
+      <div className="h2-schedule-client min-h-screen bg-gradient-to-br from-[#0a0a1a] via-[#15102e] to-[#0a0a1a] px-4 py-8">
+        <div className="sg-client-shell">
 
           {/* Cabeçalho de sucesso */}
-          <div className="text-center mb-6">
-            <div className="inline-flex items-center justify-center w-16 h-16 rounded-2xl bg-green-500/15 border border-green-500/40 mb-4">
+          <div className="sg-customer-hero sg-confirmed mb-6">
+            <div className="sg-client-label"><CheckCircle2 className="h-4 w-4" /> AGENDAMENTO CONFIRMADO</div>
+            <div className="inline-flex items-center justify-center w-16 h-16 rounded-2xl bg-green-500/15 border border-green-500/40 mb-4 mt-4">
               <CheckCircle2 className="w-8 h-8 text-green-400" />
             </div>
             <h1 className="text-2xl font-bold text-white">Atendimento agendado!</h1>
@@ -720,7 +722,7 @@ export default function SchedulePage() {
           <ScheduleOrderContext order={data.order} onLogout={logout} />
 
           {/* Card de data e hora */}
-          <div className="relative overflow-hidden rounded-2xl border border-white/10 bg-white/5 mb-5">
+          <div className="sg-confirmed-time">
             <div className="absolute left-0 top-0 h-full w-1.5 bg-gradient-to-b from-green-400 to-emerald-600" />
             <div className="p-5 pl-6 text-center">
               <p className="text-white/50 text-xs font-semibold uppercase tracking-widest mb-2">Data e Horário Confirmados</p>
@@ -832,7 +834,7 @@ export default function SchedulePage() {
   // Cancelado
   if (appt.status === "cancelled") {
     return (
-      <div className="min-h-screen bg-gradient-to-br from-[#0a0a1a] via-[#15102e] to-[#0a0a1a] flex items-center justify-center px-4 text-center">
+      <div className="h2-schedule-client min-h-screen bg-gradient-to-br from-[#0a0a1a] via-[#15102e] to-[#0a0a1a] flex items-center justify-center px-4 text-center">
         <div className="bg-black/40 border border-white/10 rounded-2xl p-8 max-w-md">
           <AlertTriangle className="w-10 h-10 text-red-400 mx-auto mb-3" />
           <h1 className="text-xl font-bold text-white mb-2">Agendamento cancelado</h1>
@@ -851,8 +853,8 @@ export default function SchedulePage() {
   };
 
   return (
-    <div className="min-h-screen bg-gradient-to-br from-[#0a0a1a] via-[#15102e] to-[#0a0a1a] px-4 py-8">
-      <div className="max-w-lg mx-auto">
+    <div className="h2-schedule-client min-h-screen bg-gradient-to-br from-[#0a0a1a] via-[#15102e] to-[#0a0a1a] px-4 py-8">
+      <div className="sg-client-shell" style={{ "--sg-accent": accent } as CSSProperties}>
         {/* Alerta de madrugada */}
         {showMidnightWarning && selectedIsMidnight && (
           <div className="mb-6 relative overflow-hidden rounded-2xl border border-purple-500/40 bg-gradient-to-br from-purple-500/15 via-purple-500/5 to-transparent shadow-lg shadow-purple-900/20">
@@ -886,21 +888,23 @@ export default function SchedulePage() {
           </div>
         )}
 
-        <div className="text-center mb-6 flex flex-col items-center">
-          <div className="inline-flex items-center justify-center w-14 h-14 rounded-2xl mb-3" style={{ background: `${accent}22`, border: `1px solid ${accent}55` }}>
+        <div className="sg-customer-hero flex flex-col items-center">
+          <div className="sg-client-label"><span className="sg-signal" /> H2 COLOMBIANO • AGENDAMENTO DISPONÍVEL</div>
+          <div className="sg-client-icon" style={{ background: `${accent}22`, border: `1px solid ${accent}55` }}>
             <CalendarClock className="w-7 h-7" style={{ color: accent }} />
           </div>
           <h1 className="text-2xl font-bold text-white">{cfg?.title || "Agende seu atendimento"}</h1>
-          {appt.serviceName && <p className="text-fuchsia-300 text-sm mt-1 font-semibold">{appt.serviceName}</p>}
-          {cfg?.introMessage && <p className="text-white/60 text-sm mt-2 whitespace-pre-line">{cfg.introMessage}</p>}
-          {appt.instructions && <p className="w-full text-white/60 text-sm mt-3 bg-white/5 border border-white/10 rounded-lg p-4 text-left whitespace-pre-line leading-relaxed">{appt.instructions}</p>}
+          {appt.serviceName && <p className="sg-client-service">{appt.serviceName}</p>}
+          <p className="sg-client-intro">{cfg?.introMessage || "Selecione o melhor dia e horário para o atendimento."}</p>
+          <div className="sg-client-progress" aria-label="Etapas do agendamento"><span className={selectedDate ? "sg-step-done" : ""}>01 • DATA</span><span className={selectedSlot ? "sg-step-done" : ""}>02 • HORÁRIO</span><span>03 • CONFIRMAR</span></div>
+          {appt.instructions && <p className="sg-instruction-card w-full">{appt.instructions}</p>
         </div>
 
         <ScheduleOrderContext order={data.order} onLogout={logout} />
 
         {/* Aviso de reagendamento */}
         {cfg?.noShowWarning && (
-          <div className="relative mb-6 overflow-hidden rounded-2xl border border-amber-500/40 bg-gradient-to-br from-amber-500/15 via-amber-500/5 to-transparent shadow-lg shadow-amber-900/20">
+          <div className="sg-client-warning relative mb-6 overflow-hidden rounded-2xl border border-amber-500/40 bg-gradient-to-br from-amber-500/15 via-amber-500/5 to-transparent">
             <div className="absolute left-0 top-0 h-full w-1.5 bg-gradient-to-b from-amber-400 to-orange-500" />
             <div className="p-4 sm:p-5">
               <div className="flex items-center gap-2.5 mb-3">
@@ -927,18 +931,18 @@ export default function SchedulePage() {
         ) : (
           <>
             {/* Passo 1: escolher data */}
-            <div className="bg-black/40 border border-white/10 rounded-2xl p-5 mb-4">
+            <div className="sg-client-card">
               <div className="flex items-center gap-3 mb-4">
                 <span className="flex items-center justify-center w-7 h-7 rounded-full text-white text-sm font-bold shrink-0" style={{ background: accent }}>1</span>
                 <p className="text-base font-bold text-white flex items-center gap-2"><CalendarDays className="w-4 h-4" style={{ color: accent }} /> Escolha o dia</p>
               </div>
-              <div className="grid grid-cols-2 sm:grid-cols-3 gap-2.5">
+              <div className="sg-date-grid">
                 {dates.map(d => {
                   const active = selectedDate === d;
                   const [wd, rest] = formatDateParts(d);
                   return (
-                    <button key={d} onClick={() => { setSelectedDate(d); setSelectedSlot(null); setPeriodFilter('all'); }}
-                      className={`flex flex-col items-center py-3 px-2 rounded-xl border transition-all active:scale-[0.97] ${active ? "text-white shadow-lg" : "bg-white/5 border-white/10 text-white/70 hover:bg-white/10 hover:border-white/20"}`}
+                    <button key={d} type="button" aria-pressed={active} onClick={() => { setSelectedDate(d); setSelectedSlot(null); setPeriodFilter('all'); }}
+                      className={`sg-date-choice flex flex-col items-center py-3 px-2 rounded-xl border transition-all active:scale-[0.97] ${active ? "text-white shadow-lg" : "bg-white/5 border-white/10 text-white/70 hover:bg-white/10 hover:border-white/20"}`}
                       style={active ? { background: accent, borderColor: accent, boxShadow: `0 8px 20px -8px ${accent}` } : {}}>
                       <span className={`text-[11px] uppercase font-semibold tracking-wide ${active ? "text-white/80" : "text-white/45"}`}>{wd}</span>
                       <span className="text-base font-extrabold leading-tight mt-0.5">{rest}</span>
@@ -950,14 +954,14 @@ export default function SchedulePage() {
 
             {/* Passo 2: escolher horário */}
             {selectedDate && (
-              <div className="bg-black/40 border border-white/10 rounded-2xl p-5 mb-4">
+              <div className="sg-client-card">
                 <div className="flex items-center gap-3 mb-4">
                   <span className="flex items-center justify-center w-7 h-7 rounded-full text-white text-sm font-bold shrink-0" style={{ background: accent }}>2</span>
                   <p className="text-base font-bold text-white flex items-center gap-2"><Clock className="w-4 h-4" style={{ color: accent }} /> Escolha o horário</p>
                 </div>
                 
                 {/* Filtros de período */}
-                <div className="mb-4 flex gap-2 flex-wrap">
+                <div className="sg-periods">
                   {(['all', 'morning', 'afternoon', 'night', 'midnight'] as const).map(period => (
                     <button
                       key={period}
@@ -976,7 +980,7 @@ export default function SchedulePage() {
                 {slotsOfDay.length === 0 ? (
                   <p className="text-white/60 text-sm">Nenhum horário disponível para este dia</p>
                 ) : (
-                  <div className="grid grid-cols-3 sm:grid-cols-4 gap-2.5">
+                  <div className="sg-time-grid">
                     {slotsOfDay
                       .filter(s => periodFilter === 'all' || getPeriod(s.slotTime) === periodFilter)
                       .map(s => {
@@ -985,11 +989,11 @@ export default function SchedulePage() {
                         const colors = getPeriodColor(period);
                         return (
                           <div key={s.id} className="flex flex-col items-center">
-                            <button onClick={() => {
+                            <button type="button" aria-pressed={active} onClick={() => {
                               if (period === 'midnight') setShowMidnightWarning(true);
                               setSelectedSlot(s.id);
                             }}
-                              className={`w-full py-2.5 rounded-xl text-sm font-bold border transition-all active:scale-[0.97] ${
+                              className={`sg-time-choice w-full py-2.5 rounded-xl text-sm font-bold border transition-all active:scale-[0.97] ${
                                 s.isBooked
                                   ? 'bg-white/5 border-white/10 text-white/30 cursor-not-allowed'
                                   : active
@@ -1019,7 +1023,7 @@ export default function SchedulePage() {
                 }
               }}
               disabled={!selectedSlot || confirmMut.isPending}
-              className="w-full py-3.5 px-4 rounded-xl font-bold text-white transition-all active:scale-[0.97] disabled:opacity-50 disabled:cursor-not-allowed flex items-center justify-center gap-2"
+              className="sg-client-cta disabled:opacity-50"
               style={selectedSlot && !confirmMut.isPending ? { background: accent } : { background: `${accent}44` }}>
               {confirmMut.isPending ? <Loader2 className="w-4 h-4 animate-spin" /> : <CheckCircle2 className="w-4 h-4" />}
               {confirmMut.isPending ? 'Confirmando...' : 'Confirmar Agendamento'}
@@ -1059,7 +1063,7 @@ function ScheduleIdentityGate({
 }) {
   const isPasswordStep = step === "password";
   return (
-    <main className="min-h-screen bg-gradient-to-br from-[#0a0a1a] via-[#15102e] to-[#0a0a1a] px-4 py-8 text-white sm:py-12">
+    <main className="h2-schedule-client min-h-screen bg-gradient-to-br from-[#0a0a1a] via-[#15102e] to-[#0a0a1a] px-4 py-8 text-white sm:py-12">
       <div className="mx-auto w-full max-w-lg">
         <header className="mb-7 text-center">
           <div className="mx-auto mb-4 flex h-16 w-16 items-center justify-center rounded-2xl border border-violet-400/40 bg-violet-500/15 shadow-[0_0_35px_rgba(139,92,246,.25)]">
@@ -1152,7 +1156,7 @@ function ScheduleMissingProfileGate({
 }) {
   const has = (field: string) => missingFields.includes(field);
   return (
-    <main className="min-h-screen bg-gradient-to-br from-[#0a0a1a] via-[#15102e] to-[#0a0a1a] px-4 py-8 text-white sm:py-12">
+    <main className="h2-schedule-client min-h-screen bg-gradient-to-br from-[#0a0a1a] via-[#15102e] to-[#0a0a1a] px-4 py-8 text-white sm:py-12">
       <div className="mx-auto w-full max-w-lg">
         <header className="mb-7 text-center">
           <div className="mx-auto mb-4 flex h-16 w-16 items-center justify-center rounded-2xl border border-amber-400/40 bg-amber-500/15 shadow-[0_0_35px_rgba(245,158,11,.2)]">
