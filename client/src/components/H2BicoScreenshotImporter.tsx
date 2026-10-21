@@ -1,6 +1,7 @@
 
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { ClipboardPaste } from "lucide-react";
+import {detectStandaloneAvatarBounds} from "@/lib/h2bicoStandaloneAvatar";
 import { detectH2AvatarFaces } from "@/lib/similarFaceTfliteRuntime";
 import { rankAvatarCandidates, measureAvatarQuality, shouldAutoSelectAvatar, type AvatarCandidate } from "@/lib/h2bicoAvatarCrop";
 import { createH2FaceScanTiles, mergeH2FaceScanBoxes } from "@/lib/h2bicoFaceScanTiles";
@@ -87,6 +88,8 @@ export default function H2BicoScreenshotImporter(){
   const [editingPhotoId,setEditingPhotoId]=useState<string|null>(null);
   const replaceInput=useRef<HTMLInputElement>(null);
   const [replaceTargetId,setReplaceTargetId]=useState<string|null>(null);
+  const avatarInput=useRef<HTMLInputElement>(null);
+  const [avatarTargetId,setAvatarTargetId]=useState<string|null>(null);
   // Fila sem limite artificial de quantidade: cada imagem e analisada separadamente.
   const pendingRef=useRef<File[]>([]);
   const runningRef=useRef(false);
@@ -306,7 +309,7 @@ export default function H2BicoScreenshotImporter(){
                whiteChecked:true,
               width:analysis.width,height:analysis.height,
               existing:p.alreadyExists,
-              selected:shouldPreselectH2BicoPhoto({...p,crop:p.crop}),
+              selected:shouldPreselectH2BicoPhoto({...p,whitePhotoCrop:p.whitePhotoCrop, crop:undefined}),
               warnings:[...p.warnings,...(resolved.warning?[resolved.warning]:[])],
             });});
             setItems(current=>{
@@ -366,6 +369,7 @@ export default function H2BicoScreenshotImporter(){
       const photo=URL.createObjectURL(file);
       photoUrlsRef.current.add(photo);
       const portrait=match.whitePhotoCrop||portraitFromLegacySquare(analysis.width,analysis.height,match.crop);
+      scanTokens.current.set(item.id,(scanTokens.current.get(item.id)||0)+1);
       update(item.id,{source:file.name,photo,crop:match.crop,width:analysis.width,height:analysis.height,
         photoLayout:match.photoLayout,confidence:match.confidence,nameBox:match.nameBox,cpfBox:match.cpfBox,
         whiteCrop:portrait,cropMode:portrait?"white":"original",whiteChecked:true,manualCrop:null,avatarCrop:null,
@@ -373,6 +377,32 @@ export default function H2BicoScreenshotImporter(){
       toast.success("Print substituído pelo CPF correto. Nome, CPF e EAR foram mantidos.");
     }catch(error){toast.error(error instanceof Error?error.message:"Não foi possível substituir o print.");}
     finally{setStatus("");setReplaceTargetId(null);}
+  };
+
+  const replaceOnlyAvatar=async(item:Item,file:File)=>{
+    try{
+      if(savingRef.current||runningRef.current)throw new Error("Aguarde a operacao em andamento.");
+      if(!["image/jpeg","image/png","image/webp"].includes(file.type)||file.size>10*1024*1024||file.size===0)throw new Error("Envie uma foto JPG, PNG ou WEBP de ate 10 MB.");
+      const image=await createImageBitmap(file);
+      try{
+        if(image.width<70||image.height<80||image.width*image.height>20_000_000)throw new Error("Dimensoes da imagem invalidas.");
+        const canvas=document.createElement("canvas");canvas.width=image.width;canvas.height=image.height;
+        const ctx=canvas.getContext("2d",{willReadFrequently:true});if(!ctx)throw new Error("Canvas indisponivel.");
+        ctx.drawImage(image,0,0);
+        const data=ctx.getImageData(0,0,image.width,image.height);
+        const crop=detectStandaloneAvatarBounds(data);
+        if(!crop)throw new Error("Esta imagem nao parece uma unica foto avatar. Use o print completo ou ajuste manualmente.");
+        // An image-only replacement never sends the file through OCR and does not modify
+        // name, cpf, ear or any neighboring card. Cancel pending face scans for this card.
+        scanTokens.current.set(item.id,(scanTokens.current.get(item.id)||0)+1);
+        const photo=URL.createObjectURL(file);photoUrlsRef.current.add(photo);
+        update(item.id,{photo,source:file.name,width:image.width,height:image.height,
+          manualCrop:crop,cropMode:"manual",avatarCrop:null,whiteCrop:null,
+          avatarBusy:false,avatarError:undefined,matchedCpf:true,selected:false,error:undefined});
+        toast.success("Somente a foto deste card foi substituida. Nome, CPF e EAR preservados.");
+      }finally{image.close();}
+    }catch(error){toast.error(error instanceof Error?error.message:"Falha ao substituir somente a foto.");}
+    finally{setAvatarTargetId(null);}
   };
 
   const pasteReplacement=async(item:Item)=>{
@@ -481,7 +511,7 @@ export default function H2BicoScreenshotImporter(){
   const eligible=(item:Item)=>!item.existing&&!item.saved&&isValidCpf(item.cpf)&&
     item.name.trim().split(/\s+/).length>=2&&item.confidence!==undefined&&item.confidence>=70&&
     !item.cpfSuggestion&&!item.warnings.some(w=>/CONFIRA O N[UÚ]MERO|CPF REPETIDO|LEITURA DIVERGENTE/i.test(w))&&
-    (item.cropMode==="avatar"&&!!item.avatarCrop||item.cropMode==="white"&&!!item.whiteCrop||item.cropMode==="manual"&&!!item.manualCrop&&validateManualPhotoCrop(item.manualCrop,item.width,item.height)||item.cropMode==="original"&&item.crop.size>=48);
+    (item.cropMode==="avatar"&&!!item.avatarCrop&&item.matchedCpf===true||item.cropMode==="white"&&!!item.whiteCrop||item.cropMode==="manual"&&!!item.manualCrop&&validateManualPhotoCrop(item.manualCrop,item.width,item.height));
   const selected=items.filter(item=>item.selected&&!item.saved&&!item.existing);
   const selectable=items.filter(eligible);
   const selectAll=()=>setItems(current=>current.map(item=>({...item,selected:eligible(item)})));
@@ -494,6 +524,8 @@ export default function H2BicoScreenshotImporter(){
     </div>
      <input ref={input} type="file" accept="image/png,image/jpeg,image/webp" multiple className="hidden"
        onChange={e=>{if(e.target.files)void inspect(e.target.files);e.currentTarget.value="";}}/>
+     <input ref={avatarInput} type="file" accept="image/png,image/jpeg,image/webp" className="hidden"
+       onChange={e=>{const item=items.find(row=>row.id===avatarTargetId);const file=e.target.files?.[0];if(item&&file)void replaceOnlyAvatar(item,file);e.currentTarget.value="";}}/>
      <input ref={replaceInput} type="file" accept="image/png,image/jpeg,image/webp" className="hidden"
        onChange={e=>{const item=items.find(row=>row.id===replaceTargetId);const file=e.target.files?.[0];if(item&&file)void replacePrintForItem(item,file);e.currentTarget.value="";}}/>
     <div onDragOver={e=>e.preventDefault()} onDrop={e=>{e.preventDefault();inspect(e.dataTransfer.files);}}
@@ -532,6 +564,7 @@ export default function H2BicoScreenshotImporter(){
                   </Button>
                   {!item.saved&&<div className="flex flex-wrap gap-1">
                     <Button type="button" variant="outline" size="sm" disabled={saving||busy} onClick={()=>{setReplaceTargetId(item.id);replaceInput.current?.click();}}>SUBSTITUIR PRINT</Button>
+                    <Button type="button" variant="outline" size="sm" disabled={saving||busy} onClick={()=>{setAvatarTargetId(item.id);avatarInput.current?.click();}}>SUBSTITUIR SÓ A FOTO</Button>
                     <Button type="button" variant="outline" size="sm" disabled={saving||busy} onClick={()=>void pasteReplacement(item)}>COLAR OUTRO PRINT</Button>
                   </div>}
                </div>

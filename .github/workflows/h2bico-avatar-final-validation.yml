@@ -1,0 +1,27 @@
+name: Validate H2BICO Avatar Crop
+on:
+  push:
+    branches:
+      - fix/h2bico-final-photo-only-crop-20261021
+  pull_request:
+    paths:
+      - client/src/components/H2BicoScreenshotImporter.tsx
+      - client/src/lib/h2bicoStandaloneAvatar.ts
+      - server/routers/h2bico.ts
+      - server/h2bicoStandaloneAvatar.test.ts
+jobs:
+  validate:
+    runs-on: ubuntu-latest
+    timeout-minutes: 25
+    steps:
+      - uses: actions/checkout@v4
+      - uses: pnpm/action-setup@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: "22"
+          cache: pnpm
+      - run: pnpm install --frozen-lockfile
+      - run: pnpm exec vitest run server/h2bicoStandaloneAvatar.test.ts server/h2bicoCpfAvatarMatcher.test.ts server/h2bicoScreenshotOcr.test.ts server/h2bicoImportReview.test.ts
+      # Full repository tsc has existing errors outside this H2BICO change;
+      # keep targeted tests plus production build as release checks.
+      - run: pnpm run build

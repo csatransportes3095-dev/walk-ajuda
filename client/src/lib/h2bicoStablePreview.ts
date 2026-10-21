@@ -3,7 +3,7 @@
  */
 import { isSafeAvatarRect, measureAvatarQuality, type AvatarFace, type AvatarRect, type PixelImage } from "./h2bicoAvatarCrop";
 
-export type StableCropMode="original"|"white"|"avatar";
+export type StableCropMode="original"|"white"|"avatar"|"manual";
 export type StablePreviewState={
   cropMode?:StableCropMode;
   whiteCrop?:AvatarRect|null;
