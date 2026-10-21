@@ -2,10 +2,10 @@ import { TRPCError } from "@trpc/server";
 import { sql } from "drizzle-orm";
 import { z } from "zod";
 import { getDb } from "../db";
-import { adminProcedure, router } from "../_core/trpc";
+import { publicProcedure, router } from "../_core/trpc";
 import { assertValidVinReservationBatch, reserveVinBatch } from "../vinRegistryCore";
 
-// Reserva livre exclusiva do ADM; compradores usam o endpoint com créditos.
+// Limite defensivo por IP: a rota é pública, assim como o gerador de chassis.
 const rateByIp = new Map<string, { used: number; expiresAt: number }>();
 const MAX_VINS_PER_MINUTE = 300;
 
@@ -33,7 +33,7 @@ function checkVinRateLimit(ip: string, amount: number): void {
 }
 
 export const vinRegistryRouter = router({
-  reserve: adminProcedure
+  reserve: publicProcedure
     .input(z.object({
       vins: z.array(z.string().min(17).max(17)).min(1).max(10),
     }))
@@ -80,4 +80,3 @@ export const vinRegistryRouter = router({
       }
     }),
 });
-

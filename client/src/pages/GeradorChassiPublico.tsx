@@ -17,8 +17,6 @@ import {
   obterPerfilFabricanteOficial,
 } from "@/lib/vinGenerator";
 import { trpc } from "@/lib/trpc";
-import ChassisWmiReferencePanel from "@/components/ChassisWmiReferencePanel";
-import type { ChassisGenerationInput } from "@shared/chassisService";
 
 const FIPE_BASE = "https://fipe.parallelum.com.br/api/v2/cars";
 
@@ -34,7 +32,6 @@ const ANOS_GERADOR_PUBLICO = [
   { code: "R", ano: 2024 },
   { code: "S", ano: 2025 },
   { code: "T", ano: 2026 },
-  { code: "V", ano: 2027 },
 ];
 
 type FipeBrand = {
@@ -82,11 +79,8 @@ async function copiarTexto(texto: string): Promise<boolean> {
   }
 }
 
-export default function GeradorChassiPublico({ embedded = false, customer }: {
-  embedded?: boolean;
-  customer?: { balance: number; onGenerate: (input: Omit<ChassisGenerationInput, "requestId">) => Promise<string[]> };
-} = {}) {
-  const { data: settings } = trpc.settings.getAll.useQuery(undefined, { enabled: !customer });
+export default function GeradorChassiPublico() {
+  const { data: settings } = trpc.settings.getAll.useQuery();
   const logoUrl = settings?.login_image_url || "";
 
   const [marcas, setMarcas] = useState<FipeBrand[]>([]);
@@ -284,15 +278,6 @@ export default function GeradorChassiPublico({ embedded = false, customer }: {
         return;
       }
 
-      if (customer) {
-        if (customer.balance < quantidade) throw new Error("Saldo insuficiente. Escolha uma quantidade menor ou recarregue.");
-        const vins = await customer.onGenerate({ marca: marca.name, modelo, yearCode: anoCode as ChassisGenerationInput["yearCode"], quantity: quantidade, ...(usarChassiOriginal ? { originalVin: chassiBase } : {}) });
-        const agora = Date.now();
-        setResultados(vins.map((vin, i) => ({ vin, key: `${vin}-${i}-${agora}`, marca: marca.name, modelo, ano: anoInfo.ano })));
-        setCopiados(new Set());
-        return;
-      }
-
       const perfilTeste = usarChassiOriginal ? null : obterPerfilFabricanteOficial(marca.name, modelo);
       const accepted: string[] = [];
       let attempts = 0;
@@ -364,7 +349,7 @@ export default function GeradorChassiPublico({ embedded = false, customer }: {
           "radial-gradient(ellipse at top, #1a0a2e 0%, #0d0d1a 40%, #050508 100%)",
       }}
     >
-      {!embedded && <header className="sticky top-0 z-10 border-b border-purple-900/40 bg-black/50 backdrop-blur-md">
+      <header className="sticky top-0 z-10 border-b border-purple-900/40 bg-black/50 backdrop-blur-md">
         <div className="mx-auto flex max-w-3xl items-center gap-3 px-4 py-3">
           <Link href="/admin/codes">
             <button
@@ -399,10 +384,10 @@ export default function GeradorChassiPublico({ embedded = false, customer }: {
             </div>
           </div>
         </div>
-      </header>}
+      </header>
 
       <main className="mx-auto max-w-3xl space-y-5 px-3 py-5 sm:px-4 sm:py-6">
-        {!customer && <section className="rounded-2xl border border-yellow-500/25 bg-yellow-900/15 px-4 py-3">
+        <section className="rounded-2xl border border-yellow-500/25 bg-yellow-900/15 px-4 py-3">
           <div className="flex items-start gap-3">
             <Info className="mt-0.5 h-4 w-4 shrink-0 text-yellow-300" />
             <div className="space-y-1 text-xs leading-relaxed text-yellow-100/80">
@@ -415,7 +400,7 @@ export default function GeradorChassiPublico({ embedded = false, customer }: {
               </p>
             </div>
           </div>
-        </section>}
+        </section>
 
         <section className="space-y-5 rounded-2xl border border-zinc-700/50 bg-zinc-900/80 p-4 sm:p-5">
           <div>
@@ -461,9 +446,9 @@ export default function GeradorChassiPublico({ embedded = false, customer }: {
                   placeholder="Ex.: 9BRB29BT0J2189102"
                   className="w-full rounded-xl border border-zinc-700 bg-zinc-800 px-3 py-2.5 font-mono text-sm text-white outline-none transition-colors placeholder:text-zinc-600 focus:border-cyan-500"
                 />
-                {!customer && <p className="mt-1.5 text-xs leading-relaxed text-zinc-500">
+                <p className="mt-1.5 text-xs leading-relaxed text-zinc-500">
                   Preserva as posições 1–8, 10 e 11; troca o serial 12–17 e recalcula a posição 9. Selecione abaixo a mesma marca, modelo e ano do original.
-                </p>}
+                </p>
               </div>
             )}
 
@@ -582,23 +567,17 @@ export default function GeradorChassiPublico({ embedded = false, customer }: {
               <label className="mb-1.5 block text-xs font-semibold text-zinc-300">
                 Quantidade
               </label>
-              {customer ? (
-                <select
-                  value={quantidade}
-                  onChange={(e) => setQuantidade(Number(e.target.value))}
-                  className="w-full rounded-xl border border-zinc-700 bg-zinc-800 px-3 py-2.5 text-sm text-white outline-none transition-colors focus:border-cyan-500"
-                >
-                  {[1, 2, 3, 5, 10].map((n) => (
-                    <option key={n} value={n}>
-                      {n} chassi{n > 1 ? "s" : ""}
-                    </option>
-                  ))}
-                </select>
-              ) : (
-                <div className="w-full rounded-xl border border-zinc-700 bg-zinc-800 px-3 py-2.5 text-sm text-white">
-                  1 chassi
-                </div>
-              )}
+              <select
+                value={quantidade}
+                onChange={(e) => setQuantidade(Number(e.target.value))}
+                className="w-full rounded-xl border border-zinc-700 bg-zinc-800 px-3 py-2.5 text-sm text-white outline-none transition-colors focus:border-cyan-500"
+              >
+                {[1, 2, 3, 5, 10].map((n) => (
+                  <option key={n} value={n}>
+                    {n} chassi{n > 1 ? "s" : ""}
+                  </option>
+                ))}
+              </select>
             </div>
           </div>
 
@@ -606,7 +585,6 @@ export default function GeradorChassiPublico({ embedded = false, customer }: {
             type="button"
             onClick={gerar}
             disabled={
-              (customer !== undefined && customer.balance < quantidade) ||
               verificandoUnicidade ||
               carregandoMarcas ||
               carregandoModelos ||
@@ -622,8 +600,6 @@ export default function GeradorChassiPublico({ embedded = false, customer }: {
             />
             Gerar {quantidade > 1 ? `${quantidade} chassis` : "chassi"}
           </button>
-
-          {customer && customer.balance > 0 && customer.balance < quantidade && <p role="status" className="text-sm text-amber-300">Você tem {customer.balance} créditos. Escolha uma quantidade menor ou compre um pacote.</p>}
 
           <div className="overflow-hidden rounded-xl border border-zinc-700/50 bg-zinc-950/35">
             <button
@@ -757,18 +733,15 @@ export default function GeradorChassiPublico({ embedded = false, customer }: {
           </section>
         )}
 
-        {!customer && <section className="rounded-2xl border border-zinc-800/60 bg-zinc-900/40 p-4 text-xs leading-relaxed text-zinc-500">
+        <section className="rounded-2xl border border-zinc-800/60 bg-zinc-900/40 p-4 text-xs leading-relaxed text-zinc-500">
           <p>
             <strong className="text-zinc-300">Fonte do catálogo:</strong>{" "}
             Tabela FIPE via API pública. O gerador usa os nomes de veículos para organizar os testes; o VIN produzido não é um chassi oficial.
           </p>
-        </section>}
-
-        <ChassisWmiReferencePanel />
+        </section>
 
         <div className="pb-5" />
       </main>
     </div>
   );
 }
-
