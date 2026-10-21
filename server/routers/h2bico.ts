@@ -277,17 +277,18 @@ export const h2bicoRouter = router({
       }));
       const cpfs=[...new Set(proposed.filter(row=>isValidCpf(row.cpf)).map(row=>row.cpf))];
       const db=await dbOrThrow();
-      const existing=new Set<string>();
+      const existing=new Map<string,string>();
       for(let start=0;start<cpfs.length;start+=250){
         const batch=cpfs.slice(start,start+250);
-        const rows=await db.execute(sql`SELECT cpf FROM h2bico_records WHERE cpf IN (${sql.join(batch.map(cpf=>sql`${cpf}`),sql`, `)})`);
-        for(const row of rows[0] as Array<{cpf:string}>)existing.add(String(row.cpf));
+        const rows=await db.execute(sql`SELECT cpf,name FROM h2bico_records WHERE cpf IN (${sql.join(batch.map(cpf=>sql`${cpf}`),sql`, `)})`);
+        for(const row of rows[0] as Array<{cpf:string;name:string}>)existing.set(String(row.cpf),String(row.name||""));
       }
       return {width,height,persons:proposed.map(row=>({
         ...row,
         nameBox:row.nameBox?{left:row.nameBox.left*width/ocrWidth,top:row.nameBox.top*height/ocrHeight,width:row.nameBox.width*width/ocrWidth,height:row.nameBox.height*height/ocrHeight}:undefined,
         cpfBox:row.cpfBox?{left:row.cpfBox.left*width/ocrWidth,top:row.cpfBox.top*height/ocrHeight,width:row.cpfBox.width*width/ocrWidth,height:row.cpfBox.height*height/ocrHeight}:undefined,
         validCpf:isValidCpf(row.cpf),alreadyExists:existing.has(row.cpf),
+        existingName:existing.get(row.cpf)||null,
       }))};
     }catch(error){
       if(error instanceof TRPCError)throw error;
