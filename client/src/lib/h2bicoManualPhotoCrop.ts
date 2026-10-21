@@ -141,6 +141,7 @@ export function suggestCompletePhotoCrop(image:{width:number;height:number;data:
   if(mean/total<105||bright/total<.51||dark/total>.36)return null;
   const bounds=detectStandaloneAvatarBounds(image);
   if(!bounds||bounds.width<width*.68||bounds.height<height*.67)return null;
-  return validateManualPhotoCrop(bounds,width,height)?bounds:null;
+  const whole={x:bounds.x,y:0,width:bounds.width,height};
+  return validateManualPhotoCrop(whole,width,height)?whole:null;
 }
 
