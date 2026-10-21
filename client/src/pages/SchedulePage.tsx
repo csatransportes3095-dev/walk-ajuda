@@ -1,6 +1,6 @@
 import { trpc } from "@/lib/trpc";
 import { useParams } from "wouter";
-import { useState, useMemo, useEffect, type FormEvent } from "react";
+import { useState, useMemo, useEffect, type FormEvent, type CSSProperties } from "react";
 import { toast } from "sonner";
 import { CalendarClock, CheckCircle2, AlertTriangle, Clock, CalendarDays, Loader2, ShieldAlert, MessageCircle, AlertCircle, ShieldCheck, UserRoundCog, Upload } from "lucide-react";
 import { isValidCPF, normalizeCpf } from "@shared/cpf";
@@ -854,7 +854,7 @@ export default function SchedulePage() {
 
   return (
     <div className="h2-schedule-client min-h-screen bg-gradient-to-br from-[#0a0a1a] via-[#15102e] to-[#0a0a1a] px-4 py-8">
-      <div className="sg-client-shell" style={{ "--sg-accent": accent } as React.CSSProperties}>
+      <div className="sg-client-shell" style={{ "--sg-accent": accent } as CSSProperties}>
         {/* Alerta de madrugada */}
         {showMidnightWarning && selectedIsMidnight && (
           <div className="mb-6 relative overflow-hidden rounded-2xl border border-purple-500/40 bg-gradient-to-br from-purple-500/15 via-purple-500/5 to-transparent shadow-lg shadow-purple-900/20">
