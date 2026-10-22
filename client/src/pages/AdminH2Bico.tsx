@@ -12,7 +12,7 @@ import { Card } from "@/components/ui/card";
 import { Input } from "@/components/ui/input";
 import { Textarea } from "@/components/ui/textarea";
 import { trpc } from "@/lib/trpc";
-import { extractCpfCandidatesFromText, isValidCpf, H2BICO_CPF_MAX_FILES, readCpfSourceFile } from "@/lib/h2bicoCpfExtractor";
+import { extractCpfCandidatesFromText, extractCpfPeopleFromText, isValidCpf, H2BICO_CPF_MAX_FILES, readCpfSourceFile } from "@/lib/h2bicoCpfExtractor";
 
 const STATUS:any = {available:"Disponível",reserved:"Reservado",in_use:"Em uso",used:"Usado",archived:"Arquivado"};
 const maskCpf=(cpf:string)=> cpf?.length===11 ? `${cpf.slice(0,3)}.***.***-${cpf.slice(-2)}` : cpf;
@@ -122,6 +122,7 @@ export default function AdminH2Bico(){
   const [progress,setProgress]=useState({done:0,total:0,name:""});
   const [summary,setSummary]=useState<{imported:number;repaired:number;duplicates:number;errors:number}|null>(null);
   const [extractText,setExtractText]=useState("");
+  const [cpfExtractMode,setCpfExtractMode]=useState<"cpf"|"full">("cpf");
   const [cpfCheck,setCpfCheck]=useState<{key:string;existing:string[];error?:string}|null>(null);
   const [brokenPhotos,setBrokenPhotos]=useState<Set<number>>(new Set());
   const utils=trpc.useUtils();
@@ -154,6 +155,7 @@ export default function AdminH2Bico(){
   useEffect(()=>{setCardPage(0);},[search,status,review]);
   const existingCpfs=useMemo(()=>new Set((allRecords.data||[]).map((r:any)=>String(r.cpf))),[allRecords.data]);
   const candidates=useMemo(()=>extractCpfCandidatesFromText(extractText),[extractText]);
+  const extractedPeople=useMemo(()=>extractCpfPeopleFromText(extractText),[extractText]);
   const validCpfs=useMemo(()=>candidates.filter(isValidCpf),[candidates]);
   const cpfKey=validCpfs.join(",");
   const checkReady=cpfCheck?.key===cpfKey && !cpfCheck.error;
@@ -191,7 +193,7 @@ export default function AdminH2Bico(){
       try{
         const content=await readCpfSourceFile(file);
         const extracted=extractCpfCandidatesFromText(content);
-        found.push(...extracted);
+        found.push(content);
         added+=extracted.length;
         read++;
       }catch(error){
@@ -208,6 +210,27 @@ export default function AdminH2Bico(){
     try{
       await navigator.clipboard.writeText(cpfs.join("\n"));
       toast.success(`${cpfs.length} CPF(s) copiado(s), um por linha.`);
+    }catch{
+      toast.error("Não foi possível copiar. Verifique a permissão do navegador.");
+    }
+  };
+  const fullRows=useMemo(()=>{
+    const allowed=new Set(cpfs);
+    const byCpf=new Map(extractedPeople.map(person=>[person.cpf,person]));
+    return cpfs.map(cpf=>{
+      const person=byCpf.get(cpf);
+      return {
+        cpf,
+        name:person?.name||"",
+        profession:person?.profession||"",
+      };
+    }).filter(row=>allowed.has(row.cpf));
+  },[cpfs,extractedPeople]);
+  const copyAllFull=async()=>{
+    if(!checkReady || !fullRows.length) return;
+    try{
+      await navigator.clipboard.writeText(fullRows.map(row=>`${row.cpf} | ${row.name} | ${row.profession}`).join("\n"));
+      toast.success(`${fullRows.length} registro(s) copiado(s) com CPF, nome e profissão.`);
     }catch{
       toast.error("Não foi possível copiar. Verifique a permissão do navegador.");
     }
@@ -433,9 +456,15 @@ export default function AdminH2Bico(){
         <div className="flex flex-wrap items-center justify-between gap-3">
           <div className="font-semibold flex items-center gap-2"><FileText className="w-4 h-4"/>Extrator de CPF <span className="rounded-md bg-emerald-500/15 px-2 py-1 text-xs font-bold text-emerald-300">{cpfs.length} CPF(s)</span></div>
           <div className="flex flex-wrap gap-2">
-            <Button type="button" onClick={()=>void copyAllCpfs()} disabled={!checkReady||!cpfs.length}><Copy className="w-4 h-4 mr-2"/>COPIAR TODOS</Button>
+            <Button type="button" onClick={()=>void (cpfExtractMode==="full"?copyAllFull():copyAllCpfs())} disabled={!checkReady||!cpfs.length}><Copy className="w-4 h-4 mr-2"/>{cpfExtractMode==="full"?"COPIAR TUDO":"COPIAR TODOS"}</Button>
+            {cpfExtractMode==="full"&&<Button type="button" variant="outline" onClick={()=>void copyAllCpfs()} disabled={!checkReady||!cpfs.length}><Copy className="w-4 h-4 mr-2"/>COPIAR CPFs</Button>}
             <Button type="button" variant="outline" disabled={!extractText&& !cpfFileReport} onClick={()=>{setExtractText("");setCpfFileReport("");}}><XCircle className="w-4 h-4 mr-2"/>LIMPAR</Button>
           </div>
+        </div>
+        <div className="flex flex-wrap items-center gap-2 rounded-xl border border-cyan-400/20 bg-cyan-500/5 p-3">
+          <span className="text-xs font-black text-cyan-200">EXTRAIR:</span>
+          <button type="button" onClick={()=>setCpfExtractMode("cpf")} className={`rounded-lg border px-3 py-2 text-xs font-black transition ${cpfExtractMode==="cpf"?"border-cyan-400 bg-cyan-500/20 text-cyan-100":"border-slate-700 bg-slate-950/40 text-slate-400"}`}>SOMENTE CPF</button>
+          <button type="button" onClick={()=>setCpfExtractMode("full")} className={`rounded-lg border px-3 py-2 text-xs font-black transition ${cpfExtractMode==="full"?"border-cyan-400 bg-cyan-500/20 text-cyan-100":"border-slate-700 bg-slate-950/40 text-slate-400"}`}>CPF + NOME + PROFISSÃO</button>
         </div>
         <div className="grid grid-cols-2 sm:grid-cols-4 gap-2 text-center text-xs">
           <div className="rounded-lg bg-slate-800 p-2">Encontrados<br/><strong className="text-lg">{candidates.length}</strong></div>
@@ -458,7 +487,19 @@ export default function AdminH2Bico(){
           {cpfFileReport&&<p role="status" className="mt-2 text-xs text-emerald-300">{cpfFileReport}</p>}
         </div>
         <Textarea placeholder="Ou cole aqui o texto com vários CPFs..." value={extractText} onChange={e=>setExtractText(e.target.value)}/>
-        {checkReady&&cpfs.length>0&&<Textarea readOnly value={cpfs.join("\n")} className="font-mono min-h-28" aria-label="CPFs extraídos, um por linha"/>}
+        {checkReady&&cpfs.length>0&&cpfExtractMode==="cpf"&&<Textarea readOnly value={cpfs.join("\n")} className="font-mono min-h-28" aria-label="CPFs extraídos, um por linha"/>}
+        {checkReady&&cpfs.length>0&&cpfExtractMode==="full"&&<div className="overflow-hidden rounded-xl border border-slate-700">
+          <div className="grid grid-cols-[150px_1fr_1fr] gap-0 bg-slate-800 px-3 py-2 text-xs font-black text-slate-200">
+            <span>CPF</span><span>NOME</span><span>PROFISSÃO</span>
+          </div>
+          <div className="max-h-72 overflow-auto">
+            {fullRows.map(row=><div key={row.cpf} className="grid grid-cols-[150px_1fr_1fr] gap-0 border-t border-slate-800 px-3 py-2 text-xs">
+              <span className="font-mono text-cyan-200">{row.cpf}</span>
+              <span className="pr-3">{row.name||"—"}</span>
+              <span>{row.profession||"—"}</span>
+            </div>)}
+          </div>
+        </div>}
       </Card>
       </section>}
 
