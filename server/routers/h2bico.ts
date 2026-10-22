@@ -159,12 +159,18 @@ export const h2bicoRouter = router({
     return { existing: (rows[0] as Array<{ cpf: string }>).map(row => String(row.cpf)) };
   }),
 
-  availableForSimilarity: adminProcedure.query(async () => {
+  availableForSimilarity: adminProcedure.input(z.object({
+    search: z.string().max(120).optional().default(""),
+  }).optional()).query(async ({ input }) => {
     const db = await dbOrThrow();
+    const search = (input?.search || "").trim();
+    const like = `%${search}%`;
     const rows = await db.execute(sql`
       SELECT id,name,cpf,uf,photoUrl,originalFilename
       FROM h2bico_records
-      WHERE status = 'available' AND photoUrl IS NOT NULL AND photoUrl <> ''
+      WHERE status = 'available'
+        AND photoUrl IS NOT NULL AND photoUrl <> ''
+        AND (${search} = '' OR name LIKE ${like})
       ORDER BY name ASC, id ASC
       LIMIT 10000
     `);
