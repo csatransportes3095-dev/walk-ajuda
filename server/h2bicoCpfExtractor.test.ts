@@ -1,12 +1,20 @@
 import { describe, expect, it } from "vitest";
 import { readFileSync } from "node:fs";
-import { decodeCpfText, extractCpfCandidatesFromText, extractCpfsFromText, extractWordXmlText, isValidCpf } from "../client/src/lib/h2bicoCpfExtractor";
+import { decodeCpfText, extractCpfCandidatesFromText, extractCpfPeopleFromText, extractCpfsFromText, extractWordXmlText, isValidCpf } from "../client/src/lib/h2bicoCpfExtractor";
 
 describe("H2BICO - extrator CPF de arquivos", () => {
   it("extrai CPFs com e sem pontuacao sem duplicar", () => {
     expect(extractCpfCandidatesFromText("123.456.789-01 | 98765432100 | 12345678901")).toEqual(["12345678901","98765432100"]);
     expect(extractCpfsFromText("123.456.789-01 | 98765432100")).toEqual([]);
     expect(extractCpfsFromText("abc1234567890123x")).toEqual([]);
+  });
+  it("extrai CPF, nome e profissao no modo completo", () => {
+    expect(extractCpfPeopleFromText("52998224725 | RONNYBRENDO VIEIRA LIMA | TECNICO ELETRONICO")).toEqual([
+      {cpf:"52998224725",name:"RONNYBRENDO VIEIRA LIMA",profession:"TECNICO ELETRONICO"},
+    ]);
+    expect(extractCpfPeopleFromText("529.982.247-25; MARIA DA SILVA; MOTORISTA")).toEqual([
+      {cpf:"52998224725",name:"MARIA DA SILVA",profession:"MOTORISTA"},
+    ]);
   });
   it("rejeita numeros com onze digitos sem CPF valido", () => {
     expect(isValidCpf("529.982.247-25")).toBe(true);
