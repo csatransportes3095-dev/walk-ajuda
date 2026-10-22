@@ -4709,6 +4709,32 @@ export default function AdminOrders() {
                                                     {ar.customerNumber && <span className="text-muted-foreground/40 text-xs">·</span>}
                                                     <span className="text-xs text-muted-foreground">{ar.customerPhone}</span>
                                                   </div>
+                                                  <div className="mt-2 flex flex-wrap items-center gap-1.5">
+                                                    <button
+                                                      onClick={(e) => { e.stopPropagation(); toggleUrgentMutation.mutate({ registrationId: ar.registrationId, urgent: !(ar as any).isUrgent }); }}
+                                                      title={(ar as any).isUrgent ? 'Remover urgência' : 'Marcar como urgente'}
+                                                      className={`inline-flex items-center gap-1 rounded-full border px-2 py-1 text-[10px] font-bold transition-colors ${(ar as any).isUrgent ? 'border-red-500 bg-red-500/20 text-red-300' : 'border-zinc-600 bg-zinc-800/80 text-zinc-300 hover:border-red-500/50 hover:text-red-300'}`}
+                                                    >
+                                                      🚨 {(ar as any).isUrgent ? 'URGENTE' : 'Urgente'}
+                                                    </button>
+                                                    <button
+                                                      onClick={(e) => { e.stopPropagation(); toggleAttention(ar.registrationId); }}
+                                                      title={attentionMap.has(ar.registrationId) ? `Em atendimento: ${attentionMap.get(ar.registrationId)} — clique para liberar` : 'Marcar como em atendimento'}
+                                                      className={`inline-flex items-center gap-1 rounded-full border px-2 py-1 text-[10px] font-bold transition-all ${attentionMap.has(ar.registrationId) ? 'border-red-500 bg-red-600/30 text-red-300 animate-pulse' : 'border-green-500/60 bg-green-500/15 text-green-300 hover:bg-green-500/25'}`}
+                                                    >
+                                                      👤 {attentionMap.has(ar.registrationId) ? attentionMap.get(ar.registrationId) : 'Atender'}
+                                                    </button>
+                                                    <OrderH2AdsBrowserShortcut
+                                                      registrationId={ar.registrationId}
+                                                      subOrderIndex={0}
+                                                      customerNumber={ar.customerNumber}
+                                                      customerName={ar.customerName}
+                                                      orderNumber={ar.orderNumber}
+                                                      latestStatus={ar.latestStatus}
+                                                      serviceName={ar.serviceName}
+                                                      serviceOption={ar.serviceOption}
+                                                    />
+                                                  </div>
                                                 </div>
                                               </div>
                                             </div>
