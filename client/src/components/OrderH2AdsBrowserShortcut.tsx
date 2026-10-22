@@ -5,7 +5,7 @@ import { trpc } from "@/lib/trpc";
 import { resolveH2AdsOrderBrowserShortcutState, resolveH2AdsOrderLinkRepairCandidate } from "@shared/h2adsOrderBrowserShortcut";
 import { normalizeH2AdsRoutingText, resolveH2AdsAutomaticGroup } from "@shared/h2adsGroupRouting";
 
-export default function OrderH2AdsBrowserShortcut({ registrationId, subOrderIndex, customerNumber, serviceName, serviceOption }: { registrationId: number; subOrderIndex: number; customerNumber?: number | null; serviceName?: string | null; serviceOption?: string | null }) {
+export default function OrderH2AdsBrowserShortcut({ registrationId, subOrderIndex, customerNumber, customerName, orderNumber, latestStatus, serviceName, serviceOption }: { registrationId: number; subOrderIndex: number; customerNumber?: number | null; customerName?: string | null; orderNumber?: number | null; latestStatus?: string | null; serviceName?: string | null; serviceOption?: string | null }) {
   const utils = trpc.useUtils();
   const [selectedInstanceId, setSelectedInstanceId] = useState<number | null>(null);
   const [creating, setCreating] = useState(false);
@@ -37,9 +37,20 @@ export default function OrderH2AdsBrowserShortcut({ registrationId, subOrderInde
 
   const dashboard = dashboardQuery.data;
   const orders = (ordersQuery.data ?? []) as any[];
-  const currentOrder = orders.find(order => order.id === registrationId && (order.subOrderIndex ?? 0) === subOrderIndex);
+  const activeOrder = orders.find(order => order.id === registrationId && (order.subOrderIndex ?? 0) === subOrderIndex);
+  const currentOrder = activeOrder ?? {
+    id: registrationId,
+    subOrderIndex,
+    customerNumber: customerNumber ?? null,
+    customerName: customerName ?? null,
+    codeClientName: customerName ?? null,
+    orderNumber: orderNumber ?? null,
+    serviceName: serviceName ?? null,
+    serviceOption: serviceOption ?? null,
+    latestStatus: latestStatus ?? null,
+  };
   const activeGroups = (dashboard?.groups ?? []).filter(group => group.status === "active");
-  const automaticGroup = resolveH2AdsAutomaticGroup(activeGroups, currentOrder ?? { serviceName, serviceOption, latestStatus: null });
+  const automaticGroup = resolveH2AdsAutomaticGroup(activeGroups, currentOrder);
   const deliveredGroup = activeGroups.find(group => {
     const name = normalizeH2AdsRoutingText(group.name);
     return name === "entregue" || name === "entregues" || name === "grupo entregue" || name === "grupo entregues";
@@ -83,10 +94,6 @@ export default function OrderH2AdsBrowserShortcut({ registrationId, subOrderInde
   const createLinkedInstance = async (event: MouseEvent<HTMLButtonElement>) => {
     event.stopPropagation();
     if (pending || dashboardQuery.isLoading || ordersQuery.isLoading) return;
-    if (!currentOrder) {
-      toast.error("Não foi possível localizar este pedido para criar a instância H2ADS.");
-      return;
-    }
     if (activeGroups.length === 0) {
       toast.error("Não existe grupo H2ADS ativo para receber a instância.");
       return;
