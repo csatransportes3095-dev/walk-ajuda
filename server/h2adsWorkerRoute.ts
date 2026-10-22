@@ -20,6 +20,18 @@ import { isSystemRestoreLocked } from "./backupRestoreService";
 const MAX_NAME_LENGTH = 128;
 const STALE_BROWSER_COMMAND_MS = 30_000;
 const STALE_PREPARATION_COMMAND_MS = 120_000;
+const MIN_BROWSER_AGENT_VERSION = "1.4.3";
+
+function compareVersions(a: string, b: string): number {
+  const left = a.split(".").map(part => Number(part));
+  const right = b.split(".").map(part => Number(part));
+  for (let index = 0; index < Math.max(left.length, right.length); index += 1) {
+    const av = Number.isFinite(left[index]) ? left[index] : 0;
+    const bv = Number.isFinite(right[index]) ? right[index] : 0;
+    if (av !== bv) return av > bv ? 1 : -1;
+  }
+  return 0;
+}
 
 function workerString(value: unknown, maxLength = MAX_NAME_LENGTH): string | null {
   return typeof value === "string" && value.trim().length > 0 && value.trim().length <= maxLength ? value.trim() : null;
@@ -355,8 +367,8 @@ export function registerH2AdsWorkerRoute(app: Express): void {
     const worker = await authenticateRequest(req, res);
     if (!worker) return;
     const agentVersion = workerString(req.header("x-h2ads-agent-version"), 32);
-    if (!agentVersion) {
-      res.status(426).json({ error: "Atualize o agente H2 Ads para executar comandos de navegador." });
+    if (!agentVersion || compareVersions(agentVersion, MIN_BROWSER_AGENT_VERSION) < 0) {
+      res.status(426).json({ error: `Atualize o agente H2 Ads para a versão ${MIN_BROWSER_AGENT_VERSION} ou superior.` });
       return;
     }
     try {
