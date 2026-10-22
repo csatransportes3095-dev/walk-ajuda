@@ -28,6 +28,7 @@ export type FaceMatchDecisionInput = {
   structureScore?: number;
   symmetryScore?: number;
   reliability: number;
+  minimumSimilarityPercent?: number;
 };
 
 export type FaceMatchDecision = {
@@ -122,7 +123,7 @@ export function decideFaceMatch(input: FaceMatchDecisionInput): FaceMatchDecisio
     };
   }
 
-  if (finalScore >= H2_FACE_MINIMUM_PERCENT) {
+  if (finalScore >= Math.max(0, Math.min(100, input.minimumSimilarityPercent ?? H2_FACE_MINIMUM_PERCENT))) {
     return {
       finalScore,
       identityScore,
