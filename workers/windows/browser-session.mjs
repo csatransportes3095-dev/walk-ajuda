@@ -297,7 +297,8 @@ async function suspendProxyTraffic(reason = "proxy_path_unverified") {
 }
 
 async function resumeProxyTraffic() {
-  if (!networkSuspended || browserExitHandled) return;
+  // A troca de IP durante uma sessao e definitiva: somente uma nova sessao pode aceitar o novo IP.
+  if (!networkSuspended || browserExitHandled || sessionIpChanged) return;
   try {
     if (!backendRelay) {
       backendRelay = createBackendRelay();
