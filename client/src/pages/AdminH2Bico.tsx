@@ -124,6 +124,7 @@ export default function AdminH2Bico(){
   const [extractText,setExtractText]=useState("");
   const [cpfExtractMode,setCpfExtractMode]=useState<"cpf"|"full">("cpf");
   const [professionFilter,setProfessionFilter]=useState("");
+  const [showPastedData,setShowPastedData]=useState(false);
   const [cpfCheck,setCpfCheck]=useState<{key:string;existing:string[];error?:string}|null>(null);
   const [brokenPhotos,setBrokenPhotos]=useState<Set<number>>(new Set());
   const utils=trpc.useUtils();
@@ -475,7 +476,7 @@ export default function AdminH2Bico(){
           <div className="flex flex-wrap gap-2">
             <Button type="button" onClick={()=>void (cpfExtractMode==="full"?copyAllFull():copyAllCpfs())} disabled={!checkReady||!cpfs.length}><Copy className="w-4 h-4 mr-2"/>{cpfExtractMode==="full"?"COPIAR TUDO":"COPIAR TODOS"}</Button>
             {cpfExtractMode==="full"&&<Button type="button" variant="outline" onClick={()=>void copyFilteredCpfs()} disabled={!checkReady||!filteredFullRows.length}><Copy className="w-4 h-4 mr-2"/>COPIAR CPFs</Button>}
-            <Button type="button" variant="outline" disabled={!extractText&& !cpfFileReport} onClick={()=>{setExtractText("");setCpfFileReport("");setProfessionFilter("");}}><XCircle className="w-4 h-4 mr-2"/>LIMPAR</Button>
+            <Button type="button" variant="outline" disabled={!extractText&& !cpfFileReport} onClick={()=>{setExtractText("");setCpfFileReport("");setProfessionFilter("");setShowPastedData(false);}}><XCircle className="w-4 h-4 mr-2"/>LIMPAR</Button>
           </div>
         </div>
         <div className="flex flex-wrap items-center gap-2 rounded-xl border border-cyan-400/20 bg-cyan-500/5 p-3">
@@ -508,7 +509,22 @@ export default function AdminH2Bico(){
           </Button>
           {cpfFileReport&&<p role="status" className="mt-2 text-xs text-emerald-300">{cpfFileReport}</p>}
         </div>
-        <Textarea placeholder="Ou cole aqui o texto com vários CPFs..." value={extractText} onChange={e=>setExtractText(e.target.value)}/>
+                {!extractText||showPastedData?<div className="space-y-2">
+          <Textarea
+            placeholder="Ou cole aqui o texto com vários CPFs..."
+            value={extractText}
+            onChange={e=>setExtractText(e.target.value)}
+            onBlur={()=>{if(extractText.trim())setShowPastedData(false);}}
+            className="min-h-28 max-h-56 resize-y"
+          />
+          {extractText&&<div className="flex justify-end"><Button type="button" size="sm" variant="outline" onClick={()=>setShowPastedData(false)}>RECOLHER DADOS COLADOS</Button></div>}
+        </div>:<div className="flex flex-wrap items-center justify-between gap-3 rounded-xl border border-slate-700 bg-slate-950/50 p-3">
+          <div>
+            <div className="text-sm font-bold text-slate-200">DADOS COLADOS RECOLHIDOS</div>
+            <div className="text-xs text-slate-400">{candidates.length} CPF(s) localizado(s) • {extractText.split(/\r?\n/).filter(Boolean).length} linha(s)</div>
+          </div>
+          <Button type="button" size="sm" variant="outline" onClick={()=>setShowPastedData(true)}>ABRIR DADOS COLADOS</Button>
+        </div>}
         {checkReady&&cpfs.length>0&&cpfExtractMode==="cpf"&&<Textarea readOnly value={cpfs.join("\n")} className="font-mono min-h-28" aria-label="CPFs extraídos, um por linha"/>}
         {checkReady&&cpfs.length>0&&cpfExtractMode==="full"&&<div className="overflow-hidden rounded-xl border border-slate-700">
           <div className="flex items-center justify-between gap-2 bg-slate-800 px-3 py-2 text-xs">
