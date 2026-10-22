@@ -6,7 +6,7 @@ import path from "node:path";
 import { and, eq, lt } from "drizzle-orm";
 import { h2AdsWorkerBrowserCommands, h2AdsWorkerCommands } from "../drizzle/schema";
 import { getDb } from "./db";
-import { authenticateH2AdsWorker, claimH2AdsWorker, claimNextH2AdsWorkerCommand, completeH2AdsWorkerBrowserCommand, completeH2AdsWorkerPreparation, getH2AdsInstance, getH2AdsProxyCredential, recordH2AdsBrowserRuntimeState, recordH2AdsWorkerHeartbeat } from "./h2ads";
+import { authenticateH2AdsWorker, claimH2AdsWorker, claimNextH2AdsWorkerCommand, completeH2AdsWorkerBrowserCommand, completeH2AdsWorkerPreparation, getH2AdsInstance, getH2AdsPreparedObservedIp, getH2AdsProxyCredential, recordH2AdsBrowserRuntimeState, recordH2AdsWorkerHeartbeat } from "./h2ads";
 import { recordH2AdsRuntimeIp } from "./h2adsIpHistory";
 import { confirmH2AdsLocalRemoval, getNextH2AdsInstanceDeletion } from "./h2adsDeletionState";
 import { finalizeH2AdsInstancePermanentDeletion } from "./h2ads";
@@ -379,9 +379,13 @@ export function registerH2AdsWorkerRoute(app: Express): void {
       const proxy = decryptH2AdsProxy(encryptedPayload);
       const instance = await getH2AdsInstance(command.instanceId);
       const instanceName = workerString(instance?.name) ?? `Instância ${command.instanceId}`;
+      const preparedObservedIp = command.command === "launch_browser"
+        ? await getH2AdsPreparedObservedIp(command.instanceId, worker.id)
+        : null;
+      if (command.command === "launch_browser" && !preparedObservedIp) throw new Error("Rota precisa ser preparada novamente antes da abertura.");
       res.status(200).json({
         command: { id: command.id, instanceId: command.instanceId, command: command.command },
-        proxy: { ...proxy, instanceName },
+        proxy: { ...proxy, instanceName, preparedObservedIp },
         mobileRemoteEnabled: command.command === "launch_browser" && h2AdsMobileRemoteEnabled(),
       });
     } catch (_error) {
