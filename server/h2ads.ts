@@ -452,7 +452,7 @@ export async function getH2AdsPreparedObservedIp(instanceId: number, workerId: n
     eq(h2AdsInstanceBrowserRuns.workerId, workerId),
   )).limit(1);
   const run = rows[0];
-  return run?.state === "proxy_verified" && run.observedIp ? run.observedIp : null;
+  return (run?.state === "proxy_verified" || run?.state === "closed") && run.observedIp ? run.observedIp : null;
 }
 
 export async function requestH2AdsBrowserLaunch(instanceId: number): Promise<{ commandId: number; instanceId: number; workerId: number }> {
