@@ -442,6 +442,19 @@ async function getAssignedOnlineWorker(instanceId: number) {
   return { db, assignment, worker };
 }
 
+export async function getH2AdsPreparedObservedIp(instanceId: number, workerId: number): Promise<string | null> {
+  const db = await requireH2AdsDb();
+  const rows = await db.select({
+    state: h2AdsInstanceBrowserRuns.state,
+    observedIp: h2AdsInstanceBrowserRuns.observedIp,
+  }).from(h2AdsInstanceBrowserRuns).where(and(
+    eq(h2AdsInstanceBrowserRuns.instanceId, instanceId),
+    eq(h2AdsInstanceBrowserRuns.workerId, workerId),
+  )).limit(1);
+  const run = rows[0];
+  return run?.state === "proxy_verified" && run.observedIp ? run.observedIp : null;
+}
+
 export async function requestH2AdsBrowserLaunch(instanceId: number): Promise<{ commandId: number; instanceId: number; workerId: number }> {
   await assertH2AdsInstanceNotDeleting(instanceId);
   const { db, assignment, worker } = await getAssignedOnlineWorker(instanceId);
