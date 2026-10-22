@@ -32,6 +32,7 @@ const instanceName = String(proxy.instanceName || `Instancia ${instanceId}`).tri
 const instanceWindowTitle = `H2ADS | ${instanceName}`;
 const parsedRotationMinutes = Number(proxy.rotationMinutes);
 const rotationMinutes = Number.isInteger(parsedRotationMinutes) && parsedRotationMinutes >= 1 && parsedRotationMinutes <= 1_440 ? parsedRotationMinutes : null;
+const preparedObservedIp = typeof proxy.preparedObservedIp === "string" && proxy.preparedObservedIp.trim() ? proxy.preparedObservedIp.trim() : null;
 
 let frontRelay;
 let backendRelay;
@@ -550,6 +551,10 @@ async function run() {
     await frontRelay.listen();
     relayPort = frontRelay.port;
     const initial = await privacyGuardPreflight(executable);
+    if (preparedObservedIp && normalizeIp(initial.observedIp) !== normalizeIp(preparedObservedIp)) {
+      await suspendProxyTraffic("prepared_ip_mismatch");
+      throw new Error("prepared_ip_mismatch");
+    }
     initialObservedIp = initial.observedIp;
     lastReportedIp = initial.observedIp;
     // Auto-provision Store extensions only for the isolated Chrome for Testing binary.
