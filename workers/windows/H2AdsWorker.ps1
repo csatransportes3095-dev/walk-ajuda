@@ -429,16 +429,6 @@ function Restore-H2AdsProfileSnapshot([object]$Config, [int]$InstanceId) {
 function Invoke-BrowserSession([object]$Config, [object]$Payload) {
   $profileDirectory = Join-Path $ProfilesDirectory "instance-$($Payload.command.instanceId)"
   if (!(Test-Path (Join-Path $profileDirectory "h2ads-profile.json"))) { throw "Perfil local não preparado." }
-
-  # Remove stale session lock left by an already-finished runner before a new launch.
-  $runnerLockPath = Join-Path $profileDirectory "h2ads-session-runner.lock"
-  if (Test-Path $runnerLockPath) {
-    $stalePid = $null
-    try { $stalePid = [int]((Get-Content -Raw -Path $runnerLockPath | ConvertFrom-Json).pid) } catch { }
-    if (!$stalePid -or !(Get-Process -Id $stalePid -ErrorAction SilentlyContinue)) {
-      Remove-Item -Force $runnerLockPath -ErrorAction SilentlyContinue
-    }
-  }
   Ensure-DedicatedBrowser
   Ensure-H2AdsBrowserFirewall
   $env:H2ADS_PANEL_URL = $Config.panelUrl
