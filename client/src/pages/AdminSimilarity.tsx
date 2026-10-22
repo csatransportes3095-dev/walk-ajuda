@@ -279,29 +279,29 @@ function formatScore(score: number | null) {
   return score === null ? "—" : `${score.toFixed(1)}%`;
 }
 
-function shouldPulseSimilarity(score: number | null, reliability: number | null) {
-  return canHighlightH2Face(score, reliability);
+function shouldPulseSimilarity(score: number | null, reliability: number | null, minimumPercent = H2_FACE_MINIMUM_PERCENT) {
+  return canHighlightH2Face(score, reliability, minimumPercent);
 }
 
-function scoreLabel(score: number | null) {
+function scoreLabel(score: number | null, minimumPercent = H2_FACE_MINIMUM_PERCENT) {
   if (score === null) return "Sem leitura";
   if (score >= 92) return "Muito alta";
-  if (score >= H2_FACE_MINIMUM_PERCENT) return "Alta";
+  if (score >= minimumPercent) return "Alta";
   if (score >= 65) return "Moderada";
   if (score >= 45) return "Parcial";
   return "Baixa";
 }
 
-function verdictFor(result: ComparisonResult) {
+function verdictFor(result: ComparisonResult, minimumPercent = H2_FACE_MINIMUM_PERCENT) {
   if (result.similarity === null || !result.verdict) {
     return { label: "INCONCLUSIVO", detail: result.error || "Não houve leitura suficiente para comparar.", tone: "text-slate-300 border-white/10 bg-white/5" };
   }
 
   if (result.referenceEngine) {
-    if (shouldPulseSimilarity(result.similarity, result.reliability)) {
+    if (shouldPulseSimilarity(result.similarity, result.reliability, minimumPercent)) {
       return {
         label: "✓ SIMILARIDADE DESTACADA",
-        detail: "Resultado H2 Face a partir de 75%, com confiabilidade suficiente para destaque. O índice não garante identidade.",
+        detail: `Resultado H2 Face a partir de ${minimumPercent}%, com confiabilidade suficiente para destaque. O índice não garante identidade.`,
         tone: "text-emerald-100 border-emerald-300/40 bg-emerald-500/10",
       };
     }
@@ -358,9 +358,36 @@ export default function AdminSimilarity() {
   const [similarRuntime, setSimilarRuntime] = useState<SimilarFaceRuntime | null>(null);
   const [runtimeLoading, setRuntimeLoading] = useState(true);
   const [runtimeMessage, setRuntimeMessage] = useState("Verificando motor de referência...");
-  const h2bicoQuery = trpc.h2bico.availableForSimilarity.useQuery(undefined, { enabled: false });
+  const [h2bicoMode, setH2BicoMode] = useState<"all" | "name">("all");
+  const [h2bicoSearch, setH2BicoSearch] = useState("");
+  const [similarityMinPercent, setSimilarityMinPercent] = useState(H2_FACE_MINIMUM_PERCENT);
+  const settingsQuery = trpc.settings.getAll.useQuery();
+  const saveSettings = trpc.settings.update.useMutation();
+  const thresholdLoadedRef = useRef(false);
+  const h2bicoQuery = trpc.h2bico.availableForSimilarity.useQuery(
+    { search: h2bicoMode === "name" ? h2bicoSearch.trim() : "" },
+    { enabled: false }
+  );
   const [loadingH2Bico, setLoadingH2Bico] = useState(false);
   const autoAnalyzeH2BicoRef = useRef(false);
+
+  useEffect(() => {
+    if (thresholdLoadedRef.current || !settingsQuery.data) return;
+    const raw = Number(settingsQuery.data.h2_face_minimum_percent);
+    if (Number.isFinite(raw)) setSimilarityMinPercent(clamp(raw, 0, 100));
+    thresholdLoadedRef.current = true;
+  }, [settingsQuery.data]);
+
+  const persistSimilarityMinimum = async () => {
+    const normalized = Math.round(clamp(similarityMinPercent, 0, 100) * 10) / 10;
+    setSimilarityMinPercent(normalized);
+    try {
+      await saveSettings.mutateAsync({ settings: { h2_face_minimum_percent: String(normalized) } });
+      toast.success(`Percentual mínimo salvo em ${normalized}%.`);
+    } catch (error: any) {
+      toast.error(error?.message || "Não foi possível salvar o percentual.");
+    }
+  };
 
   useEffect(() => {
     let active = true;
@@ -442,13 +469,13 @@ export default function AdminSimilarity() {
   const rankedResults = useMemo(
     () =>
       results
-        .filter((result) => meetsH2FaceMinimum(result.similarity))
+        .filter((result) => meetsH2FaceMinimum(result.similarity, similarityMinPercent))
         .sort((a, b) => {
           const similarityDiff = (b.similarity ?? -1) - (a.similarity ?? -1);
           if (similarityDiff !== 0) return similarityDiff;
           return (b.criticalMean ?? -1) - (a.criticalMean ?? -1);
         }),
-    [results]
+    [results, similarityMinPercent]
   );
 
   useEffect(() => {
@@ -504,6 +531,10 @@ export default function AdminSimilarity() {
 
   const loadH2BicoCandidates = async () => {
     if (analyzing || loadingH2Bico) return;
+    if (h2bicoMode === "name" && !h2bicoSearch.trim()) {
+      toast.info("Digite um nome para buscar no H2BICO.");
+      return;
+    }
     setLoadingH2Bico(true);
     setProgress({ current: 0, total: 0, name: "Buscando banco H2BICO..." });
 
@@ -511,7 +542,7 @@ export default function AdminSimilarity() {
       const response = await h2bicoQuery.refetch();
       const records = response.data || [];
       if (!records.length) {
-        toast.info("Nenhuma foto DISPONÍVEL no H2BICO.");
+        toast.info(h2bicoMode === "name" ? `Nenhuma foto DISPONÍVEL encontrada para "${h2bicoSearch.trim()}".` : "Nenhuma foto DISPONÍVEL no H2BICO.");
         return;
       }
 
@@ -824,10 +855,10 @@ export default function AdminSimilarity() {
           if (isH2BicoBatch && candidate.h2bicoId && masterReferenceEmbedding && similarRuntime) {
             precomputedH2BicoEmbedding = await similarRuntime.embedFile(candidate.file);
             const fastScore = similarFaceScorePercent(cosineSimilarity512(masterReferenceEmbedding, precomputedH2BicoEmbedding));
-            if (!needsDetailedH2BicoAnalysis(fastScore)) {
+            if (!needsDetailedH2BicoAnalysis(fastScore, similarityMinPercent)) {
               nextResults.push({ id: candidate.id, name: candidate.file.name, preview: candidate.preview,
                 similarity: fastScore, reliability: null, referenceEngine: true,
-                warnings: ["Abaixo do limite de exibição (75%). Diagnóstico geométrico dispensado."],
+                warnings: [`Abaixo do limite de exibição (${similarityMinPercent}%). Diagnóstico geométrico dispensado.`],
               });
               if ((index + 1) % 10 === 0 || index === candidates.length - 1) setResults([...nextResults]);
               continue;
@@ -968,6 +999,7 @@ export default function AdminSimilarity() {
             structureScore: comparison.regions.structure,
             symmetryScore: comparison.regions.symmetry,
             reliability,
+            minimumSimilarityPercent: similarityMinPercent,
           });
 
           if (reliability < 40 && !referenceEngine) {
@@ -1084,6 +1116,7 @@ export default function AdminSimilarity() {
               structureScore: pairGeometry.regions.structure,
               symmetryScore: pairGeometry.regions.symmetry,
               reliability: pairReliability,
+              minimumSimilarityPercent: similarityMinPercent,
             });
 
             pairs.push({
@@ -1301,6 +1334,54 @@ export default function AdminSimilarity() {
                 </p>
               </div>
 
+              <div className="mt-4 grid gap-3 rounded-xl border border-amber-300/20 bg-amber-300/[0.04] p-3">
+                <div className="flex flex-wrap items-end gap-2">
+                  <div className="min-w-[180px] flex-1">
+                    <p className="mb-1 text-[10px] font-black uppercase tracking-[0.14em] text-amber-200">Banco H2BICO</p>
+                    <div className="flex gap-2">
+                      <button type="button" onClick={() => setH2BicoMode("all")} className={`rounded-lg border px-3 py-2 text-xs font-black ${h2bicoMode === "all" ? "border-amber-300 bg-amber-300/15 text-amber-100" : "border-white/10 text-slate-400"}`}>TODOS</button>
+                      <button type="button" onClick={() => setH2BicoMode("name")} className={`rounded-lg border px-3 py-2 text-xs font-black ${h2bicoMode === "name" ? "border-amber-300 bg-amber-300/15 text-amber-100" : "border-white/10 text-slate-400"}`}>NOME</button>
+                    </div>
+                  </div>
+                  {h2bicoMode === "name" && (
+                    <label className="min-w-[220px] flex-[2] text-xs font-bold text-slate-300">
+                      Buscar nome
+                      <input
+                        value={h2bicoSearch}
+                        onChange={(event) => setH2BicoSearch(event.target.value)}
+                        onKeyDown={(event) => { if (event.key === "Enter") void loadH2BicoCandidates(); }}
+                        placeholder="Ex.: RODRIGO"
+                        className="mt-1 w-full rounded-lg border border-white/15 bg-black/30 px-3 py-2 text-sm text-white outline-none focus:border-amber-300"
+                      />
+                    </label>
+                  )}
+                </div>
+
+                <div className="flex flex-wrap items-end gap-2">
+                  <label className="w-40 text-xs font-bold text-slate-300">
+                    Percentual mínimo
+                    <input
+                      type="number"
+                      min="0"
+                      max="100"
+                      step="0.1"
+                      value={similarityMinPercent}
+                      onChange={(event) => setSimilarityMinPercent(clamp(Number(event.target.value), 0, 100))}
+                      className="mt-1 w-full rounded-lg border border-cyan-400/25 bg-black/30 px-3 py-2 text-sm font-black text-cyan-100 outline-none focus:border-cyan-300"
+                    />
+                  </label>
+                  <button
+                    type="button"
+                    onClick={() => void persistSimilarityMinimum()}
+                    disabled={saveSettings.isPending}
+                    className="rounded-lg border border-cyan-400/30 bg-cyan-400/10 px-3 py-2 text-xs font-black text-cyan-100 hover:bg-cyan-400/15 disabled:opacity-40"
+                  >
+                    {saveSettings.isPending ? "Salvando..." : "Salvar %"}
+                  </button>
+                  <p className="pb-2 text-[10px] text-slate-500">Livre de 0% a 100%. Aplica ranking, destaque e análise H2 Face.</p>
+                </div>
+              </div>
+
               <div className="mt-4 grid grid-cols-2 gap-2 sm:grid-cols-4">
                 <button
                   type="button"
@@ -1330,9 +1411,9 @@ export default function AdminSimilarity() {
                   onClick={() => void loadH2BicoCandidates()}
                   disabled={analyzing || loadingH2Bico}
                   className="flex items-center justify-center gap-2 rounded-xl border border-amber-300/40 bg-amber-300/10 px-3 py-3 text-sm font-black text-amber-100 transition hover:bg-amber-300/15 disabled:cursor-not-allowed disabled:opacity-40"
-                  title="Carregar todas as fotos disponíveis armazenadas no H2BICO"
+                  title={h2bicoMode === "name" ? "Carregar somente nomes encontrados no H2BICO" : "Carregar todas as fotos disponíveis armazenadas no H2BICO"}
                 >
-                  <FolderOpen className="h-4 w-4" /> {loadingH2Bico ? (progress.total ? `${progress.current}/${progress.total}` : "Buscando...") : "Banco H2BICO"}
+                  <FolderOpen className="h-4 w-4" /> {loadingH2Bico ? (progress.total ? `${progress.current}/${progress.total}` : "Buscando...") : h2bicoMode === "name" ? `Buscar ${h2bicoSearch.trim() || "nome"}` : "Banco H2BICO"}
                 </button>
               </div>
 
@@ -1384,7 +1465,7 @@ export default function AdminSimilarity() {
               <div className="mt-4 rounded-xl border border-white/10 bg-black/20 p-3">
                 <div className="flex items-center justify-between gap-3 text-sm">
                   <span className="text-slate-400">{candidates.length} imagem(ns) pronta(s) para comparar</span>
-                  {results.length > 0 && <span className="text-[11px] font-bold text-cyan-300">{rankedResults.length} resultado(s) a partir de 75%</span>}
+                  {results.length > 0 && <span className="text-[11px] font-bold text-cyan-300">{rankedResults.length} resultado(s) a partir de {similarityMinPercent}%</span>}
                 </div>
 
                 <div className="mt-3 grid gap-2 sm:grid-cols-3 lg:grid-cols-1 2xl:grid-cols-3">
@@ -1475,7 +1556,7 @@ export default function AdminSimilarity() {
             {results.length > 0 && rankedResults.length === 0 && !analyzing && (
               <div className="rounded-2xl border border-white/10 bg-white/[0.03] px-6 py-10 text-center">
                 <p className="text-xs font-bold uppercase tracking-[0.16em] text-cyan-300">Resultado final</p>
-                <h2 className="mt-2 text-2xl font-black text-white">Nenhum resultado a partir de 75%</h2>
+                <h2 className="mt-2 text-2xl font-black text-white">Nenhum resultado a partir de {similarityMinPercent}%</h2>
                 <p className="mt-2 text-sm text-slate-400">A análise foi concluída, mas nenhum registro atingiu o limite mínimo de exibição.</p>
               </div>
             )}
@@ -1485,9 +1566,9 @@ export default function AdminSimilarity() {
                 <div className="flex flex-col gap-1 sm:flex-row sm:items-end sm:justify-between">
                   <div>
                     <p className="text-xs font-bold uppercase tracking-[0.16em] text-cyan-300">Ranking</p>
-                    <h2 className="text-xl font-black">Resultados a partir de 75%</h2>
+                    <h2 className="text-xl font-black">Resultados a partir de {similarityMinPercent}%</h2>
                   </div>
-                  <span className="rounded-full border border-cyan-400/20 bg-cyan-400/5 px-3 py-1 text-xs font-bold text-cyan-200">Exibindo somente 75% ou mais</span>
+                  <span className="rounded-full border border-cyan-400/20 bg-cyan-400/5 px-3 py-1 text-xs font-bold text-cyan-200">Exibindo somente {similarityMinPercent}% ou mais</span>
                 </div>
 
                 {/* Cards compactos: a largura disponível determina a quantidade por linha. */}
@@ -1497,7 +1578,7 @@ export default function AdminSimilarity() {
                   aria-label="Resultados de similaridade em cards compactos"
                 >
                   {rankedResults.map((result, index) => {
-                    const highlighted = shouldPulseSimilarity(result.similarity, result.reliability);
+                    const highlighted = shouldPulseSimilarity(result.similarity, result.reliability, similarityMinPercent);
                     return (
                       <article
                         key={result.id}
@@ -1601,7 +1682,7 @@ export default function AdminSimilarity() {
                         .map((result) => (
                   <article
                     key={result.id}
-                    className={`overflow-hidden rounded-2xl border ${shouldPulseSimilarity(result.similarity, result.reliability) ? "border-emerald-300/60 bg-emerald-500/[0.07]" : "border-white/10 bg-white/[0.035]"}`}
+                    className={`overflow-hidden rounded-2xl border ${shouldPulseSimilarity(result.similarity, result.reliability, similarityMinPercent) ? "border-emerald-300/60 bg-emerald-500/[0.07]" : "border-white/10 bg-white/[0.035]"}`}
                   >
                     <div className="flex flex-col gap-4 p-4 sm:flex-row">
                       <div className="relative h-32 w-full shrink-0 overflow-hidden rounded-xl bg-black/40 sm:h-28 sm:w-28">
@@ -1616,8 +1697,8 @@ export default function AdminSimilarity() {
                             <p className="text-4xl font-black tracking-tight text-cyan-300">
                               {formatScore(result.similarity)}
                             </p>
-                            <p className="text-xs font-bold uppercase tracking-wide text-slate-500">{result.referenceEngine ? "H2 Face • motor principal" : result.faceXGlobalScore !== undefined ? "Índice H2 • escala própria" : `${scoreLabel(result.similarity)} semelhança facial`}</p>
-                            {shouldPulseSimilarity(result.similarity, result.reliability) && (
+                            <p className="text-xs font-bold uppercase tracking-wide text-slate-500">{result.referenceEngine ? "H2 Face • motor principal" : result.faceXGlobalScore !== undefined ? "Índice H2 • escala própria" : `${scoreLabel(result.similarity, similarityMinPercent)} semelhança facial`}</p>
+                            {shouldPulseSimilarity(result.similarity, result.reliability, similarityMinPercent) && (
                               <div className="mt-2 inline-flex items-center gap-1.5 rounded-full border border-emerald-300/40 bg-emerald-400/10 px-3 py-1 text-[11px] font-black uppercase tracking-wide text-emerald-200">
                                 <ShieldCheck className="h-3.5 w-3.5" />
                                 SIMILARIDADE DESTACADA
@@ -1699,7 +1780,7 @@ export default function AdminSimilarity() {
                         )}
 
                         {!result.error && result.similarity !== null && (() => {
-                          const verdict = verdictFor(result);
+                          const verdict = verdictFor(result, similarityMinPercent);
                           return (
                             <div className={`mt-3 rounded-xl border px-3 py-2 ${verdict.tone}`}>
                               <p className="text-xs font-black tracking-wide">{verdict.label}</p>
