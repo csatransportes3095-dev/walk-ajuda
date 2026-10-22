@@ -220,15 +220,35 @@ function writeSession(extra = {}) {
   }), { encoding: "utf8", mode: 0o600 });
 }
 
-async function privacyGuardPreflight(executable) {
+async function privacyGuardPreflight() {
   const observedIp = await checkIp();
   if (!observedIp) throw new Error("privacy_guard_proxy_unavailable");
-  const browserObservedIp = await verifyChromeProxyPath(executable, relayPort, observedIp);
   writeSession({
-    privacyGuard: "protected", privacyGuardCheckedAt: new Date().toISOString(), observedIp, browserObservedIp, browserProxyVerified: true,
-    quicDisabled: true, dnsPrefetchDisabled: true, webrtcNonProxiedUdpDisabled: true, killSwitch: "armed", directBrowserEgress: "blocked_by_windows_firewall",
+    privacyGuard: "protected", privacyGuardCheckedAt: new Date().toISOString(), observedIp, browserProxyVerified: false,
+    browserProxyVerification: "pending", quicDisabled: true, dnsPrefetchDisabled: true,
+    webrtcNonProxiedUdpDisabled: true, killSwitch: "armed", directBrowserEgress: "blocked_by_windows_firewall",
   });
-  return { observedIp, browserObservedIp };
+  return { observedIp };
+}
+
+async function verifyChromeProxyAfterLaunch(executable, expectedIp) {
+  try {
+    const browserObservedIp = await verifyChromeProxyPath(executable, relayPort, expectedIp);
+    if (browserExitHandled || !browser || browser.exitCode !== null) return;
+    writeSession({
+      browserObservedIp, browserProxyVerified: true, browserProxyVerification: "verified",
+      browserProxyVerifiedAt: new Date().toISOString(), privacyGuard: "protected", killSwitch: "armed",
+    });
+  } catch (error) {
+    if (browserExitHandled || !browser || browser.exitCode !== null) return;
+    try {
+      writeSession({
+        browserProxyVerified: false, browserProxyVerification: "failed",
+        browserProxyFailureAt: new Date().toISOString(),
+      });
+    } catch { }
+    await suspendProxyTraffic(error instanceof Error ? error.message : "browser_proxy_unverified");
+  }
 }
 
 function stopSessionTimers() {
@@ -598,7 +618,7 @@ async function run() {
     frontRelay = createFrontRelay();
     await frontRelay.listen();
     relayPort = frontRelay.port;
-    const initial = await privacyGuardPreflight(executable);
+    const initial = await privacyGuardPreflight();
     initialObservedIp = initial.observedIp;
     sessionLockedIp = initial.observedIp;
     lastReportedIp = initial.observedIp;
@@ -623,7 +643,7 @@ async function run() {
     writeSession({ extensionSyncStatus, extensionPreparedCount: globalExtensionPaths.length, extensionSyncAt: new Date().toISOString() });
     let startupSites = [];
     try {
-      const response = await fetch(panelUrl.replace(/\/$/, "") + "/api/h2ads/worker/startup-sites", { headers: headers(), signal: AbortSignal.timeout(10000) });
+      const response = await fetch(panelUrl.replace(/\/$/, "") + "/api/h2ads/worker/startup-sites", { headers: headers(), signal: AbortSignal.timeout(2500) });
       if (response.ok) {
         const urls = await response.json();
         if (Array.isArray(urls)) startupSites = urls.filter(url => typeof url === "string" && url.startsWith("https://") && url.length <= 500).slice(0, 20);
@@ -645,6 +665,9 @@ async function run() {
     // Register before any network request to the panel: early exit is never lost.
     browser.once("error", (error) => { void finalizeBrowserExit("spawn_error", null, error?.code || null); });
     browser.once("exit", (code, signal) => { void finalizeBrowserExit("browser_exit", code, signal); });
+    // Do not make the user wait for a second headless Chrome before seeing the real window.
+    // Direct egress remains blocked by Windows Firewall; verification runs asynchronously.
+    void verifyChromeProxyAfterLaunch(executable, initial.observedIp);
     ipTimer = setInterval(() => { void reportObservedIp(); }, IP_CHECK_INTERVAL_MS);
     ipTimer.unref?.();
     killSwitchTimer = setInterval(() => { void enforceKillSwitch(); }, KILL_SWITCH_CHECK_INTERVAL_MS);
@@ -667,8 +690,9 @@ async function run() {
     try {
       writeSession({
         startedAt: new Date().toISOString(), lastClosedAt: null, browserExitReason: null,
-        instanceLabelState: "static_tab", observedIp: initial.observedIp, browserObservedIp: initial.browserObservedIp,
-        browserProxyVerified: true, privacyGuard: "protected", googleSorryPrivacyGuard: "enabled_v3",
+        instanceLabelState: "static_tab", observedIp: initial.observedIp,
+        browserProxyVerified: false, browserProxyVerification: "pending",
+        privacyGuard: "protected", googleSorryPrivacyGuard: "enabled_v3",
         killSwitch: "armed", networkState: "online", panelConnection: "pending",
         directBrowserEgress: "blocked_by_windows_firewall",
         proxyRotationPolicy: "provider_managed_between_sessions",
