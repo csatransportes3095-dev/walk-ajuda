@@ -712,7 +712,9 @@ function Invoke-PendingBrowserCommand([object]$Config) {
           leakProtection = $leakProtection
         } | ConvertTo-Json -Depth 4 -Compress
       } else {
-        $resultBody = @{ command = "prepare_browser"; state = "blocked"; errorCategory = "proxy_unavailable" } | ConvertTo-Json -Compress
+        $runnerError = [string]$result.errorCategory
+        if ([string]::IsNullOrWhiteSpace($runnerError)) { $runnerError = "proxy_unavailable" }
+        $resultBody = @{ command = "prepare_browser"; state = "blocked"; errorCategory = $runnerError } | ConvertTo-Json -Compress
       }
       Invoke-WebRequest -UseBasicParsing -Method Post -Uri "$($Config.panelUrl)/api/h2ads/worker/commands/$($payload.command.id)/result" -Headers $headers -ContentType "application/json" -Body $resultBody | Out-Null
       return
