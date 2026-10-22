@@ -58,8 +58,6 @@ let runnerLockOwned = false;
 let browserProbeInProgress = false;
 let stopMobileRemote = null;
 const mobileRemoteRequested = process.env.H2ADS_REMOTE_DEBUG === "1";
-const runtimeLocale = Intl.DateTimeFormat().resolvedOptions().locale || null;
-const runtimeTimeZone = Intl.DateTimeFormat().resolvedOptions().timeZone || null;
 
 function upstreamUrl() {
   const protocol = proxy.protocol === "socks5" ? "socks5" : proxy.protocol === "https" ? "https" : "http";
@@ -183,7 +181,7 @@ async function verifyChromeProxyPath(executable, localPort, expectedIp) {
     const { stdout } = await execFileAsync(executable, [
       "--headless=new", "--disable-gpu", "--disable-background-networking", "--disable-component-update", "--disable-sync", "--metrics-recording-only",
       `--user-data-dir=${probeProfile}`, `--proxy-server=http://127.0.0.1:${localPort}`, "--proxy-bypass-list=<-loopback>",
-      "--disable-quic", "--dns-prefetch-disable", "--host-resolver-rules=MAP * ~NOTFOUND, EXCLUDE localhost", "--force-webrtc-ip-handling-policy=disable_non_proxied_udp", "--no-first-run", "--no-default-browser-check",
+      "--disable-quic", "--dns-prefetch-disable", "--force-webrtc-ip-handling-policy=disable_non_proxied_udp", "--no-first-run", "--no-default-browser-check",
       "--dump-dom", "https://api.ipify.org?format=json",
     ], { windowsHide: true, timeout: CHROME_PROBE_TIMEOUT_MS, maxBuffer: 128_000 });
     const match = stdout.match(/"ip"\s*:\s*"([^"<>]+)"/i);
@@ -228,8 +226,7 @@ async function privacyGuardPreflight(executable) {
   const browserObservedIp = await verifyChromeProxyPath(executable, relayPort, observedIp);
   writeSession({
     privacyGuard: "protected", privacyGuardCheckedAt: new Date().toISOString(), observedIp, browserObservedIp, browserProxyVerified: true,
-    quicDisabled: true, dnsPrefetchDisabled: true, chromeDirectDnsBlocked: true, webrtcNonProxiedUdpDisabled: true,
-    killSwitch: "armed", directBrowserEgress: "blocked_by_windows_firewall", runtimeLocale, runtimeTimeZone,
+    quicDisabled: true, dnsPrefetchDisabled: true, webrtcNonProxiedUdpDisabled: true, killSwitch: "armed", directBrowserEgress: "blocked_by_windows_firewall",
   });
   return { observedIp, browserObservedIp };
 }
@@ -630,7 +627,7 @@ async function run() {
       // Um pipe local entre Node e Chrome: nenhuma porta TCP de depuracao e aberta.
       ...(mobileRemoteRequested ? ["--remote-debugging-pipe"] : []),
       "--user-data-dir=" + profileDirectory, "--proxy-server=http://127.0.0.1:" + relayPort, "--proxy-bypass-list=<-loopback>",
-      "--disable-quic", "--dns-prefetch-disable", "--host-resolver-rules=MAP * ~NOTFOUND, EXCLUDE localhost", "--force-webrtc-ip-handling-policy=disable_non_proxied_udp",
+      "--disable-quic", "--dns-prefetch-disable", "--force-webrtc-ip-handling-policy=disable_non_proxied_udp",
       "--load-extension=" + [privacyGuardExtension, ...globalExtensionPaths].join(","), "--no-first-run", "--no-default-browser-check", (startupSites[0] || labelPageUrl),
     ], { detached: false, stdio: mobileRemoteRequested ? ["ignore", "ignore", "ignore", "pipe", "pipe"] : "ignore", windowsHide: false });
 
