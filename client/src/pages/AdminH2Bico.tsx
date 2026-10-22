@@ -123,6 +123,7 @@ export default function AdminH2Bico(){
   const [summary,setSummary]=useState<{imported:number;repaired:number;duplicates:number;errors:number}|null>(null);
   const [extractText,setExtractText]=useState("");
   const [cpfExtractMode,setCpfExtractMode]=useState<"cpf"|"full">("cpf");
+  const [professionFilter,setProfessionFilter]=useState("");
   const [cpfCheck,setCpfCheck]=useState<{key:string;existing:string[];error?:string}|null>(null);
   const [brokenPhotos,setBrokenPhotos]=useState<Set<number>>(new Set());
   const utils=trpc.useUtils();
@@ -226,11 +227,27 @@ export default function AdminH2Bico(){
       };
     }).filter(row=>allowed.has(row.cpf));
   },[cpfs,extractedPeople]);
+  const normalizedProfessionFilter=useMemo(()=>professionFilter.normalize("NFD").replace(/[\u0300-\u036f]/g,"").trim().toUpperCase(),[professionFilter]);
+  const filteredFullRows=useMemo(()=>{
+    if(!normalizedProfessionFilter) return fullRows;
+    return fullRows.filter(row=>
+      row.profession.normalize("NFD").replace(/[\u0300-\u036f]/g,"").toUpperCase().includes(normalizedProfessionFilter)
+    );
+  },[fullRows,normalizedProfessionFilter]);
   const copyAllFull=async()=>{
-    if(!checkReady || !fullRows.length) return;
+    if(!checkReady || !filteredFullRows.length) return;
     try{
-      await navigator.clipboard.writeText(fullRows.map(row=>`${row.cpf} | ${row.name} | ${row.profession}`).join("\n"));
-      toast.success(`${fullRows.length} registro(s) copiado(s) com CPF, nome e profissão.`);
+      await navigator.clipboard.writeText(filteredFullRows.map(row=>`${row.cpf} | ${row.name} | ${row.profession}`).join("\n"));
+      toast.success(`${filteredFullRows.length} registro(s) copiado(s) com CPF, nome e profissão.`);
+    }catch{
+      toast.error("Não foi possível copiar. Verifique a permissão do navegador.");
+    }
+  };
+  const copyFilteredCpfs=async()=>{
+    if(!checkReady || !filteredFullRows.length) return;
+    try{
+      await navigator.clipboard.writeText(filteredFullRows.map(row=>row.cpf).join("\n"));
+      toast.success(`${filteredFullRows.length} CPF(s) copiado(s) do filtro de profissão.`);
     }catch{
       toast.error("Não foi possível copiar. Verifique a permissão do navegador.");
     }
@@ -457,14 +474,19 @@ export default function AdminH2Bico(){
           <div className="font-semibold flex items-center gap-2"><FileText className="w-4 h-4"/>Extrator de CPF <span className="rounded-md bg-emerald-500/15 px-2 py-1 text-xs font-bold text-emerald-300">{cpfs.length} CPF(s)</span></div>
           <div className="flex flex-wrap gap-2">
             <Button type="button" onClick={()=>void (cpfExtractMode==="full"?copyAllFull():copyAllCpfs())} disabled={!checkReady||!cpfs.length}><Copy className="w-4 h-4 mr-2"/>{cpfExtractMode==="full"?"COPIAR TUDO":"COPIAR TODOS"}</Button>
-            {cpfExtractMode==="full"&&<Button type="button" variant="outline" onClick={()=>void copyAllCpfs()} disabled={!checkReady||!cpfs.length}><Copy className="w-4 h-4 mr-2"/>COPIAR CPFs</Button>}
-            <Button type="button" variant="outline" disabled={!extractText&& !cpfFileReport} onClick={()=>{setExtractText("");setCpfFileReport("");}}><XCircle className="w-4 h-4 mr-2"/>LIMPAR</Button>
+            {cpfExtractMode==="full"&&<Button type="button" variant="outline" onClick={()=>void copyFilteredCpfs()} disabled={!checkReady||!filteredFullRows.length}><Copy className="w-4 h-4 mr-2"/>COPIAR CPFs</Button>}
+            <Button type="button" variant="outline" disabled={!extractText&& !cpfFileReport} onClick={()=>{setExtractText("");setCpfFileReport("");setProfessionFilter("");}}><XCircle className="w-4 h-4 mr-2"/>LIMPAR</Button>
           </div>
         </div>
         <div className="flex flex-wrap items-center gap-2 rounded-xl border border-cyan-400/20 bg-cyan-500/5 p-3">
           <span className="text-xs font-black text-cyan-200">EXTRAIR:</span>
           <button type="button" onClick={()=>setCpfExtractMode("cpf")} className={`rounded-lg border px-3 py-2 text-xs font-black transition ${cpfExtractMode==="cpf"?"border-cyan-400 bg-cyan-500/20 text-cyan-100":"border-slate-700 bg-slate-950/40 text-slate-400"}`}>SOMENTE CPF</button>
           <button type="button" onClick={()=>setCpfExtractMode("full")} className={`rounded-lg border px-3 py-2 text-xs font-black transition ${cpfExtractMode==="full"?"border-cyan-400 bg-cyan-500/20 text-cyan-100":"border-slate-700 bg-slate-950/40 text-slate-400"}`}>CPF + NOME + PROFISSÃO</button>
+          {cpfExtractMode==="full"&&<div className="relative min-w-[220px] flex-1 sm:max-w-sm">
+            <Search className="absolute left-3 top-2.5 h-4 w-4 text-slate-500"/>
+            <Input className="pl-9" placeholder="Filtrar profissão. Ex.: MOTORISTA" value={professionFilter} onChange={e=>setProfessionFilter(e.target.value)}/>
+          </div>}
+          {cpfExtractMode==="full"&&professionFilter&&<Button type="button" size="sm" variant="outline" onClick={()=>setProfessionFilter("")}>LIMPAR FILTRO</Button>}
         </div>
         <div className="grid grid-cols-2 sm:grid-cols-4 gap-2 text-center text-xs">
           <div className="rounded-lg bg-slate-800 p-2">Encontrados<br/><strong className="text-lg">{candidates.length}</strong></div>
@@ -489,11 +511,14 @@ export default function AdminH2Bico(){
         <Textarea placeholder="Ou cole aqui o texto com vários CPFs..." value={extractText} onChange={e=>setExtractText(e.target.value)}/>
         {checkReady&&cpfs.length>0&&cpfExtractMode==="cpf"&&<Textarea readOnly value={cpfs.join("\n")} className="font-mono min-h-28" aria-label="CPFs extraídos, um por linha"/>}
         {checkReady&&cpfs.length>0&&cpfExtractMode==="full"&&<div className="overflow-hidden rounded-xl border border-slate-700">
-          <div className="grid grid-cols-[150px_1fr_1fr] gap-0 bg-slate-800 px-3 py-2 text-xs font-black text-slate-200">
-            <span>CPF</span><span>NOME</span><span>PROFISSÃO</span>
+          <div className="flex items-center justify-between gap-2 bg-slate-800 px-3 py-2 text-xs">
+            <div className="grid flex-1 grid-cols-[150px_1fr_1fr] gap-0 font-black text-slate-200">
+              <span>CPF</span><span>NOME</span><span>PROFISSÃO</span>
+            </div>
+            <span className="shrink-0 font-bold text-cyan-300">{filteredFullRows.length}{professionFilter?` de ${fullRows.length}`:""} resultado(s)</span>
           </div>
           <div className="max-h-72 overflow-auto">
-            {fullRows.map(row=><div key={row.cpf} className="grid grid-cols-[150px_1fr_1fr] gap-0 border-t border-slate-800 px-3 py-2 text-xs">
+            {filteredFullRows.map(row=><div key={row.cpf} className="grid grid-cols-[150px_1fr_1fr] gap-0 border-t border-slate-800 px-3 py-2 text-xs">
               <span className="font-mono text-cyan-200">{row.cpf}</span>
               <span className="pr-3">{row.name||"—"}</span>
               <span>{row.profession||"—"}</span>
