@@ -609,7 +609,7 @@ async function run() {
       ...(mobileRemoteRequested ? ["--remote-debugging-pipe"] : []),
       "--user-data-dir=" + profileDirectory, "--proxy-server=http://127.0.0.1:" + relayPort, "--proxy-bypass-list=<-loopback>",
       "--disable-quic", "--dns-prefetch-disable", "--force-webrtc-ip-handling-policy=disable_non_proxied_udp",
-      "--load-extension=" + [privacyGuardExtension, ...globalExtensionPaths].join(","), "--no-first-run", "--no-default-browser-check", labelPageUrl, ...startupSites,
+      "--load-extension=" + [privacyGuardExtension, ...globalExtensionPaths].join(","), "--no-first-run", "--no-default-browser-check", (startupSites[0] || labelPageUrl),
     ], { detached: false, stdio: mobileRemoteRequested ? ["ignore", "ignore", "ignore", "pipe", "pipe"] : "ignore", windowsHide: false });
 
     // Register before any network request to the panel: early exit is never lost.
