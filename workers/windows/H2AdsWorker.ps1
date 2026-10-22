@@ -439,11 +439,8 @@ function Invoke-BrowserSession([object]$Config, [object]$Payload) {
   $env:H2ADS_PROXY_JSON = ($Payload.proxy | ConvertTo-Json -Compress)
   $env:H2ADS_PROFILE_DIRECTORY = $profileDirectory
   $extensionExecutable = $DedicatedChromePath
-  if (Test-Path $TestingChromePath) {
-    Assert-H2AdsTestingExecutable | Out-Null
-    if (!(Test-H2AdsTestingFirewall)) { throw "Chrome for Testing sem kill switch verificado. Nao abrir instancia." }
-    $extensionExecutable = $TestingChromePath
-  }
+  Assert-GoogleChromeSignature $extensionExecutable
+  if (!(Test-H2AdsBrowserFirewall)) { throw "Chrome dedicado sem kill switch verificado. Nao abrir instancia." }
   $env:H2ADS_BROWSER_EXECUTABLE = $extensionExecutable
   $env:H2ADS_REMOTE_DEBUG = $(if ($Payload.mobileRemoteEnabled -eq $true) { "1" } else { "0" })
   try {
