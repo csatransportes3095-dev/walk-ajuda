@@ -564,28 +564,26 @@ async function finalizeBrowserExit(reason, code = null, signal = null) {
     const manifest = existsSync(manifestPath) ? JSON.parse(readFileSync(manifestPath, "utf8")) : { instanceId, profileVersion: 1 };
     writeFileSync(manifestPath, JSON.stringify({ ...manifest, lastClosedAt: closedAt }), "utf8");
   } catch { }
-  // The durable local queue must exist BEFORE any remote call. If the panel
-  // or snapshot upload fails, the Worker can retry without touching the profile.
+  // Queue the profile backup locally, but never keep the session lock while
+  // compressing/uploading it. The independent Worker snapshot queue handles it.
   let pendingPath = null;
   try { pendingPath = queueProfileSnapshot(); } catch { }
+  try {
+    await closeRelay(frontRelay);
+    await closeRelay(backendRelay);
+    activeBackendPort = undefined;
+  } finally {
+    releaseRunnerLock();
+  }
+  try {
+    if (pendingPath) {
+      writeSession({ profileSnapshotPending: true, profileSnapshotQueuedAt: closedAt });
+    }
+  } catch { }
   try {
     await post("/api/h2ads/worker/runs/" + instanceId + "/state", { state: "closed" });
   } catch (error) {
     panelFailure(error);
-  }
-  try {
-    if (pendingPath) {
-      await uploadProfileSnapshot();
-      // Deletion is safe only after the server acknowledges the upload.
-      try { unlinkSync(pendingPath); } catch { }
-    }
-  } catch {
-    try { writeSession({ profileSnapshotPending: true, profileSnapshotQueuedAt: closedAt }); } catch { }
-  } finally {
-    await closeRelay(frontRelay);
-    await closeRelay(backendRelay);
-    activeBackendPort = undefined;
-    releaseRunnerLock();
   }
 }
 
