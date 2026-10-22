@@ -26,13 +26,16 @@ describe("melhorias operacionais H2 Ads", () => {
     }
   });
 
-  it("reduz a espera do comando local e mantém rotação por reconexão do relay", () => {
+  it("mantém o mesmo IP durante a sessão aberta e preserva o kill switch", () => {
     const worker = read("workers/windows/H2AdsWorker.ps1");
     const session = read("workers/windows/browser-session.mjs");
     expect(worker).toContain("Start-Sleep -Seconds 2");
-    expect(worker).toContain('$AgentVersion = "1.3.3"');
-    expect(session).toContain("setInterval");
-    expect(session).toContain("rotationMinutes * 60_000");
-    expect(session).toContain("relay.close(true)");
+    expect(worker).toContain('$AgentVersion = "1.4.1"');
+    expect(worker).toContain("H2ADS Dedicated Chrome - Block Direct IPv4");
+    expect(worker).toContain("H2ADS Dedicated Chrome - Block Direct IPv6");
+    expect(session).toContain('proxyRotationPolicy: "between_sessions_only"');
+    expect(session).not.toContain("rotationMinutes * 60_000");
+    expect(session).toContain('directBrowserEgress: "blocked_by_windows_firewall"');
+    expect(session).toContain("await suspendProxyTraffic");
   });
 });
