@@ -393,6 +393,24 @@ function escapeHtml(value) {
   return String(value).replaceAll("&", "&amp;").replaceAll("<", "&lt;").replaceAll(">", "&gt;").replaceAll('"', "&quot;").replaceAll("'", "&#39;");
 }
 
+function clearPreviousBrowserTabs() {
+  const targets = [
+    join(profileDirectory, "Default", "Sessions"),
+    join(profileDirectory, "Default", "Current Session"),
+    join(profileDirectory, "Default", "Current Tabs"),
+    join(profileDirectory, "Default", "Last Session"),
+    join(profileDirectory, "Default", "Last Tabs"),
+  ];
+  for (const target of targets) {
+    try {
+      if (!existsSync(target)) continue;
+      const stat = statSync(target);
+      if (stat.isDirectory()) rmSync(target, { recursive: true, force: true });
+      else unlinkSync(target);
+    } catch { }
+  }
+}
+
 function createInstanceLabelPage() {
   const safeTitle = escapeHtml(instanceWindowTitle);
   const safeName = escapeHtml(instanceName);
@@ -602,6 +620,7 @@ async function run() {
     } catch (error) {
       console.error("[H2ADS] sites iniciais indisponiveis:", String(error?.message || error));
     }
+    clearPreviousBrowserTabs();
     const labelPageUrl = createInstanceLabelPage();
     const privacyGuardExtension = createGoogleSorryPrivacyGuard();
     browser = spawn(executable, [
