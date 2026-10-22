@@ -307,6 +307,18 @@ async function resumeProxyTraffic() {
     // Prove the upstream route with the FRONT STILL BLOCKED. No traffic from
     // Chrome is released until a Chrome probe also confirms the expected IP.
     const observedIp = await checkIpThroughPort(backendRelay.port);
+    // Recovery must preserve the original session IP before any Chrome traffic is released.
+    if (sessionLockedIp && normalizeIp(observedIp) !== normalizeIp(sessionLockedIp)) {
+      sessionIpChanged = true;
+      writeSession({
+        sessionLockedIp, observedIp,
+        sessionIpChangedAt: new Date().toISOString(),
+        networkState: "blocked", killSwitch: "triggered",
+        killSwitchReason: "session_ip_changed",
+      });
+      await suspendProxyTraffic("session_ip_changed");
+      return;
+    }
     const executable = chromeExecutable();
     if (!executable) throw new Error("browser_not_found");
     const browserObservedIp = await verifyChromeProxyPath(executable, backendRelay.port, observedIp);
