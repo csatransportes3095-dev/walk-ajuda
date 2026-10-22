@@ -402,6 +402,9 @@ function createGoogleSorryPrivacyGuard() {
 }
 
 async function rotateRelay() {
+  // Never change the upstream route while Chrome is open. The session keeps the same
+  // verified exit path until the browser closes; any proxy failure suspends traffic.
+  if (browser && browser.exitCode === null) return;
   if (!frontRelay || !backendRelay || !relayPort || !activeBackendPort || rotationInProgress || networkSuspended || browserExitHandled) return;
   rotationInProgress = true;
   const previousBackend = backendRelay;
@@ -607,10 +610,9 @@ async function run() {
     }
     panelSyncTimer = setInterval(() => { void syncPanelOpening(); }, 12_000);
     panelSyncTimer.unref?.();
-    if (rotationMinutes) {
-      rotationTimer = setInterval(() => { void rotateRelay(); }, rotationMinutes * 60_000);
-      rotationTimer.unref?.();
-    }
+    // Security rule: never rotate/reconnect the upstream route while the browser session is open.
+    // A new relay is created only on the next browser session. This prevents IP changes during
+    // login/authentication while the Windows firewall continues blocking any direct browser egress.
     try {
       writeSession({
         startedAt: new Date().toISOString(), lastClosedAt: null, browserExitReason: null,
@@ -618,6 +620,8 @@ async function run() {
         browserProxyVerified: true, privacyGuard: "protected", googleSorryPrivacyGuard: "enabled_v3",
         killSwitch: "armed", networkState: "online", panelConnection: "pending",
         directBrowserEgress: "blocked_by_windows_firewall",
+        proxyRotationPolicy: "between_sessions_only",
+        configuredRotationMinutes: rotationMinutes,
       });
     } catch { }
     // Communication failure never reaches the launch catch or terminates Chrome.
