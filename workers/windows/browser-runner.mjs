@@ -97,34 +97,40 @@ function classifyRelayError(error) {
 async function checkIp(localPort) {
   const endpoints = [
     { url: "https://api.ipify.org?format=json", parse: (body) => JSON.parse(body).ip, name: "ipify" },
-    { url: "https://api64.ipify.org?format=json", parse: (body) => JSON.parse(body).ip, name: "ipify64" },
     { url: "https://ifconfig.me/ip", parse: (body) => body.trim(), name: "ifconfig_me" },
+    { url: "https://api64.ipify.org?format=json", parse: (body) => JSON.parse(body).ip, name: "ipify64" },
   ];
-  let lastError = null;
-  for (const endpoint of endpoints) {
+  const attempts = endpoints.map(async (endpoint) => {
     try {
       const { stdout } = await execFileAsync("curl.exe", [
         "--silent",
         "--show-error",
         "--fail",
         "--connect-timeout",
-        "8",
+        "10",
         "--max-time",
-        "15",
+        "22",
         "--proxy",
         `http://127.0.0.1:${localPort}`,
         endpoint.url,
-      ], { windowsHide: true, timeout: 20_000, maxBuffer: 8_192 });
+      ], { windowsHide: true, timeout: 27_000, maxBuffer: 8_192 });
       const ip = String(endpoint.parse(stdout) || "").trim();
       if (ip.length < 3 || ip.length > 64) throw Object.assign(new Error("proxy_ip_response_invalid"), { category: "proxy_ip_response_invalid", stage: "https" });
       return { ip, endpoint: endpoint.name };
     } catch (error) {
-      lastError = error;
+      const classified = error?.category ? { category: error.category, stage: error.stage || "https" } : classifyRelayError(error);
+      throw Object.assign(new Error(classified.category), classified);
     }
+  });
+  try {
+    return await Promise.any(attempts);
+  } catch (aggregate) {
+    const errors = Array.isArray(aggregate?.errors) ? aggregate.errors : [];
+    const preferred = errors.find(error => error?.category && error.category !== "proxy_request_timeout") || errors[0];
+    if (preferred?.category) throw preferred;
+    const classified = classifyRelayError(preferred || aggregate);
+    throw Object.assign(new Error(classified.category), classified);
   }
-  if (lastError?.category) throw lastError;
-  const classified = classifyRelayError(lastError);
-  throw Object.assign(new Error(classified.category), classified);
 }
 
 async function run() {
