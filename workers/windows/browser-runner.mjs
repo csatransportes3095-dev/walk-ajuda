@@ -95,29 +95,36 @@ function classifyRelayError(error) {
 }
 
 async function checkIp(localPort) {
-  try {
-    const { stdout } = await execFileAsync("curl.exe", [
-      "--silent",
-      "--show-error",
-      "--fail",
-      "--connect-timeout",
-      "10",
-      "--max-time",
-      "20",
-      "--proxy",
-      `http://127.0.0.1:${localPort}`,
-      "https://api.ipify.org?format=json",
-    ], { windowsHide: true, timeout: 25_000, maxBuffer: 8_192 });
-    const data = JSON.parse(stdout);
-    if (typeof data.ip !== "string" || data.ip.length < 3 || data.ip.length > 64) {
-      throw Object.assign(new Error("proxy_ip_response_invalid"), { category: "proxy_ip_response_invalid", stage: "https" });
+  const endpoints = [
+    { url: "https://api.ipify.org?format=json", parse: (body) => JSON.parse(body).ip, name: "ipify" },
+    { url: "https://api64.ipify.org?format=json", parse: (body) => JSON.parse(body).ip, name: "ipify64" },
+    { url: "https://ifconfig.me/ip", parse: (body) => body.trim(), name: "ifconfig_me" },
+  ];
+  let lastError = null;
+  for (const endpoint of endpoints) {
+    try {
+      const { stdout } = await execFileAsync("curl.exe", [
+        "--silent",
+        "--show-error",
+        "--fail",
+        "--connect-timeout",
+        "8",
+        "--max-time",
+        "15",
+        "--proxy",
+        `http://127.0.0.1:${localPort}`,
+        endpoint.url,
+      ], { windowsHide: true, timeout: 20_000, maxBuffer: 8_192 });
+      const ip = String(endpoint.parse(stdout) || "").trim();
+      if (ip.length < 3 || ip.length > 64) throw Object.assign(new Error("proxy_ip_response_invalid"), { category: "proxy_ip_response_invalid", stage: "https" });
+      return { ip, endpoint: endpoint.name };
+    } catch (error) {
+      lastError = error;
     }
-    return data.ip.trim();
-  } catch (error) {
-    if (error?.category) throw error;
-    const classified = classifyRelayError(error);
-    throw Object.assign(new Error(classified.category), classified);
   }
+  if (lastError?.category) throw lastError;
+  const classified = classifyRelayError(lastError);
+  throw Object.assign(new Error(classified.category), classified);
 }
 
 async function run() {
@@ -136,8 +143,8 @@ async function run() {
       prepareRequestFunction: () => ({ upstreamProxyUrl: upstreamUrl(input.proxy) }),
     });
     await server.listen();
-    const observedIp = await checkIp(server.port);
-    output({ state: "proxy_verified", observedIp, diagnostics: { dns: "ok", tcp: "ok", https: "ok" } });
+    const observed = await checkIp(server.port);
+    output({ state: "proxy_verified", observedIp: observed.ip, diagnostics: { dns: "ok", tcp: "ok", https: "ok", ipEndpoint: observed.endpoint } });
   } catch (error) {
     output({
       state: "blocked",
