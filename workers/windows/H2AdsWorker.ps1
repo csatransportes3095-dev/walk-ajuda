@@ -168,6 +168,39 @@ function Ensure-H2AdsBrowserFirewall {
   if (!(Test-H2AdsBrowserFirewall)) { throw "O kill switch rígido do H2ADS não foi aplicado corretamente." }
 }
 
+function Test-H2AdsLeakProtection {
+  Ensure-DedicatedBrowser
+  Ensure-H2AdsBrowserFirewall
+
+  if (!(Test-H2AdsBrowserFirewall)) {
+    throw "Protecao de vazamento H2ADS falhou: firewall IPv4/IPv6 do Chrome dedicado nao confirmado."
+  }
+  if (!(Test-Path $SessionRunnerPath)) {
+    throw "Protecao de vazamento H2ADS falhou: componente de sessao ausente."
+  }
+
+  $sessionSource = Get-Content -Raw -Path $SessionRunnerPath
+  foreach ($requiredFlag in @(
+    "--proxy-server=http://127.0.0.1:",
+    "--disable-quic",
+    "--dns-prefetch-disable",
+    "--force-webrtc-ip-handling-policy=disable_non_proxied_udp"
+  )) {
+    if ($sessionSource.IndexOf($requiredFlag, [StringComparison]::Ordinal) -lt 0) {
+      throw "Protecao de vazamento H2ADS falhou: camada obrigatoria ausente."
+    }
+  }
+
+  return [ordered]@{
+    ipv4DirectBlocked = $true
+    ipv6DirectBlocked = $true
+    proxyOnlyBrowser = $true
+    quicDisabled = $true
+    dnsPrefetchDisabled = $true
+    webrtcNonProxiedUdpDisabled = $true
+  }
+}
+
 function Read-PairingCode {
   if ([string]::IsNullOrWhiteSpace($PairingCode)) {
     $securePairingCode = Read-Host "Cole o código temporário criado no painel H2 Ads" -AsSecureString
@@ -549,6 +582,7 @@ function Get-WorkerErrorCategory([object]$ErrorRecord) {
   if ($message -like "*relay local*") { return "relay_setup_failed" }
   if ($message -like "*Firewall H2ADS*" -or $message -like "*kill switch rígido*") { return "hard_kill_switch_unavailable" }
   if ($message -like "*Chrome dedicado*" -or $message -like "*Google Chrome*") { return "dedicated_browser_unavailable" }
+  if ($message -like "*Protecao de vazamento H2ADS*") { return "leak_protection_failed" }
   return "worker_execution_failed"
 }
 
@@ -664,13 +698,19 @@ function Invoke-PendingBrowserCommand([object]$Config) {
     $payload = $response.Content | ConvertFrom-Json
     if ($payload.command.command -eq "prepare_browser") {
       Ensure-BrowserPreparationComponent $Config
+      $leakProtection = Test-H2AdsLeakProtection
       $runnerInput = @{ command = $payload.command.command; proxy = $payload.proxy } | ConvertTo-Json -Depth 5 -Compress
       $runnerOutput = $runnerInput | & node.exe $RunnerPath
       $result = $runnerOutput | ConvertFrom-Json
       if ($result.state -eq "proxy_verified" -and ![string]::IsNullOrWhiteSpace($result.observedIp)) {
         Restore-H2AdsProfileSnapshot $Config ([int]$payload.command.instanceId) | Out-Null
         Initialize-InstanceProfile ([int]$payload.command.instanceId)
-        $resultBody = @{ command = "prepare_browser"; state = "proxy_verified"; observedIp = $result.observedIp } | ConvertTo-Json -Compress
+        $resultBody = @{
+          command = "prepare_browser"
+          state = "proxy_verified"
+          observedIp = $result.observedIp
+          leakProtection = $leakProtection
+        } | ConvertTo-Json -Depth 4 -Compress
       } else {
         $resultBody = @{ command = "prepare_browser"; state = "blocked"; errorCategory = "proxy_unavailable" } | ConvertTo-Json -Compress
       }
