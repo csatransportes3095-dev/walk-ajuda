@@ -10,7 +10,7 @@ param(
 
 $ErrorActionPreference = "Stop"
 $ProgressPreference = "SilentlyContinue"
-$AgentVersion = "1.4.2"
+$AgentVersion = "1.4.3"
 $WorkerDirectory = Join-Path $env:LOCALAPPDATA "H2AdsWorker"
 $ConfigPath = Join-Path $WorkerDirectory "worker.json"
 $InstalledScriptPath = Join-Path $WorkerDirectory "H2AdsWorker.ps1"
@@ -495,11 +495,29 @@ function Close-BrowserSession([object]$Config, [object]$Payload) {
     & taskkill.exe /PID $nodePid /T /F 1>$null 2>$null
   }
 
-  # O Node da sessao recebe o evento de saida do Chrome e tenta o snapshot antes de encerrar.
+  # O Node da sessao recebe o evento de saida do Chrome e tenta concluir normalmente.
   if ($nodePid) {
     $nodeDeadline = (Get-Date).AddSeconds(25)
     while ((Get-Date) -lt $nodeDeadline -and (Get-Process -Id $nodePid -ErrorAction SilentlyContinue)) {
       Start-Sleep -Milliseconds 250
+    }
+
+    # Supervisor de sessao: se o Chrome ja fechou mas o runner ficou preso,
+    # encerra somente o runner auxiliar. O perfil local permanece intacto e
+    # o snapshot continua protegido pela fila independente do Worker.
+    if (Get-Process -Id $nodePid -ErrorAction SilentlyContinue) {
+      & taskkill.exe /PID $nodePid /T /F 1>$null 2>$null
+      Start-Sleep -Milliseconds 300
+    }
+  }
+
+  # Remove somente lock orfao. Nunca remove lock de um runner ainda vivo.
+  $runnerLockPath = Join-Path $profileDirectory "h2ads-session-runner.lock"
+  if (Test-Path $runnerLockPath) {
+    $lockPid = $null
+    try { $lockPid = [int]((Get-Content -Raw -Path $runnerLockPath | ConvertFrom-Json).pid) } catch { }
+    if (!$lockPid -or !(Get-Process -Id $lockPid -ErrorAction SilentlyContinue)) {
+      Remove-Item -LiteralPath $runnerLockPath -Force -ErrorAction SilentlyContinue
     }
   }
 
