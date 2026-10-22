@@ -32,7 +32,6 @@ const instanceName = String(proxy.instanceName || `Instancia ${instanceId}`).tri
 const instanceWindowTitle = `H2ADS | ${instanceName}`;
 const parsedRotationMinutes = Number(proxy.rotationMinutes);
 const rotationMinutes = Number.isInteger(parsedRotationMinutes) && parsedRotationMinutes >= 1 && parsedRotationMinutes <= 1_440 ? parsedRotationMinutes : null;
-const preparedObservedIp = typeof proxy.preparedObservedIp === "string" && proxy.preparedObservedIp.trim() ? proxy.preparedObservedIp.trim() : null;
 
 let frontRelay;
 let backendRelay;
@@ -53,6 +52,8 @@ let panelSyncInProgress = false;
 let openingCommandConfirmed = false;
 let panelRuntimeConfirmed = false;
 let initialObservedIp = null;
+let sessionLockedIp = null;
+let sessionIpChanged = false;
 let runnerLockOwned = false;
 let browserProbeInProgress = false;
 let stopMobileRemote = null;
@@ -341,6 +342,19 @@ async function reportObservedIp() {
     return;
   }
   try {
+    if (sessionLockedIp && normalizeIp(observedIp) !== normalizeIp(sessionLockedIp)) {
+      sessionIpChanged = true;
+      writeSession({
+        sessionLockedIp,
+        observedIp,
+        sessionIpChangedAt: new Date().toISOString(),
+        networkState: "blocked",
+        killSwitch: "triggered",
+        killSwitchReason: "session_ip_changed",
+      });
+      await suspendProxyTraffic("session_ip_changed");
+      return;
+    }
     if (observedIp !== lastReportedIp) {
       await post("/api/h2ads/worker/runs/" + instanceId + "/state", { state: "browser_open", observedIp });
       lastReportedIp = observedIp;
@@ -358,10 +372,15 @@ async function enforceKillSwitch() {
   killSwitchCheckInProgress = true;
   try {
     if (networkSuspended) {
-      await resumeProxyTraffic();
+      if (!sessionIpChanged) await resumeProxyTraffic();
     } else {
-      await checkIp();
-      writeSession({ killSwitch: "armed", killSwitchLastVerifiedAt: new Date().toISOString() });
+      const observedIp = await checkIp();
+      if (sessionLockedIp && normalizeIp(observedIp) !== normalizeIp(sessionLockedIp)) {
+        sessionIpChanged = true;
+        await suspendProxyTraffic("session_ip_changed");
+      } else {
+        writeSession({ killSwitch: "armed", killSwitchLastVerifiedAt: new Date().toISOString(), sessionLockedIp });
+      }
     }
   } catch (error) {
     await suspendProxyTraffic(error instanceof Error ? error.message : "proxy_path_unverified");
@@ -551,11 +570,8 @@ async function run() {
     await frontRelay.listen();
     relayPort = frontRelay.port;
     const initial = await privacyGuardPreflight(executable);
-    if (preparedObservedIp && normalizeIp(initial.observedIp) !== normalizeIp(preparedObservedIp)) {
-      await suspendProxyTraffic("prepared_ip_mismatch");
-      throw new Error("prepared_ip_mismatch");
-    }
     initialObservedIp = initial.observedIp;
+    sessionLockedIp = initial.observedIp;
     lastReportedIp = initial.observedIp;
     // Auto-provision Store extensions only for the isolated Chrome for Testing binary.
     // All third-party downloads are tunnelled through this instance's verified relay.
@@ -625,8 +641,9 @@ async function run() {
         browserProxyVerified: true, privacyGuard: "protected", googleSorryPrivacyGuard: "enabled_v3",
         killSwitch: "armed", networkState: "online", panelConnection: "pending",
         directBrowserEgress: "blocked_by_windows_firewall",
-        proxyRotationPolicy: "between_sessions_only",
+        proxyRotationPolicy: "provider_managed_between_sessions",
         configuredRotationMinutes: rotationMinutes,
+        sessionLockedIp,
       });
     } catch { }
     // Communication failure never reaches the launch catch or terminates Chrome.
