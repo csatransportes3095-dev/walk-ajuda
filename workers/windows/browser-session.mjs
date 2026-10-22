@@ -562,12 +562,10 @@ async function finalizeBrowserExit(reason, code = null, signal = null) {
   }
   try {
     if (pendingPath) {
-      await uploadProfileSnapshot();
-      // Deletion is safe only after the server acknowledges the upload.
-      try { unlinkSync(pendingPath); } catch { }
+      // Do not hold the browser-session lock while uploading a potentially large profile.
+      // The Windows Worker processes this durable queue in the background.
+      writeSession({ profileSnapshotPending: true, profileSnapshotQueuedAt: closedAt });
     }
-  } catch {
-    try { writeSession({ profileSnapshotPending: true, profileSnapshotQueuedAt: closedAt }); } catch { }
   } finally {
     await closeRelay(frontRelay);
     await closeRelay(backendRelay);
