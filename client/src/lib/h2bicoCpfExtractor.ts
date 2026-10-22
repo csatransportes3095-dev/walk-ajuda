@@ -38,6 +38,56 @@ export function extractCpfsFromText(text: string): string[] {
   return extractCpfCandidatesFromText(text).filter(isValidCpf);
 }
 
+export type H2BicoCpfPerson = {
+  cpf: string;
+  name: string;
+  profession: string;
+};
+
+function cleanExtractedField(value: string): string {
+  return value
+    .replace(/^[|;,:\-\s]+|[|;,:\-\s]+$/g, "")
+    .replace(/\s+/g, " ")
+    .trim()
+    .toUpperCase();
+}
+
+// Extrai linhas estruturadas como CPF | NOME | PROFISSAO, sem alterar o
+// extrator simples de CPF. Tambem aceita tabulacao, ponto-e-virgula e
+// colunas separadas por dois ou mais espacos.
+export function extractCpfPeopleFromText(text: string): H2BicoCpfPerson[] {
+  const byCpf = new Map<string, H2BicoCpfPerson>();
+  for (const rawLine of text.split(/\r?\n/)) {
+    const line = rawLine.trim();
+    if (!line) continue;
+    const candidates = extractCpfCandidatesFromText(line).filter(isValidCpf);
+    if (!candidates.length) continue;
+
+    for (const cpf of candidates) {
+      const cpfPattern = new RegExp(
+        "(?<!\\d)" +
+        cpf.slice(0, 3) + "[.\\-\\s]?" +
+        cpf.slice(3, 6) + "[.\\-\\s]?" +
+        cpf.slice(6, 9) + "[.\\-\\s]?" +
+        cpf.slice(9) + "(?!\\d)"
+      );
+      const withoutCpf = line.replace(cpfPattern, " | ");
+      let fields = withoutCpf.split(/\s*(?:\||;|\t)\s*/).map(cleanExtractedField).filter(Boolean);
+      if (fields.length < 2) {
+        fields = withoutCpf.split(/\s{2,}/).map(cleanExtractedField).filter(Boolean);
+      }
+
+      const name = fields[0] || "";
+      const profession = fields.slice(1).join(" ") || "";
+      const current = byCpf.get(cpf);
+      if (!current || (name.length + profession.length) > (current.name.length + current.profession.length)) {
+        byCpf.set(cpf, { cpf, name, profession });
+      }
+    }
+  }
+  return [...byCpf.values()];
+}
+
 export function decodeCpfText(bytes: Uint8Array): string {
   if (bytes[0] === 0xff && bytes[1] === 0xfe) {
     return new TextDecoder("utf-16le").decode(bytes.subarray(2));
