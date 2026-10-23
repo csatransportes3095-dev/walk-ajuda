@@ -718,104 +718,24 @@
   }
 }
 
-/* H2ADS ADMIN - PRETO + VERMELHO - VISUAL ONLY */
-.h2ads-workspace {
-  background:
-    radial-gradient(circle at 15% 0%, rgba(196, 0, 26, 0.14), transparent 28%),
-    linear-gradient(180deg, #050505 0%, #080808 48%, #030303 100%) !important;
-  color: #FFFFFF !important;
-}
 
-.h2ads-workspace > .pointer-events-none.fixed {
-  background:
-    radial-gradient(circle at 15% 0%, rgba(196, 0, 26, 0.16), transparent 32%),
-    radial-gradient(circle at 88% 8%, rgba(120, 0, 16, 0.14), transparent 30%) !important;
-}
-
-.h2ads-workspace header,
-.h2ads-workspace details,
-.h2ads-workspace main > section,
-.h2ads-workspace section.rounded-3xl,
-.h2ads-workspace section.rounded-2xl,
-.h2ads-workspace article {
-  background-color: #0D0D0D !important;
-  border-color: rgba(196, 0, 26, 0.32) !important;
-  color: #FFFFFF !important;
-}
-
-.h2ads-workspace p,
-.h2ads-workspace span,
-.h2ads-workspace label,
-.h2ads-workspace h1,
-.h2ads-workspace h2,
-.h2ads-workspace h3,
-.h2ads-workspace h4,
-.h2ads-workspace h5,
-.h2ads-workspace h6 {
-  color: #FFFFFF;
-}
-
-.h2ads-workspace .text-slate-300,
-.h2ads-workspace .text-slate-400,
-.h2ads-workspace .text-slate-500 {
-  color: #CFCFCF !important;
-}
-
+/* H2ADS ADMIN - SOMENTE BOTOES VERMELHOS - VISUAL ONLY */
 .h2ads-workspace button:not(:disabled),
-.h2ads-workspace a[class*="rounded"],
-.h2ads-workspace [role="button"] {
+.h2ads-workspace a[class*="rounded"] {
   color: #FFFFFF !important;
 }
 
-.h2ads-workspace button:not(:disabled):not([class*="emerald"]):not([class*="green"]):not([class*="cyan"]):not([class*="amber"]):not([class*="rose"]) {
+.h2ads-workspace button:not(:disabled):not([class*="emerald"]):not([class*="green"]):not([class*="cyan"]):not([class*="amber"]):not([class*="rose"]),
+.h2ads-workspace a[class*="rounded"]:not([class*="emerald"]):not([class*="green"]):not([class*="cyan"]):not([class*="amber"]):not([class*="rose"]) {
   background-color: #C4001A !important;
   border-color: rgba(224, 0, 34, 0.55) !important;
   color: #FFFFFF !important;
 }
 
-.h2ads-workspace button:not(:disabled):not([class*="emerald"]):not([class*="green"]):not([class*="cyan"]):not([class*="amber"]):not([class*="rose"]):hover {
+.h2ads-workspace button:not(:disabled):not([class*="emerald"]):not([class*="green"]):not([class*="cyan"]):not([class*="amber"]):not([class*="rose"]):hover,
+.h2ads-workspace a[class*="rounded"]:not([class*="emerald"]):not([class*="green"]):not([class*="cyan"]):not([class*="amber"]):not([class*="rose"]):hover {
   background-color: #E00022 !important;
   border-color: #FF2440 !important;
 }
 
-.h2ads-workspace [class*="bg-[#148CFF]"],
-.h2ads-workspace [class*="bg-[#F5B800]"] {
-  background-color: #C4001A !important;
-  color: #FFFFFF !important;
-}
-
-.h2ads-workspace [class*="text-[#8CC8FF]"],
-.h2ads-workspace [class*="text-[#FFE37A]"] {
-  color: #FFFFFF !important;
-}
-
-.h2ads-workspace [class*="border-[#148CFF]"],
-.h2ads-workspace [class*="border-[#F5B800]"] {
-  border-color: rgba(196, 0, 26, 0.48) !important;
-}
-
-.h2ads-workspace input,
-.h2ads-workspace textarea,
-.h2ads-workspace select {
-  background-color: #090909 !important;
-  border-color: rgba(196, 0, 26, 0.35) !important;
-  color: #FFFFFF !important;
-}
-
-.h2ads-workspace input::placeholder,
-.h2ads-workspace textarea::placeholder {
-  color: #8F8F8F !important;
-}
-
-.h2ads-workspace input:focus,
-.h2ads-workspace textarea:focus,
-.h2ads-workspace select:focus {
-  border-color: #E00022 !important;
-  box-shadow: 0 0 0 2px rgba(224, 0, 34, 0.15) !important;
-}
-
-/* Verde fica reservado para estados positivos/online. */
-.h2ads-workspace [class*="emerald"],
-.h2ads-workspace [class*="green"] {
-  /* Preserva as classes funcionais existentes. */
-}
+/* Preserva fundo, cards, filtros e status originais. */
