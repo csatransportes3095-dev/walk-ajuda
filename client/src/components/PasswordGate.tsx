@@ -15,6 +15,21 @@ const SESSION_EXPIRES_KEY = "walk_access_expires";
 const SESSION_PHONE_KEY = "walk_client_phone";
 const PWA_DISMISSED_KEY = "walk_pwa_dismissed";
 const CP_TOKEN_KEY = "cp_token";
+const LOGIN_EMAIL_PENDING_STORAGE_KEY = "h2_login_email_pending";
+const LOGIN_EMAIL_PROOF_STORAGE_KEY = "h2_login_email_proof";
+
+type StoredLoginEmailPending = {
+  phone: string;
+  email: string;
+  expiresAt: number;
+};
+
+type StoredLoginEmailProof = {
+  phone: string;
+  email: string;
+  verificationToken: string;
+  expiresAt: number;
+};
 
 interface PasswordGateProps {
   children: React.ReactNode;
@@ -276,6 +291,55 @@ export default function PasswordGate({ children }: PasswordGateProps) {
   function getPhoneDigits(value: string) {
     return normalizeBrazilPhone(value);
   }
+
+  // Preserva a etapa de confirmação ao alternar para o app de e-mail.
+  // sessionStorage sobrevive a reload/remontagem da aba, mas é isolado por aba.
+  useEffect(() => {
+    try {
+      const rawProof = sessionStorage.getItem(LOGIN_EMAIL_PROOF_STORAGE_KEY);
+      if (rawProof) {
+        const proof = JSON.parse(rawProof) as StoredLoginEmailProof;
+        if (
+          proof.expiresAt > Date.now() &&
+          getPhoneDigits(proof.phone).length === 11 &&
+          /^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(proof.email) &&
+          proof.verificationToken
+        ) {
+          const phone = getPhoneDigits(proof.phone);
+          setClientPhone(phone);
+          setLoginEmail(proof.email);
+          setMaskedLoginEmail(proof.email);
+          setEmailVerificationToken(proof.verificationToken);
+          setRegEmail(proof.email);
+          sessionStorage.setItem('reg_phone_temp', phone);
+          return;
+        }
+        sessionStorage.removeItem(LOGIN_EMAIL_PROOF_STORAGE_KEY);
+      }
+
+      const rawPending = sessionStorage.getItem(LOGIN_EMAIL_PENDING_STORAGE_KEY);
+      if (!rawPending) return;
+      const pending = JSON.parse(rawPending) as StoredLoginEmailPending;
+      if (
+        pending.expiresAt > Date.now() &&
+        getPhoneDigits(pending.phone).length === 11 &&
+        /^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(pending.email)
+      ) {
+        const phone = getPhoneDigits(pending.phone);
+        setClientPhone(phone);
+        setLoginEmail(pending.email);
+        setMaskedLoginEmail(pending.email);
+        setLoginEmailCode("");
+        setGateStep("emailCode");
+        sessionStorage.setItem('reg_phone_temp', phone);
+      } else {
+        sessionStorage.removeItem(LOGIN_EMAIL_PENDING_STORAGE_KEY);
+      }
+    } catch {
+      sessionStorage.removeItem(LOGIN_EMAIL_PENDING_STORAGE_KEY);
+      sessionStorage.removeItem(LOGIN_EMAIL_PROOF_STORAGE_KEY);
+    }
+  }, []);
 
   // Capturar ?ref= da URL ao carregar
   useEffect(() => {
@@ -596,8 +660,14 @@ export default function PasswordGate({ children }: PasswordGateProps) {
       setLoginEmail(email);
       setMaskedLoginEmail(email);
       setLoginEmailCode("");
+      sessionStorage.setItem(LOGIN_EMAIL_PENDING_STORAGE_KEY, JSON.stringify({
+        phone: getPhoneDigits(clientPhone),
+        email,
+        expiresAt: Date.now() + Math.max(1, Number(result.expiresIn || 600)) * 1000,
+      } satisfies StoredLoginEmailPending));
+      sessionStorage.removeItem(LOGIN_EMAIL_PROOF_STORAGE_KEY);
       setGateStep("emailCode");
-      toast.success("Código enviado para seu e-mail.");
+      toast.success("Código enviado. Ele vale por 10 minutos enquanto não for usado.");
     } catch (err: any) {
       toast.error(err?.message || "Não foi possível enviar o código. Tente novamente.");
     } finally {
@@ -623,8 +693,16 @@ export default function PasswordGate({ children }: PasswordGateProps) {
         toast.error(result.message || "Código incorreto.");
         return;
       }
+      const verifiedEmail = result.email || loginEmail.trim().toLowerCase();
       setEmailVerificationToken(result.verificationToken);
-      setRegEmail(result.email || loginEmail.trim().toLowerCase());
+      setRegEmail(verifiedEmail);
+      sessionStorage.removeItem(LOGIN_EMAIL_PENDING_STORAGE_KEY);
+      sessionStorage.setItem(LOGIN_EMAIL_PROOF_STORAGE_KEY, JSON.stringify({
+        phone: getPhoneDigits(clientPhone),
+        email: verifiedEmail,
+        verificationToken: result.verificationToken,
+        expiresAt: Date.now() + 20 * 60 * 1000,
+      } satisfies StoredLoginEmailProof));
       toast.success("E-mail confirmado.");
       await handlePhoneSubmit({ preventDefault: () => undefined } as React.FormEvent, getPhoneDigits(clientPhone), true);
     } catch (err: any) {
