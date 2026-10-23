@@ -365,6 +365,21 @@ async function resumeProxyTraffic() {
       browserProxyVerification: "verified",
     });
     lastReportedIp = frontIp;
+    try {
+      await post("/api/h2ads/worker/runs/" + instanceId + "/state", {
+        state: "browser_open",
+        observedIp: frontIp,
+      });
+      panelRuntimeConfirmed = true;
+      writeSession({
+        panelConnection: "online",
+        panelLastErrorCategory: null,
+        panelLastSyncedAt: new Date().toISOString(),
+        hotSwapStateSyncedAt: new Date().toISOString(),
+      });
+    } catch (error) {
+      panelFailure(error);
+    }
     void syncPanelOpening(frontIp);
   } catch (error) {
     await suspendProxyTraffic(error instanceof Error ? error.message : "proxy_path_unverified");
@@ -388,9 +403,17 @@ async function syncCurrentProxyCredential() {
     if (currentFingerprint === nextFingerprint) return;
 
     proxy = { ...proxy, ...next };
-    writeSession({ proxyHotSwapDetectedAt: new Date().toISOString(), networkState: "suspended" });
+    writeSession({
+      proxyHotSwapDetectedAt: new Date().toISOString(),
+      networkState: "suspended",
+      hotSwapState: "applying",
+    });
     await suspendProxyTraffic("proxy_hot_swap");
     await resumeProxyTraffic();
+    writeSession({
+      hotSwapState: networkSuspended ? "waiting_proxy" : "online",
+      hotSwapCompletedAt: networkSuspended ? null : new Date().toISOString(),
+    });
   } catch (error) {
     panelFailure(error);
   } finally {
