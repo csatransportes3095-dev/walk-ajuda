@@ -719,23 +719,58 @@
 }
 
 
-/* H2ADS ADMIN - SOMENTE BOTOES VERMELHOS - VISUAL ONLY */
+/* H2ADS ADMIN - FUNDO VERMELHO SANGUE + BOTOES PRETOS - VISUAL ONLY */
+.h2ads-workspace {
+  background:
+    radial-gradient(circle at 15% 0%, rgba(217, 4, 41, 0.22), transparent 28%),
+    linear-gradient(180deg, #5A0008 0%, #460006 45%, #300004 100%) !important;
+  color: #FFFFFF !important;
+}
+
+.h2ads-workspace > .pointer-events-none.fixed {
+  background:
+    radial-gradient(circle at 14% 0%, rgba(255, 36, 64, 0.18), transparent 30%),
+    radial-gradient(circle at 88% 8%, rgba(120, 0, 16, 0.20), transparent 32%) !important;
+}
+
+.h2ads-workspace header,
+.h2ads-workspace details,
+.h2ads-workspace main > section,
+.h2ads-workspace section.rounded-3xl,
+.h2ads-workspace section.rounded-2xl {
+  border-color: rgba(255, 90, 110, 0.22) !important;
+}
+
 .h2ads-workspace button:not(:disabled),
 .h2ads-workspace a[class*="rounded"] {
+  background-color: #000000 !important;
+  border-color: rgba(255,255,255,0.16) !important;
   color: #FFFFFF !important;
 }
 
-.h2ads-workspace button:not(:disabled):not([class*="emerald"]):not([class*="green"]):not([class*="cyan"]):not([class*="amber"]):not([class*="rose"]),
-.h2ads-workspace a[class*="rounded"]:not([class*="emerald"]):not([class*="green"]):not([class*="cyan"]):not([class*="amber"]):not([class*="rose"]) {
-  background-color: #C4001A !important;
-  border-color: rgba(224, 0, 34, 0.55) !important;
+.h2ads-workspace button:not(:disabled):hover,
+.h2ads-workspace a[class*="rounded"]:hover {
+  background-color: #151515 !important;
+  border-color: rgba(255,255,255,0.30) !important;
   color: #FFFFFF !important;
 }
 
-.h2ads-workspace button:not(:disabled):not([class*="emerald"]):not([class*="green"]):not([class*="cyan"]):not([class*="amber"]):not([class*="rose"]):hover,
-.h2ads-workspace a[class*="rounded"]:not([class*="emerald"]):not([class*="green"]):not([class*="cyan"]):not([class*="amber"]):not([class*="rose"]):hover {
-  background-color: #E00022 !important;
-  border-color: #FF2440 !important;
+.h2ads-workspace button:disabled {
+  background-color: #101010 !important;
+  color: rgba(255,255,255,0.35) !important;
+  border-color: rgba(255,255,255,0.08) !important;
 }
 
-/* Preserva fundo, cards, filtros e status originais. */
+.h2ads-workspace p,
+.h2ads-workspace span,
+.h2ads-workspace label,
+.h2ads-workspace h1,
+.h2ads-workspace h2,
+.h2ads-workspace h3,
+.h2ads-workspace h4,
+.h2ads-workspace h5,
+.h2ads-workspace h6 {
+  color: #FFFFFF;
+}
+
+/* Preserva as cores funcionais dos badges/status e o funcionamento da pagina. */
