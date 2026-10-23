@@ -34,12 +34,35 @@ export function isPhotoAnalysisOrderStatusSemantic(key: unknown, label: unknown)
   return semantic === 'foto em analise' || semantic === 'foto em anal' || semantic === 'foto analise';
 }
 
-/** EM ANALISE is always open, even when its key/position is inherited from an old flow. */
+/**
+ * Regra operacional da agenda baseada na ORDEM REAL do fluxo:
+ * - EM ANÁLISE: cria/reabre agenda e nunca finaliza.
+ * - Status ANTES de FOTO EM ANÁLISE (ex.: CNH EM ANÁLISE / CNH APROVADA): não finalizam.
+ * - FOTO EM ANÁLISE e qualquer status DEPOIS dela: finalizam a agenda aberta.
+ * A posição configurada no fluxo é a fonte de verdade.
+ */
 export function isScheduleClosedStatusInFlow(input: {
   targetKey: string;
   targetLabel?: string | null;
   flowStatusKeys: string[];
   statuses: ScheduleStatusDescriptor[];
+}): boolean {
+  const labelByKey = new Map(input.statuses.map(status => [status.key, status.label ?? status.key]));
+  const targetLabel = input.targetLabel || labelByKey.get(input.targetKey) || input.targetKey;
+
+  if (isAnalysisOrderStatusSemantic(input.targetKey, targetLabel)) return false;
+
+  const photoAnalysisIndex = input.flowStatusKeys.findIndex(key =>
+    isPhotoAnalysisOrderStatusSemantic(key, labelByKey.get(key) ?? key)
+  );
+  const targetIndex = input.flowStatusKeys.indexOf(input.targetKey);
+
+  if (photoAnalysisIndex >= 0 && targetIndex >= 0) {
+    return targetIndex >= photoAnalysisIndex;
+  }
+
+  if (isPhotoAnalysisOrderStatusSemantic(input.targetKey, targetLabel)) return true;
+  return SCHEDULE_CLOSED_STATUS_FALLBACK.has(input.targetKey);
 }): boolean {
   const labelByKey = new Map(input.statuses.map(status => [status.key, status.label ?? status.key]));
   const targetLabel = input.targetLabel || labelByKey.get(input.targetKey) || input.targetKey;
