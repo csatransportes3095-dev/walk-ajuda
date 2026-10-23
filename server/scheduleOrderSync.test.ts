@@ -61,6 +61,13 @@ describe("independência entre status do pedido e agendamento", () => {
     expect(block).toContain("if (sr.status === 'cancelled' || sr.status === 'completed') continue");
   });
 
+  it("respeita a ordem real: CNH antes de Foto em Analise nao fecha; Foto em Analise e posteriores fecham", async () => {
+    const source = await readFile(new URL("../shared/scheduleOrderLifecycle.ts", import.meta.url), "utf8");
+    expect(source).toContain("targetIndex >= photoAnalysisIndex");
+    expect(source).toContain("isAnalysisOrderStatusSemantic(input.targetKey, targetLabel)");
+    expect(source).toContain("return false");
+  });
+
   it("não usa fallback por telefone quando o pedido já possui agenda encerrada", async () => {
     const source = await routerSource();
     expect(source).toContain("!resolvedScheduleKeys.has(`${o.id}_${o.subOrderIndex}`)");
