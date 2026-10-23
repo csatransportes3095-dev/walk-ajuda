@@ -45,6 +45,58 @@ function scheduleFatalProcessExit() {
   setTimeout(() => process.exit(1), 0).unref?.();
 }
 
+async function repairSchedule2040001Once() {
+  const db = await getDb() as any;
+  if (!db) return;
+  const { sql } = await import("drizzle-orm");
+  const marker = "repair_schedule_2940001_20261023_v1";
+
+  const markerRows = await db.execute(sql.raw(
+    "SELECT settingValue FROM siteSettings WHERE settingKey = '" + marker + "' LIMIT 1"
+  ));
+  if ((markerRows as any)?.[0]?.length) return;
+
+  const rows = await db.execute(sql.raw(
+    "SELECT id, registrationId, subOrderIndex, templateId, slotDate, slotTime, status, confirmedAt " +
+    "FROM scheduleAppointments WHERE id = 2940001 AND registrationId = 2040001 AND subOrderIndex = 0 LIMIT 1"
+  ));
+  const appt = (rows as any)?.[0]?.[0];
+  if (!appt) {
+    await db.execute(sql.raw(
+      "INSERT IGNORE INTO siteSettings (settingKey, settingValue) VALUES ('" + marker + "', 'appointment_not_found')"
+    ));
+    return;
+  }
+
+  if (String(appt.status) !== "completed" || String(appt.slotDate || "") !== "2026-10-24" || String(appt.slotTime || "") !== "11:30") {
+    await db.execute(sql.raw(
+      "INSERT IGNORE INTO siteSettings (settingKey, settingValue) VALUES ('" + marker + "', 'state_not_eligible')"
+    ));
+    return;
+  }
+
+  await db.transaction(async (tx: any) => {
+    const slotResult = await tx.execute(sql.raw(
+      "INSERT INTO scheduleSlots (templateId, slotDate, slotTime, capacity, bookedCount, status, note) VALUES (" +
+      (appt.templateId == null ? "NULL" : Number(appt.templateId)) +
+      ", '2026-10-24', '11:30', 1, 1, 'available', 'RECUPERADO AUTOMATICAMENTE - pedido 2040001')"
+    ));
+    const slotId = Number((slotResult as any)?.[0]?.insertId || (slotResult as any)?.insertId || 0);
+    if (!slotId) throw new Error("Nao foi possivel recriar o slot 24/10 11:30");
+
+    await tx.execute(sql.raw(
+      "UPDATE scheduleAppointments SET status='confirmed', slotId=" + slotId +
+      ", slotDate='2026-10-24', slotTime='11:30', confirmedAt=COALESCE(confirmedAt, NOW()) " +
+      "WHERE id=2940001 AND registrationId=2040001 AND status='completed'"
+    ));
+    await tx.execute(sql.raw(
+      "INSERT IGNORE INTO siteSettings (settingKey, settingValue) VALUES ('" + marker + "', 'restored_2026-10-24_11:30')"
+    ));
+  });
+
+  console.warn("[ScheduleRepair] pedido 2040001 restaurado para 24/10/2026 11:30.");
+}
+
 async function ensureZohoOAuthInfrastructure() {
   const db = await getDb();
   if (!db) return;
@@ -207,6 +259,11 @@ async function startServer() {
     if(outcome.normalized)console.info("[CustomerText] cadastros normalizados:",outcome.normalized);
   } catch (error) {
     console.warn("[CustomerText] normalização recuperável pendente, sem bloquear o site:",error);
+  }
+  try {
+    await repairSchedule2040001Once();
+  } catch (error) {
+    console.error('[ScheduleRepair] falha na recuperacao do pedido 2040001:', error);
   }
   try {
     await ensureZohoOAuthInfrastructure();
