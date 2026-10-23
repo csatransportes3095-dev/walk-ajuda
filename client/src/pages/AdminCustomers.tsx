@@ -404,7 +404,6 @@ export default function AdminCustomers() {
   const [editResellerDiscountValue, setEditResellerDiscountValue] = useState<string>('0');
   const [photoModal, setPhotoModal] = useState<{ url: string; name: string } | null>(null);
   const [uploadingPhotoFor, setUploadingPhotoFor] = useState<number | null>(null);
-  const [pastePhotoCustomer, setPastePhotoCustomer] = useState<Customer | null>(null);
 
   // Estado apenas de interface: nunca substitui nem remove profilePhotoUrl no banco.
   const [failedProfilePhotoIds, setFailedProfilePhotoIds] = useState<Map<number, string>>(() => new Map());
@@ -767,23 +766,26 @@ export default function AdminCustomers() {
 
   const handlePastePhoto = async (customer: Customer) => {
     if (customerSaveGate.isBusy()) { toast.info("Aguarde o salvamento antes de colar outro print."); return; }
+    if (!navigator.clipboard?.read) {
+      toast.error("Este navegador não permite colar imagem automaticamente.");
+      return;
+    }
 
     try {
-      if (navigator.clipboard?.read) {
-        const items = await navigator.clipboard.read();
-        for (const item of items) {
-          const imageType = item.types.find(type => type.startsWith("image/"));
-          if (!imageType) continue;
-          const blob = await item.getType(imageType);
-          const file = new File([blob], `print-${customer.phone}.${imageType.includes("png") ? "png" : "jpg"}`, { type: imageType });
-          handlePhotoUpload(customer, file);
-          return;
-        }
+      const items = await navigator.clipboard.read();
+      for (const item of items) {
+        const imageType = item.types.find(type => type.startsWith("image/"));
+        if (!imageType) continue;
+        const blob = await item.getType(imageType);
+        const ext = imageType.includes("png") ? "png" : "jpg";
+        const file = new File([blob], `print-${customer.phone}.${ext}`, { type: imageType });
+        handlePhotoUpload(customer, file);
+        return;
       }
-    } catch {}
-
-    setPastePhotoCustomer(customer);
-    toast.info("Cole o print com Ctrl+V na caixa que abriu.");
+      toast.error("Não encontrei uma imagem copiada.");
+    } catch {
+      toast.error("Permissão da área de transferência bloqueada no navegador.");
+    }
   };
 
   const handleCreatePhotoUpload = (file: File) => {
@@ -1432,10 +1434,11 @@ export default function AdminCustomers() {
                       type="button"
                       onClick={(e) => { e.stopPropagation(); void handlePastePhoto(c); }}
                       disabled={uploadingPhotoFor === c.id}
-                      className="absolute -bottom-7 left-1/2 -translate-x-1/2 whitespace-nowrap rounded-md border border-cyan-400/35 bg-cyan-500/15 px-2 py-1 text-[8px] font-black uppercase text-cyan-200 shadow hover:bg-cyan-500/25 disabled:opacity-50"
-                      title="Usar a imagem copiada da área de transferência como foto"
+                      className="absolute bottom-0 left-0 w-6 h-6 rounded-full border-2 border-background bg-cyan-500 text-white shadow flex items-center justify-center hover:bg-cyan-400 transition-colors disabled:opacity-50"
+                      title="Colar print e salvar foto"
+                      aria-label="Colar print e salvar foto"
                     >
-                      COLAR PRINT
+                      <ImageIcon className="w-3 h-3" />
                     </button>
                   </div>
 
@@ -1903,50 +1906,6 @@ export default function AdminCustomers() {
         )}
       </div>
     </div>
-
-      {pastePhotoCustomer && (
-        <div className="fixed inset-0 z-[70] flex items-center justify-center bg-black/80 backdrop-blur-sm p-4" onClick={() => setPastePhotoCustomer(null)}>
-          <div className="w-full max-w-sm rounded-2xl border border-cyan-400/30 bg-card p-5 shadow-2xl" onClick={(e) => e.stopPropagation()}>
-            <div className="mb-4 flex items-center justify-between gap-3">
-              <div>
-                <p className="text-sm font-black text-cyan-300">COLAR PRINT</p>
-                <p className="text-xs text-muted-foreground">{pastePhotoCustomer.name}</p>
-              </div>
-              <button onClick={() => setPastePhotoCustomer(null)} className="rounded-lg bg-muted p-2 text-muted-foreground hover:text-foreground">
-                <X className="h-4 w-4" />
-              </button>
-            </div>
-            <div
-              tabIndex={0}
-              autoFocus
-              onPaste={(event) => {
-                const items = Array.from(event.clipboardData?.items || []);
-                const imageItem = items.find(item => item.type.startsWith("image/"));
-                if (!imageItem) {
-                  toast.error("O conteúdo colado não é uma imagem.");
-                  return;
-                }
-                const blob = imageItem.getAsFile();
-                if (!blob) {
-                  toast.error("Não foi possível ler o print colado.");
-                  return;
-                }
-                const file = new File([blob], `print-${pastePhotoCustomer.phone}.${blob.type.includes("png") ? "png" : "jpg"}`, { type: blob.type || "image/png" });
-                handlePhotoUpload(pastePhotoCustomer, file);
-                setPastePhotoCustomer(null);
-                event.preventDefault();
-              }}
-              className="flex min-h-32 cursor-text items-center justify-center rounded-xl border-2 border-dashed border-cyan-400/40 bg-cyan-500/5 p-5 text-center outline-none focus:border-cyan-300"
-            >
-              <div>
-                <ImageIcon className="mx-auto mb-2 h-8 w-8 text-cyan-300" />
-                <p className="text-sm font-bold text-cyan-100">Pressione Ctrl+V aqui</p>
-                <p className="mt-1 text-xs text-muted-foreground">O print será enviado automaticamente.</p>
-              </div>
-            </div>
-          </div>
-        </div>
-      )}
 
       {/* Modal de foto ampliada */}
       {photoModal && (
