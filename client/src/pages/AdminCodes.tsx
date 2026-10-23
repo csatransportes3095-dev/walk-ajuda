@@ -124,8 +124,8 @@ export default function AdminCodes() {
     ...cardOrder.map((id) => byAdminShortcutId.get(id)).filter(Boolean) as AdminShortcut[],
     ...ADMIN_SHORTCUTS.filter((card) => !cardOrder.includes(card.id)),
   ];
-  const featuredAdminShortcuts = orderedAdminShortcuts.slice(0, 6);
-  const secondaryAdminShortcuts = orderedAdminShortcuts.slice(6);
+  const featuredAdminShortcuts = orderedAdminShortcuts.slice(0, 12);
+  const secondaryAdminShortcuts = orderedAdminShortcuts.slice(12);
 
   const saveCardOrder = () => {
     saveCardOrderMutation.mutate(
@@ -390,7 +390,7 @@ export default function AdminCodes() {
           ) : (
             <>
               <div className="rounded-2xl border border-white/10 bg-black/20 p-3 sm:p-4">
-                <div className="mb-3 flex items-center justify-between gap-3"><div><p className="text-xs font-black uppercase tracking-[0.16em] text-purple-200">Uso diário</p><p className="mt-1 text-xs text-white/45">Os seis primeiros atalhos seguem a ordem que você definir.</p></div><span className="rounded-full border border-purple-300/20 bg-purple-500/10 px-2.5 py-1 text-xs font-bold text-purple-100">6 em destaque</span></div>
+                <div className="mb-3 flex items-center justify-between gap-3"><div><p className="text-xs font-black uppercase tracking-[0.16em] text-purple-200">Uso diário</p><p className="mt-1 text-xs text-white/45">Os doze primeiros atalhos seguem a ordem que você definir.</p></div><span className="rounded-full border border-purple-300/20 bg-purple-500/10 px-2.5 py-1 text-xs font-bold text-purple-100">12 em destaque</span></div>
                 <div className="grid grid-cols-2 gap-3 sm:grid-cols-3 lg:grid-cols-6">{featuredAdminShortcuts.map((card, index) => renderShortcutCard(card, index, true))}</div>
               </div>
               <div className="rounded-2xl border border-white/10 bg-white/[0.025]">
