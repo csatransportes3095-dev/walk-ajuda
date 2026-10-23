@@ -782,18 +782,15 @@ export default function AdminCustomers() {
       const name = String(error?.name || "");
       const message = String(error?.message || "");
       console.error("[AdminCustomers][clipboard.read]", { name, message, secure: window.isSecureContext, active: navigator.userActivation?.isActive });
-      if (name === "NotAllowedError") {
-        toast.error("O Chrome recusou a leitura do print mesmo com a permissão liberada. Atualize a página e tente novamente.");
-      } else {
-        toast.error(`Falha ao ler o print: ${message || name || "erro desconhecido"}`);
-      }
+      toast.error(name === "NotAllowedError"
+        ? "O Chrome recusou a leitura do print mesmo com a permissão liberada."
+        : `Falha ao ler o print: ${message || name || "erro desconhecido"}`);
       return;
     }
 
     const imageItem = items.find(item => item.types.some(type => type.startsWith("image/")));
     if (!imageItem) {
       const formats = items.flatMap(item => item.types).join(", ");
-      console.warn("[AdminCustomers][clipboard] sem imagem", formats);
       toast.error(formats ? `O conteúdo copiado não veio como imagem (${formats}).` : "Não encontrei uma imagem copiada.");
       return;
     }
@@ -805,7 +802,7 @@ export default function AdminCustomers() {
       imageItem.types.find(type => type.startsWith("image/"));
 
     if (!preferredType) {
-      toast.error("O print copiado não possui um formato de imagem compatível.");
+      toast.error("O print copiado não possui formato compatível.");
       return;
     }
 
@@ -815,18 +812,32 @@ export default function AdminCustomers() {
         toast.error("O print copiado veio vazio.");
         return;
       }
+      if (blob.size > 5 * 1024 * 1024) {
+        toast.error("A foto deve ter no máximo 5MB.");
+        return;
+      }
 
-      const ext =
-        preferredType.includes("png") ? "png" :
-        preferredType.includes("webp") ? "webp" : "jpg";
-      const file = new File([blob], `print-${customer.phone}.${ext}`, {
-        type: preferredType,
-        lastModified: Date.now(),
-      });
-
-      handlePhotoUpload(customer, file);
+      setUploadingPhotoFor(customer.id);
+      const reader = new FileReader();
+      reader.onload = () => {
+        try {
+          const result = String(reader.result || "");
+          const base64 = result.includes(",") ? result.split(",")[1] : result;
+          if (!base64) throw new Error("base64 vazio");
+          uploadPhotoMut.mutate({ imageBase64: base64, phone: customer.phone, requireExisting: true });
+        } catch (error: any) {
+          setUploadingPhotoFor(null);
+          toast.error(`Não foi possível preparar o print: ${error?.message || "erro desconhecido"}`);
+        }
+      };
+      reader.onerror = () => {
+        setUploadingPhotoFor(null);
+        toast.error("Não foi possível ler o print copiado.");
+      };
+      reader.readAsDataURL(blob);
     } catch (error: any) {
       console.error("[AdminCustomers][clipboard.image]", error);
+      setUploadingPhotoFor(null);
       toast.error(`Não foi possível converter o print: ${error?.message || "erro desconhecido"}`);
     }
   };
