@@ -248,6 +248,28 @@ export async function rotateH2AdsInstanceProxy(instanceId: number): Promise<H2Ad
   }
 
   await assignH2AdsInstanceWorkerPortable(instanceId, worker.id);
+
+  if (browserAlreadyOpen) {
+    // Sessão aberta: não derrubar estado nem enviar preparação.
+    // O browser-session consulta a credencial atual e aplica o hot swap no relay.
+    await db
+      .update(h2AdsInstanceBrowserRuns)
+      .set({
+        state: "browser_open",
+        lastErrorCategory: null,
+        lastChangedAt: new Date(),
+      })
+      .where(eq(h2AdsInstanceBrowserRuns.instanceId, instanceId));
+
+    return {
+      status: "reconnecting",
+      instanceId,
+      proxyPoolId: reserved.id,
+      workerId: worker.id,
+      message: "Proxy trocado e validado. A sessão aberta está sincronizando a nova rota sem fechar.",
+    };
+  }
+
   await requestH2AdsBrowserPreparation(instanceId);
 
   return {
