@@ -1039,7 +1039,7 @@ export function LoansTab({ token }: LoansTabProps) {
                         <div>
                           <p className="text-sm font-black text-blue-200">Solicitação em análise — aguardando aprovação.</p>
                           <p className="mt-1 text-xs leading-relaxed text-blue-100/75">Nenhuma parcela está ativa neste momento. O prazo de pagamento só começa depois da confirmação do PIX.</p>
-                          <p className="mt-2 text-xs font-black text-cyan-200">🕐 Previsão de liberação (24h): {fmtDateTimeSP(plannedReleaseAt)}</p>
+                          <p className="mt-2 text-xs font-bold text-blue-100/70">A previsão de liberação será calculada após a aprovação.</p>
                         </div>
                       </div>
                     </div>
@@ -1052,7 +1052,8 @@ export function LoansTab({ token }: LoansTabProps) {
                         <div>
                           <p className="text-sm font-black text-amber-200">Solicitação aprovada ✅</p>
                           <p className="mt-1 text-xs leading-relaxed text-amber-100/75">Aguardando a liberação do PIX. As parcelas ainda não estão ativas.</p>
-                          <p className="mt-2 text-xs font-black text-amber-200">🕐 Previsão de liberação (24h): {fmtDateTimeSP(plannedReleaseAt)}</p>
+                          <p className="mt-2 text-xs font-bold text-amber-100/80">✅ Aprovado em: <span className="font-black text-amber-200">{fmtDateTimeSP(loan.approvedAt)}</span></p>
+                          <p className="mt-1 text-xs font-black text-amber-200">🕐 Previsão de liberação (24h após aprovação): {fmtDateTimeSP(plannedReleaseAt)}</p>
                         </div>
                       </div>
                     </div>
@@ -1089,7 +1090,7 @@ export function LoansTab({ token }: LoansTabProps) {
                       <div className="col-span-2 rounded-xl border border-cyan-500/25 bg-cyan-500/10 p-3">
                         <p className="text-xs font-bold text-cyan-100/75 mb-1">🕐 Previsão automática de liberação</p>
                         <p className="text-base font-black text-cyan-200">{fmtDateTimeSP(plannedReleaseAt)}</p>
-                        <p className="mt-1 text-[11px] text-cyan-100/65">24 horas após o envio da solicitação.</p>
+                        <p className="mt-1 text-[11px] text-cyan-100/65">24 horas após a aprovação da solicitação.</p>
                       </div>
                     ) : loan.releaseDate ? (
                       <div className="bg-emerald-500/8 border border-emerald-500/20 rounded-xl p-3">
