@@ -22,7 +22,7 @@ const instanceId = Number(process.env.H2ADS_INSTANCE_ID);
 const commandId = Number(process.env.H2ADS_COMMAND_ID);
 const profileDirectory = process.env.H2ADS_PROFILE_DIRECTORY;
 const browserExecutable = process.env.H2ADS_BROWSER_EXECUTABLE;
-const proxy = JSON.parse(process.env.H2ADS_PROXY_JSON);
+let proxy = JSON.parse(process.env.H2ADS_PROXY_JSON);
 const sessionPath = join(profileDirectory, "h2ads-browser-session.json");
 const runnerLockPath = join(profileDirectory, "h2ads-session-runner.lock");
 const snapshotQueueDirectory = join(profileDirectory, "..", "..", "snapshot-queue");
@@ -48,6 +48,8 @@ let killSwitchCheckInProgress = false;
 let networkSuspended = false;
 let browserExitHandled = false;
 let panelSyncTimer;
+let proxySyncTimer;
+let proxySyncInProgress = false;
 let panelSyncInProgress = false;
 let openingCommandConfirmed = false;
 let panelRuntimeConfirmed = false;
@@ -256,6 +258,7 @@ function stopSessionTimers() {
   if (ipTimer) clearInterval(ipTimer);
   if (killSwitchTimer) clearInterval(killSwitchTimer);
   if (panelSyncTimer) clearInterval(panelSyncTimer);
+  if (proxySyncTimer) clearInterval(proxySyncTimer);
   if (stopMobileRemote) { stopMobileRemote(); stopMobileRemote = null; }
 }
 
@@ -365,6 +368,33 @@ async function resumeProxyTraffic() {
     void syncPanelOpening(frontIp);
   } catch (error) {
     await suspendProxyTraffic(error instanceof Error ? error.message : "proxy_path_unverified");
+  }
+}
+
+async function syncCurrentProxyCredential() {
+  if (proxySyncInProgress || browserExitHandled || !browser || browser.exitCode !== null) return;
+  proxySyncInProgress = true;
+  try {
+    const response = await fetch(`${panelUrl.replace(/\/$/, "")}/api/h2ads/worker/proxy/${instanceId}/current`, {
+      headers: headers(),
+      signal: AbortSignal.timeout(12_000),
+    });
+    if (!response.ok) throw new Error(`panel_http_${response.status}`);
+    const data = await response.json();
+    const next = data?.proxy;
+    if (!next?.host || !next?.port || !next?.username || !next?.password) return;
+    const currentFingerprint = JSON.stringify([proxy.protocol, proxy.host, proxy.port, proxy.username, proxy.password]);
+    const nextFingerprint = JSON.stringify([next.protocol, next.host, next.port, next.username, next.password]);
+    if (currentFingerprint === nextFingerprint) return;
+
+    proxy = { ...proxy, ...next };
+    writeSession({ proxyHotSwapDetectedAt: new Date().toISOString(), networkState: "suspended" });
+    await suspendProxyTraffic("proxy_hot_swap");
+    await resumeProxyTraffic();
+  } catch (error) {
+    panelFailure(error);
+  } finally {
+    proxySyncInProgress = false;
   }
 }
 
@@ -694,6 +724,8 @@ async function run() {
     }
     panelSyncTimer = setInterval(() => { void syncPanelOpening(); }, 12_000);
     panelSyncTimer.unref?.();
+    proxySyncTimer = setInterval(() => { void syncCurrentProxyCredential(); }, 5_000);
+    proxySyncTimer.unref?.();
     // A queda do proxy não encerra o Chrome. O relay local permanece como barreira;
     // a conexão só volta depois que o upstream e o Chrome de prova validarem o mesmo IP.
     try {
