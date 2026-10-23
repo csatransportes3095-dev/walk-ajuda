@@ -5,8 +5,12 @@ let source = fs.readFileSync(file, 'utf8');
 
 function replaceOnce(oldText, newText, label) {
   const count = source.split(oldText).length - 1;
+  if (count === 0) {
+    console.log(`[h2ads-layout-hotfix] ${label}: layout atual ja nao usa o bloco legado; etapa ignorada.`);
+    return;
+  }
   if (count !== 1) {
-    throw new Error(`[h2ads-layout-hotfix] ${label}: esperado 1 bloco, encontrado ${count}`);
+    throw new Error(`[h2ads-layout-hotfix] ${label}: esperado no maximo 1 bloco, encontrado ${count}`);
   }
   source = source.replace(oldText, newText);
 }
