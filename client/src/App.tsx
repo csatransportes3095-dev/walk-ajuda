@@ -410,7 +410,8 @@ function ClientInstallGate({ children }: { children: React.ReactNode }) {
 function AppContent() {
   const [location] = useLocation();
   const isGeradorChassiRoute = isChassisAdminPath(location);
-  const isAdminRoute = location.startsWith("/admin") || isGeradorChassiRoute;
+  const isVehicleUsageAdminRoute = location.toLowerCase() === "/adm/conferencia-veiculo";
+  const isAdminRoute = location.startsWith("/admin") || isGeradorChassiRoute || isVehicleUsageAdminRoute;
   const isH2AdsRoute = isH2AdsPath(location);
   const isSimilarityRoute = location.toLowerCase() === "/similaridade";
   const isTrackingRoute = location === "/acompanhar";
