@@ -29,6 +29,7 @@ export default function OrderH2AdsBrowserShortcut({ registrationId, subOrderInde
   const ordersQuery = trpc.orderStatus.listOrders.useQuery(undefined, { staleTime: 0, refetchOnWindowFocus: true });
   const launchBrowser = trpc.h2Ads.launchBrowser.useMutation();
   const closeBrowser = trpc.h2Ads.closeBrowser.useMutation();
+  const validateProxy = trpc.h2Ads.validateProxy.useMutation();
   const updateInstance = trpc.h2Ads.updateInstance.useMutation();
   const setOrderLink = trpc.h2Ads.setOrderLink.useMutation();
   const createInstanceLinkedOrderAuto = trpc.h2Ads.createInstanceLinkedOrderAuto.useMutation();
@@ -82,7 +83,7 @@ export default function OrderH2AdsBrowserShortcut({ registrationId, subOrderInde
     groups: (dashboard?.groups ?? []) as any[],
   });
 
-  const pending = launchBrowser.isPending || closeBrowser.isPending || updateInstance.isPending || setOrderLink.isPending || createInstanceLinkedOrderAuto.isPending || rotateProxyAuto.isPending || deleteInstance.isPending;
+  const pending = launchBrowser.isPending || closeBrowser.isPending || validateProxy.isPending || updateInstance.isPending || setOrderLink.isPending || createInstanceLinkedOrderAuto.isPending || rotateProxyAuto.isPending || deleteInstance.isPending;
 
   const refresh = async () => {
     await Promise.all([
@@ -167,17 +168,27 @@ export default function OrderH2AdsBrowserShortcut({ registrationId, subOrderInde
     }
   };
 
+  const prepareAgain = async (event: MouseEvent<HTMLButtonElement>) => {
+    event.stopPropagation();
+    if (!shortcut || pending) return;
+    try {
+      const result = await validateProxy.mutateAsync({ instanceId: shortcut.instanceId });
+      if ((result as any)?.healthy === false) toast.error((result as any)?.message || "A rota continua indisponível.");
+      else toast.success("Conexão revalidada. A instância aberta vai reconectar sem fechar.");
+      await refresh();
+    } catch (error) {
+      toast.error(error instanceof Error ? error.message : "Não foi possível preparar novamente.");
+    }
+  };
+
   const rotateProxy = async (event: MouseEvent<HTMLButtonElement>) => {
     event.stopPropagation();
     if (!shortcut || pending) return;
-    if (shortcut.state === "browser_open") {
-      toast.error("Feche o browser antes de trocar o proxy.");
-      return;
-    }
     if (!window.confirm("Trocar o proxy desta instância?\n\nO proxy atual será marcado como USADO e não voltará para a fila.")) return;
     try {
       const result = await rotateProxyAuto.mutateAsync({ instanceId: shortcut.instanceId });
       if (result.status === "preparing") toast.success("Proxy trocado. WALK1 recebeu a nova preparação.");
+      else if (result.status === "reconnecting") toast.success("Proxy trocado. A instância aberta está aplicando a nova conexão.");
       else if (result.status === "awaiting_proxy") toast.warning("Fila vazia. O proxy atual foi mantido.");
       else if (result.status === "worker_unavailable") toast.warning(result.message);
       else toast.error(result.message);
@@ -339,10 +350,19 @@ export default function OrderH2AdsBrowserShortcut({ registrationId, subOrderInde
     </button>
     <button
       type="button"
+      onClick={prepareAgain}
+      disabled={pending || shortcut.state === "queued" || shortcut.state === "preparing"}
+      className="inline-flex items-center gap-1 rounded-full border border-sky-400/35 bg-sky-400/15 px-2 py-1 text-[9px] font-black text-sky-200 transition hover:bg-sky-400/25 disabled:cursor-not-allowed disabled:opacity-30"
+      title="Revalidar e restaurar a conexão sem fechar a instância"
+    >
+      <RefreshCw className="h-3 w-3" />PREPARAR NOVAMENTE
+    </button>
+    <button
+      type="button"
       onClick={rotateProxy}
-      disabled={pending || shortcut.state === "browser_open" || shortcut.state === "queued" || shortcut.state === "preparing"}
+      disabled={pending || shortcut.state === "queued" || shortcut.state === "preparing"}
       className="inline-flex items-center gap-1 rounded-full border border-amber-400/35 bg-amber-400/15 px-2 py-1 text-[9px] font-black text-amber-200 transition hover:bg-amber-400/25 disabled:cursor-not-allowed disabled:opacity-30"
-      title={shortcut.state === "browser_open" ? "Feche o browser antes de trocar o proxy" : "Pegar o próximo proxy disponível da fila"}
+      title="Trocar para o próximo proxy da fila, inclusive com a instância aberta"
     >
       <RefreshCw className="h-3 w-3" />TROCAR PROXY
     </button>
