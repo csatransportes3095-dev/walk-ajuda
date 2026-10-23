@@ -4025,6 +4025,60 @@ export async function reopenAppointment(id: number): Promise<void> {
     const rows = await tx.select().from(scheduleAppointments).where(eq(scheduleAppointments.id, id)).limit(1);
     if (rows.length === 0) return;
     const appt = rows[0];
+
+    // Em Finalizados, "Restaurar" deve recuperar o horário original preservado.
+    if (appt.status === 'completed' && appt.slotDate && appt.slotTime) {
+      let slotRows = await tx.select().from(scheduleSlots)
+        .where(and(
+          eq(scheduleSlots.slotDate, appt.slotDate),
+          eq(scheduleSlots.slotTime, appt.slotTime),
+        ))
+        .limit(1);
+
+      let restoredSlotId: number;
+      if (slotRows.length === 0) {
+        const inserted: any = await tx.insert(scheduleSlots).values({
+          templateId: appt.templateId ?? null,
+          slotDate: appt.slotDate,
+          slotTime: appt.slotTime,
+          capacity: 1,
+          bookedCount: 1,
+          status: 'available',
+          note: 'Horário restaurado pelo sistema',
+        });
+        restoredSlotId = Number(inserted?.[0]?.insertId ?? inserted?.insertId ?? 0);
+        if (!restoredSlotId) throw new Error('Não foi possível recriar o horário original.');
+      } else {
+        const slot = slotRows[0];
+        restoredSlotId = slot.id;
+        const confirmed = await tx.select({ id: scheduleAppointments.id })
+          .from(scheduleAppointments)
+          .where(and(
+            eq(scheduleAppointments.slotId, restoredSlotId),
+            eq(scheduleAppointments.status, 'confirmed'),
+          ));
+        const alreadyLinked = confirmed.some(row => row.id === id);
+        const bookedCount = confirmed.length + (alreadyLinked ? 0 : 1);
+        await tx.update(scheduleSlots)
+          .set({
+            bookedCount,
+            capacity: Math.max(slot.capacity || 1, bookedCount),
+            status: 'available',
+          })
+          .where(eq(scheduleSlots.id, restoredSlotId));
+      }
+
+      await tx.update(scheduleAppointments)
+        .set({
+          status: 'confirmed',
+          slotId: restoredSlotId,
+          confirmedAt: appt.confirmedAt ?? new Date(),
+          adminSeenConfirmedAt: null,
+        })
+        .where(eq(scheduleAppointments.id, id));
+      return;
+    }
+
     const oldSlotId = appt.slotId;
     const wasPreviouslyScheduled = appt.status === 'confirmed' || Boolean(appt.confirmedAt) || Boolean(appt.slotId);
 
@@ -4047,9 +4101,6 @@ export async function reopenAppointment(id: number): Promise<void> {
       .where(eq(scheduleAppointments.id, id));
 
     if (oldSlotId) {
-      // Se o admin configurou capacidade > 1, não apagamos um slot que ainda possua
-      // outro cliente confirmado. Neste caso congelamos o slot como lotado, sem
-      // devolver a vaga abandonada. Quando o último confirmado sair, o slot é apagado.
       const otherConfirmed = await tx.select({ id: scheduleAppointments.id })
         .from(scheduleAppointments)
         .where(and(

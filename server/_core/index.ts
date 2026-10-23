@@ -18,7 +18,7 @@ import { reconcileDailyLoanLateFees } from "../routers/loans";
 import { createContext } from "./context";
 import { isAdminJwtValid } from "./trpc";
 import { serveStatic, setupVite } from "./vite";
-import { isIpBlocked, getSetting, getDb, getRaffleById, getRaffleEntries, deleteRaffleEntry } from "../db";
+import { isIpBlocked, getSetting, getDb, getRaffleById, getRaffleEntries, deleteRaffleEntry, getAppointmentById, reopenAppointment } from "../db";
 import { broadcastEmailHandler } from "../broadcastEmailHandler";
 import { registerPingRoute } from "./pingRoute";
 import { registerRaffleIntegrityRoutes } from "../raffleIntegrityRoutes";
@@ -247,6 +247,17 @@ async function startServer() {
   // Keep gate before uploads, worker routes, storage proxies, tRPC and HTML fallback.
   app.use(createSiteAccessGateway());
   const server = createServer(app);
+  // Recuperação automática e idempotente do agendamento encerrado por engano.
+  try {
+    const appt = await getAppointmentById(2940001);
+    if (appt?.registrationId === 2040001 && appt.status === 'completed' && appt.slotDate === '2026-10-24' && appt.slotTime === '11:30') {
+      await reopenAppointment(appt.id);
+      console.warn('[ScheduleRepair] pedido 2040001 restaurado automaticamente para 24/10/2026 11:30.');
+    }
+  } catch (error) {
+    console.error('[ScheduleRepair] falha ao restaurar pedido 2040001:', error);
+  }
+
   // Register upload route BEFORE body parsers so multer can handle multipart streams correctly
   // A camada de identidade deve estar pronta antes de qualquer rota aceitar cadastro ou login.
   try {

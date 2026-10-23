@@ -1452,7 +1452,7 @@ function FinalizadosTab() {
     onError: (e) => toast.error(e.message),
   });
   const reopenMut = trpc.schedule.reopen.useMutation({
-    onSuccess: () => { toast.success("Agendamento restaurado"); utils.schedule.listAppointments.invalidate(); },
+    onSuccess: () => { toast.success("Horário original restaurado"); utils.schedule.listAppointments.invalidate(); },
     onError: (e) => toast.error(e.message),
   });
 
@@ -1492,7 +1492,7 @@ function FinalizadosTab() {
                   onClick={() => reopenMut.mutate({ id: a.id })}
                   disabled={reopenMut.isPending}
                   className="text-xs px-2 py-1 bg-blue-600/20 border border-blue-500/30 text-blue-300 hover:bg-blue-600/30 rounded transition-colors disabled:opacity-50"
-                >Restaurar</button>
+                >Restaurar horário</button>
                 <button
                   onClick={() => { if (confirm("Excluir este agendamento da lista? Esta ação não pode ser desfeita.")) removeMut.mutate({ id: a.id }); }}
                   disabled={removeMut.isPending}
