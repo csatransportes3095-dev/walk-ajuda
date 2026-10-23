@@ -765,26 +765,69 @@ export default function AdminCustomers() {
   };
 
   const handlePastePhoto = async (customer: Customer) => {
-    if (customerSaveGate.isBusy()) { toast.info("Aguarde o salvamento antes de colar outro print."); return; }
-    if (!navigator.clipboard?.read) {
-      toast.error("Este navegador não permite colar imagem automaticamente.");
+    if (customerSaveGate.isBusy()) {
+      toast.info("Aguarde o salvamento antes de colar outro print.");
+      return;
+    }
+
+    if (!window.isSecureContext || !navigator.clipboard?.read) {
+      toast.error("Leitura automática do print não está disponível neste navegador.");
+      return;
+    }
+
+    let items: ClipboardItems;
+    try {
+      items = await navigator.clipboard.read();
+    } catch (error: any) {
+      const name = String(error?.name || "");
+      const message = String(error?.message || "");
+      console.error("[AdminCustomers][clipboard.read]", { name, message, secure: window.isSecureContext, active: navigator.userActivation?.isActive });
+      if (name === "NotAllowedError") {
+        toast.error("O Chrome recusou a leitura do print mesmo com a permissão liberada. Atualize a página e tente novamente.");
+      } else {
+        toast.error(`Falha ao ler o print: ${message || name || "erro desconhecido"}`);
+      }
+      return;
+    }
+
+    const imageItem = items.find(item => item.types.some(type => type.startsWith("image/")));
+    if (!imageItem) {
+      const formats = items.flatMap(item => item.types).join(", ");
+      console.warn("[AdminCustomers][clipboard] sem imagem", formats);
+      toast.error(formats ? `O conteúdo copiado não veio como imagem (${formats}).` : "Não encontrei uma imagem copiada.");
+      return;
+    }
+
+    const preferredType =
+      imageItem.types.find(type => type === "image/png") ||
+      imageItem.types.find(type => type === "image/jpeg") ||
+      imageItem.types.find(type => type === "image/webp") ||
+      imageItem.types.find(type => type.startsWith("image/"));
+
+    if (!preferredType) {
+      toast.error("O print copiado não possui um formato de imagem compatível.");
       return;
     }
 
     try {
-      const items = await navigator.clipboard.read();
-      for (const item of items) {
-        const imageType = item.types.find(type => type.startsWith("image/"));
-        if (!imageType) continue;
-        const blob = await item.getType(imageType);
-        const ext = imageType.includes("png") ? "png" : "jpg";
-        const file = new File([blob], `print-${customer.phone}.${ext}`, { type: imageType });
-        handlePhotoUpload(customer, file);
+      const blob = await imageItem.getType(preferredType);
+      if (!blob || blob.size <= 0) {
+        toast.error("O print copiado veio vazio.");
         return;
       }
-      toast.error("Não encontrei uma imagem copiada.");
-    } catch {
-      toast.error("Permissão da área de transferência bloqueada no navegador.");
+
+      const ext =
+        preferredType.includes("png") ? "png" :
+        preferredType.includes("webp") ? "webp" : "jpg";
+      const file = new File([blob], `print-${customer.phone}.${ext}`, {
+        type: preferredType,
+        lastModified: Date.now(),
+      });
+
+      handlePhotoUpload(customer, file);
+    } catch (error: any) {
+      console.error("[AdminCustomers][clipboard.image]", error);
+      toast.error(`Não foi possível converter o print: ${error?.message || "erro desconhecido"}`);
     }
   };
 
