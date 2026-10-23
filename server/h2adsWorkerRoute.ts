@@ -107,6 +107,29 @@ export function registerH2AdsWorkerRoute(app: Express): void {
     if (!worker) return;
     res.status(200).json((await listH2AdsStartupSites()).filter(item => item.enabled).map(item => item.url));
   }));
+  app.get("/api/h2ads/worker/proxy/:instanceId/current", safeH2AdsWorkerRoute(async (req: Request, res: Response) => {
+    noStore(res);
+    const worker = await authenticateRequest(req, res);
+    if (!worker) return;
+    const instanceId = Number(req.params.instanceId);
+    if (!Number.isSafeInteger(instanceId) || instanceId < 1) {
+      res.status(400).json({ error: "Instância inválida." });
+      return;
+    }
+    const owner = await h2AdsRemoteOwnerForOpenInstance(instanceId);
+    if (owner !== worker.id) {
+      res.status(403).json({ error: "Instância não pertence a este Worker." });
+      return;
+    }
+    const encryptedPayload = await getH2AdsProxyCredential(instanceId);
+    if (!encryptedPayload) {
+      res.status(404).json({ error: "Proxy não configurado." });
+      return;
+    }
+    const proxy = decryptH2AdsProxy(encryptedPayload);
+    res.status(200).json({ proxy });
+  }));
+
   app.get("/api/h2ads/worker/extensions/enabled", safeH2AdsWorkerRoute(async (req: Request, res: Response) => {
     noStore(res);
     const worker = await authenticateRequest(req, res);
