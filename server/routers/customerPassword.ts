@@ -31,6 +31,7 @@ const LOGIN_EMAIL_PROOF_TTL_MS = 20 * 60 * 1000;
 type LoginEmailPending = {
   phone: string;
   email: string;
+  code: string;
   codeHash: string;
   expiresAt: number;
   lastSentAt: number;
@@ -198,18 +199,41 @@ export const customerPasswordRouter = router({
 
       const key = loginEmailKey(cleanPhone, email);
       const current = loginEmailPending.get(key);
-      if (current && Date.now() - current.lastSentAt < LOGIN_EMAIL_CODE_RESEND_MS) {
-        const retryAfter = Math.ceil((LOGIN_EMAIL_CODE_RESEND_MS - (Date.now() - current.lastSentAt)) / 1000);
-        return { success: false, error: "cooldown" as const, retryAfter, message: "Aguarde " + retryAfter + "s para reenviar o código." };
+      const now = Date.now();
+
+      if (current && current.expiresAt > now) {
+        if (now - current.lastSentAt < LOGIN_EMAIL_CODE_RESEND_MS) {
+          const retryAfter = Math.ceil((LOGIN_EMAIL_CODE_RESEND_MS - (now - current.lastSentAt)) / 1000);
+          return { success: false, error: "cooldown" as const, retryAfter, message: "Aguarde " + retryAfter + "s para reenviar o código." };
+        }
+
+        try {
+          await deliverOwnSiteCode(email, current.code);
+          current.lastSentAt = now;
+        } catch (error) {
+          console.error("[customerPassword] login email code resend failed", error instanceof Error ? error.message : String(error));
+          throw new TRPCError({ code: "INTERNAL_SERVER_ERROR", message: "Não foi possível reenviar o código agora. Tente novamente." });
+        }
+
+        return {
+          success: true,
+          existingCustomer: !!customer,
+          email,
+          reusedCode: true,
+          expiresIn: Math.max(1, Math.floor((current.expiresAt - now) / 1000)),
+        };
       }
+
+      if (current) loginEmailPending.delete(key);
 
       const code = generateOwnSiteCode();
       loginEmailPending.set(key, {
         phone: cleanPhone,
         email,
+        code,
         codeHash: loginEmailCodeHash(cleanPhone, email, code),
-        expiresAt: Date.now() + LOGIN_EMAIL_CODE_TTL_MS,
-        lastSentAt: Date.now(),
+        expiresAt: now + LOGIN_EMAIL_CODE_TTL_MS,
+        lastSentAt: now,
         attempts: 0,
       });
 
@@ -225,6 +249,7 @@ export const customerPasswordRouter = router({
         success: true,
         existingCustomer: !!customer,
         email,
+        reusedCode: false,
         expiresIn: Math.floor(LOGIN_EMAIL_CODE_TTL_MS / 1000),
       };
     }),
