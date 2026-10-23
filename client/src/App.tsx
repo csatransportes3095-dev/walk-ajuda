@@ -83,6 +83,7 @@ import AdminHubCentral from "./pages/AdminHubCentral";
 import AdminLocadora from "./pages/AdminLocadora";
 import LocadoraPortal from "./pages/LocadoraPortal";
 import AdminConsultas from "./pages/AdminConsultas";
+import AdminVehicleUsage from "./pages/AdminVehicleUsage";
 import AdminWhatsappTemplates from "./pages/AdminWhatsappTemplates";
 import AdminCartoesUsers from "./pages/AdminCartoesUsers";
 import AdminOnlineSupport from "./pages/AdminOnlineSupport";
@@ -353,6 +354,9 @@ function Router() {
       </Route>
       <Route path={"/admin/consultas"}>
         <AdminGuard><AdminConsultas /></AdminGuard>
+      </Route>
+      <Route path={"/adm/conferencia-veiculo"}>
+        <AdminGuard><AdminVehicleUsage /></AdminGuard>
       </Route>
       <Route path={"/admin/whatsapp-templates"}>
         <AdminGuard><AdminWhatsappTemplates /></AdminGuard>
