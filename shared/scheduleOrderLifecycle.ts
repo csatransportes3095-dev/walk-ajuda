@@ -46,4 +46,22 @@ export function isScheduleClosedStatusInFlow(input: {
   targetLabel?: string | null;
   flowStatusKeys: string[];
   statuses: ScheduleStatusDescriptor[];
+}): boolean {
+  const labelByKey = new Map(input.statuses.map(status => [status.key, status.label ?? status.key]));
+  const targetLabel = input.targetLabel || labelByKey.get(input.targetKey) || input.targetKey;
+
+  if (isAnalysisOrderStatusSemantic(input.targetKey, targetLabel)) return false;
+
+  const photoAnalysisIndex = input.flowStatusKeys.findIndex(key =>
+    isPhotoAnalysisOrderStatusSemantic(key, labelByKey.get(key) ?? key)
+  );
+  const targetIndex = input.flowStatusKeys.indexOf(input.targetKey);
+
+  if (photoAnalysisIndex >= 0 && targetIndex >= 0) {
+    return targetIndex >= photoAnalysisIndex;
+  }
+
+  // Fallback apenas quando a sequência do pedido não puder ser resolvida.
+  if (isPhotoAnalysisOrderStatusSemantic(input.targetKey, targetLabel)) return true;
+  return SCHEDULE_CLOSED_STATUS_FALLBACK.has(input.targetKey);
 }
