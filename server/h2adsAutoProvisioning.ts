@@ -182,15 +182,6 @@ export async function autoProvisionH2AdsInstance(instanceId: number): Promise<H2
     };
   }
 
-  if (browserAlreadyOpen) {
-    return {
-      status: "reconnecting",
-      instanceId,
-      proxyPoolId: reserved.id,
-      message: "Proxy trocado e validado. A sessão aberta vai aplicar a nova rota automaticamente.",
-    };
-  }
-
   const worker = await resolveWalk1Worker();
   if (!worker || !worker.online) {
     return {
