@@ -244,6 +244,10 @@ async function getCustomerPhotoPreview(sourceUrl: URL) {
 
 async function startServer() {
   const app = express();
+  app.use((_req, res, next) => {
+    res.setHeader("Permissions-Policy", "clipboard-read=(self), clipboard-write=(self)");
+    next();
+  });
   // Keep gate before uploads, worker routes, storage proxies, tRPC and HTML fallback.
   app.use(createSiteAccessGateway());
   const server = createServer(app);
