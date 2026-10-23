@@ -2210,7 +2210,10 @@ export const loanRouter = router({
 
     const loans = await qRows(db, drizzleSql`
       SELECT l.*,
-        DATE_ADD(l.createdAt, INTERVAL 24 HOUR) as plannedReleaseAt,
+        CASE
+          WHEN l.approvedAt IS NOT NULL THEN DATE_ADD(l.approvedAt, INTERVAL 24 HOUR)
+          ELSE NULL
+        END as plannedReleaseAt,
         (SELECT COUNT(*) FROM loanInstallments WHERE loanId=l.id AND status='pago') as paidInstallments,
         (SELECT COUNT(*) FROM loanInstallments WHERE loanId=l.id) as totalInstallments,
         (SELECT COUNT(*) FROM loanInstallments WHERE loanId=l.id AND status='em_analise') as pendingProofs
