@@ -22,7 +22,7 @@ import {
 } from "./h2adsProxyPool";
 
 export type H2AdsAutoProvisionResult = {
-  status: "preparing" | "awaiting_proxy" | "proxy_failed" | "worker_unavailable";
+  status: "preparing" | "reconnecting" | "awaiting_proxy" | "proxy_failed" | "worker_unavailable";
   instanceId: number;
   proxyPoolId?: number;
   workerId?: number;
@@ -58,7 +58,6 @@ async function assertProxySwapAllowed(instanceId: number) {
     .limit(1);
 
   const state = runs[0]?.state;
-  if (state === "browser_open") throw new Error("Feche o browser antes de trocar o proxy.");
   if (state === "queued" || state === "preparing") throw new Error("A preparação desta instância ainda está em andamento.");
 
   const [prep, browser] = await Promise.all([
@@ -183,6 +182,15 @@ export async function autoProvisionH2AdsInstance(instanceId: number): Promise<H2
     };
   }
 
+  if (browserAlreadyOpen) {
+    return {
+      status: "reconnecting",
+      instanceId,
+      proxyPoolId: reserved.id,
+      message: "Proxy trocado e validado. A sessão aberta vai aplicar a nova rota automaticamente.",
+    };
+  }
+
   const worker = await resolveWalk1Worker();
   if (!worker || !worker.online) {
     return {
@@ -208,6 +216,13 @@ export async function autoProvisionH2AdsInstance(instanceId: number): Promise<H2
 
 export async function rotateH2AdsInstanceProxy(instanceId: number): Promise<H2AdsAutoProvisionResult> {
   await assertProxySwapAllowed(instanceId);
+  const db = await requireDb();
+  const runRows = await db
+    .select({ state: h2AdsInstanceBrowserRuns.state })
+    .from(h2AdsInstanceBrowserRuns)
+    .where(eq(h2AdsInstanceBrowserRuns.instanceId, instanceId))
+    .limit(1);
+  const browserAlreadyOpen = runRows[0]?.state === "browser_open";
 
   const reserved = await reserveH2AdsProxyForInstance(instanceId);
   if (!reserved) {
@@ -218,7 +233,7 @@ export async function rotateH2AdsInstanceProxy(instanceId: number): Promise<H2Ad
     };
   }
 
-  await resetPreparationState(instanceId);
+  if (!browserAlreadyOpen) await resetPreparationState(instanceId);
 
   const checked = await attachAndValidateReservedProxy(instanceId, reserved);
   if (!checked.ok) {
