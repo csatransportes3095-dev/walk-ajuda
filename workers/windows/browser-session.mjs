@@ -317,45 +317,51 @@ async function suspendProxyTraffic(reason = "proxy_path_unverified") {
 }
 
 async function resumeProxyTraffic() {
-  // A troca de IP durante uma sessao e definitiva: somente uma nova sessao pode aceitar o novo IP.
-  if (!networkSuspended || browserExitHandled || sessionIpChanged) return;
+  // A instância permanece aberta durante a queda. O novo caminho só é liberado
+  // depois de validar o upstream e confirmar o mesmo IP pelo Chrome de prova.
+  if (!networkSuspended || browserExitHandled) return;
   try {
     if (!backendRelay) {
       backendRelay = createBackendRelay();
       await backendRelay.listen();
     }
-    // Prove the upstream route with the FRONT STILL BLOCKED. No traffic from
-    // Chrome is released until a Chrome probe also confirms the expected IP.
+    // O front continua bloqueado enquanto o novo caminho é testado.
     const observedIp = await checkIpThroughPort(backendRelay.port);
-    // Recovery must preserve the original session IP before any Chrome traffic is released.
-    if (sessionLockedIp && normalizeIp(observedIp) !== normalizeIp(sessionLockedIp)) {
-      sessionIpChanged = true;
-      writeSession({
-        sessionLockedIp, observedIp,
-        sessionIpChangedAt: new Date().toISOString(),
-        networkState: "blocked", killSwitch: "triggered",
-        killSwitchReason: "session_ip_changed",
-      });
-      await suspendProxyTraffic("session_ip_changed");
-      return;
-    }
     const executable = chromeExecutable();
     if (!executable) throw new Error("browser_not_found");
     const browserObservedIp = await verifyChromeProxyPath(executable, backendRelay.port, observedIp);
+
     if (!frontRelay) {
       frontRelay = createFrontRelay(relayPort);
       await frontRelay.listen();
     }
+
+    // Se o provedor voltou com outro IP, adotar somente depois da validação dupla.
+    const previousLockedIp = sessionLockedIp;
+    sessionLockedIp = observedIp;
+    sessionIpChanged = Boolean(previousLockedIp && normalizeIp(previousLockedIp) !== normalizeIp(observedIp));
     activeBackendPort = backendRelay.port;
     networkSuspended = false;
+
     const frontIp = await checkIp();
     if (normalizeIp(frontIp) !== normalizeIp(observedIp)) throw new Error("exit_ip_mismatch");
+
     writeSession({
-      networkState: "online", privacyGuard: "protected", killSwitch: "armed",
-      networkFailureCategory: null, networkRestoredAt: new Date().toISOString(),
-      observedIp: frontIp, browserObservedIp, browserProxyVerified: true,
+      networkState: "online",
+      privacyGuard: "protected",
+      killSwitch: "armed",
+      networkFailureCategory: null,
+      networkRestoredAt: new Date().toISOString(),
+      previousSessionLockedIp: previousLockedIp || null,
+      sessionLockedIp,
+      sessionIpChanged,
+      sessionIpChangedAt: sessionIpChanged ? new Date().toISOString() : null,
+      observedIp: frontIp,
+      browserObservedIp,
+      browserProxyVerified: true,
+      browserProxyVerification: "verified",
     });
-    // A panel outage must not undo successful proxy recovery.
+    lastReportedIp = frontIp;
     void syncPanelOpening(frontIp);
   } catch (error) {
     await suspendProxyTraffic(error instanceof Error ? error.message : "proxy_path_unverified");
@@ -405,12 +411,20 @@ async function enforceKillSwitch() {
   killSwitchCheckInProgress = true;
   try {
     if (networkSuspended) {
-      if (!sessionIpChanged) await resumeProxyTraffic();
+      await resumeProxyTraffic();
     } else {
       const observedIp = await checkIp();
       if (sessionLockedIp && normalizeIp(observedIp) !== normalizeIp(sessionLockedIp)) {
         sessionIpChanged = true;
-        await suspendProxyTraffic("session_ip_changed");
+        writeSession({
+          previousSessionLockedIp: sessionLockedIp,
+          observedIp,
+          sessionIpChangedAt: new Date().toISOString(),
+          networkState: "suspended",
+          killSwitch: "armed",
+          killSwitchReason: "proxy_ip_changed_revalidating",
+        });
+        await suspendProxyTraffic("proxy_ip_changed_revalidating");
       } else {
         writeSession({ killSwitch: "armed", killSwitchLastVerifiedAt: new Date().toISOString(), sessionLockedIp });
       }
@@ -680,9 +694,8 @@ async function run() {
     }
     panelSyncTimer = setInterval(() => { void syncPanelOpening(); }, 12_000);
     panelSyncTimer.unref?.();
-    // Security rule: never rotate/reconnect the upstream route while the browser session is open.
-    // A new relay is created only on the next browser session. This prevents IP changes during
-    // login/authentication while the Windows firewall continues blocking any direct browser egress.
+    // A queda do proxy não encerra o Chrome. O relay local permanece como barreira;
+    // a conexão só volta depois que o upstream e o Chrome de prova validarem o mesmo IP.
     try {
       writeSession({
         startedAt: new Date().toISOString(), lastClosedAt: null, browserExitReason: null,
