@@ -763,6 +763,25 @@ export default function AdminCustomers() {
     reader.readAsDataURL(file);
   };
 
+  const handlePastePhoto = async (customer: Customer) => {
+    if (customerSaveGate.isBusy()) { toast.info("Aguarde o salvamento antes de colar outro print."); return; }
+    if (!navigator.clipboard?.read) { toast.error("Este navegador não permite ler imagem da área de transferência."); return; }
+    try {
+      const items = await navigator.clipboard.read();
+      for (const item of items) {
+        const imageType = item.types.find(type => type.startsWith("image/"));
+        if (!imageType) continue;
+        const blob = await item.getType(imageType);
+        const file = new File([blob], `print-${customer.phone}.${imageType.includes("png") ? "png" : "jpg"}`, { type: imageType });
+        handlePhotoUpload(customer, file);
+        return;
+      }
+      toast.error("Não encontrei uma imagem copiada. Copie o print e tente novamente.");
+    } catch (error) {
+      toast.error("Não foi possível acessar o print copiado. Autorize a área de transferência no navegador.");
+    }
+  };
+
   const handleCreatePhotoUpload = (file: File) => {
     if (!createPhone || createPhone.length < 10) { setCreateError('Informe o telefone antes de enviar a foto'); return; }
     if (!file.type.startsWith('image/')) { setCreateError('Selecione uma imagem válida'); return; }
@@ -1405,6 +1424,15 @@ export default function AdminCustomers() {
                         : <Camera className="w-3 h-3 text-white" />
                       }
                     </label>
+                    <button
+                      type="button"
+                      onClick={(e) => { e.stopPropagation(); void handlePastePhoto(c); }}
+                      disabled={uploadingPhotoFor === c.id}
+                      className="absolute -bottom-7 left-1/2 -translate-x-1/2 whitespace-nowrap rounded-md border border-cyan-400/35 bg-cyan-500/15 px-2 py-1 text-[8px] font-black uppercase text-cyan-200 shadow hover:bg-cyan-500/25 disabled:opacity-50"
+                      title="Usar a imagem copiada da área de transferência como foto"
+                    >
+                      COLAR PRINT
+                    </button>
                   </div>
 
                   {/* Info ao lado da foto */}
