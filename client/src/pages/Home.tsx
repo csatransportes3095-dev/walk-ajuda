@@ -1526,16 +1526,44 @@ export default function Home() {
       return;
     }
 
-    // Validar perguntas obrigatórias (perguntas individuais por opção)
+    // Validar somente as perguntas que pertencem ao caminho REAL escolhido.
+    // Regras "Encerrar questionário" / "Encerrar com mensagem" cortam todas as
+    // perguntas posteriores também na finalização do pedido.
     const optQuestions = selectedOption?.questions || [];
     if (optQuestions.length > 0) {
-      for (const q of optQuestions) {
-        // Pular perguntas condicionais que não estão visíveis
-        if (q.parentQuestionId) {
-          const parentAnswer = questionAnswers[q.parentQuestionId]?.trim() || "";
-          const isVisible = !q.triggerOption || parentAnswer === q.triggerOption;
-          if (!isVisible) continue;
+      const orderedVisibleQuestions: ProductQuestion[] = [];
+      const appendVisible = (q: ProductQuestion) => {
+        if (orderedVisibleQuestions.some(item => item.id === q.id)) return;
+        orderedVisibleQuestions.push(q);
+
+        const children = optQuestions
+          .filter(child => child.parentQuestionId === q.id)
+          .sort((a, b) => a.sortOrder - b.sortOrder);
+
+        for (const child of children) {
+          const parentAnswer = questionAnswers[q.id]?.trim() || "";
+          const parentKind = getVehicleQuestionKind(q.question);
+          const childKind = getVehicleQuestionKind(child.question);
+          const isGenericVehicleModel = parentKind === 'brand' && childKind === 'model';
+          const isVisible = isGenericVehicleModel
+            ? !!parentAnswer
+            : (!child.triggerOption || parentAnswer === child.triggerOption);
+          if (isVisible) appendVisible(child);
         }
+      };
+
+      optQuestions
+        .filter(q => !q.parentQuestionId)
+        .sort((a, b) => a.sortOrder - b.sortOrder)
+        .forEach(appendVisible);
+
+      const activeFlowQuestions = applyQuestionFlow(
+        orderedVisibleQuestions,
+        questionAnswers,
+        extractFlowRules(optQuestions),
+      ).questions;
+
+      for (const q of activeFlowQuestions) {
         const hasAudio = q.fieldType === 'audio' && !!questionAudioAnswers[q.id];
         if (q.isRequired === 1 && !(hasAudio || questionAnswers[q.id]?.trim())) {
           toast.error(`Responda: ${q.question}`);
