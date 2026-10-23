@@ -355,7 +355,7 @@ function Router() {
       <Route path={"/admin/consultas"}>
         <AdminGuard><AdminConsultas /></AdminGuard>
       </Route>
-      <Route path={"/adm/conferencia-veiculo"}>
+      <Route path={"/adm/placa"}>
         <AdminGuard><AdminVehicleUsage /></AdminGuard>
       </Route>
       <Route path={"/admin/whatsapp-templates"}>
@@ -410,7 +410,7 @@ function ClientInstallGate({ children }: { children: React.ReactNode }) {
 function AppContent() {
   const [location] = useLocation();
   const isGeradorChassiRoute = isChassisAdminPath(location);
-  const isVehicleUsageAdminRoute = location.toLowerCase() === "/adm/conferencia-veiculo";
+  const isVehicleUsageAdminRoute = location.toLowerCase() === "/adm/placa";
   const isAdminRoute = location.startsWith("/admin") || isGeradorChassiRoute || isVehicleUsageAdminRoute;
   const isH2AdsRoute = isH2AdsPath(location);
   const isSimilarityRoute = location.toLowerCase() === "/similaridade";
