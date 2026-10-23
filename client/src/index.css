@@ -743,20 +743,20 @@
 
 .h2ads-workspace button:not(:disabled),
 .h2ads-workspace a[class*="rounded"] {
-  background-color: #000000 !important;
+  background-color: #171717 !important;
   border-color: rgba(255,255,255,0.16) !important;
   color: #FFFFFF !important;
 }
 
 .h2ads-workspace button:not(:disabled):hover,
 .h2ads-workspace a[class*="rounded"]:hover {
-  background-color: #151515 !important;
+  background-color: #222222 !important;
   border-color: rgba(255,255,255,0.30) !important;
   color: #FFFFFF !important;
 }
 
 .h2ads-workspace button:disabled {
-  background-color: #101010 !important;
+  background-color: #141414 !important;
   color: rgba(255,255,255,0.35) !important;
   border-color: rgba(255,255,255,0.08) !important;
 }
