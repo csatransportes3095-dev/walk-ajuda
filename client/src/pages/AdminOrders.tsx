@@ -2831,11 +2831,41 @@ export default function AdminOrders() {
         </div>
       )}
 
+      <style>{`
+        .h2-orders-toolbar { position: relative; background: linear-gradient(135deg, #0c1023, #17102d); border-bottom: 1px solid #a855f780; box-shadow: 0 6px 24px #7c3aed20; }
+        .h2-orders-toolbar > div { max-width: 72rem; display: flex; flex-direction: column; align-items: stretch; gap: 14px; padding: 16px; }
+        .h2-orders-toolbar > div > div:first-child { width: 100%; flex-shrink: 0; }
+        .h2-orders-toolbar > div > div:last-child { display: grid; width: 100%; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 10px; }
+        .h2-orders-toolbar-actions { display: contents; }
+        .h2-orders-toolbar-actions > .relative { min-width: 0; }
+        .h2-orders-toolbar > div > div:last-child > a,
+        .h2-orders-toolbar > div > div:last-child > button,
+        .h2-orders-toolbar-actions > button,
+        .h2-orders-toolbar-actions > .relative > button {
+          display: flex; align-items: center; justify-content: center; gap: 8px;
+          width: 100%; min-width: 0; min-height: 48px; height: auto; padding: 10px 12px;
+          border-width: 1px; border-style: solid; border-radius: 12px;
+          font-size: 12px; line-height: 1.35; font-weight: 700; white-space: normal;
+          text-align: center; overflow-wrap: anywhere;
+          box-shadow: inset 0 1px 0 #ffffff18, 0 0 12px #8b5cf618;
+          transition: box-shadow .18s ease, filter .18s ease;
+          animation: none;
+        }
+        .h2-orders-toolbar-actions > button:last-child { border-color: #64748b80; background: #172033; color: #e2e8f0; }
+        .h2-orders-toolbar > div > div:last-child > button > span { display: inline; }
+        .h2-orders-toolbar svg { flex-shrink: 0; width: 17px; height: 17px; }
+        .h2-orders-toolbar button:hover, .h2-orders-toolbar a:hover { filter: brightness(1.15); box-shadow: 0 0 16px #a855f740; }
+        .h2-orders-toolbar button:focus-visible, .h2-orders-toolbar a:focus-visible { outline: 2px solid #67e8f9; outline-offset: 3px; }
+        @media (min-width: 768px) { .h2-orders-toolbar > div > div:last-child { grid-template-columns: repeat(4, minmax(0, 1fr)); } }
+        @media (prefers-reduced-motion: reduce) { .h2-orders-toolbar button, .h2-orders-toolbar a { transition: none; } }
+      `}</style>
       <AdminHeader
         title="Pedidos"
+        stackOnMobile
+        className="h2-orders-toolbar"
         icon={<Package className="w-5 h-5" />}
         rightContent={
-          <div className="flex items-center gap-1">
+          <div className="h2-orders-toolbar-actions">
             {/* Dropdown de ordenação */}
             <div className="relative group">
               <button
@@ -2844,8 +2874,8 @@ export default function AdminOrders() {
                 onClick={() => setSortOrder(prev => prev === "asc" ? "desc" : "asc")}
               >
                 {sortOrder === "asc" ? <ArrowUp className="w-3.5 h-3.5 text-primary" /> : <ArrowDown className="w-3.5 h-3.5 text-primary" />}
-                <span className="hidden sm:inline text-[10px] text-muted-foreground">
-                  {sortBy === "date" ? "Data" : sortBy === "status_date" ? "Status" : "Nome"}
+                <span className="text-xs">
+                  Ordenar: {sortBy === "date" ? "data" : sortBy === "status_date" ? "status" : "nome"}
                 </span>
               </button>
               <div className="absolute right-0 top-full mt-1 bg-card border border-border rounded-xl shadow-xl z-50 min-w-[160px] py-1 hidden group-hover:block">
@@ -2888,28 +2918,28 @@ export default function AdminOrders() {
             </div>
             {someSelected && (
               <button onClick={() => setConfirmBulkDelete(true)} className="flex items-center gap-1 px-2 py-1.5 bg-red-600 text-white rounded-lg text-xs font-semibold hover:bg-red-700 transition-colors">
-                <Trash className="w-3.5 h-3.5" />{selected.size}
+                <Trash className="w-3.5 h-3.5" /><span>Excluir ({selected.size})</span>
               </button>
             )}
             {commissionPendingCount > 0 && (
               <button onClick={() => navigate("/admin/commissions")} className="flex items-center gap-1 px-2 py-1.5 bg-amber-500/20 border border-amber-500/50 text-amber-400 rounded-lg text-xs font-semibold hover:bg-amber-500/30 transition-colors animate-pulse">
-                💰{commissionPendingCount}
+                <span aria-hidden="true">💰</span><span>Comissões ({commissionPendingCount})</span>
               </button>
             )}
             <button onClick={() => setShowGlobalProgressSequence(true)} className="flex items-center gap-1 px-2 py-1.5 bg-purple-600/20 border border-purple-500/40 text-purple-300 rounded-lg text-xs font-bold hover:bg-purple-600/30 transition-colors" title="Definir uma única sequência de progresso para todos os clientes">
-              <Layers className="w-3.5 h-3.5" /><span className="hidden lg:inline">Sequência do Cliente</span>
+              <Layers className="w-3.5 h-3.5" /><span>Sequência do cliente</span>
             </button>
             <button onClick={() => navigate("/admin/orders/new")} className="flex items-center gap-1 px-2 py-1.5 bg-primary text-primary-foreground rounded-lg text-xs font-semibold hover:bg-primary/90 transition-colors">
-              <Plus className="w-3.5 h-3.5" /><span className="hidden sm:inline">Novo</span>
+              <Plus className="w-3.5 h-3.5" /><span>Novo pedido</span>
             </button>
             <button onClick={() => setShowCsvImportModal(true)} className="flex items-center gap-1 px-2 py-1.5 bg-blue-600 text-white rounded-lg text-xs font-semibold hover:bg-blue-700 transition-colors">
-              <Upload className="w-3.5 h-3.5" /><span className="hidden sm:inline">Importar CSV</span>
+              <Upload className="w-3.5 h-3.5" /><span>Importar CSV</span>
             </button>
             <button onClick={exportCSV} className="flex items-center gap-1 px-2 py-1.5 bg-green-600 text-white rounded-lg text-xs font-semibold hover:bg-green-700 transition-colors">
-              <Download className="w-3.5 h-3.5" /><span className="hidden sm:inline">CSV</span>
+              <Download className="w-3.5 h-3.5" /><span>Exportar CSV</span>
             </button>
             <button onClick={() => ordersQuery.refetch()} className="p-1.5 rounded-lg hover:bg-card transition-colors">
-              <RefreshCw className={`w-4 h-4 ${ordersQuery.isFetching ? "animate-spin" : ""}`} />
+              <RefreshCw className={`w-4 h-4 ${ordersQuery.isFetching ? "animate-spin" : ""}`} /><span>Atualizar</span>
             </button>
           </div>
         }

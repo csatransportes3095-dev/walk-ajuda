@@ -14,9 +14,11 @@ interface AdminHeaderProps {
   rightContent?: React.ReactNode;
   /** Empilha título e ações no celular; padrão false para não alterar outras telas */
   stackOnMobile?: boolean;
+  /** Classe visual opcional para personalização isolada por página. */
+  className?: string;
 }
 
-export default function AdminHeader({ icon, title, backTo = "/admin/codes", rightContent, stackOnMobile = false }: AdminHeaderProps) {
+export default function AdminHeader({ icon, title, backTo = "/admin/codes", rightContent, stackOnMobile = false, className = "" }: AdminHeaderProps) {
   const [, navigate] = useLocation();
   const utils = trpc.useUtils();
 
@@ -33,7 +35,7 @@ export default function AdminHeader({ icon, title, backTo = "/admin/codes", righ
   });
 
   return (
-    <header className="sticky top-0 z-50 bg-[#0a0a1a]/95 backdrop-blur-md border-b border-purple-500/30">
+    <header className={`sticky top-0 z-50 bg-[#0a0a1a]/95 backdrop-blur-md border-b border-purple-500/30 ${className}`}>
       <div className={`max-w-4xl mx-auto py-3 px-4 ${stackOnMobile ? "flex flex-col sm:flex-row sm:items-center sm:justify-between gap-3" : "flex items-center justify-between"}`}>
         <div className={`flex items-center gap-2 ${stackOnMobile ? "w-full sm:w-auto min-w-0" : ""}`}>
           <a href={backTo} className="text-white/60 hover:text-white transition-colors p-1">
