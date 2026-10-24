@@ -23,7 +23,7 @@
   ]);
 
   const prefixes = [
-    '/admin/', '/h2ads', '/revendedor/', '/agendar/', '/orcamento/', '/recibo/',
+    '/admin/', '/h2ads', '/revendedor/', '/agendar/', '/confirmacao-foto/', '/orcamento/', '/recibo/',
     '/locadora/', '/cartoes/', '/video/', '/r/'
   ];
 
