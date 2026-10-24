@@ -23,6 +23,7 @@ import { NotesTab } from "@/components/NotesTab";
 import { AuthenticatorQrAdminField, type PendingQr } from "@/components/AuthenticatorQrAdminField";
 import { OrderLoginAuthenticatorCode } from "@/components/OrderLoginAuthenticatorCode";
 import OrderH2AdsBrowserShortcut from "@/components/OrderH2AdsBrowserShortcut";
+import OrderPhotoConfirmation from "@/components/OrderPhotoConfirmation";
 import { normalizePublicSiteLinks, normalizeWhatsAppTrackingLinks, publicSiteUrl, publicTrackingShareUrl } from "@shared/publicLinks";
 import { getOperationalBucket } from "@shared/orderBuckets";
 import { repairWhatsappReplacementIcons } from "@shared/whatsappMessageText";
@@ -4764,6 +4765,13 @@ export default function AdminOrders() {
                                                       serviceName={ar.serviceName}
                                                       serviceOption={ar.serviceOption}
                                                     />
+                                                    <OrderPhotoConfirmation
+                                                      registrationId={ar.registrationId}
+                                                      subOrderIndex={0}
+                                                      customerPhone={ar.customerPhone || ""}
+                                                      customerName={ar.customerName}
+                                                      orderNumber={ar.orderNumber}
+                                                    />
                                                   </div>
                                                 </div>
                                               </div>
@@ -6290,6 +6298,13 @@ export default function AdminOrders() {
                             👤 {attentionMap.has(order.id) ? attentionMap.get(order.id) : 'Atender'}
                           </button>
                           <OrderH2AdsBrowserShortcut registrationId={order.id} subOrderIndex={order.subOrderIndex ?? 0} customerNumber={order.customerNumber} serviceName={order.serviceName} serviceOption={order.serviceOption} />
+                          <OrderPhotoConfirmation
+                            registrationId={order.id}
+                            subOrderIndex={order.subOrderIndex ?? 0}
+                            customerPhone={order.phone || ""}
+                            customerName={order.customerName || order.codeClientName}
+                            orderNumber={order.orderNumber}
+                          />
                           {/* Selo NOVO */}
                           {!viewedOrders.has(getOrderKey(order)) && (
                             <span className="inline-flex items-center px-2 py-0.5 rounded-full text-[10px] font-bold bg-red-500 text-white animate-pulse shadow-sm shadow-red-500/50">
