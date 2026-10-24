@@ -92,12 +92,13 @@ async function verifyWindowsFirewallRules() {
   const executable = chromeExecutable();
   if (!executable) throw new Error("browser_not_found");
   const escapedPath = executable.replaceAll("'", "''");
+  const firewallFamily = /chrome-for-testing/i.test(executable) ? "H2ADS Testing Chrome" : "H2ADS Dedicated Chrome";
   const script = [
     "$ErrorActionPreference='Stop'",
     "$expectedProgram='" + escapedPath + "'",
     "$checks=@(",
-    "  @{Name='H2ADS Dedicated Chrome - Block Direct IPv4';Expected=@('0.0.0.0-126.255.255.255','128.0.0.0-255.255.255.255')},",
-    "  @{Name='H2ADS Dedicated Chrome - Block Direct IPv6';Expected=@('Internet6')}",
+    "  @{Name='" + firewallFamily + " - Block Direct IPv4';Expected=@('0.0.0.0-126.255.255.255','128.0.0.0-255.255.255.255')},",
+    "  @{Name='" + firewallFamily + " - Block Direct IPv6';Expected=@('Internet6')}",
     ")",
     "foreach($check in $checks){",
     "  $rule=Get-NetFirewallRule -DisplayName $check.Name -ErrorAction Stop | Where-Object {$_.Enabled -eq 'True' -and $_.Direction -eq 'Outbound' -and $_.Action -eq 'Block'} | Select-Object -First 1",
