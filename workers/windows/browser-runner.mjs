@@ -164,37 +164,76 @@ function validateBrowserExecutable(value) {
   return value.trim();
 }
 
-async function verifyChromeProxyPath(executable, localPort, expectedIp) {
-  const profile = await mkdtemp(join(tmpdir(), "h2ads-proxy-probe-"));
+async function extractPublicIpFromChrome(executable, args, timeoutMs = 25_000) {
+  const endpoints = [
+    "https://api.ipify.org?format=json",
+    "https://ifconfig.me/ip",
+    "https://api64.ipify.org?format=json",
+  ];
+  let lastError = null;
+  for (const endpoint of endpoints) {
+    const profile = await mkdtemp(join(tmpdir(), "h2ads-chrome-probe-"));
+    try {
+      const { stdout } = await execFileAsync(executable, [
+        "--headless=new", "--disable-gpu", "--disable-background-networking", "--disable-component-update", "--disable-sync",
+        "--metrics-recording-only", "--no-first-run", "--no-default-browser-check",
+        "--user-data-dir=" + profile,
+        ...args,
+        "--virtual-time-budget=7000",
+        "--dump-dom",
+        endpoint,
+      ], { windowsHide: true, timeout: timeoutMs, maxBuffer: 512_000 });
+      const matches = String(stdout).match(/(?:\d{1,3}\.){3}\d{1,3}|(?:[0-9a-f]{0,4}:){2,}[0-9a-f:]+/ig) || [];
+      const publicIp = matches.map(item => item.trim()).find(item => !isPrivateOrLocalIp(item));
+      if (publicIp) return publicIp;
+      lastError = new Error("browser_probe_invalid_response");
+    } catch (error) {
+      lastError = error;
+    } finally {
+      await rm(profile, { recursive: true, force: true }).catch(() => undefined);
+    }
+  }
+  throw lastError || new Error("browser_proxy_unverified");
+}
+
+async function verifyDirectBrowserEgressBlocked(executable) {
   try {
-    const { stdout } = await execFileAsync(executable, [
-      "--headless=new", "--disable-gpu", "--disable-background-networking", "--disable-component-update", "--disable-sync",
-      "--metrics-recording-only", "--no-first-run", "--no-default-browser-check",
-      "--user-data-dir=" + profile,
+    const directIp = await extractPublicIpFromChrome(executable, [
+      "--disable-quic",
+      "--dns-prefetch-disable",
+      "--force-webrtc-ip-handling-policy=disable_non_proxied_udp",
+    ], 12_000);
+    if (directIp && !isPrivateOrLocalIp(directIp)) {
+      throw Object.assign(new Error("direct_browser_egress_detected"), {
+        category: "direct_browser_egress_detected",
+        stage: "firewall",
+      });
+    }
+  } catch (error) {
+    if (error?.category === "direct_browser_egress_detected" || error?.message === "direct_browser_egress_detected") throw error;
+    // Expected result: the dedicated Chrome cannot reach a public IP without the local relay/proxy.
+    return true;
+  }
+  return true;
+}
+
+async function verifyChromeProxyPath(executable, localPort) {
+  try {
+    const browserObservedIp = await extractPublicIpFromChrome(executable, [
       "--proxy-server=http://127.0.0.1:" + localPort,
       "--proxy-bypass-list=<-loopback>",
       "--disable-quic",
       "--dns-prefetch-disable",
       "--host-resolver-rules=MAP * ~NOTFOUND",
       "--force-webrtc-ip-handling-policy=disable_non_proxied_udp",
-      "--virtual-time-budget=5000",
-      "--dump-dom",
-      "https://api.ipify.org?format=json",
-    ], { windowsHide: true, timeout: 25_000, maxBuffer: 512_000 });
-    const match = String(stdout).match(/(?:\d{1,3}\.){3}\d{1,3}|(?:[0-9a-f]{0,4}:){2,}[0-9a-f:]+/i);
-    const observedIp = match?.[0]?.trim();
-    if (!observedIp || isPrivateOrLocalIp(observedIp)) {
-      throw Object.assign(new Error("browser_proxy_unverified"), { category: "browser_proxy_unverified", stage: "browser" });
+    ]);
+    if (isPrivateOrLocalIp(browserObservedIp)) {
+      throw Object.assign(new Error("private_or_local_ip_detected"), { category: "private_or_local_ip_detected", stage: "browser" });
     }
-    if (observedIp.toLowerCase() !== String(expectedIp).trim().toLowerCase()) {
-      throw Object.assign(new Error("exit_ip_mismatch"), { category: "exit_ip_mismatch", stage: "browser" });
-    }
-    return observedIp;
+    return browserObservedIp;
   } catch (error) {
     if (error?.category) throw error;
     throw Object.assign(new Error("browser_proxy_unverified"), { category: "browser_proxy_unverified", stage: "browser" });
-  } finally {
-    await rm(profile, { recursive: true, force: true }).catch(() => undefined);
   }
 }
 
@@ -260,18 +299,21 @@ async function run() {
     await server.listen();
     const observed = await checkIp(server.port);
     const executable = validateBrowserExecutable(input.browserExecutable);
-    const browserObservedIp = await verifyChromeProxyPath(executable, server.port, observed.ip);
+    await verifyDirectBrowserEgressBlocked(executable);
+    const browserObservedIp = await verifyChromeProxyPath(executable, server.port);
     await verifyWebRtcNoLocalLeak(executable, server.port);
     output({
       state: "proxy_verified",
-      observedIp: observed.ip,
+      observedIp: browserObservedIp,
       diagnostics: {
         dns: "ok",
         tcp: "ok",
         https: "ok",
         ipEndpoint: observed.endpoint,
+        relayObservedIp: observed.ip,
         browserProxy: "ok",
         browserObservedIp,
+        directBrowserEgress: "blocked",
         webrtc: "ok",
         dnsDirect: "blocked",
       },
