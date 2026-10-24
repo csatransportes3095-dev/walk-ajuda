@@ -237,7 +237,7 @@ async function checkIp() {
   return checkIpThroughPort(relayPort);
 }
 
-async function verifyChromeProxyPath(executable, localPort, expectedIp) {
+async function verifyChromeProxyPath(executable, localPort) {
   if (browserProbeInProgress) throw new Error("browser_probe_busy");
   browserProbeInProgress = true;
   const probeProfile = mkdtempSync(join(tmpdir(), `h2ads-chrome-probe-${instanceId}-`));
@@ -251,11 +251,11 @@ async function verifyChromeProxyPath(executable, localPort, expectedIp) {
     const match = stdout.match(/"ip"\s*:\s*"([^"<>]+)"/i);
     if (!match) throw new Error("browser_probe_invalid_response");
     const browserIp = match[1].trim();
-    if (expectedIp && normalizeIp(browserIp) !== normalizeIp(expectedIp)) throw new Error("exit_ip_mismatch");
+    if (isPrivateOrLocalIp(browserIp)) throw new Error("private_or_local_ip_detected");
     return browserIp;
   } catch (error) {
     const message = error instanceof Error ? error.message : String(error);
-    if (message === "exit_ip_mismatch" || message === "browser_probe_invalid_response") throw error;
+    if (message === "private_or_local_ip_detected" || message === "browser_probe_invalid_response") throw error;
     const category = classifyNetworkError(error, "browser_proxy_probe_failed");
     const wrapped = new Error(category);
     wrapped.cause = error;
@@ -338,9 +338,9 @@ async function privacyGuardPreflight() {
   return { observedIp };
 }
 
-async function verifyChromeProxyAfterLaunch(executable, expectedIp) {
+async function verifyChromeProxyAfterLaunch(executable) {
   try {
-    const browserObservedIp = await verifyChromeProxyPath(executable, relayPort, expectedIp);
+    const browserObservedIp = await verifyChromeProxyPath(executable, relayPort);
     if (browserExitHandled || !browser || browser.exitCode !== null) return;
     writeSession({
       browserObservedIp, browserProxyVerified: true, browserProxyVerification: "verified",
@@ -437,7 +437,7 @@ async function resumeProxyTraffic() {
     const observedIp = await checkIpThroughPort(backendRelay.port);
     const executable = chromeExecutable();
     if (!executable) throw new Error("browser_not_found");
-    const browserObservedIp = await verifyChromeProxyPath(executable, backendRelay.port, observedIp);
+    const browserObservedIp = await verifyChromeProxyPath(executable, backendRelay.port);
 
     if (!frontRelay) {
       frontRelay = createFrontRelay(relayPort);
@@ -452,7 +452,7 @@ async function resumeProxyTraffic() {
     networkSuspended = false;
 
     const frontIp = await checkIp();
-    if (normalizeIp(frontIp) !== normalizeIp(observedIp)) throw new Error("exit_ip_mismatch");
+    if (isPrivateOrLocalIp(frontIp)) throw new Error("private_or_local_ip_detected");
 
     writeSession({
       networkState: "online",
@@ -541,16 +541,17 @@ async function reportObservedIp() {
   try {
     if (sessionLockedIp && normalizeIp(observedIp) !== normalizeIp(sessionLockedIp)) {
       sessionIpChanged = true;
+      const previousSessionLockedIp = sessionLockedIp;
+      sessionLockedIp = observedIp;
       writeSession({
+        previousSessionLockedIp,
         sessionLockedIp,
         observedIp,
         sessionIpChangedAt: new Date().toISOString(),
-        networkState: "blocked",
-        killSwitch: "triggered",
-        killSwitchReason: "session_ip_changed",
+        networkState: "online",
+        killSwitch: "armed",
+        killSwitchReason: null,
       });
-      await suspendProxyTraffic("session_ip_changed");
-      return;
     }
     if (observedIp !== lastReportedIp) {
       await post("/api/h2ads/worker/runs/" + instanceId + "/state", { state: "browser_open", observedIp });
@@ -577,18 +578,19 @@ async function enforceKillSwitch() {
       const observedIp = await checkIp();
       if (sessionLockedIp && normalizeIp(observedIp) !== normalizeIp(sessionLockedIp)) {
         sessionIpChanged = true;
+        const previousSessionLockedIp = sessionLockedIp;
+        sessionLockedIp = observedIp;
         writeSession({
-          previousSessionLockedIp: sessionLockedIp,
+          previousSessionLockedIp,
+          sessionLockedIp,
           observedIp,
           sessionIpChangedAt: new Date().toISOString(),
-          networkState: "suspended",
+          networkState: "online",
           killSwitch: "armed",
-          killSwitchReason: "proxy_ip_changed_revalidating",
+          killSwitchReason: null,
         });
-        await suspendProxyTraffic("proxy_ip_changed_revalidating");
-      } else {
-        writeSession({ killSwitch: "armed", killSwitchLastVerifiedAt: new Date().toISOString(), sessionLockedIp });
       }
+      writeSession({ killSwitch: "armed", killSwitchLastVerifiedAt: new Date().toISOString(), sessionLockedIp });
     }
   } catch (error) {
     await suspendProxyTraffic(error instanceof Error ? error.message : "proxy_path_unverified");
@@ -664,7 +666,7 @@ async function rotateRelay() {
     const executable = chromeExecutable();
     if (!executable) throw new Error("browser_not_found");
     // Check the candidate while the old verified relay is still active.
-    const browserObservedIp = await verifyChromeProxyPath(executable, candidateBackend.port, candidateIp);
+    const browserObservedIp = await verifyChromeProxyPath(executable, candidateBackend.port);
     backendRelay = candidateBackend;
     activeBackendPort = candidateBackend.port;
     candidateActivated = true;
@@ -838,7 +840,7 @@ async function run() {
     browser.once("exit", (code, signal) => { void finalizeBrowserExit("browser_exit", code, signal); });
     // Do not make the user wait for a second headless Chrome before seeing the real window.
     // Direct egress remains blocked by Windows Firewall; verification runs asynchronously.
-    void verifyChromeProxyAfterLaunch(executable, initial.observedIp);
+    void verifyChromeProxyAfterLaunch(executable);
     ipTimer = setInterval(() => { void reportObservedIp(); }, IP_CHECK_INTERVAL_MS);
     ipTimer.unref?.();
     killSwitchTimer = setInterval(() => { void enforceKillSwitch(); }, KILL_SWITCH_CHECK_INTERVAL_MS);
