@@ -4,6 +4,7 @@ import {toast} from "sonner";
 import {Button} from "@/components/ui/button";
 import {Card} from "@/components/ui/card";
 import {Textarea} from "@/components/ui/textarea";
+import {isValidCpf} from "@/lib/h2bicoCpfExtractor";
 
 type Row={id:number;name:string;cpf:string;status:string;hasPhoto:boolean;earStatus:"com_ear"|"sem_ear"|null;protected:boolean;reviewState?:"pending"|"confirmed"|"discarded";reviewedAt?:string|null};
 const statuses:Record<string,string>={available:"Disponível",reserved:"Reservado",in_use:"Em uso",used:"USADO",archived:"Arquivado"};
@@ -25,14 +26,15 @@ export default function H2BicoBulkManager(){
   const pasted=trpc.h2bicoReview.managePasted.useMutation();
   const [reviewAction,setReviewAction]=useState<"confirm"|"unconfirm"|"discard"|"restore">("confirm");
   const parse=()=>{
-    const all=text.split(/\r?\n/).map(x=>x.replace(/\D/g,"")).filter(Boolean);
-    const invalid=all.filter(x=>x.length!==11);
-    return {cpfs:[...new Set(all.filter(x=>x.length===11))],invalid};
+    const all=[...new Set(text.split(/\r?\n/).map(x=>x.replace(/\D/g,"")).filter(Boolean))];
+    const cpfs=all.filter(isValidCpf);
+    const invalid=all.filter(x=>!isValidCpf(x));
+    return {cpfs,invalid};
   };
   const search=async()=>{
     const {cpfs,invalid}=parse();
-    if(invalid.length){toast.error(invalid.length+" linha(s) com CPF fora do formato de 11 dígitos.");return;}
-    if(!cpfs.length){toast.error("Cole pelo menos um CPF.");return;}
+    if(!cpfs.length){toast.error(invalid.length?"Nenhum CPF válido encontrado. Confira formato e dígitos verificadores.":"Cole pelo menos um CPF.");return;}
+    if(invalid.length)toast.warning(invalid.length+" CPF(s) inválido(s) foram ignorados; a consulta seguirá com os válidos.");
     setBusy(true);
     try{
       const found:Row[]=[];
@@ -85,7 +87,8 @@ export default function H2BicoBulkManager(){
   };
   const reviewPasted=async()=>{
     const {cpfs,invalid}=parse();
-    if(invalid.length||!cpfs.length){toast.error("Cole CPFs válidos, um por linha.");return;}
+    if(!cpfs.length){toast.error("Nenhum CPF válido encontrado.");return;}
+    if(invalid.length)toast.warning(invalid.length+" CPF(s) inválido(s) foram ignorados nesta ação.");
     if(busy)return;
     const labels={confirm:"CONFIRMAR",unconfirm:"VOLTAR A PENDENTE",discard:"DESCARTAR / ARQUIVAR",restore:"RESTAURAR"};
     if(!window.confirm(labels[reviewAction]+" os "+cpfs.length+" CPFs colados encontrados no H2BICO? Descartados ficam protegidos da confirmação."))return;
@@ -149,6 +152,10 @@ export default function H2BicoBulkManager(){
       <Button variant="outline" disabled={busy} onClick={()=>{setText("");setRecords([]);setMissing([]);setSelected([]);setCopied("");}}>LIMPAR LISTA</Button>
       <span className="self-center text-sm text-gray-400">{records.length} encontrados • {missing.length} não encontrados • {selected.length} selecionados</span>
     </div>
+    {parse().invalid.length>0&&<details className="rounded-lg border border-red-500/30 bg-red-950/15 p-2 text-sm text-red-300">
+      <summary className="cursor-pointer font-bold">CPFs inválidos ignorados ({parse().invalid.length})</summary>
+      <p className="mt-2 break-all font-mono text-xs">{parse().invalid.join(", ")}</p>
+    </details>
     {missing.length>0&&<details className="text-sm text-amber-300"><summary>CPFs não encontrados ({missing.length})</summary><p className="break-all font-mono">{missing.join(", ")}</p></details>}
     <div className="flex flex-wrap gap-2">
       <label className="text-sm">Situação <select aria-label="Filtrar situação" className="ml-2 rounded bg-gray-950 border border-gray-700 p-2" value={filter} onChange={e=>setFilter(e.target.value)}>
