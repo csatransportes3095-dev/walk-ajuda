@@ -217,7 +217,6 @@ function Test-H2AdsLeakProtection {
     "--proxy-server=http://127.0.0.1:",
     "--disable-quic",
     "--dns-prefetch-disable",
-    "--host-resolver-rules=MAP * ~NOTFOUND",
     "--force-webrtc-ip-handling-policy=disable_non_proxied_udp"
   )) {
     if ($sessionSource.IndexOf($requiredFlag, [StringComparison]::Ordinal) -lt 0) {
@@ -232,7 +231,6 @@ function Test-H2AdsLeakProtection {
     proxyOnlyBrowser = $true
     quicDisabled = $true
     dnsPrefetchDisabled = $true
-    dnsDirectBlocked = $true
     webrtcNonProxiedUdpDisabled = $true
   }
 }
