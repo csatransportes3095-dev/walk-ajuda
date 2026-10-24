@@ -10,7 +10,7 @@ param(
 
 $ErrorActionPreference = "Stop"
 $ProgressPreference = "SilentlyContinue"
-$AgentVersion = "1.4.4"
+$AgentVersion = "1.4.5"
 $WorkerDirectory = Join-Path $env:LOCALAPPDATA "H2AdsWorker"
 $ConfigPath = Join-Path $WorkerDirectory "worker.json"
 $InstalledScriptPath = Join-Path $WorkerDirectory "H2AdsWorker.ps1"
@@ -618,6 +618,14 @@ function Get-WorkerErrorCategory([object]$ErrorRecord) {
   if ($message -like "*Firewall H2ADS*" -or $message -like "*kill switch rígido*") { return "hard_kill_switch_unavailable" }
   if ($message -like "*Chrome dedicado*" -or $message -like "*Google Chrome*") { return "dedicated_browser_unavailable" }
   if ($message -like "*Protecao de vazamento H2ADS*") { return "leak_protection_failed" }
+  if ($message -like "*runner_execution_failed*") { return "runner_execution_failed" }
+  if ($message -like "*runner_invalid_output*") { return "runner_invalid_output" }
+  if ($message -like "*firewall_validation_failed*") { return "firewall_validation_failed" }
+  if ($message -like "*webrtc_local_ip_leak_detected*") { return "webrtc_local_ip_leak_detected" }
+  if ($message -like "*webrtc_probe_failed*") { return "webrtc_probe_failed" }
+  if ($message -like "*private_or_local_ip_detected*") { return "private_or_local_ip_detected" }
+  if ($message -like "*browser_proxy_unverified*") { return "browser_proxy_unverified" }
+  if ($message -like "*exit_ip_mismatch*") { return "exit_ip_mismatch" }
   return "worker_execution_failed"
 }
 
@@ -734,9 +742,16 @@ function Invoke-PendingBrowserCommand([object]$Config) {
     if ($payload.command.command -eq "prepare_browser") {
       Ensure-BrowserPreparationComponent $Config
       $leakProtection = Test-H2AdsLeakProtection
-      $runnerInput = @{ command = $payload.command.command; proxy = $payload.proxy } | ConvertTo-Json -Depth 5 -Compress
+      $runnerInput = @{ command = $payload.command.command; proxy = $payload.proxy; browserExecutable = $DedicatedChromePath } | ConvertTo-Json -Depth 5 -Compress
       $runnerOutput = $runnerInput | & node.exe $RunnerPath
-      $result = $runnerOutput | ConvertFrom-Json
+      if ($LASTEXITCODE -ne 0 -or [string]::IsNullOrWhiteSpace([string]$runnerOutput)) {
+        throw "runner_execution_failed"
+      }
+      try {
+        $result = $runnerOutput | ConvertFrom-Json -ErrorAction Stop
+      } catch {
+        throw "runner_invalid_output"
+      }
       if ($result.state -eq "proxy_verified" -and ![string]::IsNullOrWhiteSpace($result.observedIp)) {
         Restore-H2AdsProfileSnapshot $Config ([int]$payload.command.instanceId) | Out-Null
         Initialize-InstanceProfile ([int]$payload.command.instanceId)
