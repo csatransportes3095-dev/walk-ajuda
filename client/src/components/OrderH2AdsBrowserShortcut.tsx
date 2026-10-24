@@ -14,6 +14,7 @@ export default function OrderH2AdsBrowserShortcut({ registrationId, subOrderInde
   const [newGroupId, setNewGroupId] = useState<number | null>(null);
   const [editingNote, setEditingNote] = useState(false);
   const [noteDraft, setNoteDraft] = useState("");
+  const [linkingExisting, setLinkingExisting] = useState(false);
   const linksQuery = trpc.h2Ads.listOrderLinks.useQuery(undefined, {
     staleTime: 0,
     refetchInterval: 2_000,
@@ -58,6 +59,15 @@ export default function OrderH2AdsBrowserShortcut({ registrationId, subOrderInde
   }) ?? null;
 
   const linkedIds = (linksQuery.data ?? []).filter(link => link.registrationId === registrationId && link.subOrderIndex === subOrderIndex).map(link => link.instanceId);
+  const allLinkedInstanceIds = new Set((linksQuery.data ?? []).map(link => link.instanceId));
+  const activeGroupIds = new Set(activeGroups.map(group => group.id));
+  const unlinkedInstances = (dashboard?.instances ?? [])
+    .filter(instance => !allLinkedInstanceIds.has(instance.id) && instance.status !== "archived" && activeGroupIds.has(instance.groupId))
+    .map(instance => ({
+      instance,
+      group: activeGroups.find(group => group.id === instance.groupId),
+    }))
+    .sort((a, b) => (a.group?.name || "").localeCompare(b.group?.name || "", "pt-BR") || a.instance.name.localeCompare(b.instance.name, "pt-BR"));
   const activeInstanceId = linkedIds.includes(selectedInstanceId ?? -1) ? selectedInstanceId : linkedIds.length === 1 ? linkedIds[0] : null;
   const shortcut = resolveH2AdsOrderBrowserShortcutState({
     registrationId,
@@ -299,6 +309,37 @@ export default function OrderH2AdsBrowserShortcut({ registrationId, subOrderInde
     }
   };
 
+  const linkExistingInstance = async (event: ChangeEvent<HTMLSelectElement>) => {
+    event.stopPropagation();
+    if (pending) return;
+    const instanceId = Number(event.target.value);
+    if (!Number.isInteger(instanceId) || instanceId < 1) return;
+    const candidate = unlinkedInstances.find(item => item.instance.id === instanceId);
+    if (!candidate) {
+      toast.error("Esta instância não está mais disponível para vínculo.");
+      await refresh();
+      return;
+    }
+    const label = `${candidate.group?.name || "SEM GRUPO"} — ${candidate.instance.name}`;
+    if (!window.confirm(`VINCULAR esta instância ao pedido atual?\n\n${label}\n\nA instância será mantida com o mesmo grupo, proxy, perfil e dados H2ADS.`)) {
+      event.target.value = "";
+      return;
+    }
+    try {
+      await setOrderLink.mutateAsync({
+        instanceId,
+        registrationId,
+        subOrderIndex,
+      });
+      setSelectedInstanceId(instanceId);
+      setLinkingExisting(false);
+      toast.success(`Instância vinculada: ${label}.`);
+      await refresh();
+    } catch (error) {
+      toast.error(error instanceof Error ? error.message : "Não foi possível vincular a instância.");
+    }
+  };
+
   const saveNote = async (event: MouseEvent<HTMLButtonElement>) => {
     event.stopPropagation();
     if (!shortcut || pending) return;
@@ -311,6 +352,30 @@ export default function OrderH2AdsBrowserShortcut({ registrationId, subOrderInde
       toast.error(error instanceof Error ? error.message : "Não foi possível salvar a OBS.");
     }
   };
+
+  const linkExistingPanel = linkingExisting ? <span className="inline-flex items-center gap-1" onClick={event => event.stopPropagation()}>
+    <select
+      aria-label="Vincular instância H2ADS existente"
+      defaultValue=""
+      onChange={linkExistingInstance}
+      disabled={pending || unlinkedInstances.length === 0}
+      className="max-w-64 rounded border border-emerald-400/40 bg-slate-950 px-2 py-1 text-[10px] font-bold text-white disabled:opacity-40"
+    >
+      <option value="" disabled>{unlinkedInstances.length ? "GRUPO — INSTÂNCIA" : "NENHUMA INSTÂNCIA LIVRE"}</option>
+      {unlinkedInstances.map(({ instance, group }) => (
+        <option key={instance.id} value={instance.id}>{group?.name || "SEM GRUPO"} — {instance.name}</option>
+      ))}
+    </select>
+    <button type="button" onClick={event => { event.stopPropagation(); setLinkingExisting(false); }} className="px-1 text-[10px] font-bold text-slate-300">X</button>
+  </span> : <button
+    type="button"
+    onClick={event => { event.stopPropagation(); setLinkingExisting(true); }}
+    disabled={pending || unlinkedInstances.length === 0}
+    className="inline-flex items-center gap-1 rounded-full border border-emerald-400/35 bg-emerald-400/15 px-2 py-1 text-[9px] font-black text-emerald-200 disabled:cursor-not-allowed disabled:opacity-30"
+    title={unlinkedInstances.length ? "Vincular uma instância H2ADS sem vínculo a este pedido" : "Não há instâncias H2ADS livres para vincular"}
+  >
+    VINCULAR INSTÂNCIA
+  </button>;
 
   const createPanel = creating ? <span className="inline-flex flex-wrap items-center gap-1" onClick={event => event.stopPropagation()}>
     <input value={newName} onChange={event => setNewName(event.target.value)} maxLength={128} placeholder="Nome (automático)" aria-label="Nome da nova instância" className="w-36 rounded border border-violet-400/40 bg-slate-950 px-2 py-1 text-xs text-white" />
@@ -341,12 +406,14 @@ export default function OrderH2AdsBrowserShortcut({ registrationId, subOrderInde
     return <span className="inline-flex items-center gap-1 rounded-full border border-amber-500/35 bg-amber-500/10 p-0.5" title={sourceTitle} onClick={event => event.stopPropagation()}>
       <span className="px-1 text-[9px] font-black uppercase tracking-wide text-amber-300">H2ADS</span>
       <button type="button" onClick={repairLink} disabled={pending} className="rounded-full border border-amber-500/35 bg-amber-500/15 px-2 py-1 text-[9px] font-black text-amber-200 transition hover:bg-amber-500/25 disabled:opacity-30">VINCULAR</button>
+      {linkExistingPanel}
     </span>;
   }
 
   if (!shortcut) {
     return <span className="inline-flex items-center gap-1 rounded-full border border-violet-500/35 bg-violet-500/10 p-0.5" title="Criar uma instância H2ADS já vinculada a este pedido" onClick={event => event.stopPropagation()}>
       <span className="px-1 text-[9px] font-black uppercase tracking-wide text-violet-300">H2ADS</span>
+      {linkExistingPanel}
       {createPanel}
     </span>;
   }
@@ -374,6 +441,7 @@ export default function OrderH2AdsBrowserShortcut({ registrationId, subOrderInde
     </select>}
     {linkedInstance && <span className="max-w-40 truncate px-1 text-[9px] text-slate-300" title={linkedInstance.notes || ""}>OBS: {linkedInstance.notes || "—"}</span>}
     {editingNote ? <span className="inline-flex items-center gap-1"><input value={noteDraft} onChange={event => setNoteDraft(event.target.value)} maxLength={150} aria-label="Editar OBS H2ADS" className="w-28 rounded border border-cyan-400/30 bg-slate-950 px-1 py-1 text-[10px] text-white" /><button type="button" onClick={saveNote} disabled={pending} className="text-[9px] text-emerald-300">SALVAR</button><button type="button" onClick={event => {event.stopPropagation();setEditingNote(false);}} className="text-[9px] text-slate-300">X</button></span> : <button type="button" onClick={event => {event.stopPropagation();setNoteDraft(linkedInstance?.notes || "");setEditingNote(true);}} className="text-[9px] text-cyan-200">EDITAR OBS</button>}
+    {linkExistingPanel}
     {createPanel}
     <button
       type="button"
