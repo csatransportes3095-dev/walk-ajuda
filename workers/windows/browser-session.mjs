@@ -316,17 +316,23 @@ async function verifyWebRtcNoLocalLeak(executable, localPort) {
 }
 
 async function privacyGuardPreflight() {
-  await verifyWindowsFirewallRules();
+  // Fluxo comprovado: antes do spawn, exige apenas que o relay/proxy esteja vivo.
+  // Firewall + Chrome + WebRTC ja foram validados no PREPARAR/TESTE VAZAMENTO.
+  // Depois do spawn, o Chrome e revalidado de forma assincrona; se falhar,
+  // suspendProxyTraffic() corta a rede sem impedir a janela de abrir.
   const observedIp = await checkIp();
   if (!observedIp) throw new Error("privacy_guard_proxy_unavailable");
-  const executable = chromeExecutable();
-  if (!executable) throw new Error("browser_not_found");
-  await verifyChromeProxyPath(executable, relayPort, observedIp);
-  await verifyWebRtcNoLocalLeak(executable, relayPort);
   writeSession({
-    privacyGuard: "protected", privacyGuardCheckedAt: new Date().toISOString(), observedIp, browserProxyVerified: true,
-    browserProxyVerification: "verified", quicDisabled: true, dnsPrefetchDisabled: true, dnsDirectBlocked: true,
-    webrtcNonProxiedUdpDisabled: true, webrtcOperationalProbe: "passed", killSwitch: "armed",
+    privacyGuard: "protected",
+    privacyGuardCheckedAt: new Date().toISOString(),
+    observedIp,
+    browserProxyVerified: false,
+    browserProxyVerification: "pending",
+    quicDisabled: true,
+    dnsPrefetchDisabled: true,
+    webrtcNonProxiedUdpDisabled: true,
+    webrtcOperationalProbe: "prevalidated",
+    killSwitch: "armed",
     directBrowserEgress: "blocked_by_windows_firewall",
   });
   return { observedIp };
