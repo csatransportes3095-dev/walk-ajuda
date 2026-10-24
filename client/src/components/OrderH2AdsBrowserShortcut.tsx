@@ -378,20 +378,20 @@ export default function OrderH2AdsBrowserShortcut({ registrationId, subOrderInde
   </button>;
 
   const createPanel = creating ? <span className="flex max-w-full flex-wrap items-center gap-1.5 sm:gap-2" onClick={event => event.stopPropagation()}>
-    <input value={newName} onChange={event => setNewName(event.target.value)} maxLength={128} placeholder="Nome (automático)" aria-label="Nome da nova instância" className="w-36 rounded border border-violet-400/40 bg-slate-950 px-2 py-1 text-xs text-white" />
-    <select aria-label="Grupo da nova instância" value={newGroupId ?? automaticGroup?.id ?? ""} onChange={event => setNewGroupId(Number(event.target.value))} className="max-w-36 rounded border border-violet-400/40 bg-slate-950 px-2 py-1 text-xs text-white">
+    <input value={newName} onChange={event => setNewName(event.target.value)} maxLength={128} placeholder="Nome (automático)" aria-label="Nome da nova instância" className="h-8 w-40 max-w-full rounded-lg border border-violet-400/40 bg-slate-950 px-2 text-[10px] text-white sm:h-9 sm:w-44 sm:text-[11px] lg:h-10 lg:text-xs" />
+    <select aria-label="Grupo da nova instância" value={newGroupId ?? automaticGroup?.id ?? ""} onChange={event => setNewGroupId(Number(event.target.value))} className="h-8 min-w-[140px] max-w-full rounded-lg border border-violet-400/40 bg-slate-950 px-2 text-[10px] text-white sm:h-9 sm:text-[11px] lg:h-10 lg:text-xs">
       <option value="" disabled>Escolha o grupo</option>
       {activeGroups.map(group => <option key={group.id} value={group.id}>{group.name}</option>)}
     </select>
-    <input value={newNote} onChange={event => setNewNote(event.target.value)} maxLength={150} placeholder="OBS: TESTE DOC" aria-label="OBS da nova instância" className="w-32 rounded border border-violet-400/40 bg-slate-950 px-2 py-1 text-xs text-white" />
-    <button type="button" onClick={createLinkedInstance} disabled={pending} className="rounded bg-violet-500/25 px-2 py-1 text-xs text-violet-100">CONFIRMAR</button>
-    <button type="button" onClick={() => setCreating(false)} className="px-1 text-xs text-slate-300">CANCELAR</button>
+    <input value={newNote} onChange={event => setNewNote(event.target.value)} maxLength={150} placeholder="OBS: TESTE DOC" aria-label="OBS da nova instância" className="h-8 w-36 max-w-full rounded-lg border border-violet-400/40 bg-slate-950 px-2 text-[10px] text-white sm:h-9 sm:w-40 sm:text-[11px] lg:h-10 lg:text-xs" />
+    <button type="button" onClick={createLinkedInstance} disabled={pending} className="min-h-8 rounded-lg border border-violet-400/30 bg-violet-500/25 px-2.5 text-[10px] font-black text-violet-100 sm:min-h-9 sm:px-3 sm:text-[11px] lg:min-h-10 lg:text-xs">CONFIRMAR</button>
+    <button type="button" onClick={() => setCreating(false)} className="min-h-8 rounded-lg border border-white/10 bg-black/20 px-2.5 text-[10px] font-black text-slate-200 sm:min-h-9 sm:text-[11px] lg:min-h-10 lg:text-xs">CANCELAR</button>
   </span> : <button type="button" onClick={event => { event.stopPropagation(); setNewNote(""); setCreating(true); }} disabled={pending} className="inline-flex min-h-8 items-center justify-center gap-1.5 rounded-lg border border-violet-400/35 bg-violet-400/15 px-2.5 py-1.5 text-[10px] font-black text-violet-100 sm:min-h-9 sm:px-3 sm:text-[11px] lg:min-h-10 lg:px-3.5 lg:text-xs"><Plus className="h-3.5 w-3.5 lg:h-4 lg:w-4" />CRIAR</button>;
 
   if (!shortcut && linkedIds.length > 1) {
-    return <span className="inline-flex items-center gap-1 rounded border border-cyan-500/40 p-1" onClick={event => event.stopPropagation()}>
-      <span className="text-[10px] text-cyan-200">H2ADS: {linkedIds.length} instâncias</span>
-      <select aria-label="Escolher instância H2ADS" value="" onChange={event => { event.stopPropagation(); setSelectedInstanceId(Number(event.target.value)); setEditingNote(false); }} className="rounded bg-slate-950 p-1 text-[10px] text-white">
+    return <span className="flex w-full max-w-full flex-wrap items-center gap-1.5 rounded-xl border border-cyan-500/40 bg-cyan-500/10 p-1.5 sm:gap-2 sm:p-2" onClick={event => event.stopPropagation()}>
+      <span className="text-[10px] font-black text-cyan-100 sm:text-[11px] lg:text-xs">H2ADS: {linkedIds.length} instâncias</span>
+      <select aria-label="Escolher instância H2ADS" value="" onChange={event => { event.stopPropagation(); setSelectedInstanceId(Number(event.target.value)); setEditingNote(false); }} className="h-8 min-w-[150px] max-w-full rounded-lg border border-cyan-400/30 bg-slate-950 px-2 text-[10px] font-bold text-white sm:h-9 sm:text-[11px] lg:h-10 lg:text-xs">
         <option value="" disabled>SELECIONE</option>
         {linkedIds.map(id => <option key={id} value={id}>{(dashboard?.instances ?? []).find(item => item.id === id)?.name || `Instância #${id}`}</option>)}
       </select>
@@ -403,16 +403,16 @@ export default function OrderH2AdsBrowserShortcut({ registrationId, subOrderInde
     const sourceTitle = repairCandidate.linkedOrderNumber
       ? `Instância compatível vinculada ao pedido #${repairCandidate.linkedOrderNumber}. Clique em VINCULAR para revisar e confirmar a transferência.`
       : "Instância compatível vinculada a outro pedido/subpedido. Clique em VINCULAR para revisar e confirmar a transferência.";
-    return <span className="inline-flex items-center gap-1 rounded-full border border-amber-500/35 bg-amber-500/10 p-0.5" title={sourceTitle} onClick={event => event.stopPropagation()}>
-      <span className="px-1 text-[9px] font-black uppercase tracking-wide text-amber-300">H2ADS</span>
-      <button type="button" onClick={repairLink} disabled={pending} className="rounded-full border border-amber-500/35 bg-amber-500/15 px-2 py-1 text-[9px] font-black text-amber-200 transition hover:bg-amber-500/25 disabled:opacity-30">VINCULAR</button>
+    return <span className="flex w-full max-w-full flex-wrap items-center gap-1.5 rounded-xl border border-amber-500/35 bg-amber-500/10 p-1.5 sm:gap-2 sm:p-2" title={sourceTitle} onClick={event => event.stopPropagation()}>
+      <span className="rounded-lg border border-amber-400/20 bg-amber-400/10 px-2 py-1.5 text-[10px] font-black uppercase tracking-wide text-amber-200 sm:px-2.5 sm:text-[11px] lg:text-xs">H2ADS</span>
+      <button type="button" onClick={repairLink} disabled={pending} className="inline-flex min-h-8 items-center justify-center rounded-lg border border-amber-500/35 bg-amber-500/15 px-2.5 py-1.5 text-[10px] font-black text-amber-100 transition hover:bg-amber-500/25 disabled:opacity-30 sm:min-h-9 sm:px-3 sm:text-[11px] lg:min-h-10 lg:text-xs">VINCULAR</button>
       {linkExistingPanel}
     </span>;
   }
 
   if (!shortcut) {
-    return <span className="inline-flex items-center gap-1 rounded-full border border-violet-500/35 bg-violet-500/10 p-0.5" title="Criar uma instância H2ADS já vinculada a este pedido" onClick={event => event.stopPropagation()}>
-      <span className="px-1 text-[9px] font-black uppercase tracking-wide text-violet-300">H2ADS</span>
+    return <span className="flex w-full max-w-full flex-wrap items-center gap-1.5 rounded-xl border border-violet-500/35 bg-violet-500/10 p-1.5 sm:gap-2 sm:p-2" title="Criar uma instância H2ADS já vinculada a este pedido" onClick={event => event.stopPropagation()}>
+      <span className="rounded-lg border border-violet-400/20 bg-violet-400/10 px-2 py-1.5 text-[10px] font-black uppercase tracking-wide text-violet-200 sm:px-2.5 sm:text-[11px] lg:text-xs">H2ADS</span>
       {linkExistingPanel}
       {createPanel}
     </span>;
@@ -426,7 +426,7 @@ export default function OrderH2AdsBrowserShortcut({ registrationId, subOrderInde
       ? `A instância já está em ${deliveredGroup.name}.`
       : `Mover esta instância para ${deliveredGroup.name}.`;
 
-  return <span className="flex w-full max-w-full flex-wrap items-center gap-1.5 rounded-xl border border-cyan-500/35 bg-cyan-500/10 p-1.5 sm:w-auto sm:gap-2 sm:p-2 xl:gap-2.5" title={statusTitle} onClick={event => event.stopPropagation()}>
+  return <span className="flex w-full max-w-full flex-wrap items-center gap-1.5 rounded-xl border border-cyan-500/35 bg-cyan-500/10 p-1.5 sm:gap-2 sm:p-2 xl:gap-2.5" title={statusTitle} onClick={event => event.stopPropagation()}>
     <span className="rounded-lg border border-cyan-400/20 bg-cyan-400/10 px-2 py-1.5 text-[10px] font-black uppercase tracking-wide text-cyan-200 sm:px-2.5 sm:text-[11px] lg:text-xs">H2ADS</span>
     {linkedIds.length > 1 && <select aria-label="Selecionar instância H2ADS" value={activeInstanceId ?? ""} onChange={event => { event.stopPropagation(); setSelectedInstanceId(Number(event.target.value)); setEditingNote(false); }} className="h-8 min-w-[120px] max-w-full rounded-lg border border-cyan-400/30 bg-slate-950 px-2 text-[10px] font-bold text-white sm:h-9 sm:min-w-[140px] sm:text-[11px] lg:h-10 lg:text-xs">{linkedIds.map(id => { const item = (dashboard?.instances ?? []).find(instance => instance.id === id); return <option key={id} value={id}>{item?.name || `Instância #${id}`}</option>; })}</select>}
     {linkedInstance && <select
@@ -441,9 +441,10 @@ export default function OrderH2AdsBrowserShortcut({ registrationId, subOrderInde
     </select>}
     {linkedInstance && <span className="max-w-44 truncate rounded-lg border border-white/10 bg-black/20 px-2 py-1.5 text-[10px] text-slate-200 sm:max-w-52 sm:text-[11px]" title={linkedInstance.notes || ""}>OBS: {linkedInstance.notes || "—"}</span>}
     {editingNote ? <span className="flex max-w-full flex-wrap items-center gap-1.5 sm:gap-2"><input value={noteDraft} onChange={event => setNoteDraft(event.target.value)} maxLength={150} aria-label="Editar OBS H2ADS" className="h-8 w-36 max-w-full rounded-lg border border-cyan-400/30 bg-slate-950 px-2 text-[10px] text-white sm:h-9 sm:w-44 sm:text-[11px]" /><button type="button" onClick={saveNote} disabled={pending} className="min-h-8 rounded-lg border border-emerald-400/30 bg-emerald-400/10 px-2.5 text-[10px] font-black text-emerald-200 sm:min-h-9 sm:text-[11px]">SALVAR</button><button type="button" onClick={event => {event.stopPropagation();setEditingNote(false);}} className="min-h-8 rounded-lg border border-white/10 bg-black/20 px-2.5 text-[10px] font-black text-slate-200 sm:min-h-9 sm:text-[11px]">X</button></span> : <button type="button" onClick={event => {event.stopPropagation();setNoteDraft(linkedInstance?.notes || "");setEditingNote(true);}} className="min-h-8 rounded-lg border border-cyan-400/30 bg-cyan-400/10 px-2.5 text-[10px] font-black text-cyan-100 sm:min-h-9 sm:text-[11px]">EDITAR OBS</button>}
-    {linkExistingPanel}
-    {createPanel}
-    <button
+    <span className="flex w-full flex-wrap items-center gap-1.5 border-t border-white/10 pt-1.5 sm:gap-2 sm:pt-2">
+      {linkExistingPanel}
+      {createPanel}
+      <button
       type="button"
       onClick={openBrowser}
       disabled={!shortcut.canOpen || pending}
@@ -506,5 +507,6 @@ export default function OrderH2AdsBrowserShortcut({ registrationId, subOrderInde
     >
       <Trash2 className="h-3.5 w-3.5 lg:h-4 lg:w-4" />DELETAR
     </button>
+    </span>
   </span>;
 }
