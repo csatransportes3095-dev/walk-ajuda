@@ -244,7 +244,7 @@ async function verifyChromeProxyPath(executable, localPort, expectedIp) {
     const { stdout } = await execFileAsync(executable, [
       "--headless=new", "--disable-gpu", "--disable-background-networking", "--disable-component-update", "--disable-sync", "--metrics-recording-only",
       `--user-data-dir=${probeProfile}`, `--proxy-server=http://127.0.0.1:${localPort}`, "--proxy-bypass-list=<-loopback>",
-      "--disable-quic", "--dns-prefetch-disable", "--host-resolver-rules=MAP * ~NOTFOUND", "--force-webrtc-ip-handling-policy=disable_non_proxied_udp", "--no-first-run", "--no-default-browser-check",
+      "--disable-quic", "--dns-prefetch-disable", "--force-webrtc-ip-handling-policy=disable_non_proxied_udp", "--no-first-run", "--no-default-browser-check",
       "--dump-dom", "https://api.ipify.org?format=json",
     ], { windowsHide: true, timeout: CHROME_PROBE_TIMEOUT_MS, maxBuffer: 128_000 });
     const match = stdout.match(/"ip"\s*:\s*"([^"<>]+)"/i);
@@ -303,7 +303,7 @@ async function verifyWebRtcNoLocalLeak(executable, localPort) {
     const { stdout } = await execFileAsync(executable, [
       "--headless=new", "--disable-gpu", "--disable-background-networking", "--disable-component-update", "--disable-sync", "--metrics-recording-only",
       `--user-data-dir=${probeProfile}`, `--proxy-server=http://127.0.0.1:${localPort}`, "--proxy-bypass-list=<-loopback>",
-      "--disable-quic", "--dns-prefetch-disable", "--host-resolver-rules=MAP * ~NOTFOUND", "--force-webrtc-ip-handling-policy=disable_non_proxied_udp",
+      "--disable-quic", "--dns-prefetch-disable", "--force-webrtc-ip-handling-policy=disable_non_proxied_udp",
       "--virtual-time-budget=5000", "--dump-dom", pathToFileURL(probePath).href,
     ], { windowsHide: true, timeout: 15_000, maxBuffer: 256_000 });
     const localPattern = /(?:127\.|10\.|192\.168\.|169\.254\.|172\.(?:1[6-9]|2\d|3[01])\.|\[?::1\]?|\bfc[0-9a-f]{2}:|\bfd[0-9a-f]{2}:|\bfe[89ab][0-9a-f]:)/i;
@@ -822,7 +822,7 @@ async function run() {
       // Um pipe local entre Node e Chrome: nenhuma porta TCP de depuracao e aberta.
       ...(mobileRemoteRequested ? ["--remote-debugging-pipe"] : []),
       "--user-data-dir=" + profileDirectory, "--proxy-server=http://127.0.0.1:" + relayPort, "--proxy-bypass-list=<-loopback>",
-      "--disable-quic", "--dns-prefetch-disable", "--host-resolver-rules=MAP * ~NOTFOUND", "--force-webrtc-ip-handling-policy=disable_non_proxied_udp",
+      "--disable-quic", "--dns-prefetch-disable", "--force-webrtc-ip-handling-policy=disable_non_proxied_udp",
       ...(globalExtensionPaths.length ? ["--load-extension=" + globalExtensionPaths.join(",")] : []), "--no-first-run", "--no-default-browser-check", labelPageUrl, ...startupSites,
     ], { detached: false, stdio: mobileRemoteRequested ? ["ignore", "ignore", "ignore", "pipe", "pipe"] : "ignore", windowsHide: false });
 
@@ -858,7 +858,7 @@ async function run() {
         instanceLabelState: "static_tab", observedIp: initial.observedIp,
         browserProxyVerified: false, browserProxyVerification: "pending",
         privacyGuard: "protected", googleSorryPrivacyGuard: "disabled",
-        dnsDirectBlocked: true, webrtcOperationalProbe: "passed",
+        dnsPrefetchDisabled: true, webrtcOperationalProbe: "passed",
         killSwitch: "armed", networkState: "online", panelConnection: "pending",
         directBrowserEgress: "blocked_by_windows_firewall",
         proxyRotationPolicy: "provider_managed_between_sessions",
