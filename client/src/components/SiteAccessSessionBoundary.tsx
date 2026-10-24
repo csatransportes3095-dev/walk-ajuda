@@ -7,7 +7,8 @@ type SessionView={phase:'checking'|'ready'|'error'|'closing';required:boolean;ex
 /** UX mirror only: the gateway and server-side session registry remain authoritative. */
 export default function SiteAccessSessionBoundary({children,onClear}:{children:ReactNode;onClear:()=>void}) {
   const [path]=useLocation();
-  const excluded=path==='/site-access'||path==='/admin'||path.startsWith('/admin/');
+  const publicTokenRoute=path.startsWith('/confirmacao-foto/')||path.startsWith('/agendar/');
+  const excluded=path==='/site-access'||path==='/admin'||path.startsWith('/admin/')||publicTokenRoute;
   const [view,setView]=useState<SessionView>({phase:'checking',required:false,expiresAt:null});
   const checking=useRef(false),closing=useRef(false),lastToken=useRef('');
   const active=useRef(true);
