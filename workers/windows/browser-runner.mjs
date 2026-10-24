@@ -1,6 +1,10 @@
 import { execFile } from "node:child_process";
 import { lookup } from "node:dns/promises";
+import { mkdtemp, readFile, rm, writeFile } from "node:fs/promises";
 import { createConnection, isIP } from "node:net";
+import { tmpdir } from "node:os";
+import { join } from "node:path";
+import { pathToFileURL } from "node:url";
 import { promisify } from "node:util";
 import { Server } from "proxy-chain";
 
@@ -152,6 +156,92 @@ async function checkIp(localPort) {
   }
 }
 
+
+function validateBrowserExecutable(value) {
+  if (typeof value !== "string" || value.trim().length < 5 || !/chrome\.exe$/i.test(value.trim())) {
+    throw Object.assign(new Error("dedicated_browser_unavailable"), { category: "dedicated_browser_unavailable", stage: "browser" });
+  }
+  return value.trim();
+}
+
+async function verifyChromeProxyPath(executable, localPort, expectedIp) {
+  const profile = await mkdtemp(join(tmpdir(), "h2ads-proxy-probe-"));
+  try {
+    const { stdout } = await execFileAsync(executable, [
+      "--headless=new", "--disable-gpu", "--disable-background-networking", "--disable-component-update", "--disable-sync",
+      "--metrics-recording-only", "--no-first-run", "--no-default-browser-check",
+      "--user-data-dir=" + profile,
+      "--proxy-server=http://127.0.0.1:" + localPort,
+      "--proxy-bypass-list=<-loopback>",
+      "--disable-quic",
+      "--dns-prefetch-disable",
+      "--host-resolver-rules=MAP * ~NOTFOUND",
+      "--force-webrtc-ip-handling-policy=disable_non_proxied_udp",
+      "--virtual-time-budget=5000",
+      "--dump-dom",
+      "https://api.ipify.org?format=json",
+    ], { windowsHide: true, timeout: 25_000, maxBuffer: 512_000 });
+    const match = String(stdout).match(/(?:\d{1,3}\.){3}\d{1,3}|(?:[0-9a-f]{0,4}:){2,}[0-9a-f:]+/i);
+    const observedIp = match?.[0]?.trim();
+    if (!observedIp || isPrivateOrLocalIp(observedIp)) {
+      throw Object.assign(new Error("browser_proxy_unverified"), { category: "browser_proxy_unverified", stage: "browser" });
+    }
+    if (observedIp.toLowerCase() !== String(expectedIp).trim().toLowerCase()) {
+      throw Object.assign(new Error("exit_ip_mismatch"), { category: "exit_ip_mismatch", stage: "browser" });
+    }
+    return observedIp;
+  } catch (error) {
+    if (error?.category) throw error;
+    throw Object.assign(new Error("browser_proxy_unverified"), { category: "browser_proxy_unverified", stage: "browser" });
+  } finally {
+    await rm(profile, { recursive: true, force: true }).catch(() => undefined);
+  }
+}
+
+async function verifyWebRtcNoLocalLeak(executable, localPort) {
+  const profile = await mkdtemp(join(tmpdir(), "h2ads-webrtc-probe-"));
+  const probePath = join(profile, "probe.html");
+  const html = `<!doctype html><html><body><pre id="out">pending</pre><script>
+  (async()=>{try{
+    const pc=new RTCPeerConnection({iceServers:[{urls:"stun:stun.l.google.com:19302"}]});
+    pc.createDataChannel("x");
+    const found=[];
+    pc.onicecandidate=e=>{if(e.candidate){found.push(e.candidate.candidate||"");}else{
+      document.getElementById("out").textContent=JSON.stringify(found);pc.close();
+    }};
+    await pc.setLocalDescription(await pc.createOffer());
+    setTimeout(()=>{document.getElementById("out").textContent=JSON.stringify(found);try{pc.close()}catch{}},3500);
+  }catch(e){document.getElementById("out").textContent="[]";}})();
+  </script></body></html>`;
+  await writeFile(probePath, html, "utf8");
+  try {
+    const { stdout } = await execFileAsync(executable, [
+      "--headless=new", "--disable-gpu", "--disable-background-networking", "--disable-component-update", "--disable-sync",
+      "--metrics-recording-only", "--no-first-run", "--no-default-browser-check",
+      "--user-data-dir=" + profile,
+      "--proxy-server=http://127.0.0.1:" + localPort,
+      "--proxy-bypass-list=<-loopback>",
+      "--disable-quic",
+      "--dns-prefetch-disable",
+      "--host-resolver-rules=MAP * ~NOTFOUND",
+      "--force-webrtc-ip-handling-policy=disable_non_proxied_udp",
+      "--virtual-time-budget=5000",
+      "--dump-dom",
+      pathToFileURL(probePath).href,
+    ], { windowsHide: true, timeout: 15_000, maxBuffer: 512_000 });
+    const localPattern = /(?:127\.|10\.|192\.168\.|169\.254\.|172\.(?:1[6-9]|2\d|3[01])\.|\[?::1\]?|\bfc[0-9a-f]{2}:|\bfd[0-9a-f]{2}:|\bfe[89ab][0-9a-f]:)/i;
+    if (localPattern.test(String(stdout))) {
+      throw Object.assign(new Error("webrtc_local_ip_leak_detected"), { category: "webrtc_local_ip_leak_detected", stage: "webrtc" });
+    }
+    return true;
+  } catch (error) {
+    if (error?.category) throw error;
+    throw Object.assign(new Error("webrtc_probe_failed"), { category: "webrtc_probe_failed", stage: "webrtc" });
+  } finally {
+    await rm(profile, { recursive: true, force: true }).catch(() => undefined);
+  }
+}
+
 async function run() {
   let server;
   try {
@@ -169,7 +259,23 @@ async function run() {
     });
     await server.listen();
     const observed = await checkIp(server.port);
-    output({ state: "proxy_verified", observedIp: observed.ip, diagnostics: { dns: "ok", tcp: "ok", https: "ok", ipEndpoint: observed.endpoint } });
+    const executable = validateBrowserExecutable(input.browserExecutable);
+    const browserObservedIp = await verifyChromeProxyPath(executable, server.port, observed.ip);
+    await verifyWebRtcNoLocalLeak(executable, server.port);
+    output({
+      state: "proxy_verified",
+      observedIp: observed.ip,
+      diagnostics: {
+        dns: "ok",
+        tcp: "ok",
+        https: "ok",
+        ipEndpoint: observed.endpoint,
+        browserProxy: "ok",
+        browserObservedIp,
+        webrtc: "ok",
+        dnsDirect: "blocked",
+      },
+    });
   } catch (error) {
     output({
       state: "blocked",
