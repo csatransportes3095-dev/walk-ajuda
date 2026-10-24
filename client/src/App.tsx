@@ -101,6 +101,7 @@ import ConsultarCadastro from "./pages/ConsultarCadastro";
 import AtualizarCadastro from "./pages/AtualizarCadastro";
 import ClientReferralTree from "./pages/ClientReferralTree";
 import SchedulePage from "./pages/SchedulePage";
+import PhotoConfirmationPage from "./pages/PhotoConfirmationPage";
 import PublicQuotePage from "./pages/PublicQuotePage";
 import PublicReceiptPage from "./pages/PublicReceiptPage";
 import { SpreadsheetPage } from "./pages/SpreadsheetPage";
@@ -371,6 +372,7 @@ function Router() {
         <AdminGuard><AdminChatFlow /></AdminGuard>
       </Route>
       <Route path={"/agendar/:token"} component={SchedulePage} />
+      <Route path={"/confirmacao-foto/:token"} component={PhotoConfirmationPage} />
       <Route path={"/orcamento/:publicToken"} component={PublicQuotePage} />
       <Route path={"/recibo/:publicToken"} component={PublicReceiptPage} />
       <Route path={"/locadora"} component={LocadoraPortal} />
@@ -423,6 +425,7 @@ function AppContent() {
   const isResellerRoute = location.startsWith("/revendedor");
   const isAjudaRoute = location === "/ajuda";
   const isAgendarRoute = location.startsWith("/agendar");
+  const isPhotoConfirmationRoute = location.startsWith("/confirmacao-foto/");
   const isVideoRoute = location.startsWith("/video") || location === "/tutorial";
   const isGastosRoute = location.toLowerCase() === "/gastos";
   const isEmprestimoRoute = location.toLowerCase() === "/emprestimo";
@@ -630,8 +633,8 @@ function AppContent() {
     return <Router />;
   }
 
-  // Rota /agendar/:token é pública — cliente agenda atendimento pelo link individual
-  if (isAgendarRoute) {
+  // Rotas públicas com token individual: agendamento e CONFIRMAÇÃO PARA FOTO.
+  if (isAgendarRoute || isPhotoConfirmationRoute) {
     return <Router />;
   }
 
