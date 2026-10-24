@@ -64,7 +64,9 @@ export function registerH2BicoPhotoRoutes(app: Express) {
 
         res.setHeader("Content-Type", contentType);
         res.setHeader("Content-Length", String(buffer.length));
-        res.setHeader("Cache-Control", "private, max-age=300");
+        res.setHeader("Cache-Control", "private, no-store, no-cache, must-revalidate, max-age=0");
+        res.setHeader("Pragma", "no-cache");
+        res.setHeader("Expires", "0");
         res.status(200).send(buffer);
       } finally {
         clearTimeout(timer);
