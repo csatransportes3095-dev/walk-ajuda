@@ -17,6 +17,25 @@ const answersSchema = z.record(z.string().min(1).max(64), z.string().max(2000));
 
 type Question = z.infer<typeof questionSchema>;
 
+const LEGACY_BASE_IDS = ["ready_location", "ready_device", "ready_environment", "ready_now"] as const;
+const PHOTO_PREP_QUESTIONS: Question[] = [
+  { id: "glasses_no_lenses", text: "Está com a armação de óculos sem lentes?", type: "check_cross", required: true },
+  { id: "hard_reset_done", text: "O celular já foi feito Hard Reset?", type: "check_cross", required: true },
+  { id: "inside_home", text: "Você está dentro de casa?", type: "check_cross", required: true },
+  { id: "colored_background", text: "Preparou cama, lençol ou fundo colorido?", type: "check_cross", required: true },
+  { id: "good_lighting", text: "O local está com boa iluminação?", type: "check_cross", required: true },
+  { id: "whatsapp_new_number", text: "O WhatsApp está instalado com número novo?", type: "check_cross", required: true },
+  { id: "new_sim", text: "Está usando chip novo?", type: "check_cross", required: true },
+  { id: "no_wifi_after_reset", text: "Após o Hard Reset, o celular nunca foi conectado ao Wi-Fi?", type: "check_cross", required: true },
+  { id: "ready_for_photo", text: "Está tudo pronto para fazer a foto?", type: "check_cross", required: true },
+];
+
+function withPhotoPrepQuestions(questions: Question[]): Question[] {
+  const ids = new Set(questions.map(q => q.id));
+  const isLegacyChecklist = LEGACY_BASE_IDS.every(id => ids.has(id)) && PHOTO_PREP_QUESTIONS.every(q => !ids.has(q.id));
+  return isLegacyChecklist ? [...questions, ...PHOTO_PREP_QUESTIONS] : questions;
+}
+
 let infrastructureReady = false;
 
 async function ensureInfrastructure() {
@@ -85,7 +104,7 @@ function normalizeRow(row: any, appointment: any = null) {
     customerPhone: String(row.customerPhone || ""),
     customerName: row.customerName ? String(row.customerName) : null,
     orderNumber: row.orderNumber == null ? null : Number(row.orderNumber),
-    questions: parseJson<Question[]>(row.questions, []),
+    questions: withPhotoPrepQuestions(parseJson<Question[]>(row.questions, [])),
     answers: parseJson<Record<string,string>>(row.answers, {}),
     status: String(row.status || "pending") as "pending" | "completed",
     openedAt: row.openedAt ? new Date(row.openedAt).toISOString() : null,

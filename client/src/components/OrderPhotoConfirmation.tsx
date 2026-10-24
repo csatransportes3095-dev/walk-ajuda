@@ -22,6 +22,15 @@ const DEFAULT_QUESTIONS: Question[] = [
   { id: "ready_device", text: "O aparelho de trabalho está pronto e disponível para o procedimento?", type: "check_cross", required: true },
   { id: "ready_environment", text: "O ambiente está preparado conforme as orientações recebidas?", type: "check_cross", required: true },
   { id: "ready_now", text: "Você está pronto para iniciar a foto no horário agendado?", type: "thumbs", required: true },
+  { id: "glasses_no_lenses", text: "Está com a armação de óculos sem lentes?", type: "check_cross", required: true },
+  { id: "hard_reset_done", text: "O celular já foi feito Hard Reset?", type: "check_cross", required: true },
+  { id: "inside_home", text: "Você está dentro de casa?", type: "check_cross", required: true },
+  { id: "colored_background", text: "Preparou cama, lençol ou fundo colorido?", type: "check_cross", required: true },
+  { id: "good_lighting", text: "O local está com boa iluminação?", type: "check_cross", required: true },
+  { id: "whatsapp_new_number", text: "O WhatsApp está instalado com número novo?", type: "check_cross", required: true },
+  { id: "new_sim", text: "Está usando chip novo?", type: "check_cross", required: true },
+  { id: "no_wifi_after_reset", text: "Após o Hard Reset, o celular nunca foi conectado ao Wi-Fi?", type: "check_cross", required: true },
+  { id: "ready_for_photo", text: "Está tudo pronto para fazer a foto?", type: "check_cross", required: true },
 ];
 
 const TYPE_LABELS: Record<QuestionType,string> = {
