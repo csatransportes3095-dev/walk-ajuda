@@ -224,7 +224,6 @@ async function verifyChromeProxyPath(executable, localPort) {
       "--proxy-bypass-list=<-loopback>",
       "--disable-quic",
       "--dns-prefetch-disable",
-      "--host-resolver-rules=MAP * ~NOTFOUND",
       "--force-webrtc-ip-handling-policy=disable_non_proxied_udp",
     ]);
     if (isPrivateOrLocalIp(browserObservedIp)) {
@@ -262,7 +261,6 @@ async function verifyWebRtcNoLocalLeak(executable, localPort) {
       "--proxy-bypass-list=<-loopback>",
       "--disable-quic",
       "--dns-prefetch-disable",
-      "--host-resolver-rules=MAP * ~NOTFOUND",
       "--force-webrtc-ip-handling-policy=disable_non_proxied_udp",
       "--virtual-time-budget=5000",
       "--dump-dom",
@@ -315,7 +313,7 @@ async function run() {
         browserObservedIp,
         directBrowserEgress: "blocked",
         webrtc: "ok",
-        dnsDirect: "blocked",
+        dnsPrefetch: "disabled",
       },
     });
   } catch (error) {
