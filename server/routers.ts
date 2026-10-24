@@ -65,6 +65,7 @@ import { h2AssistantRouter } from "./routers/h2Assistant";
 import { h2AdsRouter } from "./routers/h2ads";
 import { adminAuthenticatorRouter } from "./routers/adminAuthenticator";
 import { h2bicoRouter } from "./routers/h2bico";
+import { photoConfirmationRouter } from "./routers/photoConfirmation";
 import { h2bicoReviewRouter } from "./h2bicoReview";
 import { h2bicoIntelligenceRouter } from "./h2bicoReviewIntelligence";
 import { createSqlOrderPersistenceStore, isPersistedPublicOrder, notifyOnlyAfterPersistence, persistPublicOrder } from "./orderPersistence";
@@ -451,6 +452,7 @@ export const appRouter = router({
   vipInstallments: vipInstallmentsRouter,
   resellers: resellersRouter,
   schedule: scheduleRouter,
+  photoConfirmation: photoConfirmationRouter,
   spreadsheet: spreadsheetRouter,
   privateTransport: privateTransportRouter,
   locadora: locadoraRouter,
