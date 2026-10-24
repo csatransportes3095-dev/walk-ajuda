@@ -1,6 +1,6 @@
 import { useEffect, useMemo, useRef, useState } from "react";
 import { useLocation } from "wouter";
-import { Archive, CheckCircle2, ChevronDown, Copy, Eye, EyeOff, FileText, FolderOpen, Images, Search, UploadCloud, UserCheck, XCircle } from "lucide-react";
+import { Archive, Camera, CheckCircle2, ChevronDown, ClipboardPaste, Copy, Eye, EyeOff, FileText, FolderOpen, Images, Search, UploadCloud, UserCheck, XCircle } from "lucide-react";
 import { toast } from "sonner";
 import AdminHeader from "@/components/AdminHeader";
 import H2BicoScreenshotImporter from "@/components/H2BicoScreenshotImporter";
@@ -56,7 +56,7 @@ function parsePhotoFilename(file: File): ParsedFile {
   return { file, name, cpf, uf, valid: true };
 }
 
-function fileToBase64(file: File): Promise<string> {
+function fileToBase64(file: Blob): Promise<string> {
   return new Promise((resolve,reject)=>{
     const reader = new FileReader();
     reader.onerror=()=>reject(new Error("Falha ao ler arquivo"));
@@ -111,6 +111,9 @@ export default function AdminH2Bico(){
   const filesRef=useRef<HTMLInputElement>(null);
   const folderRef=useRef<HTMLInputElement>(null);
   const cpfFileRef=useRef<HTMLInputElement>(null);
+  const replacePhotoInputRef=useRef<HTMLInputElement>(null);
+  const [replacePhotoTargetId,setReplacePhotoTargetId]=useState<number|null>(null);
+  const [replacingPhotoIds,setReplacingPhotoIds]=useState<Set<number>>(new Set());
   const [readingCpfFiles,setReadingCpfFiles]=useState(false);
   const [cpfFileReport,setCpfFileReport]=useState("");
   const [search,setSearch]=useState("");
@@ -133,6 +136,14 @@ export default function AdminH2Bico(){
   const allRecords=trpc.h2bico.list.useQuery({search:"",status:"all"});
   const stats=trpc.h2bico.stats.useQuery();
   const importer=trpc.h2bico.importPhoto.useMutation();
+  const replacePhoto=trpc.h2bico.replacePhoto.useMutation({
+    onSuccess:async(data)=>{
+      setBrokenPhotos(current=>{const next=new Set(current);next.delete(data.id);return next;});
+      await utils.h2bico.invalidate();
+      toast.success("Foto do H2BICO atualizada.");
+    },
+    onError:e=>toast.error("Não foi possível trocar a foto: "+e.message),
+  });
   const [savingEar,setSavingEar]=useState<Set<number>>(new Set());
   const setEar=trpc.h2bico.setEarMarker.useMutation({
     onSuccess:()=>{void utils.h2bico.invalidate();},
@@ -153,6 +164,58 @@ export default function AdminH2Bico(){
     onSuccess:()=>utils.h2bico.invalidate(),
     onError:e=>toast.error(e.message)
   });
+  const uploadReplacementPhoto=async(id:number,blob:Blob,source:"gallery"|"clipboard")=>{
+    const mimeType=blob.type as "image/jpeg"|"image/png"|"image/webp";
+    if(!["image/jpeg","image/png","image/webp"].includes(mimeType)){
+      toast.error("Use uma imagem JPG, PNG ou WEBP.");
+      return;
+    }
+    if(blob.size<=0){toast.error("A imagem está vazia.");return;}
+    if(blob.size>8*1024*1024){toast.error("A foto deve ter no máximo 8 MB.");return;}
+    setReplacingPhotoIds(current=>new Set(current).add(id));
+    try{
+      const base64=await fileToBase64(blob);
+      if(!base64) throw new Error("base64 vazio");
+      await replacePhoto.mutateAsync({id,base64,mimeType,source});
+    }catch(error){
+      if(!(error instanceof Error) || !error.message.includes("TRPCClientError")){
+        console.error("[H2BICO][replace-photo]",error);
+      }
+    }finally{
+      setReplacingPhotoIds(current=>{const next=new Set(current);next.delete(id);return next;});
+    }
+  };
+
+  const openReplacementGallery=(id:number)=>{
+    setReplacePhotoTargetId(id);
+    if(replacePhotoInputRef.current){
+      replacePhotoInputRef.current.value="";
+      replacePhotoInputRef.current.click();
+    }
+  };
+
+  const pasteReplacementPhoto=async(id:number)=>{
+    if(!navigator.clipboard?.read){
+      toast.error("Seu navegador não liberou leitura de imagem da área de transferência.");
+      return;
+    }
+    try{
+      const items=await navigator.clipboard.read();
+      const imageItem=items.find(item=>item.types.some(type=>type.startsWith("image/")));
+      if(!imageItem){toast.error("Não encontrei uma imagem copiada.");return;}
+      const preferredType=imageItem.types.find(type=>type==="image/png")
+        || imageItem.types.find(type=>type==="image/jpeg")
+        || imageItem.types.find(type=>type==="image/webp")
+        || imageItem.types.find(type=>type.startsWith("image/"));
+      if(!preferredType){toast.error("O print copiado não possui formato compatível.");return;}
+      const blob=await imageItem.getType(preferredType);
+      await uploadReplacementPhoto(id,blob,"clipboard");
+    }catch(error:any){
+      console.error("[H2BICO][clipboard.image]",error);
+      toast.error(`Não foi possível colar o print: ${error?.message||"permissão negada"}`);
+    }
+  };
+
 
   useEffect(()=>{setCardPage(0);},[search,status,review]);
   const existingCpfs=useMemo(()=>new Set((allRecords.data||[]).map((r:any)=>String(r.cpf))),[allRecords.data]);
@@ -553,10 +616,43 @@ export default function AdminH2Bico(){
         <select aria-label="Filtrar conferência" className="bg-gray-900 border border-gray-700 rounded-md px-3 py-2" value={review} onChange={e=>setReview(e.target.value as typeof review)}><option value="all">Todas as conferências</option><option value="confirmed">Confirmados</option><option value="pending">Pendentes</option><option value="discarded">Descartados</option></select>
       </div>
 
+      <input
+        ref={replacePhotoInputRef}
+        type="file"
+        accept="image/jpeg,image/png,image/webp"
+        className="hidden"
+        onChange={event=>{
+          const file=event.target.files?.[0];
+          const id=replacePhotoTargetId;
+          event.currentTarget.value="";
+          setReplacePhotoTargetId(null);
+          if(file&&id) void uploadReplacementPhoto(id,file,"gallery");
+        }}
+      />
       <div className="mt-3 grid max-h-[70vh] grid-cols-1 gap-2 overflow-y-auto pr-1 sm:grid-cols-2 xl:grid-cols-3">
         {cardsOnPage.map((r:any)=><Card key={r.id} className="bg-gray-900 border-gray-800 p-3">
           <div className="flex gap-3">{r.photoUrl&&!brokenPhotos.has(r.id)?<img src={`/api/admin/h2bico/photo/${r.id}`} onError={()=>setBrokenPhotos(current=>{const next=new Set(current);next.add(r.id);return next;})} className="h-14 w-14 shrink-0 rounded-lg object-cover border border-gray-700"/>:<div className="h-14 w-14 shrink-0 rounded-lg bg-gray-800 grid place-items-center"><UserCheck/></div>}
             <div className="min-w-0 flex-1"><div className="font-bold truncate">{r.name}</div><div className="text-sm text-gray-400 font-mono">{showCpf?r.cpf:maskCpf(r.cpf)}</div>{r.uf&&<div className="text-xs text-gray-500">{r.uf}</div>}<div className="text-xs mt-1 font-bold">Situação: {STATUS[r.status]}</div><div className={`mt-1 inline-flex rounded-md border px-2 py-1 text-xs font-black ${r.reviewState==="confirmed"?"border-emerald-500/40 bg-emerald-500/15 text-emerald-300":r.reviewState==="discarded"?"border-red-500/40 bg-red-500/15 text-red-300":"border-amber-500/30 bg-amber-500/10 text-amber-200"}`}>{r.reviewState==="confirmed"?"✓ CPF CONFERIDO":r.reviewState==="discarded"?"⛔ DESCARTADO — BLOQUEADO":"⏳ CPF PENDENTE DE CONFERÊNCIA"}</div>{r.reviewState==="confirmed"&&r.reviewedAt&&<div className="text-xs mt-1 text-emerald-200/80">Conferido em {new Date(r.reviewedAt).toLocaleString("pt-BR")}</div>}{r.linkedOrder&&<div className="text-xs text-amber-300">Pedido: {r.linkedOrder}</div>}</div>
+          </div>
+          <div className="mt-2 grid grid-cols-2 gap-2">
+            <Button
+              size="sm"
+              variant="outline"
+              disabled={replacingPhotoIds.has(r.id)}
+              onClick={()=>openReplacementGallery(r.id)}
+              className="border-cyan-500/40 bg-cyan-500/10 text-cyan-200 hover:bg-cyan-500/20 hover:text-white"
+            >
+              <Camera className="mr-1 h-4 w-4"/>{replacingPhotoIds.has(r.id)?"ENVIANDO...":"TROCAR FOTO · GALERIA"}
+            </Button>
+            <Button
+              size="sm"
+              variant="outline"
+              disabled={replacingPhotoIds.has(r.id)}
+              onClick={()=>void pasteReplacementPhoto(r.id)}
+              className="border-violet-500/40 bg-violet-500/10 text-violet-200 hover:bg-violet-500/20 hover:text-white"
+            >
+              <ClipboardPaste className="mr-1 h-4 w-4"/>COLAR PRINT
+            </Button>
           </div>
           <div className="mt-2 grid grid-cols-2 gap-2" role="group" aria-label={`Marcação EAR de ${r.name}`}>
             {(["com_ear","sem_ear"] as const).map(option=>{
