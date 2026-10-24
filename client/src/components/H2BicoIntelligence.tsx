@@ -5,6 +5,7 @@ import {Button} from "@/components/ui/button";
 import {Card} from "@/components/ui/card";
 import {Textarea} from "@/components/ui/textarea";
 import {formatMissingH2BicoCpfs} from "@/lib/h2bicoImportReview";
+import {isValidCpf} from "@/lib/h2bicoCpfExtractor";
 const stateLabels={pending:"PENDENTE",confirmed:"JÁ CONFIRMADO",discarded:"DESCARTADO / BLOQUEADO"};
 type Decision="confirm"|"unconfirm"|"discard"|"restore";
 type Filter="all"|"pending"|"confirmed"|"discarded";
@@ -27,12 +28,18 @@ export default function H2BicoIntelligence(){
  const directory=intelligence.listReviewed.useQuery({review:filter,search:term,page,pageSize:30});
  const history=intelligence.history.useQuery({recordId:historyId||1},{enabled:!!historyId});
  const current=intelligence.operation.useQuery({id:operationId||"00000000-0000-4000-8000-000000000000"},{enabled:!!operationId});
- const getCpfs=()=>[...new Set(value.split(/\r?\n/).map(x=>x.replace(/\D/g,"")).filter(Boolean))];
+ const getCpfSelection=()=>{
+  const raw=[...new Set(value.split(/\r?\n/).map(x=>x.replace(/\D/g,"")).filter(Boolean))];
+  const valid=raw.filter(cpf=>isValidCpf(cpf));
+  const invalid=raw.filter(cpf=>!isValidCpf(cpf));
+  return {raw,valid,invalid};
+ };
  const runAnalysis=async()=>{
-  const cpfs=getCpfs();
-  if(!cpfs.length||cpfs.some(cpf=>cpf.length!==11)){toast.error("Cole CPFs de 11 dígitos, um por linha.");return;}
+  const {valid:cpfs,invalid}=getCpfSelection();
+  if(!cpfs.length){toast.error(invalid.length?"Nenhum CPF válido encontrado. Confira os dígitos verificadores.":"Cole pelo menos um CPF.");return;}
+  if(invalid.length)toast.warning(invalid.length+" CPF(s) inválido(s) foram ignorados; os válidos serão analisados normalmente.");
   setBusy(true);
-  try{const data=await analyze.mutateAsync({cpfs});setAnalysis(data);toast.success(data.confirmed+" já confirmados; "+data.pending+" pendentes.");}
+  try{const data=await analyze.mutateAsync({cpfs});setAnalysis({...data,invalidCpfs:invalid});toast.success(data.confirmed+" já confirmados; "+data.pending+" pendentes; "+invalid.length+" inválido(s) ignorado(s).");}
   catch(e){toast.error(e instanceof Error?e.message:"Falha ao analisar CPFs.");}
   finally{setBusy(false);}
  };
@@ -57,7 +64,10 @@ export default function H2BicoIntelligence(){
   setBusy(true);
   try{
    const id=crypto.randomUUID();
-   await start.mutateAsync({id,decision,cpfs:getCpfs()});
+   const {valid:cpfs,invalid}=getCpfSelection();
+   if(!cpfs.length){toast.error("Nenhum CPF válido disponível para processar.");setBusy(false);return;}
+   if(invalid.length)toast.warning(invalid.length+" CPF(s) inválido(s) continuam fora da operação.");
+   await start.mutateAsync({id,decision,cpfs});
    setBusy(false);
    await resume(id);
   }catch(e){setBusy(false);toast.error(e instanceof Error?e.message:"Não foi possível iniciar.");}
@@ -66,6 +76,16 @@ export default function H2BicoIntelligence(){
   <div><p className="text-xs font-bold text-cyan-300">H2BICO INTELLIGENCE · AUDITORIA</p><h2 className="text-xl font-black">ANÁLISE INTELIGENTE E CADASTROS CONFIRMADOS</h2><p className="text-sm text-gray-400">Detecta listas repetidas, exibe situações atuais e mantém histórico. Analisar nunca altera registros.</p></div>
   <Textarea value={value} onChange={e=>{setValue(e.target.value);setAnalysis(null);}} className="min-h-28 font-mono" placeholder="Cole CPFs, um por linha, para saber quais já estão confirmados"/>
   <Button disabled={busy||!value.trim()} onClick={()=>void runAnalysis()}>LOCALIZAR E ANALISAR CPFs</Button>
+  {getCpfSelection().invalid.length>0&&<section className="rounded-lg border border-red-500/35 bg-red-950/20 p-3 text-sm">
+   <div className="flex flex-wrap items-center justify-between gap-2">
+    <strong className="text-red-300">CPFs INVÁLIDOS IGNORADOS ({getCpfSelection().invalid.length})</strong>
+    <Button size="sm" variant="outline" onClick={async()=>{
+     try{await navigator.clipboard.writeText(getCpfSelection().invalid.join("\n"));toast.success("Lista de CPFs inválidos copiada.");}
+     catch{toast.error("Não foi possível copiar automaticamente.");}
+    }}>COPIAR INVÁLIDOS</Button>
+   </div>
+   <p className="mt-1 text-xs text-slate-400">Esses números têm formato de CPF, mas falham nos dígitos verificadores. Eles não são enviados ao servidor e não interrompem os CPFs válidos.</p>
+  </section>}
   {!!analysis&&<div className="space-y-3 border border-gray-700 rounded-lg p-3">
    <p className="font-bold">{analysis.total} CPFs únicos analisados</p>
    <div className="grid grid-cols-2 md:grid-cols-4 gap-2 text-center">{([["JÁ CONFIRMADOS",analysis.confirmed],["PENDENTES",analysis.pending],["DESCARTADOS",analysis.discarded],["NÃO ENCONTRADOS",analysis.missing.length]] as const).map(([label,n])=><div key={label} className="rounded bg-gray-950 p-2"><p className="text-xs text-gray-400">{label}</p><p className="text-xl font-bold">{n}</p></div>)}</div>
