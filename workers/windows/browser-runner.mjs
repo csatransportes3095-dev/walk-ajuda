@@ -12,6 +12,24 @@ function output(value) {
   process.stdout.write(`${JSON.stringify(value)}\n`);
 }
 
+function isPrivateOrLocalIp(value) {
+  const ip = String(value || "").trim().toLowerCase();
+  if (!ip || ip === "localhost" || ip === "::1" || ip === "0.0.0.0") return true;
+  if (/^127\./.test(ip) || /^10\./.test(ip) || /^192\.168\./.test(ip) || /^169\.254\./.test(ip)) return true;
+  const v4 = ip.match(/^(\d{1,3})\.(\d{1,3})\.(\d{1,3})\.(\d{1,3})$/);
+  if (v4) {
+    const a = Number(v4[1]), b = Number(v4[2]);
+    if (a === 172 && b >= 16 && b <= 31) return true;
+    if (a === 100 && b >= 64 && b <= 127) return true;
+    if (a >= 224) return true;
+    return false;
+  }
+  if (ip.includes(":")) {
+    return ip === "::" || ip.startsWith("fc") || ip.startsWith("fd") || /^fe[89ab]/.test(ip);
+  }
+  return true;
+}
+
 function validateProxy(proxy) {
   if (!proxy || typeof proxy.host !== "string" || proxy.host.trim().length < 1 || !Number.isInteger(proxy.port) || proxy.port < 1 || proxy.port > 65_535 || typeof proxy.username !== "string" || typeof proxy.password !== "string") {
     throw Object.assign(new Error("proxy_config_invalid"), { category: "proxy_config_invalid", stage: "config" });
@@ -116,6 +134,7 @@ async function checkIp(localPort) {
       ], { windowsHide: true, timeout: 27_000, maxBuffer: 8_192 });
       const ip = String(endpoint.parse(stdout) || "").trim();
       if (ip.length < 3 || ip.length > 64) throw Object.assign(new Error("proxy_ip_response_invalid"), { category: "proxy_ip_response_invalid", stage: "https" });
+      if (isPrivateOrLocalIp(ip)) throw Object.assign(new Error("private_or_local_ip_detected"), { category: "private_or_local_ip_detected", stage: "https" });
       return { ip, endpoint: endpoint.name };
     } catch (error) {
       const classified = error?.category ? { category: error.category, stage: error.stage || "https" } : classifyRelayError(error);
