@@ -155,7 +155,7 @@ export default function H2BicoBulkManager(){
     {parse().invalid.length>0&&<details className="rounded-lg border border-red-500/30 bg-red-950/15 p-2 text-sm text-red-300">
       <summary className="cursor-pointer font-bold">CPFs inválidos ignorados ({parse().invalid.length})</summary>
       <p className="mt-2 break-all font-mono text-xs">{parse().invalid.join(", ")}</p>
-    </details>
+    </details>}
     {missing.length>0&&<details className="text-sm text-amber-300"><summary>CPFs não encontrados ({missing.length})</summary><p className="break-all font-mono">{missing.join(", ")}</p></details>}
     <div className="flex flex-wrap gap-2">
       <label className="text-sm">Situação <select aria-label="Filtrar situação" className="ml-2 rounded bg-gray-950 border border-gray-700 p-2" value={filter} onChange={e=>setFilter(e.target.value)}>
