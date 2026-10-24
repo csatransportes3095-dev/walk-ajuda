@@ -45,6 +45,7 @@ let rotationInProgress = false;
 let lastReportedIp = null;
 let ipCheckInProgress = false;
 let killSwitchCheckInProgress = false;
+let lastFirewallAuditAt = 0;
 let networkSuspended = false;
 let browserExitHandled = false;
 let panelSyncTimer;
@@ -85,6 +86,45 @@ function createFrontRelay(port = 0) {
 function chromeExecutable() {
   if (!browserExecutable || !existsSync(browserExecutable)) return undefined;
   return browserExecutable;
+}
+
+async function verifyWindowsFirewallRules() {
+  const executable = chromeExecutable();
+  if (!executable) throw new Error("browser_not_found");
+  const escapedPath = executable.replaceAll("'", "''");
+  const script = [
+    "$ErrorActionPreference='Stop'",
+    "$expectedProgram='" + escapedPath + "'",
+    "$checks=@(",
+    "  @{Name='H2ADS Dedicated Chrome - Block Direct IPv4';Expected=@('0.0.0.0-126.255.255.255','128.0.0.0-255.255.255.255')},",
+    "  @{Name='H2ADS Dedicated Chrome - Block Direct IPv6';Expected=@('Internet6')}",
+    ")",
+    "foreach($check in $checks){",
+    "  $rule=Get-NetFirewallRule -DisplayName $check.Name -ErrorAction Stop | Where-Object {$_.Enabled -eq 'True' -and $_.Direction -eq 'Outbound' -and $_.Action -eq 'Block'} | Select-Object -First 1",
+    "  if(-not $rule){throw 'firewall_rule_missing'}",
+    "  $app=$rule | Get-NetFirewallApplicationFilter",
+    "  if(-not $app){throw 'firewall_program_missing'}",
+    "  if(-not ([System.IO.Path]::GetFullPath([string]$app.Program)).Equals([System.IO.Path]::GetFullPath($expectedProgram),[StringComparison]::OrdinalIgnoreCase)){throw 'firewall_program_mismatch'}",
+    "  $addr=$rule | Get-NetFirewallAddressFilter",
+    "  $actual=@($addr.RemoteAddress | ForEach-Object {([string]$_)-split ','} | ForEach-Object {$_.Trim()} | Where-Object {$_} | Sort-Object -Unique)",
+    "  $expected=@($check.Expected | Sort-Object -Unique)",
+    "  if($actual.Count -ne $expected.Count){throw 'firewall_range_mismatch'}",
+    "  foreach($item in $expected){if($actual -notcontains $item){throw 'firewall_range_mismatch'}}",
+    "}",
+    "Write-Output 'OK'"
+  ].join(";");
+  try {
+    const { stdout } = await execFileAsync("powershell.exe", ["-NoProfile", "-NonInteractive", "-Command", script], {
+      windowsHide: true, timeout: 12_000, maxBuffer: 32_000,
+    });
+    if (!String(stdout).includes("OK")) throw new Error("firewall_validation_failed");
+    lastFirewallAuditAt = Date.now();
+    writeSession({ firewallAudit: "passed", firewallAuditAt: new Date().toISOString() });
+    return true;
+  } catch (error) {
+    writeSession({ firewallAudit: "failed", firewallAuditAt: new Date().toISOString() });
+    throw new Error("firewall_validation_failed");
+  }
 }
 
 function headers() {
@@ -275,6 +315,7 @@ async function verifyWebRtcNoLocalLeak(executable, localPort) {
 }
 
 async function privacyGuardPreflight() {
+  await verifyWindowsFirewallRules();
   const observedIp = await checkIp();
   if (!observedIp) throw new Error("privacy_guard_proxy_unavailable");
   const executable = chromeExecutable();
@@ -520,6 +561,9 @@ async function enforceKillSwitch() {
   if (!browser || browser.exitCode !== null || !relayPort || rotationInProgress || browserExitHandled || killSwitchCheckInProgress || ipCheckInProgress) return;
   killSwitchCheckInProgress = true;
   try {
+    if (Date.now() - lastFirewallAuditAt > 60_000) {
+      await verifyWindowsFirewallRules();
+    }
     if (networkSuspended) {
       await resumeProxyTraffic();
     } else {
