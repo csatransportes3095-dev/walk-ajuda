@@ -15,6 +15,7 @@ export default function OrderH2AdsBrowserShortcut({ registrationId, subOrderInde
   const [editingNote, setEditingNote] = useState(false);
   const [noteDraft, setNoteDraft] = useState("");
   const [linkingExisting, setLinkingExisting] = useState(false);
+  const [linkExistingInstanceId, setLinkExistingInstanceId] = useState<number | null>(null);
   const linksQuery = trpc.h2Ads.listOrderLinks.useQuery(undefined, {
     staleTime: 0,
     refetchInterval: 2_000,
@@ -309,29 +310,31 @@ export default function OrderH2AdsBrowserShortcut({ registrationId, subOrderInde
     }
   };
 
-  const linkExistingInstance = async (event: ChangeEvent<HTMLSelectElement>) => {
+  const selectExistingInstance = (event: ChangeEvent<HTMLSelectElement>) => {
     event.stopPropagation();
-    if (pending) return;
     const instanceId = Number(event.target.value);
-    if (!Number.isInteger(instanceId) || instanceId < 1) return;
-    const candidate = unlinkedInstances.find(item => item.instance.id === instanceId);
+    setLinkExistingInstanceId(Number.isInteger(instanceId) && instanceId > 0 ? instanceId : null);
+  };
+
+  const confirmLinkExistingInstance = async (event: MouseEvent<HTMLButtonElement>) => {
+    event.stopPropagation();
+    if (pending || !linkExistingInstanceId) return;
+    const candidate = unlinkedInstances.find(item => item.instance.id === linkExistingInstanceId);
     if (!candidate) {
       toast.error("Esta instância não está mais disponível para vínculo.");
+      setLinkExistingInstanceId(null);
       await refresh();
       return;
     }
     const label = `${candidate.group?.name || "SEM GRUPO"} — ${candidate.instance.name}`;
-    if (!window.confirm(`VINCULAR esta instância ao pedido atual?\n\n${label}\n\nA instância será mantida com o mesmo grupo, proxy, perfil e dados H2ADS.`)) {
-      event.target.value = "";
-      return;
-    }
     try {
       await setOrderLink.mutateAsync({
-        instanceId,
+        instanceId: candidate.instance.id,
         registrationId,
         subOrderIndex,
       });
-      setSelectedInstanceId(instanceId);
+      setSelectedInstanceId(candidate.instance.id);
+      setLinkExistingInstanceId(null);
       setLinkingExisting(false);
       toast.success(`Instância vinculada: ${label}.`);
       await refresh();
@@ -356,8 +359,8 @@ export default function OrderH2AdsBrowserShortcut({ registrationId, subOrderInde
   const linkExistingPanel = linkingExisting ? <span className="flex max-w-full flex-wrap items-center gap-1.5 sm:gap-2" onClick={event => event.stopPropagation()}>
     <select
       aria-label="Vincular instância H2ADS existente"
-      defaultValue=""
-      onChange={linkExistingInstance}
+      value={linkExistingInstanceId ?? ""}
+      onChange={selectExistingInstance}
       disabled={pending || unlinkedInstances.length === 0}
       className="h-8 min-w-[190px] max-w-full rounded-lg border border-emerald-400/40 bg-slate-950 px-2 text-[10px] font-bold text-white disabled:opacity-40 sm:h-9 sm:min-w-[240px] sm:text-[11px] lg:h-10 lg:text-xs"
     >
@@ -366,10 +369,18 @@ export default function OrderH2AdsBrowserShortcut({ registrationId, subOrderInde
         <option key={instance.id} value={instance.id}>{group?.name || "SEM GRUPO"} — {instance.name}</option>
       ))}
     </select>
-    <button type="button" onClick={event => { event.stopPropagation(); setLinkingExisting(false); }} className="min-h-8 rounded-lg border border-white/10 bg-black/20 px-2.5 text-[10px] font-black text-slate-200 sm:min-h-9 sm:text-[11px]">X</button>
+    <button
+      type="button"
+      onClick={confirmLinkExistingInstance}
+      disabled={pending || !linkExistingInstanceId}
+      className="inline-flex min-h-8 items-center justify-center rounded-lg border border-emerald-400/45 bg-emerald-500/25 px-2.5 text-[10px] font-black text-emerald-100 transition hover:bg-emerald-500/35 disabled:cursor-not-allowed disabled:opacity-30 sm:min-h-9 sm:px-3 sm:text-[11px] lg:min-h-10 lg:text-xs"
+    >
+      CONFIRMAR VÍNCULO
+    </button>
+    <button type="button" onClick={event => { event.stopPropagation(); setLinkExistingInstanceId(null); setLinkingExisting(false); }} className="min-h-8 rounded-lg border border-white/10 bg-black/20 px-2.5 text-[10px] font-black text-slate-200 sm:min-h-9 sm:text-[11px]">X</button>
   </span> : <button
     type="button"
-    onClick={event => { event.stopPropagation(); setLinkingExisting(true); }}
+    onClick={event => { event.stopPropagation(); setLinkExistingInstanceId(null); setLinkingExisting(true); }}
     disabled={pending || unlinkedInstances.length === 0}
     className="inline-flex min-h-8 items-center justify-center gap-1.5 rounded-lg border border-emerald-400/35 bg-emerald-400/15 px-2.5 py-1.5 text-[10px] font-black text-emerald-100 disabled:cursor-not-allowed disabled:opacity-30 sm:min-h-9 sm:px-3 sm:text-[11px] lg:min-h-10 lg:px-3.5 lg:text-xs"
     title={unlinkedInstances.length ? "Vincular uma instância H2ADS sem vínculo a este pedido" : "Não há instâncias H2ADS livres para vincular"}
