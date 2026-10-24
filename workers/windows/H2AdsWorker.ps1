@@ -10,7 +10,7 @@ param(
 
 $ErrorActionPreference = "Stop"
 $ProgressPreference = "SilentlyContinue"
-$AgentVersion = "1.4.7"
+$AgentVersion = "1.4.8"
 $WorkerDirectory = Join-Path $env:LOCALAPPDATA "H2AdsWorker"
 $ConfigPath = Join-Path $WorkerDirectory "worker.json"
 $InstalledScriptPath = Join-Path $WorkerDirectory "H2AdsWorker.ps1"
@@ -512,8 +512,9 @@ function Restore-H2AdsProfileSnapshot([object]$Config, [int]$InstanceId) {
 function Invoke-BrowserSession([object]$Config, [object]$Payload) {
   $profileDirectory = Join-Path $ProfilesDirectory "instance-$($Payload.command.instanceId)"
   if (!(Test-Path (Join-Path $profileDirectory "h2ads-profile.json"))) { throw "Perfil local não preparado." }
-  Install-H2AdsTestingBrowser
-  Ensure-H2AdsTestingFirewall
+  if (!(Test-Path $TestingChromePath)) { throw "testing_browser_missing" }
+  Assert-H2AdsTestingExecutable | Out-Null
+  if (!(Test-H2AdsTestingFirewall)) { throw "testing_browser_firewall_unavailable" }
   $env:H2ADS_PANEL_URL = $Config.panelUrl
   $env:H2ADS_WORKER_KEY = $Config.workerKey
   $env:H2ADS_WORKER_TOKEN = Get-WorkerToken $Config
@@ -640,6 +641,10 @@ function Get-WorkerErrorCategory([object]$ErrorRecord) {
   if ($message -like "*private_or_local_ip_detected*") { return "private_or_local_ip_detected" }
   if ($message -like "*browser_proxy_unverified*") { return "browser_proxy_unverified" }
   if ($message -like "*exit_ip_mismatch*") { return "exit_ip_mismatch" }
+  if ($message -like "*testing_browser_missing*") { return "testing_browser_missing" }
+  if ($message -like "*testing_browser_firewall_unavailable*") { return "testing_browser_firewall_unavailable" }
+  if ($message -like "*Versao inesperada do Chrome for Testing*") { return "testing_browser_version_mismatch" }
+  if ($message -like "*Chrome for Testing*") { return "testing_browser_unavailable" }
   return "worker_execution_failed"
 }
 
@@ -958,6 +963,8 @@ if ($Install) {
   Copy-Item -Path $PSCommandPath -Destination $InstalledScriptPath -Force
   Ensure-DedicatedBrowser
   Ensure-H2AdsBrowserFirewall
+  Install-H2AdsTestingBrowser
+  Ensure-H2AdsTestingFirewall
   Ensure-WorkerScheduledTask
   Ensure-BackgroundLauncher
   Ensure-DesktopShortcut
@@ -979,6 +986,8 @@ if ($Update) {
   Remove-Item -Force $downloadPath -ErrorAction SilentlyContinue
   Ensure-DedicatedBrowser
   Ensure-H2AdsBrowserFirewall
+  Install-H2AdsTestingBrowser
+  Ensure-H2AdsTestingFirewall
   Ensure-WorkerScheduledTask
   Start-InstalledWorker
   Write-Output "Agente H2 Ads atualizado com isolamento rígido e iniciado."
