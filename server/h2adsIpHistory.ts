@@ -4,26 +4,6 @@ import { getDb } from "./db";
 
 let historyTableReady = false;
 
-function isPrivateOrLocalIp(value: string): boolean {
-  const ip = value.trim().toLowerCase();
-  if (!ip || ip === "localhost" || ip === "::1" || ip === "0.0.0.0") return true;
-  if (/^127\./.test(ip) || /^10\./.test(ip) || /^192\.168\./.test(ip) || /^169\.254\./.test(ip)) return true;
-  const v4 = ip.match(/^(\d{1,3})\.(\d{1,3})\.(\d{1,3})\.(\d{1,3})$/);
-  if (v4) {
-    const octets = v4.slice(1).map(Number);
-    if (octets.some(part => !Number.isInteger(part) || part < 0 || part > 255)) return true;
-    const [a, b] = octets;
-    if (a === 172 && b >= 16 && b <= 31) return true;
-    if (a === 100 && b >= 64 && b <= 127) return true;
-    if (a >= 224) return true;
-    return false;
-  }
-  if (ip.includes(":")) {
-    return ip === "::" || ip.startsWith("fc") || ip.startsWith("fd") || /^fe[89ab]/.test(ip);
-  }
-  return true;
-}
-
 async function requireDb() {
   const db = await getDb();
   if (!db) throw new Error("Banco indisponível para o histórico de IP H2 Ads.");
@@ -66,7 +46,7 @@ async function insertHistory(instanceId: number, workerId: number, observedIp: s
 
 export async function recordH2AdsRuntimeIp(input: { workerId: number; instanceId: number; observedIp: string }): Promise<boolean> {
   const observedIp = input.observedIp.trim();
-  if (!observedIp || observedIp.length > 64 || isPrivateOrLocalIp(observedIp)) return false;
+  if (!observedIp || observedIp.length > 64) return false;
   const db = await requireDb();
   await ensureHistoryTable();
 

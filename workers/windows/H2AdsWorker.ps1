@@ -10,7 +10,7 @@ param(
 
 $ErrorActionPreference = "Stop"
 $ProgressPreference = "SilentlyContinue"
-$AgentVersion = "1.4.8"
+$AgentVersion = "1.4.3"
 $WorkerDirectory = Join-Path $env:LOCALAPPDATA "H2AdsWorker"
 $ConfigPath = Join-Path $WorkerDirectory "worker.json"
 $InstalledScriptPath = Join-Path $WorkerDirectory "H2AdsWorker.ps1"
@@ -34,22 +34,6 @@ $FirewallRuleV6Name = "H2ADS Dedicated Chrome - Block Direct IPv6"
 $TaskName = "H2 Ads Browser Worker"
 $ShortcutName = "Iniciar H2Ads Worker.lnk"
 $LauncherPath = Join-Path $WorkerDirectory "StartH2AdsWorker.vbs"
-$DiagnosticLogPath = Join-Path $WorkerDirectory "worker-diagnostic.log"
-
-function Write-H2AdsWorkerDiagnostic([string]$EventName, [string]$Detail = "") {
-  try {
-    if (!(Test-Path $WorkerDirectory)) { New-Item -ItemType Directory -Force -Path $WorkerDirectory | Out-Null }
-    $safeDetail = ([string]$Detail) -replace '[\r\n]+', ' '
-    if ($safeDetail.Length -gt 300) { $safeDetail = $safeDetail.Substring(0, 300) }
-    $line = "{0} [{1}] {2}" -f (Get-Date).ToUniversalTime().ToString("o"), $EventName, $safeDetail
-    Add-Content -LiteralPath $DiagnosticLogPath -Value $line -Encoding UTF8
-    $info = Get-Item -LiteralPath $DiagnosticLogPath -ErrorAction SilentlyContinue
-    if ($info -and $info.Length -gt 262144) {
-      $tail = Get-Content -LiteralPath $DiagnosticLogPath -Tail 600 -ErrorAction SilentlyContinue
-      $tail | Set-Content -LiteralPath $DiagnosticLogPath -Encoding UTF8
-    }
-  } catch { }
-}
 
 function Get-ComputerLabel {
   $name = $env:COMPUTERNAME
@@ -93,57 +77,19 @@ function Ensure-DedicatedBrowser {
   Assert-GoogleChromeSignature $DedicatedChromePath
 }
 
-function Test-H2AdsFirewallRule([string]$RuleName, [string]$ProgramPath, [string[]]$ExpectedRemoteAddresses) {
-  if (!(Get-Command Get-NetFirewallRule -ErrorAction SilentlyContinue)) { return $false }
-  $rule = Get-NetFirewallRule -DisplayName $RuleName -ErrorAction SilentlyContinue |
-    Where-Object { $_.Enabled -eq "True" -and $_.Direction -eq "Outbound" -and $_.Action -eq "Block" } |
-    Select-Object -First 1
-  if (!$rule) { return $false }
-
-  try {
-    if ([string]$rule.Profile -notmatch "(?i)Any") { return $false }
-
-    $application = $rule | Get-NetFirewallApplicationFilter
-    if (!$application -or [string]::IsNullOrWhiteSpace([string]$application.Program)) { return $false }
-    $actualProgram = [System.IO.Path]::GetFullPath([string]$application.Program)
-    $expectedProgram = [System.IO.Path]::GetFullPath($ProgramPath)
-    if (!$actualProgram.Equals($expectedProgram, [StringComparison]::OrdinalIgnoreCase)) { return $false }
-
-    $portFilter = $rule | Get-NetFirewallPortFilter
-    if (!$portFilter) { return $false }
-    $protocol = [string]$portFilter.Protocol
-    if ($protocol -ne "Any" -and $protocol -ne "256") { return $false }
-
-    $addressFilter = $rule | Get-NetFirewallAddressFilter
-    if (!$addressFilter) { return $false }
-    $actualAddresses = @(
-      $addressFilter.RemoteAddress |
-        ForEach-Object { ([string]$_) -split "," } |
-        ForEach-Object { $_.Trim() } |
-        Where-Object { $_ } |
-        Sort-Object -Unique
-    )
-    $expectedAddresses = @(
-      $ExpectedRemoteAddresses |
-        ForEach-Object { ([string]$_) -split "," } |
-        ForEach-Object { $_.Trim() } |
-        Where-Object { $_ } |
-        Sort-Object -Unique
-    )
-    if ($actualAddresses.Count -ne $expectedAddresses.Count) { return $false }
-    foreach ($expected in $expectedAddresses) {
-      if ($actualAddresses -notcontains $expected) { return $false }
-    }
-    return $true
-  } catch {
-    return $false
-  }
-}
-
 function Test-H2AdsTestingFirewall {
   if (!(Test-Path $TestingChromePath)) { return $false }
-  if (!(Test-H2AdsFirewallRule $TestingV4Rule $TestingChromePath @("0.0.0.0-126.255.255.255", "128.0.0.0-255.255.255.255"))) { return $false }
-  if (!(Test-H2AdsFirewallRule $TestingV6Rule $TestingChromePath @("Internet6"))) { return $false }
+  foreach ($name in @($TestingV4Rule, $TestingV6Rule)) {
+    $rule = Get-NetFirewallRule -DisplayName $name -ErrorAction SilentlyContinue | Where-Object { $_.Enabled -eq "True" -and $_.Direction -eq "Outbound" -and $_.Action -eq "Block" } | Select-Object -First 1
+    if (!$rule) { return $false }
+    $filter = $rule | Get-NetFirewallApplicationFilter
+    if (!$filter -or [string]::IsNullOrWhiteSpace([string]$filter.Program)) { return $false }
+    try {
+      $programPath = [System.IO.Path]::GetFullPath([string]$filter.Program)
+      $expectedPath = [System.IO.Path]::GetFullPath($TestingChromePath)
+      if (!$programPath.Equals($expectedPath, [StringComparison]::OrdinalIgnoreCase)) { return $false }
+    } catch { return $false }
+  }
   return $true
 }
 
@@ -200,8 +146,13 @@ function Install-H2AdsTestingBrowser {
 }
 
 function Test-H2AdsBrowserFirewall {
-  if (!(Test-H2AdsFirewallRule $FirewallRuleV4Name $DedicatedChromePath @("0.0.0.0-126.255.255.255", "128.0.0.0-255.255.255.255"))) { return $false }
-  if (!(Test-H2AdsFirewallRule $FirewallRuleV6Name $DedicatedChromePath @("Internet6"))) { return $false }
+  if (!(Get-Command Get-NetFirewallRule -ErrorAction SilentlyContinue)) { return $false }
+  foreach ($ruleName in @($FirewallRuleV4Name, $FirewallRuleV6Name)) {
+    $rule = Get-NetFirewallRule -DisplayName $ruleName -ErrorAction SilentlyContinue | Where-Object { $_.Enabled -eq "True" -and $_.Direction -eq "Outbound" -and $_.Action -eq "Block" } | Select-Object -First 1
+    if (!$rule) { return $false }
+    $application = $rule | Get-NetFirewallApplicationFilter
+    if (!$application -or !([string]$application.Program).Equals($DedicatedChromePath, [StringComparison]::OrdinalIgnoreCase)) { return $false }
+  }
   return $true
 }
 
@@ -243,7 +194,6 @@ function Test-H2AdsLeakProtection {
   return [ordered]@{
     ipv4DirectBlocked = $true
     ipv6DirectBlocked = $true
-    firewallRangesValidated = $true
     proxyOnlyBrowser = $true
     quicDisabled = $true
     dnsPrefetchDisabled = $true
@@ -512,9 +462,8 @@ function Restore-H2AdsProfileSnapshot([object]$Config, [int]$InstanceId) {
 function Invoke-BrowserSession([object]$Config, [object]$Payload) {
   $profileDirectory = Join-Path $ProfilesDirectory "instance-$($Payload.command.instanceId)"
   if (!(Test-Path (Join-Path $profileDirectory "h2ads-profile.json"))) { throw "Perfil local não preparado." }
-  if (!(Test-Path $TestingChromePath)) { throw "testing_browser_missing" }
-  Assert-H2AdsTestingExecutable | Out-Null
-  if (!(Test-H2AdsTestingFirewall)) { throw "testing_browser_firewall_unavailable" }
+  Install-H2AdsTestingBrowser
+  Ensure-H2AdsTestingFirewall
   $env:H2ADS_PANEL_URL = $Config.panelUrl
   $env:H2ADS_WORKER_KEY = $Config.workerKey
   $env:H2ADS_WORKER_TOKEN = Get-WorkerToken $Config
@@ -633,18 +582,6 @@ function Get-WorkerErrorCategory([object]$ErrorRecord) {
   if ($message -like "*Firewall H2ADS*" -or $message -like "*kill switch rígido*") { return "hard_kill_switch_unavailable" }
   if ($message -like "*Chrome dedicado*" -or $message -like "*Google Chrome*") { return "dedicated_browser_unavailable" }
   if ($message -like "*Protecao de vazamento H2ADS*") { return "leak_protection_failed" }
-  if ($message -like "*runner_execution_failed*") { return "runner_execution_failed" }
-  if ($message -like "*runner_invalid_output*") { return "runner_invalid_output" }
-  if ($message -like "*firewall_validation_failed*") { return "firewall_validation_failed" }
-  if ($message -like "*webrtc_local_ip_leak_detected*") { return "webrtc_local_ip_leak_detected" }
-  if ($message -like "*webrtc_probe_failed*") { return "webrtc_probe_failed" }
-  if ($message -like "*private_or_local_ip_detected*") { return "private_or_local_ip_detected" }
-  if ($message -like "*browser_proxy_unverified*") { return "browser_proxy_unverified" }
-  if ($message -like "*exit_ip_mismatch*") { return "exit_ip_mismatch" }
-  if ($message -like "*testing_browser_missing*") { return "testing_browser_missing" }
-  if ($message -like "*testing_browser_firewall_unavailable*") { return "testing_browser_firewall_unavailable" }
-  if ($message -like "*Versao inesperada do Chrome for Testing*") { return "testing_browser_version_mismatch" }
-  if ($message -like "*Chrome for Testing*") { return "testing_browser_unavailable" }
   return "worker_execution_failed"
 }
 
@@ -761,16 +698,9 @@ function Invoke-PendingBrowserCommand([object]$Config) {
     if ($payload.command.command -eq "prepare_browser") {
       Ensure-BrowserPreparationComponent $Config
       $leakProtection = Test-H2AdsLeakProtection
-      $runnerInput = @{ command = $payload.command.command; proxy = $payload.proxy; browserExecutable = $DedicatedChromePath } | ConvertTo-Json -Depth 5 -Compress
+      $runnerInput = @{ command = $payload.command.command; proxy = $payload.proxy } | ConvertTo-Json -Depth 5 -Compress
       $runnerOutput = $runnerInput | & node.exe $RunnerPath
-      if ($LASTEXITCODE -ne 0 -or [string]::IsNullOrWhiteSpace([string]$runnerOutput)) {
-        throw "runner_execution_failed"
-      }
-      try {
-        $result = $runnerOutput | ConvertFrom-Json -ErrorAction Stop
-      } catch {
-        throw "runner_invalid_output"
-      }
+      $result = $runnerOutput | ConvertFrom-Json
       if ($result.state -eq "proxy_verified" -and ![string]::IsNullOrWhiteSpace($result.observedIp)) {
         Restore-H2AdsProfileSnapshot $Config ([int]$payload.command.instanceId) | Out-Null
         Initialize-InstanceProfile ([int]$payload.command.instanceId)
@@ -790,9 +720,6 @@ function Invoke-PendingBrowserCommand([object]$Config) {
     }
     if ($payload.command.command -eq "launch_browser") {
       Ensure-BrowserPreparationComponent $Config
-      # Revalida todas as camadas imediatamente antes de cada abertura.
-      # Qualquer alteracao no Firewall ou nas flags bloqueia a sessao antes do Chrome navegar.
-      Test-H2AdsLeakProtection | Out-Null
       Invoke-BrowserSession $Config $payload
       return
     }
@@ -838,16 +765,8 @@ Set shell = Nothing
 function Start-InstalledWorker {
   try {
     Start-ScheduledTask -TaskName $TaskName -ErrorAction Stop
-    Start-Sleep -Milliseconds 800
-    $task = Get-ScheduledTask -TaskName $TaskName -ErrorAction SilentlyContinue
-    if ($task -and $task.State -eq "Running") {
-      Write-H2AdsWorkerDiagnostic "START_TASK" "scheduled_task_running"
-      return
-    }
-  } catch {
-    Write-H2AdsWorkerDiagnostic "START_TASK_ERROR" $_.Exception.Message
-  }
-  Write-H2AdsWorkerDiagnostic "START_FALLBACK" "starting_hidden_powershell"
+    return
+  } catch { }
   Start-Process -FilePath "powershell.exe" -ArgumentList "-NoProfile -NonInteractive -ExecutionPolicy Bypass -WindowStyle Hidden -File `"$InstalledScriptPath`" -Run" -WindowStyle Hidden
 }
 
@@ -963,8 +882,6 @@ if ($Install) {
   Copy-Item -Path $PSCommandPath -Destination $InstalledScriptPath -Force
   Ensure-DedicatedBrowser
   Ensure-H2AdsBrowserFirewall
-  Install-H2AdsTestingBrowser
-  Ensure-H2AdsTestingFirewall
   Ensure-WorkerScheduledTask
   Ensure-BackgroundLauncher
   Ensure-DesktopShortcut
@@ -986,9 +903,6 @@ if ($Update) {
   Remove-Item -Force $downloadPath -ErrorAction SilentlyContinue
   Ensure-DedicatedBrowser
   Ensure-H2AdsBrowserFirewall
-  Install-H2AdsTestingBrowser
-  Ensure-H2AdsTestingFirewall
-  Ensure-WorkerScheduledTask
   Start-InstalledWorker
   Write-Output "Agente H2 Ads atualizado com isolamento rígido e iniciado."
   exit 0
@@ -997,50 +911,34 @@ if ($Update) {
 if ($Run) {
   if (!(Test-Path $ConfigPath)) { throw "Configuração do Worker não encontrada. Faça o pareamento primeiro." }
   $config = Get-Content -Raw -Path $ConfigPath | ConvertFrom-Json
-
-  # O mutex e a autoridade de instancia unica. Nunca mate outro Worker dentro
-  # do modo -Run: duas inicializacoes simultaneas poderiam se encerrar mutuamente.
+  try { Ensure-WorkerScheduledTask } catch { }
+  try { Ensure-BackgroundLauncher } catch { }
+  try { Ensure-DesktopShortcut } catch { }
+  Stop-ExistingWorkerProcesses
+  Start-Sleep -Milliseconds 250
   $workerMutex = Acquire-WorkerMutex $config
-  if ($null -eq $workerMutex) {
-    Write-H2AdsWorkerDiagnostic "DUPLICATE_RUN" "another_worker_process_already_owns_mutex"
-    exit 0
-  }
-
+  if ($null -eq $workerMutex) { exit 0 }
+  $nextHeartbeatAt = Get-Date
+  $nextSnapshotQueueCheckAt = Get-Date
   try {
-    try { Ensure-WorkerScheduledTask } catch { Write-H2AdsWorkerDiagnostic "TASK_REFRESH_ERROR" $_.Exception.Message }
-    try { Ensure-BackgroundLauncher } catch { }
-    try { Ensure-DesktopShortcut } catch { }
-    Write-H2AdsWorkerDiagnostic "RUN_START" "agent=$AgentVersion"
-
-    $nextHeartbeatAt = Get-Date
-    $nextSnapshotQueueCheckAt = Get-Date
     while ($true) {
       $now = Get-Date
       if ($now -ge $nextHeartbeatAt) {
-        try {
-          Invoke-WorkerHeartbeat $config
-        } catch {
-          Write-H2AdsWorkerDiagnostic "HEARTBEAT_ERROR" $_.Exception.Message
-        }
+        try { Invoke-WorkerHeartbeat $config } catch { }
         $nextHeartbeatAt = $now.AddSeconds(20)
       }
+      # A exclusão tem prioridade sobre o disparo de novos backups.
       try { Invoke-H2AdsPendingInstanceDeletion $config } catch { }
       if ($now -ge $nextSnapshotQueueCheckAt) {
         try { Start-H2AdsSnapshotQueueWorker } catch { }
         $nextSnapshotQueueCheckAt = $now.AddSeconds(20)
       }
-      try { Invoke-PendingBrowserCommand $config } catch {
-        Write-H2AdsWorkerDiagnostic "COMMAND_LOOP_ERROR" $_.Exception.Message
-      }
+      try { Invoke-PendingBrowserCommand $config } catch { }
       Start-Sleep -Seconds 2
     }
-  } catch {
-    Write-H2AdsWorkerDiagnostic "RUN_FATAL" $_.Exception.Message
-    throw
   } finally {
     try { $workerMutex.ReleaseMutex() } catch { }
     $workerMutex.Dispose()
-    Write-H2AdsWorkerDiagnostic "RUN_STOP" "agent=$AgentVersion"
   }
 }
 

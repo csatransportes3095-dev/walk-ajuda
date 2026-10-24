@@ -45,7 +45,6 @@ let rotationInProgress = false;
 let lastReportedIp = null;
 let ipCheckInProgress = false;
 let killSwitchCheckInProgress = false;
-let lastFirewallAuditAt = 0;
 let networkSuspended = false;
 let browserExitHandled = false;
 let panelSyncTimer;
@@ -86,46 +85,6 @@ function createFrontRelay(port = 0) {
 function chromeExecutable() {
   if (!browserExecutable || !existsSync(browserExecutable)) return undefined;
   return browserExecutable;
-}
-
-async function verifyWindowsFirewallRules() {
-  const executable = chromeExecutable();
-  if (!executable) throw new Error("browser_not_found");
-  const escapedPath = executable.replaceAll("'", "''");
-  const firewallFamily = /chrome-for-testing/i.test(executable) ? "H2ADS Testing Chrome" : "H2ADS Dedicated Chrome";
-  const script = [
-    "$ErrorActionPreference='Stop'",
-    "$expectedProgram='" + escapedPath + "'",
-    "$checks=@(",
-    "  @{Name='" + firewallFamily + " - Block Direct IPv4';Expected=@('0.0.0.0-126.255.255.255','128.0.0.0-255.255.255.255')},",
-    "  @{Name='" + firewallFamily + " - Block Direct IPv6';Expected=@('Internet6')}",
-    ")",
-    "foreach($check in $checks){",
-    "  $rule=Get-NetFirewallRule -DisplayName $check.Name -ErrorAction Stop | Where-Object {$_.Enabled -eq 'True' -and $_.Direction -eq 'Outbound' -and $_.Action -eq 'Block'} | Select-Object -First 1",
-    "  if(-not $rule){throw 'firewall_rule_missing'}",
-    "  $app=$rule | Get-NetFirewallApplicationFilter",
-    "  if(-not $app){throw 'firewall_program_missing'}",
-    "  if(-not ([System.IO.Path]::GetFullPath([string]$app.Program)).Equals([System.IO.Path]::GetFullPath($expectedProgram),[StringComparison]::OrdinalIgnoreCase)){throw 'firewall_program_mismatch'}",
-    "  $addr=$rule | Get-NetFirewallAddressFilter",
-    "  $actual=@($addr.RemoteAddress | ForEach-Object {([string]$_)-split ','} | ForEach-Object {$_.Trim()} | Where-Object {$_} | Sort-Object -Unique)",
-    "  $expected=@($check.Expected | Sort-Object -Unique)",
-    "  if($actual.Count -ne $expected.Count){throw 'firewall_range_mismatch'}",
-    "  foreach($item in $expected){if($actual -notcontains $item){throw 'firewall_range_mismatch'}}",
-    "}",
-    "Write-Output 'OK'"
-  ].join(";");
-  try {
-    const { stdout } = await execFileAsync("powershell.exe", ["-NoProfile", "-NonInteractive", "-Command", script], {
-      windowsHide: true, timeout: 12_000, maxBuffer: 32_000,
-    });
-    if (!String(stdout).includes("OK")) throw new Error("firewall_validation_failed");
-    lastFirewallAuditAt = Date.now();
-    writeSession({ firewallAudit: "passed", firewallAuditAt: new Date().toISOString() });
-    return true;
-  } catch (error) {
-    writeSession({ firewallAudit: "failed", firewallAuditAt: new Date().toISOString() });
-    throw new Error("firewall_validation_failed");
-  }
 }
 
 function headers() {
@@ -181,25 +140,6 @@ function normalizeIp(value) {
   return typeof value === "string" ? value.trim().toLowerCase() : "";
 }
 
-function isPrivateOrLocalIp(value) {
-  const ip = normalizeIp(value);
-  if (!ip) return true;
-  if (ip === "localhost" || ip === "::1" || ip === "0.0.0.0") return true;
-  if (/^127\./.test(ip) || /^10\./.test(ip) || /^192\.168\./.test(ip) || /^169\.254\./.test(ip)) return true;
-  const v4 = ip.match(/^(\d{1,3})\.(\d{1,3})\.(\d{1,3})\.(\d{1,3})$/);
-  if (v4) {
-    const a = Number(v4[1]), b = Number(v4[2]);
-    if (a === 172 && b >= 16 && b <= 31) return true;
-    if (a === 100 && b >= 64 && b <= 127) return true;
-    if (a >= 224) return true;
-    return false;
-  }
-  if (ip.includes(":")) {
-    return ip === "::" || ip.startsWith("fc") || ip.startsWith("fd") || ip.startsWith("fe8") || ip.startsWith("fe9") || ip.startsWith("fea") || ip.startsWith("feb");
-  }
-  return true;
-}
-
 function classifyNetworkError(error, fallback = "proxy_path_unverified") {
   const message = `${error?.message || ""}\n${error?.stderr || ""}`.toLowerCase();
   if (message.includes("407") || message.includes("proxy authentication") || message.includes("authentication required")) return "proxy_auth_407";
@@ -221,9 +161,7 @@ async function checkIpThroughPort(localPort) {
     ], { windowsHide: true, timeout: 25_000, maxBuffer: 8_192 });
     const data = JSON.parse(stdout);
     if (typeof data.ip !== "string" || data.ip.length < 3 || data.ip.length > 64) throw new Error("invalid_ip_response");
-    const observedIp = data.ip.trim();
-    if (isPrivateOrLocalIp(observedIp)) throw new Error("private_or_local_ip_detected");
-    return observedIp;
+    return data.ip.trim();
   } catch (error) {
     const category = classifyNetworkError(error);
     const wrapped = new Error(category);
@@ -237,7 +175,7 @@ async function checkIp() {
   return checkIpThroughPort(relayPort);
 }
 
-async function verifyChromeProxyPath(executable, localPort) {
+async function verifyChromeProxyPath(executable, localPort, expectedIp) {
   if (browserProbeInProgress) throw new Error("browser_probe_busy");
   browserProbeInProgress = true;
   const probeProfile = mkdtempSync(join(tmpdir(), `h2ads-chrome-probe-${instanceId}-`));
@@ -251,11 +189,11 @@ async function verifyChromeProxyPath(executable, localPort) {
     const match = stdout.match(/"ip"\s*:\s*"([^"<>]+)"/i);
     if (!match) throw new Error("browser_probe_invalid_response");
     const browserIp = match[1].trim();
-    if (isPrivateOrLocalIp(browserIp)) throw new Error("private_or_local_ip_detected");
+    if (expectedIp && normalizeIp(browserIp) !== normalizeIp(expectedIp)) throw new Error("exit_ip_mismatch");
     return browserIp;
   } catch (error) {
     const message = error instanceof Error ? error.message : String(error);
-    if (message === "private_or_local_ip_detected" || message === "browser_probe_invalid_response") throw error;
+    if (message === "exit_ip_mismatch" || message === "browser_probe_invalid_response") throw error;
     const category = classifyNetworkError(error, "browser_proxy_probe_failed");
     const wrapped = new Error(category);
     wrapped.cause = error;
@@ -284,63 +222,20 @@ function writeSession(extra = {}) {
   }), { encoding: "utf8", mode: 0o600 });
 }
 
-async function verifyWebRtcNoLocalLeak(executable, localPort) {
-  const probeProfile = mkdtempSync(join(tmpdir(), `h2ads-webrtc-probe-${instanceId}-`));
-  const probePath = join(probeProfile, "probe.html");
-  const html = `<!doctype html><html><body><pre id="out">pending</pre><script>
-  (async()=>{try{
-    const pc=new RTCPeerConnection({iceServers:[{urls:"stun:stun.l.google.com:19302"}]});
-    pc.createDataChannel("x");
-    const found=[];
-    pc.onicecandidate=e=>{if(e.candidate){found.push(e.candidate.candidate||"");}else{
-      document.getElementById("out").textContent=JSON.stringify(found); pc.close();
-    }};
-    await pc.setLocalDescription(await pc.createOffer());
-    setTimeout(()=>{document.getElementById("out").textContent=JSON.stringify(found); try{pc.close()}catch{}},3500);
-  }catch(e){document.getElementById("out").textContent="[]";}})();
-  </script></body></html>`;
-  writeFileSync(probePath, html, "utf8");
-  try {
-    const { stdout } = await execFileAsync(executable, [
-      "--headless=new", "--disable-gpu", "--disable-background-networking", "--disable-component-update", "--disable-sync", "--metrics-recording-only",
-      `--user-data-dir=${probeProfile}`, `--proxy-server=http://127.0.0.1:${localPort}`, "--proxy-bypass-list=<-loopback>",
-      "--disable-quic", "--dns-prefetch-disable", "--force-webrtc-ip-handling-policy=disable_non_proxied_udp",
-      "--virtual-time-budget=5000", "--dump-dom", pathToFileURL(probePath).href,
-    ], { windowsHide: true, timeout: 15_000, maxBuffer: 256_000 });
-    const localPattern = /(?:127\.|10\.|192\.168\.|169\.254\.|172\.(?:1[6-9]|2\d|3[01])\.|\[?::1\]?|\bfc[0-9a-f]{2}:|\bfd[0-9a-f]{2}:|\bfe[89ab][0-9a-f]:)/i;
-    if (localPattern.test(stdout)) throw new Error("webrtc_local_ip_leak_detected");
-    return true;
-  } finally {
-    try { rmSync(probeProfile, { recursive: true, force: true }); } catch {}
-  }
-}
-
 async function privacyGuardPreflight() {
-  // Fluxo comprovado: antes do spawn, exige apenas que o relay/proxy esteja vivo.
-  // Firewall + Chrome + WebRTC ja foram validados no PREPARAR/TESTE VAZAMENTO.
-  // Depois do spawn, o Chrome e revalidado de forma assincrona; se falhar,
-  // suspendProxyTraffic() corta a rede sem impedir a janela de abrir.
   const observedIp = await checkIp();
   if (!observedIp) throw new Error("privacy_guard_proxy_unavailable");
   writeSession({
-    privacyGuard: "protected",
-    privacyGuardCheckedAt: new Date().toISOString(),
-    observedIp,
-    browserProxyVerified: false,
-    browserProxyVerification: "pending",
-    quicDisabled: true,
-    dnsPrefetchDisabled: true,
-    webrtcNonProxiedUdpDisabled: true,
-    webrtcOperationalProbe: "prevalidated",
-    killSwitch: "armed",
-    directBrowserEgress: "blocked_by_windows_firewall",
+    privacyGuard: "protected", privacyGuardCheckedAt: new Date().toISOString(), observedIp, browserProxyVerified: false,
+    browserProxyVerification: "pending", quicDisabled: true, dnsPrefetchDisabled: true,
+    webrtcNonProxiedUdpDisabled: true, killSwitch: "armed", directBrowserEgress: "blocked_by_windows_firewall",
   });
   return { observedIp };
 }
 
-async function verifyChromeProxyAfterLaunch(executable) {
+async function verifyChromeProxyAfterLaunch(executable, expectedIp) {
   try {
-    const browserObservedIp = await verifyChromeProxyPath(executable, relayPort);
+    const browserObservedIp = await verifyChromeProxyPath(executable, relayPort, expectedIp);
     if (browserExitHandled || !browser || browser.exitCode !== null) return;
     writeSession({
       browserObservedIp, browserProxyVerified: true, browserProxyVerification: "verified",
@@ -437,7 +332,7 @@ async function resumeProxyTraffic() {
     const observedIp = await checkIpThroughPort(backendRelay.port);
     const executable = chromeExecutable();
     if (!executable) throw new Error("browser_not_found");
-    const browserObservedIp = await verifyChromeProxyPath(executable, backendRelay.port);
+    const browserObservedIp = await verifyChromeProxyPath(executable, backendRelay.port, observedIp);
 
     if (!frontRelay) {
       frontRelay = createFrontRelay(relayPort);
@@ -452,7 +347,7 @@ async function resumeProxyTraffic() {
     networkSuspended = false;
 
     const frontIp = await checkIp();
-    if (isPrivateOrLocalIp(frontIp)) throw new Error("private_or_local_ip_detected");
+    if (normalizeIp(frontIp) !== normalizeIp(observedIp)) throw new Error("exit_ip_mismatch");
 
     writeSession({
       networkState: "online",
@@ -541,17 +436,16 @@ async function reportObservedIp() {
   try {
     if (sessionLockedIp && normalizeIp(observedIp) !== normalizeIp(sessionLockedIp)) {
       sessionIpChanged = true;
-      const previousSessionLockedIp = sessionLockedIp;
-      sessionLockedIp = observedIp;
       writeSession({
-        previousSessionLockedIp,
         sessionLockedIp,
         observedIp,
         sessionIpChangedAt: new Date().toISOString(),
-        networkState: "online",
-        killSwitch: "armed",
-        killSwitchReason: null,
+        networkState: "blocked",
+        killSwitch: "triggered",
+        killSwitchReason: "session_ip_changed",
       });
+      await suspendProxyTraffic("session_ip_changed");
+      return;
     }
     if (observedIp !== lastReportedIp) {
       await post("/api/h2ads/worker/runs/" + instanceId + "/state", { state: "browser_open", observedIp });
@@ -569,28 +463,24 @@ async function enforceKillSwitch() {
   if (!browser || browser.exitCode !== null || !relayPort || rotationInProgress || browserExitHandled || killSwitchCheckInProgress || ipCheckInProgress) return;
   killSwitchCheckInProgress = true;
   try {
-    if (Date.now() - lastFirewallAuditAt > 60_000) {
-      await verifyWindowsFirewallRules();
-    }
     if (networkSuspended) {
       await resumeProxyTraffic();
     } else {
       const observedIp = await checkIp();
       if (sessionLockedIp && normalizeIp(observedIp) !== normalizeIp(sessionLockedIp)) {
         sessionIpChanged = true;
-        const previousSessionLockedIp = sessionLockedIp;
-        sessionLockedIp = observedIp;
         writeSession({
-          previousSessionLockedIp,
-          sessionLockedIp,
+          previousSessionLockedIp: sessionLockedIp,
           observedIp,
           sessionIpChangedAt: new Date().toISOString(),
-          networkState: "online",
+          networkState: "suspended",
           killSwitch: "armed",
-          killSwitchReason: null,
+          killSwitchReason: "proxy_ip_changed_revalidating",
         });
+        await suspendProxyTraffic("proxy_ip_changed_revalidating");
+      } else {
+        writeSession({ killSwitch: "armed", killSwitchLastVerifiedAt: new Date().toISOString(), sessionLockedIp });
       }
-      writeSession({ killSwitch: "armed", killSwitchLastVerifiedAt: new Date().toISOString(), sessionLockedIp });
     }
   } catch (error) {
     await suspendProxyTraffic(error instanceof Error ? error.message : "proxy_path_unverified");
@@ -666,7 +556,7 @@ async function rotateRelay() {
     const executable = chromeExecutable();
     if (!executable) throw new Error("browser_not_found");
     // Check the candidate while the old verified relay is still active.
-    const browserObservedIp = await verifyChromeProxyPath(executable, candidateBackend.port);
+    const browserObservedIp = await verifyChromeProxyPath(executable, candidateBackend.port, candidateIp);
     backendRelay = candidateBackend;
     activeBackendPort = candidateBackend.port;
     candidateActivated = true;
@@ -840,7 +730,7 @@ async function run() {
     browser.once("exit", (code, signal) => { void finalizeBrowserExit("browser_exit", code, signal); });
     // Do not make the user wait for a second headless Chrome before seeing the real window.
     // Direct egress remains blocked by Windows Firewall; verification runs asynchronously.
-    void verifyChromeProxyAfterLaunch(executable);
+    void verifyChromeProxyAfterLaunch(executable, initial.observedIp);
     ipTimer = setInterval(() => { void reportObservedIp(); }, IP_CHECK_INTERVAL_MS);
     ipTimer.unref?.();
     killSwitchTimer = setInterval(() => { void enforceKillSwitch(); }, KILL_SWITCH_CHECK_INTERVAL_MS);
@@ -867,7 +757,6 @@ async function run() {
         instanceLabelState: "static_tab", observedIp: initial.observedIp,
         browserProxyVerified: false, browserProxyVerification: "pending",
         privacyGuard: "protected", googleSorryPrivacyGuard: "disabled",
-        dnsPrefetchDisabled: true, webrtcOperationalProbe: "passed",
         killSwitch: "armed", networkState: "online", panelConnection: "pending",
         directBrowserEgress: "blocked_by_windows_firewall",
         proxyRotationPolicy: "provider_managed_between_sessions",
