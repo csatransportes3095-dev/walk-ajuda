@@ -353,31 +353,31 @@ export default function OrderH2AdsBrowserShortcut({ registrationId, subOrderInde
     }
   };
 
-  const linkExistingPanel = linkingExisting ? <span className="inline-flex items-center gap-1" onClick={event => event.stopPropagation()}>
+  const linkExistingPanel = linkingExisting ? <span className="flex max-w-full flex-wrap items-center gap-1.5 sm:gap-2" onClick={event => event.stopPropagation()}>
     <select
       aria-label="Vincular instância H2ADS existente"
       defaultValue=""
       onChange={linkExistingInstance}
       disabled={pending || unlinkedInstances.length === 0}
-      className="max-w-64 rounded border border-emerald-400/40 bg-slate-950 px-2 py-1 text-[10px] font-bold text-white disabled:opacity-40"
+      className="h-8 min-w-[190px] max-w-full rounded-lg border border-emerald-400/40 bg-slate-950 px-2 text-[10px] font-bold text-white disabled:opacity-40 sm:h-9 sm:min-w-[240px] sm:text-[11px] lg:h-10 lg:text-xs"
     >
       <option value="" disabled>{unlinkedInstances.length ? "GRUPO — INSTÂNCIA" : "NENHUMA INSTÂNCIA LIVRE"}</option>
       {unlinkedInstances.map(({ instance, group }) => (
         <option key={instance.id} value={instance.id}>{group?.name || "SEM GRUPO"} — {instance.name}</option>
       ))}
     </select>
-    <button type="button" onClick={event => { event.stopPropagation(); setLinkingExisting(false); }} className="px-1 text-[10px] font-bold text-slate-300">X</button>
+    <button type="button" onClick={event => { event.stopPropagation(); setLinkingExisting(false); }} className="min-h-8 rounded-lg border border-white/10 bg-black/20 px-2.5 text-[10px] font-black text-slate-200 sm:min-h-9 sm:text-[11px]">X</button>
   </span> : <button
     type="button"
     onClick={event => { event.stopPropagation(); setLinkingExisting(true); }}
     disabled={pending || unlinkedInstances.length === 0}
-    className="inline-flex items-center gap-1 rounded-full border border-emerald-400/35 bg-emerald-400/15 px-2 py-1 text-[9px] font-black text-emerald-200 disabled:cursor-not-allowed disabled:opacity-30"
+    className="inline-flex min-h-8 items-center justify-center gap-1.5 rounded-lg border border-emerald-400/35 bg-emerald-400/15 px-2.5 py-1.5 text-[10px] font-black text-emerald-100 disabled:cursor-not-allowed disabled:opacity-30 sm:min-h-9 sm:px-3 sm:text-[11px] lg:min-h-10 lg:px-3.5 lg:text-xs"
     title={unlinkedInstances.length ? "Vincular uma instância H2ADS sem vínculo a este pedido" : "Não há instâncias H2ADS livres para vincular"}
   >
     VINCULAR INSTÂNCIA
   </button>;
 
-  const createPanel = creating ? <span className="inline-flex flex-wrap items-center gap-1" onClick={event => event.stopPropagation()}>
+  const createPanel = creating ? <span className="flex max-w-full flex-wrap items-center gap-1.5 sm:gap-2" onClick={event => event.stopPropagation()}>
     <input value={newName} onChange={event => setNewName(event.target.value)} maxLength={128} placeholder="Nome (automático)" aria-label="Nome da nova instância" className="w-36 rounded border border-violet-400/40 bg-slate-950 px-2 py-1 text-xs text-white" />
     <select aria-label="Grupo da nova instância" value={newGroupId ?? automaticGroup?.id ?? ""} onChange={event => setNewGroupId(Number(event.target.value))} className="max-w-36 rounded border border-violet-400/40 bg-slate-950 px-2 py-1 text-xs text-white">
       <option value="" disabled>Escolha o grupo</option>
@@ -386,7 +386,7 @@ export default function OrderH2AdsBrowserShortcut({ registrationId, subOrderInde
     <input value={newNote} onChange={event => setNewNote(event.target.value)} maxLength={150} placeholder="OBS: TESTE DOC" aria-label="OBS da nova instância" className="w-32 rounded border border-violet-400/40 bg-slate-950 px-2 py-1 text-xs text-white" />
     <button type="button" onClick={createLinkedInstance} disabled={pending} className="rounded bg-violet-500/25 px-2 py-1 text-xs text-violet-100">CONFIRMAR</button>
     <button type="button" onClick={() => setCreating(false)} className="px-1 text-xs text-slate-300">CANCELAR</button>
-  </span> : <button type="button" onClick={event => { event.stopPropagation(); setNewNote(""); setCreating(true); }} disabled={pending} className="inline-flex items-center gap-1 rounded-full border border-violet-400/35 bg-violet-400/15 px-2 py-1 text-[9px] font-black text-violet-200"><Plus className="h-3 w-3" />CRIAR</button>;
+  </span> : <button type="button" onClick={event => { event.stopPropagation(); setNewNote(""); setCreating(true); }} disabled={pending} className="inline-flex min-h-8 items-center justify-center gap-1.5 rounded-lg border border-violet-400/35 bg-violet-400/15 px-2.5 py-1.5 text-[10px] font-black text-violet-100 sm:min-h-9 sm:px-3 sm:text-[11px] lg:min-h-10 lg:px-3.5 lg:text-xs"><Plus className="h-3.5 w-3.5 lg:h-4 lg:w-4" />CRIAR</button>;
 
   if (!shortcut && linkedIds.length > 1) {
     return <span className="inline-flex items-center gap-1 rounded border border-cyan-500/40 p-1" onClick={event => event.stopPropagation()}>
@@ -426,64 +426,64 @@ export default function OrderH2AdsBrowserShortcut({ registrationId, subOrderInde
       ? `A instância já está em ${deliveredGroup.name}.`
       : `Mover esta instância para ${deliveredGroup.name}.`;
 
-  return <span className="inline-flex items-center gap-1 rounded-full border border-cyan-500/35 bg-cyan-500/10 p-0.5" title={statusTitle} onClick={event => event.stopPropagation()}>
-    <span className="px-1 text-[9px] font-black uppercase tracking-wide text-cyan-300">H2ADS</span>
-    {linkedIds.length > 1 && <select aria-label="Selecionar instância H2ADS" value={activeInstanceId ?? ""} onChange={event => { event.stopPropagation(); setSelectedInstanceId(Number(event.target.value)); setEditingNote(false); }} className="max-w-32 rounded border border-cyan-400/30 bg-slate-950 px-1 py-1 text-[10px] text-white">{linkedIds.map(id => { const item = (dashboard?.instances ?? []).find(instance => instance.id === id); return <option key={id} value={id}>{item?.name || `Instância #${id}`}</option>; })}</select>}
+  return <span className="flex w-full max-w-full flex-wrap items-center gap-1.5 rounded-xl border border-cyan-500/35 bg-cyan-500/10 p-1.5 sm:w-auto sm:gap-2 sm:p-2 xl:gap-2.5" title={statusTitle} onClick={event => event.stopPropagation()}>
+    <span className="rounded-lg border border-cyan-400/20 bg-cyan-400/10 px-2 py-1.5 text-[10px] font-black uppercase tracking-wide text-cyan-200 sm:px-2.5 sm:text-[11px] lg:text-xs">H2ADS</span>
+    {linkedIds.length > 1 && <select aria-label="Selecionar instância H2ADS" value={activeInstanceId ?? ""} onChange={event => { event.stopPropagation(); setSelectedInstanceId(Number(event.target.value)); setEditingNote(false); }} className="h-8 min-w-[120px] max-w-full rounded-lg border border-cyan-400/30 bg-slate-950 px-2 text-[10px] font-bold text-white sm:h-9 sm:min-w-[140px] sm:text-[11px] lg:h-10 lg:text-xs">{linkedIds.map(id => { const item = (dashboard?.instances ?? []).find(instance => instance.id === id); return <option key={id} value={id}>{item?.name || `Instância #${id}`}</option>; })}</select>}
     {linkedInstance && <select
       aria-label="Grupo da instância H2ADS"
       value={linkedInstance.groupId}
       onChange={changeLinkedInstanceGroup}
       disabled={pending}
-      className="max-w-40 rounded border border-amber-400/30 bg-slate-950 px-1 py-1 text-[10px] font-bold text-amber-100 disabled:opacity-40"
+      className="h-8 min-w-[130px] max-w-full rounded-lg border border-amber-400/30 bg-slate-950 px-2 text-[10px] font-bold text-amber-100 disabled:opacity-40 sm:h-9 sm:min-w-[150px] sm:text-[11px] lg:h-10 lg:text-xs"
       title="Mover esta instância para outro grupo H2ADS"
     >
       {activeGroups.map(group => <option key={group.id} value={group.id}>{group.name}</option>)}
     </select>}
-    {linkedInstance && <span className="max-w-40 truncate px-1 text-[9px] text-slate-300" title={linkedInstance.notes || ""}>OBS: {linkedInstance.notes || "—"}</span>}
-    {editingNote ? <span className="inline-flex items-center gap-1"><input value={noteDraft} onChange={event => setNoteDraft(event.target.value)} maxLength={150} aria-label="Editar OBS H2ADS" className="w-28 rounded border border-cyan-400/30 bg-slate-950 px-1 py-1 text-[10px] text-white" /><button type="button" onClick={saveNote} disabled={pending} className="text-[9px] text-emerald-300">SALVAR</button><button type="button" onClick={event => {event.stopPropagation();setEditingNote(false);}} className="text-[9px] text-slate-300">X</button></span> : <button type="button" onClick={event => {event.stopPropagation();setNoteDraft(linkedInstance?.notes || "");setEditingNote(true);}} className="text-[9px] text-cyan-200">EDITAR OBS</button>}
+    {linkedInstance && <span className="max-w-44 truncate rounded-lg border border-white/10 bg-black/20 px-2 py-1.5 text-[10px] text-slate-200 sm:max-w-52 sm:text-[11px]" title={linkedInstance.notes || ""}>OBS: {linkedInstance.notes || "—"}</span>}
+    {editingNote ? <span className="flex max-w-full flex-wrap items-center gap-1.5 sm:gap-2"><input value={noteDraft} onChange={event => setNoteDraft(event.target.value)} maxLength={150} aria-label="Editar OBS H2ADS" className="h-8 w-36 max-w-full rounded-lg border border-cyan-400/30 bg-slate-950 px-2 text-[10px] text-white sm:h-9 sm:w-44 sm:text-[11px]" /><button type="button" onClick={saveNote} disabled={pending} className="min-h-8 rounded-lg border border-emerald-400/30 bg-emerald-400/10 px-2.5 text-[10px] font-black text-emerald-200 sm:min-h-9 sm:text-[11px]">SALVAR</button><button type="button" onClick={event => {event.stopPropagation();setEditingNote(false);}} className="min-h-8 rounded-lg border border-white/10 bg-black/20 px-2.5 text-[10px] font-black text-slate-200 sm:min-h-9 sm:text-[11px]">X</button></span> : <button type="button" onClick={event => {event.stopPropagation();setNoteDraft(linkedInstance?.notes || "");setEditingNote(true);}} className="min-h-8 rounded-lg border border-cyan-400/30 bg-cyan-400/10 px-2.5 text-[10px] font-black text-cyan-100 sm:min-h-9 sm:text-[11px]">EDITAR OBS</button>}
     {linkExistingPanel}
     {createPanel}
     <button
       type="button"
       onClick={openBrowser}
       disabled={!shortcut.canOpen || pending}
-      className="inline-flex items-center gap-1 rounded-full border border-emerald-500/35 bg-emerald-500/15 px-2 py-1 text-[9px] font-black text-emerald-300 transition hover:bg-emerald-500/25 disabled:cursor-not-allowed disabled:opacity-30"
+      className="inline-flex min-h-8 items-center justify-center gap-1.5 rounded-lg border border-emerald-500/35 bg-emerald-500/15 px-2.5 py-1.5 text-[10px] font-black text-emerald-200 transition hover:bg-emerald-500/25 disabled:cursor-not-allowed disabled:opacity-30 sm:min-h-9 sm:px-3 sm:text-[11px] lg:min-h-10 lg:px-3.5 lg:text-xs"
       title={shortcut.canOpen ? "Abrir browser da instância vinculada" : statusTitle}
     >
-      <Play className="h-3 w-3" />ABRIR
+      <Play className="h-3.5 w-3.5 lg:h-4 lg:w-4" />ABRIR
     </button>
     <button
       type="button"
       onClick={closeBrowserNow}
       disabled={!shortcut.canClose || pending}
-      className="inline-flex items-center gap-1 rounded-full border border-rose-500/35 bg-rose-500/15 px-2 py-1 text-[9px] font-black text-rose-300 transition hover:bg-rose-500/25 disabled:cursor-not-allowed disabled:opacity-30"
+      className="inline-flex min-h-8 items-center justify-center gap-1.5 rounded-lg border border-rose-500/35 bg-rose-500/15 px-2.5 py-1.5 text-[10px] font-black text-rose-200 transition hover:bg-rose-500/25 disabled:cursor-not-allowed disabled:opacity-30 sm:min-h-9 sm:px-3 sm:text-[11px] lg:min-h-10 lg:px-3.5 lg:text-xs"
       title={shortcut.canClose ? "Fechar browser da instância vinculada" : statusTitle}
     >
-      <Square className="h-3 w-3" />FECHAR
+      <Square className="h-3.5 w-3.5 lg:h-4 lg:w-4" />FECHAR
     </button>
     <button
       type="button"
       onClick={prepareAgain}
       disabled={pending || shortcut.state === "queued" || shortcut.state === "preparing"}
-      className="inline-flex items-center gap-1 rounded-full border border-sky-400/35 bg-sky-400/15 px-2 py-1 text-[9px] font-black text-sky-200 transition hover:bg-sky-400/25 disabled:cursor-not-allowed disabled:opacity-30"
+      className="inline-flex min-h-8 items-center justify-center gap-1.5 rounded-lg border border-sky-400/35 bg-sky-400/15 px-2.5 py-1.5 text-[10px] font-black text-sky-100 transition hover:bg-sky-400/25 disabled:cursor-not-allowed disabled:opacity-30 sm:min-h-9 sm:px-3 sm:text-[11px] lg:min-h-10 lg:px-3.5 lg:text-xs"
       title="Revalidar e restaurar a conexão sem fechar a instância"
     >
-      <RefreshCw className="h-3 w-3" />PREPARAR NOVAMENTE
+      <RefreshCw className="h-3.5 w-3.5 lg:h-4 lg:w-4" />PREPARAR NOVAMENTE
     </button>
     <button
       type="button"
       onClick={rotateProxy}
       disabled={pending || shortcut.state === "queued" || shortcut.state === "preparing"}
-      className="inline-flex items-center gap-1 rounded-full border border-amber-400/35 bg-amber-400/15 px-2 py-1 text-[9px] font-black text-amber-200 transition hover:bg-amber-400/25 disabled:cursor-not-allowed disabled:opacity-30"
+      className="inline-flex min-h-8 items-center justify-center gap-1.5 rounded-lg border border-amber-400/35 bg-amber-400/15 px-2.5 py-1.5 text-[10px] font-black text-amber-100 transition hover:bg-amber-400/25 disabled:cursor-not-allowed disabled:opacity-30 sm:min-h-9 sm:px-3 sm:text-[11px] lg:min-h-10 lg:px-3.5 lg:text-xs"
       title="Trocar para o próximo proxy da fila, inclusive com a instância aberta"
     >
-      <RefreshCw className="h-3 w-3" />TROCAR PROXY
+      <RefreshCw className="h-3.5 w-3.5 lg:h-4 lg:w-4" />TROCAR PROXY
     </button>
     <button
       type="button"
       onClick={moveToDelivered}
       disabled={!deliveredGroup || alreadyDelivered || pending}
-      className="inline-flex items-center gap-1 rounded-full border border-teal-400/35 bg-teal-400/15 px-2 py-1 text-[9px] font-black text-teal-200 transition hover:bg-teal-400/25 disabled:cursor-not-allowed disabled:opacity-30"
+      className="inline-flex min-h-8 items-center justify-center gap-1.5 rounded-lg border border-teal-400/35 bg-teal-400/15 px-2.5 py-1.5 text-[10px] font-black text-teal-100 transition hover:bg-teal-400/25 disabled:cursor-not-allowed disabled:opacity-30 sm:min-h-9 sm:px-3 sm:text-[11px] lg:min-h-10 lg:px-3.5 lg:text-xs"
       title={deliveredTitle}
     >
       {alreadyDelivered ? "ENTREGUE ✓" : "ENTREGUE"}
@@ -492,7 +492,7 @@ export default function OrderH2AdsBrowserShortcut({ registrationId, subOrderInde
       type="button"
       onClick={unlinkLinkedInstance}
       disabled={pending}
-      className="inline-flex items-center gap-1 rounded-full border border-orange-400/40 bg-orange-400/15 px-2 py-1 text-[9px] font-black text-orange-200 transition hover:bg-orange-400/25 disabled:cursor-not-allowed disabled:opacity-30"
+      className="inline-flex min-h-8 items-center justify-center gap-1.5 rounded-lg border border-orange-400/40 bg-orange-400/15 px-2.5 py-1.5 text-[10px] font-black text-orange-100 transition hover:bg-orange-400/25 disabled:cursor-not-allowed disabled:opacity-30 sm:min-h-9 sm:px-3 sm:text-[11px] lg:min-h-10 lg:px-3.5 lg:text-xs"
       title="Desvincular esta instância do pedido sem apagar a instância"
     >
       DESVINCULAR
@@ -501,10 +501,10 @@ export default function OrderH2AdsBrowserShortcut({ registrationId, subOrderInde
       type="button"
       onClick={deleteLinkedInstance}
       disabled={pending || shortcut.state === "browser_open" || shortcut.state === "queued" || shortcut.state === "preparing"}
-      className="inline-flex items-center gap-1 rounded-full border border-red-500/45 bg-red-500/15 px-2 py-1 text-[9px] font-black text-red-200 transition hover:bg-red-500/25 disabled:cursor-not-allowed disabled:opacity-30"
+      className="inline-flex min-h-8 items-center justify-center gap-1.5 rounded-lg border border-red-500/45 bg-red-500/15 px-2.5 py-1.5 text-[10px] font-black text-red-100 transition hover:bg-red-500/25 disabled:cursor-not-allowed disabled:opacity-30 sm:min-h-9 sm:px-3 sm:text-[11px] lg:min-h-10 lg:px-3.5 lg:text-xs"
       title={shortcut.state === "browser_open" ? "Feche o browser antes de deletar" : "Deletar somente a instância H2ADS vinculada"}
     >
-      <Trash2 className="h-3 w-3" />DELETAR
+      <Trash2 className="h-3.5 w-3.5 lg:h-4 lg:w-4" />DELETAR
     </button>
   </span>;
 }
