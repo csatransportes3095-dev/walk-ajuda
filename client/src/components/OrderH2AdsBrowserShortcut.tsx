@@ -32,6 +32,7 @@ export default function OrderH2AdsBrowserShortcut({ registrationId, subOrderInde
   const launchBrowser = trpc.h2Ads.launchBrowser.useMutation();
   const closeBrowser = trpc.h2Ads.closeBrowser.useMutation();
   const validateProxy = trpc.h2Ads.validateProxy.useMutation();
+  const prepareBrowser = trpc.h2Ads.prepareBrowser.useMutation();
   const updateInstance = trpc.h2Ads.updateInstance.useMutation();
   const setOrderLink = trpc.h2Ads.setOrderLink.useMutation();
   const createInstanceLinkedOrderAuto = trpc.h2Ads.createInstanceLinkedOrderAuto.useMutation();
@@ -94,7 +95,7 @@ export default function OrderH2AdsBrowserShortcut({ registrationId, subOrderInde
     groups: (dashboard?.groups ?? []) as any[],
   });
 
-  const pending = launchBrowser.isPending || closeBrowser.isPending || validateProxy.isPending || updateInstance.isPending || setOrderLink.isPending || createInstanceLinkedOrderAuto.isPending || rotateProxyAuto.isPending || deleteInstance.isPending;
+  const pending = launchBrowser.isPending || closeBrowser.isPending || validateProxy.isPending || prepareBrowser.isPending || updateInstance.isPending || setOrderLink.isPending || createInstanceLinkedOrderAuto.isPending || rotateProxyAuto.isPending || deleteInstance.isPending;
 
   const refresh = async () => {
     await Promise.all([
@@ -183,9 +184,8 @@ export default function OrderH2AdsBrowserShortcut({ registrationId, subOrderInde
     event.stopPropagation();
     if (!shortcut || pending) return;
     try {
-      const result = await validateProxy.mutateAsync({ instanceId: shortcut.instanceId });
-      if ((result as any)?.healthy === false) toast.error((result as any)?.message || "A rota continua indisponível.");
-      else toast.success("Conexão revalidada. A instância aberta vai reconectar sem fechar.");
+      await prepareBrowser.mutateAsync({ instanceId: shortcut.instanceId });
+      toast.success("Preparação enviada para o WALK1. O botão ABRIR será liberado quando a instância ficar pronta.");
       await refresh();
     } catch (error) {
       toast.error(error instanceof Error ? error.message : "Não foi possível preparar novamente.");
@@ -219,7 +219,9 @@ export default function OrderH2AdsBrowserShortcut({ registrationId, subOrderInde
     const label = linkedInstance?.name || `instância #${shortcut.instanceId}`;
     if (!window.confirm(`DELETAR ${label}?\n\nA instância H2ADS e o vínculo com este pedido serão apagados. O pedido e o cliente não serão excluídos.`)) return;
     try {
-      const result = await deleteInstance.mutateAsync({ id: shortcut.instanceId });
+      const deletingInstanceId = shortcut.instanceId;
+      const result = await deleteInstance.mutateAsync({ id: deletingInstanceId });
+      if (selectedInstanceId === deletingInstanceId) setSelectedInstanceId(null);
       await refresh();
       if (result.success) {
         toast.success("Instância H2ADS excluída. Limpeza confirmada.");
@@ -327,16 +329,31 @@ export default function OrderH2AdsBrowserShortcut({ registrationId, subOrderInde
       return;
     }
     const label = `${candidate.group?.name || "SEM GRUPO"} — ${candidate.instance.name}`;
+    const keepCurrentInstanceId = shortcut?.instanceId ?? activeInstanceId ?? null;
     try {
       await setOrderLink.mutateAsync({
         instanceId: candidate.instance.id,
         registrationId,
         subOrderIndex,
       });
-      setSelectedInstanceId(candidate.instance.id);
+
+      // Se já havia uma instância principal no pedido, ela continua selecionada.
+      // Assim o vínculo de uma segunda instância não desativa o ABRIR da principal.
+      if (keepCurrentInstanceId) {
+        setSelectedInstanceId(keepCurrentInstanceId);
+      } else {
+        setSelectedInstanceId(candidate.instance.id);
+        try {
+          await prepareBrowser.mutateAsync({ instanceId: candidate.instance.id });
+          toast.success(`Instância vinculada e preparação enviada: ${label}.`);
+        } catch (prepareError) {
+          toast.warning("Instância vinculada, mas ainda precisa ser preparada. Use PREPARAR NOVAMENTE.");
+        }
+      }
+
       setLinkExistingInstanceId(null);
       setLinkingExisting(false);
-      toast.success(`Instância vinculada: ${label}.`);
+      if (keepCurrentInstanceId) toast.success(`Instância vinculada: ${label}. A instância principal foi mantida ativa no pedido.`);
       await refresh();
     } catch (error) {
       toast.error(error instanceof Error ? error.message : "Não foi possível vincular a instância.");
