@@ -1,4 +1,4 @@
-import { useState, type MouseEvent } from "react";
+import { useState, type MouseEvent, type ChangeEvent } from "react";
 import { Play, Plus, RefreshCw, Square, Trash2 } from "lucide-react";
 import { toast } from "sonner";
 import { trpc } from "@/lib/trpc";
@@ -242,6 +242,41 @@ export default function OrderH2AdsBrowserShortcut({ registrationId, subOrderInde
     }
   };
 
+  const changeLinkedInstanceGroup = async (event: ChangeEvent<HTMLSelectElement>) => {
+    event.stopPropagation();
+    if (!shortcut || !linkedInstance || pending) return;
+    const groupId = Number(event.target.value);
+    const group = activeGroups.find(item => item.id === groupId);
+    if (!group || group.id === linkedInstance.groupId) return;
+    try {
+      await updateInstance.mutateAsync({ id: shortcut.instanceId, groupId: group.id });
+      toast.success(`Instância movida para ${group.name}.`);
+      await refresh();
+    } catch (error) {
+      toast.error(error instanceof Error ? error.message : "Não foi possível trocar o grupo da instância.");
+    }
+  };
+
+  const unlinkLinkedInstance = async (event: MouseEvent<HTMLButtonElement>) => {
+    event.stopPropagation();
+    if (!shortcut || pending) return;
+    const label = linkedInstance?.name || `instância #${shortcut.instanceId}`;
+    if (!window.confirm(`DESVINCULAR ${label} deste pedido?\n\nA instância NÃO será apagada. Proxy, perfil e dados H2ADS serão mantidos. Ela ficará livre para ser vinculada a outro pedido.`)) return;
+    try {
+      await setOrderLink.mutateAsync({
+        instanceId: shortcut.instanceId,
+        registrationId: null,
+        subOrderIndex: 0,
+      });
+      setSelectedInstanceId(null);
+      setEditingNote(false);
+      toast.success("Instância desvinculada do pedido sem apagar os dados.");
+      await refresh();
+    } catch (error) {
+      toast.error(error instanceof Error ? error.message : "Não foi possível desvincular a instância.");
+    }
+  };
+
   const repairLink = async (event: MouseEvent<HTMLButtonElement>) => {
     event.stopPropagation();
     if (!repairCandidate || pending) return;
@@ -327,6 +362,16 @@ export default function OrderH2AdsBrowserShortcut({ registrationId, subOrderInde
   return <span className="inline-flex items-center gap-1 rounded-full border border-cyan-500/35 bg-cyan-500/10 p-0.5" title={statusTitle} onClick={event => event.stopPropagation()}>
     <span className="px-1 text-[9px] font-black uppercase tracking-wide text-cyan-300">H2ADS</span>
     {linkedIds.length > 1 && <select aria-label="Selecionar instância H2ADS" value={activeInstanceId ?? ""} onChange={event => { event.stopPropagation(); setSelectedInstanceId(Number(event.target.value)); setEditingNote(false); }} className="max-w-32 rounded border border-cyan-400/30 bg-slate-950 px-1 py-1 text-[10px] text-white">{linkedIds.map(id => { const item = (dashboard?.instances ?? []).find(instance => instance.id === id); return <option key={id} value={id}>{item?.name || `Instância #${id}`}</option>; })}</select>}
+    {linkedInstance && <select
+      aria-label="Grupo da instância H2ADS"
+      value={linkedInstance.groupId}
+      onChange={changeLinkedInstanceGroup}
+      disabled={pending}
+      className="max-w-40 rounded border border-amber-400/30 bg-slate-950 px-1 py-1 text-[10px] font-bold text-amber-100 disabled:opacity-40"
+      title="Mover esta instância para outro grupo H2ADS"
+    >
+      {activeGroups.map(group => <option key={group.id} value={group.id}>{group.name}</option>)}
+    </select>}
     {linkedInstance && <span className="max-w-40 truncate px-1 text-[9px] text-slate-300" title={linkedInstance.notes || ""}>OBS: {linkedInstance.notes || "—"}</span>}
     {editingNote ? <span className="inline-flex items-center gap-1"><input value={noteDraft} onChange={event => setNoteDraft(event.target.value)} maxLength={150} aria-label="Editar OBS H2ADS" className="w-28 rounded border border-cyan-400/30 bg-slate-950 px-1 py-1 text-[10px] text-white" /><button type="button" onClick={saveNote} disabled={pending} className="text-[9px] text-emerald-300">SALVAR</button><button type="button" onClick={event => {event.stopPropagation();setEditingNote(false);}} className="text-[9px] text-slate-300">X</button></span> : <button type="button" onClick={event => {event.stopPropagation();setNoteDraft(linkedInstance?.notes || "");setEditingNote(true);}} className="text-[9px] text-cyan-200">EDITAR OBS</button>}
     {createPanel}
@@ -374,6 +419,15 @@ export default function OrderH2AdsBrowserShortcut({ registrationId, subOrderInde
       title={deliveredTitle}
     >
       {alreadyDelivered ? "ENTREGUE ✓" : "ENTREGUE"}
+    </button>
+    <button
+      type="button"
+      onClick={unlinkLinkedInstance}
+      disabled={pending}
+      className="inline-flex items-center gap-1 rounded-full border border-orange-400/40 bg-orange-400/15 px-2 py-1 text-[9px] font-black text-orange-200 transition hover:bg-orange-400/25 disabled:cursor-not-allowed disabled:opacity-30"
+      title="Desvincular esta instância do pedido sem apagar a instância"
+    >
+      DESVINCULAR
     </button>
     <button
       type="button"
