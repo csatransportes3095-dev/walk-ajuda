@@ -140,6 +140,25 @@ function normalizeIp(value) {
   return typeof value === "string" ? value.trim().toLowerCase() : "";
 }
 
+function isPrivateOrLocalIp(value) {
+  const ip = normalizeIp(value);
+  if (!ip) return true;
+  if (ip === "localhost" || ip === "::1" || ip === "0.0.0.0") return true;
+  if (/^127\./.test(ip) || /^10\./.test(ip) || /^192\.168\./.test(ip) || /^169\.254\./.test(ip)) return true;
+  const v4 = ip.match(/^(\d{1,3})\.(\d{1,3})\.(\d{1,3})\.(\d{1,3})$/);
+  if (v4) {
+    const a = Number(v4[1]), b = Number(v4[2]);
+    if (a === 172 && b >= 16 && b <= 31) return true;
+    if (a === 100 && b >= 64 && b <= 127) return true;
+    if (a >= 224) return true;
+    return false;
+  }
+  if (ip.includes(":")) {
+    return ip === "::" || ip.startsWith("fc") || ip.startsWith("fd") || ip.startsWith("fe8") || ip.startsWith("fe9") || ip.startsWith("fea") || ip.startsWith("feb");
+  }
+  return true;
+}
+
 function classifyNetworkError(error, fallback = "proxy_path_unverified") {
   const message = `${error?.message || ""}\n${error?.stderr || ""}`.toLowerCase();
   if (message.includes("407") || message.includes("proxy authentication") || message.includes("authentication required")) return "proxy_auth_407";
@@ -161,7 +180,9 @@ async function checkIpThroughPort(localPort) {
     ], { windowsHide: true, timeout: 25_000, maxBuffer: 8_192 });
     const data = JSON.parse(stdout);
     if (typeof data.ip !== "string" || data.ip.length < 3 || data.ip.length > 64) throw new Error("invalid_ip_response");
-    return data.ip.trim();
+    const observedIp = data.ip.trim();
+    if (isPrivateOrLocalIp(observedIp)) throw new Error("private_or_local_ip_detected");
+    return observedIp;
   } catch (error) {
     const category = classifyNetworkError(error);
     const wrapped = new Error(category);
@@ -183,7 +204,7 @@ async function verifyChromeProxyPath(executable, localPort, expectedIp) {
     const { stdout } = await execFileAsync(executable, [
       "--headless=new", "--disable-gpu", "--disable-background-networking", "--disable-component-update", "--disable-sync", "--metrics-recording-only",
       `--user-data-dir=${probeProfile}`, `--proxy-server=http://127.0.0.1:${localPort}`, "--proxy-bypass-list=<-loopback>",
-      "--disable-quic", "--dns-prefetch-disable", "--force-webrtc-ip-handling-policy=disable_non_proxied_udp", "--no-first-run", "--no-default-browser-check",
+      "--disable-quic", "--dns-prefetch-disable", "--host-resolver-rules=MAP * ~NOTFOUND", "--force-webrtc-ip-handling-policy=disable_non_proxied_udp", "--no-first-run", "--no-default-browser-check",
       "--dump-dom", "https://api.ipify.org?format=json",
     ], { windowsHide: true, timeout: CHROME_PROBE_TIMEOUT_MS, maxBuffer: 128_000 });
     const match = stdout.match(/"ip"\s*:\s*"([^"<>]+)"/i);
@@ -222,13 +243,49 @@ function writeSession(extra = {}) {
   }), { encoding: "utf8", mode: 0o600 });
 }
 
+async function verifyWebRtcNoLocalLeak(executable, localPort) {
+  const probeProfile = mkdtempSync(join(tmpdir(), `h2ads-webrtc-probe-${instanceId}-`));
+  const probePath = join(probeProfile, "probe.html");
+  const html = `<!doctype html><html><body><pre id="out">pending</pre><script>
+  (async()=>{try{
+    const pc=new RTCPeerConnection({iceServers:[{urls:"stun:stun.l.google.com:19302"}]});
+    pc.createDataChannel("x");
+    const found=[];
+    pc.onicecandidate=e=>{if(e.candidate){found.push(e.candidate.candidate||"");}else{
+      document.getElementById("out").textContent=JSON.stringify(found); pc.close();
+    }};
+    await pc.setLocalDescription(await pc.createOffer());
+    setTimeout(()=>{document.getElementById("out").textContent=JSON.stringify(found); try{pc.close()}catch{}},3500);
+  }catch(e){document.getElementById("out").textContent="[]";}})();
+  </script></body></html>`;
+  writeFileSync(probePath, html, "utf8");
+  try {
+    const { stdout } = await execFileAsync(executable, [
+      "--headless=new", "--disable-gpu", "--disable-background-networking", "--disable-component-update", "--disable-sync", "--metrics-recording-only",
+      `--user-data-dir=${probeProfile}`, `--proxy-server=http://127.0.0.1:${localPort}`, "--proxy-bypass-list=<-loopback>",
+      "--disable-quic", "--dns-prefetch-disable", "--host-resolver-rules=MAP * ~NOTFOUND", "--force-webrtc-ip-handling-policy=disable_non_proxied_udp",
+      "--virtual-time-budget=5000", "--dump-dom", pathToFileURL(probePath).href,
+    ], { windowsHide: true, timeout: 15_000, maxBuffer: 256_000 });
+    const localPattern = /(?:127\.|10\.|192\.168\.|169\.254\.|172\.(?:1[6-9]|2\d|3[01])\.|\[?::1\]?|\bfc[0-9a-f]{2}:|\bfd[0-9a-f]{2}:|\bfe[89ab][0-9a-f]:)/i;
+    if (localPattern.test(stdout)) throw new Error("webrtc_local_ip_leak_detected");
+    return true;
+  } finally {
+    try { rmSync(probeProfile, { recursive: true, force: true }); } catch {}
+  }
+}
+
 async function privacyGuardPreflight() {
   const observedIp = await checkIp();
   if (!observedIp) throw new Error("privacy_guard_proxy_unavailable");
+  const executable = chromeExecutable();
+  if (!executable) throw new Error("browser_not_found");
+  await verifyChromeProxyPath(executable, relayPort, observedIp);
+  await verifyWebRtcNoLocalLeak(executable, relayPort);
   writeSession({
-    privacyGuard: "protected", privacyGuardCheckedAt: new Date().toISOString(), observedIp, browserProxyVerified: false,
-    browserProxyVerification: "pending", quicDisabled: true, dnsPrefetchDisabled: true,
-    webrtcNonProxiedUdpDisabled: true, killSwitch: "armed", directBrowserEgress: "blocked_by_windows_firewall",
+    privacyGuard: "protected", privacyGuardCheckedAt: new Date().toISOString(), observedIp, browserProxyVerified: true,
+    browserProxyVerification: "verified", quicDisabled: true, dnsPrefetchDisabled: true, dnsDirectBlocked: true,
+    webrtcNonProxiedUdpDisabled: true, webrtcOperationalProbe: "passed", killSwitch: "armed",
+    directBrowserEgress: "blocked_by_windows_firewall",
   });
   return { observedIp };
 }
@@ -721,7 +778,7 @@ async function run() {
       // Um pipe local entre Node e Chrome: nenhuma porta TCP de depuracao e aberta.
       ...(mobileRemoteRequested ? ["--remote-debugging-pipe"] : []),
       "--user-data-dir=" + profileDirectory, "--proxy-server=http://127.0.0.1:" + relayPort, "--proxy-bypass-list=<-loopback>",
-      "--disable-quic", "--dns-prefetch-disable", "--force-webrtc-ip-handling-policy=disable_non_proxied_udp",
+      "--disable-quic", "--dns-prefetch-disable", "--host-resolver-rules=MAP * ~NOTFOUND", "--force-webrtc-ip-handling-policy=disable_non_proxied_udp",
       ...(globalExtensionPaths.length ? ["--load-extension=" + globalExtensionPaths.join(",")] : []), "--no-first-run", "--no-default-browser-check", labelPageUrl, ...startupSites,
     ], { detached: false, stdio: mobileRemoteRequested ? ["ignore", "ignore", "ignore", "pipe", "pipe"] : "ignore", windowsHide: false });
 
@@ -757,6 +814,7 @@ async function run() {
         instanceLabelState: "static_tab", observedIp: initial.observedIp,
         browserProxyVerified: false, browserProxyVerification: "pending",
         privacyGuard: "protected", googleSorryPrivacyGuard: "disabled",
+        dnsDirectBlocked: true, webrtcOperationalProbe: "passed",
         killSwitch: "armed", networkState: "online", panelConnection: "pending",
         directBrowserEgress: "blocked_by_windows_firewall",
         proxyRotationPolicy: "provider_managed_between_sessions",
