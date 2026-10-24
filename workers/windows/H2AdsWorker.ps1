@@ -10,7 +10,7 @@ param(
 
 $ErrorActionPreference = "Stop"
 $ProgressPreference = "SilentlyContinue"
-$AgentVersion = "1.4.6"
+$AgentVersion = "1.4.7"
 $WorkerDirectory = Join-Path $env:LOCALAPPDATA "H2AdsWorker"
 $ConfigPath = Join-Path $WorkerDirectory "worker.json"
 $InstalledScriptPath = Join-Path $WorkerDirectory "H2AdsWorker.ps1"
@@ -34,6 +34,22 @@ $FirewallRuleV6Name = "H2ADS Dedicated Chrome - Block Direct IPv6"
 $TaskName = "H2 Ads Browser Worker"
 $ShortcutName = "Iniciar H2Ads Worker.lnk"
 $LauncherPath = Join-Path $WorkerDirectory "StartH2AdsWorker.vbs"
+$DiagnosticLogPath = Join-Path $WorkerDirectory "worker-diagnostic.log"
+
+function Write-H2AdsWorkerDiagnostic([string]$EventName, [string]$Detail = "") {
+  try {
+    if (!(Test-Path $WorkerDirectory)) { New-Item -ItemType Directory -Force -Path $WorkerDirectory | Out-Null }
+    $safeDetail = ([string]$Detail) -replace '[\r\n]+', ' '
+    if ($safeDetail.Length -gt 300) { $safeDetail = $safeDetail.Substring(0, 300) }
+    $line = "{0} [{1}] {2}" -f (Get-Date).ToUniversalTime().ToString("o"), $EventName, $safeDetail
+    Add-Content -LiteralPath $DiagnosticLogPath -Value $line -Encoding UTF8
+    $info = Get-Item -LiteralPath $DiagnosticLogPath -ErrorAction SilentlyContinue
+    if ($info -and $info.Length -gt 262144) {
+      $tail = Get-Content -LiteralPath $DiagnosticLogPath -Tail 600 -ErrorAction SilentlyContinue
+      $tail | Set-Content -LiteralPath $DiagnosticLogPath -Encoding UTF8
+    }
+  } catch { }
+}
 
 function Get-ComputerLabel {
   $name = $env:COMPUTERNAME
@@ -817,8 +833,16 @@ Set shell = Nothing
 function Start-InstalledWorker {
   try {
     Start-ScheduledTask -TaskName $TaskName -ErrorAction Stop
-    return
-  } catch { }
+    Start-Sleep -Milliseconds 800
+    $task = Get-ScheduledTask -TaskName $TaskName -ErrorAction SilentlyContinue
+    if ($task -and $task.State -eq "Running") {
+      Write-H2AdsWorkerDiagnostic "START_TASK" "scheduled_task_running"
+      return
+    }
+  } catch {
+    Write-H2AdsWorkerDiagnostic "START_TASK_ERROR" $_.Exception.Message
+  }
+  Write-H2AdsWorkerDiagnostic "START_FALLBACK" "starting_hidden_powershell"
   Start-Process -FilePath "powershell.exe" -ArgumentList "-NoProfile -NonInteractive -ExecutionPolicy Bypass -WindowStyle Hidden -File `"$InstalledScriptPath`" -Run" -WindowStyle Hidden
 }
 
@@ -955,6 +979,7 @@ if ($Update) {
   Remove-Item -Force $downloadPath -ErrorAction SilentlyContinue
   Ensure-DedicatedBrowser
   Ensure-H2AdsBrowserFirewall
+  Ensure-WorkerScheduledTask
   Start-InstalledWorker
   Write-Output "Agente H2 Ads atualizado com isolamento rígido e iniciado."
   exit 0
@@ -963,34 +988,50 @@ if ($Update) {
 if ($Run) {
   if (!(Test-Path $ConfigPath)) { throw "Configuração do Worker não encontrada. Faça o pareamento primeiro." }
   $config = Get-Content -Raw -Path $ConfigPath | ConvertFrom-Json
-  try { Ensure-WorkerScheduledTask } catch { }
-  try { Ensure-BackgroundLauncher } catch { }
-  try { Ensure-DesktopShortcut } catch { }
-  Stop-ExistingWorkerProcesses
-  Start-Sleep -Milliseconds 250
+
+  # O mutex e a autoridade de instancia unica. Nunca mate outro Worker dentro
+  # do modo -Run: duas inicializacoes simultaneas poderiam se encerrar mutuamente.
   $workerMutex = Acquire-WorkerMutex $config
-  if ($null -eq $workerMutex) { exit 0 }
-  $nextHeartbeatAt = Get-Date
-  $nextSnapshotQueueCheckAt = Get-Date
+  if ($null -eq $workerMutex) {
+    Write-H2AdsWorkerDiagnostic "DUPLICATE_RUN" "another_worker_process_already_owns_mutex"
+    exit 0
+  }
+
   try {
+    try { Ensure-WorkerScheduledTask } catch { Write-H2AdsWorkerDiagnostic "TASK_REFRESH_ERROR" $_.Exception.Message }
+    try { Ensure-BackgroundLauncher } catch { }
+    try { Ensure-DesktopShortcut } catch { }
+    Write-H2AdsWorkerDiagnostic "RUN_START" "agent=$AgentVersion"
+
+    $nextHeartbeatAt = Get-Date
+    $nextSnapshotQueueCheckAt = Get-Date
     while ($true) {
       $now = Get-Date
       if ($now -ge $nextHeartbeatAt) {
-        try { Invoke-WorkerHeartbeat $config } catch { }
+        try {
+          Invoke-WorkerHeartbeat $config
+        } catch {
+          Write-H2AdsWorkerDiagnostic "HEARTBEAT_ERROR" $_.Exception.Message
+        }
         $nextHeartbeatAt = $now.AddSeconds(20)
       }
-      # A exclusão tem prioridade sobre o disparo de novos backups.
       try { Invoke-H2AdsPendingInstanceDeletion $config } catch { }
       if ($now -ge $nextSnapshotQueueCheckAt) {
         try { Start-H2AdsSnapshotQueueWorker } catch { }
         $nextSnapshotQueueCheckAt = $now.AddSeconds(20)
       }
-      try { Invoke-PendingBrowserCommand $config } catch { }
+      try { Invoke-PendingBrowserCommand $config } catch {
+        Write-H2AdsWorkerDiagnostic "COMMAND_LOOP_ERROR" $_.Exception.Message
+      }
       Start-Sleep -Seconds 2
     }
+  } catch {
+    Write-H2AdsWorkerDiagnostic "RUN_FATAL" $_.Exception.Message
+    throw
   } finally {
     try { $workerMutex.ReleaseMutex() } catch { }
     $workerMutex.Dispose()
+    Write-H2AdsWorkerDiagnostic "RUN_STOP" "agent=$AgentVersion"
   }
 }
 
