@@ -425,7 +425,8 @@ function AppContent() {
   const isResellerRoute = location.startsWith("/revendedor");
   const isAjudaRoute = location === "/ajuda";
   const isAgendarRoute = location.startsWith("/agendar");
-  const isPhotoConfirmationRoute = location.startsWith("/confirmacao-foto/");
+  const isPhotoConfirmationRoute = location === "/confirmacao-foto" || location.startsWith("/confirmacao-foto/");
+  const isDirectPublicTokenRoute = isAgendarRoute || isPhotoConfirmationRoute;
   const isVideoRoute = location.startsWith("/video") || location === "/tutorial";
   const isGastosRoute = location.toLowerCase() === "/gastos";
   const isEmprestimoRoute = location.toLowerCase() === "/emprestimo";
@@ -436,9 +437,9 @@ function AppContent() {
   const isLocadoraRoute = location === "/locadora" || location === "/locadora/";
   const isLocadoraBrandRoute = location === "/locadora" || location.startsWith("/locadora/") || location.startsWith("/admin/locadora");
   const maintenanceManifestQuery = trpc.maintenanceManifest.get.useQuery(undefined, {
-    enabled: !isAdminRoute && !isH2AdsRoute && !isSimilarityRoute,
+    enabled: !isAdminRoute && !isH2AdsRoute && !isSimilarityRoute && !isDirectPublicTokenRoute,
     staleTime: 15_000,
-    refetchInterval: !isAdminRoute && !isH2AdsRoute && !isSimilarityRoute ? 30_000 : false,
+    refetchInterval: !isAdminRoute && !isH2AdsRoute && !isSimilarityRoute && !isDirectPublicTokenRoute ? 30_000 : false,
     refetchOnWindowFocus: true,
   });
   const maintenanceManifest = maintenanceManifestQuery.data;
@@ -535,7 +536,13 @@ function AppContent() {
     );
   }
 
-  // 🔧 MODO MANUTENÇÃO — bloqueia todas as rotas públicas
+  // Links individuais por token são públicos e não passam por login, senha,
+  // liberação de rota do cliente ou manutenção do acesso geral ao site.
+  if (isDirectPublicTokenRoute) {
+    return <Router />;
+  }
+
+  // 🔧 MODO MANUTENÇÃO — bloqueia as demais rotas públicas
   if (MAINTENANCE_MODE) {
     return <MaintenancePage />;
   }
@@ -630,11 +637,6 @@ function AppContent() {
 
   // Rota /video é pública — vídeos tutoriais para clientes
   if (isVideoRoute) {
-    return <Router />;
-  }
-
-  // Rotas públicas com token individual: agendamento e CONFIRMAÇÃO PARA FOTO.
-  if (isAgendarRoute || isPhotoConfirmationRoute) {
     return <Router />;
   }
 
