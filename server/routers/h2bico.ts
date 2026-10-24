@@ -485,6 +485,41 @@ export const h2bicoRouter = router({
     return { success: true, url };
   }),
 
+  replacePhoto: adminProcedure.input(z.object({
+    id: z.number().int().positive(),
+    base64: z.string().min(10).max(15_000_000),
+    mimeType: z.enum(["image/jpeg","image/png","image/webp"]),
+    source: z.enum(["gallery","clipboard"]),
+  }).strict()).mutation(async ({ input }) => {
+    const db = await dbOrThrow();
+    const found = await db.execute(sql`
+      SELECT id,name,cpf FROM h2bico_records WHERE id=${input.id} LIMIT 1
+    `);
+    const record = (found[0] as any[])[0];
+    if (!record) throw new TRPCError({code:"NOT_FOUND",message:"Registro H2BICO não encontrado."});
+
+    const buffer = Buffer.from(input.base64, "base64");
+    if (!buffer.length) throw new TRPCError({code:"BAD_REQUEST",message:"Imagem vazia."});
+    if (buffer.length > 8 * 1024 * 1024) throw new TRPCError({code:"BAD_REQUEST",message:"A foto deve ter no máximo 8 MB."});
+
+    const ext = input.mimeType === "image/png" ? "png" : input.mimeType === "image/webp" ? "webp" : "jpg";
+    const key = `h2bico/replaced-${input.id}-${Date.now()}-${Math.random().toString(36).slice(2,8)}.${ext}`;
+    const {url} = await storagePut(key, buffer, input.mimeType);
+    const filename = `${String(record.cpf)}-troca-${input.source}-${Date.now()}.${ext}`;
+
+    await db.execute(sql`
+      UPDATE h2bico_records
+      SET photoUrl=${url}, originalFilename=${filename}
+      WHERE id=${input.id}
+    `);
+    await db.execute(sql`
+      INSERT INTO h2bico_history(recordId,action,details)
+      VALUES(${input.id},'photo_replaced',${input.source === "clipboard" ? "Foto substituída por COLAR PRINT" : "Foto substituída pela GALERIA"})
+    `);
+
+    return {success:true as const,id:input.id,url};
+  }),
+
   bulkLookup: adminProcedure.input(z.object({
     cpfs: z.array(z.string().trim().regex(/^(?:[0-9]{11}|[0-9]{3}[.][0-9]{3}[.][0-9]{3}-[0-9]{2})$/,"CPF precisa ter 11 dígitos, com ou sem pontuação").transform(cpf=>cpf.replace(/[^0-9]/g,""))).min(1).max(300),
   }).strict()).query(async ({input})=>{
