@@ -77,19 +77,57 @@ function Ensure-DedicatedBrowser {
   Assert-GoogleChromeSignature $DedicatedChromePath
 }
 
+function Test-H2AdsFirewallRule([string]$RuleName, [string]$ProgramPath, [string[]]$ExpectedRemoteAddresses) {
+  if (!(Get-Command Get-NetFirewallRule -ErrorAction SilentlyContinue)) { return $false }
+  $rule = Get-NetFirewallRule -DisplayName $RuleName -ErrorAction SilentlyContinue |
+    Where-Object { $_.Enabled -eq "True" -and $_.Direction -eq "Outbound" -and $_.Action -eq "Block" } |
+    Select-Object -First 1
+  if (!$rule) { return $false }
+
+  try {
+    if ([string]$rule.Profile -notmatch "(?i)Any") { return $false }
+
+    $application = $rule | Get-NetFirewallApplicationFilter
+    if (!$application -or [string]::IsNullOrWhiteSpace([string]$application.Program)) { return $false }
+    $actualProgram = [System.IO.Path]::GetFullPath([string]$application.Program)
+    $expectedProgram = [System.IO.Path]::GetFullPath($ProgramPath)
+    if (!$actualProgram.Equals($expectedProgram, [StringComparison]::OrdinalIgnoreCase)) { return $false }
+
+    $portFilter = $rule | Get-NetFirewallPortFilter
+    if (!$portFilter) { return $false }
+    $protocol = [string]$portFilter.Protocol
+    if ($protocol -ne "Any" -and $protocol -ne "256") { return $false }
+
+    $addressFilter = $rule | Get-NetFirewallAddressFilter
+    if (!$addressFilter) { return $false }
+    $actualAddresses = @(
+      $addressFilter.RemoteAddress |
+        ForEach-Object { ([string]$_) -split "," } |
+        ForEach-Object { $_.Trim() } |
+        Where-Object { $_ } |
+        Sort-Object -Unique
+    )
+    $expectedAddresses = @(
+      $ExpectedRemoteAddresses |
+        ForEach-Object { ([string]$_) -split "," } |
+        ForEach-Object { $_.Trim() } |
+        Where-Object { $_ } |
+        Sort-Object -Unique
+    )
+    if ($actualAddresses.Count -ne $expectedAddresses.Count) { return $false }
+    foreach ($expected in $expectedAddresses) {
+      if ($actualAddresses -notcontains $expected) { return $false }
+    }
+    return $true
+  } catch {
+    return $false
+  }
+}
+
 function Test-H2AdsTestingFirewall {
   if (!(Test-Path $TestingChromePath)) { return $false }
-  foreach ($name in @($TestingV4Rule, $TestingV6Rule)) {
-    $rule = Get-NetFirewallRule -DisplayName $name -ErrorAction SilentlyContinue | Where-Object { $_.Enabled -eq "True" -and $_.Direction -eq "Outbound" -and $_.Action -eq "Block" } | Select-Object -First 1
-    if (!$rule) { return $false }
-    $filter = $rule | Get-NetFirewallApplicationFilter
-    if (!$filter -or [string]::IsNullOrWhiteSpace([string]$filter.Program)) { return $false }
-    try {
-      $programPath = [System.IO.Path]::GetFullPath([string]$filter.Program)
-      $expectedPath = [System.IO.Path]::GetFullPath($TestingChromePath)
-      if (!$programPath.Equals($expectedPath, [StringComparison]::OrdinalIgnoreCase)) { return $false }
-    } catch { return $false }
-  }
+  if (!(Test-H2AdsFirewallRule $TestingV4Rule $TestingChromePath @("0.0.0.0-126.255.255.255", "128.0.0.0-255.255.255.255"))) { return $false }
+  if (!(Test-H2AdsFirewallRule $TestingV6Rule $TestingChromePath @("Internet6"))) { return $false }
   return $true
 }
 
@@ -146,13 +184,8 @@ function Install-H2AdsTestingBrowser {
 }
 
 function Test-H2AdsBrowserFirewall {
-  if (!(Get-Command Get-NetFirewallRule -ErrorAction SilentlyContinue)) { return $false }
-  foreach ($ruleName in @($FirewallRuleV4Name, $FirewallRuleV6Name)) {
-    $rule = Get-NetFirewallRule -DisplayName $ruleName -ErrorAction SilentlyContinue | Where-Object { $_.Enabled -eq "True" -and $_.Direction -eq "Outbound" -and $_.Action -eq "Block" } | Select-Object -First 1
-    if (!$rule) { return $false }
-    $application = $rule | Get-NetFirewallApplicationFilter
-    if (!$application -or !([string]$application.Program).Equals($DedicatedChromePath, [StringComparison]::OrdinalIgnoreCase)) { return $false }
-  }
+  if (!(Test-H2AdsFirewallRule $FirewallRuleV4Name $DedicatedChromePath @("0.0.0.0-126.255.255.255", "128.0.0.0-255.255.255.255"))) { return $false }
+  if (!(Test-H2AdsFirewallRule $FirewallRuleV6Name $DedicatedChromePath @("Internet6"))) { return $false }
   return $true
 }
 
@@ -184,6 +217,7 @@ function Test-H2AdsLeakProtection {
     "--proxy-server=http://127.0.0.1:",
     "--disable-quic",
     "--dns-prefetch-disable",
+    "--host-resolver-rules=MAP * ~NOTFOUND",
     "--force-webrtc-ip-handling-policy=disable_non_proxied_udp"
   )) {
     if ($sessionSource.IndexOf($requiredFlag, [StringComparison]::Ordinal) -lt 0) {
@@ -194,9 +228,11 @@ function Test-H2AdsLeakProtection {
   return [ordered]@{
     ipv4DirectBlocked = $true
     ipv6DirectBlocked = $true
+    firewallRangesValidated = $true
     proxyOnlyBrowser = $true
     quicDisabled = $true
     dnsPrefetchDisabled = $true
+    dnsDirectBlocked = $true
     webrtcNonProxiedUdpDisabled = $true
   }
 }
@@ -720,6 +756,9 @@ function Invoke-PendingBrowserCommand([object]$Config) {
     }
     if ($payload.command.command -eq "launch_browser") {
       Ensure-BrowserPreparationComponent $Config
+      # Revalida todas as camadas imediatamente antes de cada abertura.
+      # Qualquer alteracao no Firewall ou nas flags bloqueia a sessao antes do Chrome navegar.
+      Test-H2AdsLeakProtection | Out-Null
       Invoke-BrowserSession $Config $payload
       return
     }
