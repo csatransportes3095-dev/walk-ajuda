@@ -9,6 +9,40 @@ import { promisify } from "node:util";
 const exec = promisify(execFile);
 const ID = /^[a-p]{32}$/;
 const CRX_PREFIX = Buffer.from("CRX3 SignedData\0", "ascii");
+
+const BLOCKED_EXTENSION_PERMISSIONS = new Set([
+  "proxy",
+  "nativeMessaging",
+  "debugger",
+  "management",
+  "privacy",
+  "vpnProvider",
+]);
+
+function auditExtensionManifest(manifest, id) {
+  if (!manifest || ![2, 3].includes(manifest.manifest_version)) throw new Error("unsupported_extension_manifest");
+  const permissions = [
+    ...(Array.isArray(manifest.permissions) ? manifest.permissions : []),
+    ...(Array.isArray(manifest.optional_permissions) ? manifest.optional_permissions : []),
+  ].filter(item => typeof item === "string");
+
+  const blocked = permissions.filter(permission => BLOCKED_EXTENSION_PERMISSIONS.has(permission));
+  if (blocked.length) throw new Error(`extension_permission_blocked:${id}:${blocked.join(",")}`);
+
+  // Extensions may not silently alter browser proxy/privacy controls or invoke native code.
+  const background = manifest.background;
+  if (background && typeof background === "object" && Array.isArray(background.scripts) && background.scripts.length > 100) {
+    throw new Error("extension_manifest_suspicious");
+  }
+  return true;
+}
+
+async function auditInstalledExtension(destination, id) {
+  const manifestPath = join(destination, "manifest.json");
+  const manifest = JSON.parse(await readFile(manifestPath, "utf8"));
+  auditExtensionManifest(manifest, id);
+  return manifest;
+}
 function varint(data, pos) {
   let n = 0, shift = 0;
   while (pos < data.length && shift < 56) {
@@ -72,7 +106,15 @@ export async function syncH2AdsExtensions({ panelUrl, headers, proxyPort, root }
     const id = entry?.id;
     if (!ID.test(id)) continue;
     const destination = join(root, id);
-    if (existsSync(join(destination, "manifest.json"))) { paths.push(destination); continue; }
+    if (existsSync(join(destination, "manifest.json"))) {
+      try {
+        await auditInstalledExtension(destination, id);
+        paths.push(destination);
+      } catch (error) {
+        console.error("[H2ADS] extensao bloqueada", id, String(error?.message || error));
+      }
+      continue;
+    }
     const temp = await mkdtemp(join(tmpdir(), "h2ads-crx-"));
     try {
       const crxPath = join(temp, "extension.crx"), zipPath = join(temp, "extension.zip");
@@ -91,7 +133,7 @@ export async function syncH2AdsExtensions({ panelUrl, headers, proxyPort, root }
       await exec("powershell.exe", ["-NoProfile", "-NonInteractive", "-Command", "Expand-Archive -LiteralPath " + quote(zipPath) + " -DestinationPath " + quote(output) + " -Force"], { windowsHide: true, timeout: 30000 });
       const manifestPath = join(output, "manifest.json");
       const manifest = JSON.parse(await readFile(manifestPath, "utf8"));
-      if (![2, 3].includes(manifest.manifest_version)) throw new Error("unsupported_extension_manifest");
+      auditExtensionManifest(manifest, id);
       manifest.key = unpacked.key;
       await writeFile(manifestPath, JSON.stringify(manifest));
       await mkdir(root, { recursive: true });
