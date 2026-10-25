@@ -1,0 +1,35 @@
+name: Validate question tree trigger normalization
+on:
+  push:
+    branches: [fix/question-tree-trigger-normalization-20261025]
+    paths:
+      - 'client/src/pages/Home.tsx'
+      - '.github/workflows/question-tree-trigger-normalization-validate.yml'
+permissions:
+  contents: read
+jobs:
+  validate:
+    runs-on: ubuntu-latest
+    timeout-minutes: 12
+    steps:
+      - uses: actions/checkout@v4
+      - uses: pnpm/action-setup@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+          cache: pnpm
+      - run: pnpm install --frozen-lockfile
+      - name: Verify normalized tree trigger
+        run: |
+          node --input-type=module <<'JS'
+          import fs from 'node:fs';
+          const home=fs.readFileSync('client/src/pages/Home.tsx','utf8');
+          const needle='normalizeConditionalValue(parentAnswer) === normalizeConditionalValue(child.triggerOption)';
+          if(!home.includes(needle)) throw new Error('normalized tree comparison missing');
+          console.log('TREE_TRIGGER_NORMALIZED_OK');
+          JS
+      - name: Verify flow engine normalization
+        run: |
+          node --experimental-strip-types --input-type=module -e "import { normalizeFlowValue, applyQuestionFlow } from './client/src/lib/conditionalQuestionFlow.ts'; if(normalizeFlowValue('NÃO')!=='NAO'||normalizeFlowValue(' nao ')!=='NAO') throw new Error('normalize'); const r=applyQuestionFlow([{id:1},{id:2}],{1:'NÃO'},[{questionId:1,answer:'NAO',action:'continue'}]); if(r.ended) throw new Error('continue'); console.log('FLOW_NORMALIZATION_OK');"
+      - name: Build
+        run: pnpm build
