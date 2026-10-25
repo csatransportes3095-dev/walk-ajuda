@@ -6,6 +6,7 @@ import {sendH2AutoOrderCode} from "./h2-auto-order-email";
 import {normalizeCustomerPhone} from "./customerAccess";
 import {isOwnSiteEmailAuthorized} from "./siteAccessOwnCodes";
 import {getOrderStatusVisibilityForClient} from "./orderStatusVisibility";
+import {groupVisibleH2AutoOrders} from "./h2-auto-order-history";
 
 const hash=(v:string)=>createHash("sha256").update(v).digest("hex");
 const otpDigest=(sid:string,code:string)=>{const secret=process.env.H2_SITE_ACCESS_SECRET||"";if(secret.length<32)throw Error("otp_secret_unavailable");return createHmac("sha256",secret).update("h2-auto-orders:"+sid+":"+code).digest("hex");};
@@ -159,34 +160,16 @@ export function registerH2AutoOrdersRoutes(app:Express){
     AND h.approval='approved'
     AND NOT EXISTS (SELECT 1 FROM orderStatusHistory old WHERE old.registrationId=h.registrationId AND old.createdAt<${s.customer_created})
     ORDER BY h.registrationId ASC,h.createdAt ASC,h.id ASC LIMIT 500`);
-   const grouped=new Map<number,any[]>();
-   for(const o of orders){const k=Number(o.registrationId);if(!grouped.has(k))grouped.set(k,[]);grouped.get(k)!.push(o);}
    const statusRows=await rows(sql`SELECT \`key\` FROM orderStatusTypes WHERE isActive=1 AND isGlobal=1 ORDER BY sortOrder ASC,id ASC LIMIT 1`);
    const initialStatus=String(statusRows[0]?.key||"recebido");
+   const registrationIds=[...new Set(orders.map((o:any)=>Number(o.registrationId)).filter((id:number)=>Number.isSafeInteger(id)&&id>0))];
+   const hiddenRows=registrationIds.length?await rows(sql`SELECT registrationId,subOrderIndex FROM hiddenSubOrders WHERE registrationId IN (${sql.join(registrationIds.map((id:number)=>sql`${id}`),sql`,`)})`):[];
+   const candidateOrders=groupVisibleH2AutoOrders(orders,hiddenRows,initialStatus,20);
    const visible=[];
-   for(const [registrationId,history] of grouped){
-    const groups:any[][]=[];let current:any[]=[];
-    for(const entry of history){
-     if(current.length>0 && (entry.status===initialStatus || entry.status==="recebido")){groups.push(current);current=[];}
-     current.push(entry);
-    }
-    if(current.length)groups.push(current);
-    const reversed=groups.reverse();
-    for(let subOrderIndex=0;subOrderIndex<reversed.length;subOrderIndex++){
-     const hidden=await rows(sql`SELECT id FROM hiddenSubOrders WHERE registrationId=${registrationId} AND subOrderIndex=${subOrderIndex} LIMIT 1`);
-     if(hidden.length)continue;
-     const entries=reversed[subOrderIndex],latest=entries[entries.length-1];
-     const service=entries.find(o=>o.serviceName||o.serviceOption)||latest;
-     const numbered=entries.find(o=>o.orderNumber!=null);
-     const number=numbered?.orderNumber==null?null:Number(numbered.orderNumber);
-     const policy=await getOrderStatusVisibilityForClient(registrationId,number,String(latest.status));
-     // Current status is visible to the customer; never include hidden timeline steps.
-     visible.push({registrationId,subOrderIndex,orderNumber:number,
-       serviceName:String(service.serviceName||""),serviceOption:String(service.serviceOption||""),
-       status:String(latest.status),statusLabel:String(latest.statusLabel||latest.status),updatedAt:latest.createdAt,showNextStep:policy.showNextStep});
-     if(visible.length>=20)break;
-    }
-    if(visible.length>=20)break;
+   for(const item of candidateOrders){
+      // Respect the same flow-specific visibility policy as the tracking page.
+      const policy=await getOrderStatusVisibilityForClient(item.registrationId,item.orderNumber,item.status);
+      visible.push({...item,showNextStep:policy.showNextStep});
    }
    return reply(res,200,{state:"verified",orders:visible,message:visible.length?"Pedidos encontrados.":settings.noOrders});
   }catch{return reply(res,503,{error:"temporarily_unavailable"});}
