@@ -1,0 +1,24 @@
+name: H2 AUTO Orders - validate integration
+on:
+  push:
+    branches: [feature/h2-auto-pedidos-20261025]
+  workflow_dispatch:
+permissions:
+  contents: read
+jobs:
+  validate:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: pnpm/action-setup@v4
+        with:
+          version: '10.4.1'
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '22'
+          cache: pnpm
+      - run: pnpm install --frozen-lockfile
+      - name: Verify isolated API compilation
+        run: pnpm exec esbuild server/h2-auto-orders.ts --bundle --platform=node --packages=external --format=esm --outfile=/tmp/h2auto-orders-compile.js
+      - name: Verify TypeScript
+        run: pnpm check
