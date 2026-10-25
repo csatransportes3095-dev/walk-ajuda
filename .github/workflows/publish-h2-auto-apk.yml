@@ -19,9 +19,9 @@ jobs:
       - uses: actions/checkout@v4
         with:
           ref: recovery/organizar-salvos-2026-08-24
-      - name: Baixar APK com deduplicacao de notificacoes e textos de cadastro corrigidos
+      - name: Baixar APK com agendamento da foto no pedido
         env:
-          ZIP_URL: "https://sdmntprbrazilsouth.oaiusercontent.com/files/00000000-e0b0-820e-9e65-60ff73ef4f08/raw?se=2026-10-25T23%3A22%3A43Z&sp=r&sv=2026-02-06&sr=b&scid=c30dedb3-f145-5179-a38a-4796670f58ab&skoid=db6dad9e-03ee-465b-aef6-ce0f63a161dc&sktid=a48cca56-e6da-484e-a814-9c849652bcb3&skt=2026-10-25T02%3A14%3A57Z&ske=2026-10-26T02%3A14%3A57Z&sks=b&skv=2026-02-06&sig=nYkfhpS4Qh6pLzpx4vdr/OS6K4%2BPFChmkFj7cbz644E%3D"
+          ZIP_URL: "https://sdmntprbrazilsouth.oaiusercontent.com/files/00000000-cae4-820e-96ba-19e359d47309/raw?se=2026-10-25T23%3A34%3A29Z&sp=r&sv=2026-02-06&sr=b&scid=7fc21d3a-47f3-54c1-ae09-0a2f87f4cfb9&skoid=db6dad9e-03ee-465b-aef6-ce0f63a161dc&sktid=a48cca56-e6da-484e-a814-9c849652bcb3&skt=2026-10-25T02%3A06%3A00Z&ske=2026-10-26T02%3A06%3A00Z&sks=b&skv=2026-02-06&sig=DcU4BBEMfZoM/cr4l%2Bl5zj2Ea0d5l2X8pFoLwRbF8NQ%3D"
         run: |
           set -euo pipefail
           curl --fail --location --retry 2 --connect-timeout 15 --max-time 120 --silent --show-error "$ZIP_URL" --output /tmp/h2-auto-1-7-build.zip
@@ -39,7 +39,7 @@ jobs:
           if git diff --cached --quiet; then
             echo "APK ja publicado na arvore de codigo."
           else
-            git commit -m "fix(h2-auto): APK com respostas sem duplicacao e cadastro objetivo"
+            git commit -m "feat(h2-auto): APK com link individual de agendamento de foto"
             git pull --rebase origin recovery/organizar-salvos-2026-08-24
             git push origin HEAD:recovery/organizar-salvos-2026-08-24
           fi
