@@ -151,8 +151,8 @@ export function registerH2AutoOrdersRoutes(app:Express){
      AND s.expires_at>${now} AND c.deletedAt IS NULL AND c.blocked=0 LIMIT 1`);
    const s=sessions[0];if(!s)return reply(res,403,{error:"authentication_required"});
    const authDb=await getDb();if(!authDb || !(await isOwnSiteEmailAuthorized(authDb,String(s.current_email))))return reply(res,403,{error:"authentication_required"});
-   const orders=await rows(sql`SELECT h.id,h.registrationId,h.orderNumber,h.status,h.serviceName,h.serviceOption,h.createdAt
-    FROM orderStatusHistory h INNER JOIN accessCodePhones a ON a.id=h.registrationId
+   const orders=await rows(sql`SELECT h.id,h.registrationId,h.orderNumber,h.status, st.label AS statusLabel, h.serviceName,h.serviceOption,h.createdAt
+    FROM orderStatusHistory h LEFT JOIN orderStatusTypes st ON st.`key`=h.status INNER JOIN accessCodePhones a ON a.id=h.registrationId
     AND a.deletedAt IS NULL AND a.accessedAt>=${s.customer_created}
     AND RIGHT(REGEXP_REPLACE(a.phone,'[^0-9]',''),11)=${String(s.customer_phone).replace(/\D/g,'').slice(-11)}
     WHERE RIGHT(REGEXP_REPLACE(h.customerPhone,'[^0-9]',''),11)=${String(s.customer_phone).replace(/\D/g,"").slice(-11)}
@@ -183,7 +183,7 @@ export function registerH2AutoOrdersRoutes(app:Express){
      // Current status is visible to the customer; never include hidden timeline steps.
      visible.push({registrationId,subOrderIndex,orderNumber:number,
        serviceName:String(service.serviceName||""),serviceOption:String(service.serviceOption||""),
-       status:String(latest.status),updatedAt:latest.createdAt,showNextStep:policy.showNextStep});
+       status:String(latest.status),statusLabel:String(latest.statusLabel||latest.status),updatedAt:latest.createdAt,showNextStep:policy.showNextStep});
      if(visible.length>=20)break;
     }
     if(visible.length>=20)break;
