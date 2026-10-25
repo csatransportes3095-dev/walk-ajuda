@@ -18,10 +18,12 @@ jobs:
       - run: pnpm install --frozen-lockfile
       - name: Verify isolated API compilation
         run: pnpm exec esbuild server/h2-auto-orders.ts --bundle --platform=node --packages=external --format=esm --outfile=/tmp/h2auto-orders-compile.js
+      - name: Run dedicated H2 AUTO order-history tests
+        run: pnpm exec vitest run server/h2-auto-order-history.test.ts
       - name: Verify H2 AUTO TypeScript without unrelated legacy errors
         shell: bash
         run: |
           pnpm check > /tmp/h2auto-typecheck.log 2>&1 || true
-          grep -E "error TS" /tmp/h2auto-typecheck.log | grep -E "(server/h2-auto-orders\\.ts|server/h2-auto-order-email\\.ts|server/h2-auto-remote\\.ts|client/src/pages/AdminH2Auto\\.tsx|server/_core/index\\.ts)" && exit 1 || true
+          grep -E "error TS" /tmp/h2auto-typecheck.log | grep -E "(server/h2-auto-orders\\.ts|server/h2-auto-order-history\\.ts|server/h2-auto-order-email\\.ts|server/h2-auto-remote\\.ts|client/src/pages/AdminH2Auto\\.tsx|server/_core/index\\.ts)" && exit 1 || true
           echo "H2 AUTO integration: no direct TypeScript errors in changed files."
           echo "Note: repository-wide TypeScript errors unrelated to H2 AUTO remain outside this check."
