@@ -8,6 +8,7 @@ import { getDb, getSetting, upsertSetting } from "../db";
 import { isVipMemberByPhone } from "./vipMemberships";
 import { resolveVipInstallmentCheckoutPricing } from "../vipInstallmentPricing";
 import { getVipInstallmentFrequencyRule, getVipInstallmentProductRule, listVipInstallmentProductRules, saveVipInstallmentProductRule } from "../vipInstallmentProductRules";
+import { getVipInstallmentOptionFrequencyRule, getVipInstallmentOptionRule, listVipInstallmentOptionRules, saveVipInstallmentOptionRule } from "../vipInstallmentOptionRules";
 import { prepareVipInstallmentCheckoutIntent, cancelVipInstallmentCheckoutIntent, finalizeVipInstallmentCheckoutIntent, submitVipInstallmentProof, confirmVipInstallmentPayment, recoverVipInstallmentCheckoutOrder, changeVipInstallmentDueDate, addVipInstallmentAdminNote, cancelVipInstallmentPlan, payoffVipInstallmentPlan, rejectVipInstallmentProof } from "../vipInstallmentContracts";
 
 const SETTING_KEYS = {
@@ -378,7 +379,7 @@ async function openPlanForCustomer(customerId: number) {
   };
 }
 
-async function resolveEligibility(phone: string, productId?: number | null) {
+async function resolveEligibility(phone: string, productId?: number | null, optionId?: number | null) {
   const customer = await customerByPhone(phone);
   const [config, permission, vipActive, openPlan, productRule] = await Promise.all([
     getVipInstallmentConfig(),
@@ -388,9 +389,11 @@ async function resolveEligibility(phone: string, productId?: number | null) {
     productId ? getVipInstallmentProductRule(productId) : Promise.resolve(null),
   ]);
 
-  const dailyRule = productRule ? getVipInstallmentFrequencyRule(productRule, "daily") : null;
-  const weeklyRule = productRule ? getVipInstallmentFrequencyRule(productRule, "weekly") : null;
-  const monthlyRule = productRule ? getVipInstallmentFrequencyRule(productRule, "monthly") : null;
+  const optionRule = optionId ? await getVipInstallmentOptionRule(optionId) : null;
+  const effectiveBaseRule = optionRule || productRule;
+  const dailyRule = effectiveBaseRule ? (optionRule ? getVipInstallmentOptionFrequencyRule(optionRule, "daily") : getVipInstallmentFrequencyRule(effectiveBaseRule, "daily")) : null;
+  const weeklyRule = effectiveBaseRule ? (optionRule ? getVipInstallmentOptionFrequencyRule(optionRule, "weekly") : getVipInstallmentFrequencyRule(effectiveBaseRule, "weekly")) : null;
+  const monthlyRule = effectiveBaseRule ? (optionRule ? getVipInstallmentOptionFrequencyRule(optionRule, "monthly") : getVipInstallmentFrequencyRule(effectiveBaseRule, "monthly")) : null;
   const allowedFrequencies = {
     daily: dailyRule?.enabled === true,
     weekly: weeklyRule?.enabled === true,
@@ -406,7 +409,8 @@ async function resolveEligibility(phone: string, productId?: number | null) {
   if (!vipActive) reason = "Seu VIP precisa estar ativo para usar o parcelamento.";
   else if (!permission.enabled) reason = "Parcelamento VIP ainda não foi liberado para este cadastro.";
   else if (openPlan && openPlan.balanceCents > 0) reason = "Você já possui uma compra parcelada em andamento. Quite o saldo para liberar um novo parcelamento.";
-  else if (productRule && !productRule.enabled) reason = "Este produto não está liberado para Parcelamento VIP.";
+  else if (optionRule && !optionRule.enabled) reason = "Esta categoria não está liberada para Parcelamento VIP.";
+  else if (!optionRule && productRule && !productRule.enabled) reason = "Este produto não está liberado para Parcelamento VIP.";
   else if (productRule && configuredRules.some((rule) => rule!.minInstallments == null || rule!.maxInstallments == null || rule!.interestBps == null)) reason = "Uma das periodicidades liberadas ainda está com regra financeira incompleta.";
   else if (productRule && configuredRules.some((rule) => Number(rule!.maxInstallments) < Number(rule!.minInstallments))) reason = "Uma das periodicidades liberadas está com quantidade de parcelas inválida.";
   else if (productRule && !hasAllowedFrequency) reason = "Este produto não possui periodicidade liberada.";
@@ -418,6 +422,7 @@ async function resolveEligibility(phone: string, productId?: number | null) {
     vipActive,
     openPlan,
     productRule,
+    optionRule,
     effectiveRules: {
       minInstallments,
       maxInstallments,
@@ -482,19 +487,20 @@ async function buildValidatedVipCheckout(input: {
     throw new TRPCError({ code: "BAD_REQUEST", message: "Valor da compra acima do limite suportado pelo Financeiro atual." });
   }
 
-  const eligibility = await resolveEligibility(input.phone, pricing.items[0].productId);
+  const eligibility = await resolveEligibility(input.phone, pricing.items[0].productId, pricing.items[0].optionId);
   if (!eligibility.eligible) {
     throw new TRPCError({ code: "FORBIDDEN", message: eligibility.reason || "Parcelamento VIP indisponível." });
   }
+  const optionRule = eligibility.optionRule || await getVipInstallmentOptionRule(pricing.items[0].optionId);
   const productRule = eligibility.productRule || await getVipInstallmentProductRule(pricing.items[0].productId);
-  if (!productRule.enabled) {
-    throw new TRPCError({ code: "FORBIDDEN", message: "Este produto não está liberado para Parcelamento VIP." });
+  if (!optionRule.enabled) {
+    throw new TRPCError({ code: "FORBIDDEN", message: "Esta categoria não está liberada para Parcelamento VIP." });
   }
-  if (productRule.minOrderCents != null && pricing.totalCents < productRule.minOrderCents) {
+  if (optionRule.minOrderCents != null && pricing.totalCents < optionRule.minOrderCents) {
     throw new TRPCError({ code: "FORBIDDEN", message: "Valor abaixo do mínimo liberado para parcelamento deste produto." });
   }
 
-  const frequencyRule = getVipInstallmentFrequencyRule(productRule, input.frequency);
+  const frequencyRule = getVipInstallmentOptionFrequencyRule(optionRule, input.frequency);
   if (!frequencyRule.enabled) {
     throw new TRPCError({ code: "BAD_REQUEST", message: "Periodicidade não permitida para este produto." });
   }
@@ -528,7 +534,7 @@ async function buildValidatedVipCheckout(input: {
       firstInstallmentAmountCents,
       firstDueDate: getBrazilTodayForVipInstallments(),
       frequency: input.frequency,
-      dailyMode: input.frequency === "daily" ? (productRule.dailyMode ?? "all_days") : "all_days",
+      dailyMode: input.frequency === "daily" ? (optionRule.dailyMode ?? "all_days") : "all_days",
     });
   } catch (error) {
     throw new TRPCError({ code: "BAD_REQUEST", message: (error as Error).message || "Não foi possível calcular o parcelamento." });
@@ -538,7 +544,7 @@ async function buildValidatedVipCheckout(input: {
     throw new TRPCError({ code: "BAD_REQUEST", message: "Uma ou mais parcelas ultrapassam o limite suportado pelo Financeiro atual." });
   }
 
-  return { eligibility, pricing, quote, productRule, frequencyRule, maxInstallments, interestBps };
+  return { eligibility, pricing, quote, productRule, optionRule, frequencyRule, maxInstallments, interestBps };
 }
 
 async function refreshVipInstallmentOverdueStatuses() {
@@ -584,11 +590,11 @@ async function refreshVipInstallmentOverdueStatuses() {
 export const vipInstallmentsRouter = router({
   adminConfig: adminProcedure.query(async () => getVipInstallmentConfig()),
 
-  adminProductRules: adminProcedure.query(async () => listVipInstallmentProductRules()),
+  adminProductRules: adminProcedure.query(async () => listVipInstallmentOptionRules()),
 
   setProductRule: adminProcedure
     .input(z.object({
-      productId: z.number().int().positive(),
+      optionId: z.number().int().positive(),
       enabled: z.boolean(),
       minOrderCents: z.number().int().positive().max(100_000_000_000).nullable().optional(),
       minInstallments: z.number().int().min(2).max(120).nullable().optional(),
@@ -624,19 +630,13 @@ export const vipInstallmentsRouter = router({
     }))
     .mutation(async ({ input }) => {
       try {
-        return await saveVipInstallmentProductRule({
-          productId: input.productId,
+        return await saveVipInstallmentOptionRule({
+          optionId: input.optionId,
           enabled: input.enabled,
           minOrderCents: input.minOrderCents ?? null,
-          minInstallments: input.minInstallments ?? null,
-          maxInstallments: input.maxInstallments ?? null,
-          interestBps: input.interestBps ?? null,
-          entryMode: input.entryMode ?? null,
-          entryFixedCents: input.entryFixedCents ?? null,
-          entryPercentBps: input.entryPercentBps ?? null,
-          allowDaily: input.allowDaily ?? null,
-          allowWeekly: input.allowWeekly ?? null,
-          allowMonthly: input.allowMonthly ?? null,
+          allowDaily: input.allowDaily ?? false,
+          allowWeekly: input.allowWeekly ?? false,
+          allowMonthly: input.allowMonthly ?? false,
           dailyMinInstallments: input.dailyMinInstallments ?? null,
           dailyMaxInstallments: input.dailyMaxInstallments ?? null,
           dailyInterestBps: input.dailyInterestBps ?? null,
@@ -659,7 +659,7 @@ export const vipInstallmentsRouter = router({
           notes: input.notes ?? null,
         });
       } catch (error) {
-        throw new TRPCError({ code: "BAD_REQUEST", message: (error as Error).message || "Não foi possível salvar a regra do produto." });
+        throw new TRPCError({ code: "BAD_REQUEST", message: (error as Error).message || "Não foi possível salvar a regra da categoria." });
       }
     }),
 
@@ -809,10 +809,10 @@ export const vipInstallmentsRouter = router({
   }),
 
   eligibility: publicProcedure
-    .input(z.object({ cpToken: z.string().min(32), phone: z.string().min(8).max(32).optional(), productId: z.number().int().positive().optional() }))
+    .input(z.object({ cpToken: z.string().min(32), phone: z.string().min(8).max(32).optional(), productId: z.number().int().positive().optional(), optionId: z.number().int().positive().optional() }))
     .query(async ({ input }) => {
       const session = await requireCustomerSession(input.cpToken, input.phone);
-      return resolveEligibility(session.phone, input.productId);
+      return resolveEligibility(session.phone, input.productId, input.optionId);
     }),
 
   quote: publicProcedure
