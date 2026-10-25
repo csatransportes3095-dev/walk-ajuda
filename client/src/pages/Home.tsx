@@ -6,7 +6,7 @@ import { ServicosExtras } from "@/components/ServicosExtras";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
-import { MessageCircle, Zap, Phone, Clock, Users, Upload, FileUp, Ticket, Copy, Check, ImageIcon, AlertTriangle, Camera, Car, Loader2, UserCircle, X, KeyRound, ShoppingCart, Trash2, LogOut, HelpCircle, ChevronDown, CalendarDays } from "lucide-react";
+import { MessageCircle, Zap, Phone, Clock, Users, Upload, FileUp, Ticket, Copy, Check, ImageIcon, AlertTriangle, Camera, Car, Loader2, UserCircle, X, KeyRound, ShoppingCart, Trash2, LogOut, HelpCircle, ChevronDown, CalendarDays, CreditCard } from "lucide-react";
 import { useState, useEffect, useCallback, useRef, useMemo } from "react";
 import { toast } from "sonner";
 import { trpc } from "@/lib/trpc";
@@ -5067,36 +5067,49 @@ export default function Home() {
                 : isActive ? 'Clique para agendar agora' : 'Aguardando liberação do ADM';
 
               return (
-                <button
-                  type="button"
-                  disabled={!isActive}
-                  onClick={() => { if (isActive) window.location.href = `/agendar/${schedule.token}`; }}
-                  className={`group col-span-2 flex min-h-[82px] w-full items-center gap-3 rounded-2xl border px-4 py-3 text-left transition-all sm:min-h-[90px] ${isConfirmed
-                    ? 'h2-schedule-card-confirmed border-green-400/70 bg-gradient-to-br from-green-500/24 to-emerald-500/12 shadow-[0_0_24px_rgba(74,222,128,0.20)] hover:border-green-300/90 hover:bg-green-500/28 active:scale-[0.99]'
-                    : isActive
-                      ? 'h2-schedule-card-available border-cyan-400/70 bg-gradient-to-br from-cyan-500/22 to-sky-500/10 shadow-[0_0_24px_rgba(34,211,238,0.20)] hover:border-cyan-300/90 hover:bg-cyan-500/26 active:scale-[0.99]'
-                      : 'cursor-not-allowed border-violet-400/40 bg-gradient-to-br from-violet-500/16 to-fuchsia-500/8 shadow-[0_0_20px_rgba(167,139,250,0.09)]'
-                  }`}
-                  aria-label={title}
-                  title={title}
-                >
-                  <span className={`flex h-11 w-11 shrink-0 items-center justify-center rounded-xl ring-1 ${isConfirmed
-                    ? 'bg-green-400/15 text-green-200 ring-green-300/40'
-                    : isActive
-                      ? 'bg-cyan-400/15 text-cyan-200 ring-cyan-300/40'
-                      : 'bg-violet-400/15 text-violet-200 ring-violet-300/30'}`}>
-                    <CalendarDays className="h-6 w-6" />
-                  </span>
-                  <span className="min-w-0 flex-1">
-                    <span className="block text-xs font-black uppercase leading-tight tracking-wide text-white sm:text-sm">{title}</span>
-                    <span className={`mt-1 block text-[11px] leading-tight sm:text-xs ${isConfirmed ? 'text-green-100/80' : isActive ? 'text-cyan-100/80' : 'text-violet-100/75'}`}>{subtitle}</span>
-                  </span>
-                  {isActive && (
-                    <span className={`shrink-0 rounded-lg border px-2.5 py-2 text-[9px] font-black uppercase tracking-wide sm:px-3 sm:text-[10px] ${isConfirmed ? 'border-green-300/40 bg-green-400/15 text-green-100' : 'border-cyan-300/40 bg-cyan-400/15 text-cyan-50'}`}>
-                      {isConfirmed ? 'Alterar agendamento' : 'Agendar agora'}
+                <div className="col-span-2 grid grid-cols-2 gap-2">
+                  <button
+                    type="button"
+                    disabled={!isActive}
+                    onClick={() => { if (isActive) window.location.href = `/agendar/${schedule.token}`; }}
+                    className={`group flex min-h-[82px] w-full items-center gap-2 rounded-2xl border px-3 py-3 text-left transition-all sm:min-h-[90px] sm:gap-3 sm:px-4 ${isConfirmed
+                      ? 'h2-schedule-card-confirmed border-green-400/70 bg-gradient-to-br from-green-500/24 to-emerald-500/12 shadow-[0_0_24px_rgba(74,222,128,0.20)] hover:border-green-300/90 hover:bg-green-500/28 active:scale-[0.99]'
+                      : isActive
+                        ? 'h2-schedule-card-available border-cyan-400/70 bg-gradient-to-br from-cyan-500/22 to-sky-500/10 shadow-[0_0_24px_rgba(34,211,238,0.20)] hover:border-cyan-300/90 hover:bg-cyan-500/26 active:scale-[0.99]'
+                        : 'cursor-not-allowed border-violet-400/40 bg-gradient-to-br from-violet-500/16 to-fuchsia-500/8 shadow-[0_0_20px_rgba(167,139,250,0.09)]'
+                    }`}
+                    aria-label={title}
+                    title={title}
+                  >
+                    <span className={`flex h-10 w-10 shrink-0 items-center justify-center rounded-xl ring-1 ${isConfirmed
+                      ? 'bg-green-400/15 text-green-200 ring-green-300/40'
+                      : isActive
+                        ? 'bg-cyan-400/15 text-cyan-200 ring-cyan-300/40'
+                        : 'bg-violet-400/15 text-violet-200 ring-violet-300/30'}`}>
+                      <CalendarDays className="h-5 w-5" />
                     </span>
-                  )}
-                </button>
+                    <span className="min-w-0 flex-1">
+                      <span className="block text-[10px] font-black uppercase leading-tight tracking-wide text-white sm:text-xs">{title}</span>
+                      <span className={`mt-1 hidden text-[10px] leading-tight sm:block ${isConfirmed ? 'text-green-100/80' : isActive ? 'text-cyan-100/80' : 'text-violet-100/75'}`}>{subtitle}</span>
+                    </span>
+                  </button>
+
+                  <button
+                    type="button"
+                    onClick={() => { window.location.href = '/parcelas-vip'; }}
+                    className="group flex min-h-[82px] w-full items-center gap-2 rounded-2xl border border-amber-300/55 bg-gradient-to-br from-amber-500/22 to-orange-500/10 px-3 py-3 text-left shadow-[0_0_24px_rgba(251,191,36,0.16)] transition-all hover:border-amber-200/80 hover:bg-amber-500/28 active:scale-[0.99] sm:min-h-[90px] sm:gap-3 sm:px-4"
+                    aria-label="Pague suas parcelas"
+                    title="Pague suas parcelas"
+                  >
+                    <span className="flex h-10 w-10 shrink-0 items-center justify-center rounded-xl bg-amber-400/15 text-amber-200 ring-1 ring-amber-300/35">
+                      <CreditCard className="h-5 w-5" />
+                    </span>
+                    <span className="min-w-0 flex-1">
+                      <span className="block text-[10px] font-black uppercase leading-tight tracking-wide text-white sm:text-xs">PAGUE SUAS PARCELAS</span>
+                      <span className="mt-1 hidden text-[10px] leading-tight text-amber-100/75 sm:block">Acesse suas parcelas VIP e faça o pagamento</span>
+                    </span>
+                  </button>
+                </div>
               );
             })()}
           </div>
