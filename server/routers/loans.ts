@@ -5,7 +5,7 @@ import { z } from "zod";
 import { publicProcedure, adminProcedure, router } from "../_core/trpc";
 import { getDb, createFinancialSale } from "../db";
 import { syncUnifiedCustomerRegistry, requireCompleteMainCustomerProfile } from "../customerIdentity";
-import { CUSTOMER_ROUTES, findMainCustomerByIdentity, getRouteAccess, reconcileLegacyLoanPermissions, setCustomerRoutePermissions } from "../customerAccess";
+import { CUSTOMER_ROUTES, findMainCustomerByIdentity, getRouteAccess, getRouteReleaseMode, reconcileLegacyLoanPermissions, setCustomerRoutePermissions } from "../customerAccess";
 import { storagePut } from "../storage";
 import { spreadsheetSessions } from "../../drizzle/schema";
 import { eq, sql as drizzleSql } from "drizzle-orm";
@@ -122,8 +122,9 @@ async function requireLoanRouteAccess(db: any, rawToken: string): Promise<any> {
   }
   const mainCustomer = await findMainCustomerByIdentity({ phone: session.phone, cpf: session.cpf }, db);
   if (!mainCustomer) throw new TRPCError({ code: 'FORBIDDEN', message: 'Conclua o cadastro principal para continuar.' });
+  const releaseMode = await getRouteReleaseMode('emprestimo', db);
   const access = await getRouteAccess(mainCustomer.id, db);
-  const loanAllowed = !access.restricted || access.routes.includes('emprestimo');
+  const loanAllowed = releaseMode === 'automatico' || !access.restricted || access.routes.includes('emprestimo');
   await syncLegacyLoanAccess(db, session, loanAllowed);
   if (!loanAllowed) {
     throw new TRPCError({ code: 'FORBIDDEN', message: 'Acesso não autorizado para a área de Empréstimos.' });
