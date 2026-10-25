@@ -188,25 +188,15 @@ export default function AdminVipInstallmentsPanel() {
 
   const saveCustomer = () => {
     if (!selected) return;
-    const interestRaw = permissionForm.interestPercent.trim() ? Number(permissionForm.interestPercent.replace(",", ".")) : null;
-    if (interestRaw != null && (!Number.isFinite(interestRaw) || interestRaw < 0 || interestRaw > 1000)) {
-      toast.error("Juros do cliente inválido.");
-      return;
-    }
-    const maxInstallments = permissionForm.maxInstallments.trim() ? Number(permissionForm.maxInstallments) : null;
-    if (maxInstallments != null && (!Number.isInteger(maxInstallments) || maxInstallments < 2 || maxInstallments > 120)) {
-      toast.error("Máximo de parcelas do cliente inválido.");
-      return;
-    }
     setPermissionMutation.mutate({
       customerId: Number(selected.customerId),
       enabled: permissionForm.enabled,
-      maxInstallments,
-      interestBps: interestRaw == null ? null : Math.round(interestRaw * 100),
+      maxInstallments: null,
+      interestBps: null,
       creditLimitCents: moneyToCents(permissionForm.creditLimit),
-      allowDaily: triToValue(permissionForm.allowDaily),
-      allowWeekly: triToValue(permissionForm.allowWeekly),
-      allowMonthly: triToValue(permissionForm.allowMonthly),
+      allowDaily: null,
+      allowWeekly: null,
+      allowMonthly: null,
       notes: permissionForm.notes.trim() || null,
     });
   };
@@ -219,7 +209,7 @@ export default function AdminVipInstallmentsPanel() {
         <div className="flex flex-wrap items-start justify-between gap-3">
           <div>
             <div className="flex items-center gap-2 text-emerald-300"><CreditCard className="h-6 w-6" /><h2 className="text-2xl font-black">Parcelamento VIP</h2></div>
-            <p className="mt-2 max-w-3xl text-sm text-slate-400">Benefício separado da assinatura VIP. O cliente só parcela quando o VIP está ativo e o ADM libera individualmente.</p>
+            <p className="mt-2 max-w-3xl text-sm text-slate-400">Parcelamento por produto. O cliente precisa estar com VIP ativo e autorizado; as condições financeiras ficam somente na regra do produto.</p>
           </div>
           <button type="button" onClick={refresh} className="inline-flex items-center gap-2 rounded-xl border border-white/10 bg-white/5 px-3 py-2 text-xs font-black text-slate-200">
             <RefreshCw className={`h-4 w-4 ${installmentDirectoryQuery.isFetching ? "animate-spin" : ""}`} /> Atualizar
@@ -228,27 +218,10 @@ export default function AdminVipInstallmentsPanel() {
       </div>
 
       <div className="grid gap-5 p-4 sm:p-6">
-        <div className={`rounded-2xl border p-5 ${config.enabled ? "border-emerald-400/35 bg-emerald-500/10" : "border-slate-500/25 bg-slate-500/[0.06]"}`}>
-          <label className="flex cursor-pointer items-center justify-between gap-4">
-            <div><p className="font-black">Parcelamento VIP disponível no sistema</p><p className="mt-1 text-xs text-slate-400">Começa desligado. Desligar bloqueia novos parcelamentos, mas não apaga dívidas existentes.</p></div>
-            <input type="checkbox" checked={config.enabled} onChange={(event) => setConfig((value) => ({ ...value, enabled: event.target.checked }))} className="h-5 w-5 accent-emerald-400" />
-          </label>
+        <div className="rounded-2xl border border-cyan-400/25 bg-cyan-500/[0.06] p-4 text-sm text-slate-300">
+          <p className="font-black uppercase text-cyan-200">Configuração simplificada</p>
+          <p className="mt-2">As regras financeiras agora são configuradas <strong className="text-white">somente por produto</strong>: parcelas, juros, entrada e periodicidade. O cliente possui apenas autorização para parcelar e limite de crédito.</p>
         </div>
-
-        <div className="grid gap-4 rounded-2xl border border-white/10 bg-white/[0.025] p-5 sm:grid-cols-2 lg:grid-cols-4">
-          <label className="text-[11px] font-black uppercase text-slate-300">Mínimo de parcelas<input type="number" min={2} max={120} value={config.minInstallments} onChange={(event) => setConfig((value) => ({ ...value, minInstallments: Number(event.target.value) || 2 }))} className={inputClass} /></label>
-          <label className="text-[11px] font-black uppercase text-slate-300">Máximo de parcelas<input type="number" min={2} max={120} value={config.maxInstallments} onChange={(event) => setConfig((value) => ({ ...value, maxInstallments: Number(event.target.value) || 2 }))} className={inputClass} /></label>
-          <label className="text-[11px] font-black uppercase text-slate-300">Juros padrão (%)<input inputMode="decimal" value={config.defaultInterestPercent} onChange={(event) => setConfig((value) => ({ ...value, defaultInterestPercent: event.target.value }))} className={inputClass} /></label>
-          <label className="text-[11px] font-black uppercase text-slate-300">Entrada / primeira parcela<select value={config.entryMode} onChange={(event) => setConfig((value) => ({ ...value, entryMode: event.target.value as "none" | "fixed" | "percent", entryValue: "" }))} className={inputClass}><option value="none">Sem entrada especial</option><option value="fixed">Valor fixo (R$)</option><option value="percent">Percentual (%)</option></select></label>
-          {config.entryMode !== "none" && <label className="text-[11px] font-black uppercase text-slate-300">{config.entryMode === "fixed" ? "Valor da entrada (R$)" : "Entrada (%)"}<input inputMode="decimal" value={config.entryValue} onChange={(event) => setConfig((value) => ({ ...value, entryValue: event.target.value }))} placeholder={config.entryMode === "fixed" ? "Ex.: 150,00" : "Ex.: 30"} className={inputClass} /><span className="mt-1 block normal-case font-medium text-slate-500">A entrada é a parcela 1. Os juros são aplicados somente no saldo restante.</span></label>}
-          <label className="text-[11px] font-black uppercase text-slate-300">Regra diária<select value={config.dailyMode} onChange={(event) => setConfig((value) => ({ ...value, dailyMode: event.target.value as "all_days" | "mon_sat" }))} className={inputClass}><option value="all_days">Todos os dias</option><option value="mon_sat">Segunda a sábado</option></select></label>
-          <div className="sm:col-span-2 lg:col-span-4 flex flex-wrap gap-3">
-            {([['allowDaily','Diário'],['allowWeekly','Semanal'],['allowMonthly','Mensal']] as const).map(([key, label]) => <label key={key} className="flex items-center gap-2 rounded-xl border border-white/10 bg-black/20 px-3 py-2 text-xs font-bold"><input type="checkbox" checked={config[key]} onChange={(event) => setConfig((value) => ({ ...value, [key]: event.target.checked }))} className="accent-emerald-400" /> {label}</label>)}
-          </div>
-          <button type="button" onClick={saveGlobal} disabled={setConfigMutation.isPending} className="sm:col-span-2 lg:col-span-4 inline-flex min-h-[50px] items-center justify-center gap-2 rounded-xl bg-emerald-400 px-4 text-sm font-black uppercase text-emerald-950 disabled:opacity-50"><Save className="h-4 w-4" /> {setConfigMutation.isPending ? "Salvando..." : "Salvar regras do parcelamento"}</button>
-        </div>
-
-        <div className="rounded-2xl border border-amber-400/25 bg-amber-500/[0.07] p-4 text-xs leading-relaxed text-slate-300"><p className="font-black uppercase text-amber-200">Qual configuração vale?</p><p className="mt-2"><strong>Parcelas:</strong> o Global define mínimo e teto máximo. Produto e Cliente podem apenas reduzir esse máximo. Vale sempre o menor teto.</p><p className="mt-1"><strong>Cliente:</strong> libera/bloqueia o Parcelamento VIP, pode limitar parcelas, definir limite de crédito e juros específicos.</p><p className="mt-1"><strong>Produto:</strong> libera/bloqueia o produto, pode limitar parcelas, definir valor mínimo e juros específicos.</p><p className="mt-1"><strong>Juros:</strong> Cliente específico → Produto → Global.</p><p className="mt-1"><strong>Periodicidade:</strong> só aparece se estiver permitida ao mesmo tempo no Global, Produto e Cliente.</p></div>
 
         <AdminVipInstallmentProductsPanel />
 
@@ -278,10 +251,7 @@ export default function AdminVipInstallmentsPanel() {
         {Number(selected.balanceCents || 0) > 0 && <div className="mt-4 rounded-2xl border border-orange-400/30 bg-orange-500/10 p-4"><p className="flex items-center gap-2 text-sm font-black text-orange-200"><AlertTriangle className="h-4 w-4" /> Compra parcelada em andamento</p><p className="mt-2 text-sm text-orange-100">Saldo: {moneyLabel(selected.balanceCents)}. Desativar a permissão não cancela nem altera essa dívida.</p></div>}
         <div className="mt-5 grid gap-4 sm:grid-cols-2">
           <label className="sm:col-span-2 flex items-center justify-between gap-4 rounded-2xl border border-emerald-400/20 bg-emerald-500/[0.06] p-4"><div><p className="font-black">Liberar Parcelamento VIP</p><p className="mt-1 text-xs text-slate-400">Só afeta novas compras.</p></div><input type="checkbox" checked={permissionForm.enabled} onChange={(event) => setPermissionForm((value) => ({ ...value, enabled: event.target.checked }))} className="h-5 w-5 accent-emerald-400" /></label>
-          <label className="text-[11px] font-black uppercase text-slate-300">Máximo de parcelas deste cliente<input type="number" min={2} max={120} value={permissionForm.maxInstallments} onChange={(event) => setPermissionForm((value) => ({ ...value, maxInstallments: event.target.value }))} placeholder={`Vazio = usar teto Global (${config.maxInstallments}x)`} className={inputClass} /><span className="mt-1 block normal-case font-medium text-slate-500">O Global continua sendo o teto absoluto.</span></label>
-          <label className="text-[11px] font-black uppercase text-slate-300">Juros específicos (%)<input inputMode="decimal" value={permissionForm.interestPercent} onChange={(event) => setPermissionForm((value) => ({ ...value, interestPercent: event.target.value }))} placeholder={`Padrão: ${config.defaultInterestPercent}%`} className={inputClass} /></label>
-          <label className="sm:col-span-2 text-[11px] font-black uppercase text-slate-300">Limite de crédito<input value={permissionForm.creditLimit} onChange={(event) => setPermissionForm((value) => ({ ...value, creditLimit: event.target.value }))} placeholder="Vazio = sem limite individual" className={inputClass} /></label>
-          {([['allowDaily','Diário'],['allowWeekly','Semanal'],['allowMonthly','Mensal']] as const).map(([key, label]) => <label key={key} className="text-[11px] font-black uppercase text-slate-300">{label}<select value={permissionForm[key]} onChange={(event) => setPermissionForm((value) => ({ ...value, [key]: event.target.value as TriState }))} className={inputClass}><option value="inherit">Herdar padrão global</option><option value="yes">Permitir</option><option value="no">Bloquear</option></select></label>)}
+          <label className="sm:col-span-2 text-[11px] font-black uppercase text-slate-300">Limite de crédito<input value={permissionForm.creditLimit} onChange={(event) => setPermissionForm((value) => ({ ...value, creditLimit: event.target.value }))} placeholder="Vazio = sem limite individual" className={inputClass} /><span className="mt-1 block normal-case font-medium text-slate-500">Parcelas, juros, entrada e periodicidade são definidos exclusivamente no produto.</span></label>
           <label className="sm:col-span-2 text-[11px] font-black uppercase text-slate-300">Observação<textarea rows={2} value={permissionForm.notes} onChange={(event) => setPermissionForm((value) => ({ ...value, notes: event.target.value }))} className={inputClass} /></label>
           <div className="sm:col-span-2 rounded-2xl border border-cyan-400/20 bg-cyan-500/[0.05] p-4 text-xs text-cyan-100"><p className="flex items-center gap-2 font-black"><ShieldCheck className="h-4 w-4" /> Regra de segurança</p><p className="mt-2 text-slate-300">Mesmo liberado, o cliente só pode ter uma compra parcelada aberta. Qualquer saldo pendente bloqueia um novo parcelamento.</p></div>
           <button type="button" onClick={saveCustomer} disabled={setPermissionMutation.isPending} className="sm:col-span-2 inline-flex min-h-[52px] items-center justify-center gap-2 rounded-xl bg-emerald-400 px-4 text-sm font-black uppercase text-emerald-950 disabled:opacity-50"><CheckCircle2 className="h-4 w-4" /> {setPermissionMutation.isPending ? "Salvando..." : "Salvar permissão do cliente"}</button>
