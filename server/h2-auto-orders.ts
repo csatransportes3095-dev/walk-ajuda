@@ -98,11 +98,13 @@ export function registerH2AutoOrdersRoutes(app:Express){
    if(limitedDevice || limitedPhone)return reply(res,429,{error:"too_many_requests"});
 
    const customer=await activeCustomer(phone);
-   // Do not expose whether this phone or e-mail is registered.
-   const generic={state:"await_code",message:"Se houver cadastro elegível, enviaremos um código ao e-mail. Verifique também o spam. Código válido pelo prazo configurado no atendimento."};
-   if(!customer)return reply(res,200,generic);
+   // Replies stay on the paired H2 AUTO device and are rate-limited before lookup.
+   // Never reveal the customer's name, email address, or order information before OTP.
+   const notFound={state:"not_found",message:"❌ Não encontramos cadastro com esse telefone. Confira o número com DDD e tente novamente."};
+   if(!customer)return reply(res,200,notFound);
    const authorizationDb=await getDb();if(!authorizationDb)throw Error("db");
-   if(!(await isOwnSiteEmailAuthorized(authorizationDb,customer.email)))return reply(res,200,generic);
+   if(!(await isOwnSiteEmailAuthorized(authorizationDb,customer.email)))return reply(res,200,notFound);
+   const delivered={state:"await_code",message:"✅ Código enviado ao e-mail cadastrado. Informe os 6 números recebidos. Validade: "+settings.ttl+" minutos."};
    const code=String(randomInt(0,1000000)).padStart(6,"0"), codeHash=otpDigest(sid,code);
    const db=await getDb();if(!db)throw Error("db");
    await db.execute(sql`INSERT INTO h2_auto_order_sessions(id,device_id,conversation_hash,customer_id,customer_phone,email_hash,code_hash,code_expires,code_attempts,resend_after,expires_at,issued_at)
@@ -113,7 +115,7 @@ export function registerH2AutoOrdersRoutes(app:Express){
     await db.execute(sql`UPDATE h2_auto_order_sessions SET code_hash=NULL,code_expires=NULL WHERE id=${sid} AND code_hash=${codeHash}`);
     return reply(res,503,{error:"email_unavailable",message:"Não foi possível enviar o código agora."});
    }
-   return reply(res,200,generic);
+   return reply(res,200,delivered);
   }catch{return reply(res,503,{error:"temporarily_unavailable"});}
  });
  app.post("/api/h2-auto/orders/verify",async(req,res)=>{
