@@ -2748,7 +2748,7 @@ export default function Home() {
                 return (
                   <select
                     value={questionAnswers[q.id] || ""}
-                    onChange={(e) => setQuestionAnswers(prev => ({ ...prev, [q.id]: e.target.value }))}
+                    onChange={(e) => { commitAnswerChange(q.id, e.target.value); }}
                     style={{ backgroundColor: '#ffffff', color: '#000000', fontSize: '16px', textAlign: 'center', border: '2px double #000', borderRadius: '8px', padding: '8px 12px', width: '100%', fontWeight: 500 }}
                   >
                     <option value="">Selecione...</option>
@@ -2778,13 +2778,13 @@ export default function Home() {
                   allowFileUpload={q.allowAudioFileUpload !== 0}
                   helpText={q.helpText}
                   value={questionAudioAnswers[q.id]}
-                  onConfirmed={audio => { setQuestionAudioAnswers(prev => ({ ...prev, [q.id]: audio })); setQuestionAnswers(prev => ({ ...prev, [q.id]: 'Áudio anexado' })); }}
+                  onConfirmed={audio => { commitAnswerChange(q.id, 'Áudio anexado'); setQuestionAudioAnswers(prev => ({ ...prev, [q.id]: audio })); }}
                   onClear={() => { setQuestionAudioAnswers(prev => { const next = { ...prev }; delete next[q.id]; return next; }); setQuestionAnswers(prev => { const next = { ...prev }; delete next[q.id]; return next; }); }}
                 /> : null
               ) : q.fieldType === 'textarea' ? (
                 <textarea
                   value={questionAnswers[q.id] || ""}
-                  onChange={(e) => setQuestionAnswers(prev => ({ ...prev, [q.id]: e.target.value }))}
+                  onChange={(e) => { commitAnswerChange(q.id, e.target.value); }}
                   placeholder="Digite aqui..."
                   className="w-full rounded-md p-2 text-sm"
                   style={{ backgroundColor: '#ffffff', color: '#000000', border: '2px double #000' }}
@@ -3521,6 +3521,47 @@ export default function Home() {
         const isLastQuestion = safeIndex === totalQs - 1;
         const progressPct = totalQs > 0 ? Math.round(((safeIndex) / totalQs) * 100) : 0;
 
+        // Ao alterar uma resposta, respostas posteriores e descendentes deixam de ser válidas.
+        // Isso evita que uma regra antiga de "Encerrar" continue afetando o novo caminho.
+        const prepareAnswerChange = (questionId: number, value: string) => {
+          const nextAnswers = { ...questionAnswers };
+          const clearedIds = new Set<number>();
+
+          const currentOrder = buildOrderedQs(questionAnswers);
+          const currentPos = currentOrder.findIndex(item => item.id === questionId);
+          if (currentPos >= 0) {
+            for (const item of currentOrder.slice(currentPos + 1)) {
+              delete nextAnswers[item.id];
+              clearedIds.add(item.id);
+            }
+          }
+
+          const clearDescendants = (parentId: number) => {
+            for (const child of allQsModal.filter(item => item.parentQuestionId === parentId)) {
+              delete nextAnswers[child.id];
+              clearedIds.add(child.id);
+              clearDescendants(child.id);
+            }
+          };
+          clearDescendants(questionId);
+          nextAnswers[questionId] = value;
+
+          if (clearedIds.size) {
+            setQuestionAudioAnswers(prev => {
+              const next = { ...prev };
+              clearedIds.forEach(id => { delete next[id]; });
+              return next;
+            });
+          }
+          return nextAnswers;
+        };
+
+        const commitAnswerChange = (questionId: number, value: string) => {
+          const nextAnswers = prepareAnswerChange(questionId, value);
+          setQuestionAnswers(nextAnswers);
+          return nextAnswers;
+        };
+
         // Calcula o próximo índice considerando sub-perguntas que podem aparecer após responder
         const getNextIndex = (newAnswers: Record<number, string>): number => {
           const nextList = resolveFlow(newAnswers).questions;
@@ -3571,7 +3612,7 @@ export default function Home() {
               }
             };
             const chooseVehicleValue = (value: string, autoAdvance = true) => {
-              const nextAnswers = { ...questionAnswers, [q.id]: value };
+              const nextAnswers = commitAnswerChange(q.id, value);
               if (vehicleKind === 'brand') clearDescendants(q.id, nextAnswers);
               setQuestionAnswers(nextAnswers);
               setBlockedByQuestion(null);
@@ -3635,7 +3676,7 @@ export default function Home() {
                         key={i}
                         type="button"
                         onClick={() => {
-                          setQuestionAnswers(prev => ({ ...prev, [q.id]: opt.label }));
+                          const newAnswers = commitAnswerChange(q.id, opt.label);
                           if (isBlocking2) {
                             const phone = clientPhone || '';
                             if (phone) {
@@ -3652,7 +3693,6 @@ export default function Home() {
                             setBlockedByQuestion(null);
                             // Auto-avança para próxima pergunta após breve delay
                             // Usa getNextIndex com as novas respostas para incluir sub-perguntas que acabaram de ficar visíveis
-                            const newAnswers = { ...questionAnswers, [q.id]: opt.label };
                             const nextFlowState = resolveFlow(newAnswers);
                             if (finishQuestionnaireFlow(nextFlowState)) return;
                             const nextIdx = getNextIndex(newAnswers);
@@ -3713,9 +3753,8 @@ export default function Home() {
                       key={i}
                       type="button"
                       onClick={() => {
-                        setQuestionAnswers(prev => ({ ...prev, [q.id]: opt }));
+                        const newAnswers2 = commitAnswerChange(q.id, opt);
                         setBlockedByQuestion(null);
-                        const newAnswers2 = { ...questionAnswers, [q.id]: opt };
                         const nextFlowState2 = resolveFlow(newAnswers2);
                         if (finishQuestionnaireFlow(nextFlowState2)) return;
                         const nextIdx2 = getNextIndex(newAnswers2);
