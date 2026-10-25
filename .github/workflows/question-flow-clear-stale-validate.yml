@@ -1,0 +1,41 @@
+name: Validate stale question flow cleanup
+on:
+  push:
+    branches: [fix/question-flow-clear-stale-answers-20261025]
+    paths:
+      - 'client/src/pages/Home.tsx'
+      - '.github/workflows/question-flow-clear-stale-validate.yml'
+permissions:
+  contents: read
+jobs:
+  validate:
+    runs-on: ubuntu-latest
+    timeout-minutes: 12
+    steps:
+      - uses: actions/checkout@v4
+      - uses: pnpm/action-setup@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+          cache: pnpm
+      - run: pnpm install --frozen-lockfile
+      - name: Verify stale answer cleanup wiring
+        run: |
+          node --input-type=module <<'JS'
+          import fs from 'node:fs';
+          const home=fs.readFileSync('client/src/pages/Home.tsx','utf8');
+          for (const needle of [
+            'const prepareAnswerChange =',
+            'const commitAnswerChange =',
+            'currentOrder.slice(currentPos + 1)',
+            'clearDescendants(questionId)',
+            'const newAnswers = commitAnswerChange(q.id, opt.label)',
+            'const newAnswers2 = commitAnswerChange(q.id, opt)'
+          ]) if (!home.includes(needle)) throw new Error('missing '+needle);
+          console.log('STALE_CLEANUP_WIRING_OK');
+          JS
+      - name: Verify all four flow actions
+        run: |
+          node --experimental-strip-types --input-type=module -e "import { applyQuestionFlow } from './client/src/lib/conditionalQuestionFlow.ts'; const qs=[{id:1},{id:2},{id:3},{id:4}]; let r=applyQuestionFlow(qs,{1:'A'},[]); if(r.ended||r.questions.length!==4) throw new Error('continue'); r=applyQuestionFlow(qs,{1:'A'},[{questionId:1,answer:'A',action:'jump',targetQuestionId:3}]); if(r.ended||r.questions.map(x=>x.id).join(',')!=='1,3,4') throw new Error('jump'); r=applyQuestionFlow(qs,{2:'STOP'},[{questionId:2,answer:'STOP',action:'finish'}]); if(!r.ended||r.questions.map(x=>x.id).join(',')!=='1,2') throw new Error('finish'); r=applyQuestionFlow(qs,{2:'STOP'},[{questionId:2,answer:'STOP',action:'message',message:'FIM'}]); if(!r.ended||r.message!=='FIM'||r.questions.map(x=>x.id).join(',')!=='1,2') throw new Error('message'); console.log('ALL_FLOW_ACTIONS_OK');"
+      - name: Build
+        run: pnpm build
