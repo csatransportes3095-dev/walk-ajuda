@@ -1547,7 +1547,7 @@ export default function Home() {
           const isGenericVehicleModel = parentKind === 'brand' && childKind === 'model';
           const isVisible = isGenericVehicleModel
             ? !!parentAnswer
-            : (!child.triggerOption || parentAnswer === child.triggerOption);
+            : (!child.triggerOption || normalizeConditionalValue(parentAnswer) === normalizeConditionalValue(child.triggerOption));
           if (isVisible) appendVisible(child);
         }
       };
@@ -3473,6 +3473,9 @@ export default function Home() {
         // Monta a arvore em qualquer profundidade. Cada filho so entra quando a
         // resposta do pai satisfaz triggerOption. As regras finish/message podem
         // portanto encerrar o questionario em qualquer nivel.
+        const normalizeConditionalValue = (value: string | null | undefined) =>
+          String(value || '').normalize('NFD').replace(/[\u0300-\u036f]/g, '').trim().toLocaleUpperCase('pt-BR');
+
         const buildOrderedQs = (answers: Record<number, string>): ProductQuestion[] => {
           const result: ProductQuestion[] = [];
           const visited = new Set<number>();
