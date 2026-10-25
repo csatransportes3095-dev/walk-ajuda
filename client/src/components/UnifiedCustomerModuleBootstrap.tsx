@@ -20,7 +20,8 @@ function currentRelativeUrl(): string {
 function resolveTarget(pathname: string): ModuleTarget {
   const path = String(pathname || "/").toLowerCase().replace(/\/+$/, "") || "/";
   if (path === "/gastos") return { kind: "spreadsheet", route: "gastos" };
-  if (path === "/emprestimo") return { kind: "spreadsheet", route: "emprestimo" };
+  // Empréstimos já gerencia cp_token, permissão e manifesto dentro da própria página.
+  // Não interceptar aqui evita uma segunda preparação de sessão antes da rota abrir.
   if (path === "/cartoes" || path.startsWith("/cartoes/")) return { kind: "cartoes" };
   return null;
 }
