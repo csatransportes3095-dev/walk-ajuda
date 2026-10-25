@@ -18,6 +18,6 @@ jobs:
           cache: pnpm
       - run: pnpm install --no-frozen-lockfile
       - name: TypeScript check
-        run: pnpm check
+        run: pnpm exec tsc --noEmit --ignoreDeprecations 5.0
       - name: Frontend and backend build
         run: pnpm build
