@@ -109,6 +109,39 @@ export function registerH2AutoDeviceRoutes(app:Express) {
    return respond(res,200,{revision:Number(d.revision),config:safeDevice(d).config});
  }catch{return respond(res,500,{error:"temporary_error"});}
  });
+ // The first sync must preserve the local WhatsApp menu and rules. An empty ADM
+ // draft (revision 0) may be populated ONCE by its already-paired device.
+ // Never replace a configuration that an administrator has saved.
+ app.post("/api/h2-auto/import",async(req:Request,res:Response)=>{
+  try {
+   const id=String(req.header("x-h2-device-id")||"");
+   const token=String(req.header("x-h2-device-token")||"");
+   if(!/^[a-f0-9]{24}$/.test(id)||!/^[a-f0-9]{64}$/.test(token))
+     return respond(res,401,{error:"unauthorized"});
+   const parsed=configSchema.safeParse(req.body);
+   if(!parsed.success)return respond(res,400,{error:"invalid_local_configuration"});
+   await ensure();
+   const data=await rows(sql`SELECT token_hash,revision FROM h2_auto_devices WHERE id=${id} LIMIT 1`);
+   const device=data[0];
+   if(!device?.token_hash ||
+     !timingSafeEqual(Buffer.from(String(device.token_hash),"hex"),Buffer.from(hash(token),"hex")))
+      return respond(res,401,{error:"unauthorized"});
+   if(Number(device.revision)!==0)return respond(res,409,{error:"admin_configuration_already_exists"});
+   const db=await getDb();if(!db)throw Error("db");
+   const result:any=await db.execute(sql`
+      UPDATE h2_auto_devices
+      SET config_json=${JSON.stringify(parsed.data)},revision=1,applied_revision=1,last_seen=${Date.now()}
+      WHERE id=${id} AND token_hash=${hash(token)} AND revision=0
+   `);
+   if(!result[0]?.affectedRows)
+      return respond(res,409,{error:"admin_configuration_already_exists"});
+   return respond(res,200,{success:true,revision:1,source:"android_local_settings"});
+  }catch(error){
+   console.error("[H2Auto] initial import failed",error instanceof Error ? error.message : String(error));
+   return respond(res,500,{error:"temporary_error"});
+  }
+ });
+
  app.post("/api/h2-auto/ack",async(req:Request,res:Response)=>{
  try {
    const id=String(req.header("x-h2-device-id")||""), token=String(req.header("x-h2-device-token")||"");

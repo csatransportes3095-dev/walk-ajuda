@@ -19,7 +19,7 @@ export function isSecurityPublicPath(pathname: string): boolean {
   // No generic /api bypass: only exact minimal routes.
   if (pathname === "/api/ping") return true;
   // Device endpoints each verify an independent per-device secret or single-use code.
-  if (pathname === "/api/h2-auto/pair" || pathname === "/api/h2-auto/config" || pathname === "/api/h2-auto/ack") return true;
+  if (pathname === "/api/h2-auto/pair" || pathname === "/api/h2-auto/config" || pathname === "/api/h2-auto/ack" || pathname === "/api/h2-auto/import") return true;
   if (isSiteVisitorEntryPath(pathname)) return true;
   if (/^\/api\/trpc\/adminAuth\.(login|check|setup|unlock|requestUnlock|logout)$/.test(pathname)) return true;
   // Scripts and worker APIs are governed by H2ADS' own existing authentication.
