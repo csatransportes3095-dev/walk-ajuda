@@ -26,6 +26,26 @@ async function run() {
           FOREIGN KEY (\`clientId\`) REFERENCES \`spreadsheetClients\` (\`id\`) ON DELETE CASCADE
       ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci
     `);
+    const [columnRows] = await connection.query<any[]>(
+      "SHOW COLUMNS FROM \`spreadsheetReferralDeclarations\` LIKE 'referrerCustomerId'"
+    );
+    if (!columnRows.length) {
+      await connection.query(
+        "ALTER TABLE \`spreadsheetReferralDeclarations\` ADD COLUMN \`referrerCustomerId\` INT NULL AFTER \`referrerPhone\`"
+      );
+      console.log('[spreadsheet-referral-declaration-migrate] Coluna referrerCustomerId adicionada.');
+    }
+
+    const [indexRows] = await connection.query<any[]>(
+      "SHOW INDEX FROM \`spreadsheetReferralDeclarations\` WHERE Key_name='idx_spreadsheet_referral_declaration_referrer'"
+    );
+    if (!indexRows.length) {
+      await connection.query(
+        "CREATE INDEX \`idx_spreadsheet_referral_declaration_referrer\` ON \`spreadsheetReferralDeclarations\` (\`referrerCustomerId\`)"
+      );
+      console.log('[spreadsheet-referral-declaration-migrate] Índice de indicador adicionado.');
+    }
+
     console.log('[spreadsheet-referral-declaration-migrate] Tabela de manifesto de indicação verificada com sucesso.');
   } catch (error) {
     console.error('[spreadsheet-referral-declaration-migrate] Falha:', error instanceof Error ? error.message : String(error));
