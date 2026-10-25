@@ -145,21 +145,22 @@ export default function AdminVipInstallmentProductsPanel() {
     return ((rulesQuery.data || []) as any[]).filter((row) => {
       if (!query) return true;
       return String(row.productName || "").toLowerCase().includes(query)
-        || String(row.productId || "").includes(query);
+        || String(row.optionLabel || "").toLowerCase().includes(query)
+        || String(row.optionId || "").includes(query);
     });
   }, [rulesQuery.data, search]);
 
   const mutation = trpc.vipInstallments.setProductRule.useMutation({
     onSuccess: async () => {
-      toast.success("Regras do produto salvas.");
+      toast.success("Regras da categoria salvas.");
       setSelectedId(null);
       await utils.vipInstallments.adminProductRules.invalidate();
     },
-    onError: (error) => toast.error(error.message || "Não foi possível salvar as regras do produto."),
+    onError: (error) => toast.error(error.message || "Não foi possível salvar as regras da categoria."),
   });
 
   const open = (row: any) => {
-    setSelectedId(Number(row.productId));
+    setSelectedId(Number(row.optionId));
     setForm({
       enabled: Boolean(row.enabled),
       minOrder: centsToInput(row.minOrderCents),
@@ -171,8 +172,8 @@ export default function AdminVipInstallmentProductsPanel() {
     });
   };
 
-  const selected = rows.find((row) => Number(row.productId) === selectedId)
-    || ((rulesQuery.data || []) as any[]).find((row) => Number(row.productId) === selectedId)
+  const selected = rows.find((row) => Number(row.optionId) === selectedId)
+    || ((rulesQuery.data || []) as any[]).find((row) => Number(row.optionId) === selectedId)
     || null;
 
   const save = () => {
@@ -202,7 +203,7 @@ export default function AdminVipInstallmentProductsPanel() {
     }
 
     mutation.mutate({
-      productId: Number(selected.productId),
+      optionId: Number(selected.optionId),
       enabled: form.enabled,
       minOrderCents,
 
@@ -309,7 +310,7 @@ export default function AdminVipInstallmentProductsPanel() {
             <PackageCheck className="h-5 w-5" />
             <h3 className="text-lg font-black">Produtos liberados</h3>
           </div>
-          <p className="mt-1 text-xs text-slate-400">Cada modalidade possui sua própria regra financeira. Diário, Semanal e Mensal não compartilham juros, parcelas ou entrada.</p>
+          <p className="mt-1 text-xs text-slate-400">Cada categoria do produto possui sua própria regra. Ex.: NOME ALEATÓRIO, PRIMEIRO NOME e NOME COMPLETO são configurados separadamente.</p>
         </div>
         <span className="rounded-full border border-cyan-400/25 bg-cyan-500/10 px-3 py-1 text-[10px] font-black uppercase text-cyan-200">
           {rows.filter((row) => row.enabled).length} ativos
@@ -318,7 +319,7 @@ export default function AdminVipInstallmentProductsPanel() {
 
       <div className="relative mt-4">
         <Search className="absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 text-slate-500" />
-        <input value={search} onChange={(event) => setSearch(event.target.value)} placeholder="Buscar produto" className="w-full rounded-xl border border-white/10 bg-slate-950/80 py-2.5 pl-10 pr-3 text-sm font-semibold text-white outline-none focus:border-cyan-300/50" />
+        <input value={search} onChange={(event) => setSearch(event.target.value)} placeholder="Buscar produto ou categoria" className="w-full rounded-xl border border-white/10 bg-slate-950/80 py-2.5 pl-10 pr-3 text-sm font-semibold text-white outline-none focus:border-cyan-300/50" />
       </div>
 
       <div className="mt-4 grid gap-2">
@@ -327,16 +328,19 @@ export default function AdminVipInstallmentProductsPanel() {
         ) : rows.length === 0 ? (
           <p className="py-5 text-center text-sm text-slate-500">Nenhum produto encontrado.</p>
         ) : rows.map((row) => (
-          <div key={row.productId} className={`flex flex-wrap items-center gap-3 rounded-xl border px-3 py-3 ${row.enabled ? "border-cyan-400/30 bg-cyan-500/[0.07]" : "border-white/10 bg-black/15"}`}>
+          <div key={row.optionId} className={`flex flex-wrap items-center gap-3 rounded-xl border px-3 py-3 ${row.enabled ? "border-cyan-400/30 bg-cyan-500/[0.07]" : "border-white/10 bg-black/15"}`}>
             <div className="min-w-0 flex-1">
               <div className="flex flex-wrap items-center gap-2">
-                <p className="truncate text-sm font-black text-white">{row.productName}</p>
+                <div className="min-w-0">
+                  <p className="truncate text-sm font-black text-white">{row.optionLabel}</p>
+                  <p className="mt-0.5 text-[10px] font-bold uppercase tracking-wide text-cyan-300/75">{row.productName}</p>
+                </div>
                 <span className={`rounded-full border px-2 py-0.5 text-[9px] font-black uppercase ${row.enabled ? "border-emerald-400/30 bg-emerald-500/10 text-emerald-300" : "border-slate-500/25 bg-slate-500/10 text-slate-400"}`}>
                   Parcelamento {row.enabled ? "ON" : "OFF"}
                 </span>
               </div>
               <p className="mt-1 text-[11px] text-slate-500">
-                ID {row.productId}
+                OPÇÃO {row.optionId}
                 {row.allowDaily ? " • Diário" : ""}
                 {row.allowWeekly ? " • Semanal" : ""}
                 {row.allowMonthly ? " • Mensal" : ""}
@@ -354,15 +358,16 @@ export default function AdminVipInstallmentProductsPanel() {
           <div className="max-h-[92vh] w-full max-w-3xl overflow-y-auto rounded-[26px] border border-cyan-400/35 bg-[#07111a] p-5 shadow-2xl">
             <div className="flex items-start justify-between gap-3">
               <div>
-                <p className="text-[10px] font-black uppercase tracking-[0.15em] text-cyan-300">Regra financeira por produto</p>
-                <h3 className="mt-1 text-xl font-black text-white">{selected.productName}</h3>
+                <p className="text-[10px] font-black uppercase tracking-[0.15em] text-cyan-300">Regra financeira por categoria</p>
+                <h3 className="mt-1 text-xl font-black text-white">{selected.optionLabel}</h3>
+                <p className="mt-1 text-xs font-bold uppercase text-cyan-300/70">{selected.productName}</p>
               </div>
               <button type="button" onClick={() => setSelectedId(null)} disabled={mutation.isPending} className="rounded-lg bg-white/5 p-2 text-slate-400"><X className="h-5 w-5" /></button>
             </div>
 
             <div className="mt-5 space-y-4">
               <label className="flex items-center justify-between gap-4 rounded-2xl border border-cyan-400/20 bg-cyan-500/[0.06] p-4">
-                <div><p className="font-black text-white">Permitir Parcelamento VIP</p><p className="mt-1 text-xs text-slate-400">Chave geral deste produto.</p></div>
+                <div><p className="font-black text-white">Permitir Parcelamento VIP</p><p className="mt-1 text-xs text-slate-400">Chave geral desta categoria.</p></div>
                 <input type="checkbox" checked={form.enabled} onChange={(event) => setForm((value) => ({ ...value, enabled: event.target.checked }))} className="h-5 w-5 accent-cyan-400" />
               </label>
 
@@ -383,7 +388,7 @@ export default function AdminVipInstallmentProductsPanel() {
               </div>
 
               <button type="button" onClick={save} disabled={mutation.isPending} className="inline-flex min-h-[50px] w-full items-center justify-center gap-2 rounded-xl bg-cyan-400 px-4 text-sm font-black uppercase text-cyan-950 disabled:opacity-50">
-                <Save className="h-4 w-4" /> {mutation.isPending ? "Salvando..." : "Salvar regras do produto"}
+                <Save className="h-4 w-4" /> {mutation.isPending ? "Salvando..." : "Salvar regras da categoria"}
               </button>
             </div>
           </div>
