@@ -241,21 +241,22 @@ export function getVipInstallmentFrequencyRule(
   };
 }
 
-const SELECT_FIELDS = sql.raw(`
-  productId, enabled, minOrderCents, minInstallments, maxInstallments, interestBps,
-  entryMode, entryFixedCents, entryPercentBps,
-  allowDaily, allowWeekly, allowMonthly,
-  dailyMinInstallments, dailyMaxInstallments, dailyInterestBps, dailyEntryMode, dailyEntryFixedCents, dailyEntryPercentBps,
-  weeklyMinInstallments, weeklyMaxInstallments, weeklyInterestBps, weeklyEntryMode, weeklyEntryFixedCents, weeklyEntryPercentBps,
-  monthlyMinInstallments, monthlyMaxInstallments, monthlyInterestBps, monthlyEntryMode, monthlyEntryFixedCents, monthlyEntryPercentBps,
-  dailyMode, notes
-`);
-
 export async function getVipInstallmentProductRule(productId: number): Promise<VipInstallmentProductRule> {
   await ensureVipInstallmentProductRuleInfrastructure();
   const db = (await getDb()) as any;
   if (!db) throw new Error("Banco de dados indisponível.");
-  const result = await db.execute(sql.raw(`SELECT ${SELECT_FIELDS.sql} FROM vipInstallmentProductRules WHERE productId=${Number(productId)} LIMIT 1`));
+  const result = await db.execute(sql`
+    SELECT productId, enabled, minOrderCents, minInstallments, maxInstallments, interestBps,
+           entryMode, entryFixedCents, entryPercentBps,
+           allowDaily, allowWeekly, allowMonthly,
+           dailyMinInstallments, dailyMaxInstallments, dailyInterestBps, dailyEntryMode, dailyEntryFixedCents, dailyEntryPercentBps,
+           weeklyMinInstallments, weeklyMaxInstallments, weeklyInterestBps, weeklyEntryMode, weeklyEntryFixedCents, weeklyEntryPercentBps,
+           monthlyMinInstallments, monthlyMaxInstallments, monthlyInterestBps, monthlyEntryMode, monthlyEntryFixedCents, monthlyEntryPercentBps,
+           dailyMode, notes
+    FROM vipInstallmentProductRules
+    WHERE productId=${productId}
+    LIMIT 1
+  `);
   return mapRule(rowsOf<any>(result)[0], productId);
 }
 
