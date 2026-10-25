@@ -512,6 +512,15 @@ export async function ensureCustomerIdentityInfrastructure(dbArg?: any): Promise
         )
       `));
 
+      // Registros na lixeira não podem reservar chaves normalizadas únicas.
+      // Mantemos todos os dados originais; liberamos apenas as colunas técnicas.
+      await db.execute(sql`
+        UPDATE customers
+        SET normalizedPhone=NULL, normalizedCpf=NULL, normalizedEmail=NULL
+        WHERE deletedAt IS NOT NULL
+          AND (normalizedPhone IS NOT NULL OR normalizedCpf IS NOT NULL OR normalizedEmail IS NOT NULL)
+      `);
+
       const customers = await rows(db, sql`SELECT id, phone, cpf, email FROM customers WHERE deletedAt IS NULL`);
       for (const customer of customers) {
         const phone = normalizeCustomerPhone(customer.phone) || null;
