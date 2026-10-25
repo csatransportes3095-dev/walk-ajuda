@@ -7,7 +7,7 @@ import { requireCustomerSession } from "../customerSession";
 import { getDb, getSetting, upsertSetting } from "../db";
 import { isVipMemberByPhone } from "./vipMemberships";
 import { resolveVipInstallmentCheckoutPricing } from "../vipInstallmentPricing";
-import { getVipInstallmentFrequencyRule, getVipInstallmentProductRule, listVipInstallmentProductRules, saveVipInstallmentProductRule } from "../vipInstallmentProductRules";
+import { getVipInstallmentFrequencyRule, getVipInstallmentProductRule } from "../vipInstallmentProductRules";
 import { getVipInstallmentOptionFrequencyRule, getVipInstallmentOptionRule, listVipInstallmentOptionRules, saveVipInstallmentOptionRule } from "../vipInstallmentOptionRules";
 import { prepareVipInstallmentCheckoutIntent, cancelVipInstallmentCheckoutIntent, finalizeVipInstallmentCheckoutIntent, submitVipInstallmentProof, confirmVipInstallmentPayment, recoverVipInstallmentCheckoutOrder, changeVipInstallmentDueDate, addVipInstallmentAdminNote, cancelVipInstallmentPlan, payoffVipInstallmentPlan, rejectVipInstallmentProof } from "../vipInstallmentContracts";
 
