@@ -9,6 +9,7 @@ import { getDb } from "./db";
 const hash = (s:string)=>createHash("sha256").update(s).digest("hex");
 const configSchema=z.object({
  enabled:z.boolean(),
+ ordersEnabled:z.boolean().default(false),
  welcome:z.string().max(6000),
  menu:z.array(z.string().max(6000)).length(9),
  whatsappMode:z.number().int().min(-1).max(1),
@@ -20,7 +21,7 @@ const configSchema=z.object({
  rules:z.array(z.object({trigger:z.string().max(120),reply:z.string().max(6000),mode:z.enum(["exact","contains"]),enabled:z.boolean()})).max(100)
 });
 type RemoteConfig=z.infer<typeof configSchema>;
-const initial:RemoteConfig={enabled:false,welcome:"",menu:Array(9).fill(""),whatsappMode:-1,pauseMinutes:60,scheduleOn:false,scheduleStart:"09:00",scheduleEnd:"18:00",blocked:"",rules:[]};
+const initial:RemoteConfig={ordersEnabled:false,enabled:false,welcome:"",menu:Array(9).fill(""),whatsappMode:-1,pauseMinutes:60,scheduleOn:false,scheduleStart:"09:00",scheduleEnd:"18:00",blocked:"",rules:[]};
 let ready:Promise<void>|undefined;
 function ensure() {
  if(!ready) ready=(async()=>{
@@ -59,7 +60,7 @@ function mergeWithoutDeleting(remote:RemoteConfig, local:RemoteConfig):RemoteCon
  const rules=remote.rules.slice();
  for(const r of local.rules){const k=r.trigger.trim().toLowerCase()+"|"+r.mode;if(!seen.has(k) && rules.length<100){rules.push(r);seen.add(k)}}
  const blocked=[...new Set([...remote.blocked.split(/[\n;,]/),...local.blocked.split(/[\n;,]/)].map(v=>v.trim()).filter(Boolean))].join("\n").slice(0,10000);
- return {...remote,welcome:remote.welcome.trim()?remote.welcome:local.welcome,
+ return {...remote,ordersEnabled:remote.ordersEnabled,welcome:remote.welcome.trim()?remote.welcome:local.welcome,
  menu:remote.menu.map((v,i)=>v.trim()?v:local.menu[i]),rules,blocked};
 }
 export const h2AutoAdminRouter=router({
