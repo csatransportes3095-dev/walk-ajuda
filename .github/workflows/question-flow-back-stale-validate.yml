@@ -1,0 +1,43 @@
+name: Validate question back stale config
+on:
+  push:
+    branches: [fix/question-flow-back-stale-config-20261025]
+    paths:
+      - 'client/src/pages/Home.tsx'
+      - '.github/workflows/question-flow-back-stale-validate.yml'
+permissions:
+  contents: read
+jobs:
+  validate:
+    runs-on: ubuntu-latest
+    timeout-minutes: 12
+    steps:
+      - uses: actions/checkout@v4
+      - uses: pnpm/action-setup@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+          cache: pnpm
+      - run: pnpm install --frozen-lockfile
+      - name: Verify back navigation and current-message scope
+        run: |
+          node --input-type=module <<'JS'
+          import fs from 'node:fs';
+          const home=fs.readFileSync('client/src/pages/Home.tsx','utf8');
+          const required=[
+            'const goBackQuestion = () =>',
+            'const currentFlowMessage =',
+            'onClick={goBackQuestion}',
+            'if (!keepIds.has(question.id)) delete nextAnswers[question.id]',
+            'setSelectedOption(freshOption)',
+            'normalizeConditionalValue(rule.answer) === normalizeConditionalValue(currentAnswer)'
+          ];
+          for (const needle of required) if (!home.includes(needle)) throw new Error('missing '+needle);
+          if (home.includes('{flowState.message}</div>')) throw new Error('global stale message renderer remains');
+          console.log('BACK_FLOW_STRUCTURE_OK');
+          JS
+      - name: Flow engine regression
+        run: |
+          node --experimental-strip-types --input-type=module -e "import { applyQuestionFlow } from './client/src/lib/conditionalQuestionFlow.ts'; const qs=[{id:1},{id:2},{id:3}]; let r=applyQuestionFlow(qs,{1:'SIM'},[]); if(r.ended||r.questions.length!==3) throw new Error('continue'); r=applyQuestionFlow(qs,{2:'NAO'},[{questionId:2,answer:'NÃO',action:'message',message:'fim'}]); if(!r.ended||r.message!=='fim'||r.questions.at(-1)?.id!==2) throw new Error('message'); console.log('FLOW_ENGINE_OK');"
+      - name: Build
+        run: pnpm build
