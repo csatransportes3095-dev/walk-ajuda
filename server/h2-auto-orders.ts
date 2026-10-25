@@ -152,7 +152,7 @@ export function registerH2AutoOrdersRoutes(app:Express){
    const s=sessions[0];if(!s)return reply(res,403,{error:"authentication_required"});
    const authDb=await getDb();if(!authDb || !(await isOwnSiteEmailAuthorized(authDb,String(s.current_email))))return reply(res,403,{error:"authentication_required"});
    const orders=await rows(sql`SELECT h.id,h.registrationId,h.orderNumber,h.status, st.label AS statusLabel, h.serviceName,h.serviceOption,h.createdAt
-    FROM orderStatusHistory h LEFT JOIN orderStatusTypes st ON st.`key`=h.status INNER JOIN accessCodePhones a ON a.id=h.registrationId
+    FROM orderStatusHistory h LEFT JOIN orderStatusTypes st ON st.${sql.identifier("key")}=h.status INNER JOIN accessCodePhones a ON a.id=h.registrationId
     AND a.deletedAt IS NULL AND a.accessedAt>=${s.customer_created}
     AND RIGHT(REGEXP_REPLACE(a.phone,'[^0-9]',''),11)=${String(s.customer_phone).replace(/\D/g,'').slice(-11)}
     WHERE RIGHT(REGEXP_REPLACE(h.customerPhone,'[^0-9]',''),11)=${String(s.customer_phone).replace(/\D/g,"").slice(-11)}
