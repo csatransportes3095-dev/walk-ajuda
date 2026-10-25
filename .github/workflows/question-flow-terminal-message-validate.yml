@@ -1,0 +1,38 @@
+name: Validate terminal question message
+on:
+  push:
+    branches: [fix/question-flow-terminal-message-20261025]
+    paths:
+      - 'client/src/pages/Home.tsx'
+      - '.github/workflows/question-flow-terminal-message-validate.yml'
+permissions:
+  contents: read
+jobs:
+  validate:
+    runs-on: ubuntu-latest
+    timeout-minutes: 12
+    steps:
+      - uses: actions/checkout@v4
+      - uses: pnpm/action-setup@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+          cache: pnpm
+      - run: pnpm install --frozen-lockfile
+      - name: Verify terminal message state
+        run: |
+          node --input-type=module <<'JS'
+          import fs from 'node:fs';
+          const home=fs.readFileSync('client/src/pages/Home.tsx','utf8');
+          for (const needle of [
+            'const [questionFlowEndMessage, setQuestionFlowEndMessage]',
+            'setQuestionFlowEndMessage(state.message)',
+            'questionFlowEndMessage ? (',
+            'Questionário encerrado conforme a regra configurada pelo administrador.',
+            'setStep("cadastro")'
+          ]) if(!home.includes(needle)) throw new Error('missing '+needle);
+          if(home.includes('if (state.message) toast.info(state.message')) throw new Error('old toast-only behavior remains');
+          console.log('TERMINAL_MESSAGE_OK');
+          JS
+      - name: Build
+        run: pnpm build

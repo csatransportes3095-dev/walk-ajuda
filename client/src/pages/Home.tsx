@@ -499,6 +499,8 @@ export default function Home() {
   const [postOrderReferralSaving, setPostOrderReferralSaving] = useState(false);
   const [highlightedAnswer, setHighlightedAnswer] = useState<{ qId: number; label: string } | null>(null);
   const [currentQuestionIndex, setCurrentQuestionIndex] = useState(0);
+  const [questionFlowEndMessage, setQuestionFlowEndMessage] = useState<string | null>(null);
+
 
   // Mantém produto/opção selecionados sincronizados com o catálogo mais recente.
   // Evita usar regras antigas após o ADM alterar perguntas/fluxos em outra aba.
@@ -951,7 +953,7 @@ export default function Home() {
     } else if (needsFileUpload(product, option)) {
       setStep('upload');
     } else if (option?.questions && option.questions.length > 0) {
-      setStep('questions'); setCurrentQuestionIndex(0);
+      setQuestionFlowEndMessage(null); setStep('questions'); setCurrentQuestionIndex(0);
     } else {
       setStep('cadastro');
       setCadastroSubStep('dados');
@@ -2101,7 +2103,7 @@ export default function Home() {
     } else if (needsFileUpload(selectedProduct, option)) {
       setStep("upload");
     } else if (option.questions && option.questions.length > 0) {
-      setStep("questions"); setCurrentQuestionIndex(0);
+      setQuestionFlowEndMessage(null); setStep("questions"); setCurrentQuestionIndex(0);
     } else {
       setStep("cadastro"); setCadastroSubStep('dados');
     }
@@ -2845,7 +2847,7 @@ export default function Home() {
       if (reqSrc?.requireAlvara === 1 && !alvaraFile && !restoredFileUrls.alvara) { toast.error('Selecione o Alvará'); return; }
       if (reqSrc?.requireCondutaxi === 1 && !condutaxiFile && !restoredFileUrls.condutaxi) { toast.error('Selecione o Condutaxi'); return; }
     }
-    if (hasQuestions) { setStep("questions"); setCurrentQuestionIndex(0); } else { setStep("cadastro"); setCadastroSubStep('dados'); }
+    if (hasQuestions) { setQuestionFlowEndMessage(null); setStep("questions"); setCurrentQuestionIndex(0); } else { setStep("cadastro"); setCadastroSubStep('dados'); }
   };
 
   // ========== RENDER ==========
@@ -3471,7 +3473,7 @@ export default function Home() {
               <button onClick={() => {
                 if (!carDocument && !restoredFileUrls.carDocument) { toast.error("Selecione um documento PDF"); return; }
                 if (selectedProduct?.showYearField === 1 && !carDocumentYear) { toast.error("Selecione o ano"); return; }
-                if (hasQuestions) { setStep("questions"); setCurrentQuestionIndex(0); } else { setStep("cadastro"); setCadastroSubStep('dados'); }
+                if (hasQuestions) { setQuestionFlowEndMessage(null); setStep("questions"); setCurrentQuestionIndex(0); } else { setStep("cadastro"); setCadastroSubStep('dados'); }
               }} className="w-full px-4 py-3 bg-gradient-to-r from-primary to-purple-600 hover:from-primary/80 hover:to-purple-600/80 text-white font-semibold rounded-lg transition-all duration-300 transform hover:scale-105">
                 Próximo
               </button>
@@ -3634,7 +3636,10 @@ export default function Home() {
 
         const finishQuestionnaireFlow = (state: ReturnType<typeof resolveFlow>) => {
           if (!state.ended) return false;
-          if (state.message) toast.info(state.message, { duration: 6000 });
+          if (state.message) {
+            setQuestionFlowEndMessage(state.message);
+            return true;
+          }
           setStep("cadastro");
           setCadastroSubStep('dados');
           return true;
@@ -3905,6 +3910,33 @@ export default function Home() {
         return (
                 <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/70 backdrop-blur-sm p-4" style={{ overscrollBehavior: 'contain' }}>
           <div className="rounded-2xl max-w-md w-full shadow-2xl flex flex-col" style={{ backgroundColor: '#020617', border: '1px solid rgba(37,99,235,0.25)', maxHeight: '90dvh' }}>
+            {questionFlowEndMessage ? (
+              <>
+                <div className="px-6 py-8 text-center">
+                  <div className="mx-auto mb-4 flex h-14 w-14 items-center justify-center rounded-full border border-cyan-400/40 bg-cyan-500/10 text-2xl">✅</div>
+                  <h3 className="text-xl font-bold text-white mb-4">Informações Adicionais</h3>
+                  <div className="rounded-xl border border-cyan-400/40 bg-cyan-500/10 px-4 py-5 text-base leading-relaxed text-cyan-100">
+                    {questionFlowEndMessage}
+                  </div>
+                  <p className="mt-4 text-xs text-white/50">Questionário encerrado conforme a regra configurada pelo administrador.</p>
+                </div>
+                <div className="px-6 pb-6">
+                  <button
+                    type="button"
+                    onClick={() => {
+                      setQuestionFlowEndMessage(null);
+                      setStep("cadastro");
+                      setCadastroSubStep('dados');
+                    }}
+                    className="w-full px-4 py-3 font-bold rounded-xl transition-all duration-200 active:scale-95"
+                    style={{ backgroundColor: '#2563EB', color: '#FFFFFF', boxShadow: '0 0 16px rgba(37,99,235,0.5)', border: '1px solid rgba(37,99,235,0.6)' }}
+                  >
+                    CONTINUAR
+                  </button>
+                </div>
+              </>
+            ) : (
+              <>
             {/* Cabeçalho fixo */}
             <div className="px-6 pt-6 pb-4 flex-shrink-0">
             <h3 className="text-xl font-bold text-white mb-4 text-center tracking-wide">Informações Adicionais</h3>
@@ -3992,6 +4024,8 @@ export default function Home() {
                   <button onClick={() => { window.location.reload(); }} className="w-full px-4 py-3 bg-red-700 hover:bg-red-600 text-white font-semibold rounded-xl transition-colors text-sm">Fechar</button>
                 </div>
               </div>
+            )}
+              </>
             )}
           </div>
         </div>
@@ -4099,6 +4133,7 @@ export default function Home() {
               </button>
               <button onClick={() => {
                 if (hasQuestions) {
+                  setQuestionFlowEndMessage(null);
                   setStep("questions");
                   setCurrentQuestionIndex(0);
                 } else if (isPDFOnly) {
