@@ -29,8 +29,9 @@ async function authenticated(req:Request){
  const deviceId=String(req.header("x-h2-device-id")||"");
  const token=String(req.header("x-h2-device-token")||"");
  if(!/^[a-f0-9]{24}$/.test(deviceId)||!/^[a-f0-9]{64}$/.test(token))return null;
- const devices=await rows(sql`SELECT id,token_hash FROM h2_auto_devices WHERE id=${deviceId} LIMIT 1`);
+ const devices=await rows(sql`SELECT id,token_hash, JSON_UNQUOTE(JSON_EXTRACT(config_json, '$.ordersEnabled')) AS orders_enabled FROM h2_auto_devices WHERE id=${deviceId} LIMIT 1`);
  const expected=String(devices[0]?.token_hash||"");
+ if(String(devices[0]?.orders_enabled)!=="true")return null;
  if(!/^[a-f0-9]{64}$/.test(expected))return null;
  if(!timingSafeEqual(Buffer.from(expected,"hex"),Buffer.from(hash(token),"hex")))return null;
  return deviceId;
