@@ -173,7 +173,25 @@ async function ensureReferralDeclaration(db: any, clientId: number, route: Sprea
         (${clientId}, ${route}, ${answer}, ${referrerName || null}, ${referrerPhone || null}, ${referrerCustomerId})
     `);
   } catch (error: any) {
-    if (!String(error?.code || "").includes("ER_DUP_ENTRY")) throw error;
+    if (String(error?.code || "").includes("ER_DUP_ENTRY")) return;
+
+    // Compatibilidade urgente: bancos antigos podem ter a tabela criada antes
+    // da coluna referrerCustomerId. O acesso ao módulo não pode cair por isso.
+    const message = String(error?.message || "");
+    if (
+      String(error?.code || "") === "ER_BAD_FIELD_ERROR" &&
+      message.includes("referrerCustomerId")
+    ) {
+      await db.execute(sql`
+        INSERT INTO spreadsheetReferralDeclarations
+          (clientId, route, answer, referrerName, referrerPhone)
+        VALUES
+          (${clientId}, ${route}, ${answer}, ${referrerName || null}, ${referrerPhone || null})
+      `);
+      return;
+    }
+
+    throw error;
   }
 }
 
