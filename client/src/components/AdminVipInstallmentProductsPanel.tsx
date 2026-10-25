@@ -8,11 +8,15 @@ type TriState = "inherit" | "yes" | "no";
 type FormState = {
   enabled: boolean;
   minOrder: string;
+  minInstallments: string;
   maxInstallments: string;
   interestPercent: string;
+  entryMode: "none" | "fixed" | "percent";
+  entryValue: string;
   allowDaily: TriState;
   allowWeekly: TriState;
   allowMonthly: TriState;
+  dailyMode: "all_days" | "mon_sat";
   notes: string;
 };
 
@@ -53,11 +57,15 @@ export default function AdminVipInstallmentProductsPanel() {
   const [form, setForm] = useState<FormState>({
     enabled: false,
     minOrder: "",
+    minInstallments: "2",
     maxInstallments: "",
     interestPercent: "",
-    allowDaily: "inherit",
-    allowWeekly: "inherit",
-    allowMonthly: "inherit",
+    entryMode: "none",
+    entryValue: "",
+    allowDaily: "no",
+    allowWeekly: "yes",
+    allowMonthly: "no",
+    dailyMode: "all_days",
     notes: "",
   });
 
@@ -84,11 +92,15 @@ export default function AdminVipInstallmentProductsPanel() {
     setForm({
       enabled: Boolean(row.enabled),
       minOrder: centsToInput(row.minOrderCents),
+      minInstallments: row.minInstallments == null ? "2" : String(row.minInstallments),
       maxInstallments: row.maxInstallments == null ? "" : String(row.maxInstallments),
       interestPercent: row.interestBps == null ? "" : String(Number(row.interestBps) / 100).replace(".", ","),
+      entryMode: row.entryMode === "fixed" || row.entryMode === "percent" ? row.entryMode : "none",
+      entryValue: row.entryMode === "fixed" ? centsToInput(row.entryFixedCents) : row.entryMode === "percent" ? String(Number(row.entryPercentBps || 0) / 100).replace(".", ",") : "",
       allowDaily: triFrom(row.allowDaily),
       allowWeekly: triFrom(row.allowWeekly),
       allowMonthly: triFrom(row.allowMonthly),
+      dailyMode: row.dailyMode === "mon_sat" ? "mon_sat" : "all_days",
       notes: String(row.notes || ""),
     });
   };
@@ -111,9 +123,34 @@ export default function AdminVipInstallmentProductsPanel() {
       return;
     }
 
-    const maxInstallments = form.maxInstallments.trim() ? Number(form.maxInstallments) : null;
-    if (maxInstallments != null && (!Number.isInteger(maxInstallments) || maxInstallments < 2 || maxInstallments > 120)) {
-      toast.error("Máximo de parcelas do produto inválido.");
+    const minInstallments = Number(form.minInstallments);
+    const maxInstallments = Number(form.maxInstallments);
+    if (!Number.isInteger(minInstallments) || minInstallments < 2 || minInstallments > 120) {
+      toast.error("Mínimo de parcelas inválido.");
+      return;
+    }
+    if (!Number.isInteger(maxInstallments) || maxInstallments < minInstallments || maxInstallments > 120) {
+      toast.error("Máximo de parcelas inválido.");
+      return;
+    }
+    if (interest == null) {
+      toast.error("Informe os juros deste produto.");
+      return;
+    }
+    const allowDaily = triTo(form.allowDaily) === true;
+    const allowWeekly = triTo(form.allowWeekly) === true;
+    const allowMonthly = triTo(form.allowMonthly) === true;
+    if (!allowDaily && !allowWeekly && !allowMonthly) {
+      toast.error("Selecione pelo menos uma periodicidade.");
+      return;
+    }
+    const entryNumeric = form.entryMode === "none" ? 0 : Number(form.entryValue.replace(",", "."));
+    if (form.entryMode !== "none" && (!Number.isFinite(entryNumeric) || entryNumeric <= 0)) {
+      toast.error("Informe uma entrada válida.");
+      return;
+    }
+    if (form.entryMode === "percent" && entryNumeric >= 100) {
+      toast.error("A entrada percentual deve ser menor que 100%.");
       return;
     }
 
@@ -121,11 +158,16 @@ export default function AdminVipInstallmentProductsPanel() {
       productId: Number(selected.productId),
       enabled: form.enabled,
       minOrderCents,
+      minInstallments,
       maxInstallments,
-      interestBps: interest == null ? null : Math.round(interest * 100),
-      allowDaily: triTo(form.allowDaily),
-      allowWeekly: triTo(form.allowWeekly),
-      allowMonthly: triTo(form.allowMonthly),
+      interestBps: Math.round(interest * 100),
+      entryMode: form.entryMode,
+      entryFixedCents: form.entryMode === "fixed" ? Math.round(entryNumeric * 100) : null,
+      entryPercentBps: form.entryMode === "percent" ? Math.round(entryNumeric * 100) : null,
+      allowDaily,
+      allowWeekly,
+      allowMonthly,
+      dailyMode: form.dailyMode,
       notes: form.notes.trim() || null,
     });
   };
@@ -167,7 +209,7 @@ export default function AdminVipInstallmentProductsPanel() {
                   Parcelamento {row.enabled ? "ON" : "OFF"}
                 </span>
               </div>
-              <p className="mt-1 text-[11px] text-slate-500">ID {row.productId}{row.maxInstallments != null ? ` • máximo ${row.maxInstallments}x` : " • máximo herdado do Global"}{row.interestBps != null ? ` • ${Number(row.interestBps) / 100}%` : " • juros herdados"}</p>
+              <p className="mt-1 text-[11px] text-slate-500">ID {row.productId}{row.minInstallments != null && row.maxInstallments != null ? ` • ${row.minInstallments}x a ${row.maxInstallments}x` : " • parcelas não configuradas"}{row.interestBps != null ? ` • ${Number(row.interestBps) / 100}% juros` : " • juros não configurados"}</p>
             </div>
             <button type="button" onClick={() => open(row)} className="inline-flex items-center gap-1.5 rounded-lg border border-cyan-400/25 bg-cyan-500/10 px-3 py-2 text-[10px] font-black uppercase text-cyan-200">
               <Settings2 className="h-3.5 w-3.5" /> Configurar
@@ -194,14 +236,18 @@ export default function AdminVipInstallmentProductsPanel() {
                 <input type="checkbox" checked={form.enabled} onChange={(event) => setForm((value) => ({ ...value, enabled: event.target.checked }))} className="h-5 w-5 accent-cyan-400" />
               </label>
               <label className="text-[11px] font-black uppercase text-slate-300">Valor mínimo da compra<input value={form.minOrder} onChange={(event) => setForm((value) => ({ ...value, minOrder: event.target.value }))} placeholder="Vazio = sem mínimo" className={inputClass} /></label>
-              <label className="text-[11px] font-black uppercase text-slate-300">Máximo de parcelas deste produto<input type="number" min={2} max={120} value={form.maxInstallments} onChange={(event) => setForm((value) => ({ ...value, maxInstallments: event.target.value }))} placeholder="Vazio = usar teto Global" className={inputClass} /><span className="mt-1 block normal-case font-medium text-slate-500">Nunca aumenta acima do Global; apenas restringe.</span></label>
-              <label className="sm:col-span-2 text-[11px] font-black uppercase text-slate-300">Juros deste produto (%)<input inputMode="decimal" value={form.interestPercent} onChange={(event) => setForm((value) => ({ ...value, interestPercent: event.target.value }))} placeholder="Vazio = herdar" className={inputClass} /></label>
+              <label className="text-[11px] font-black uppercase text-slate-300">Mínimo de parcelas<input type="number" min={2} max={120} value={form.minInstallments} onChange={(event) => setForm((value) => ({ ...value, minInstallments: event.target.value }))} className={inputClass} /></label>
+              <label className="text-[11px] font-black uppercase text-slate-300">Máximo de parcelas<input type="number" min={2} max={120} value={form.maxInstallments} onChange={(event) => setForm((value) => ({ ...value, maxInstallments: event.target.value }))} placeholder="Ex.: 6" className={inputClass} /></label>
+              <label className="text-[11px] font-black uppercase text-slate-300">Juros deste produto (%)<input inputMode="decimal" value={form.interestPercent} onChange={(event) => setForm((value) => ({ ...value, interestPercent: event.target.value }))} placeholder="Ex.: 15" className={inputClass} /></label>
+              <label className="text-[11px] font-black uppercase text-slate-300">Entrada / pagamento inicial<select value={form.entryMode} onChange={(event) => setForm((value) => ({ ...value, entryMode: event.target.value as "none" | "fixed" | "percent", entryValue: "" }))} className={inputClass}><option value="none">Sem entrada especial</option><option value="fixed">Valor fixo (R$)</option><option value="percent">Percentual (%)</option></select></label>
+              {form.entryMode !== "none" && <label className="text-[11px] font-black uppercase text-slate-300">{form.entryMode === "fixed" ? "Valor pago hoje (R$)" : "Percentual pago hoje (%)"}<input inputMode="decimal" value={form.entryValue} onChange={(event) => setForm((value) => ({ ...value, entryValue: event.target.value }))} className={inputClass} /></label>}
+              <label className="text-[11px] font-black uppercase text-slate-300">Regra diária<select value={form.dailyMode} onChange={(event) => setForm((value) => ({ ...value, dailyMode: event.target.value as "all_days" | "mon_sat" }))} className={inputClass}><option value="all_days">Todos os dias</option><option value="mon_sat">Segunda a sábado</option></select></label>
               {([['allowDaily','Diário'],['allowWeekly','Semanal'],['allowMonthly','Mensal']] as const).map(([key, label]) => (
-                <label key={key} className="text-[11px] font-black uppercase text-slate-300">{label}<select value={form[key]} onChange={(event) => setForm((value) => ({ ...value, [key]: event.target.value as TriState }))} className={inputClass}><option value="inherit">Herdar</option><option value="yes">Permitir</option><option value="no">Bloquear</option></select></label>
+                <label key={key} className="text-[11px] font-black uppercase text-slate-300">{label}<select value={form[key]} onChange={(event) => setForm((value) => ({ ...value, [key]: event.target.value as TriState }))} className={inputClass}><option value="yes">Permitir</option><option value="no">Bloquear</option></select></label>
               ))}
               <label className="sm:col-span-2 text-[11px] font-black uppercase text-slate-300">Observação<textarea rows={2} value={form.notes} onChange={(event) => setForm((value) => ({ ...value, notes: event.target.value }))} className={inputClass} /></label>
               <div className="sm:col-span-2 rounded-xl border border-amber-400/20 bg-amber-500/[0.06] p-3 text-xs text-amber-100">
-                Ativar este produto não libera ninguém sozinho. Parcelas: Global define a faixa base e Produto/Cliente só podem reduzir o máximo. Juros: Cliente → Produto → Global. Periodicidade: qualquer bloqueio no Global, Produto ou Cliente prevalece.
+                Esta é a única regra financeira usada na compra deste produto. Configure aqui parcelas, juros, entrada e periodicidade. O cliente precisa apenas estar VIP e autorizado para parcelar.
               </div>
               <button type="button" onClick={save} disabled={mutation.isPending} className="sm:col-span-2 inline-flex min-h-[50px] items-center justify-center gap-2 rounded-xl bg-cyan-400 px-4 text-sm font-black uppercase text-cyan-950 disabled:opacity-50">
                 <Save className="h-4 w-4" /> {mutation.isPending ? "Salvando..." : "Salvar regra do produto"}
