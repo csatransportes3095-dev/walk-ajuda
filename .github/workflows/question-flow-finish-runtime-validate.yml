@@ -1,0 +1,41 @@
+name: Validate question flow finish runtime
+on:
+  push:
+    branches: [fix/question-flow-finish-runtime-20261025]
+    paths:
+      - 'client/src/pages/Home.tsx'
+      - '.github/workflows/question-flow-finish-runtime-validate.yml'
+permissions:
+  contents: read
+jobs:
+  validate:
+    runs-on: ubuntu-latest
+    timeout-minutes: 12
+    steps:
+      - uses: actions/checkout@v4
+      - uses: pnpm/action-setup@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+          cache: pnpm
+      - run: pnpm install --frozen-lockfile
+      - name: Runtime flow structure
+        run: |
+          node --input-type=module <<'JS'
+          import fs from 'node:fs';
+          const home=fs.readFileSync('client/src/pages/Home.tsx','utf8');
+          const required=[
+            'const finishQuestionnaireFlow =',
+            'if (finishQuestionnaireFlow(nextFlowState)) return;',
+            'if (finishQuestionnaireFlow(nextFlowState2)) return;',
+            'if (finishQuestionnaireFlow(latestFlowState)) return;',
+            'setCadastroSubStep(\'dados\')'
+          ];
+          for (const needle of required) if (!home.includes(needle)) throw new Error('missing '+needle);
+          console.log('RUNTIME_FLOW_STRUCTURE_OK');
+          JS
+      - name: Existing flow engine tests
+        run: |
+          node --experimental-strip-types --input-type=module -e "import { applyQuestionFlow } from './client/src/lib/conditionalQuestionFlow.ts'; const qs=[{id:1},{id:2},{id:3},{id:4},{id:5}]; const a=applyQuestionFlow(qs,{4:'NAO'},[{questionId:4,answer:'NAO',action:'finish'}]); if(!a.ended||a.questions.at(-1)?.id!==4) throw new Error('finish failed'); const b=applyQuestionFlow(qs,{4:'NAO'},[{questionId:4,answer:'NAO',action:'message',message:'encerrou'}]); if(!b.ended||b.message!=='encerrou'||b.questions.at(-1)?.id!==4) throw new Error('message failed'); console.log('FLOW_ENGINE_OK');"
+      - name: Build
+        run: pnpm build
