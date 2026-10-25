@@ -1,0 +1,44 @@
+name: Validate VIP product-only rules and due calendar
+on:
+  push:
+    branches: [fix/vip-product-only-rules-due-calendar-20261025]
+    paths:
+      - 'server/vipInstallmentProductRules.ts'
+      - 'server/routers/vipInstallments.ts'
+      - 'client/src/components/AdminVipInstallmentProductsPanel.tsx'
+      - 'client/src/components/AdminVipInstallmentsPanel.tsx'
+      - 'client/src/components/VipInstallmentCheckoutBox.tsx'
+      - '.github/workflows/vip-product-only-due-calendar-validate.yml'
+permissions:
+  contents: read
+jobs:
+  validate:
+    runs-on: ubuntu-latest
+    timeout-minutes: 12
+    steps:
+      - uses: actions/checkout@v4
+      - uses: pnpm/action-setup@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+          cache: pnpm
+      - run: pnpm install --frozen-lockfile
+      - name: Verify VIP product-only rules
+        run: |
+          node --input-type=module <<'JS'
+          import fs from 'node:fs';
+          const productRules=fs.readFileSync('server/vipInstallmentProductRules.ts','utf8');
+          const router=fs.readFileSync('server/routers/vipInstallments.ts','utf8');
+          const productPanel=fs.readFileSync('client/src/components/AdminVipInstallmentProductsPanel.tsx','utf8');
+          const adminPanel=fs.readFileSync('client/src/components/AdminVipInstallmentsPanel.tsx','utf8');
+          const checkout=fs.readFileSync('client/src/components/VipInstallmentCheckoutBox.tsx','utf8');
+          for(const n of ['minInstallments','entryMode','entryFixedCents','entryPercentBps','dailyMode']) if(!productRules.includes(n)) throw new Error('product rule missing '+n);
+          if(router.includes('if (!config.enabled) reason')) throw new Error('global toggle still blocks checkout');
+          if(!router.includes('productRule.entryMode')) throw new Error('entry not resolved from product');
+          if(!adminPanel.includes('somente por produto')) throw new Error('admin simplification missing');
+          if(!productPanel.includes('Mínimo de parcelas') || !productPanel.includes('Entrada / pagamento inicial')) throw new Error('product configuration incomplete');
+          if(!checkout.includes('Calendário das parcelas') || !checkout.includes('Pagamento de hoje')) throw new Error('customer due calendar missing');
+          console.log('VIP_PRODUCT_ONLY_DUE_CALENDAR_OK');
+          JS
+      - name: Build
+        run: pnpm build
