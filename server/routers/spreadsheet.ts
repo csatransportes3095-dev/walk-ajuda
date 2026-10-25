@@ -11,7 +11,7 @@ import {
 } from "../db";
 import { getDb } from "../db";
 import { syncUnifiedCustomerRegistry, requireCompleteMainCustomerProfile } from "../customerIdentity";
-import { findMainCustomerByIdentity, getCustomerRouteRestrictionReason, getRouteAccess, normalizeCustomerPhone, setCustomerRoutePermissions, setCustomerRouteRestrictionReason } from "../customerAccess";
+import { findMainCustomerByIdentity, getCustomerRouteRestrictionReason, getRouteAccess, getRouteReleaseMode, normalizeCustomerPhone, setCustomerRoutePermissions, setCustomerRouteRestrictionReason } from "../customerAccess";
 import { spreadsheetClients, spreadsheetPasswords, spreadsheetSessions, spreadsheetLoginAudit, spreadsheetReferralDeclarations, customers, appSettings, customerPasswordSessions } from "../../drizzle/schema";
 import { eq, and } from "drizzle-orm";
 import { isValidCPF, normalizeCpf } from "@shared/cpf";
@@ -2002,8 +2002,9 @@ export const spreadsheetRouter = router({
         if (!phone) return { allowed: true, allowedRoutes: [] };
         const mainCustomer = await findMainCustomerByIdentity({ phone }, db);
         if (!mainCustomer) return { allowed: true, allowedRoutes: [] };
+        const releaseMode = await getRouteReleaseMode(input.route as any, db);
         const access = await getRouteAccess(mainCustomer.id, db);
-        const allowed = !access.restricted || access.routes.includes(input.route as any);
+        const allowed = releaseMode === 'automatico' || !access.restricted || access.routes.includes(input.route as any);
         const restriction = allowed
           ? null
           : await getCustomerRouteRestrictionReason(mainCustomer.id, input.route as any, db);
@@ -2031,8 +2032,9 @@ export const spreadsheetRouter = router({
         if (!phone) return { allowed: true, allowedRoutes: [] };
         const mainCustomer = await findMainCustomerByIdentity({ phone }, db);
         if (!mainCustomer) return { allowed: true, allowedRoutes: [] };
+        const releaseMode = await getRouteReleaseMode(input.route as any, db);
         const access = await getRouteAccess(mainCustomer.id, db);
-        const allowed = !access.restricted || access.routes.includes(input.route as any);
+        const allowed = releaseMode === 'automatico' || !access.restricted || access.routes.includes(input.route as any);
         const restriction = allowed
           ? null
           : await getCustomerRouteRestrictionReason(mainCustomer.id, input.route as any, db);
