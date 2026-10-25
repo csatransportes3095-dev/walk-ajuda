@@ -1,0 +1,37 @@
+name: Validate loan approval installment schedule
+on:
+  push:
+    branches: [fix/loan-approval-all-installment-dates-20261025]
+    paths:
+      - 'client/src/pages/AdminLoans.tsx'
+      - '.github/workflows/loan-approval-installment-schedule-validate.yml'
+permissions:
+  contents: read
+jobs:
+  validate:
+    runs-on: ubuntu-latest
+    timeout-minutes: 12
+    steps:
+      - uses: actions/checkout@v4
+      - uses: pnpm/action-setup@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+          cache: pnpm
+      - run: pnpm install --frozen-lockfile
+      - name: Verify installment schedule message
+        run: |
+          node --input-type=module <<'JS'
+          import fs from 'node:fs';
+          const file=fs.readFileSync('client/src/pages/AdminLoans.tsx','utf8');
+          for (const needle of [
+            'trpc.loans.getLoan.useQuery',
+            '*VENCIMENTO DAS PARCELAS:*',
+            'installmentScheduleText',
+            'installmentRows.length',
+            'Guarde esta mensagem para acompanhar as datas de vencimento.'
+          ]) if(!file.includes(needle)) throw new Error('missing '+needle);
+          console.log('INSTALLMENT_SCHEDULE_MESSAGE_OK');
+          JS
+      - name: Build
+        run: pnpm build
