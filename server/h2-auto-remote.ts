@@ -52,7 +52,7 @@ export const h2AutoAdminRouter=router({
    await ensure(); const id=randomBytes(12).toString("hex"),code=String(randomBytes(4).readUInt32BE()%100000000).padStart(8,"0");
    const db=await getDb();if(!db)throw new Error("DB unavailable");
    await db.execute(sql`INSERT INTO h2_auto_devices (id,label,pairing_hash,pairing_expires,token_hash,config_json,revision,created_at) VALUES (
-   ${id},${input.label},${hash(code)},${Date.now()+10*60*1000},NULL,${JSON.stringify(initial)},1,${Date.now()})`);
+   ${id},${input.label},${hash(code)},${Date.now()+10*60*1000},NULL,${JSON.stringify(initial)},0,${Date.now()})`);
    return {id,code,expiresInSeconds:600};
  }),
  pairCode:adminProcedure.input(z.object({id:z.string().length(24)})).mutation(async({input})=>{
