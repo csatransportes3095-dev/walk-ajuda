@@ -1,0 +1,36 @@
+name: Validate customer parcelas vip home card
+on:
+  push:
+    branches: [feat/customer-parcelas-vip-home-card-20261025]
+    paths:
+      - 'client/src/pages/Home.tsx'
+      - '.github/workflows/customer-parcelas-vip-home-card-validate.yml'
+permissions:
+  contents: read
+jobs:
+  validate:
+    runs-on: ubuntu-latest
+    timeout-minutes: 12
+    steps:
+      - uses: actions/checkout@v4
+      - uses: pnpm/action-setup@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+          cache: pnpm
+      - run: pnpm install --frozen-lockfile
+      - name: Verify direct parcelas card
+        run: |
+          node --input-type=module <<'JS'
+          import fs from 'node:fs';
+          const home=fs.readFileSync('client/src/pages/Home.tsx','utf8');
+          for (const needle of [
+            "PAGUE SUAS PARCELAS",
+            "window.location.href = '/parcelas-vip'",
+            "grid grid-cols-2 gap-2",
+            "CreditCard"
+          ]) if (!home.includes(needle)) throw new Error('missing '+needle);
+          console.log('PARCELAS_HOME_CARD_OK');
+          JS
+      - name: Build
+        run: pnpm build
