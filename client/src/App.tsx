@@ -85,6 +85,7 @@ import LocadoraPortal from "./pages/LocadoraPortal";
 import AdminConsultas from "./pages/AdminConsultas";
 import AdminVehicleUsage from "./pages/AdminVehicleUsage";
 import AdminWhatsappTemplates from "./pages/AdminWhatsappTemplates";
+import AdminH2Auto from "./pages/AdminH2Auto";
 import AdminCartoesUsers from "./pages/AdminCartoesUsers";
 import AdminOnlineSupport from "./pages/AdminOnlineSupport";
 import AdminChatFlow from "./pages/AdminChatFlow";
@@ -359,6 +360,7 @@ function Router() {
       <Route path={"/adm/placa"}>
         <AdminGuard><AdminVehicleUsage /></AdminGuard>
       </Route>
+      <Route path={"/admin/h2-auto"}><AdminGuard><AdminH2Auto /></AdminGuard></Route>
       <Route path={"/admin/whatsapp-templates"}>
         <AdminGuard><AdminWhatsappTemplates /></AdminGuard>
       </Route>
