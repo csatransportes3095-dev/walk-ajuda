@@ -33,6 +33,7 @@ export default function AdminH2Auto(){
  </select>
  </label>
  <label className="flex items-center gap-2"><input type="checkbox" checked={value.enabled} onChange={e=>change("enabled",e.target.checked)}/><Power className="h-4 w-4"/> Robô habilitado remotamente</label>
+ <label className="flex items-center gap-2"><input type="checkbox" checked={Boolean(value.ordersEnabled)} onChange={e=>change("ordersEnabled",e.target.checked)}/>Consulta de pedidos por WhatsApp (exige APK atualizado e teste)</label>
  <label className="flex items-center gap-2"><Clock className="h-4 w-4"/>Pausa atendente (min)<input type="number" min={1} max={1440} className={field} value={value.pauseMinutes} onChange={e=>change("pauseMinutes",Number(e.target.value))}/></label>
  <label className="flex items-center gap-2"><input type="checkbox" checked={value.scheduleOn} onChange={e=>change("scheduleOn",e.target.checked)}/> Horários ativos</label>
  <div className="flex gap-2"><input className={field} value={value.scheduleStart} onChange={e=>change("scheduleStart",e.target.value)} placeholder="09:00"/><input className={field} value={value.scheduleEnd} onChange={e=>change("scheduleEnd",e.target.value)} placeholder="18:00"/></div>
