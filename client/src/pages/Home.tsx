@@ -500,6 +500,25 @@ export default function Home() {
   const [highlightedAnswer, setHighlightedAnswer] = useState<{ qId: number; label: string } | null>(null);
   const [currentQuestionIndex, setCurrentQuestionIndex] = useState(0);
 
+  // Mantém produto/opção selecionados sincronizados com o catálogo mais recente.
+  // Evita usar regras antigas após o ADM alterar perguntas/fluxos em outra aba.
+  useEffect(() => {
+    if (!products || !selectedProduct) return;
+    const freshProduct = products.find(product => product.id === selectedProduct.id);
+    if (!freshProduct) return;
+
+    if (freshProduct !== selectedProduct) {
+      setSelectedProduct(freshProduct);
+    }
+
+    if (selectedOption) {
+      const freshOption = freshProduct.options.find(option => option.id === selectedOption.id) || null;
+      if (freshOption && freshOption !== selectedOption) {
+        setSelectedOption(freshOption);
+      }
+    }
+  }, [products, selectedProduct?.id, selectedOption?.id]);
+
   // ===== RETOMADA DE PROGRESSO =====
   const PROGRESS_KEY = 'walk_order_progress';
   const UPLOADED_FILES_KEY = 'walk_uploaded_files';
@@ -3524,6 +3543,44 @@ export default function Home() {
         const currentQ = visibleQs[safeIndex];
         const isLastQuestion = safeIndex === totalQs - 1;
         const progressPct = totalQs > 0 ? Math.round(((safeIndex) / totalQs) * 100) : 0;
+        const currentAnswer = currentQ ? questionAnswers[currentQ.id]?.trim() : '';
+        const currentFlowRule = currentQ && currentAnswer
+          ? flowRules.find(rule =>
+              rule.questionId === currentQ.id &&
+              normalizeConditionalValue(rule.answer) === normalizeConditionalValue(currentAnswer)
+            )
+          : undefined;
+        const currentFlowMessage =
+          currentFlowRule?.action === 'message' ? (currentFlowRule.message || null) : null;
+
+        const goBackQuestion = () => {
+          if (safeIndex <= 0) return;
+          const targetIndex = safeIndex - 1;
+          const targetQuestion = visibleQs[targetIndex];
+          if (!targetQuestion) return;
+
+          const currentOrder = buildOrderedQs(questionAnswers);
+          const targetPos = currentOrder.findIndex(item => item.id === targetQuestion.id);
+          const keepIds = new Set(
+            (targetPos >= 0 ? currentOrder.slice(0, targetPos + 1) : visibleQs.slice(0, targetIndex + 1))
+              .map(item => item.id)
+          );
+
+          const nextAnswers = { ...questionAnswers };
+          for (const question of allQsModal) {
+            if (!keepIds.has(question.id)) delete nextAnswers[question.id];
+          }
+          setQuestionAnswers(nextAnswers);
+          setQuestionAudioAnswers(prev => {
+            const next = { ...prev };
+            for (const id of Object.keys(next)) {
+              if (!keepIds.has(Number(id))) delete next[Number(id)];
+            }
+            return next;
+          });
+          setBlockedByQuestion(null);
+          setCurrentQuestionIndex(targetIndex);
+        };
 
         // Ao alterar uma resposta, respostas posteriores e descendentes deixam de ser válidas.
         // Isso evita que uma regra antiga de "Encerrar" continue afetando o novo caminho.
@@ -3882,8 +3939,8 @@ export default function Home() {
                 )}
                 <div>
                   {renderQuestionInput(currentQ)}
-                  {flowState.ended && flowState.message && questionAnswers[currentQ.id] && (
-                    <div className="mt-3 rounded border border-cyan-400/30 bg-cyan-500/10 p-3 text-sm text-cyan-100">{flowState.message}</div>
+                  {currentFlowMessage && questionAnswers[currentQ.id] && (
+                    <div className="mt-3 rounded border border-cyan-400/30 bg-cyan-500/10 p-3 text-sm text-cyan-100">{currentFlowMessage}</div>
                   )}
                 </div>
               </div>
@@ -3894,7 +3951,7 @@ export default function Home() {
             <div className="flex gap-3">
               {safeIndex > 0 && (
                 <button
-                  onClick={() => setCurrentQuestionIndex(safeIndex - 1)}
+                  onClick={goBackQuestion}
                   className="flex-1 px-4 py-3 font-semibold rounded-xl transition-all duration-200 active:scale-95"
                   style={{ backgroundColor: '#1E293B', color: '#94A3B8', border: '1px solid rgba(255,255,255,0.08)' }}
                 >
