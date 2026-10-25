@@ -601,6 +601,98 @@ function OptionCard({ opt, productId, onUpdate, onAutoScheduleChange, onDelete, 
   </div>;
 
 
+
+  // QUESTION_TREE_UNLIMITED_DEPTH_20261024
+  // Renderiza perguntas condicionais como uma arvore recursiva. Assim qualquer
+  // sub-pergunta pode criar filhos e receber as mesmas regras de fluxo.
+  const parseConditionalOptions = (question: QuestionType): string[] => {
+    if (question.fieldType !== 'select' || !question.options) return [];
+    try {
+      const parsed = JSON.parse(question.options);
+      if (Array.isArray(parsed)) return parsed
+        .map((item: any) => typeof item === 'string' ? item : String(item?.label || ''))
+        .map((label: string) => label.trim())
+        .filter(Boolean);
+    } catch {}
+    return question.options.split(',').map(label => label.trim()).filter(Boolean);
+  };
+
+  const conditionalTreeStyle = (depth: number) => {
+    const styles = [
+      { color: '#22d3ee', border: 'rgba(34,211,238,.35)', bg: 'rgba(34,211,238,.05)' },
+      { color: '#c084fc', border: 'rgba(192,132,252,.35)', bg: 'rgba(192,132,252,.05)' },
+      { color: '#34d399', border: 'rgba(52,211,153,.35)', bg: 'rgba(52,211,153,.05)' },
+      { color: '#fbbf24', border: 'rgba(251,191,36,.35)', bg: 'rgba(251,191,36,.05)' },
+    ];
+    return styles[Math.max(0, depth - 1) % styles.length];
+  };
+
+  const renderConditionalQuestion = (question: QuestionType, depth: number): React.ReactNode => {
+    const options = parseConditionalOptions(question);
+    const children = opt.questions
+      .filter(child => child.parentQuestionId === question.id)
+      .sort((a, b) => a.sortOrder - b.sortOrder);
+    const levelStyle = conditionalTreeStyle(depth);
+    const indentRem = Math.min(depth * 1.5, 12);
+    return (
+      <div key={question.id} className="space-y-1" style={{ marginLeft: String(indentRem) + 'rem' }}>
+        <div
+          className="flex items-center gap-2 border-l-2 px-3 py-1.5 rounded-r-lg"
+          style={{ borderColor: levelStyle.border, backgroundColor: levelStyle.bg }}
+        >
+          <span className="text-[10px] shrink-0" style={{ color: levelStyle.color }}>
+            {Array.from({ length: Math.min(depth, 5) }, () => '↳').join('')} se "{question.triggerOption || 'qualquer'}":
+          </span>
+          <span className="text-xs flex-1 truncate">{question.question}</span>
+          <span className="text-[9px] px-1.5 py-0.5 rounded border" style={{ color: levelStyle.color, borderColor: levelStyle.border }}>
+            SUB NÍVEL {depth}
+          </span>
+          <span className="text-[10px] text-gray-500 bg-gray-800 px-1.5 py-0.5 rounded">{question.fieldType}</span>
+          {question.isRequired === 1 && <span className="text-[10px] text-red-400">*</span>}
+          <button
+            onClick={() => startEditingQuestion(question)}
+            className="p-1 text-blue-400/70 hover:text-blue-400 hover:bg-blue-500/10 rounded transition-colors"
+            title="Editar sub-pergunta"
+          >
+            <svg className="w-3 h-3" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M11 5H6a2 2 0 00-2 2v11a2 2 0 002 2h11a2 2 0 002-2v-5m-1.414-9.414a2 2 0 112.828 2.828L11.828 15H9v-2.828l8.586-8.586z" /></svg>
+          </button>
+          <button onClick={() => { if (confirm('Excluir esta sub-pergunta e revisar os filhos vinculados?')) deleteQMut.mutate({ id: question.id }); }} className="p-1 text-red-400 hover:bg-red-500/20 rounded" title="Excluir"><Trash2 className="w-3 h-3" /></button>
+        </div>
+
+        {flowEditor(question)}
+
+        {options.length > 0 && (
+          <div className="flex flex-wrap gap-1" style={{ marginLeft: '1.5rem' }}>
+            {options.map(optionLabel => (
+              <button
+                key={optionLabel}
+                type="button"
+                onClick={() => {
+                  setNewQParentId(question.id);
+                  setNewQTriggerOption(optionLabel);
+                  setNewQText('');
+                  setNewQType('text');
+                  setNewQOptions('');
+                  setNewQRequired(true);
+                  setNewQPresentation('text');
+                  setNewQShowTextWithAudio(false);
+                  setNewQPromptAudioFile(null);
+                }}
+                className="text-[10px] px-2 py-0.5 rounded-full transition-colors border hover:bg-white/10"
+                style={{ color: levelStyle.color, borderColor: levelStyle.border, backgroundColor: levelStyle.bg }}
+                title={'Adicionar outra sub-pergunta quando a resposta for "' + optionLabel + '"'}
+              >
+                + sub nível {depth + 1} se &quot;{optionLabel}&quot;
+              </button>
+            ))}
+          </div>
+        )}
+
+        {children.map(child => renderConditionalQuestion(child, depth + 1))}
+      </div>
+    );
+  };
+
   const totalDocs = opt.documents?.length || 0;
 
   return (
@@ -1342,67 +1434,8 @@ function OptionCard({ opt, productId, onUpdate, onAutoScheduleChange, onDelete, 
                         ))}
                       </div>
                     )}
-                    {/* Sub-perguntas indentadas */}
-                    {subQs.map(sq => {
-                      // Opções da sub-pergunta (para permitir criar sub-sub-perguntas)
-                      const sqParsedOpts: string[] = sq.fieldType === 'select' && sq.options ? (() => {
-                        try { const p = JSON.parse(sq.options); return Array.isArray(p) ? p.map((o: any) => typeof o === 'string' ? o : o.label) : sq.options.split(',').map((s: string) => s.trim()).filter(Boolean); }
-                        catch { return sq.options.split(',').map((s: string) => s.trim()).filter(Boolean); }
-                      })() : [];
-                      // Sub-sub-perguntas desta sub-pergunta
-                      const subSubQs = opt.questions.filter(ssq => ssq.parentQuestionId === sq.id);
-                      return (
-                        <div key={sq.id} className="ml-6 space-y-1">
-                          <div className="flex items-center gap-2 bg-cyan-500/5 border-l-2 border-cyan-500/30 px-3 py-1.5 rounded-r-lg">
-                            <span className="text-[10px] text-cyan-400/60">↳ se "{sq.triggerOption || 'qualquer'}":</span>
-                            <span className="text-xs flex-1 truncate">{sq.question}</span>
-                            <span className="text-[10px] text-gray-500 bg-gray-800 px-1.5 py-0.5 rounded">{sq.fieldType}</span>
-                            {sq.isRequired === 1 && <span className="text-[10px] text-red-400">*</span>}
-                            <button
-                              onClick={() => startEditingQuestion(sq)}
-                              className="p-1 text-blue-400/70 hover:text-blue-400 hover:bg-blue-500/10 rounded transition-colors"
-                              title="Editar sub-pergunta"
-                            >
-                              <svg className="w-3 h-3" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M11 5H6a2 2 0 00-2 2v11a2 2 0 002 2h11a2 2 0 002-2v-5m-1.414-9.414a2 2 0 112.828 2.828L11.828 15H9v-2.828l8.586-8.586z" /></svg>
-                            </button>
-                            <button onClick={() => { if (confirm('Excluir esta sub-pergunta?')) deleteQMut.mutate({ id: sq.id }); }} className="p-1 text-red-400 hover:bg-red-500/20 rounded" title="Excluir"><Trash2 className="w-3 h-3" /></button>
-                          </div>
-                          {flowEditor(sq)}
-                    {/* Botões de sub-sub-pergunta por opção da sub-pergunta */}
-                          {sqParsedOpts.length > 0 && (
-                            <div className="ml-6 flex flex-wrap gap-1">
-                              {sqParsedOpts.map(sqOptLabel => (
-                                <button
-                                  key={sqOptLabel}
-                                  onClick={() => { setNewQParentId(sq.id); setNewQTriggerOption(sqOptLabel); setNewQText(''); setNewQType('text'); setNewQOptions(''); setNewQRequired(true); setNewQPresentation('text'); setNewQShowTextWithAudio(false); setNewQPromptAudioFile(null); }}
-                                  className="text-[10px] px-2 py-0.5 bg-purple-500/10 hover:bg-purple-500/20 border border-purple-500/30 text-purple-400 rounded-full transition-colors"
-                                  title={`Adicionar sub-sub-pergunta quando resposta for "${sqOptLabel}"`}
-                                >
-                                  + sub-sub se &quot;{sqOptLabel}&quot;
-                                </button>
-                              ))}
-                            </div>
-                          )}
-                          {/* Sub-sub-perguntas (3º nível) */}
-                          {subSubQs.map(ssq => (
-                            <div key={ssq.id} className="ml-12 flex items-center gap-2 bg-purple-500/5 border-l-2 border-purple-500/30 px-3 py-1.5 rounded-r-lg">
-                              <span className="text-[10px] text-purple-400/60">↳↳ se "{ssq.triggerOption || 'qualquer'}":</span>
-                              <span className="text-xs flex-1 truncate">{ssq.question}</span>
-                              <span className="text-[10px] text-gray-500 bg-gray-800 px-1.5 py-0.5 rounded">{ssq.fieldType}</span>
-                              {ssq.isRequired === 1 && <span className="text-[10px] text-red-400">*</span>}
-                              <button
-                                onClick={() => startEditingQuestion(ssq)}
-                                className="p-1 text-blue-400/70 hover:text-blue-400 hover:bg-blue-500/10 rounded transition-colors"
-                                title="Editar sub-sub-pergunta"
-                              >
-                                <svg className="w-3 h-3" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M11 5H6a2 2 0 00-2 2v11a2 2 0 002 2h11a2 2 0 002-2v-5m-1.414-9.414a2 2 0 112.828 2.828L11.828 15H9v-2.828l8.586-8.586z" /></svg>
-                              </button>
-                              <button onClick={() => { if (confirm('Excluir esta sub-sub-pergunta?')) deleteQMut.mutate({ id: ssq.id }); }} className="p-1 text-red-400 hover:bg-red-500/20 rounded" title="Excluir"><Trash2 className="w-3 h-3" /></button>
-                            </div>
-                          ))}
-                        </div>
-                      );
-                    })}
+                    {/* Sub-perguntas em profundidade ilimitada */}
+                    {subQs.map(sq => renderConditionalQuestion(sq, 1))}
                     </div>
                   );
                 })}
