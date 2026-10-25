@@ -1163,17 +1163,56 @@ export async function deleteCustomer(id: number, reason?: string): Promise<void>
     throw new Error('CUSTOMER_HAS_ORDERS');
   }
 
-  // Soft delete: marcar como excluído em vez de remover permanentemente
-  await db.update(customers).set({
-    deletedAt: new Date(),
-    deletedReason: reason || 'Excluído pelo administrador',
-  }).where(eq(customers.id, id));
+  // Soft delete: marcar como excluído e liberar somente as chaves técnicas
+  // de identidade. Os dados originais continuam intactos na lixeira.
+  await db.execute(sql`
+    UPDATE customers
+    SET deletedAt=NOW(),
+        deletedReason=${reason || 'Excluído pelo administrador'},
+        normalizedPhone=NULL,
+        normalizedCpf=NULL,
+        normalizedEmail=NULL
+    WHERE id=${id}
+  `);
 }
 
 export async function restoreCustomer(id: number): Promise<void> {
   const db = await getDb();
   if (!db) return;
-  await db.update(customers).set({ deletedAt: null, deletedReason: null }).where(eq(customers.id, id));
+
+  const [customer] = await db.select().from(customers).where(eq(customers.id, id)).limit(1);
+  if (!customer) return;
+
+  const normalizedPhone = normalizeMainCustomerPhone(customer.phone) || null;
+  const normalizedCpf = String(customer.cpf || '').replace(/\D/g, '') || null;
+  const normalizedEmail = String(customer.email || '').trim().toLowerCase() || null;
+
+  const conflicts = await db.execute(sql`
+    SELECT id
+    FROM customers
+    WHERE deletedAt IS NULL
+      AND id <> ${id}
+      AND (
+        (${normalizedPhone} IS NOT NULL AND normalizedPhone=${normalizedPhone})
+        OR (${normalizedCpf} IS NOT NULL AND normalizedCpf=${normalizedCpf})
+        OR (${normalizedEmail} IS NOT NULL AND normalizedEmail=${normalizedEmail})
+      )
+    LIMIT 1
+  `);
+  const conflictRows = (conflicts as any)?.[0] || [];
+  if (conflictRows.length) {
+    throw new Error('CUSTOMER_RESTORE_IDENTITY_CONFLICT');
+  }
+
+  await db.execute(sql`
+    UPDATE customers
+    SET deletedAt=NULL,
+        deletedReason=NULL,
+        normalizedPhone=${normalizedPhone},
+        normalizedCpf=${normalizedCpf},
+        normalizedEmail=${normalizedEmail}
+    WHERE id=${id}
+  `);
 }
 
 export async function listDeletedCustomers(): Promise<Customer[]> {
