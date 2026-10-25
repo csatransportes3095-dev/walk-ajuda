@@ -1,0 +1,45 @@
+name: Publicar instalador H2 AUTO 1.7 no site
+on:
+  push:
+    branches:
+      - recovery/organizar-salvos-2026-08-24
+    paths:
+      - .github/workflows/publish-h2-auto-apk.yml
+  workflow_dispatch:
+permissions:
+  contents: write
+concurrency:
+  group: h2-auto-site-apk
+  cancel-in-progress: false
+jobs:
+  publish:
+    runs-on: ubuntu-latest
+    timeout-minutes: 12
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          ref: recovery/organizar-salvos-2026-08-24
+      - name: Baixar pacote Android assinado da compilacao aprovada
+        env:
+          ZIP_URL: "https://sdmntprbrazilsouth.oaiusercontent.com/files/00000000-d270-820e-8375-294561e87f66/raw?se=2026-10-25T22%3A56%3A29Z&sp=r&sv=2026-02-06&sr=b&scid=ae40c9a5-071d-5ca4-9cfc-d537ea81c2da&skoid=db6dad9e-03ee-465b-aef6-ce0f63a161dc&sktid=a48cca56-e6da-484e-a814-9c849652bcb3&skt=2026-10-25T02%3A03%3A04Z&ske=2026-10-26T02%3A03%3A04Z&sks=b&skv=2026-02-06&sig=huNrhuTfpbC/9IjA00w%2BOsIPBrPk1Hupe4qe570fdP4%3D"
+        run: |
+          set -euo pipefail
+          curl --fail --location --retry 2 --connect-timeout 15 --max-time 120 --silent --show-error "$ZIP_URL" --output /tmp/h2-auto-1-7-build.zip
+          unzip -t /tmp/h2-auto-1-7-build.zip
+          mkdir -p client/public/downloads
+          unzip -p /tmp/h2-auto-1-7-build.zip app-debug.apk > client/public/downloads/H2_AUTO_1_7_INSTALAR.apk
+          printf '%s  %s\n' '5523f53aba5e16d812fa2b815b76a43e5b36b4a8229b8b5c252e88908c1e12a8' 'client/public/downloads/H2_AUTO_1_7_INSTALAR.apk' | sha256sum -c -
+          test "$(stat -c '%s' client/public/downloads/H2_AUTO_1_7_INSTALAR.apk)" -eq 42082
+      - name: Publicar APK diretamente em h2colombiano.com/downloads
+        run: |
+          set -euo pipefail
+          git config user.name "H2 Auto Release Bot"
+          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+          git add client/public/downloads/H2_AUTO_1_7_INSTALAR.apk
+          if git diff --cached --quiet; then
+            echo "APK ja publicado na arvore de codigo."
+          else
+            git commit -m "release(h2-auto): disponibilizar APK 1.7 para download direto no site"
+            git pull --rebase origin recovery/organizar-salvos-2026-08-24
+            git push origin HEAD:recovery/organizar-salvos-2026-08-24
+          fi
