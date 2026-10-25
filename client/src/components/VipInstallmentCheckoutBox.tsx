@@ -14,6 +14,22 @@ function money(cents: number | null | undefined) {
   return (Number(cents || 0) / 100).toLocaleString("pt-BR", { style: "currency", currency: "BRL" });
 }
 
+function dateBr(value: string | null | undefined) {
+  if (!value) return "—";
+  const match = /^(\d{4})-(\d{2})-(\d{2})$/.exec(value);
+  if (!match) return value;
+  return `${match[3]}/${match[2]}/${match[1]}`;
+}
+
+function todayBr() {
+  return new Intl.DateTimeFormat("pt-BR", {
+    timeZone: "America/Sao_Paulo",
+    day: "2-digit",
+    month: "2-digit",
+    year: "numeric",
+  }).format(new Date());
+}
+
 export default function VipInstallmentCheckoutBox(props: {
   cpToken: string;
   phone?: string;
@@ -71,9 +87,7 @@ export default function VipInstallmentCheckoutBox(props: {
   const effectiveRules = eligibility.data?.effectiveRules;
   const minCount = Number(effectiveRules?.minInstallments ?? config?.minInstallments ?? 2);
   const effectiveMax = Number(effectiveRules?.maxInstallments ?? config?.maxInstallments ?? minCount);
-  const globalMax = Number(effectiveRules?.globalMaxInstallments ?? config?.maxInstallments ?? effectiveMax);
   const productMax = effectiveRules?.productMaxInstallments == null ? null : Number(effectiveRules.productMaxInstallments);
-  const customerMax = effectiveRules?.customerMaxInstallments == null ? null : Number(effectiveRules.customerMaxInstallments);
 
   useEffect(() => {
     if (count < minCount) setCount(minCount);
@@ -144,9 +158,8 @@ export default function VipInstallmentCheckoutBox(props: {
             <label className="text-[10px] font-black uppercase text-slate-400">Periodicidade<select value={frequency} disabled={frequencyOptions.length === 0} onChange={(event) => setFrequency(event.target.value as typeof frequency)} className="mt-1.5 w-full rounded-xl border border-white/10 bg-slate-950 px-3 py-2.5 text-sm font-black text-white disabled:opacity-50">{frequencyOptions.length ? frequencyOptions.map((item) => <option key={item.value} value={item.value}>{item.label}</option>) : <option>Nenhuma disponível</option>}</select></label>
           </div>
           {effectiveRules && <div className="rounded-xl border border-cyan-400/20 bg-cyan-500/[0.06] p-3 text-[11px] leading-relaxed text-slate-300">
-            <p><strong className="text-cyan-200">Regra efetiva:</strong> {minCount}x até {effectiveMax}x.</p>
-            <p className="mt-1 text-slate-400">Global: até {globalMax}x{productMax != null ? ` • Produto: até ${productMax}x` : ""}{customerMax != null ? ` • Cliente: até ${customerMax}x` : ""}. Vale o menor limite.</p>
-            <p className="mt-1 text-slate-400"><strong className="text-slate-300">Periodicidade disponível:</strong> {frequencyOptions.map((item) => item.label).join(", ") || "nenhuma"}.</p>
+            <p><strong className="text-cyan-200">Condição deste produto:</strong> {minCount}x até {effectiveMax}x{productMax != null ? ` • máximo ${productMax}x` : ""}.</p>
+            <p className="mt-1 text-slate-400"><strong className="text-slate-300">Periodicidade:</strong> {frequencyOptions.map((item) => item.label).join(", ") || "nenhuma"}.</p>
           </div>}
 
           {quote.isFetching && <div className="flex items-center justify-center gap-2 rounded-xl border border-white/10 p-4 text-sm text-slate-400"><Loader2 className="h-4 w-4 animate-spin" /> Calculando no servidor...</div>}
@@ -154,7 +167,25 @@ export default function VipInstallmentCheckoutBox(props: {
           {quote.data && (
             <div className="rounded-xl border border-violet-300/25 bg-black/25 p-4">
               <div className="grid grid-cols-3 gap-2 text-center"><div><p className="text-[9px] font-black uppercase text-slate-500">Compra</p><p className="mt-1 text-sm font-black">{money(quote.data.pricing.totalCents)}</p></div><div><p className="text-[9px] font-black uppercase text-slate-500">Juros</p><p className="mt-1 text-sm font-black text-amber-300">{money(quote.data.quote.interestAmountCents)}</p></div><div><p className="text-[9px] font-black uppercase text-slate-500">Total</p><p className="mt-1 text-sm font-black text-violet-200">{money(quote.data.quote.totalAmountCents)}</p></div></div>
-              <div className="mt-3 rounded-lg bg-violet-500/10 p-3 text-center">{quote.data.quote.firstInstallmentAmountCents != null ? <><p className="text-[10px] font-black uppercase text-violet-300">Entrada agora</p><p className="mt-1 text-xl font-black text-white">{money(quote.data.quote.firstInstallmentAmountCents)}</p><div className="my-2 text-sm font-black text-violet-300">+</div><p className="text-sm font-black text-white">{quote.data.quote.installmentCount} parcelas {frequency === "daily" ? "diárias" : frequency === "weekly" ? "semanais" : "mensais"} de {money(quote.data.quote.installments?.[0]?.amountCents)}</p><p className="mt-1 text-[11px] text-slate-400">Juros calculados sobre {money(quote.data.quote.financedBaseAmountCents)}. A última parcela pode ajustar centavos de arredondamento.</p></> : <><p className="text-[10px] font-black uppercase text-violet-300">Primeira parcela agora</p><p className="mt-1 text-xl font-black text-white">{money(quote.data.quote.installments?.[0]?.amountCents)}</p><p className="mt-1 text-[11px] text-slate-400">Parcela 1 de {quote.data.quote.installmentCount}</p></>}</div>
+
+              <div className="mt-3 rounded-xl border border-emerald-400/30 bg-emerald-500/10 p-3">
+                <p className="text-[10px] font-black uppercase text-emerald-300">Pagamento de hoje • {todayBr()}</p>
+                <p className="mt-1 text-2xl font-black text-white">{money(quote.data.quote.firstInstallmentAmountCents ?? quote.data.quote.installments?.[0]?.amountCents)}</p>
+                <p className="mt-1 text-[11px] text-emerald-100/75">{quote.data.quote.firstInstallmentAmountCents != null ? "Entrada paga agora. As parcelas abaixo vencem nas datas informadas." : "Esta é a parcela 1 e vence hoje."}</p>
+              </div>
+
+              <div className="mt-3 rounded-xl border border-white/10 bg-slate-950/70 p-3">
+                <p className="text-[10px] font-black uppercase tracking-wide text-violet-300">Calendário das parcelas</p>
+                <div className="mt-2 space-y-2">
+                  {(quote.data.quote.installments || []).map((installment: any) => (
+                    <div key={installment.installmentNumber} className="flex items-center justify-between gap-3 rounded-lg border border-white/8 bg-white/[0.03] px-3 py-2">
+                      <div><p className="text-xs font-black text-white">Parcela {installment.installmentNumber}/{quote.data.quote.installmentCount}</p><p className="text-[11px] text-slate-400">Vencimento: <strong className="text-cyan-200">{dateBr(installment.dueDate)}</strong></p></div>
+                      <p className="text-sm font-black text-violet-200">{money(installment.amountCents)}</p>
+                    </div>
+                  ))}
+                </div>
+                <p className="mt-3 text-[10px] leading-relaxed text-slate-500">Confira as datas antes de avançar. Ao continuar, este será o calendário financeiro da compra.</p>
+              </div>
             </div>
           )}
           <div className="flex items-start gap-2 text-[11px] text-slate-400"><CreditCard className="mt-0.5 h-3.5 w-3.5 shrink-0" /><span>Após a compra, as próximas parcelas ficam disponíveis em <strong className="text-violet-200">Minhas Parcelas VIP</strong>.</span></div>
