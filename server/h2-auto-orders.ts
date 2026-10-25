@@ -1,12 +1,13 @@
 import type {Express, Request, Response} from "express";
-import {createHash, randomInt, randomBytes, timingSafeEqual} from "node:crypto";
+import {createHash, createHmac, randomInt, timingSafeEqual} from "node:crypto";
 import {sql} from "drizzle-orm";
 import {getDb} from "./db";
-import {deliverOwnSiteCode} from "./siteAccessCodeDelivery";
+import {sendH2AutoOrderCode} from "./h2-auto-order-email";
 import {normalizeCustomerPhone} from "./customerAccess";
 import {getOrderStatusVisibilityForClient} from "./orderStatusVisibility";
 
 const hash=(v:string)=>createHash("sha256").update(v).digest("hex");
+const codeHash=(sid:string,code:string)=>{const secret=process.env.H2_SITE_ACCESS_SECRET||"";if(secret.length<32)throw Error("otp_secret_unavailable");return createHmac("sha256",secret).update("h2-auto-orders:"+sid+":"+code).digest("hex");};
 const reply=(res:Response,status:number,data:unknown)=>res.status(status).set("Cache-Control","no-store").json(data);
 const validConversation=(v:unknown)=>typeof v==="string" && /^[a-zA-Z0-9_.:-]{24,180}$/.test(v);
 let setup:Promise<void>|undefined;
@@ -65,12 +66,12 @@ export function registerH2AutoOrdersRoutes(app:Express){
    // Do not expose whether this phone or e-mail is registered.
    const generic={state:"await_code",message:"Se houver cadastro elegível, enviaremos um código ao e-mail. Verifique também o spam. Código válido por 10 minutos."};
    if(!customer)return reply(res,200,generic);
-   const code=String(randomInt(0,1000000)).padStart(6,"0"), codeHash=hash(sid+":"+code);
+   const code=String(randomInt(0,1000000)).padStart(6,"0"), codeHash=codeHash(sid,code);
    const db=await getDb();if(!db)throw Error("db");
    await db.execute(sql`INSERT INTO h2_auto_order_sessions(id,device_id,conversation_hash,customer_id,customer_phone,code_hash,code_expires,code_attempts,resend_after,expires_at,issued_at)
     VALUES (${sid},${id},${hash(conversation)},${customer.id},${customer.phone},${codeHash},${now+600000},0,${now+60000},0,${now})
     ON DUPLICATE KEY UPDATE customer_id=VALUES(customer_id),customer_phone=VALUES(customer_phone),code_hash=VALUES(code_hash),code_expires=VALUES(code_expires),code_attempts=0,resend_after=VALUES(resend_after),expires_at=0,issued_at=VALUES(issued_at),used_at=NULL`);
-   try{await deliverOwnSiteCode(customer.email,code);}
+   try{await sendH2AutoOrderCode(customer.email,code);}
    catch{
     await db.execute(sql`UPDATE h2_auto_order_sessions SET code_hash=NULL,code_expires=NULL WHERE id=${sid} AND code_hash=${codeHash}`);
     return reply(res,503,{error:"email_unavailable",message:"Não foi possível enviar o código agora."});
