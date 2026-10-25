@@ -507,15 +507,16 @@ export function LoansTab({ token }: LoansTabProps) {
     { enabled: simEnabled && simAmount > 0, retry: false }
   );
 
-  const { data, isLoading, refetch } = trpc.loans.getClientLoanInfo.useQuery(
+  const { data, isLoading, error, refetch } = trpc.loans.getClientLoanInfo.useQuery(
     { token },
     {
       enabled: !!token,
       // Empréstimos criados pelo ADM precisam aparecer sem depender do cache anterior do cliente.
       refetchOnMount: "always",
       refetchOnWindowFocus: true,
-      // Mantém a sessão ativa sincronizada com a alteração de rotas feita pelo ADM.
-      refetchInterval: 1000,
+      // Evita sobrecarregar a API com uma consulta financeira completa a cada segundo.
+      refetchInterval: 60000,
+      retry: false,
     }
   );
 
@@ -634,6 +635,23 @@ export function LoansTab({ token }: LoansTabProps) {
           <Banknote className="absolute inset-0 m-auto w-6 h-6 text-violet-400" />
         </div>
         <p className="text-sm text-muted-foreground">Carregando seus empréstimos...</p>
+      </div>
+    );
+  }
+
+  if (error) {
+    return (
+      <div className="flex flex-col items-center justify-center py-16 text-center gap-4">
+        <div className="w-20 h-20 rounded-full border bg-red-500/10 border-red-500/30 flex items-center justify-center">
+          <AlertTriangle className="w-10 h-10 text-red-400" />
+        </div>
+        <div>
+          <p className="font-semibold text-red-300">Não foi possível carregar seus empréstimos</p>
+          <p className="text-sm text-muted-foreground/80 mt-1 max-w-sm">{error.message || 'Falha temporária ao consultar seus dados.'}</p>
+        </div>
+        <Button type="button" variant="outline" onClick={() => refetch()}>
+          <RefreshCw className="w-4 h-4 mr-2" /> Tentar novamente
+        </Button>
       </div>
     );
   }
