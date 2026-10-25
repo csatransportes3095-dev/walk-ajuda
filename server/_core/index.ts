@@ -14,6 +14,7 @@ import { registerStorageProxy } from "./storageProxy";
 import { registerUploadRoute } from "../uploadRoute";
 import { registerApkDownloadRoute, ensureApkTable } from "../routers/apk";
 import { registerH2AutoDeviceRoutes } from "../h2-auto-remote";
+import { registerUnifiedCustomerSessionRoutes } from "../unifiedCustomerSessionRoutes";
 import { appRouter } from "../routers";
 import { reconcileDailyLoanLateFees } from "../routers/loans";
 import { createContext } from "./context";
@@ -341,6 +342,9 @@ async function startServer() {
   app.use("/api/h2ads/worker/mobile", express.json({ limit: "525kb" }));
   app.use(express.json({ limit: "200mb" }));
   app.use(express.urlencoded({ limit: "200mb", extended: true }));
+  // Ponte da sessão central para Gastos/Empréstimos/Cartões.
+  // Deve existir antes do tRPC e do fallback estático.
+  registerUnifiedCustomerSessionRoutes(app);
   // Rotas de identificação preparadas, sem alterar o acesso público existente.
   registerSiteIdentity(app);
 
