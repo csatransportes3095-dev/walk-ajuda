@@ -1,0 +1,47 @@
+name: Validate VIP installment rule resolution
+on:
+  push:
+    branches: [fix/vip-installments-rule-resolution-20261025]
+    paths:
+      - 'server/routers/vipInstallments.ts'
+      - 'client/src/components/AdminVipInstallmentsPanel.tsx'
+      - 'client/src/components/AdminVipInstallmentProductsPanel.tsx'
+      - 'client/src/components/VipInstallmentCheckoutBox.tsx'
+      - '.github/workflows/vip-installment-rule-resolution-validate.yml'
+permissions:
+  contents: read
+jobs:
+  validate:
+    runs-on: ubuntu-latest
+    timeout-minutes: 12
+    steps:
+      - uses: actions/checkout@v4
+      - uses: pnpm/action-setup@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+          cache: pnpm
+      - run: pnpm install --frozen-lockfile
+      - name: Verify rule resolution
+        run: |
+          node --input-type=module <<'JS'
+          import fs from 'node:fs';
+          const server=fs.readFileSync('server/routers/vipInstallments.ts','utf8');
+          const product=fs.readFileSync('client/src/components/AdminVipInstallmentProductsPanel.tsx','utf8');
+          const admin=fs.readFileSync('client/src/components/AdminVipInstallmentsPanel.tsx','utf8');
+          const checkout=fs.readFileSync('client/src/components/VipInstallmentCheckoutBox.tsx','utf8');
+          const requiredServer=[
+            'Math.min(config.maxInstallments, productRule?.maxInstallments ?? config.maxInstallments, permission.maxInstallments ?? config.maxInstallments)',
+            'maxInstallments: input.maxInstallments ?? null',
+            'p.allowDaily, p.allowWeekly, p.allowMonthly, p.notes',
+            'eligibility.effectiveRules.allowedFrequencies[input.frequency]',
+            'const interestBps = eligibility.effectiveRules.interestBps'
+          ];
+          for(const n of requiredServer) if(!server.includes(n)) throw new Error('server missing '+n);
+          if(product.includes('maxInstallments: null,')) throw new Error('product still discards max installments');
+          if(admin.includes('maxInstallments: null,')) throw new Error('customer still discards max installments');
+          if(!checkout.includes('Regra efetiva:') || !checkout.includes('Vale o menor limite')) throw new Error('checkout effective rule summary missing');
+          console.log('VIP_RULE_RESOLUTION_OK');
+          JS
+      - name: Build
+        run: pnpm build
