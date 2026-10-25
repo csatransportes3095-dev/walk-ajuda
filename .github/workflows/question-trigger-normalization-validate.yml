@@ -1,0 +1,30 @@
+name: Validate normalized question triggers
+on:
+  push:
+    branches: [fix/question-trigger-normalization-20261025]
+    paths:
+      - 'client/src/pages/Home.tsx'
+      - 'client/src/lib/conditionalQuestionFlow.ts'
+      - '.github/workflows/question-trigger-normalization-validate.yml'
+permissions:
+  contents: read
+jobs:
+  validate:
+    runs-on: ubuntu-latest
+    timeout-minutes: 12
+    steps:
+      - uses: actions/checkout@v4
+      - uses: pnpm/action-setup@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+          cache: pnpm
+      - run: pnpm install --frozen-lockfile
+      - name: Trigger normalization tests
+        run: |
+          node --experimental-strip-types --input-type=module -e "import { normalizeFlowValue, applyQuestionFlow } from './client/src/lib/conditionalQuestionFlow.ts'; for (const v of ['NÃO','Nao',' nao ','NAO']) if(normalizeFlowValue(v)!=='NAO') throw new Error('normalize '+v); const q=[{id:1},{id:2}]; const r=applyQuestionFlow(q,{1:'NÃO'},[{questionId:1,answer:'NAO',action:'finish'}]); if(!r.ended) throw new Error('flow accent mismatch'); console.log('NORMALIZATION_OK');"
+      - name: Home trigger wiring
+        run: |
+          grep -F "normalizeConditionalValue(parentAnswer) === normalizeConditionalValue(child.triggerOption)" client/src/pages/Home.tsx
+      - name: Build
+        run: pnpm build
