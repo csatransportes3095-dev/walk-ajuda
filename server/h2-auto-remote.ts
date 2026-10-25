@@ -11,6 +11,7 @@ const configSchema=z.object({
  enabled:z.boolean(),
  welcome:z.string().max(6000),
  menu:z.array(z.string().max(6000)).length(9),
+ whatsappMode:z.number().int().min(-1).max(1),
  pauseMinutes:z.number().int().min(1).max(1440),
  scheduleOn:z.boolean(),
  scheduleStart:z.string().regex(/^([01][0-9]|2[0-3]):[0-5][0-9]$/),
@@ -19,7 +20,7 @@ const configSchema=z.object({
  rules:z.array(z.object({trigger:z.string().max(120),reply:z.string().max(6000),mode:z.enum(["exact","contains"]),enabled:z.boolean()})).max(100)
 });
 type RemoteConfig=z.infer<typeof configSchema>;
-const initial:RemoteConfig={enabled:false,welcome:"",menu:Array(9).fill(""),pauseMinutes:60,scheduleOn:false,scheduleStart:"09:00",scheduleEnd:"18:00",blocked:"",rules:[]};
+const initial:RemoteConfig={enabled:false,welcome:"",menu:Array(9).fill(""),whatsappMode:-1,pauseMinutes:60,scheduleOn:false,scheduleStart:"09:00",scheduleEnd:"18:00",blocked:"",rules:[]};
 let ready:Promise<void>|undefined;
 function ensure() {
  if(!ready) ready=(async()=>{
@@ -34,6 +35,7 @@ function ensure() {
  config_json JSON NOT NULL,
  revision INT NOT NULL DEFAULT 1,
  last_seen BIGINT NULL,
+ applied_revision INT NOT NULL DEFAULT 0,
  created_at BIGINT NOT NULL
  )`);
  })().catch(e=>{ready=undefined;throw e});
@@ -43,7 +45,7 @@ const rows=async (query:any):Promise<any[]>=>{
  const db=await getDb();if(!db)throw new Error("DB unavailable");
  const result:any=await db.execute(query);return result[0]||[];
 };
-const safeDevice=(r:any)=>({id:r.id,label:r.label,paired:Boolean(r.token_hash),revision:Number(r.revision),lastSeen:r.last_seen?Number(r.last_seen):null,config:configSchema.parse(typeof r.config_json==="string"?JSON.parse(r.config_json):r.config_json)});
+const safeDevice=(r:any)=>({id:r.id,label:r.label,paired:Boolean(r.token_hash),revision:Number(r.revision),lastSeen:r.last_seen?Number(r.last_seen):null,appliedRevision:Number(r.applied_revision||0),config:configSchema.parse(typeof r.config_json==="string"?JSON.parse(r.config_json):r.config_json)});
 export const h2AutoAdminRouter=router({
  list:adminProcedure.query(async()=>{await ensure();return (await rows(sql`SELECT * FROM h2_auto_devices ORDER BY created_at DESC LIMIT 30`)).map(safeDevice);}),
  create:adminProcedure.input(z.object({label:z.string().trim().min(1).max(80)})).mutation(async({input})=>{
@@ -107,4 +109,22 @@ export function registerH2AutoDeviceRoutes(app:Express) {
    return respond(res,200,{revision:Number(d.revision),config:safeDevice(d).config});
  }catch{return respond(res,500,{error:"temporary_error"});}
  });
+ app.post("/api/h2-auto/ack",async(req:Request,res:Response)=>{
+ try {
+   const id=String(req.header("x-h2-device-id")||""), token=String(req.header("x-h2-device-token")||"");
+   const p=z.object({revision:z.number().int().min(1)}).safeParse(req.body);
+   if(!/^[a-f0-9]{24}$/.test(id)||!/^[a-f0-9]{64}$/.test(token)||!p.success)
+      return respond(res,401,{error:"unauthorized"});
+   await ensure();
+   const data=await rows(sql`SELECT token_hash, revision FROM h2_auto_devices WHERE id=${id} LIMIT 1`);
+   const d=data[0];
+   if(!d?.token_hash || !timingSafeEqual(Buffer.from(String(d.token_hash),"hex"),Buffer.from(hash(token),"hex")))
+      return respond(res,401,{error:"unauthorized"});
+   if(Number(d.revision)!==p.data.revision)return respond(res,409,{error:"outdated_revision"});
+   const db=await getDb();if(!db)throw Error("db");
+   await db.execute(sql`UPDATE h2_auto_devices SET applied_revision=${p.data.revision},last_seen=${Date.now()} WHERE id=${id} AND revision=${p.data.revision}`);
+   return respond(res,200,{success:true});
+ }catch{return respond(res,500,{error:"temporary_error"});}
+ });
+
 }

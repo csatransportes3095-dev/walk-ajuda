@@ -21,8 +21,15 @@ export default function AdminH2Auto(){
  {pair&&<div className="rounded-xl border border-yellow-400/40 p-4"><p className="text-yellow-300 font-black">CÓDIGO TEMPORÁRIO — 10 MINUTOS</p><p className="text-3xl tracking-widest font-black">{pair.code}</p><p className="text-xs opacity-70">Aparelho: {pair.id}. Insira este código no H2 AUTO. Ele aparece somente agora.</p></div>}</Box>
  {isLoading&&<p>Carregando aparelhos...</p>}
  {data.map(d=>{const value=editing[d.id]||d.config;const change=(f:string,v:any)=>setEditing(p=>({...p,[d.id]:{...value,[f]:v}}));return <Box key={d.id}>
- <div className="flex flex-wrap justify-between gap-3"><div><h3 className="text-lg font-black">{d.label}</h3><p className="text-xs opacity-65">{d.paired?"VINCULADO":"AGUARDANDO VÍNCULO"} · Rev. {d.revision} · {d.lastSeen?"Última sincronização: "+new Date(d.lastSeen).toLocaleString("pt-BR"):"Nunca sincronizado"}</p></div><div className="flex gap-2"><button className="rounded-lg border border-cyan-500/40 px-3 py-2 text-xs" onClick={()=>{setPairId(d.id);pairCode.mutate({id:d.id},{onSuccess:x=>setPair({id:d.id,code:x.code})})}}>NOVO CÓDIGO</button><button className="rounded-lg border border-red-500/40 px-3 py-2 text-xs text-red-300" onClick={()=>{if(confirm("Revogar acesso do aparelho?"))revoke.mutate({id:d.id})}}>REVOGAR</button></div></div>
+ <div className="flex flex-wrap justify-between gap-3"><div><h3 className="text-lg font-black">{d.label}</h3><p className="text-xs opacity-65">{d.paired?"VINCULADO":"AGUARDANDO VÍNCULO"} · Config. {d.revision} · Aplicada {d.appliedRevision} · {d.lastSeen?"Última sincronização: "+new Date(d.lastSeen).toLocaleString("pt-BR"):"Nunca sincronizado"}</p></div><div className="flex gap-2"><button className="rounded-lg border border-cyan-500/40 px-3 py-2 text-xs" onClick={()=>{setPairId(d.id);pairCode.mutate({id:d.id},{onSuccess:x=>setPair({id:d.id,code:x.code})})}}>NOVO CÓDIGO</button><button className="rounded-lg border border-red-500/40 px-3 py-2 text-xs text-red-300" onClick={()=>{if(confirm("Revogar acesso do aparelho?"))revoke.mutate({id:d.id})}}>REVOGAR</button></div></div>
  <div className="grid gap-3 md:grid-cols-2">
+ <label className="text-xs flex flex-col gap-2">APLICATIVO WHATSAPP
+ <select className={field} value={value.whatsappMode} onChange={e=>change("whatsappMode",Number(e.target.value))}>
+ <option value={-1}>Manter seleção do celular</option>
+ <option value={0}>WhatsApp Normal</option>
+ <option value={1}>WhatsApp Business</option>
+ </select>
+ </label>
  <label className="flex items-center gap-2"><input type="checkbox" checked={value.enabled} onChange={e=>change("enabled",e.target.checked)}/><Power className="h-4 w-4"/> Robô habilitado remotamente</label>
  <label className="flex items-center gap-2"><Clock className="h-4 w-4"/>Pausa atendente (min)<input type="number" min={1} max={1440} className={field} value={value.pauseMinutes} onChange={e=>change("pauseMinutes",Number(e.target.value))}/></label>
  <label className="flex items-center gap-2"><input type="checkbox" checked={value.scheduleOn} onChange={e=>change("scheduleOn",e.target.checked)}/> Horários ativos</label>
