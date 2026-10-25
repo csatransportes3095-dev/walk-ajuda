@@ -23,9 +23,27 @@ async function ensure(){
    issued_at BIGINT NOT NULL DEFAULT 0, used_at BIGINT NULL,
    INDEX idx_h2auto_session_expiry (expires_at)
   ) ENGINE=InnoDB`);
+  await db.execute(sql`CREATE TABLE IF NOT EXISTS h2_auto_order_request_limits (
+    limit_key CHAR(64) PRIMARY KEY,
+    window_started_at BIGINT NOT NULL,
+    hits INT NOT NULL DEFAULT 0
+  ) ENGINE=InnoDB`);
  })().catch(e=>{setup=undefined;throw e});return setup;
 }
 const rows=async(q:any):Promise<any[]>=>{const db=await getDb();if(!db)throw Error("db_unavailable");const result:any=await db.execute(q);return result[0]||[];};
+/** Atomic fixed-window limiter, keyed by opaque SHA-256; no email or phone is persisted. */
+async function takeLimit(key:string,max:number,windowMs:number,now:number):Promise<boolean>{
+ const db=await getDb();if(!db)throw Error("db_unavailable");
+ const limitKey=hash("h2-auto-order-otp:"+key);
+ await db.execute(sql`INSERT INTO h2_auto_order_request_limits(limit_key,window_started_at,hits)
+   VALUES (${limitKey},${now},1)
+   ON DUPLICATE KEY UPDATE
+     hits=IF(window_started_at<=${now-windowMs},1,LEAST(hits+1,1000000)),
+     window_started_at=IF(window_started_at<=${now-windowMs},${now},window_started_at)`);
+ const limited=await rows(sql`SELECT hits FROM h2_auto_order_request_limits WHERE limit_key=${limitKey} LIMIT 1`);
+ return Number(limited[0]?.hits||0)>max;
+}
+
 async function authenticated(req:Request){
  const deviceId=String(req.header("x-h2-device-id")||"");
  const token=String(req.header("x-h2-device-token")||"");
@@ -64,6 +82,12 @@ export function registerH2AutoOrdersRoutes(app:Express){
    await ensure();const now=Date.now(),sid=sessionId(id,conversation);
    const existing=(await rows(sql`SELECT resend_after FROM h2_auto_order_sessions WHERE id=${sid} LIMIT 1`))[0];
    if(existing && Number(existing.resend_after)>now)return reply(res,429,{error:"wait_before_resend"});
+   const normalized=normalizeCustomerPhone(phone);
+   if(!normalized)return reply(res,400,{error:"invalid_request"});
+   const limitedDevice=await takeLimit("device:"+id,90,3600000,now);
+   const limitedPhone=await takeLimit("phone:"+normalized,5,3600000,now);
+   if(limitedDevice || limitedPhone)return reply(res,429,{error:"too_many_requests"});
+
    const customer=await activeCustomer(phone);
    // Do not expose whether this phone or e-mail is registered.
    const generic={state:"await_code",message:"Se houver cadastro elegível, enviaremos um código ao e-mail. Verifique também o spam. Código válido por 10 minutos."};
