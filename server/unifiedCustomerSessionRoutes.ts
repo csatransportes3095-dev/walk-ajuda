@@ -8,6 +8,7 @@ import {
   findMainCustomerByIdentity,
   getCustomerRouteRestrictionReason,
   getRouteAccess,
+  getRouteReleaseMode,
   normalizeCustomerPhone,
 } from "./customerAccess";
 import { requireCompleteMainCustomerProfile } from "./customerIdentity";
@@ -200,8 +201,9 @@ async function spreadsheetSession(req: Request, res: Response, route: Spreadshee
   if (!auth) return;
   const { db, customer, phone } = auth;
 
+  const releaseMode = await getRouteReleaseMode(route, db);
   const access = await getRouteAccess(Number(customer.id), db);
-  if (access.restricted && !access.routes.includes(route)) {
+  if (releaseMode === "manual" && access.restricted && !access.routes.includes(route)) {
     const restriction = await getCustomerRouteRestrictionReason(Number(customer.id), route, db);
     const savedRestrictionReason = String(restriction?.reason || "").trim();
 
