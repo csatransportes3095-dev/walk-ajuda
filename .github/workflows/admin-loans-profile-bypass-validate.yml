@@ -1,0 +1,37 @@
+name: Validate admin loans profile bypass
+on:
+  push:
+    branches: [fix/admin-loans-no-profile-block-20261025]
+    paths:
+      - 'server/routers/loans.ts'
+      - '.github/workflows/admin-loans-profile-bypass-validate.yml'
+permissions:
+  contents: read
+jobs:
+  validate:
+    runs-on: ubuntu-latest
+    timeout-minutes: 12
+    steps:
+      - uses: actions/checkout@v4
+      - uses: pnpm/action-setup@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+          cache: pnpm
+      - run: pnpm install --frozen-lockfile
+      - name: Verify admin bypass is scoped
+        run: |
+          node --input-type=module <<'JS'
+          import fs from 'node:fs';
+          const loans=fs.readFileSync('server/routers/loans.ts','utf8');
+          const profile=fs.readFileSync('server/customerProfile.ts','utf8');
+          if (!loans.includes('Regra administrativa: o ADM pode cadastrar o cliente')) throw new Error('admin bypass missing');
+          const saveStart=loans.indexOf('saveClient: adminProcedure');
+          const saveEnd=loans.indexOf('toggleLoanEnabled:', saveStart);
+          const saveBlock=loans.slice(saveStart, saveEnd);
+          if (saveBlock.includes('requireCompleteMainCustomerProfile')) throw new Error('admin save still requires complete profile');
+          if (!profile.includes('assertCompleteCustomerProfile')) throw new Error('customer profile guard missing');
+          console.log('ADMIN_BYPASS_SCOPED_OK');
+          JS
+      - name: Build
+        run: pnpm build
