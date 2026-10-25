@@ -10,7 +10,8 @@ export default function AdminH2Auto(){
  const {data=[],isLoading}=trpc.h2AutoAdmin.list.useQuery(undefined,{refetchInterval:15000});
  const create=trpc.h2AutoAdmin.create.useMutation({onSuccess:x=>{setPair({id:x.id,code:x.code});utils.h2AutoAdmin.list.invalidate();},onError:()=>toast.error("Falha ao criar aparelho")});
  const pairCode=trpc.h2AutoAdmin.pairCode.useMutation({onSuccess:x=>setPair({id:pairId,code:x.code})});
- const save=trpc.h2AutoAdmin.save.useMutation({onSuccess:()=>{toast.success("Salvo: aguardando sincronização do celular");utils.h2AutoAdmin.list.invalidate();},onError:()=>toast.error("Falha ao salvar")});
+ const save=trpc.h2AutoAdmin.save.useMutation({onSuccess:()=>{toast.success("Salvo: aguardando sincronização do celular");utils.h2AutoAdmin.list.invalidate();},onError:(e)=>toast.error(e.message || "Falha ao salvar")});
+ const merge=trpc.h2AutoAdmin.mergeLocal.useMutation({onSuccess:()=>{toast.success("Configurações locais mescladas sem apagar as atuais");utils.h2AutoAdmin.list.invalidate();},onError:(e)=>toast.error(e.message)});
  const revoke=trpc.h2AutoAdmin.revoke.useMutation({onSuccess:()=>utils.h2AutoAdmin.list.invalidate()});
  const [label,setLabel]=useState("Celular principal");const[pair,setPair]=useState<{id:string,code:string}|null>(null);const[pairId,setPairId]=useState("");const[editing,setEditing]=useState<Record<string,any>>({});
  const field="w-full rounded-xl border border-cyan-500/30 bg-slate-950 px-3 py-2 text-white";
@@ -22,6 +23,7 @@ export default function AdminH2Auto(){
  {isLoading&&<p>Carregando aparelhos...</p>}
  {data.map(d=>{const value=editing[d.id]||d.config;const change=(f:string,v:any)=>setEditing(p=>({...p,[d.id]:{...value,[f]:v}}));return <Box key={d.id}>
  <div className="flex flex-wrap justify-between gap-3"><div><h3 className="text-lg font-black">{d.label}</h3><p className="text-xs opacity-65">{d.paired?"VINCULADO":"AGUARDANDO VÍNCULO"} · Config. {d.revision} · Aplicada {d.appliedRevision} · {d.lastSeen?"Última sincronização: "+new Date(d.lastSeen).toLocaleString("pt-BR"):"Nunca sincronizado"}</p></div><div className="flex gap-2"><button className="rounded-lg border border-cyan-500/40 px-3 py-2 text-xs" onClick={()=>{setPairId(d.id);pairCode.mutate({id:d.id},{onSuccess:x=>setPair({id:d.id,code:x.code})})}}>NOVO CÓDIGO</button><button className="rounded-lg border border-red-500/40 px-3 py-2 text-xs text-red-300" onClick={()=>{if(confirm("Revogar acesso do aparelho?"))revoke.mutate({id:d.id})}}>REVOGAR</button></div></div>
+ {d.snapshotConfig&&<div className="rounded-xl border border-amber-400/30 bg-amber-950/20 p-3 space-y-2"><div className="font-bold text-amber-200">CÓPIA DAS CONFIGURAÇÕES DO CELULAR DISPONÍVEL</div><p className="text-xs text-white/70">Recebida em {d.snapshotReceivedAt?new Date(d.snapshotReceivedAt).toLocaleString("pt-BR"):"data desconhecida"}. A cópia original fica preservada. Mesclar preenche os campos vazios e adiciona regras que ainda não existem no ADM.</p><button className="rounded-lg bg-amber-400 px-4 py-2 text-xs font-black text-black" disabled={merge.isPending} onClick={()=>{if(confirm("Mesclar dados locais sem apagar configurações atuais do ADM?"))merge.mutate({id:d.id,expectedRevision:d.revision})}}>IMPORTAR CONFIGURAÇÕES DO CELULAR</button></div>}
  <div className="grid gap-3 md:grid-cols-2">
  <label className="text-xs flex flex-col gap-2">APLICATIVO WHATSAPP
  <select className={field} value={value.whatsappMode} onChange={e=>change("whatsappMode",Number(e.target.value))}>
@@ -49,7 +51,7 @@ export default function AdminH2Auto(){
  </div>})}
  </div>
  <label className="block text-xs">CONTATOS BLOQUEADOS (um por linha)<textarea className={field} rows={2} value={value.blocked} onChange={e=>change("blocked",e.target.value)}/></label>
- <button className="w-full rounded-xl bg-emerald-400 p-3 text-slate-950 font-black" disabled={save.isPending} onClick={()=>save.mutate({id:d.id,config:value})}><Save className="inline h-4 w-4 mr-1"/>SALVAR CONFIGURAÇÃO</button>
+ <button className="w-full rounded-xl bg-emerald-400 p-3 text-slate-950 font-black" disabled={save.isPending} onClick={()=>save.mutate({id:d.id,config:value,expectedRevision:d.revision})}><Save className="inline h-4 w-4 mr-1"/>SALVAR CONFIGURAÇÃO</button>
  </Box>})}
  <p className="text-xs text-slate-500">Alterações só funcionam quando o APK atualizado está vinculado e conectado à internet. As permissões do Android não podem ser liberadas remotamente.</p>
  </main></div>
