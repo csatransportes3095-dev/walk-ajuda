@@ -54,16 +54,8 @@ jobs:
         run: |
           if [ -f scripts/test-conditional-question-flow.mjs ]; then
             node --experimental-strip-types --test scripts/test-conditional-question-flow.mjs
-          else
-            node --experimental-strip-types --input-type=module <<'JS'
-            import { applyQuestionFlow } from './client/src/lib/conditionalQuestionFlow.ts';
-            const ordered=[{id:1},{id:2},{id:3},{id:4},{id:5}];
-            const rules=[{questionId:4,answer:'NAO',action:'finish'}];
-            const result=applyQuestionFlow(ordered,{1:'SIM',2:'X',3:'Y',4:'NAO'},rules);
-            if(!result.ended || result.questions.map(x=>x.id).join(',')!=='1,2,3,4') throw new Error('deep finish failed');
-            console.log('DEEP_FINISH_OK');
-            JS
           fi
+          node --experimental-strip-types --input-type=module -e "import { applyQuestionFlow } from './client/src/lib/conditionalQuestionFlow.ts'; const ordered=[{id:1},{id:2},{id:3},{id:4},{id:5}]; const rules=[{questionId:4,answer:'NAO',action:'finish'}]; const result=applyQuestionFlow(ordered,{1:'SIM',2:'X',3:'Y',4:'NAO'},rules); if(!result.ended || result.questions.map(x=>x.id).join(',')!=='1,2,3,4') throw new Error('deep finish failed'); console.log('DEEP_FINISH_OK');"
       - name: TypeScript delta check
         shell: bash
         run: |
