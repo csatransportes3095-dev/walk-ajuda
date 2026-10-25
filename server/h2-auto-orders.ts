@@ -134,7 +134,7 @@ export function registerH2AutoOrdersRoutes(app:Express){
    const user=await rows(sql`SELECT id FROM customers WHERE id=${s.customer_id} AND deletedAt IS NULL AND blocked=0 AND SHA2(LOWER(TRIM(email)),256)=${s.email_hash} AND RIGHT(REGEXP_REPLACE(phone,'[^0-9]',''),11)=${String(s.customer_phone).replace(/\D/g,'').slice(-11)} LIMIT 1`);
    if(user.length!==1)return reply(res,403,{error:"not_authorized"});
    const result:any=await db.execute(sql`UPDATE h2_auto_order_sessions SET used_at=${now},expires_at=${now+settings.hours*3600000},code_hash=NULL,code_expires=NULL
-    WHERE id=${sid} AND code_hash=${candidate} AND code_expires>=${now} AND code_attempts<5 AND used_at IS NULL`);
+    WHERE id=${sid} AND code_hash=${candidate} AND code_expires>=${now} AND code_attempts<${settings.attempts} AND used_at IS NULL`);
    if(!result[0]?.affectedRows)return reply(res,403,{error:"invalid_or_expired_code"});
    return reply(res,200,{verified:true,state:"verified",expiresAt:now+settings.hours*3600000});
   }catch{return reply(res,503,{error:"temporarily_unavailable"});}
