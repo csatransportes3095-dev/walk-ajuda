@@ -29,6 +29,7 @@ function ensure() {
  label VARCHAR(80) NOT NULL,
  pairing_hash CHAR(64) NULL,
  pairing_expires BIGINT NULL,
+ pair_attempts INT NOT NULL DEFAULT 0,
  token_hash CHAR(64) NULL,
  config_json JSON NOT NULL,
  revision INT NOT NULL DEFAULT 1,
@@ -55,7 +56,7 @@ export const h2AutoAdminRouter=router({
  pairCode:adminProcedure.input(z.object({id:z.string().length(24)})).mutation(async({input})=>{
    await ensure();const code=String(randomBytes(4).readUInt32BE()%100000000).padStart(8,"0");
    const db=await getDb();if(!db)throw new Error("DB unavailable");
-   await db.execute(sql`UPDATE h2_auto_devices SET pairing_hash=${hash(code)},pairing_expires=${Date.now()+600000} WHERE id=${input.id}`);
+   await db.execute(sql`UPDATE h2_auto_devices SET pairing_hash=${hash(code)},pairing_expires=${Date.now()+600000},pair_attempts=0 WHERE id=${input.id}`);
    return {code,expiresInSeconds:600};
  }),
  save:adminProcedure.input(z.object({id:z.string().length(24),config:configSchema})).mutation(async({input})=>{
@@ -79,9 +80,15 @@ export function registerH2AutoDeviceRoutes(app:Express) {
    await ensure();
    const data=await rows(sql`SELECT * FROM h2_auto_devices WHERE id=${parsed.data.deviceId} LIMIT 1`);
    const d=data[0];const supplied=Buffer.from(hash(parsed.data.code),"hex");
-   if(!d || !d.pairing_hash || Number(d.pairing_expires)<Date.now() ||
+   if(!d || !d.pairing_hash || Number(d.pairing_expires)<Date.now() || Number(d.pair_attempts)>=5 ||
       !timingSafeEqual(Buffer.from(String(d.pairing_hash),"hex"),supplied))
-      return respond(res,403,{error:"invalid_or_expired_code"});
+      {
+        if(d?.id && d.pairing_hash && Number(d.pair_attempts)<5) {
+          const db=await getDb();
+          if(db)await db.execute(sql`UPDATE h2_auto_devices SET pair_attempts=pair_attempts+1 WHERE id=${d.id}`);
+        }
+        return respond(res,403,{error:"invalid_or_expired_code"});
+      }
    const token=randomBytes(32).toString("hex");const db=await getDb();if(!db)throw Error("db");
    const updated:any=await db.execute(sql`UPDATE h2_auto_devices SET token_hash=${hash(token)},pairing_hash=NULL,pairing_expires=NULL
      WHERE id=${d.id} AND pairing_hash=${d.pairing_hash} AND pairing_expires>=${Date.now()}`);
