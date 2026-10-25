@@ -399,8 +399,7 @@ async function resolveEligibility(phone: string, productId?: number | null) {
   const hasAllowedFrequency = allowedFrequencies.daily || allowedFrequencies.weekly || allowedFrequencies.monthly;
 
   let reason: string | null = null;
-  if (!config.enabled) reason = "Parcelamento VIP indisponível no momento.";
-  else if (!vipActive) reason = "Seu VIP precisa estar ativo para usar o parcelamento.";
+  if (!vipActive) reason = "Seu VIP precisa estar ativo para usar o parcelamento.";
   else if (!permission.enabled) reason = "Parcelamento VIP ainda não foi liberado para este cadastro.";
   else if (openPlan && openPlan.balanceCents > 0) reason = "Você já possui uma compra parcelada em andamento. Quite o saldo para liberar um novo parcelamento.";
   else if (productRule && !productRule.enabled) reason = "Este produto não está liberado para Parcelamento VIP.";
