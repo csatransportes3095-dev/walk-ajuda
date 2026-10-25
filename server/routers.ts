@@ -41,6 +41,7 @@ import { onlineSupportRouter } from "./routers/online-support";
 import { chatFlowRouter } from "./routers/chat-flow";
 import { consultasRouter } from "./routers/consultas";
 import { whatsappTemplatesRouter } from "./routers/whatsappTemplates";
+import { h2AutoAdminRouter } from "./h2-auto-remote";
 import { preRegistrationsRouter } from "./routers/preRegistrations";
 import { preCadastroQuestionsRouter } from "./routers/preCadastroQuestions";
 import { cartoesRouter } from "./routers/cartoes";
@@ -8926,6 +8927,7 @@ export const appRouter = router({
   chatFlow: chatFlowRouter,
   consultas: router(consultasRouter),
   whatsappTemplates: router(whatsappTemplatesRouter),
+  h2AutoAdmin: h2AutoAdminRouter,
   cartoes: cartoesRouter,
   mercado: mercadoRouter,
 
