@@ -1,0 +1,111 @@
+name: Unlimited question flow validation
+on:
+  push:
+    branches: [fix/question-flow-unlimited-depth-20261024]
+    paths:
+      - 'scripts/patch-question-flow-unlimited-depth-20261024.mjs'
+      - '.github/workflows/question-flow-unlimited-depth-validate.yml'
+  workflow_dispatch:
+permissions:
+  contents: write
+jobs:
+  validate:
+    runs-on: ubuntu-latest
+    timeout-minutes: 12
+    steps:
+      - uses: actions/checkout@v4
+      - uses: pnpm/action-setup@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+          cache: pnpm
+      - name: Apply scoped question-tree patch
+        run: |
+          node scripts/patch-question-flow-unlimited-depth-20261024.mjs
+          before=$(sha256sum client/src/pages/AdminProducts.tsx client/src/pages/Home.tsx)
+          node scripts/patch-question-flow-unlimited-depth-20261024.mjs
+          test "$before" = "$(sha256sum client/src/pages/AdminProducts.tsx client/src/pages/Home.tsx)"
+      - name: Install dependencies
+        run: pnpm install --frozen-lockfile
+      - name: Structural regression checks
+        run: |
+          node --input-type=module <<'JS'
+          import fs from 'node:fs';
+          const admin=fs.readFileSync('client/src/pages/AdminProducts.tsx','utf8');
+          const home=fs.readFileSync('client/src/pages/Home.tsx','utf8');
+          const flow=fs.readFileSync('client/src/lib/conditionalQuestionFlow.ts','utf8');
+          const must=[
+            [admin,'QUESTION_TREE_UNLIMITED_DEPTH_20261024'],
+            [admin,'renderConditionalQuestion(child, depth + 1)'],
+            [admin,'flowEditor(question)'],
+            [admin,'+ sub nível {depth + 1}'],
+            [home,'QUESTION_TREE_UNLIMITED_DEPTH_20261024'],
+            [home,'if (isVisible) appendTree(child)'],
+            [home,'applyQuestionFlow(buildOrderedQs(answers), answers, flowRules)'],
+            [flow,"rule?.action==='finish'"],
+            [flow,"rule?.action==='message'"],
+          ];
+          for(const [src,needle] of must) if(!src.includes(needle)) throw new Error('missing: '+needle);
+          if(admin.includes('Sub-sub-perguntas (3º nível)')) throw new Error('old fixed-depth admin renderer remains');
+          if(home.includes('Inserir sub-sub-perguntas visíveis logo após a sub-pergunta pai')) throw new Error('old fixed-depth client renderer remains');
+          console.log('STRUCTURE_OK');
+          JS
+      - name: Existing conditional-flow tests
+        run: |
+          if [ -f scripts/test-conditional-question-flow.mjs ]; then
+            node --experimental-strip-types --test scripts/test-conditional-question-flow.mjs
+          fi
+          node --experimental-strip-types --input-type=module -e "import { applyQuestionFlow } from './client/src/lib/conditionalQuestionFlow.ts'; const ordered=[{id:1},{id:2},{id:3},{id:4},{id:5}]; const rules=[{questionId:4,answer:'NAO',action:'finish'}]; const result=applyQuestionFlow(ordered,{1:'SIM',2:'X',3:'Y',4:'NAO'},rules); if(!result.ended || result.questions.map(x=>x.id).join(',')!=='1,2,3,4') throw new Error('deep finish failed'); console.log('DEEP_FINISH_OK');"
+      - name: TypeScript delta check
+        shell: bash
+        run: |
+          git fetch --depth=1 origin recovery/organizar-salvos-2026-08-24
+          git worktree add --detach /tmp/qflow-base origin/recovery/organizar-salvos-2026-08-24
+          ln -s "$PWD/node_modules" /tmp/qflow-base/node_modules
+          set +e
+          (cd /tmp/qflow-base && pnpm check) > /tmp/qflow-before.log 2>&1
+          before=$?
+          pnpm check > /tmp/qflow-after.log 2>&1
+          after=$?
+          set -e
+          python3 - <<'PY'
+          import re
+          from collections import Counter
+          from pathlib import Path
+          def ds(p):
+              return Counter(re.sub(r'\(\d+,\d+\)','',x) for x in Path(p).read_text().splitlines() if 'error TS' in x)
+          b=ds('/tmp/qflow-before.log'); a=ds('/tmp/qflow-after.log'); added=a-b
+          print('TYPECHECK_BASELINE',sum(b.values()),'CANDIDATE',sum(a.values()),'NEW',sum(added.values()))
+          for k,v in added.items(): print(v,k)
+          if added: raise SystemExit(1)
+          PY
+      - name: Validate Render patch chain and production build
+        run: |
+          mkdir -p /tmp/qflow-prod
+          tar --exclude=.git --exclude=node_modules -cf - . | tar -xf - -C /tmp/qflow-prod
+          ln -s "$PWD/node_modules" /tmp/qflow-prod/node_modules
+          python3 - <<'PY'
+          import re, subprocess
+          from pathlib import Path
+          root=Path('/tmp/qflow-prod')
+          scripts=re.findall(r'&& node (scripts/[^\s\\]+\.mjs)',(root/'Dockerfile').read_text())
+          for script in scripts:
+              subprocess.run(['node',script],cwd=root,check=True)
+          admin=(root/'client/src/pages/AdminProducts.tsx').read_text()
+          home=(root/'client/src/pages/Home.tsx').read_text()
+          assert 'renderConditionalQuestion(child, depth + 1)' in admin
+          assert 'if (isVisible) appendTree(child)' in home
+          subprocess.run(['pnpm','build'],cwd=root,check=True)
+          print('RENDER_PATCHES_OK',len(scripts),'PRODUCTION_BUILD_OK')
+          PY
+      - name: Commit validated source
+        run: |
+          git diff --check
+          git config user.name 'github-actions[bot]'
+          git config user.email '41898282+github-actions[bot]@users.noreply.github.com'
+          git add client/src/pages/AdminProducts.tsx client/src/pages/Home.tsx
+          if ! git diff --cached --quiet; then
+            git commit -m 'fix(perguntas): permitir fluxo e subperguntas em profundidade ilimitada'
+            git push origin HEAD:fix/question-flow-unlimited-depth-20261024
+          fi
+          echo "VALIDATED_SOURCE_COMMIT=$(git rev-parse HEAD)"

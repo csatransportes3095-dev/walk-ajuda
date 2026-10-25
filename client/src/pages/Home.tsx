@@ -3469,42 +3469,45 @@ export default function Home() {
       {step === "questions" && (() => {
         const allQsModal = selectedOption?.questions || [];
 
-        // Constrói lista ordenada: perguntas raiz em ordem, sub-perguntas logo após o pai
+        // QUESTION_TREE_UNLIMITED_DEPTH_20261024
+        // Monta a arvore em qualquer profundidade. Cada filho so entra quando a
+        // resposta do pai satisfaz triggerOption. As regras finish/message podem
+        // portanto encerrar o questionario em qualquer nivel.
         const buildOrderedQs = (answers: Record<number, string>): ProductQuestion[] => {
-          const roots = allQsModal.filter(q => !q.parentQuestionId).sort((a, b) => a.sortOrder - b.sortOrder);
           const result: ProductQuestion[] = [];
-          for (const root of roots) {
-            result.push(root);
-            // Inserir sub-perguntas visíveis logo após o pai
-            const rawSubs = allQsModal
-              .filter(q => q.parentQuestionId === root.id)
+          const visited = new Set<number>();
+
+          const appendTree = (question: ProductQuestion) => {
+            if (visited.has(question.id)) return;
+            visited.add(question.id);
+            result.push(question);
+
+            const rawChildren = allQsModal
+              .filter(child => child.parentQuestionId === question.id)
               .sort((a, b) => a.sortOrder - b.sortOrder);
-            // Veículo: modelos antigos eram uma pergunta por marca. Na tela do cliente
-            // usamos uma única pergunta de modelo e filtramos as opções pela marca escolhida.
-            const vehicleModelSubs = getVehicleQuestionKind(root.question) === 'brand'
-              ? rawSubs.filter(q => getVehicleQuestionKind(q.question) === 'model')
+
+            const vehicleModelChildren = getVehicleQuestionKind(question.question) === 'brand'
+              ? rawChildren.filter(child => getVehicleQuestionKind(child.question) === 'model')
               : [];
-            const subs = vehicleModelSubs.length > 0
-              ? [vehicleModelSubs[0], ...rawSubs.filter(q => getVehicleQuestionKind(q.question) !== 'model')]
-              : rawSubs;
-            for (const sub of subs) {
-              const parentAnswer = answers[root.id]?.trim() || "";
-              const isGenericVehicleModel = getVehicleQuestionKind(root.question) === 'brand' && getVehicleQuestionKind(sub.question) === 'model';
-              const isVisible = isGenericVehicleModel ? !!parentAnswer : (!sub.triggerOption || parentAnswer === sub.triggerOption);
-              if (isVisible) {
-                result.push(sub);
-                // Inserir sub-sub-perguntas visíveis logo após a sub-pergunta pai
-                const subSubs = allQsModal
-                  .filter(q => q.parentQuestionId === sub.id)
-                  .sort((a, b) => a.sortOrder - b.sortOrder);
-                for (const subSub of subSubs) {
-                  const subAnswer = answers[sub.id]?.trim() || "";
-                  const isSubVisible = !subSub.triggerOption || subAnswer === subSub.triggerOption;
-                  if (isSubVisible) result.push(subSub);
-                }
-              }
+            const children = vehicleModelChildren.length > 0
+              ? [vehicleModelChildren[0], ...rawChildren.filter(child => getVehicleQuestionKind(child.question) !== 'model')]
+              : rawChildren;
+
+            const parentAnswer = answers[question.id]?.trim() || '';
+            for (const child of children) {
+              const isGenericVehicleModel = getVehicleQuestionKind(question.question) === 'brand'
+                && getVehicleQuestionKind(child.question) === 'model';
+              const isVisible = isGenericVehicleModel
+                ? !!parentAnswer
+                : (!child.triggerOption || parentAnswer === child.triggerOption);
+              if (isVisible) appendTree(child);
             }
-          }
+          };
+
+          allQsModal
+            .filter(question => !question.parentQuestionId)
+            .sort((a, b) => a.sortOrder - b.sortOrder)
+            .forEach(appendTree);
           return result;
         };
 
