@@ -1,0 +1,25 @@
+name: H2 AUTO Remote ADM - Isolated Validation
+on:
+  push:
+    branches: ['feature/h2-auto-remote-adm-20261025']
+  workflow_dispatch:
+permissions:
+  contents: read
+jobs:
+  validation:
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    steps:
+      - uses: actions/checkout@v4
+      - uses: pnpm/action-setup@v4
+        with:
+          version: '10'
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '22'
+          cache: pnpm
+      - run: pnpm install --frozen-lockfile
+      - name: TypeScript check
+        run: pnpm check
+      - name: Frontend and backend build
+        run: pnpm build
