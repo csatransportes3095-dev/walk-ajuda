@@ -1096,16 +1096,37 @@ export const loanRouter = router({
       }
       return { id: input.id };
     } else {
-      let mainCustomer: any;
-      try {
-        mainCustomer = await requireCompleteMainCustomerProfile(db, { phone: input.phone, cpf: input.cpf });
-      } catch (profileError: any) {
-        throw new TRPCError({ code: 'BAD_REQUEST', message: profileError?.message || 'Conclua o cadastro principal antes de habilitar empréstimos.' });
+      // Regra administrativa: o ADM pode cadastrar o cliente no módulo de
+      // Empréstimos mesmo quando o cadastro principal ainda está incompleto.
+      // A exigência de CEP/endereço/foto continua valendo somente nos fluxos
+      // de acesso do próprio cliente.
+      let mainCustomer: any = null;
+      const phoneDigits = onlyDigits(input.phone || '');
+      const cpfDigits = onlyDigits(input.cpf || '');
+      if (phoneDigits || cpfDigits) {
+        const candidates = await qRows(db, drizzleSql`
+          SELECT id, name, phone, cpf, email, profilePhotoUrl, deletedAt
+          FROM customers
+          WHERE deletedAt IS NULL
+            AND (
+              (${phoneDigits || ''} <> '' AND REGEXP_REPLACE(COALESCE(phone,''), '[^0-9]', '') = ${phoneDigits || ''})
+              OR
+              (${cpfDigits || ''} <> '' AND REGEXP_REPLACE(COALESCE(cpf,''), '[^0-9]', '') = ${cpfDigits || ''})
+            )
+          ORDER BY id DESC
+          LIMIT 1
+        `);
+        mainCustomer = candidates[0] || null;
       }
+
+      const adminName = String(mainCustomer?.name || input.name || '').trim();
+      const adminCpf = String(mainCustomer?.cpf || input.cpf || '').trim();
+      const adminPhone = String(mainCustomer?.phone || input.phone || '').trim();
+
       const result = await db.execute(drizzleSql`
         INSERT INTO loanClients (name, cpf, phone, status, profileSlug, creditLimit, interestRate,
           loanEnabled, allowedPaymentTypes, pixKey, pixKeyType, pixName, client_pix_key, client_pix_name, client_pix_bank, spreadsheetToken, notes, userId)
-        VALUES (${mainCustomer.name}, ${mainCustomer.cpf || null}, ${mainCustomer.phone || null}, ${input.status},
+        VALUES (${adminName}, ${adminCpf || null}, ${adminPhone || null}, ${input.status},
           ${input.profileSlug}, ${input.creditLimit}, ${input.interestRate}, ${resolvedLoanEnabled},
           ${resolvedAllowedTypes}, ${input.pixKey || null}, ${input.pixKeyType || null},
           ${input.pixName || null}, ${input.pixKey || null}, ${input.pixName || null}, ${input.pixBank || null}, ${input.spreadsheetToken || null}, ${input.notes || null}, 1)
