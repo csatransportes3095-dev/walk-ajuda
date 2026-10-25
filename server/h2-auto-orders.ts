@@ -7,6 +7,7 @@ import {normalizeCustomerPhone} from "./customerAccess";
 import {isOwnSiteEmailAuthorized} from "./siteAccessOwnCodes";
 import {getOrderStatusVisibilityForClient} from "./orderStatusVisibility";
 import {groupVisibleH2AutoOrders} from "./h2-auto-order-history";
+import {attachScheduleToOrders} from "./h2-auto-order-schedule";
 
 const hash=(v:string)=>createHash("sha256").update(v).digest("hex");
 const otpDigest=(sid:string,code:string)=>{const secret=process.env.H2_SITE_ACCESS_SECRET||"";if(secret.length<32)throw Error("otp_secret_unavailable");return createHmac("sha256",secret).update("h2-auto-orders:"+sid+":"+code).digest("hex");};
@@ -173,7 +174,15 @@ export function registerH2AutoOrdersRoutes(app:Express){
       const policy=await getOrderStatusVisibilityForClient(item.registrationId,item.orderNumber,item.status);
       visible.push({...item,showNextStep:policy.showNextStep});
    }
-   return reply(res,200,{state:"verified",orders:visible,message:visible.length?"Pedidos encontrados.":settings.noOrders});
+   // A photo booking is read-only here: never generate a new token or change appointments.
+   const appointmentRows=registrationIds.length?await rows(sql`SELECT id,registrationId,subOrderIndex,token,status,customerPhone,slotDate,slotTime
+     FROM scheduleAppointments WHERE registrationId IN (${sql.join(registrationIds.map((n:number)=>sql`${n}`),sql`,`)})
+     ORDER BY id DESC LIMIT 500`):[];
+   const withSchedules=attachScheduleToOrders(visible,appointmentRows,String(s.customer_phone),{
+    pending:"📸 Seu pedido está aguardando agendamento para realizar sua FOTO DE PERFIL com a equipe H2. Escolha uma data e um horário disponíveis no link abaixo.",
+    confirmed:"✅ Sua FOTO DE PERFIL está agendada. O atendimento será realizado pelo WhatsApp. Esteja disponível no horário confirmado.",
+   });
+   return reply(res,200,{state:"verified",orders:withSchedules,message:visible.length?"Pedidos encontrados.":settings.noOrders});
   }catch{return reply(res,503,{error:"temporarily_unavailable"});}
  });
  app.post("/api/h2-auto/orders/logout",async(req,res)=>{
