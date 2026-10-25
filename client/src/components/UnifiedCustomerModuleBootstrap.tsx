@@ -19,7 +19,8 @@ function currentRelativeUrl(): string {
 
 function resolveTarget(pathname: string): ModuleTarget {
   const path = String(pathname || "/").toLowerCase().replace(/\/+$/, "") || "/";
-  if (path === "/gastos") return { kind: "spreadsheet", route: "gastos" };
+  // Gastos já valida cp_token, sessão e permissão dentro da própria página.
+  // Não interceptar aqui evita uma segunda preparação de sessão antes da rota abrir.
   // Empréstimos já gerencia cp_token, permissão e manifesto dentro da própria página.
   // Não interceptar aqui evita uma segunda preparação de sessão antes da rota abrir.
   if (path === "/cartoes" || path.startsWith("/cartoes/")) return { kind: "cartoes" };
