@@ -52,7 +52,7 @@ if (!admin.includes(sentinel)) {
     const levelStyle = conditionalTreeStyle(depth);
     const indentRem = Math.min(depth * 1.5, 12);
     return (
-      <div key={question.id} className="space-y-1" style={{ marginLeft: `${indentRem}rem` }}>
+      <div key={question.id} className="space-y-1" style={{ marginLeft: String(indentRem) + 'rem' }}>
         <div
           className="flex items-center gap-2 border-l-2 px-3 py-1.5 rounded-r-lg"
           style={{ borderColor: levelStyle.border, backgroundColor: levelStyle.bg }}
@@ -97,7 +97,7 @@ if (!admin.includes(sentinel)) {
                 }}
                 className="text-[10px] px-2 py-0.5 rounded-full transition-colors border hover:bg-white/10"
                 style={{ color: levelStyle.color, borderColor: levelStyle.border, backgroundColor: levelStyle.bg }}
-                title={`Adicionar outra sub-pergunta quando a resposta for "${optionLabel}"`}
+                title={'Adicionar outra sub-pergunta quando a resposta for "' + optionLabel + '"'}
               >
                 + sub nível {depth + 1} se &quot;{optionLabel}&quot;
               </button>
