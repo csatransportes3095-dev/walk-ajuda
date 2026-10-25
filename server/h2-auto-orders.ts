@@ -56,6 +56,13 @@ async function authenticated(req:Request){
  return deviceId;
 }
 function sessionId(deviceId:string,conversation:string){return hash(deviceId+"|"+conversation);}
+async function orderSettings(deviceId:string){
+ const device=(await rows(sql`SELECT config_json FROM h2_auto_devices WHERE id=${deviceId} LIMIT 1`))[0];
+ const raw=typeof device?.config_json==="string"?JSON.parse(device.config_json):device?.config_json||{};
+ const within=(v:unknown,min:number,max:number,def:number)=>typeof v==="number"&&Number.isInteger(v)&&v>=min&&v<=max?v:def;
+ return {hours:within(raw.orderSessionHours,1,72,24),ttl:within(raw.orderCodeTtlMinutes,5,30,10),attempts:within(raw.orderCodeMaxAttempts,3,10,5),
+  noOrders:typeof raw.orderNoOrdersMessage==="string"&&raw.orderNoOrdersMessage.length<=600?raw.orderNoOrdersMessage:"Cadastro localizado, mas não encontramos nenhum pedido associado a este cadastro no momento."};
+}
 async function activeCustomer(phone:string){
  const clean=normalizeCustomerPhone(phone);if(!clean)return null;
  const found=await rows(sql`SELECT id,phone,email,blocked,deletedAt FROM customers WHERE deletedAt IS NULL AND
@@ -80,6 +87,7 @@ export function registerH2AutoOrdersRoutes(app:Express){
    if(!id)return reply(res,401,{error:"unauthorized"});
    if(!validConversation(conversation)||!normalizeCustomerPhone(phone))return reply(res,400,{error:"invalid_request"});
    await ensure();const now=Date.now(),sid=sessionId(id,conversation);
+   const settings=await orderSettings(id);
    const existing=(await rows(sql`SELECT resend_after FROM h2_auto_order_sessions WHERE id=${sid} LIMIT 1`))[0];
    if(existing && Number(existing.resend_after)>now)return reply(res,429,{error:"wait_before_resend"});
    const normalized=normalizeCustomerPhone(phone);
@@ -97,7 +105,7 @@ export function registerH2AutoOrdersRoutes(app:Express){
    const code=String(randomInt(0,1000000)).padStart(6,"0"), codeHash=otpDigest(sid,code);
    const db=await getDb();if(!db)throw Error("db");
    await db.execute(sql`INSERT INTO h2_auto_order_sessions(id,device_id,conversation_hash,customer_id,customer_phone,email_hash,code_hash,code_expires,code_attempts,resend_after,expires_at,issued_at)
-    VALUES (${sid},${id},${hash(conversation)},${customer.id},${customer.phone},${hash(customer.email.trim().toLowerCase())},${codeHash},${now+600000},0,${now+60000},0,${now})
+    VALUES (${sid},${id},${hash(conversation)},${customer.id},${customer.phone},${hash(customer.email.trim().toLowerCase())},${codeHash},${now+settings.ttl*60000},0,${now+60000},0,${now})
     ON DUPLICATE KEY UPDATE customer_id=VALUES(customer_id),customer_phone=VALUES(customer_phone),email_hash=VALUES(email_hash),code_hash=VALUES(code_hash),code_expires=VALUES(code_expires),code_attempts=0,resend_after=VALUES(resend_after),expires_at=0,issued_at=VALUES(issued_at),used_at=NULL`);
    try{await sendH2AutoOrderCode(customer.email,code);}
    catch{
@@ -113,21 +121,22 @@ export function registerH2AutoOrdersRoutes(app:Express){
    if(!id)return reply(res,401,{error:"unauthorized"});
    if(!validConversation(conversation)||typeof code!=="string"||!/^\d{6}$/.test(code))return reply(res,400,{error:"invalid_request"});
    await ensure();const sid=sessionId(id,conversation), now=Date.now();
+   const settings=await orderSettings(id);
    const records=await rows(sql`SELECT * FROM h2_auto_order_sessions WHERE id=${sid} AND device_id=${id} LIMIT 1`);
    const s=records[0];
-   if(!s || !s.code_hash || Number(s.code_expires)<now || Number(s.code_attempts)>=5 || s.used_at!==null)return reply(res,403,{error:"invalid_or_expired_code"});
+   if(!s || !s.code_hash || Number(s.code_expires)<now || Number(s.code_attempts)>=settings.attempts || s.used_at!==null)return reply(res,403,{error:"invalid_or_expired_code"});
    const db=await getDb();if(!db)throw Error("db");
    const candidate=otpDigest(sid,code);
    if(!timingSafeEqual(Buffer.from(String(s.code_hash),"hex"),Buffer.from(candidate,"hex"))){
-    await db.execute(sql`UPDATE h2_auto_order_sessions SET code_attempts=code_attempts+1 WHERE id=${sid} AND code_attempts<5`);
+    await db.execute(sql`UPDATE h2_auto_order_sessions SET code_attempts=code_attempts+1 WHERE id=${sid} AND code_attempts<${settings.attempts}`);
     return reply(res,403,{error:"invalid_or_expired_code"});
    }
    const user=await rows(sql`SELECT id FROM customers WHERE id=${s.customer_id} AND deletedAt IS NULL AND blocked=0 AND SHA2(LOWER(TRIM(email)),256)=${s.email_hash} AND RIGHT(REGEXP_REPLACE(phone,'[^0-9]',''),11)=${String(s.customer_phone).replace(/\D/g,'').slice(-11)} LIMIT 1`);
    if(user.length!==1)return reply(res,403,{error:"not_authorized"});
-   const result:any=await db.execute(sql`UPDATE h2_auto_order_sessions SET used_at=${now},expires_at=${now+86400000},code_hash=NULL,code_expires=NULL
+   const result:any=await db.execute(sql`UPDATE h2_auto_order_sessions SET used_at=${now},expires_at=${now+settings.hours*3600000},code_hash=NULL,code_expires=NULL
     WHERE id=${sid} AND code_hash=${candidate} AND code_expires>=${now} AND code_attempts<5 AND used_at IS NULL`);
    if(!result[0]?.affectedRows)return reply(res,403,{error:"invalid_or_expired_code"});
-   return reply(res,200,{verified:true,state:"verified",expiresAt:now+86400000});
+   return reply(res,200,{verified:true,state:"verified",expiresAt:now+settings.hours*3600000});
   }catch{return reply(res,503,{error:"temporarily_unavailable"});}
  });
  app.post("/api/h2-auto/orders/list",async(req,res)=>{
@@ -136,6 +145,7 @@ export function registerH2AutoOrdersRoutes(app:Express){
    if(!id)return reply(res,401,{error:"unauthorized"});
    if(!validConversation(conversation))return reply(res,400,{error:"invalid_conversation"});
    await ensure();const sid=sessionId(id,conversation), now=Date.now();
+   const settings=await orderSettings(id);
    const sessions=await rows(sql`SELECT s.customer_id,s.customer_phone,c.createdAt AS customer_created,c.email AS current_email FROM h2_auto_order_sessions s
      JOIN customers c ON c.id=s.customer_id WHERE s.id=${sid} AND s.device_id=${id} AND SHA2(LOWER(TRIM(c.email)),256)=s.email_hash AND RIGHT(REGEXP_REPLACE(c.phone,'[^0-9]',''),11)=RIGHT(REGEXP_REPLACE(s.customer_phone,'[^0-9]',''),11) AND s.used_at IS NOT NULL
      AND s.expires_at>${now} AND c.deletedAt IS NULL AND c.blocked=0 LIMIT 1`);
@@ -178,7 +188,7 @@ export function registerH2AutoOrdersRoutes(app:Express){
     }
     if(visible.length>=20)break;
    }
-   return reply(res,200,{state:"verified",orders:visible,message:visible.length?"Pedidos encontrados.":"Cadastro localizado, mas nenhum pedido disponível para consulta."});
+   return reply(res,200,{state:"verified",orders:visible,message:visible.length?"Pedidos encontrados.":settings.noOrders});
   }catch{return reply(res,503,{error:"temporarily_unavailable"});}
  });
  app.post("/api/h2-auto/orders/logout",async(req,res)=>{
