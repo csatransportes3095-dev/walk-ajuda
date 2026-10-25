@@ -33,6 +33,17 @@ export default function AdminH2Auto(){
  </select>
  </label>
  <label className="flex items-center gap-2"><input type="checkbox" checked={value.enabled} onChange={e=>change("enabled",e.target.checked)}/><Power className="h-4 w-4"/> Robô habilitado remotamente</label>
+ <label className="flex items-center gap-2"><input type="checkbox" checked={Boolean(value.ordersEnabled)} onChange={e=>change("ordersEnabled",e.target.checked)}/>Consulta de pedidos por WhatsApp (exige APK atualizado e teste)</label>
+ <div className="col-span-full rounded-xl border border-cyan-400/30 bg-cyan-950/20 p-3 space-y-3">
+ <h4 className="font-black text-cyan-300">INTEGRAÇÃO COM PEDIDOS DO SITE</h4>
+ <p className="text-xs text-white/60">Ative somente após instalar e testar o APK compatível. Código de e-mail sempre obrigatório.</p>
+ <div className="grid grid-cols-1 sm:grid-cols-3 gap-3">
+ <label className="text-xs">Sessão autenticada (horas)<input type="number" min={1} max={72} className={field} value={value.orderSessionHours??24} onChange={e=>change("orderSessionHours",Number(e.target.value))}/></label>
+ <label className="text-xs">Validade do código (minutos)<input type="number" min={5} max={30} className={field} value={value.orderCodeTtlMinutes??10} onChange={e=>change("orderCodeTtlMinutes",Number(e.target.value))}/></label>
+ <label className="text-xs">Tentativas de código<input type="number" min={3} max={10} className={field} value={value.orderCodeMaxAttempts??5} onChange={e=>change("orderCodeMaxAttempts",Number(e.target.value))}/></label>
+ </div>
+ <label className="block text-xs">Mensagem para cliente sem pedidos<textarea rows={3} className={field} maxLength={600} value={value.orderNoOrdersMessage??"Cadastro localizado com sucesso, mas não encontramos nenhum pedido associado a este cadastro no momento."} onChange={e=>change("orderNoOrdersMessage",e.target.value)}/></label>
+ </div>
  <label className="flex items-center gap-2"><Clock className="h-4 w-4"/>Pausa atendente (min)<input type="number" min={1} max={1440} className={field} value={value.pauseMinutes} onChange={e=>change("pauseMinutes",Number(e.target.value))}/></label>
  <label className="flex items-center gap-2"><input type="checkbox" checked={value.scheduleOn} onChange={e=>change("scheduleOn",e.target.checked)}/> Horários ativos</label>
  <div className="flex gap-2"><input className={field} value={value.scheduleStart} onChange={e=>change("scheduleStart",e.target.value)} placeholder="09:00"/><input className={field} value={value.scheduleEnd} onChange={e=>change("scheduleEnd",e.target.value)} placeholder="18:00"/></div>
