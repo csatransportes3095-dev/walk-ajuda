@@ -1,7 +1,7 @@
 import React from "react";
 import AdminHeader from "@/components/AdminHeader";
 import { HomeButtonsManager } from "@/components/HomeButtonsManager";
-import { Building2, LayoutGrid } from "lucide-react";
+import { Building2, LayoutGrid, Bot, Smartphone } from "lucide-react";
 import { useLocation } from "wouter";
 
 export default function AdminHubCentral() {
@@ -36,6 +36,18 @@ export default function AdminHubCentral() {
             <div className="flex h-12 w-12 items-center justify-center overflow-hidden rounded-2xl border border-[#b98a2d]/35 bg-[#14110c]"><img src="/locadora/assets/locacar-icon-192-v1.png" alt="LocaCar" className="h-full w-full object-cover" /></div>
             <div className="flex-1"><p className="font-black tracking-wide text-white">LOCADORA</p><p className="mt-0.5 text-xs text-sky-100/65">Clientes, veículos, contratos, cobranças e manutenção</p></div>
             <span className="text-[#f0d48b] transition group-hover:translate-x-1">→</span>
+          </div>
+        </button>
+
+        <button
+          type="button"
+          onClick={() => navigate("/admin/h2-auto")}
+          className="group w-full rounded-2xl border border-cyan-400/40 bg-gradient-to-r from-cyan-950/50 to-violet-950/40 p-4 text-left transition hover:border-cyan-300/70"
+        >
+          <div className="flex items-center gap-4">
+            <div className="flex h-12 w-12 items-center justify-center rounded-2xl border border-cyan-400/40 bg-slate-950"><Bot className="h-7 w-7 text-cyan-300" /></div>
+            <div className="flex-1"><p className="font-black tracking-wide text-white">H2 AUTO — CONTROLE REMOTO</p><p className="mt-0.5 text-xs text-sky-100/65">Configurar robô e vincular aparelho Android</p></div>
+            <Smartphone className="h-5 w-5 text-cyan-300" />
           </div>
         </button>
 
