@@ -1,0 +1,56 @@
+import {useState} from "react";
+import {trpc} from "@/lib/trpc";
+import AdminHeader from "@/components/AdminHeader";
+import {Bot, Smartphone, RefreshCw, ShieldCheck, Save, Power, Clock} from "lucide-react";
+import {toast} from "sonner";
+
+const Box=({children}:{children:React.ReactNode})=><div className="rounded-2xl border border-cyan-500/30 bg-slate-900/90 p-5 space-y-3">{children}</div>;
+export default function AdminH2Auto(){
+ const utils=trpc.useUtils();
+ const {data=[],isLoading}=trpc.h2AutoAdmin.list.useQuery(undefined,{refetchInterval:15000});
+ const create=trpc.h2AutoAdmin.create.useMutation({onSuccess:x=>{setPair({id:x.id,code:x.code});utils.h2AutoAdmin.list.invalidate();},onError:()=>toast.error("Falha ao criar aparelho")});
+ const pairCode=trpc.h2AutoAdmin.pairCode.useMutation({onSuccess:x=>setPair({id:pairId,code:x.code})});
+ const save=trpc.h2AutoAdmin.save.useMutation({onSuccess:()=>{toast.success("Salvo: aguardando sincronização do celular");utils.h2AutoAdmin.list.invalidate();},onError:()=>toast.error("Falha ao salvar")});
+ const revoke=trpc.h2AutoAdmin.revoke.useMutation({onSuccess:()=>utils.h2AutoAdmin.list.invalidate()});
+ const [label,setLabel]=useState("Celular principal");const[pair,setPair]=useState<{id:string,code:string}|null>(null);const[pairId,setPairId]=useState("");const[editing,setEditing]=useState<Record<string,any>>({});
+ const field="w-full rounded-xl border border-cyan-500/30 bg-slate-950 px-3 py-2 text-white";
+ return <div className="min-h-screen bg-[#050c18] text-white"><AdminHeader title="H2 AUTO — CONTROLE REMOTO" icon={<Bot className="h-5 w-5"/>}/>
+ <main className="mx-auto max-w-5xl p-4 space-y-5">
+ <div className="rounded-2xl border border-emerald-400/30 bg-emerald-950/30 p-4 text-sm text-emerald-200"><ShieldCheck className="inline h-4 w-4 mr-2"/>Sem API do WhatsApp. Apenas configurações sincronizadas com o APK. O aparelho continua responsável por responder.</div>
+ <Box><h2 className="font-black text-cyan-300 flex gap-2"><Smartphone/> VINCULAR APARELHO</h2><div className="flex gap-2"><input className={field} value={label} maxLength={80} onChange={e=>setLabel(e.target.value)} placeholder="Nome do aparelho"/><button className="rounded-xl bg-cyan-500 px-4 font-bold text-slate-950" disabled={!label.trim()||create.isPending} onClick={()=>create.mutate({label})}>ADICIONAR</button></div>
+ {pair&&<div className="rounded-xl border border-yellow-400/40 p-4"><p className="text-yellow-300 font-black">CÓDIGO TEMPORÁRIO — 10 MINUTOS</p><p className="text-3xl tracking-widest font-black">{pair.code}</p><p className="text-xs opacity-70">Aparelho: {pair.id}. Insira este código no H2 AUTO. Ele aparece somente agora.</p></div>}</Box>
+ {isLoading&&<p>Carregando aparelhos...</p>}
+ {data.map(d=>{const value=editing[d.id]||d.config;const change=(f:string,v:any)=>setEditing(p=>({...p,[d.id]:{...value,[f]:v}}));return <Box key={d.id}>
+ <div className="flex flex-wrap justify-between gap-3"><div><h3 className="text-lg font-black">{d.label}</h3><p className="text-xs opacity-65">{d.paired?"VINCULADO":"AGUARDANDO VÍNCULO"} · Config. {d.revision} · Aplicada {d.appliedRevision} · {d.lastSeen?"Última sincronização: "+new Date(d.lastSeen).toLocaleString("pt-BR"):"Nunca sincronizado"}</p></div><div className="flex gap-2"><button className="rounded-lg border border-cyan-500/40 px-3 py-2 text-xs" onClick={()=>{setPairId(d.id);pairCode.mutate({id:d.id},{onSuccess:x=>setPair({id:d.id,code:x.code})})}}>NOVO CÓDIGO</button><button className="rounded-lg border border-red-500/40 px-3 py-2 text-xs text-red-300" onClick={()=>{if(confirm("Revogar acesso do aparelho?"))revoke.mutate({id:d.id})}}>REVOGAR</button></div></div>
+ <div className="grid gap-3 md:grid-cols-2">
+ <label className="text-xs flex flex-col gap-2">APLICATIVO WHATSAPP
+ <select className={field} value={value.whatsappMode} onChange={e=>change("whatsappMode",Number(e.target.value))}>
+ <option value={-1}>Manter seleção do celular</option>
+ <option value={0}>WhatsApp Normal</option>
+ <option value={1}>WhatsApp Business</option>
+ </select>
+ </label>
+ <label className="flex items-center gap-2"><input type="checkbox" checked={value.enabled} onChange={e=>change("enabled",e.target.checked)}/><Power className="h-4 w-4"/> Robô habilitado remotamente</label>
+ <label className="flex items-center gap-2"><Clock className="h-4 w-4"/>Pausa atendente (min)<input type="number" min={1} max={1440} className={field} value={value.pauseMinutes} onChange={e=>change("pauseMinutes",Number(e.target.value))}/></label>
+ <label className="flex items-center gap-2"><input type="checkbox" checked={value.scheduleOn} onChange={e=>change("scheduleOn",e.target.checked)}/> Horários ativos</label>
+ <div className="flex gap-2"><input className={field} value={value.scheduleStart} onChange={e=>change("scheduleStart",e.target.value)} placeholder="09:00"/><input className={field} value={value.scheduleEnd} onChange={e=>change("scheduleEnd",e.target.value)} placeholder="18:00"/></div>
+ </div>
+ <label className="block text-xs text-cyan-200">RESPOSTA INICIAL<textarea rows={5} className={field} value={value.welcome} onChange={e=>change("welcome",e.target.value)}/></label>
+ <div className="grid gap-3 md:grid-cols-2">{value.menu.map((m:string,i:number)=><label key={i} className="text-xs">OPÇÃO {i+1}<textarea className={field} rows={3} value={m} onChange={e=>change("menu",value.menu.map((x:string,j:number)=>j===i?e.target.value:x))}/></label>)}</div>
+ <div className="rounded-xl border border-violet-500/25 bg-slate-950/60 p-4 space-y-3">
+ <div className="flex flex-wrap items-center justify-between gap-2"><h4 className="font-black text-violet-300">PALAVRAS-CHAVE AUTOMÁTICAS</h4><button className="rounded-lg bg-violet-500 px-3 py-2 text-xs font-black" onClick={()=>change("rules",[...value.rules,{trigger:"",reply:"",mode:"exact",enabled:true}])}>+ NOVA REGRA</button></div>
+ {value.rules.map((rule:{trigger:string,reply:string,mode:"exact"|"contains",enabled:boolean},i:number)=>{
+ const update=(key:string,v:unknown)=>change("rules",value.rules.map((x:any,j:number)=>i===j?{...x,[key]:v}:x));
+ return <div key={i} className="grid gap-2 rounded-xl border border-violet-500/25 p-3">
+  <div className="flex items-center justify-between"><label className="text-xs"><input type="checkbox" checked={rule.enabled} onChange={e=>update("enabled",e.target.checked)} className="mr-2"/>Regra {i+1} ativa</label><button className="rounded-lg border border-red-500/40 px-3 py-1 text-red-300" onClick={()=>change("rules",value.rules.filter((_x:any,j:number)=>i!==j))}>Excluir</button></div>
+  <input className={field} value={rule.trigger} maxLength={120} placeholder="Palavra ou frase recebida" onChange={e=>update("trigger",e.target.value)}/>
+  <select className={field} value={rule.mode} onChange={e=>update("mode",e.target.value)}><option value="exact">Mensagem exata</option><option value="contains">Contém a palavra</option></select>
+  <textarea className={field} rows={3} value={rule.reply} maxLength={6000} placeholder="Resposta automática" onChange={e=>update("reply",e.target.value)}/>
+ </div>})}
+ </div>
+ <label className="block text-xs">CONTATOS BLOQUEADOS (um por linha)<textarea className={field} rows={2} value={value.blocked} onChange={e=>change("blocked",e.target.value)}/></label>
+ <button className="w-full rounded-xl bg-emerald-400 p-3 text-slate-950 font-black" disabled={save.isPending} onClick={()=>save.mutate({id:d.id,config:value})}><Save className="inline h-4 w-4 mr-1"/>SALVAR CONFIGURAÇÃO</button>
+ </Box>})}
+ <p className="text-xs text-slate-500">Alterações só funcionam quando o APK atualizado está vinculado e conectado à internet. As permissões do Android não podem ser liberadas remotamente.</p>
+ </main></div>
+}
