@@ -517,11 +517,23 @@ export async function ensureCustomerIdentityInfrastructure(dbArg?: any): Promise
         const phone = normalizeCustomerPhone(customer.phone) || null;
         const cpf = normalizeCustomerCpf(customer.cpf) || null;
         const email = normalizeCustomerEmail(customer.email) || null;
-        await db.execute(sql`
-          UPDATE customers
-          SET normalizedPhone=${phone}, normalizedCpf=${cpf}, normalizedEmail=${email}
-          WHERE id=${customer.id}
-        `);
+        try {
+          await db.execute(sql`
+            UPDATE customers
+            SET normalizedPhone=${phone}, normalizedCpf=${cpf}, normalizedEmail=${email}
+            WHERE id=${customer.id}
+          `);
+        } catch (error: any) {
+          const code = String(error?.code || error?.cause?.code || "");
+          const message = String(error?.message || error?.cause?.message || "");
+          if (code === "ER_DUP_ENTRY" || /duplicate entry/i.test(message)) {
+            console.warn(
+              `[CustomerIdentity] normalização duplicada ignorada para customerId=${customer.id}; acesso preservado.`
+            );
+            continue;
+          }
+          throw error;
+        }
       }
 
       const duplicatePhone = await rows(db, sql`
