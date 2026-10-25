@@ -99,7 +99,7 @@ export function registerH2AutoOrdersRoutes(app:Express){
 
    const customer=await activeCustomer(phone);
    // Do not expose whether this phone or e-mail is registered.
-   const generic={state:"await_code",message:"Se houver cadastro elegível, enviaremos um código ao e-mail. Verifique também o spam. Código válido por 10 minutos."};
+   const generic={state:"await_code",message:"Se houver cadastro elegível, enviaremos um código ao e-mail. Verifique também o spam. Código válido pelo prazo configurado no atendimento."};
    if(!customer)return reply(res,200,generic);
    const authorizationDb=await getDb();if(!authorizationDb)throw Error("db");
    if(!(await isOwnSiteEmailAuthorized(authorizationDb,customer.email)))return reply(res,200,generic);
@@ -108,7 +108,7 @@ export function registerH2AutoOrdersRoutes(app:Express){
    await db.execute(sql`INSERT INTO h2_auto_order_sessions(id,device_id,conversation_hash,customer_id,customer_phone,email_hash,code_hash,code_expires,code_attempts,resend_after,expires_at,issued_at)
     VALUES (${sid},${id},${hash(conversation)},${customer.id},${customer.phone},${hash(customer.email.trim().toLowerCase())},${codeHash},${now+settings.ttl*60000},0,${now+60000},0,${now})
     ON DUPLICATE KEY UPDATE customer_id=VALUES(customer_id),customer_phone=VALUES(customer_phone),email_hash=VALUES(email_hash),code_hash=VALUES(code_hash),code_expires=VALUES(code_expires),code_attempts=0,resend_after=VALUES(resend_after),expires_at=0,issued_at=VALUES(issued_at),used_at=NULL`);
-   try{await sendH2AutoOrderCode(customer.email,code);}
+   try{await sendH2AutoOrderCode(customer.email,code,settings.ttl);}
    catch{
     await db.execute(sql`UPDATE h2_auto_order_sessions SET code_hash=NULL,code_expires=NULL WHERE id=${sid} AND code_hash=${codeHash}`);
     return reply(res,503,{error:"email_unavailable",message:"Não foi possível enviar o código agora."});
