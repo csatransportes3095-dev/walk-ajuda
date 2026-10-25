@@ -30,6 +30,17 @@ export default function AdminH2Auto(){
  </div>
  <label className="block text-xs text-cyan-200">RESPOSTA INICIAL<textarea rows={5} className={field} value={value.welcome} onChange={e=>change("welcome",e.target.value)}/></label>
  <div className="grid gap-3 md:grid-cols-2">{value.menu.map((m:string,i:number)=><label key={i} className="text-xs">OPÇÃO {i+1}<textarea className={field} rows={3} value={m} onChange={e=>change("menu",value.menu.map((x:string,j:number)=>j===i?e.target.value:x))}/></label>)}</div>
+ <div className="rounded-xl border border-violet-500/25 bg-slate-950/60 p-4 space-y-3">
+ <div className="flex flex-wrap items-center justify-between gap-2"><h4 className="font-black text-violet-300">PALAVRAS-CHAVE AUTOMÁTICAS</h4><button className="rounded-lg bg-violet-500 px-3 py-2 text-xs font-black" onClick={()=>change("rules",[...value.rules,{trigger:"",reply:"",mode:"exact",enabled:true}])}>+ NOVA REGRA</button></div>
+ {value.rules.map((rule:{trigger:string,reply:string,mode:"exact"|"contains",enabled:boolean},i:number)=>{
+ const update=(key:string,v:unknown)=>change("rules",value.rules.map((x:any,j:number)=>i===j?{...x,[key]:v}:x));
+ return <div key={i} className="grid gap-2 rounded-xl border border-violet-500/25 p-3">
+  <div className="flex items-center justify-between"><label className="text-xs"><input type="checkbox" checked={rule.enabled} onChange={e=>update("enabled",e.target.checked)} className="mr-2"/>Regra {i+1} ativa</label><button className="rounded-lg border border-red-500/40 px-3 py-1 text-red-300" onClick={()=>change("rules",value.rules.filter((_x:any,j:number)=>i!==j))}>Excluir</button></div>
+  <input className={field} value={rule.trigger} maxLength={120} placeholder="Palavra ou frase recebida" onChange={e=>update("trigger",e.target.value)}/>
+  <select className={field} value={rule.mode} onChange={e=>update("mode",e.target.value)}><option value="exact">Mensagem exata</option><option value="contains">Contém a palavra</option></select>
+  <textarea className={field} rows={3} value={rule.reply} maxLength={6000} placeholder="Resposta automática" onChange={e=>update("reply",e.target.value)}/>
+ </div>})}
+ </div>
  <label className="block text-xs">CONTATOS BLOQUEADOS (um por linha)<textarea className={field} rows={2} value={value.blocked} onChange={e=>change("blocked",e.target.value)}/></label>
  <button className="w-full rounded-xl bg-emerald-400 p-3 text-slate-950 font-black" disabled={save.isPending} onClick={()=>save.mutate({id:d.id,config:value})}><Save className="inline h-4 w-4 mr-1"/>SALVAR CONFIGURAÇÃO</button>
  </Box>})}
