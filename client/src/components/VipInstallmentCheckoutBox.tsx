@@ -85,9 +85,12 @@ export default function VipInstallmentCheckoutBox(props: {
   const config = eligibility.data?.config;
   const permission = eligibility.data?.permission;
   const effectiveRules = eligibility.data?.effectiveRules;
-  const minCount = Number(effectiveRules?.minInstallments ?? config?.minInstallments ?? 2);
-  const effectiveMax = Number(effectiveRules?.maxInstallments ?? config?.maxInstallments ?? minCount);
-  const productMax = effectiveRules?.productMaxInstallments == null ? null : Number(effectiveRules.productMaxInstallments);
+  const selectedFrequencyRule = effectiveRules?.frequencyRules?.[frequency] || null;
+  const minCount = Number(selectedFrequencyRule?.minInstallments ?? effectiveRules?.minInstallments ?? config?.minInstallments ?? 2);
+  const effectiveMax = Number(selectedFrequencyRule?.maxInstallments ?? effectiveRules?.maxInstallments ?? config?.maxInstallments ?? minCount);
+  const productMax = selectedFrequencyRule?.maxInstallments == null
+    ? (effectiveRules?.productMaxInstallments == null ? null : Number(effectiveRules.productMaxInstallments))
+    : Number(selectedFrequencyRule.maxInstallments);
 
   useEffect(() => {
     if (count < minCount) setCount(minCount);
@@ -158,7 +161,7 @@ export default function VipInstallmentCheckoutBox(props: {
             <label className="text-[10px] font-black uppercase text-slate-400">Periodicidade<select value={frequency} disabled={frequencyOptions.length === 0} onChange={(event) => setFrequency(event.target.value as typeof frequency)} className="mt-1.5 w-full rounded-xl border border-white/10 bg-slate-950 px-3 py-2.5 text-sm font-black text-white disabled:opacity-50">{frequencyOptions.length ? frequencyOptions.map((item) => <option key={item.value} value={item.value}>{item.label}</option>) : <option>Nenhuma disponível</option>}</select></label>
           </div>
           {effectiveRules && <div className="rounded-xl border border-cyan-400/20 bg-cyan-500/[0.06] p-3 text-[11px] leading-relaxed text-slate-300">
-            <p><strong className="text-cyan-200">Condição deste produto:</strong> {minCount}x até {effectiveMax}x{productMax != null ? ` • máximo ${productMax}x` : ""}.</p>
+            <p><strong className="text-cyan-200">Condição {frequency === "daily" ? "Diária" : frequency === "weekly" ? "Semanal" : "Mensal"}:</strong> {minCount}x até {effectiveMax}x{productMax != null ? ` • máximo ${productMax}x` : ""}.</p>
             <p className="mt-1 text-slate-400"><strong className="text-slate-300">Periodicidade:</strong> {frequencyOptions.map((item) => item.label).join(", ") || "nenhuma"}.</p>
           </div>}
 
