@@ -119,22 +119,25 @@ export default function PhotoConfirmationPage() {
   }
 
   return (
-    <div className="relative min-h-screen overflow-hidden bg-[#050713] px-3 py-4 text-white sm:px-5 sm:py-7">
+    <div className="relative min-h-screen overflow-hidden bg-[#02050c] px-3 py-4 text-white sm:px-5 sm:py-7">
       <div
         className="pointer-events-none fixed inset-0"
         style={{
           background:
-            "radial-gradient(circle at 12% 8%, rgba(37,99,235,.30), transparent 28%), radial-gradient(circle at 88% 12%, rgba(236,72,153,.22), transparent 30%), radial-gradient(circle at 50% 92%, rgba(124,58,237,.25), transparent 36%), linear-gradient(180deg, #050713 0%, #080b19 45%, #050713 100%)",
+            "radial-gradient(circle at 8% 0%, rgba(0,229,255,.20), transparent 26%), radial-gradient(circle at 94% 8%, rgba(255,0,153,.14), transparent 28%), radial-gradient(circle at 52% 100%, rgba(97,46,255,.16), transparent 34%), linear-gradient(180deg, #02050c 0%, #050914 48%, #02050c 100%)",
         }}
       />
-      <div className="pointer-events-none fixed inset-0 opacity-[0.12]" style={{ backgroundImage: "linear-gradient(rgba(255,255,255,.05) 1px, transparent 1px), linear-gradient(90deg, rgba(255,255,255,.05) 1px, transparent 1px)", backgroundSize: "32px 32px" }} />
+      <div className="pointer-events-none fixed inset-0 opacity-[0.15]" style={{ backgroundImage: "linear-gradient(rgba(0,229,255,.08) 1px, transparent 1px), linear-gradient(90deg, rgba(0,229,255,.06) 1px, transparent 1px)", backgroundSize: "26px 26px" }} />
+      <div className="pointer-events-none fixed inset-0 opacity-[0.18]" style={{ backgroundImage: "repeating-linear-gradient(180deg, transparent 0 3px, rgba(255,255,255,.018) 4px 5px)" }} />
 
       <main className="relative mx-auto w-full max-w-3xl space-y-4 sm:space-y-5">
-        <header className="overflow-hidden rounded-[28px] border border-cyan-300/20 bg-[#0a1020]/80 shadow-[0_24px_80px_rgba(0,0,0,.45)] backdrop-blur-2xl">
-          <div className="h-1 w-full bg-gradient-to-r from-blue-500 via-fuchsia-500 to-cyan-400" />
+        <header className="relative overflow-hidden border border-cyan-300/35 bg-[#050b14]/95 shadow-[0_0_0_1px_rgba(0,229,255,.05),0_28px_90px_rgba(0,0,0,.58),0_0_42px_rgba(0,229,255,.08)] backdrop-blur-2xl" style={{clipPath:"polygon(18px 0,100% 0,100% calc(100% - 18px),calc(100% - 18px) 100%,0 100%,0 18px)"}}>
+          <div className="h-[2px] w-full bg-gradient-to-r from-transparent via-cyan-300 to-fuchsia-400" />
+          <div className="absolute left-0 top-7 h-16 w-[2px] bg-cyan-300 shadow-[0_0_18px_rgba(0,229,255,.8)]" />
+          <div className="absolute right-0 top-16 h-10 w-[2px] bg-fuchsia-400 shadow-[0_0_18px_rgba(255,0,153,.7)]" />
           <div className="p-4 sm:p-6">
             <div className="flex items-start gap-3 sm:gap-4">
-              <div className="relative grid h-12 w-12 shrink-0 place-items-center rounded-2xl border border-cyan-300/25 bg-gradient-to-br from-cyan-400/20 via-blue-500/15 to-fuchsia-500/20 shadow-[0_0_32px_rgba(34,211,238,.16)] sm:h-14 sm:w-14">
+              <div className="relative grid h-12 w-12 shrink-0 place-items-center border border-cyan-300/45 bg-cyan-400/10 shadow-[0_0_28px_rgba(0,229,255,.18)] sm:h-14 sm:w-14" style={{clipPath:"polygon(25% 0,75% 0,100% 25%,100% 75%,75% 100%,25% 100%,0 75%,0 25%)"}}>
                 <Camera className="h-6 w-6 text-cyan-100 sm:h-7 sm:w-7" />
                 <span className="absolute -right-1 -top-1 h-3 w-3 rounded-full border border-cyan-200/60 bg-cyan-300 shadow-[0_0_14px_rgba(34,211,238,.9)]" />
               </div>
@@ -146,7 +149,7 @@ export default function PhotoConfirmationPage() {
                     <Sparkles className="h-3 w-3" /> VERIFICAÇÃO
                   </span>
                 </div>
-                <h1 className="bg-gradient-to-r from-white via-cyan-100 to-fuchsia-200 bg-clip-text text-2xl font-black tracking-tight text-transparent sm:text-3xl">
+                <h1 className="text-2xl font-black tracking-[0.015em] text-white [text-shadow:0_0_18px_rgba(0,229,255,.14)] sm:text-3xl">
                   CONFIRMAÇÃO PARA FOTO
                 </h1>
                 <div className="mt-2 flex flex-wrap items-center gap-x-3 gap-y-1 text-xs text-slate-400 sm:text-sm">
@@ -171,16 +174,13 @@ export default function PhotoConfirmationPage() {
             )}
 
             {!complete && (
-              <div className="mt-5 rounded-2xl border border-white/10 bg-black/20 p-3 sm:p-4">
+              <div className="mt-5 border border-cyan-300/15 bg-black/30 p-3 sm:p-4" style={{clipPath:"polygon(10px 0,100% 0,100% calc(100% - 10px),calc(100% - 10px) 100%,0 100%,0 10px)"}}>
                 <div className="mb-2 flex items-center justify-between gap-3 text-xs">
                   <span className="font-bold text-slate-400">Progresso da confirmação</span>
                   <span className="font-black text-cyan-200">{requiredAnswered}/{requiredTotal}</span>
                 </div>
-                <div className="h-3 overflow-hidden rounded-full border border-white/10 bg-[#070b14] p-[2px]">
-                  <div
-                    className="h-full rounded-full bg-gradient-to-r from-blue-500 via-fuchsia-500 to-cyan-400 shadow-[0_0_20px_rgba(34,211,238,.35)] transition-all duration-300"
-                    style={{ width: `${progress}%` }}
-                  />
+                <div className="grid grid-cols-10 gap-1">
+                  {Array.from({length:10}).map((_,i)=><span key={i} className={`h-3 border transition-all duration-300 ${i < Math.ceil(progress/10) ? "border-cyan-200/70 bg-cyan-300 shadow-[0_0_12px_rgba(0,229,255,.50)]" : "border-white/10 bg-white/[0.035]"}`} style={{clipPath:"polygon(5px 0,100% 0,calc(100% - 5px) 100%,0 100%)"}} />)}
                 </div>
                 <div className="mt-2 flex items-center justify-between text-[10px] font-bold text-slate-500">
                   <span>Responda todas as obrigatórias</span>
@@ -228,24 +228,25 @@ export default function PhotoConfirmationPage() {
           <>
             <section className="space-y-4">
               {questions.map((q, index) => (
-                <div key={q.id} className="group overflow-hidden rounded-[24px] border border-white/10 bg-[#0a0f1d]/88 shadow-[0_18px_50px_rgba(0,0,0,.30)] backdrop-blur-xl transition hover:border-cyan-300/20">
-                  <div className="relative overflow-hidden border-b border-white/10 bg-gradient-to-r from-blue-600/20 via-violet-600/20 to-fuchsia-500/20 px-4 py-4">
+                <div key={q.id} className="group relative overflow-hidden border border-cyan-300/20 bg-[#050a13]/95 shadow-[0_18px_55px_rgba(0,0,0,.42),0_0_30px_rgba(0,229,255,.035)] backdrop-blur-xl transition hover:border-cyan-300/45" style={{clipPath:"polygon(16px 0,100% 0,100% calc(100% - 16px),calc(100% - 16px) 100%,0 100%,0 16px)"}}>
+                  <div className="relative overflow-hidden border-b border-cyan-300/15 bg-[#07111e] px-4 py-4">
                     <div className="pointer-events-none absolute inset-y-0 right-0 w-24 bg-gradient-to-l from-cyan-300/[0.06] to-transparent" />
                     <div className="relative flex items-start gap-3">
-                      <span className="grid h-8 w-8 shrink-0 place-items-center rounded-xl border border-cyan-300/25 bg-cyan-400/10 text-xs font-black text-cyan-100 shadow-[0_0_20px_rgba(34,211,238,.10)]">{index + 1}</span>
+                      <span className="grid h-10 w-10 shrink-0 place-items-center border border-cyan-300/55 bg-cyan-400/10 text-sm font-black text-cyan-50 shadow-[0_0_24px_rgba(0,229,255,.18)]" style={{clipPath:"polygon(25% 0,75% 0,100% 25%,100% 75%,75% 100%,25% 100%,0 75%,0 25%)"}}>{String(index+1).padStart(2,"0")}</span>
                       <div className="min-w-0 flex-1">
-                        <p className="text-[10px] font-black tracking-[0.16em] text-cyan-300">PERGUNTA</p>
-                        <p className="mt-1 text-sm font-black leading-relaxed text-white sm:text-[15px]">
+                        <div className="mb-1 flex items-center gap-2"><p className="text-[9px] font-black tracking-[0.22em] text-cyan-300">PERGUNTA</p><span className="h-px flex-1 bg-gradient-to-r from-cyan-300/40 to-transparent"/></div>
+                        <p className="mt-1 text-[17px] font-black leading-[1.45] text-white [text-shadow:0_1px_0_rgba(255,255,255,.03)] sm:text-lg">
                           {q.text} {q.required && <span className="text-fuchsia-300">*</span>}
                         </p>
                       </div>
                     </div>
                   </div>
 
-                  <div className="bg-gradient-to-br from-cyan-500/[0.04] via-transparent to-fuchsia-500/[0.05] p-4">
+                  <div className="relative bg-[#03070d] p-4">
+                    <div className="pointer-events-none absolute inset-x-0 top-0 h-px bg-gradient-to-r from-transparent via-fuchsia-400/35 to-transparent" />
                     <div className="mb-3 flex items-center gap-2">
                       <span className="h-px flex-1 bg-gradient-to-r from-transparent via-cyan-300/20 to-transparent" />
-                      <span className="text-[9px] font-black tracking-[0.18em] text-slate-500">RESPOSTA</span>
+                      <span className="text-[9px] font-black tracking-[0.24em] text-cyan-300/55">PAINEL DE RESPOSTA</span>
                       <span className="h-px flex-1 bg-gradient-to-r from-transparent via-fuchsia-300/20 to-transparent" />
                     </div>
 
@@ -335,11 +336,11 @@ export default function PhotoConfirmationPage() {
               ))}
             </section>
 
-            <section className="rounded-[24px] border border-white/10 bg-[#0a0f1d]/88 p-3 shadow-[0_18px_50px_rgba(0,0,0,.28)] backdrop-blur-xl sm:p-4">
+            <section className="border border-cyan-300/20 bg-[#050a13]/92 p-3 shadow-[0_18px_50px_rgba(0,0,0,.38)] backdrop-blur-xl sm:p-4" style={{clipPath:"polygon(14px 0,100% 0,100% calc(100% - 14px),calc(100% - 14px) 100%,0 100%,0 14px)"}}>
               <button
                 disabled={completeMut.isPending || requiredAnswered < requiredTotal}
                 onClick={() => completeMut.mutate({ token, answers })}
-                className="group relative min-h-16 w-full overflow-hidden rounded-2xl border border-emerald-300/30 bg-gradient-to-r from-emerald-400 via-cyan-400 to-blue-500 px-4 text-sm font-black text-[#04100f] shadow-[0_0_35px_rgba(34,211,238,.18)] transition-all duration-200 hover:brightness-110 active:scale-[.995] disabled:cursor-not-allowed disabled:border-white/10 disabled:bg-none disabled:bg-slate-800 disabled:text-slate-500 disabled:shadow-none"
+                className="group relative min-h-16 w-full overflow-hidden border border-cyan-200/60 bg-gradient-to-r from-cyan-300 via-blue-400 to-fuchsia-400 px-4 text-sm font-black tracking-[0.05em] text-[#02060b] shadow-[0_0_35px_rgba(34,211,238,.18)] transition-all duration-200 hover:brightness-110 active:scale-[.995] disabled:cursor-not-allowed disabled:border-white/10 disabled:bg-none disabled:bg-slate-800 disabled:text-slate-500 disabled:shadow-none"
               >
                 <span className="relative z-10 inline-flex items-center justify-center gap-2">
                   {completeMut.isPending ? (
