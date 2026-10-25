@@ -2531,18 +2531,42 @@ function ApprovalNotifyModal({ loan, lateFeeConfig, onClose }: { loan: any; late
     seg_dom: 'Segunda a Domingo (25x)',
   };
 
-  const paymentLabel = paymentLabels[loan.paymentType] || loan.paymentType || 'Diário';
-  const workDaysLabel = loan.paymentType === 'diario' && loan.workDays
-    ? workDaysLabels[loan.workDays] || loan.workDays
+  const { data: loanDetails } = trpc.loans.getLoan.useQuery(
+    { id: Number(loan.id) },
+    { enabled: Number.isFinite(Number(loan.id)) && Number(loan.id) > 0 }
+  );
+
+  const sourceLoan = loanDetails || loan;
+  const paymentLabel = paymentLabels[sourceLoan.paymentType] || sourceLoan.paymentType || 'Diário';
+  const workDaysLabel = sourceLoan.paymentType === 'diario' && sourceLoan.workDays
+    ? workDaysLabels[sourceLoan.workDays] || sourceLoan.workDays
     : '';
   const paymentFull = workDaysLabel ? `${paymentLabel} — ${workDaysLabel}` : paymentLabel;
 
-  const amount = asFiniteNumber(loan.amount);
-  const totalAmount = asFiniteNumber(loan.totalAmount);
-  const interestRate = asFiniteNumber(loan.interestRate);
-  const installments = loan.totalInstallments || loan.installments || '?';
-  const installmentAmt = installments > 0 ? (totalAmount / installments) : 0;
-  const dueDate = loan.dueDate ? (() => { const s = String(loan.dueDate).slice(0,10); const [y,m,d] = s.split('-'); return `${d}/${m}/${y}`; })() : '—';
+  const amount = asFiniteNumber(sourceLoan.amount);
+  const totalAmount = asFiniteNumber(sourceLoan.totalAmount);
+  const interestRate = asFiniteNumber(sourceLoan.interestRate);
+  const installmentRows = Array.isArray((sourceLoan as any).installments)
+    ? [...(sourceLoan as any).installments].sort((a: any, b: any) => Number(a.installmentNumber || 0) - Number(b.installmentNumber || 0))
+    : [];
+  const installments = installmentRows.length || sourceLoan.totalInstallments || sourceLoan.installments || '?';
+  const installmentAmt = Number(installments) > 0 ? (totalAmount / Number(installments)) : 0;
+
+  const formatLoanDate = (value: any) => {
+    if (!value) return '—';
+    const s = String(value).slice(0, 10);
+    const [y, m, d] = s.split('-');
+    return y && m && d ? `${d}/${m}/${y}` : s;
+  };
+
+  const dueDate = formatLoanDate(sourceLoan.dueDate);
+  const installmentScheduleText = installmentRows.length
+    ? installmentRows.map((inst: any, index: number) => {
+        const num = Number(inst.installmentNumber || index + 1);
+        const value = asFiniteNumber(inst.originalAmount ?? inst.amount ?? installmentAmt);
+        return `• Parcela ${num}/${installmentRows.length} — ${formatLoanDate(inst.dueDate)} — R$ ${value.toLocaleString('pt-BR', { minimumFractionDigits: 2 })}`;
+      }).join('\n')
+    : `• Vencimento final — ${dueDate}`;
 
   const fee18h = asFiniteNumber(lateFeeConfig?.fee_after_18h, 10);
   const fee20h = asFiniteNumber(lateFeeConfig?.fee_after_20h, 10);
@@ -2553,30 +2577,41 @@ function ApprovalNotifyModal({ loan, lateFeeConfig, onClose }: { loan: any; late
     `- A partir das 20:00: taxa fixa acumulada de R$ ${fixedFeeAfter20.toFixed(2).replace('.', ',')}.\n` +
     `- Após 23:59: será cobrado somente o maior valor entre a taxa fixa de R$ ${fixedFeeAfter20.toFixed(2).replace('.', ',')} e o valor da parcela.`;
 
-  const pixKey = loan.clientPixKey || loan.pixKey || '';
-  const pixName = loan.clientPixName || loan.pixName || '';
-  const pixBank = loan.clientPixBank || loan.pixBank || '';
+  const pixKey = sourceLoan.clientPixKey || sourceLoan.pixKey || '';
+  const pixName = sourceLoan.clientPixName || sourceLoan.pixName || '';
+  const pixBank = sourceLoan.clientPixBank || sourceLoan.pixBank || '';
 
-  const defaultMsg = `Ola ${loan.clientName},\n\n` +
-    `*SEU PIX JA FOI LIBERADO!*\n` +
-    `Em breve estara disponivel em sua conta.\n\n` +
+  const buildDefaultMessage = () =>
+    `Olá ${sourceLoan.clientName},\n\n` +
+    `*SEU PIX FOI LIBERADO!*\n` +
+    `O envio do PIX foi aprovado e em breve o valor estará disponível em sua conta.\n\n` +
     `*Valor liberado:* R$ ${amount.toLocaleString('pt-BR', { minimumFractionDigits: 2 })}\n` +
-    `*Seu pagamento e:* ${paymentFull}\n` +
-    `*Total a pagar:* R$ ${totalAmount.toLocaleString('pt-BR', { minimumFractionDigits: 2 })} em ${installments}x de R$ ${installmentAmt.toLocaleString('pt-BR', { minimumFractionDigits: 2 })}\n` +
-    `*Vencimento final:* ${dueDate}\n\n` +
+    `*Forma de pagamento:* ${paymentFull}\n` +
+    `*Total a pagar:* R$ ${totalAmount.toLocaleString('pt-BR', { minimumFractionDigits: 2 })} em ${installments}x de R$ ${installmentAmt.toLocaleString('pt-BR', { minimumFractionDigits: 2 })}\n\n` +
+    `*VENCIMENTO DAS PARCELAS:*\n` +
+    installmentScheduleText + `\n\n` +
     `*NORMAS E TAXAS DE ATRASO:*\n` +
-    lateFeeCustomerText + '\n' +
-    `\nQualquer duvida, estamos a disposicao!`;
+    lateFeeCustomerText + `\n\n` +
+    `Guarde esta mensagem para acompanhar as datas de vencimento.\n` +
+    `Qualquer dúvida, estamos à disposição!`;
 
-  const [msg, setMsg] = useState(defaultMsg);
+  const [msg, setMsg] = useState(buildDefaultMessage());
+
+  useEffect(() => {
+    setMsg(buildDefaultMessage());
+  }, [
+    loanDetails,
+    lateFeeConfig?.fee_after_18h,
+    lateFeeConfig?.fee_after_20h,
+  ]);
 
   const copyMsg = () => {
     navigator.clipboard.writeText(msg);
     toast.success('Mensagem copiada!');
   };
 
-  const waUrl = loan.clientPhone
-    ? `https://wa.me/55${loan.clientPhone.replace(/\D/g, '')}?text=${encodeWhatsappMessage(msg)}`
+  const waUrl = sourceLoan.clientPhone
+    ? `https://wa.me/55${sourceLoan.clientPhone.replace(/\D/g, '')}?text=${encodeWhatsappMessage(msg)}`
     : null;
 
   return (
@@ -2585,28 +2620,41 @@ function ApprovalNotifyModal({ loan, lateFeeConfig, onClose }: { loan: any; late
         <DialogHeader>
           <DialogTitle className="flex items-center gap-2">
             <span className="text-2xl">📨</span>
-            Notificar Aprovação — {loan.clientName}
+            Notificar Aprovação — {sourceLoan.clientName}
           </DialogTitle>
         </DialogHeader>
         <div className="space-y-4">
-          {/* Info do empréstimo */}
           <div className="bg-emerald-500/10 border border-emerald-500/30 rounded-xl p-3 space-y-1 text-sm">
             <p>💰 <strong>Valor:</strong> R$ {amount.toLocaleString('pt-BR', { minimumFractionDigits: 2 })}</p>
             <p>💳 <strong>Pagamento:</strong> {paymentFull}</p>
             <p>📊 <strong>Taxa:</strong> {interestRate.toFixed(0)}% — Total: R$ {totalAmount.toLocaleString('pt-BR', { minimumFractionDigits: 2 })}</p>
+            <p>📅 <strong>Parcelas:</strong> {installments} vencimento(s) detalhado(s) na mensagem</p>
             {pixKey && <p>💠 <strong>PIX:</strong> {pixKey}{pixName ? ` · ${pixName}` : ''}{pixBank ? ` · ${pixBank}` : ''}</p>}
           </div>
-          {/* Mensagem editável */}
+
+          {installmentRows.length > 0 && (
+            <div className="rounded-xl border border-blue-500/30 bg-blue-500/10 p-3">
+              <p className="mb-2 text-xs font-bold uppercase tracking-wide text-blue-300">📅 Vencimentos das parcelas</p>
+              <div className="max-h-48 space-y-1 overflow-y-auto pr-1 text-xs text-white/85">
+                {installmentRows.map((inst: any, index: number) => (
+                  <p key={inst.id || index}>
+                    Parcela {Number(inst.installmentNumber || index + 1)}/{installmentRows.length} — {formatLoanDate(inst.dueDate)} — R$ {asFiniteNumber(inst.originalAmount ?? inst.amount ?? installmentAmt).toLocaleString('pt-BR', { minimumFractionDigits: 2 })}
+                  </p>
+                ))}
+              </div>
+            </div>
+          )}
+
           <div className="space-y-1">
             <label className="text-xs font-semibold text-muted-foreground">Mensagem (editável)</label>
             <Textarea
               value={msg}
               onChange={(e) => setMsg(e.target.value)}
-              rows={14}
+              rows={18}
               className="font-mono text-xs resize-none"
             />
           </div>
-          {/* Botões */}
+
           <div className="flex flex-col gap-2">
             <Button onClick={copyMsg} className="w-full bg-emerald-600 hover:bg-emerald-700 text-white">
               📋 Copiar Mensagem
@@ -2614,7 +2662,7 @@ function ApprovalNotifyModal({ loan, lateFeeConfig, onClose }: { loan: any; late
             {waUrl ? (
               <a href={waUrl} target="_blank" rel="noopener noreferrer" className="w-full">
                 <Button variant="outline" className="w-full border-green-500/40 text-green-400 hover:bg-green-500/10">
-                  <span className="mr-2">📱</span> Abrir no WhatsApp ({loan.clientPhone})
+                  <span className="mr-2">📱</span> Abrir no WhatsApp ({sourceLoan.clientPhone})
                 </Button>
               </a>
             ) : (
