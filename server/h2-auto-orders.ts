@@ -16,7 +16,7 @@ async function ensure(){
   const db=await getDb();if(!db)throw Error("db_unavailable");
   await db.execute(sql`CREATE TABLE IF NOT EXISTS h2_auto_order_sessions (
    id CHAR(64) PRIMARY KEY, device_id VARCHAR(32) NOT NULL, conversation_hash CHAR(64) NOT NULL,
-   customer_id INT NULL, customer_phone VARCHAR(32) NULL, code_hash CHAR(64) NULL,
+   customer_id INT NULL, customer_phone VARCHAR(32) NULL, email_hash CHAR(64) NULL, code_hash CHAR(64) NULL,
    code_expires BIGINT NULL, code_attempts INT NOT NULL DEFAULT 0,
    resend_after BIGINT NOT NULL DEFAULT 0, expires_at BIGINT NOT NULL DEFAULT 0,
    issued_at BIGINT NOT NULL DEFAULT 0, used_at BIGINT NULL,
@@ -69,9 +69,9 @@ export function registerH2AutoOrdersRoutes(app:Express){
    if(!customer)return reply(res,200,generic);
    const code=String(randomInt(0,1000000)).padStart(6,"0"), codeHash=otpDigest(sid,code);
    const db=await getDb();if(!db)throw Error("db");
-   await db.execute(sql`INSERT INTO h2_auto_order_sessions(id,device_id,conversation_hash,customer_id,customer_phone,code_hash,code_expires,code_attempts,resend_after,expires_at,issued_at)
-    VALUES (${sid},${id},${hash(conversation)},${customer.id},${customer.phone},${codeHash},${now+600000},0,${now+60000},0,${now})
-    ON DUPLICATE KEY UPDATE customer_id=VALUES(customer_id),customer_phone=VALUES(customer_phone),code_hash=VALUES(code_hash),code_expires=VALUES(code_expires),code_attempts=0,resend_after=VALUES(resend_after),expires_at=0,issued_at=VALUES(issued_at),used_at=NULL`);
+   await db.execute(sql`INSERT INTO h2_auto_order_sessions(id,device_id,conversation_hash,customer_id,customer_phone,email_hash,code_hash,code_expires,code_attempts,resend_after,expires_at,issued_at)
+    VALUES (${sid},${id},${hash(conversation)},${customer.id},${customer.phone},${hash(customer.email.trim().toLowerCase())},${codeHash},${now+600000},0,${now+60000},0,${now})
+    ON DUPLICATE KEY UPDATE customer_id=VALUES(customer_id),customer_phone=VALUES(customer_phone),email_hash=VALUES(email_hash),code_hash=VALUES(code_hash),code_expires=VALUES(code_expires),code_attempts=0,resend_after=VALUES(resend_after),expires_at=0,issued_at=VALUES(issued_at),used_at=NULL`);
    try{await sendH2AutoOrderCode(customer.email,code);}
    catch{
     await db.execute(sql`UPDATE h2_auto_order_sessions SET code_hash=NULL,code_expires=NULL WHERE id=${sid} AND code_hash=${codeHash}`);
@@ -95,7 +95,7 @@ export function registerH2AutoOrdersRoutes(app:Express){
     await db.execute(sql`UPDATE h2_auto_order_sessions SET code_attempts=code_attempts+1 WHERE id=${sid} AND code_attempts<5`);
     return reply(res,403,{error:"invalid_or_expired_code"});
    }
-   const user=await rows(sql`SELECT id FROM customers WHERE id=${s.customer_id} AND deletedAt IS NULL AND blocked=0 LIMIT 1`);
+   const user=await rows(sql`SELECT id FROM customers WHERE id=${s.customer_id} AND deletedAt IS NULL AND blocked=0 AND SHA2(LOWER(TRIM(email)),256)=${s.email_hash} AND RIGHT(REGEXP_REPLACE(phone,'[^0-9]',''),11)=${String(s.customer_phone).replace(/\D/g,'').slice(-11)} LIMIT 1`);
    if(user.length!==1)return reply(res,403,{error:"not_authorized"});
    const result:any=await db.execute(sql`UPDATE h2_auto_order_sessions SET used_at=${now},expires_at=${now+86400000},code_hash=NULL,code_expires=NULL
     WHERE id=${sid} AND code_hash=${candidate} AND code_expires>=${now} AND code_attempts<5 AND used_at IS NULL`);
@@ -109,13 +109,14 @@ export function registerH2AutoOrdersRoutes(app:Express){
    if(!id)return reply(res,401,{error:"unauthorized"});
    if(!validConversation(conversation))return reply(res,400,{error:"invalid_conversation"});
    await ensure();const sid=sessionId(id,conversation), now=Date.now();
-   const sessions=await rows(sql`SELECT s.customer_id,s.customer_phone FROM h2_auto_order_sessions s
-     JOIN customers c ON c.id=s.customer_id WHERE s.id=${sid} AND s.device_id=${id} AND s.used_at IS NOT NULL
+   const sessions=await rows(sql`SELECT s.customer_id,s.customer_phone,c.createdAt AS customer_created FROM h2_auto_order_sessions s
+     JOIN customers c ON c.id=s.customer_id WHERE s.id=${sid} AND s.device_id=${id} AND SHA2(LOWER(TRIM(c.email)),256)=s.email_hash AND RIGHT(REGEXP_REPLACE(c.phone,'[^0-9]',''),11)=RIGHT(REGEXP_REPLACE(s.customer_phone,'[^0-9]',''),11) AND s.used_at IS NOT NULL
      AND s.expires_at>${now} AND c.deletedAt IS NULL AND c.blocked=0 LIMIT 1`);
    const s=sessions[0];if(!s)return reply(res,403,{error:"authentication_required"});
    const orders=await rows(sql`SELECT h.registrationId,h.orderNumber,h.status,h.serviceName,h.serviceOption,h.createdAt
     FROM orderStatusHistory h WHERE RIGHT(REGEXP_REPLACE(h.customerPhone,'[^0-9]',''),11)=${String(s.customer_phone).replace(/\D/g,"").slice(-11)}
     AND h.approval='approved'
+    AND NOT EXISTS (SELECT 1 FROM orderStatusHistory old WHERE old.registrationId=h.registrationId AND old.createdAt<${s.customer_created})
     AND NOT EXISTS (SELECT 1 FROM hiddenSubOrders x WHERE x.registrationId=h.registrationId AND x.subOrderIndex=0)
     ORDER BY h.createdAt DESC LIMIT 150`);
    const found=new Map<number,any>();
