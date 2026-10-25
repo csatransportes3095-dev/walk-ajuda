@@ -112,12 +112,13 @@ export function registerH2AutoOrdersRoutes(app:Express){
    if(!id)return reply(res,401,{error:"unauthorized"});
    if(!validConversation(conversation))return reply(res,400,{error:"invalid_conversation"});
    await ensure();const sid=sessionId(id,conversation), now=Date.now();
-   const sessions=await rows(sql`SELECT s.customer_id,s.customer_phone,c.createdAt AS customer_created FROM h2_auto_order_sessions s
+   const sessions=await rows(sql`SELECT s.customer_id,s.customer_phone,c.createdAt AS customer_created,c.email AS current_email FROM h2_auto_order_sessions s
      JOIN customers c ON c.id=s.customer_id WHERE s.id=${sid} AND s.device_id=${id} AND SHA2(LOWER(TRIM(c.email)),256)=s.email_hash AND RIGHT(REGEXP_REPLACE(c.phone,'[^0-9]',''),11)=RIGHT(REGEXP_REPLACE(s.customer_phone,'[^0-9]',''),11) AND s.used_at IS NOT NULL
      AND s.expires_at>${now} AND c.deletedAt IS NULL AND c.blocked=0 LIMIT 1`);
    const s=sessions[0];if(!s)return reply(res,403,{error:"authentication_required"});
+   const authDb=await getDb();if(!authDb || !(await isOwnSiteEmailAuthorized(authDb,String(s.current_email))))return reply(res,403,{error:"authentication_required"});
    const orders=await rows(sql`SELECT h.registrationId,h.orderNumber,h.status,h.serviceName,h.serviceOption,h.createdAt
-    FROM orderStatusHistory h WHERE RIGHT(REGEXP_REPLACE(h.customerPhone,'[^0-9]',''),11)=${String(s.customer_phone).replace(/\D/g,"").slice(-11)}
+    FROM orderStatusHistory h INNER JOIN accessCodePhones a ON a.id=h.registrationId AND a.deletedAt IS NULL AND a.accessedAt>=${s.customer_created} AND RIGHT(REGEXP_REPLACE(a.phone,'[^0-9]',''),11)=${String(s.customer_phone).replace(/\D/g,'').slice(-11)} WHERE RIGHT(REGEXP_REPLACE(h.customerPhone,'[^0-9]',''),11)=${String(s.customer_phone).replace(/\D/g,"").slice(-11)}
     AND h.approval='approved'
     AND NOT EXISTS (SELECT 1 FROM orderStatusHistory old WHERE old.registrationId=h.registrationId AND old.createdAt<${s.customer_created})
     AND NOT EXISTS (SELECT 1 FROM hiddenSubOrders x WHERE x.registrationId=h.registrationId AND x.subOrderIndex=0)
