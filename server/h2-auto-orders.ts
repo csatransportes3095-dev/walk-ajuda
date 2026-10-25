@@ -93,7 +93,7 @@ export function registerH2AutoOrdersRoutes(app:Express){
    const s=records[0];
    if(!s || !s.code_hash || Number(s.code_expires)<now || Number(s.code_attempts)>=5 || s.used_at!==null)return reply(res,403,{error:"invalid_or_expired_code"});
    const db=await getDb();if(!db)throw Error("db");
-   const candidate=hash(sid+":"+code);
+   const candidate=otpDigest(sid,code);
    if(!timingSafeEqual(Buffer.from(String(s.code_hash),"hex"),Buffer.from(candidate,"hex"))){
     await db.execute(sql`UPDATE h2_auto_order_sessions SET code_attempts=code_attempts+1 WHERE id=${sid} AND code_attempts<5`);
     return reply(res,403,{error:"invalid_or_expired_code"});
