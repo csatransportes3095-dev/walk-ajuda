@@ -3521,7 +3521,7 @@ export default function Home() {
                 && getVehicleQuestionKind(child.question) === 'model';
               const isVisible = isGenericVehicleModel
                 ? !!parentAnswer
-                : (!child.triggerOption || parentAnswer === child.triggerOption);
+                : (!child.triggerOption || normalizeConditionalValue(parentAnswer) === normalizeConditionalValue(child.triggerOption));
               if (isVisible) appendTree(child);
             }
           };
