@@ -38,6 +38,11 @@ function ensure() {
  applied_revision INT NOT NULL DEFAULT 0,
  created_at BIGINT NOT NULL
  )`);
+ await db.execute(sql`CREATE TABLE IF NOT EXISTS h2_auto_local_snapshots (
+ device_id VARCHAR(32) PRIMARY KEY,
+ snapshot_json JSON NOT NULL,
+ received_at BIGINT NOT NULL
+ )`);
  })().catch(e=>{ready=undefined;throw e});
  return ready;
 }
@@ -45,9 +50,20 @@ const rows=async (query:any):Promise<any[]>=>{
  const db=await getDb();if(!db)throw new Error("DB unavailable");
  const result:any=await db.execute(query);return result[0]||[];
 };
-const safeDevice=(r:any)=>({id:r.id,label:r.label,paired:Boolean(r.token_hash),revision:Number(r.revision),lastSeen:r.last_seen?Number(r.last_seen):null,appliedRevision:Number(r.applied_revision||0),config:configSchema.parse(typeof r.config_json==="string"?JSON.parse(r.config_json):r.config_json)});
+const decodeConfig=(raw:any):RemoteConfig=>configSchema.parse(typeof raw==="string"?JSON.parse(raw):raw);
+const safeDevice=(r:any)=>({id:r.id,label:r.label,paired:Boolean(r.token_hash),revision:Number(r.revision),lastSeen:r.last_seen?Number(r.last_seen):null,appliedRevision:Number(r.applied_revision||0),config:decodeConfig(r.config_json),snapshotConfig:r.snapshot_json==null?null:decodeConfig(r.snapshot_json),snapshotReceivedAt:r.received_at==null?null:Number(r.received_at)});
+function mergeWithoutDeleting(remote:RemoteConfig, local:RemoteConfig):RemoteConfig {
+ const empty=!remote.welcome.trim() && remote.menu.every(t=>!t.trim()) && remote.rules.length===0 && !remote.blocked.trim();
+ if(empty)return local;
+ const seen=new Set(remote.rules.map(r=>r.trigger.trim().toLowerCase()+"|"+r.mode));
+ const rules=remote.rules.slice();
+ for(const r of local.rules){const k=r.trigger.trim().toLowerCase()+"|"+r.mode;if(!seen.has(k) && rules.length<100){rules.push(r);seen.add(k)}}
+ const blocked=[...new Set([...remote.blocked.split(/[\n;,]/),...local.blocked.split(/[\n;,]/)].map(v=>v.trim()).filter(Boolean))].join("\n").slice(0,10000);
+ return {...remote,welcome:remote.welcome.trim()?remote.welcome:local.welcome,
+ menu:remote.menu.map((v,i)=>v.trim()?v:local.menu[i]),rules,blocked};
+}
 export const h2AutoAdminRouter=router({
- list:adminProcedure.query(async()=>{await ensure();return (await rows(sql`SELECT * FROM h2_auto_devices ORDER BY created_at DESC LIMIT 30`)).map(safeDevice);}),
+ list:adminProcedure.query(async()=>{await ensure();return (await rows(sql`SELECT d.*, s.snapshot_json, s.received_at FROM h2_auto_devices d LEFT JOIN h2_auto_local_snapshots s ON s.device_id=d.id ORDER BY d.created_at DESC LIMIT 30`)).map(safeDevice);}),
  create:adminProcedure.input(z.object({label:z.string().trim().min(1).max(80)})).mutation(async({input})=>{
    await ensure(); const id=randomBytes(12).toString("hex"),code=String(randomBytes(4).readUInt32BE()%100000000).padStart(8,"0");
    const db=await getDb();if(!db)throw new Error("DB unavailable");
@@ -61,9 +77,21 @@ export const h2AutoAdminRouter=router({
    await db.execute(sql`UPDATE h2_auto_devices SET pairing_hash=${hash(code)},pairing_expires=${Date.now()+600000},pair_attempts=0 WHERE id=${input.id}`);
    return {code,expiresInSeconds:600};
  }),
- save:adminProcedure.input(z.object({id:z.string().length(24),config:configSchema})).mutation(async({input})=>{
+ save:adminProcedure.input(z.object({id:z.string().length(24),config:configSchema,expectedRevision:z.number().int().min(0)})).mutation(async({input})=>{
    await ensure();const db=await getDb();if(!db)throw new Error("DB unavailable");
-   await db.execute(sql`UPDATE h2_auto_devices SET config_json=${JSON.stringify(input.config)},revision=revision+1 WHERE id=${input.id}`);
+   const result:any=await db.execute(sql`UPDATE h2_auto_devices SET config_json=${JSON.stringify(input.config)},revision=revision+1 WHERE id=${input.id} AND revision=${input.expectedRevision}`);
+   if(!result[0]?.affectedRows)throw new TRPCError({code:"CONFLICT",message:"A configuração mudou. Atualize antes de salvar para não sobrescrever alterações."});
+   return {success:true};
+ }),
+ mergeLocal:adminProcedure.input(z.object({id:z.string().length(24),expectedRevision:z.number().int().min(0)})).mutation(async({input})=>{
+   await ensure();const data=await rows(sql`SELECT d.config_json,d.revision,s.snapshot_json FROM h2_auto_devices d LEFT JOIN h2_auto_local_snapshots s ON s.device_id=d.id WHERE d.id=${input.id} LIMIT 1`);
+   const row=data[0];
+   if(!row?.snapshot_json)throw new TRPCError({code:"NOT_FOUND",message:"O aparelho ainda não enviou sua cópia local."});
+   if(Number(row.revision)!==input.expectedRevision)throw new TRPCError({code:"CONFLICT",message:"O ADM foi alterado. Recarregue para evitar sobrescrever."});
+   const merged=mergeWithoutDeleting(decodeConfig(row.config_json),decodeConfig(row.snapshot_json));
+   const db=await getDb();if(!db)throw Error("db");
+   const result:any=await db.execute(sql`UPDATE h2_auto_devices SET config_json=${JSON.stringify(merged)},revision=revision+1 WHERE id=${input.id} AND revision=${input.expectedRevision}`);
+   if(!result[0]?.affectedRows)throw new TRPCError({code:"CONFLICT",message:"O ADM foi alterado durante a importação."});
    return {success:true};
  }),
  revoke:adminProcedure.input(z.object({id:z.string().length(24)})).mutation(async({input})=>{
@@ -106,38 +134,34 @@ export function registerH2AutoDeviceRoutes(app:Express) {
    if(!d?.token_hash || !timingSafeEqual(Buffer.from(String(d.token_hash),"hex"),Buffer.from(hash(token),"hex")))
      return respond(res,401,{error:"unauthorized"});
    const db=await getDb();if(db)await db.execute(sql`UPDATE h2_auto_devices SET last_seen=${Date.now()} WHERE id=${id}`);
-   return respond(res,200,{revision:Number(d.revision),config:safeDevice(d).config});
+   return respond(res,200,{revision:Number(d.revision),needsInitialImport:Number(d.revision)===0,config:Number(d.revision)===0?null:safeDevice(d).config});
  }catch{return respond(res,500,{error:"temporary_error"});}
  });
- // The first sync must preserve the local WhatsApp menu and rules. An empty ADM
- // draft (revision 0) may be populated ONCE by its already-paired device.
- // Never replace a configuration that an administrator has saved.
+ // A paired phone uploads its LOCAL snapshot before applying remote changes.
+ // Keep the first snapshot immutable: a later sync must never erase the old settings.
  app.post("/api/h2-auto/import",async(req:Request,res:Response)=>{
   try {
    const id=String(req.header("x-h2-device-id")||"");
    const token=String(req.header("x-h2-device-token")||"");
-   if(!/^[a-f0-9]{24}$/.test(id)||!/^[a-f0-9]{64}$/.test(token))
-     return respond(res,401,{error:"unauthorized"});
-   const parsed=configSchema.safeParse(req.body);
+   if(!/^[a-f0-9]{24}$/.test(id)||!/^[a-f0-9]{64}$/.test(token))return respond(res,401,{error:"unauthorized"});
+   const parsed=configSchema.safeParse(req.body?.config ?? req.body);
    if(!parsed.success)return respond(res,400,{error:"invalid_local_configuration"});
    await ensure();
    const data=await rows(sql`SELECT token_hash,revision FROM h2_auto_devices WHERE id=${id} LIMIT 1`);
    const device=data[0];
-   if(!device?.token_hash ||
-     !timingSafeEqual(Buffer.from(String(device.token_hash),"hex"),Buffer.from(hash(token),"hex")))
-      return respond(res,401,{error:"unauthorized"});
-   if(Number(device.revision)!==0)return respond(res,409,{error:"admin_configuration_already_exists"});
+   if(!device?.token_hash || !timingSafeEqual(Buffer.from(String(device.token_hash),"hex"),Buffer.from(hash(token),"hex")))
+     return respond(res,401,{error:"unauthorized"});
    const db=await getDb();if(!db)throw Error("db");
-   const result:any=await db.execute(sql`
-      UPDATE h2_auto_devices
-      SET config_json=${JSON.stringify(parsed.data)},revision=1,applied_revision=1,last_seen=${Date.now()}
-      WHERE id=${id} AND token_hash=${hash(token)} AND revision=0
-   `);
-   if(!result[0]?.affectedRows)
-      return respond(res,409,{error:"admin_configuration_already_exists"});
-   return respond(res,200,{success:true,revision:1,source:"android_local_settings"});
+   await db.execute(sql`INSERT IGNORE INTO h2_auto_local_snapshots (device_id,snapshot_json,received_at)
+     VALUES (${id},${JSON.stringify(parsed.data)},${Date.now()})`);
+   if(Number(device.revision)!==0)return respond(res,200,{success:true,imported:false,snapshotStored:true,reason:"admin_configuration_preserved",revision:Number(device.revision)});
+   // Promote the local settings only if the ADM has NEVER been saved.
+   const result:any=await db.execute(sql`UPDATE h2_auto_devices SET config_json=${JSON.stringify(parsed.data)},revision=1,last_seen=${Date.now()}
+     WHERE id=${id} AND token_hash=${hash(token)} AND revision=0`);
+   if(!result[0]?.affectedRows)return respond(res,200,{success:true,imported:false,snapshotStored:true,reason:"admin_configuration_preserved"});
+   return respond(res,200,{success:true,imported:true,snapshotStored:true,revision:1,source:"android_local_settings"});
   }catch(error){
-   console.error("[H2Auto] initial import failed",error instanceof Error ? error.message : String(error));
+   console.error("[H2Auto] initial import failed",error instanceof Error?error.message:String(error));
    return respond(res,500,{error:"temporary_error"});
   }
  });
