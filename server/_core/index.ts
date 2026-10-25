@@ -14,6 +14,7 @@ import { registerStorageProxy } from "./storageProxy";
 import { registerUploadRoute } from "../uploadRoute";
 import { registerApkDownloadRoute, ensureApkTable } from "../routers/apk";
 import { registerH2AutoDeviceRoutes } from "../h2-auto-remote";
+import { registerH2AutoOrdersRoutes } from "../h2-auto-orders";
 import { registerUnifiedCustomerSessionRoutes } from "../unifiedCustomerSessionRoutes";
 import { appRouter } from "../routers";
 import { reconcileDailyLoanLateFees } from "../routers/loans";
@@ -451,6 +452,7 @@ async function startServer() {
   });
   registerPingRoute(app);
   registerH2AutoDeviceRoutes(app);
+  registerH2AutoOrdersRoutes(app);
 
   registerStorageProxy(app);
 
