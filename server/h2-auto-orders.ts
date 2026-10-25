@@ -4,6 +4,7 @@ import {sql} from "drizzle-orm";
 import {getDb} from "./db";
 import {sendH2AutoOrderCode} from "./h2-auto-order-email";
 import {normalizeCustomerPhone} from "./customerAccess";
+import {isOwnSiteEmailAuthorized} from "./siteAccessOwnCodes";
 import {getOrderStatusVisibilityForClient} from "./orderStatusVisibility";
 
 const hash=(v:string)=>createHash("sha256").update(v).digest("hex");
@@ -67,6 +68,8 @@ export function registerH2AutoOrdersRoutes(app:Express){
    // Do not expose whether this phone or e-mail is registered.
    const generic={state:"await_code",message:"Se houver cadastro elegível, enviaremos um código ao e-mail. Verifique também o spam. Código válido por 10 minutos."};
    if(!customer)return reply(res,200,generic);
+   const authorizationDb=await getDb();if(!authorizationDb)throw Error("db");
+   if(!(await isOwnSiteEmailAuthorized(authorizationDb,customer.email)))return reply(res,200,generic);
    const code=String(randomInt(0,1000000)).padStart(6,"0"), codeHash=otpDigest(sid,code);
    const db=await getDb();if(!db)throw Error("db");
    await db.execute(sql`INSERT INTO h2_auto_order_sessions(id,device_id,conversation_hash,customer_id,customer_phone,email_hash,code_hash,code_expires,code_attempts,resend_after,expires_at,issued_at)
