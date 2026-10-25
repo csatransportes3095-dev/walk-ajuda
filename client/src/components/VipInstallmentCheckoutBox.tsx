@@ -49,7 +49,7 @@ export default function VipInstallmentCheckoutBox(props: {
   const sessionReady = props.cpToken.length >= 32;
   const itemReady = Number(props.productId || 0) > 0 && Number(props.optionId || 0) > 0;
   const eligibility = trpc.vipInstallments.eligibility.useQuery(
-    { cpToken: props.cpToken, phone: props.phone, productId: itemReady ? Number(props.productId) : undefined },
+    { cpToken: props.cpToken, phone: props.phone, productId: itemReady ? Number(props.productId) : undefined, optionId: itemReady ? Number(props.optionId) : undefined },
     { enabled: sessionReady && !props.disabledReason, staleTime: 5_000, retry: false },
   );
 
