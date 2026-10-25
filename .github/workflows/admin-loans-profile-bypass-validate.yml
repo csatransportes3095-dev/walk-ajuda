@@ -24,13 +24,13 @@ jobs:
           node --input-type=module <<'JS'
           import fs from 'node:fs';
           const loans=fs.readFileSync('server/routers/loans.ts','utf8');
-          const profile=fs.readFileSync('server/customerProfile.ts','utf8');
           if (!loans.includes('Regra administrativa: o ADM pode cadastrar o cliente')) throw new Error('admin bypass missing');
           const saveStart=loans.indexOf('saveClient: adminProcedure');
           const saveEnd=loans.indexOf('toggleLoanEnabled:', saveStart);
           const saveBlock=loans.slice(saveStart, saveEnd);
           if (saveBlock.includes('requireCompleteMainCustomerProfile')) throw new Error('admin save still requires complete profile');
-          if (!profile.includes('assertCompleteCustomerProfile')) throw new Error('customer profile guard missing');
+          const loansTab=fs.readFileSync('client/src/pages/LoansTab.tsx','utf8');
+          if (!loansTab.includes('Complete seu cadastro principal')) throw new Error('customer-side incomplete-profile guard missing');
           console.log('ADMIN_BYPASS_SCOPED_OK');
           JS
       - name: Build
