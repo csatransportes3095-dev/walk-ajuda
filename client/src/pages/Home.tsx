@@ -3530,12 +3530,22 @@ export default function Home() {
           return currentIdInNew + 1;
         };
 
+        const finishQuestionnaireFlow = (state: ReturnType<typeof resolveFlow>) => {
+          if (!state.ended) return false;
+          if (state.message) toast.info(state.message, { duration: 6000 });
+          setStep("cadastro");
+          setCadastroSubStep('dados');
+          return true;
+        };
+
         const goToNext = () => {
           if (!currentQ) return;
           if (currentQ.isRequired === 1 && !(currentQ.fieldType === 'audio' ? questionAudioAnswers[currentQ.id] : questionAnswers[currentQ.id]?.trim())) {
             toast.error(`Preencha: ${currentQ.question}`);
             return;
           }
+          const latestFlowState = resolveFlow(questionAnswers);
+          if (finishQuestionnaireFlow(latestFlowState)) return;
           if (isLastQuestion) {
             if (blockedByQuestion) {
               toast.error('Não é possível continuar. Você selecionou uma opção que impede o pedido.');
@@ -3566,8 +3576,10 @@ export default function Home() {
               setQuestionAnswers(nextAnswers);
               setBlockedByQuestion(null);
               if (autoAdvance && value) {
+                const nextFlowState = resolveFlow(nextAnswers);
+                if (finishQuestionnaireFlow(nextFlowState)) return;
                 const nextIdx = getNextIndex(nextAnswers);
-                const nextList = buildOrderedQs(nextAnswers);
+                const nextList = nextFlowState.questions;
                 setTimeout(() => { if (nextIdx < nextList.length) setCurrentQuestionIndex(nextIdx); }, 80);
               }
             };
@@ -3641,8 +3653,10 @@ export default function Home() {
                             // Auto-avança para próxima pergunta após breve delay
                             // Usa getNextIndex com as novas respostas para incluir sub-perguntas que acabaram de ficar visíveis
                             const newAnswers = { ...questionAnswers, [q.id]: opt.label };
+                            const nextFlowState = resolveFlow(newAnswers);
+                            if (finishQuestionnaireFlow(nextFlowState)) return;
                             const nextIdx = getNextIndex(newAnswers);
-                            const nextList = resolveFlow(newAnswers).questions;
+                            const nextList = nextFlowState.questions;
                             setTimeout(() => {
                               if (nextIdx < nextList.length) setCurrentQuestionIndex(nextIdx);
                             }, 100);
@@ -3702,8 +3716,10 @@ export default function Home() {
                         setQuestionAnswers(prev => ({ ...prev, [q.id]: opt }));
                         setBlockedByQuestion(null);
                         const newAnswers2 = { ...questionAnswers, [q.id]: opt };
+                        const nextFlowState2 = resolveFlow(newAnswers2);
+                        if (finishQuestionnaireFlow(nextFlowState2)) return;
                         const nextIdx2 = getNextIndex(newAnswers2);
-                        const nextList2 = resolveFlow(newAnswers2).questions;
+                        const nextList2 = nextFlowState2.questions;
                         setTimeout(() => {
                           if (nextIdx2 < nextList2.length) setCurrentQuestionIndex(nextIdx2);
                         }, 350);
