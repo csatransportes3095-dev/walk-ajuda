@@ -29,13 +29,13 @@ export default function H2AutoTreeEditor({ id, revision, initial }: Props) {
     }
   }, [id, revision, initial, dirty]);
   const selectedNode = useMemo(() => tree.nodes.find(n => n.id === selected), [tree, selected]);
-  const save = trpc.h2AutoAdmin.saveTree.useMutation({
+  const save = (trpc.h2AutoAdmin as any).saveTree.useMutation({
     onSuccess: () => {
       toast.success("Árvore salva. Aguardando sincronização do APK.");
       setDirty(false);
       utils.h2AutoAdmin.list.invalidate();
     },
-    onError: (error) => toast.error(error.message || "Não foi possível salvar."),
+    onError: (error: Error) => toast.error(error.message || "Não foi possível salvar."),
   });
   function updateNode(id: string, updater: (node: H2AutoTreeNode) => H2AutoTreeNode) {
     setTree(prev => ({ ...prev, nodes: prev.nodes.map(n => n.id === id ? updater(n) : n) }));
