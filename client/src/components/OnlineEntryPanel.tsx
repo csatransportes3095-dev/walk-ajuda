@@ -87,9 +87,10 @@ export function OnlineEntryPanel({ onBack, onOpenCadastro, intendedRoute = null 
           setError('Não foi possível criar a nova senha.');
           return;
         }
-        localStorage.setItem(ENTRY_TOKEN_KEY, createdToken);
-        localStorage.setItem('cp_token', createdToken);
-        setToken(createdToken);
+        const validToken: string = createdToken!;
+        localStorage.setItem(ENTRY_TOKEN_KEY, validToken);
+        localStorage.setItem('cp_token', validToken);
+        setToken(validToken);
         setPassword("");
         setPasswordSetupPhone("");
         return;
