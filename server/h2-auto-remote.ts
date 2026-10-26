@@ -22,7 +22,7 @@ const mediaSchema=z.object({
 });
 const configSchema=z.object({
  tree:h2AutoTreeSchema.optional(),
- media:mediaSchema.default({}),
+ media:mediaSchema.default(mediaSchema.parse({})),
  enabled:z.boolean(),
  ordersEnabled:z.boolean().default(false),
  orderSessionHours:z.number().int().min(1).max(72).default(24),
