@@ -1,7 +1,8 @@
 // Router de senha do sistema de cadastro (h2colombiano.com/admin/customers)
 // Mesma lógica do Gestor de Gastos (spreadsheet), adaptada para a tabela customers
 
-import { createHash, randomBytes } from "crypto";
+import { createHash, randomBytes, randomInt, timingSafeEqual } from "crypto";
+import { canCustomerRecoverPassword, passwordRecoveryCodeHash } from "../customerPasswordRecoveryPolicy";
 import { TRPCError } from "@trpc/server";
 import { z } from "zod";
 import { publicProcedure, adminProcedure, router } from "../_core/trpc";
@@ -340,7 +341,7 @@ export const customerPasswordRouter = router({
   // Cliente cria senha pelo fluxo normal; reparo de CPF fica centralizado.
 
   clientCreateAuto: publicProcedure
-    .input(z.object({ phone: z.string(), password: z.string().min(4) }))
+    .input(z.object({ phone: z.string(), password: z.string().min(4), emailVerificationToken: z.string().min(32).optional() }))
     .mutation(async ({ input }) => {
       const db = (await getDb()) as any;
       if (!db) throw new TRPCError({ code: "INTERNAL_SERVER_ERROR", message: "Banco indisponível" });
@@ -357,9 +358,23 @@ export const customerPasswordRouter = router({
         throw new TRPCError({ code: "NOT_FOUND", message: "Cliente não encontrado." });
       }
 
+      // A criacao inicial exige a mesma confirmacao de e-mail usada pelo login central.
+      // Telefone e senha, sozinhos, nunca autorizam criar credenciais.
+      if (!input.emailVerificationToken) throw new TRPCError({ code: "UNAUTHORIZED", message: "Confirme o e-mail no login principal." });
+      const proof = assertLoginEmailProof(cleanPhone, input.emailVerificationToken);
+      if (String((cust as any).email || "").trim().toLowerCase() !== proof.email) {
+        throw new TRPCError({ code: "UNAUTHORIZED", message: "Confirme o e-mail do cadastro novamente." });
+      }
+
       // Verificar bloqueio de cadastro
       if ((cust as any).blocked === 1) {
         return { success: false, error: "blocked" as const, blockReason: (cust as any).blockReason || 'Acesso bloqueado' };
+      }
+
+      // Uma criacao inicial nao pode substituir credenciais existentes por telefone.
+      // Trocas exigem o fluxo de recuperacao por e-mail ou uma acao do ADM.
+      if (await getActivePassword(cleanPhone)) {
+        throw new TRPCError({ code: "CONFLICT", message: "Senha ja cadastrada. Use a recuperacao autorizada." });
       }
 
       // Desativar senhas anteriores
@@ -415,17 +430,22 @@ export const customerPasswordRouter = router({
         lastAccessAt: new Date(),
       });
 
+      loginEmailProofs.delete(input.emailVerificationToken);
       return { success: true, token, expiresAt: expiresAt.getTime() };
     }),
 
   // â”€â”€ Cliente cria senha (modo manual) â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
 
   clientCreateManual: publicProcedure
-    .input(z.object({ phone: z.string(), password: z.string().min(4) }))
+    .input(z.object({ phone: z.string(), password: z.string().min(4), emailVerificationToken: z.string().min(32).optional() }))
     .mutation(async ({ input }) => {
       const db = (await getDb()) as any;
       if (!db) throw new TRPCError({ code: "INTERNAL_SERVER_ERROR", message: "Banco indisponível" });
       const cleanPhone = input.phone.replace(/\D/g, "");
+
+      if (await getPasswordMode() !== "manual") {
+        throw new TRPCError({ code: "FORBIDDEN", message: "Aprovacao manual nao esta ativa." });
+      }
 
       // Verificar se cliente existe
       const cust = await getCustomerByCleanPhone(cleanPhone);
@@ -433,9 +453,23 @@ export const customerPasswordRouter = router({
         throw new TRPCError({ code: "NOT_FOUND", message: "Cliente não encontrado." });
       }
 
+      // A criacao inicial exige a mesma confirmacao de e-mail usada pelo login central.
+      // Telefone e senha, sozinhos, nunca autorizam criar credenciais.
+      if (!input.emailVerificationToken) throw new TRPCError({ code: "UNAUTHORIZED", message: "Confirme o e-mail no login principal." });
+      const proof = assertLoginEmailProof(cleanPhone, input.emailVerificationToken);
+      if (String((cust as any).email || "").trim().toLowerCase() !== proof.email) {
+        throw new TRPCError({ code: "UNAUTHORIZED", message: "Confirme o e-mail do cadastro novamente." });
+      }
+
       // Verificar bloqueio de cadastro
       if ((cust as any).blocked === 1) {
         return { success: false, error: "blocked" as const, blockReason: (cust as any).blockReason || 'Acesso bloqueado' };
+      }
+
+      // Uma criacao inicial nao pode substituir credenciais existentes por telefone.
+      // Trocas exigem o fluxo de recuperacao por e-mail ou uma acao do ADM.
+      if (await getActivePassword(cleanPhone)) {
+        throw new TRPCError({ code: "CONFLICT", message: "Senha ja cadastrada. Use a recuperacao autorizada." });
       }
 
       // Desativar senhas anteriores
@@ -455,6 +489,7 @@ export const customerPasswordRouter = router({
         clientCreatedAt: new Date(),
       });
 
+      loginEmailProofs.delete(input.emailVerificationToken);
       return { success: true, pending: true };
     }),
 
@@ -509,11 +544,20 @@ export const customerPasswordRouter = router({
   // â”€â”€ Cliente faz login â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
 
   login: publicProcedure
-    .input(z.object({ phone: z.string(), password: z.string() }))
+    .input(z.object({ phone: z.string(), password: z.string(), emailVerificationToken: z.string().min(32).optional() }))
     .mutation(async ({ input }) => {
       const db = (await getDb()) as any;
       if (!db) throw new TRPCError({ code: "INTERNAL_SERVER_ERROR", message: "Banco indisponível" });
       const cleanPhone = input.phone.replace(/\D/g, "");
+
+      if (!input.emailVerificationToken) {
+        throw new TRPCError({ code: "UNAUTHORIZED", message: "Confirme seu e-mail no login principal." });
+      }
+      const proof = assertLoginEmailProof(cleanPhone, input.emailVerificationToken);
+      const registered = await getCustomerByCleanPhone(cleanPhone);
+      if (!registered || String((registered as any).email || "").trim().toLowerCase() !== proof.email) {
+        throw new TRPCError({ code: "UNAUTHORIZED", message: "Confirme o e-mail do cadastro." });
+      }
 
       // Verificar bloqueio de cadastro antes de autenticar
       try {
@@ -553,6 +597,7 @@ export const customerPasswordRouter = router({
         });
       } catch {}
 
+      loginEmailProofs.delete(input.emailVerificationToken);
       return {
         success: true,
         token,
@@ -631,6 +676,81 @@ export const customerPasswordRouter = router({
     }),
 
   // â”€â”€ ADM: listar pendentes â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
+
+
+  // Independent from login OTP: recovery never grants route access or extends validity.
+  requestPasswordRecovery: publicProcedure
+    .input(z.object({ phone: z.string().min(10).max(32) }))
+    .mutation(async ({ input }) => {
+      const generic = { success: true as const, message: "Se o cadastro estiver habilitado, enviaremos um codigo ao e-mail cadastrado." };
+      const phone = input.phone.replace(/\D/g, "");
+      if (!/^\d{10,11}$/.test(phone)) return generic;
+      const db = (await getDb()) as any;
+      if (!db) throw new TRPCError({ code: "SERVICE_UNAVAILABLE", message: "Servico temporariamente indisponivel." });
+      const customer = await getCustomerByCleanPhone(phone);
+      const password = await getActivePassword(phone);
+      if (!canCustomerRecoverPassword(await getPasswordMode(), customer, password)) return generic;
+      await db.execute(sql`CREATE TABLE IF NOT EXISTS customerPasswordRecovery (
+        id BIGINT AUTO_INCREMENT PRIMARY KEY, phone VARCHAR(32) NOT NULL,
+        codeHash CHAR(64) NOT NULL, expiresAt DATETIME NOT NULL,
+        attempts INT NOT NULL DEFAULT 0, usedAt DATETIME NULL, createdAt DATETIME NOT NULL,
+        INDEX recovery_phone_created (phone,createdAt)
+      ) ENGINE=InnoDB`);
+      const [recentRows] = await db.execute(sql`
+        SELECT createdAt FROM customerPasswordRecovery WHERE phone=${phone}
+        ORDER BY id DESC LIMIT 1`);
+      const recent = (recentRows as any[])?.[0];
+      if (recent && Date.now() - new Date(recent.createdAt).getTime() < 60_000) return generic;
+      const code = generateOwnSiteCode();
+      const codeHash = passwordRecoveryCodeHash(phone, code);
+      const expiresAt = new Date(Date.now() + 10 * 60_000);
+      await db.execute(sql`INSERT INTO customerPasswordRecovery(phone,codeHash,expiresAt,createdAt)
+        VALUES (${phone},${codeHash},${expiresAt},NOW())`);
+      try { await deliverOwnSiteCode(String(customer.email).trim().toLowerCase(),code, "password-recovery"); }
+      catch { throw new TRPCError({ code:"SERVICE_UNAVAILABLE", message:"Nao foi possivel enviar o codigo. Tente novamente." }); }
+      return generic;
+    }),
+
+  finishPasswordRecovery: publicProcedure
+    .input(z.object({
+      phone: z.string().min(10).max(32),
+      code: z.string().regex(/^\d{6}$/),
+      newPassword: z.string().min(8).max(72),
+    }))
+    .mutation(async ({ input }) => {
+      const phone = input.phone.replace(/\D/g,"");
+      const db = (await getDb()) as any;
+      if (!db) throw new TRPCError({code:"SERVICE_UNAVAILABLE",message:"Servico indisponivel."});
+      // Validation and mutation must be atomic; manual ADM mode always wins.
+      return db.transaction(async (tx: any) => {
+        const modeRows = await tx.select().from(appSettings)
+          .where(eq(appSettings.key, "senha_cadastro_ativa")).limit(1);
+        if (modeRows?.[0]?.value !== "false") throw new TRPCError({code:"FORBIDDEN",message:"Recuperacao disponivel somente no modo automatico."});
+        const customersRows = await tx.select().from(customers).where(eq(customers.phone,phone)).limit(1);
+        const customer=customersRows?.[0];
+        const pwRows=await tx.select().from(customerPasswords)
+          .where(and(eq(customerPasswords.phone,phone),eq(customerPasswords.isActive,1))).limit(1);
+        const pw=pwRows?.[0];
+        if(!canCustomerRecoverPassword("auto",customer,pw)) throw new TRPCError({code:"FORBIDDEN",message:"Recuperacao indisponivel para este cadastro."});
+        const [raw]=await tx.execute(sql`SELECT id,codeHash,attempts,expiresAt,usedAt FROM customerPasswordRecovery
+          WHERE phone=${phone} ORDER BY id DESC LIMIT 1 FOR UPDATE`);
+        const rec=(raw as any[])?.[0];
+        if (!rec || rec.usedAt || new Date(rec.expiresAt).getTime() <= Date.now() || Number(rec.attempts)>=5)
+          throw new TRPCError({code:"BAD_REQUEST",message:"Codigo invalido ou expirado."});
+        await tx.execute(sql`UPDATE customerPasswordRecovery SET attempts=attempts+1 WHERE id=${rec.id}`);
+        const actual=Buffer.from(String(rec.codeHash),"hex");
+        const expected=Buffer.from(passwordRecoveryCodeHash(phone, input.code),"hex");
+        if(actual.length!==expected.length || !timingSafeEqual(actual,expected))
+          return {success:false as const, message:"Codigo invalido ou expirado."};
+        const hash=await bcrypt.hash(input.newPassword,12);
+        await tx.update(customerPasswords).set({password:hash}).where(eq(customerPasswords.id,pw.id));
+        await tx.execute(sql`UPDATE customerPasswordRecovery SET usedAt=NOW() WHERE id=${rec.id}`);
+        await tx.delete(customerPasswordSessions).where(eq(customerPasswordSessions.phone,phone));
+        await tx.delete(spreadsheetSessions).where(eq(spreadsheetSessions.clientId,
+          sql`(SELECT id FROM spreadsheetClients WHERE phone=${phone} LIMIT 1)`));
+        return {success:true as const};
+      });
+    }),
 
   adminListPending: adminProcedure.query(async () => {
     const db = (await getDb()) as any;
