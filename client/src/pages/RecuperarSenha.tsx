@@ -1,5 +1,6 @@
 import { useEffect, useState } from "react";
 import { trpc } from "@/lib/trpc";
+import { ArrowLeft, CheckCircle2, KeyRound } from "lucide-react";
 
 export default function RecuperarSenha() {
   const [phone, setPhone] = useState("");
@@ -47,15 +48,15 @@ export default function RecuperarSenha() {
     }
   };
 
-  return <main className="min-h-screen bg-[#080d20] flex items-center justify-center p-4 text-white">
-    <section className="w-full max-w-md rounded-2xl border border-white/15 bg-white/5 p-6 space-y-4">
-      <h1 className="text-xl font-bold">H2 COLOMBIANO — Recuperar senha</h1>
-      <p className="text-sm text-slate-300">Disponível somente no modo automático, para cadastro completo e com acesso vigente. No modo manual, procure o atendimento.</p>
-      {step !== "done" && <>
+  return <main className="min-h-screen bg-[#080d20] flex items-center justify-center px-4 py-8 text-white">
+    <section className="w-full max-w-md space-y-5 rounded-3xl border border-sky-400/25 bg-[#101a30] p-5 shadow-[0_0_50px_rgba(56,189,248,0.12)] sm:p-7">
+      <div className="flex items-center gap-3"><div className="rounded-2xl border border-sky-400/30 bg-sky-400/15 p-3"><KeyRound className="h-7 w-7 text-sky-300" /></div><div><p className="text-xs font-black uppercase tracking-widest text-sky-300">H2 COLOMBIANO</p><h1 className="text-2xl font-black tracking-tight">Recuperar senha</h1></div></div>
+      <p className="text-sm leading-relaxed text-slate-300">Receba um código no seu e-mail cadastrado para definir uma nova senha.</p>
+      {step !== "done" && <div className="space-y-3">
         <label className="block text-sm" htmlFor="recovery-phone">Telefone cadastrado</label>
-        <input id="recovery-phone" className="w-full rounded-lg p-3 bg-black/30 border border-white/20" value={phone} disabled={step === "finish"} onChange={event => setPhone(event.target.value)} inputMode="tel" placeholder="Telefone com DDD" />
-      </>}
-      {step === "request" && <button className="w-full rounded-lg bg-blue-700 p-3 font-semibold" disabled={request.isPending} onClick={start}>{request.isPending ? "Solicitando..." : "Enviar código ao e-mail cadastrado"}</button>}
+        <input id="recovery-phone" className="w-full min-h-12 rounded-xl p-3 bg-black/25 border border-white/20 focus:border-sky-400 focus:outline-none" value={phone} disabled={step === "finish"} onChange={event => setPhone(event.target.value)} inputMode="tel" placeholder="Telefone com DDD" />
+      </div>}
+      {step === "request" && <button className="w-full min-h-12 rounded-xl bg-sky-500 p-3 font-black text-slate-950 transition-colors hover:bg-sky-400 disabled:opacity-50" disabled={request.isPending} onClick={start}>{request.isPending ? "Solicitando..." : "Enviar código ao e-mail cadastrado"}</button>}
       {step === "finish" && <>
         <label className="block text-sm" htmlFor="recovery-code">Código recebido no e-mail</label>
         <input id="recovery-code" className="w-full rounded-lg p-3 bg-black/30 border border-white/20" value={code} onChange={event => setCode(event.target.value.replace(/\D/g, "").slice(0, 6))} inputMode="numeric" autoComplete="one-time-code" placeholder="6 dígitos" />
@@ -65,10 +66,11 @@ export default function RecuperarSenha() {
         <button className="w-full rounded-lg bg-blue-700 p-3 font-semibold" disabled={finish.isPending || request.isPending || code.length !== 6} onClick={change}>{finish.isPending ? "Validando..." : "Confirmar e alterar senha"}</button>
         <button className="w-full rounded-lg border border-blue-400/40 p-3 text-sm disabled:opacity-50" disabled={cooldown > 0 || request.isPending || finish.isPending} onClick={start}>{request.isPending ? "Reenviando..." : cooldown > 0 ? `Reenviar código em ${cooldown}s` : "Reenviar código"}</button>
         <button className="w-full text-sm underline text-slate-300" disabled={request.isPending || finish.isPending} onClick={() => { setStep("request"); setCode(""); setFeedback(""); }}>Voltar e conferir o telefone</button>
-        <p className="text-xs text-slate-400">Se não recebeu, confira o spam e tente reenviar após 60 segundos. Por segurança, esta página não confirma se o cadastro é elegível.</p>
+        <p className="text-xs leading-relaxed text-slate-400">Não recebeu? Verifique também a pasta de spam. Você pode solicitar outro código após 60 segundos.</p>
       </>}
-      {feedback && <p role="status" className="text-sm text-amber-200">{feedback}</p>}
-      <a href="/login" className="block text-center underline text-blue-300">Voltar ao login</a>
+      {feedback && <p role="status" className="rounded-xl border border-sky-400/20 bg-sky-400/10 p-3 text-sm leading-relaxed text-sky-100">{feedback}</p>}
+      {step === "done" && <div className="flex items-center gap-2 rounded-xl border border-emerald-400/30 bg-emerald-400/10 p-4 text-emerald-200"><CheckCircle2 className="h-5 w-5 shrink-0" /><span className="text-sm font-semibold">Sua nova senha está pronta para uso.</span></div>}
+      <a href="/login" className="flex min-h-11 items-center justify-center gap-2 text-center text-sm font-semibold text-sky-300 underline-offset-4 hover:underline"><ArrowLeft className="h-4 w-4" /> Voltar ao login</a>
     </section>
   </main>;
 }
