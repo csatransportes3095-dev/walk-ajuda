@@ -1,6 +1,7 @@
 import {useState} from "react";
 import {trpc} from "@/lib/trpc";
 import AdminHeader from "@/components/AdminHeader";
+import H2AutoTreeEditor from "@/components/H2AutoTreeEditor";
 import {Bot, Smartphone, RefreshCw, ShieldCheck, Save, Power, Clock, Mic, Image} from "lucide-react";
 import {toast} from "sonner";
 
@@ -26,6 +27,7 @@ export default function AdminH2Auto(){
  {data.map(d=>{const value=editing[d.id]||d.config;const change=(f:string,v:any)=>setEditing(p=>({...p,[d.id]:{...value,[f]:v}}));return <Box key={d.id}>
  <div className="flex flex-wrap justify-between gap-3"><div><h3 className="text-lg font-black">{d.label}</h3><p className="text-xs opacity-65">{d.paired?"VINCULADO":"AGUARDANDO VÍNCULO"} · Config. {d.revision} · Aplicada {d.appliedRevision} · {d.lastSeen?"Última sincronização: "+new Date(d.lastSeen).toLocaleString("pt-BR"):"Nunca sincronizado"}</p></div><div className="flex flex-wrap gap-2"><button className="rounded-lg border border-cyan-500/40 px-3 py-2 text-xs" onClick={()=>{setPairId(d.id);pairCode.mutate({id:d.id},{onSuccess:x=>setPair({id:d.id,code:x.code})})}}>NOVO CÓDIGO</button><button disabled={!d.paired||revoke.isPending} className="rounded-lg border border-amber-500/50 px-3 py-2 text-xs font-bold text-amber-300 disabled:opacity-40" onClick={()=>{if(confirm("DESVINCULAR "+d.label+"?\\nO celular perderá a autorização de sincronizar e consultar pedidos. As configurações do ADM serão preservadas."))revoke.mutate({id:d.id})}}>DESVINCULAR CELULAR</button><button disabled={remove.isPending} className="rounded-lg border border-red-500/50 px-3 py-2 text-xs font-bold text-red-300 disabled:opacity-40" onClick={()=>{if(confirm("REMOVER DEFINITIVAMENTE "+d.label+"?\\nIsso apagará somente o aparelho H2 AUTO, sua cópia local armazenada no ADM e as sessões de consulta. Não apaga pedidos, clientes nem outros serviços."))remove.mutate({id:d.id})}}>REMOVER APARELHO</button></div></div>
  {d.snapshotConfig&&<div className="rounded-xl border border-amber-400/30 bg-amber-950/20 p-3 space-y-2"><div className="font-bold text-amber-200">CÓPIA DAS CONFIGURAÇÕES DO CELULAR DISPONÍVEL</div><p className="text-xs text-white/70">Recebida em {d.snapshotReceivedAt?new Date(d.snapshotReceivedAt).toLocaleString("pt-BR"):"data desconhecida"}. A cópia original fica preservada. Mesclar preenche os campos vazios e adiciona regras que ainda não existem no ADM.</p><button className="rounded-lg bg-amber-400 px-4 py-2 text-xs font-black text-black" disabled={merge.isPending} onClick={()=>{if(confirm("Mesclar dados locais sem apagar configurações atuais do ADM?"))merge.mutate({id:d.id,expectedRevision:d.revision})}}>IMPORTAR CONFIGURAÇÕES DO CELULAR</button></div>}
+ <H2AutoTreeEditor key={d.id} id={d.id} revision={d.revision} initial={d.config.tree} />
  <div className="grid gap-3 md:grid-cols-2">
  <label className="text-xs flex flex-col gap-2">APLICATIVO WHATSAPP
  <select className={field} value={value.whatsappMode} onChange={e=>change("whatsappMode",Number(e.target.value))}>
