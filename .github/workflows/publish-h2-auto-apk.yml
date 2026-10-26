@@ -21,7 +21,7 @@ jobs:
           ref: recovery/organizar-salvos-2026-08-24
       - name: Baixar APK 1.9 corrigido e verificar integridade
         env:
-          ZIP_URL: "https://sdmntprbrazilsouth.oaiusercontent.com/files/00000000-b66c-820e-9cce-705ebc60f47e/raw?se=2026-10-26T01%3A10%3A26Z&sp=r&sv=2026-02-06&sr=b&scid=711a17e4-b632-521a-9581-232a2f72a748&skoid=db6dad9e-03ee-465b-aef6-ce0f63a161dc&sktid=a48cca56-e6da-484e-a814-9c849652bcb3&skt=2026-10-26T00%3A08%3A07Z&ske=2026-10-27T00%3A08%3A07Z&sks=b&skv=2026-02-06&sig=4HC8GjD0ai5VmjcD9AZJzodipAS4e7VPQM/CZq5u6nI%3D"
+          ZIP_URL: "https://sdmntprbrazilsouth.oaiusercontent.com/files/00000000-e358-820e-ab83-f82f96892ac8/raw?se=2026-10-26T01%3A26%3A13Z&sp=r&sv=2026-02-06&sr=b&scid=a8daf1c8-f212-5b5b-90c0-3421c019fadb&skoid=db6dad9e-03ee-465b-aef6-ce0f63a161dc&sktid=a48cca56-e6da-484e-a814-9c849652bcb3&skt=2026-10-26T01%3A16%3A30Z&ske=2026-10-27T01%3A16%3A30Z&sks=b&skv=2026-02-06&sig=/0z9mwFe2SFWkU2HaHO04Y%2ByF1fbJV1mEQdFTl5ZKAE%3D"
         run: |
           set -euo pipefail
           curl --fail --location --retry 2 --connect-timeout 15 --max-time 120 --silent --show-error "$ZIP_URL" --output /tmp/h2-auto-1-7-build.zip
@@ -39,7 +39,7 @@ jobs:
           if git diff --cached --quiet; then
             echo "APK ja publicado na arvore de codigo."
           else
-            git commit -m "fix(h2-auto): APK 1.9 com mensagens organizadas e protecao contra duplicatas"
+            git commit -m "fix(h2-auto): APK 1.9 mensagens formatadas e respostas sem repeticao"
             git pull --rebase origin recovery/organizar-salvos-2026-08-24
             git push origin HEAD:recovery/organizar-salvos-2026-08-24
           fi
