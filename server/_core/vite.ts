@@ -326,14 +326,19 @@ export async function serveStatic(app: Express) {
   // Download direto do H2 AUTO para navegadores de celular.
   // Nao usa SPA, redirecionamento, cache CDN ou visualizador de arquivos.
   app.get('/baixar-h2-auto', (_req, res) => {
-    const apkPath = path.resolve(distPath, 'downloads', 'H2_AUTO_1_7_INSTALAR.apk');
+    const availableNames = ['H2_AUTO_1_9_INSTALAR.apk','H2_AUTO_1_7_INSTALAR.apk'];
+    const fileName = availableNames.find(name => {
+      const candidate = path.resolve(distPath, 'downloads', name);
+      return fs.existsSync(candidate) && fs.statSync(candidate).isFile();
+    }) || availableNames[0];
+    const apkPath = path.resolve(distPath, 'downloads', fileName);
     if (!fs.existsSync(apkPath) || !fs.statSync(apkPath).isFile()) {
       res.status(404).set('Cache-Control', 'no-store').type('text/plain').send('Instalador H2 AUTO indisponivel.');
       return;
     }
     res.set({
       'Content-Type': 'application/vnd.android.package-archive',
-      'Content-Disposition': 'attachment; filename="H2_AUTO_1_7_INSTALAR.apk"',
+      'Content-Disposition': 'attachment; filename="' + fileName + '"',
       'Content-Length': String(fs.statSync(apkPath).size),
       'Cache-Control': 'private, no-store, max-age=0',
       'CDN-Cache-Control': 'no-store',
