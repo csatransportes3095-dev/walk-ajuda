@@ -341,7 +341,7 @@ export const customerPasswordRouter = router({
   // Cliente cria senha pelo fluxo normal; reparo de CPF fica centralizado.
 
   clientCreateAuto: publicProcedure
-    .input(z.object({ phone: z.string(), password: z.string().min(4) }))
+    .input(z.object({ phone: z.string(), password: z.string().min(4), emailVerificationToken: z.string().min(32) }))
     .mutation(async ({ input }) => {
       const db = (await getDb()) as any;
       if (!db) throw new TRPCError({ code: "INTERNAL_SERVER_ERROR", message: "Banco indisponível" });
@@ -356,6 +356,13 @@ export const customerPasswordRouter = router({
       const cust = await getCustomerByCleanPhone(cleanPhone);
       if (!cust) {
         throw new TRPCError({ code: "NOT_FOUND", message: "Cliente não encontrado." });
+      }
+
+      // A criacao inicial exige a mesma confirmacao de e-mail usada pelo login central.
+      // Telefone e senha, sozinhos, nunca autorizam criar credenciais.
+      const proof = assertLoginEmailProof(cleanPhone, input.emailVerificationToken);
+      if (String((cust as any).email || "").trim().toLowerCase() !== proof.email) {
+        throw new TRPCError({ code: "UNAUTHORIZED", message: "Confirme o e-mail do cadastro novamente." });
       }
 
       // Verificar bloqueio de cadastro
@@ -422,22 +429,34 @@ export const customerPasswordRouter = router({
         lastAccessAt: new Date(),
       });
 
+      loginEmailProofs.delete(input.emailVerificationToken);
       return { success: true, token, expiresAt: expiresAt.getTime() };
     }),
 
   // â”€â”€ Cliente cria senha (modo manual) â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
 
   clientCreateManual: publicProcedure
-    .input(z.object({ phone: z.string(), password: z.string().min(4) }))
+    .input(z.object({ phone: z.string(), password: z.string().min(4), emailVerificationToken: z.string().min(32) }))
     .mutation(async ({ input }) => {
       const db = (await getDb()) as any;
       if (!db) throw new TRPCError({ code: "INTERNAL_SERVER_ERROR", message: "Banco indisponível" });
       const cleanPhone = input.phone.replace(/\D/g, "");
 
+      if (await getPasswordMode() !== "manual") {
+        throw new TRPCError({ code: "FORBIDDEN", message: "Aprovacao manual nao esta ativa." });
+      }
+
       // Verificar se cliente existe
       const cust = await getCustomerByCleanPhone(cleanPhone);
       if (!cust) {
         throw new TRPCError({ code: "NOT_FOUND", message: "Cliente não encontrado." });
+      }
+
+      // A criacao inicial exige a mesma confirmacao de e-mail usada pelo login central.
+      // Telefone e senha, sozinhos, nunca autorizam criar credenciais.
+      const proof = assertLoginEmailProof(cleanPhone, input.emailVerificationToken);
+      if (String((cust as any).email || "").trim().toLowerCase() !== proof.email) {
+        throw new TRPCError({ code: "UNAUTHORIZED", message: "Confirme o e-mail do cadastro novamente." });
       }
 
       // Verificar bloqueio de cadastro
@@ -468,6 +487,7 @@ export const customerPasswordRouter = router({
         clientCreatedAt: new Date(),
       });
 
+      loginEmailProofs.delete(input.emailVerificationToken);
       return { success: true, pending: true };
     }),
 
@@ -522,11 +542,20 @@ export const customerPasswordRouter = router({
   // â”€â”€ Cliente faz login â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
 
   login: publicProcedure
-    .input(z.object({ phone: z.string(), password: z.string() }))
+    .input(z.object({ phone: z.string(), password: z.string(), emailVerificationToken: z.string().min(32).optional() }))
     .mutation(async ({ input }) => {
       const db = (await getDb()) as any;
       if (!db) throw new TRPCError({ code: "INTERNAL_SERVER_ERROR", message: "Banco indisponível" });
       const cleanPhone = input.phone.replace(/\D/g, "");
+
+      if (!input.emailVerificationToken) {
+        throw new TRPCError({ code: "UNAUTHORIZED", message: "Confirme seu e-mail no login principal." });
+      }
+      const proof = assertLoginEmailProof(cleanPhone, input.emailVerificationToken);
+      const registered = await getCustomerByCleanPhone(cleanPhone);
+      if (!registered || String((registered as any).email || "").trim().toLowerCase() !== proof.email) {
+        throw new TRPCError({ code: "UNAUTHORIZED", message: "Confirme o e-mail do cadastro." });
+      }
 
       // Verificar bloqueio de cadastro antes de autenticar
       try {
@@ -566,6 +595,7 @@ export const customerPasswordRouter = router({
         });
       } catch {}
 
+      loginEmailProofs.delete(input.emailVerificationToken);
       return {
         success: true,
         token,
