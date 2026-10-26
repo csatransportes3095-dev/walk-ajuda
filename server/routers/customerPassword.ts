@@ -364,6 +364,12 @@ export const customerPasswordRouter = router({
         return { success: false, error: "blocked" as const, blockReason: (cust as any).blockReason || 'Acesso bloqueado' };
       }
 
+      // Uma criacao inicial nao pode substituir credenciais existentes por telefone.
+      // Trocas exigem o fluxo de recuperacao por e-mail ou uma acao do ADM.
+      if (await getActivePassword(cleanPhone)) {
+        throw new TRPCError({ code: "CONFLICT", message: "Senha ja cadastrada. Use a recuperacao autorizada." });
+      }
+
       // Desativar senhas anteriores
       await db
         .update(customerPasswords)
@@ -438,6 +444,12 @@ export const customerPasswordRouter = router({
       // Verificar bloqueio de cadastro
       if ((cust as any).blocked === 1) {
         return { success: false, error: "blocked" as const, blockReason: (cust as any).blockReason || 'Acesso bloqueado' };
+      }
+
+      // Uma criacao inicial nao pode substituir credenciais existentes por telefone.
+      // Trocas exigem o fluxo de recuperacao por e-mail ou uma acao do ADM.
+      if (await getActivePassword(cleanPhone)) {
+        throw new TRPCError({ code: "CONFLICT", message: "Senha ja cadastrada. Use a recuperacao autorizada." });
       }
 
       // Desativar senhas anteriores
