@@ -1,11 +1,11 @@
 {
   "packageName": "com.h2colombiano.auto",
-  "apkFile": "H2_AUTO_1_16_INSTALAR.apk",
-  "versionName": "1.16-audio-safe",
-  "versionCode": 16,
-  "sha256": "51f556d32d41e108e48c1edf6b3b945e998b27c7c41d8d6488c56d83095a3052",
+  "apkFile": "H2_AUTO_1_17_INSTALAR.apk",
+  "versionName": "1.17-history-neon",
+  "versionCode": 17,
+  "sha256": "ae933c15ba0ec5676bed1f3fc076ac607b70be28a00a886e0a646c87c80eef6a",
   "certificateSha256": "3215b6d6b643ae6b57ffaf6e4854a40be267d4816166255872410c696384b393",
-  "commit": "e4f8be6f942ef8fabc0afcc0a8b26f380f8d9f42",
-  "workflowRun": 40384080929,
-  "publishedAt": "2026-10-26T19:11:56.332111+00:00"
+  "commit": "de3d7027572b20058f898174c119095be88fa9ff",
+  "workflowRun": 40395047732,
+  "publishedAt": "2026-10-26T20:23:48.685735+00:00"
 }

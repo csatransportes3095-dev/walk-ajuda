@@ -3,7 +3,7 @@ on:
   push:
     branches: [recovery/organizar-salvos-2026-08-24]
     paths:
-      - client/public/downloads/H2_AUTO_1_16_INSTALAR.apk
+      - client/public/downloads/H2_AUTO_*_INSTALAR.apk
       - client/public/downloads/h2-auto-release.json
       - .github/workflows/publish-h2-auto-apk.yml
   workflow_dispatch:

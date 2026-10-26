@@ -9,6 +9,11 @@ import {
   decodeH2AutoDiagnostics,
   h2AutoDiagnosticsSchema,
 } from "./h2-auto-diagnostics";
+import {
+  decodeH2AutoHistory,
+  h2AutoHistorySchema,
+  mergeH2AutoHistory,
+} from "./h2-auto-history";
 
 const hash = (s: string) => createHash("sha256").update(s).digest("hex");
 const matchesHash = (stored: unknown, supplied: string) => {
@@ -137,6 +142,11 @@ function ensure() {
 	 diagnostics_json JSON NOT NULL,
 	 received_at BIGINT NOT NULL
 	 )`);
+      await db.execute(sql`CREATE TABLE IF NOT EXISTS h2_auto_history (
+			 device_id VARCHAR(32) PRIMARY KEY,
+		 history_json JSON NOT NULL,
+		 received_at BIGINT NOT NULL
+		)`);
     })().catch(e => {
       ready = undefined;
       throw e;
@@ -167,6 +177,9 @@ const safeDevice = (r: any) => ({
     r.diagnostics_received_at == null
       ? null
       : Number(r.diagnostics_received_at),
+  history: decodeH2AutoHistory(r.history_json),
+  historyReceivedAt:
+    r.history_received_at == null ? null : Number(r.history_received_at),
 });
 function mergeWithoutDeleting(
   remote: RemoteConfig,
@@ -249,7 +262,7 @@ export const h2AutoAdminRouter = router({
     await ensure();
     return (
       await rows(
-        sql`SELECT d.*, s.snapshot_json, s.received_at, q.diagnostics_json, q.received_at AS diagnostics_received_at FROM h2_auto_devices d LEFT JOIN h2_auto_local_snapshots s ON s.device_id=d.id LEFT JOIN h2_auto_diagnostics q ON q.device_id=d.id ORDER BY d.created_at DESC LIMIT 30`
+        sql`SELECT d.*, s.snapshot_json, s.received_at, q.diagnostics_json, q.received_at AS diagnostics_received_at, h.history_json, h.received_at AS history_received_at FROM h2_auto_devices d LEFT JOIN h2_auto_local_snapshots s ON s.device_id=d.id LEFT JOIN h2_auto_diagnostics q ON q.device_id=d.id LEFT JOIN h2_auto_history h ON h.device_id=d.id ORDER BY d.created_at DESC LIMIT 30`
       )
     ).map(safeDevice);
   }),
@@ -413,6 +426,9 @@ export const h2AutoAdminRouter = router({
       await db.execute(
         sql`DELETE FROM h2_auto_diagnostics WHERE device_id=${input.id}`
       );
+      await db.execute(
+        sql`DELETE FROM h2_auto_history WHERE device_id=${input.id}`
+      );
       return { success: true, removed: false };
     }),
   remove: adminProcedure
@@ -440,6 +456,9 @@ export const h2AutoAdminRouter = router({
       );
       await db.execute(
         sql`DELETE FROM h2_auto_diagnostics WHERE device_id=${input.id}`
+      );
+      await db.execute(
+        sql`DELETE FROM h2_auto_history WHERE device_id=${input.id}`
       );
       await db.execute(sql`DELETE FROM h2_auto_devices WHERE id=${input.id}`);
       return { success: true, removed: true };
@@ -632,6 +651,7 @@ export function registerH2AutoDeviceRoutes(app: Express) {
         .object({
           revision: z.number().int().min(1),
           diagnostics: h2AutoDiagnosticsSchema.optional(),
+          history: h2AutoHistorySchema.optional(),
         })
         .strict()
         .safeParse(req.body);
@@ -650,26 +670,44 @@ export function registerH2AutoDeviceRoutes(app: Express) {
       if (Number(d.revision) !== p.data.revision)
         return respond(res, 409, { error: "outdated_revision" });
       const db = await getDb();
-      if (!db) throw Error("db");
+      if (!db || typeof (db as any).transaction !== "function")
+        throw Error("transaction_required");
       const persist = async (tx: any) => {
         const updated: any = await tx.execute(
           sql`UPDATE h2_auto_devices SET applied_revision=${p.data.revision},last_seen=${Date.now()} WHERE id=${id} AND revision=${p.data.revision} AND token_hash=${hash(token)}`
         );
         if (!updated[0]?.affectedRows) return false;
+
+        if (p.data.history) {
+          const storedRows: any = await tx.execute(
+            sql`SELECT history_json FROM h2_auto_history WHERE device_id=${id} FOR UPDATE`
+          );
+          const storedRaw = storedRows[0]?.[0]?.history_json ?? null;
+          const stored =
+            storedRaw == null ? null : decodeH2AutoHistory(storedRaw);
+          if (storedRaw != null && !stored)
+            throw new Error("stored_h2_auto_history_invalid");
+          const merged = mergeH2AutoHistory(stored, p.data.history);
+          await tx.execute(sql`INSERT INTO h2_auto_history (device_id,history_json,received_at)
+		         VALUES (${id},${JSON.stringify(merged)},${Date.now()})
+		         ON DUPLICATE KEY UPDATE history_json=VALUES(history_json),received_at=VALUES(received_at)`);
+        }
+
         if (p.data.diagnostics) {
           await tx.execute(sql`INSERT INTO h2_auto_diagnostics (device_id,diagnostics_json,received_at)
-	         VALUES (${id},${JSON.stringify(p.data.diagnostics)},${Date.now()})
-	         ON DUPLICATE KEY UPDATE diagnostics_json=VALUES(diagnostics_json),received_at=VALUES(received_at)`);
+		         VALUES (${id},${JSON.stringify(p.data.diagnostics)},${Date.now()})
+		         ON DUPLICATE KEY UPDATE diagnostics_json=VALUES(diagnostics_json),received_at=VALUES(received_at)`);
         }
         return true;
       };
-      const persisted =
-        typeof (db as any).transaction === "function"
-          ? await (db as any).transaction(persist)
-          : await persist(db);
+      const persisted = await (db as any).transaction(persist);
       if (!persisted) return respond(res, 409, { error: "outdated_revision" });
       return respond(res, 200, { success: true });
-    } catch {
+    } catch (error) {
+      if (error instanceof Error && error.message === "HISTORY_CONFLICT")
+        return respond(res, 409, { error: "history_conflict" });
+      if (error instanceof Error && error.name === "H2AutoHistoryConflictError")
+        return respond(res, 409, { error: "history_conflict" });
       return respond(res, 500, { error: "temporary_error" });
     }
   });

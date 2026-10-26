@@ -16,6 +16,7 @@ import {
   Smartphone,
 } from "lucide-react";
 import { toast } from "sonner";
+import H2AutoHistoryPanel from "@/components/H2AutoHistoryPanel";
 
 const Box = ({ children }: { children: React.ReactNode }) => (
   <div className="rounded-2xl border border-cyan-500/30 bg-slate-900/90 p-5 space-y-3">
@@ -188,7 +189,7 @@ export default function AdminH2Auto() {
         <div className="flex flex-wrap items-center justify-between gap-3 rounded-2xl border border-cyan-400/30 bg-cyan-950/25 p-4">
           <div>
             <p className="font-black text-cyan-200">
-              APK H2 AUTO 1.16 — áudio seguro
+              APK H2 AUTO 1.17 — histórico neon
             </p>
             <p className="text-xs text-slate-300">
               Instalador oficial e manifesto versionado. A permissão do Android
@@ -200,7 +201,7 @@ export default function AdminH2Auto() {
             className="inline-flex items-center gap-2 rounded-xl bg-cyan-400 px-4 py-2 text-sm font-black text-slate-950 hover:bg-cyan-300"
           >
             <ExternalLink className="h-4 w-4" />
-            BAIXAR APK 1.16
+            BAIXAR APK 1.17
           </a>
         </div>
         <Box>
@@ -386,6 +387,12 @@ export default function AdminH2Auto() {
                   </button>
                 </div>
               )}
+              <H2AutoHistoryPanel
+                deviceId={d.id}
+                label={d.label}
+                history={d.history}
+                receivedAt={d.historyReceivedAt}
+              />
               <section className="rounded-2xl border border-fuchsia-400/30 bg-fuchsia-950/20 p-4 space-y-3">
                 <div className="flex items-center gap-2">
                   <Image className="h-5 w-5 text-fuchsia-300" />
