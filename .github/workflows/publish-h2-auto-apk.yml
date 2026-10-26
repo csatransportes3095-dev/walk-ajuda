@@ -1,45 +1,49 @@
-name: Publicar instalador H2 AUTO 1.9 no site
+name: Validar instalador H2 AUTO assinado
 on:
   push:
-    branches:
-      - recovery/organizar-salvos-2026-08-24
+    branches: [recovery/organizar-salvos-2026-08-24]
     paths:
+      - client/public/downloads/H2_AUTO_1_16_INSTALAR.apk
+      - client/public/downloads/h2-auto-release.json
       - .github/workflows/publish-h2-auto-apk.yml
   workflow_dispatch:
 permissions:
-  contents: write
-concurrency:
-  group: h2-auto-site-apk
-  cancel-in-progress: false
+  contents: read
 jobs:
-  publish:
+  validate:
     runs-on: ubuntu-latest
-    timeout-minutes: 12
+    timeout-minutes: 10
     steps:
       - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
         with:
-          ref: recovery/organizar-salvos-2026-08-24
-      - name: Baixar APK 1.9 corrigido e verificar integridade
-        env:
-          ZIP_URL: "https://sdmntprbrazilsouth.oaiusercontent.com/files/00000000-e358-820e-ab83-f82f96892ac8/raw?se=2026-10-26T01%3A26%3A13Z&sp=r&sv=2026-02-06&sr=b&scid=a8daf1c8-f212-5b5b-90c0-3421c019fadb&skoid=db6dad9e-03ee-465b-aef6-ce0f63a161dc&sktid=a48cca56-e6da-484e-a814-9c849652bcb3&skt=2026-10-26T01%3A16%3A30Z&ske=2026-10-27T01%3A16%3A30Z&sks=b&skv=2026-02-06&sig=/0z9mwFe2SFWkU2HaHO04Y%2ByF1fbJV1mEQdFTl5ZKAE%3D"
+          python-version: '3.12'
+      - name: Install static APK inspection library
+        run: python -m pip install 'androguard==4.1.3'
+      - name: Validate promoted release, without temporary external URLs
         run: |
-          set -euo pipefail
-          curl --fail --location --retry 2 --connect-timeout 15 --max-time 120 --silent --show-error "$ZIP_URL" --output /tmp/h2-auto-1-7-build.zip
-          unzip -t /tmp/h2-auto-1-7-build.zip
-          mkdir -p client/public/downloads
-          unzip -p /tmp/h2-auto-1-7-build.zip app-debug.apk > client/public/downloads/H2_AUTO_1_9_INSTALAR.apk
-          echo 'Package contents checked by unzip -t'
-          test "$(stat -c '%s' client/public/downloads/H2_AUTO_1_9_INSTALAR.apk)" -gt 35000
-      - name: Publicar APK diretamente em h2colombiano.com/downloads
-        run: |
-          set -euo pipefail
-          git config user.name "H2 Auto Release Bot"
-          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
-          git add client/public/downloads/H2_AUTO_1_9_INSTALAR.apk
-          if git diff --cached --quiet; then
-            echo "APK ja publicado na arvore de codigo."
-          else
-            git commit -m "fix(h2-auto): APK 1.9 mensagens formatadas e respostas sem repeticao"
-            git pull --rebase origin recovery/organizar-salvos-2026-08-24
-            git push origin HEAD:recovery/organizar-salvos-2026-08-24
-          fi
+          python - <<'PY'
+          import json, hashlib, re
+          from pathlib import Path
+          from androguard.core.apk import APK
+          from loguru import logger
+          logger.remove()
+          root = Path('client/public/downloads')
+          metadata = json.loads((root / 'h2-auto-release.json').read_text())
+          assert re.fullmatch(r'H2_AUTO_[0-9_]+_INSTALAR\.apk', metadata['apkFile'])
+          p = root / metadata['apkFile']
+          assert p.is_file()
+          assert hashlib.sha256(p.read_bytes()).hexdigest() == metadata['sha256']
+          a = APK(str(p))
+          assert a.get_package() == metadata['packageName'] == 'com.h2colombiano.auto'
+          assert int(a.get_androidversion_code()) == metadata['versionCode'] >= 16
+          assert a.get_androidversion_name() == metadata['versionName']
+          expected = '3215b6d6b643ae6b57ffaf6e4854a40be267d4816166255872410c696384b393'
+          fingerprints = [hashlib.sha256(c.dump()).hexdigest() for c in a.get_certificates()]
+          assert fingerprints == [expected]
+          assert metadata['certificateSha256'] == expected
+          assert re.fullmatch(r'[a-f0-9]{40}', metadata['commit'])
+          assert isinstance(metadata['workflowRun'], int) and metadata['workflowRun'] > 0
+          assert b'AudioTranscriber' in a.get_dex() and b'MediaReplyPolicy' in a.get_dex()
+          print('Verified H2 AUTO', metadata['versionName'], 'same certificate as 1.15')
+          PY

@@ -9,6 +9,7 @@ import { getSettings } from "../db";
 import { getSharePreviewProfile, isSharePreviewProfileId, sharePreviewProfileForPath, sharePreviewProxyPath } from "../sharePreviewProfiles";
 import { ENV } from "./env";
 import { publicSiteUrl } from "../../shared/publicLinks";
+import { resolveH2AutoInstaller } from "../h2-auto-apk-release";
 
 async function getOgMeta(requestPath: string): Promise<{ title: string; description: string; imageUrl: string | null; imageVersion: string; imageType?: string; imageWidth?: number; imageHeight?: number }> {
   const profileId = sharePreviewProfileForPath(requestPath);
@@ -326,25 +327,24 @@ export async function serveStatic(app: Express) {
   // Download direto do H2 AUTO para navegadores de celular.
   // Nao usa SPA, redirecionamento, cache CDN ou visualizador de arquivos.
   app.get('/baixar-h2-auto', (_req, res) => {
-    const availableNames = ['H2_AUTO_1_9_INSTALAR.apk','H2_AUTO_1_7_INSTALAR.apk'];
-    const fileName = availableNames.find(name => {
-      const candidate = path.resolve(distPath, 'downloads', name);
-      return fs.existsSync(candidate) && fs.statSync(candidate).isFile();
-    }) || availableNames[0];
-    const apkPath = path.resolve(distPath, 'downloads', fileName);
-    if (!fs.existsSync(apkPath) || !fs.statSync(apkPath).isFile()) {
-      res.status(404).set('Cache-Control', 'no-store').type('text/plain').send('Instalador H2 AUTO indisponivel.');
+    let verified: ReturnType<typeof resolveH2AutoInstaller>;
+    try { verified = resolveH2AutoInstaller(distPath); }
+    catch {
+      res.status(404).set('Cache-Control', 'no-store').type('text/plain').send('Instalador H2 AUTO aguardando release verificada.');
       return;
     }
     res.set({
       'Content-Type': 'application/vnd.android.package-archive',
-      'Content-Disposition': 'attachment; filename="' + fileName + '"',
-      'Content-Length': String(fs.statSync(apkPath).size),
+      'Content-Disposition': 'attachment; filename="' + verified.release.apkFile + '"',
+      'Content-Length': String(verified.size),
+      'X-H2-Apk-Version': verified.release.versionName,
+      'X-H2-Apk-Version-Code': String(verified.release.versionCode),
+      'X-H2-Apk-Sha256': verified.release.sha256,
       'Cache-Control': 'private, no-store, max-age=0',
       'CDN-Cache-Control': 'no-store',
       'X-Content-Type-Options': 'nosniff',
     });
-    res.sendFile(apkPath, { acceptRanges: true }, error => {
+    res.sendFile(verified.filePath, { acceptRanges: true }, error => {
       if (error && !res.headersSent) res.status(500).end();
     });
   });

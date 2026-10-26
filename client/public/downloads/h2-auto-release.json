@@ -1,0 +1,11 @@
+{
+  "packageName": "com.h2colombiano.auto",
+  "apkFile": "H2_AUTO_1_16_INSTALAR.apk",
+  "versionName": "1.16-audio-safe",
+  "versionCode": 16,
+  "sha256": "51f556d32d41e108e48c1edf6b3b945e998b27c7c41d8d6488c56d83095a3052",
+  "certificateSha256": "3215b6d6b643ae6b57ffaf6e4854a40be267d4816166255872410c696384b393",
+  "commit": "e4f8be6f942ef8fabc0afcc0a8b26f380f8d9f42",
+  "workflowRun": 40384080929,
+  "publishedAt": "2026-10-26T19:11:56.332111+00:00"
+}
