@@ -5,6 +5,7 @@ import { sql } from "drizzle-orm";
 import { TRPCError } from "@trpc/server";
 import { adminProcedure, router } from "./_core/trpc";
 import { getDb } from "./db";
+import { h2AutoTreeSchema } from "../shared/h2AutoTree";
 import {
   decodeH2AutoDiagnostics,
   h2AutoDiagnosticsSchema,
@@ -62,6 +63,7 @@ const mediaSchema = z.object({
   maxAudioSeconds: z.number().int().min(5).max(120).default(30),
 });
 const configSchema = z.object({
+  tree: h2AutoTreeSchema.optional(),
   media: mediaSchema.default(() => mediaSchema.parse({})),
   enabled: z.boolean(),
   ordersEnabled: z.boolean().default(false),
@@ -193,6 +195,7 @@ function mergeWithoutDeleting(
   if (empty)
     return {
       ...local,
+      tree: remote.tree ?? local.tree,
       media: remote.media,
       ordersEnabled: remote.ordersEnabled,
       orderSessionHours: remote.orderSessionHours,
@@ -222,6 +225,7 @@ function mergeWithoutDeleting(
     .slice(0, 10000);
   return {
     ...remote,
+    tree: remote.tree ?? local.tree,
     media: remote.media,
     ordersEnabled: remote.ordersEnabled,
     welcome: remote.welcome.trim() ? remote.welcome : local.welcome,
@@ -318,6 +322,27 @@ export const h2AutoAdminRouter = router({
             "A configuração mudou. Atualize antes de salvar para não sobrescrever alterações.",
         });
       return { success: true };
+    }),
+  saveTree: adminProcedure
+    .input(z.object({
+      id: z.string().regex(/^[a-f0-9]{24}$/),
+      tree: h2AutoTreeSchema,
+      expectedRevision: z.number().int().min(0),
+    }))
+    .mutation(async ({ input }) => {
+      await ensure();
+      const device = (await rows(sql`SELECT config_json,revision FROM h2_auto_devices WHERE id=${input.id} LIMIT 1`))[0];
+      if (!device) throw new TRPCError({ code: "NOT_FOUND", message: "Aparelho não encontrado." });
+      if (Number(device.revision) !== input.expectedRevision)
+        throw new TRPCError({ code: "CONFLICT", message: "Configuração alterada. Atualize antes de salvar." });
+      const updated: RemoteConfig = { ...decodeConfig(device.config_json), tree: input.tree };
+      const db = await getDb(); if (!db) throw new Error("DB unavailable");
+      const result: any = await db.execute(sql`
+        UPDATE h2_auto_devices SET config_json=${JSON.stringify(updated)},revision=revision+1
+        WHERE id=${input.id} AND revision=${input.expectedRevision}`);
+      if (!result[0]?.affectedRows)
+        throw new TRPCError({ code: "CONFLICT", message: "Revisão alterada durante o salvamento." });
+      return { success: true, revision: input.expectedRevision + 1 };
     }),
   saveMedia: adminProcedure
     .input(
