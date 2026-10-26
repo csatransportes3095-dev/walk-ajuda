@@ -1648,7 +1648,7 @@ export const spreadsheetRouter = router({
     }),
 
   // ADM alterna o modo
-  setPasswordMode: publicProcedure
+  setPasswordMode: adminProcedure
     .input(z.object({ mode: z.enum(['manual', 'auto']) }))
     .mutation(async ({ input }) => {
       try {
