@@ -67,6 +67,20 @@ function mergeWithoutDeleting(remote:RemoteConfig, local:RemoteConfig):RemoteCon
  return {...remote,ordersEnabled:remote.ordersEnabled,welcome:remote.welcome.trim()?remote.welcome:local.welcome,
  menu:remote.menu.map((v,i)=>v.trim()?v:local.menu[i]),rules,blocked};
 }
+/** Unlinking must also revoke customer-order sessions. The order feature may
+ * never have been activated, so its session table can legitimately be absent. */
+function isMissingH2AutoSessionTable(error:unknown):boolean{
+ const e=error as {code?:string;errno?:number;cause?:{code?:string;errno?:number}}|null;
+ return e?.code==="ER_NO_SUCH_TABLE" || e?.errno===1146 ||
+        e?.cause?.code==="ER_NO_SUCH_TABLE" || e?.cause?.errno===1146;
+}
+async function clearH2AutoCustomerSessions(db:any,deviceId:string):Promise<void>{
+ try{
+  await db.execute(sql`DELETE FROM h2_auto_order_sessions WHERE device_id=${deviceId}`);
+ }catch(error){
+  if(!isMissingH2AutoSessionTable(error))throw error;
+ }
+}
 export const h2AutoAdminRouter=router({
  list:adminProcedure.query(async()=>{await ensure();return (await rows(sql`SELECT d.*, s.snapshot_json, s.received_at FROM h2_auto_devices d LEFT JOIN h2_auto_local_snapshots s ON s.device_id=d.id ORDER BY d.created_at DESC LIMIT 30`)).map(safeDevice);}),
  create:adminProcedure.input(z.object({label:z.string().trim().min(1).max(80)})).mutation(async({input})=>{
@@ -99,10 +113,26 @@ export const h2AutoAdminRouter=router({
    if(!result[0]?.affectedRows)throw new TRPCError({code:"CONFLICT",message:"O ADM foi alterado durante a importação."});
    return {success:true};
  }),
- revoke:adminProcedure.input(z.object({id:z.string().length(24)})).mutation(async({input})=>{
+ revoke:adminProcedure.input(z.object({id:z.string().regex(/^[a-f0-9]{24}$/)})).mutation(async({input})=>{
    await ensure();const db=await getDb();if(!db)throw new Error("DB unavailable");
-   await db.execute(sql`UPDATE h2_auto_devices SET token_hash=NULL,pairing_hash=NULL,pairing_expires=NULL WHERE id=${input.id}`);
-   return {success:true};
+   const exists=await rows(sql`SELECT id FROM h2_auto_devices WHERE id=${input.id} LIMIT 1`);
+   if(!exists.length)throw new TRPCError({code:"NOT_FOUND",message:"Celular não encontrado no H2 AUTO."});
+   // Stop all remote sync and order lookups while preserving ADM configuration.
+   await db.execute(sql`UPDATE h2_auto_devices SET token_hash=NULL,pairing_hash=NULL,pairing_expires=NULL,pair_attempts=0,applied_revision=0,last_seen=NULL WHERE id=${input.id}`);
+   await clearH2AutoCustomerSessions(db,input.id);
+   return {success:true,removed:false};
+ }),
+ remove:adminProcedure.input(z.object({id:z.string().regex(/^[a-f0-9]{24}$/)})).mutation(async({input})=>{
+   await ensure();const db=await getDb();if(!db)throw new Error("DB unavailable");
+   const exists=await rows(sql`SELECT id FROM h2_auto_devices WHERE id=${input.id} LIMIT 1`);
+   if(!exists.length)throw new TRPCError({code:"NOT_FOUND",message:"Celular já removido ou não encontrado."});
+   // Revoke first, then delete only this device, its immutable local snapshot,
+   // and any active client-verification sessions linked to this device.
+   await db.execute(sql`UPDATE h2_auto_devices SET token_hash=NULL,pairing_hash=NULL,pairing_expires=NULL,applied_revision=0 WHERE id=${input.id}`);
+   await clearH2AutoCustomerSessions(db,input.id);
+   await db.execute(sql`DELETE FROM h2_auto_local_snapshots WHERE device_id=${input.id}`);
+   await db.execute(sql`DELETE FROM h2_auto_devices WHERE id=${input.id}`);
+   return {success:true,removed:true};
  })
 });
 const respond=(res:Response,status:number,body:unknown)=>res.status(status).set("Cache-Control","no-store").json(body);
