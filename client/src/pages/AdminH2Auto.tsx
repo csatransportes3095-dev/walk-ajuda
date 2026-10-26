@@ -1,7 +1,7 @@
 import {useState} from "react";
 import {trpc} from "@/lib/trpc";
 import AdminHeader from "@/components/AdminHeader";
-import {Bot, Smartphone, RefreshCw, ShieldCheck, Save, Power, Clock} from "lucide-react";
+import {Bot, Smartphone, RefreshCw, ShieldCheck, Save, Power, Clock, Mic, Image} from "lucide-react";
 import {toast} from "sonner";
 
 const Box=({children}:{children:React.ReactNode})=><div className="rounded-2xl border border-cyan-500/30 bg-slate-900/90 p-5 space-y-3">{children}</div>;
@@ -15,6 +15,7 @@ export default function AdminH2Auto(){
  const revoke=trpc.h2AutoAdmin.revoke.useMutation({onSuccess:()=>{toast.success("Celular desvinculado. Configurações preservadas.");utils.h2AutoAdmin.list.invalidate();},onError:e=>toast.error(e.message)});
  const remove=trpc.h2AutoAdmin.remove.useMutation({onSuccess:()=>{toast.success("Celular removido do H2 AUTO.");utils.h2AutoAdmin.list.invalidate();},onError:e=>toast.error(e.message)});
  const [label,setLabel]=useState("Celular principal");const[pair,setPair]=useState<{id:string,code:string}|null>(null);const[pairId,setPairId]=useState("");const[editing,setEditing]=useState<Record<string,any>>({});
+ const mediaDefaults={enabled:false,transcribeAudio:false,audioFallback:"🎤 Recebemos seu áudio. Por favor, envie sua dúvida por escrito ou digite 6 para falar com um atendente.",photoReply:"📸 Recebemos sua foto. Descreva sua dúvida por escrito ou digite 6.",videoReply:"🎥 Recebemos seu vídeo. Descreva sua dúvida por escrito ou digite 6.",documentReply:"📄 Recebemos seu documento. Descreva sua solicitação por escrito ou digite 6.",stickerReply:"📎 Recebemos sua mídia. Digite MENU para escolher uma opção.",unknownReply:"📎 Recebemos sua mídia. Escreva sua dúvida ou digite MENU.",cooldownSeconds:120,maxAudioSeconds:30};
  const field="w-full rounded-xl border border-cyan-500/30 bg-slate-950 px-3 py-2 text-white";
  return <div className="min-h-screen bg-[#050c18] text-white"><AdminHeader title="H2 AUTO — CONTROLE REMOTO" icon={<Bot className="h-5 w-5"/>}/>
  <main className="mx-auto max-w-5xl p-4 space-y-5">
@@ -63,6 +64,19 @@ export default function AdminH2Auto(){
   <textarea className={field} rows={3} value={rule.reply} maxLength={6000} placeholder="Resposta automática" onChange={e=>update("reply",e.target.value)}/>
  </div>})}
  </div>
+ <section className="rounded-2xl border border-sky-400/35 bg-sky-950/25 p-4 space-y-3">
+ <h4 className="font-black text-sky-300 flex items-center gap-2"><Mic className="h-5 w-5"/> CENTRAL DE ÁUDIOS E MÍDIAS</h4>
+ <p className="text-xs text-slate-300">Configuração exclusiva deste aparelho. Sem alterar o menu, pedidos ou regras existentes. A transcrição local só funciona quando o áudio estiver acessível ao Android.</p>
+ {(()=>{const m={...mediaDefaults,...(value.media||{})};const updateMedia=(key:string,val:any)=>change("media",{...m,[key]:val});return <div className="space-y-3">
+ <label className="flex gap-2 items-center text-sm"><input type="checkbox" checked={m.enabled} onChange={e=>updateMedia("enabled",e.target.checked)}/>Responder mídias recebidas</label>
+ <label className="flex gap-2 items-center text-sm"><input type="checkbox" checked={m.transcribeAudio} onChange={e=>updateMedia("transcribeAudio",e.target.checked)}/>Tentar transcrever áudio localmente quando acessível</label>
+ <div className="grid grid-cols-2 gap-3">
+ <label className="text-xs">Intervalo por conversa (segundos)<input type="number" min={15} max={3600} className={field} value={m.cooldownSeconds} onChange={e=>updateMedia("cooldownSeconds",Number(e.target.value))}/></label>
+ <label className="text-xs">Duração máxima de áudio (segundos)<input type="number" min={5} max={120} className={field} value={m.maxAudioSeconds} onChange={e=>updateMedia("maxAudioSeconds",Number(e.target.value))}/></label>
+ </div>
+ {([["audioFallback","ÁUDIO NÃO TRANSCRITO"],["photoReply","FOTO"],["videoReply","VÍDEO"],["documentReply","DOCUMENTO"],["stickerReply","FIGURINHA"],["unknownReply","MÍDIA DESCONHECIDA"]] as const).map(([key,label])=><label key={key} className="block text-xs font-bold text-sky-200">{label}<textarea className={field} rows={2} maxLength={3000} value={m[key]} onChange={e=>updateMedia(key,e.target.value)}/></label>)}
+ </div>})()}
+ </section>
  <label className="block text-xs">CONTATOS BLOQUEADOS (um por linha)<textarea className={field} rows={2} value={value.blocked} onChange={e=>change("blocked",e.target.value)}/></label>
  <button className="w-full rounded-xl bg-emerald-400 p-3 text-slate-950 font-black" disabled={save.isPending} onClick={()=>save.mutate({id:d.id,config:value,expectedRevision:d.revision})}><Save className="inline h-4 w-4 mr-1"/>SALVAR CONFIGURAÇÃO</button>
  </Box>})}
