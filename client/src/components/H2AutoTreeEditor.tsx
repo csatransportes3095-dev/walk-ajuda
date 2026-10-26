@@ -11,7 +11,7 @@ import {
 } from "@shared/h2AutoTree";
 import {
   addConnectedStage, availableOptionKey, flowPath, flowRows, flowTitle,
-  moveFlowOption, removeFlowOption, unlinkedStages,
+  moveFlowOption, removeFlowOption, unlinkedStages, type FlowRow,
 } from "@/lib/h2AutoFlowMap";
 
 type Props = { id: string; revision: number; initial?: H2AutoTree };
@@ -50,6 +50,21 @@ export default function H2AutoTreeEditor({ id, revision, initial }: Props) {
 
   const selectedNode = useMemo(() => tree.nodes.find(n => n.id === selected), [tree, selected]);
   const map = useMemo(() => flowRows(tree, folded), [tree, folded]);
+  // Each top-level answer is a separate full-width vertical block.
+  // Keep the DFS order, shared destinations and fold/unfold behavior unchanged.
+  const mapGroups = useMemo(() => {
+    const root = map.length && map[0].depth === 0 ? map[0] : null;
+    const branches: Array<{ key: string; title: string; rows: FlowRow[] }> = [];
+    for (const row of map) {
+      if (row.depth === 0) continue;
+      if (row.depth === 1) {
+        branches.push({ key: row.viaKey || "", title: row.viaLabel || "Resposta", rows: [row] });
+      } else if (branches.length) {
+        branches[branches.length - 1].rows.push(row);
+      }
+    }
+    return { root, branches };
+  }, [map]);
   const path = useMemo(() => flowPath(tree, selected), [tree, selected]);
   const unlinked = useMemo(() => unlinkedStages(tree), [tree]);
   const currentTest = tree.nodes.find(n => n.id === test.current);
@@ -66,7 +81,7 @@ export default function H2AutoTreeEditor({ id, revision, initial }: Props) {
 
   function selectStage(stageId: string) {
     setSelected(stageId);
-    if (typeof window !== "undefined" && window.matchMedia("(max-width: 1023px)").matches) {
+    if (typeof window !== "undefined") {
       window.requestAnimationFrame(() => editRef.current?.scrollIntoView({ behavior: "smooth", block: "start" }));
     }
   }
@@ -176,6 +191,54 @@ export default function H2AutoTreeEditor({ id, revision, initial }: Props) {
     </button>
   );
 
+
+  function renderMapRow(row: FlowRow, index: number, levelOffset = 0, showVia = true) {
+    const node = tree.nodes.find(n => n.id === row.id);
+    if (!node) return null;
+    const active = selected === row.id;
+    const expandable = node.options.length > 0 && !row.shared;
+    const indentation = Math.min(Math.max(row.depth - levelOffset, 0), 3) * 12;
+    return (
+      <div key={row.id + "-" + index}
+        style={{ marginLeft: indentation }}
+        className={"min-w-0 rounded-xl border-l-[3px] p-2 " +
+          (active ? "border-l-emerald-300 bg-emerald-900/25" : "border-l-cyan-600/65 bg-slate-950/20")}>
+        {showVia && row.viaKey !== null && (
+          <div className="mb-2 flex min-w-0 items-start gap-2 pl-2 text-sm leading-snug text-violet-200">
+            <span className="shrink-0 rounded-md border border-violet-400/40 bg-violet-950/60 px-2 py-1 font-black">{row.viaKey}</span>
+            <span className="min-w-0 flex-1 break-words">{row.viaLabel}</span>
+            <ArrowRight className="mt-1 h-4 w-4 shrink-0" />
+          </div>
+        )}
+        <div className="flex min-w-0 items-stretch gap-2">
+          <button type="button" onClick={() => selectStage(row.id)} aria-pressed={active}
+            className={"min-w-0 flex-1 rounded-xl border px-3 py-3 text-left " +
+              (active ? "border-emerald-300 bg-emerald-950/70 text-white" :
+                "border-cyan-500/25 bg-[#092036] text-slate-100 hover:border-cyan-300")}>
+            <span className="block text-[11px] font-bold uppercase tracking-wide text-cyan-300">
+              {row.depth === 0 ? "🏠 PRIMEIRA MENSAGEM" : row.shared ? "↗ ETAPA COMPARTILHADA" : "↳ PRÓXIMA ETAPA"}
+            </span>
+            <span className="mt-1 block break-words text-sm font-black leading-snug">{flowTitle(node, tree.start)}</span>
+            <span className="mt-1 block text-xs text-slate-300">
+              {node.mode === "question" ? node.options.length + " resposta(s)" : modeLabel[node.mode]}
+            </span>
+          </button>
+          {expandable && (
+            <button type="button" onClick={() => setFolded(previous => {
+              const next = new Set(previous);
+              if (next.has(row.id)) next.delete(row.id);
+              else next.add(row.id);
+              return next;
+            })} title={folded.has(row.id) ? "Mostrar respostas" : "Recolher respostas"}
+              className="shrink-0 rounded-lg border border-cyan-500/25 px-3 text-cyan-200">
+              {folded.has(row.id) ? <ChevronRight className="h-5 w-5" /> : <ChevronDown className="h-5 w-5" />}
+            </button>
+          )}
+        </div>
+      </div>
+    );
+  }
+
   return (
     <section className="space-y-5 rounded-3xl border-2 border-emerald-400/60 bg-[#061321] p-4 shadow-[0_0_40px_rgba(16,185,129,0.1)] md:p-7">
       <div className="flex flex-wrap items-start justify-between gap-4">
@@ -209,8 +272,8 @@ export default function H2AutoTreeEditor({ id, revision, initial }: Props) {
         </div>
       </div>
 
-      <div className="grid gap-5 lg:grid-cols-[minmax(330px,0.9fr)_minmax(0,1.3fr)] xl:grid-cols-[minmax(420px,1fr)_minmax(0,1.45fr)]">
-        <aside className={card + " space-y-4"}>
+      <div className="flex w-full min-w-0 flex-col gap-6">
+        <aside className={card + " w-full min-w-0 space-y-4"}>
           <div className="flex items-center justify-between gap-3">
             <div>
               <h4 className="flex items-center gap-2 text-lg font-black text-cyan-300">
@@ -233,53 +296,33 @@ export default function H2AutoTreeEditor({ id, revision, initial }: Props) {
             </button>
           </div>
 
-          <div className="space-y-2" aria-label="Mapa completo das perguntas e respostas">
-            {map.map((row, index) => {
-              const node = tree.nodes.find(n => n.id === row.id);
-              if (!node) return null;
-              const active = selected === row.id;
-              const expandable = node.options.length > 0 && !row.shared;
-              return (
-                <div key={row.id + "-" + index} style={{ marginLeft: Math.min(row.depth, 6) * 16 }}
-                  className={"rounded-xl border-l-[3px] p-1.5 " +
-                    (active ? "border-l-emerald-300 bg-emerald-900/25" : "border-l-cyan-600/65 bg-slate-950/20")}>
-                  {row.viaKey !== null && (
-                    <div className="mb-1.5 flex items-center gap-2 pl-2 text-sm leading-snug text-violet-200">
-                      <span className="rounded-md border border-violet-400/40 bg-violet-950/60 px-2 py-1 font-black">{row.viaKey}</span>
-                      <span className="min-w-0 flex-1 break-words">{row.viaLabel}</span>
-                      <ArrowRight className="h-4 w-4 shrink-0" />
-                    </div>
-                  )}
-                  <div className="flex items-stretch gap-1.5">
-                    <button type="button" onClick={() => selectStage(row.id)} aria-pressed={active}
-                      className={"min-w-0 flex-1 rounded-xl border px-3 py-3 text-left " +
-                        (active ? "border-emerald-300 bg-emerald-950/70 text-white" :
-                          "border-cyan-500/25 bg-[#092036] text-slate-100 hover:border-cyan-300")}>
-                      <span className="block text-[11px] font-bold uppercase tracking-wide text-cyan-300">
-                        {row.depth === 0 ? "🏠 PRIMEIRA MENSAGEM" : row.shared ? "↗ ETAPA COMPARTILHADA" : "↳ PRÓXIMA ETAPA"}
-                      </span>
-                      <span className="mt-1 block break-words text-sm font-black leading-snug">
-                        {flowTitle(node, tree.start)}
-                      </span>
-                      <span className="mt-1 block text-xs text-slate-300">
-                        {node.mode === "question" ? node.options.length + " resposta(s)" : modeLabel[node.mode]}
-                      </span>
-                    </button>
-                    {expandable && (
-                      <button type="button" onClick={() => setFolded(previous => {
-                        const next = new Set(previous);
-                        if (next.has(row.id)) next.delete(row.id);
-                        else next.add(row.id);
-                        return next;
-                      })} title={folded.has(row.id) ? "Mostrar respostas" : "Recolher respostas"}
-                        className="rounded-lg border border-cyan-500/25 px-2 text-cyan-200">
-                        {folded.has(row.id) ? <ChevronRight className="h-5 w-5" /> : <ChevronDown className="h-5 w-5" />}
-                      </button>
-                    )}
-                  </div>
+          <div className="w-full min-w-0 space-y-4" aria-label="Mapa completo das perguntas e respostas">
+            {mapGroups.root && (
+              <div className="w-full min-w-0 rounded-2xl border border-cyan-400/30 bg-cyan-950/10 p-3 md:p-4">
+                {renderMapRow(mapGroups.root, 0)}
+              </div>
+            )}
+            {mapGroups.branches.map((branch, branchIndex) => (
+              <section key={branch.key + "-" + branchIndex}
+                className="w-full min-w-0 space-y-3 rounded-2xl border border-violet-400/35 bg-[#0b172a] p-3 md:p-4">
+                <div className="flex min-w-0 flex-col items-start gap-2 border-b border-violet-400/20 pb-3 sm:flex-row sm:items-center">
+                  <span className="shrink-0 rounded-xl bg-violet-800/60 px-3 py-2 text-sm font-black text-white">
+                    OPÇÃO {numLabel(branch.key)}
+                  </span>
+                  <span className="min-w-0 break-words text-base font-black leading-snug text-violet-100">
+                    {branch.title}
+                  </span>
                 </div>
-              );
-            })}
+                <div className="min-w-0 space-y-2">
+                  {branch.rows.map((row, index) => renderMapRow(row, index, 1, index !== 0))}
+                </div>
+              </section>
+            ))}
+            {!mapGroups.branches.length && (
+              <p className="rounded-xl border border-amber-400/30 bg-amber-950/15 p-3 text-sm text-amber-100">
+                Abra as respostas da primeira mensagem para visualizar os caminhos.
+              </p>
+            )}
           </div>
 
           {unlinked.length > 0 && (
@@ -294,12 +337,12 @@ export default function H2AutoTreeEditor({ id, revision, initial }: Props) {
           )}
         </aside>
 
-        <div className={card + " space-y-5"} ref={editRef}>
+        <div className={card + " w-full min-w-0 scroll-mt-28 space-y-5"} ref={editRef}>
           {selectedNode && (
             <>
               <div className="flex flex-wrap items-start justify-between gap-3">
                 <div>
-                  <h4 className="text-lg font-black text-emerald-300">2. CONFIGURAR ESTA ETAPA</h4>
+                  <h4 className="text-lg font-black text-emerald-300">2. EDITAR A ETAPA SELECIONADA</h4>
                   <p className="mt-1 break-words text-xl font-black text-white">{flowTitle(selectedNode, tree.start)}</p>
                 </div>
                 <div className="flex flex-wrap gap-2">
@@ -369,7 +412,7 @@ export default function H2AutoTreeEditor({ id, revision, initial }: Props) {
                 <div className="space-y-4 rounded-2xl border border-violet-400/35 bg-violet-950/10 p-4">
                   <div className="flex flex-wrap items-center justify-between gap-3">
                     <div>
-                      <h5 className="text-lg font-black text-violet-200">3. RESPOSTAS DESTA PERGUNTA</h5>
+                      <h5 className="text-lg font-black text-violet-200">RESPOSTAS DESTA PERGUNTA</h5>
                       <p className="mt-1 text-sm text-slate-300">
                         A posição 1, 2, 3... é a opção que o cliente digita. Cada opção aponta para uma etapa.
                       </p>
@@ -503,11 +546,11 @@ export default function H2AutoTreeEditor({ id, revision, initial }: Props) {
         </div>
       </div>
 
-      <section className={card + " space-y-4"}>
+      <section className={card + " w-full min-w-0 space-y-4"}>
         <div className="flex flex-wrap items-center justify-between gap-3">
           <div>
             <h4 className="flex items-center gap-2 text-lg font-black text-cyan-300">
-              <Play className="h-5 w-5" /> 4. TESTAR O CAMINHO
+              <Play className="h-5 w-5" /> 3. TESTAR O CAMINHO
             </h4>
             <p className="mt-1 text-sm text-slate-300">Clique nas respostas como se fosse um cliente. O teste não envia WhatsApp.</p>
           </div>
@@ -530,10 +573,10 @@ export default function H2AutoTreeEditor({ id, revision, initial }: Props) {
             {currentTest ? renderH2AutoNode(currentTest) : "Etapa indisponível."}
           </div>
         </div>
-        <div className="flex flex-wrap gap-2">
+        <div className="flex w-full flex-col gap-2">
           {currentTest?.options.map(answer => (
             <button type="button" key={answer.key} onClick={() => chooseTest(answer.key)}
-              className="rounded-xl border border-cyan-400/45 bg-[#102b40] px-4 py-3 text-sm font-bold text-white">
+              className="w-full rounded-xl border border-cyan-400/45 bg-[#102b40] px-4 py-3 text-left text-sm font-bold text-white">
               {numLabel(answer.key)} {answer.label}
             </button>
           ))}
