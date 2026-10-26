@@ -15,7 +15,7 @@
   // Rotas conhecidas do H2. Qualquer rota pública fora desta lista não deve cair
   // no WelcomeScreen/PasswordGate antigo; vai para a entrada atual do sistema.
   const exact = new Set([
-    '/', '/login', '/foto', '/sorteio', '/acompanhar', '/revendedor',
+    '/', '/login', '/recuperarsenha', '/foto', '/sorteio', '/acompanhar', '/revendedor',
     '/pre-cadastro', '/consultar-cadastro', '/atualizarcadastro', '/locadora',
     '/gastos', '/emprestimo', '/cartoes', '/gerador-chassi', '/gerador-chassi/',
     '/adm/chassis', '/adm/chassis/', '/adm/placa', '/adm/placa/', '/h2chassis', '/h2chassis/', '/ajuda',
@@ -34,4 +34,3 @@
     window.location.replace(target.toString());
   }
 })();
-
