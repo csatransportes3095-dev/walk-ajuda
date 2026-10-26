@@ -23,6 +23,7 @@ import { ensureCustomerIdentityInfrastructure, getRouteAccess, setCustomerRouteP
 import { getMissingCustomerProfileFields } from "../customerProfileRequirements";
 import { deliverOwnSiteCode } from "../siteAccessCodeDelivery";
 import { generateOwnSiteCode } from "../siteAccessOwnCodes";
+import { emailBelongsToAnotherCustomer, CUSTOMER_EMAIL_IN_USE_MESSAGE } from "../customerEmailOwnership";
 
 const SESSION_DURATION_MS = 90 * 24 * 60 * 60 * 1000; // 90 dias
 const LOGIN_EMAIL_CODE_TTL_MS = 10 * 60 * 1000;
@@ -128,6 +129,10 @@ async function authenticateVerifiedCustomer(db: any, phone: string, password: st
     if (String(customer.email || "").trim().toLowerCase() !== proof.email) {
       throw new TRPCError({ code: "UNAUTHORIZED", message: "Confirme o e-mail do cadastro novamente." });
     }
+    // An OTP proves mailbox access, not that it belongs to this customer's identity.
+    if (await emailBelongsToAnotherCustomer(tx, proof.email, Number(customer.id))) {
+      throw new TRPCError({ code: "CONFLICT", message: CUSTOMER_EMAIL_IN_USE_MESSAGE });
+    }
     if (Number(customer.blocked || 0) === 1) {
       return { success: false, error: "blocked" as const, blockReason: customer.blockReason || "Acesso bloqueado" };
     }
@@ -221,7 +226,12 @@ export const customerPasswordRouter = router({
         throw new TRPCError({ code: "BAD_REQUEST", message: "Telefone inválido." });
       }
       const email = input.email.trim().toLowerCase();
+      const db = (await getDb()) as any;
+      if (!db) throw new TRPCError({ code: "SERVICE_UNAVAILABLE", message: "Não foi possível verificar o cadastro agora." });
       const customer = await getCustomerByCleanPhone(cleanPhone);
+      if (customer?.deletedAt) {
+        return { success: false, error: "customer_unavailable" as const, message: "Cadastro indisponível. Entre em contato com o atendimento." };
+      }
 
       // Cliente existente precisa confirmar exatamente o e-mail salvo no cadastro.
       // Cliente novo pode confirmar qualquer e-mail válido informado por ele.
@@ -233,6 +243,12 @@ export const customerPasswordRouter = router({
         if (registeredEmail !== email) {
           return { success: false, error: "email_mismatch" as const, message: "O e-mail informado não corresponde ao cadastro deste telefone." };
         }
+      }
+
+      // Before issuing OR resending any code, reject mailboxes owned by other IDs.
+      // Compare database identity, not just whether this phone exists.
+      if (await emailBelongsToAnotherCustomer(db, email, customer ? Number(customer.id) : null)) {
+        return { success: false, error: "email_in_use" as const, message: CUSTOMER_EMAIL_IN_USE_MESSAGE };
       }
 
       const key = loginEmailKey(cleanPhone, email);
@@ -312,6 +328,18 @@ export const customerPasswordRouter = router({
       if (pending.attempts >= 5) {
         loginEmailPending.delete(key);
         return { success: false, error: "locked" as const, message: "Muitas tentativas. Solicite um novo código." };
+      }
+
+      // An email may have been assigned elsewhere after an OTP was issued.
+      // Never mint proof tokens from stale or cross-account mailboxes.
+      const db = (await getDb()) as any;
+      if (!db) throw new TRPCError({ code: "SERVICE_UNAVAILABLE", message: "Não foi possível verificar o cadastro agora." });
+      const customer = await getCustomerByCleanPhone(cleanPhone);
+      if (customer?.deletedAt ||
+          (customer && String(customer.email || "").trim().toLowerCase() !== email) ||
+          await emailBelongsToAnotherCustomer(db, email, customer ? Number(customer.id) : null)) {
+        loginEmailPending.delete(key);
+        return { success: false, error: "email_in_use" as const, message: CUSTOMER_EMAIL_IN_USE_MESSAGE };
       }
 
       pending.attempts += 1;
@@ -401,6 +429,9 @@ export const customerPasswordRouter = router({
       const proof = assertLoginEmailProof(cleanPhone, input.emailVerificationToken);
       if (String((cust as any).email || "").trim().toLowerCase() !== proof.email) {
         throw new TRPCError({ code: "UNAUTHORIZED", message: "Confirme o e-mail do cadastro novamente." });
+      }
+      if (await emailBelongsToAnotherCustomer(db, proof.email, Number(cust.id))) {
+        throw new TRPCError({ code: "CONFLICT", message: CUSTOMER_EMAIL_IN_USE_MESSAGE });
       }
 
       // Verificar bloqueio de cadastro
@@ -496,6 +527,9 @@ export const customerPasswordRouter = router({
       const proof = assertLoginEmailProof(cleanPhone, input.emailVerificationToken);
       if (String((cust as any).email || "").trim().toLowerCase() !== proof.email) {
         throw new TRPCError({ code: "UNAUTHORIZED", message: "Confirme o e-mail do cadastro novamente." });
+      }
+      if (await emailBelongsToAnotherCustomer(db, proof.email, Number(cust.id))) {
+        throw new TRPCError({ code: "CONFLICT", message: CUSTOMER_EMAIL_IN_USE_MESSAGE });
       }
 
       // Verificar bloqueio de cadastro
