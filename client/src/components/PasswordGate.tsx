@@ -1315,6 +1315,7 @@ export default function PasswordGate({ children }: PasswordGateProps) {
           const manualResult = await cpwdCreateManualMutation.mutateAsync({
             phone: getCanonicalPhone(),
             password: cpwdNewPassword,
+            emailVerificationToken,
           });
           if (manualResult.success) {
             setGateStep("cpwd_pending");
