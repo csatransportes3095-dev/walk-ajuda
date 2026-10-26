@@ -71,6 +71,10 @@ export function OnlineEntryPanel({ onBack, onOpenCadastro, intendedRoute = null 
   };
 
   const createNewPassword = async () => {
+    // Single secure entry: verify registered e-mail before creating credentials.
+    sessionStorage.setItem('h2_customer_return_to', intendedRoute ? '/'+intendedRoute : '/acompanhar');
+    window.location.assign('/login');
+    return;
     if (newPassword.length < 4) { setError('Crie uma senha com pelo menos 4 caracteres.'); return; }
     if (newPassword !== confirmNewPassword) { setError('As senhas não coincidem.'); return; }
     try {
@@ -93,6 +97,9 @@ export function OnlineEntryPanel({ onBack, onOpenCadastro, intendedRoute = null 
   };
 
   const login = async () => {
+    sessionStorage.setItem('h2_customer_return_to', intendedRoute ? '/'+intendedRoute : '/acompanhar');
+    window.location.assign('/login');
+    return;
     setError("");
     const cleanPhone = phone.replace(/\D/g, "");
     if (cleanPhone.length < 10) { setError('Informe seu telefone com DDD.'); return; }
