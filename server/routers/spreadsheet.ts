@@ -1974,9 +1974,9 @@ export const spreadsheetRouter = router({
     .query(async ({ input }) => {
       try {
         const db = await getDb() as any;
-        if (!db) return { allowed: true, allowedRoutes: [] };
+        if (!db) return { allowed: false, allowedRoutes: [] };
         const cleanToken = input.token.trim();
-        if (!cleanToken) return { allowed: true, allowedRoutes: [] };
+        if (!cleanToken) return { allowed: false, allowedRoutes: [] };
 
         let phone: string | null = null;
         try {
@@ -1999,9 +1999,9 @@ export const spreadsheetRouter = router({
           }
         }
 
-        if (!phone) return { allowed: true, allowedRoutes: [] };
+        if (!phone) return { allowed: false, allowedRoutes: [] };
         const mainCustomer = await findMainCustomerByIdentity({ phone }, db);
-        if (!mainCustomer) return { allowed: true, allowedRoutes: [] };
+        if (!mainCustomer) return { allowed: false, allowedRoutes: [] };
         const access = await getRouteAccess(mainCustomer.id, db);
         const allowed = !access.restricted || access.routes.includes(input.route as any);
         const restriction = allowed
@@ -2014,7 +2014,7 @@ export const spreadsheetRouter = router({
         };
       } catch (_) {
         // Erro de infraestrutura não pode virar bloqueio falso para um cliente autenticado.
-        return { allowed: true, allowedRoutes: [] };
+        return { allowed: false, allowedRoutes: [] };
       }
     }),
 
