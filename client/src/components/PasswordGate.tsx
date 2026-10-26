@@ -2970,6 +2970,12 @@ export default function PasswordGate({ children }: PasswordGateProps) {
                   <MessageCircle className="w-4 h-4" />
                   Recuperar senha via WhatsApp
                 </a>
+                <a
+                  href="/recuperarsenha"
+                  className="flex items-center justify-center gap-2 px-4 py-2 bg-blue-600/20 border border-blue-500/30 hover:bg-blue-600/30 text-blue-300 rounded-xl text-sm font-semibold transition-colors"
+                >
+                  Recuperar senha pelo e-mail (modo automatico)
+                </a>
               </div>
             </form>
           )}
