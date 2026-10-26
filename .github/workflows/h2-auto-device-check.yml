@@ -1,0 +1,27 @@
+name: Validar controle dispositivos H2 AUTO
+on:
+  push:
+    branches: [feature/h2-auto-desvincular-remover-20261025]
+  workflow_dispatch:
+permissions:
+  contents: read
+jobs:
+  validate:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: pnpm/action-setup@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '22'
+          cache: pnpm
+      - run: pnpm install --frozen-lockfile
+      - name: Validar servidor do H2 AUTO
+        run: pnpm exec esbuild server/h2-auto-remote.ts --bundle --platform=node --packages=external --format=esm --outfile=/tmp/h2auto-remote.js
+      - name: Validar tela ADM H2 AUTO
+        run: pnpm exec esbuild client/src/pages/AdminH2Auto.tsx --bundle --platform=browser --packages=external --format=esm --outfile=/tmp/h2auto-admin.js
+      - name: Verificar codigos de seguranca
+        run: |
+          grep -q 'clearH2AutoCustomerSessions' server/h2-auto-remote.ts
+          grep -q 'DESVINCULAR CELULAR' client/src/pages/AdminH2Auto.tsx
+          grep -q 'REMOVER APARELHO' client/src/pages/AdminH2Auto.tsx
