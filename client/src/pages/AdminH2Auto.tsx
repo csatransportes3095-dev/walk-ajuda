@@ -17,6 +17,7 @@ import {
 } from "lucide-react";
 import { toast } from "sonner";
 import H2AutoHistoryPanel from "@/components/H2AutoHistoryPanel";
+import H2AutoTreeEditor from "@/components/H2AutoTreeEditor";
 
 const Box = ({ children }: { children: React.ReactNode }) => (
   <div className="rounded-2xl border border-cyan-500/30 bg-slate-900/90 p-5 space-y-3">
@@ -387,6 +388,7 @@ export default function AdminH2Auto() {
                   </button>
                 </div>
               )}
+              <H2AutoTreeEditor id={d.id} revision={d.revision} initial={d.config.tree} />
               <H2AutoHistoryPanel
                 deviceId={d.id}
                 label={d.label}
