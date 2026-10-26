@@ -1,3 +1,4 @@
+import { emailBelongsToAnotherCustomer, CUSTOMER_EMAIL_IN_USE_MESSAGE } from "./customerEmailOwnership";
 import { normalizeCustomerText } from "../shared/customerTextNormalization";
 import { TRPCError } from "@trpc/server";
 import { ensureStatusScopeSchema, withStatusScopeLock, archiveScopeDefinition, assertStatusCanBeRemoved, assertNotInitialStatus, scopeRows } from "./orderStatusScope";
@@ -1066,6 +1067,7 @@ export async function createCustomer(data: MainCustomerProfileInput): Promise<Cu
   const db = await getDb();
   if (!db) throw new Error('Database not available');
   const required = validateMainCustomerProfile(data);
+  if (await emailBelongsToAnotherCustomer(db, required.email)) throw new Error(CUSTOMER_EMAIL_IN_USE_MESSAGE);
   // Mesma fonte oficial usada pelo ADM e por qualquer cadastro novo.
   const nextNum = await generateNextCustomerNumber(db);
   await db.insert(customers).values({
@@ -1108,7 +1110,11 @@ export async function updateCustomer(id: number, data: { name?: string; phone?: 
   const updateSet: Record<string, unknown> = {};
   if (data.name !== undefined) updateSet.name = data.name ? normalizeCustomerText(data.name) : data.name;
   if (data.phone !== undefined) updateSet.phone = normalizeMainCustomerPhone(data.phone);
-  if (data.email !== undefined) updateSet.email = data.email ? data.email.trim().toLowerCase() : data.email;
+  if (data.email !== undefined) {
+    const candidate = data.email ? data.email.trim().toLowerCase() : data.email;
+    if (candidate && await emailBelongsToAnotherCustomer(db, candidate, id)) throw new Error(CUSTOMER_EMAIL_IN_USE_MESSAGE);
+    updateSet.email = candidate;
+  }
   if (data.city !== undefined) updateSet.city = data.city ? normalizeCustomerText(data.city) : data.city;
   if (data.uf !== undefined) updateSet.uf = data.uf ? normalizeCustomerText(data.uf) : data.uf;
   if (data.cpf !== undefined) updateSet.cpf = data.cpf ? data.cpf.replace(/\D/g, '') : data.cpf;
