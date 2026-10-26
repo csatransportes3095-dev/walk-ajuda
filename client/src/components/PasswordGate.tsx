@@ -1679,7 +1679,7 @@ export default function PasswordGate({ children }: PasswordGateProps) {
               {gateStep === "emailCode" && "Digite o código recebido"}
               {gateStep === "registration" && "Cadastre-se"}
               {gateStep === "profilePhoto" && "Foto de Perfil"}
-              {gateStep === "password" && "Acesso com senha do cadastro"}
+              {gateStep === "password" && "Entre com sua senha pessoal"}
               {gateStep === "updateCpf" && "Atualizar Cadastro"}
               {gateStep === "cpwd_create" && "Crie sua senha"}
               {gateStep === "cpwd_pending" && "Aguardando aprovação"}
@@ -1767,6 +1767,13 @@ export default function PasswordGate({ children }: PasswordGateProps) {
                   </span>
                 )}
               </button>
+
+              <a
+                href="/recuperarsenha"
+                className="flex min-h-11 w-full items-center justify-center gap-2 rounded-xl border border-sky-400/35 bg-sky-400/10 px-4 py-3 text-sm font-bold text-sky-200 transition-colors hover:bg-sky-400/20"
+              >
+                <Mail className="h-4 w-4" /> RECUPERAR SENHA
+              </a>
 
               {/* Botão WhatsApp ao errar senha */}
               {showPasswordError && (
@@ -2896,15 +2903,18 @@ export default function PasswordGate({ children }: PasswordGateProps) {
               </div>
 
               {/* Instrução clara */}
-              <div className="bg-primary/10 border border-primary/30 rounded-xl px-4 py-3">
-                <p className="text-white/90 text-sm font-semibold text-center">🔐 Digite a senha que você criou no cadastro</p>
-                <p className="text-white/50 text-xs text-center mt-1">A mesma senha definida quando você se cadastrou no site</p>
-              </div>
+              <div className="rounded-xl border border-primary/30 bg-primary/10 px-4 py-4 text-center">
+                 <p className="flex items-center justify-center gap-2 text-sm font-bold text-white">
+                   <Lock className="h-4 w-4 text-primary" />
+                   Acesse com sua senha pessoal
+                 </p>
+                 <p className="mt-1 text-xs leading-relaxed text-white/65">Digite a senha que você cadastrou no H2 Colombiano.</p>
+               </div>
 
               {/* Campo de senha */}
               <div>
                 <label className="block text-xs font-semibold text-white/60 mb-2 uppercase tracking-wider">
-                  Sua senha de cadastro
+                  SENHA DE ACESSO
                 </label>
                 <div className="relative">
                   <input
@@ -2912,7 +2922,8 @@ export default function PasswordGate({ children }: PasswordGateProps) {
                     value={password}
                     onChange={(e) => setPassword(e.target.value)}
                     placeholder="Digite sua senha"
-                    className="w-full px-4 py-3.5 bg-white/10 text-white text-lg text-center font-bold rounded-xl border-2 border-white/20 focus:border-primary focus:ring-2 focus:ring-primary/30 outline-none transition-all placeholder:text-white/30"
+                     autoComplete="current-password"
+                     className="w-full px-4 py-3.5 bg-white/10 text-white text-lg text-center font-bold rounded-xl border-2 border-white/20 focus:border-primary focus:ring-2 focus:ring-primary/30 outline-none transition-all placeholder:text-white/30"
                     autoFocus
                     disabled={isValidating}
                   />
@@ -2948,37 +2959,42 @@ export default function PasswordGate({ children }: PasswordGateProps) {
                 )}
               </button>
 
-              {/* Links auxiliares */}
-              <div className="flex flex-col items-center gap-3 pt-1">
-                <button
-                  type="button"
-                  onClick={() => { setGateStep("phone"); setPassword(""); setEmailVerificationToken(""); setLoginEmail(""); setLoginEmailCode(""); }}
-                  className="text-white/40 text-xs hover:text-white/70 transition-colors underline underline-offset-2"
-                >
-                  ← Trocar número de telefone
-                </button>
+              {/* Card de recuperação: mantém a autenticação e o atendimento existentes */}
+              <section aria-labelledby="recovery-card-heading" className="space-y-3 rounded-2xl border border-sky-400/40 bg-gradient-to-br from-sky-950/80 via-[#14213e] to-[#101629] p-4 shadow-[0_0_25px_rgba(56,189,248,0.12)]">
+                <div className="flex items-start gap-3">
+                  <div className="flex h-10 w-10 shrink-0 items-center justify-center rounded-xl border border-sky-400/40 bg-sky-400/15">
+                    <Lock className="h-5 w-5 text-sky-300" />
+                  </div>
+                  <div className="min-w-0">
+                    <h3 id="recovery-card-heading" className="text-base font-black tracking-wide text-white">RECUPERAR SENHA</h3>
+                    <p className="mt-1 text-xs leading-relaxed text-slate-300">Esqueceu sua senha? Escolha como deseja recuperar o acesso.</p>
+                  </div>
+                </div>
+                <div className="grid grid-cols-1 gap-2 sm:grid-cols-2">
+                  <a
+                    href="/recuperarsenha"
+                    className="inline-flex min-h-12 items-center justify-center gap-2 rounded-xl bg-sky-500 px-3 py-3 text-center text-sm font-black text-slate-950 shadow-lg shadow-sky-500/20 transition-colors hover:bg-sky-400"
+                  >
+                    <Mail className="h-4 w-4 shrink-0" /> Por e-mail
+                  </a>
+                  <a
+                    href={`https://wa.me/${WHATSAPP_NUMBER}?text=${encodeWhatsappMessage(`Olá! Esqueci minha senha de acesso ao site. Meu telefone é ${getPhoneDigits(clientPhone)}`)}`}
+                    target="_blank"
+                    rel="noopener noreferrer"
+                    className="inline-flex min-h-12 items-center justify-center gap-2 rounded-xl bg-emerald-600 px-3 py-3 text-center text-sm font-black text-white shadow-lg shadow-emerald-500/20 transition-colors hover:bg-emerald-500"
+                  >
+                    <MessageCircle className="h-4 w-4 shrink-0" /> WhatsApp
+                  </a>
+                </div>
+              </section>
 
-                <div className="w-full border-t border-white/10" />
-
-                <p className="text-white/40 text-xs text-center">
-                  Esqueceu sua senha? Entre em contato pelo
-                </p>
-                <a
-                  href={`https://wa.me/${WHATSAPP_NUMBER}?text=${encodeWhatsappMessage(`Olá! Esqueci minha senha de acesso ao site. Meu telefone é ${getPhoneDigits(clientPhone)}`)}`}
-                  target="_blank"
-                  rel="noopener noreferrer"
-                  className="flex items-center gap-2 px-4 py-2 bg-green-600/20 border border-green-500/30 hover:bg-green-600/30 text-green-400 rounded-xl text-sm font-semibold transition-colors"
-                >
-                  <MessageCircle className="w-4 h-4" />
-                  Recuperar senha via WhatsApp
-                </a>
-                <a
-                  href="/recuperarsenha"
-                  className="flex items-center justify-center gap-2 px-4 py-2 bg-blue-600/20 border border-blue-500/30 hover:bg-blue-600/30 text-blue-300 rounded-xl text-sm font-semibold transition-colors"
-                >
-                  Recuperar senha pelo e-mail (modo automatico)
-                </a>
-              </div>
+              <button
+                type="button"
+                onClick={() => { setGateStep("phone"); setPassword(""); setEmailVerificationToken(""); setLoginEmail(""); setLoginEmailCode(""); }}
+                className="mx-auto block py-2 text-center text-xs font-semibold text-white/60 underline underline-offset-4 transition-colors hover:text-white"
+              >
+                ← Trocar número de telefone
+              </button>
             </form>
           )}
         </div>
