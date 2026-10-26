@@ -1,7 +1,9 @@
 // Router de senha do sistema de cadastro (h2colombiano.com/admin/customers)
 // Mesma lógica do Gestor de Gastos (spreadsheet), adaptada para a tabela customers
 
-import { createHash, randomBytes } from "crypto";
+import { createHash, randomBytes, randomInt, timingSafeEqual } from "crypto";
+import { canCustomerRecoverPassword } from "../customerPasswordRecoveryPolicy";
+import { sendPasswordRecoveryEmail } from "../passwordRecoveryEmail";
 import { TRPCError } from "@trpc/server";
 import { z } from "zod";
 import { publicProcedure, adminProcedure, router } from "../_core/trpc";
@@ -631,6 +633,81 @@ export const customerPasswordRouter = router({
     }),
 
   // â”€â”€ ADM: listar pendentes â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
+
+
+  // Independent from login OTP: recovery never grants route access or extends validity.
+  requestPasswordRecovery: publicProcedure
+    .input(z.object({ phone: z.string().min(10).max(32) }))
+    .mutation(async ({ input }) => {
+      const generic = { success: true as const, message: "Se o cadastro estiver habilitado, enviaremos um codigo ao e-mail cadastrado." };
+      const phone = input.phone.replace(/\D/g, "");
+      if (!/^\d{10,11}$/.test(phone)) return generic;
+      const db = (await getDb()) as any;
+      if (!db) throw new TRPCError({ code: "SERVICE_UNAVAILABLE", message: "Servico temporariamente indisponivel." });
+      const customer = await getCustomerByCleanPhone(phone);
+      const password = await getActivePassword(phone);
+      if (!canCustomerRecoverPassword(await getPasswordMode(), customer, password)) return generic;
+      await db.execute(sql`CREATE TABLE IF NOT EXISTS customerPasswordRecovery (
+        id BIGINT AUTO_INCREMENT PRIMARY KEY, phone VARCHAR(32) NOT NULL,
+        codeHash CHAR(64) NOT NULL, expiresAt DATETIME NOT NULL,
+        attempts INT NOT NULL DEFAULT 0, usedAt DATETIME NULL, createdAt DATETIME NOT NULL,
+        INDEX recovery_phone_created (phone,createdAt)
+      ) ENGINE=InnoDB`);
+      const [recentRows] = await db.execute(sql`
+        SELECT createdAt FROM customerPasswordRecovery WHERE phone=${phone}
+        ORDER BY id DESC LIMIT 1`);
+      const recent = (recentRows as any[])?.[0];
+      if (recent && Date.now() - new Date(recent.createdAt).getTime() < 60_000) return generic;
+      const code = Array.from({ length: 6 }, () => randomInt(10).toString()).join("");
+      const codeHash = createHash("sha256").update(phone + "|" + code).digest("hex");
+      const expiresAt = new Date(Date.now() + 10 * 60_000);
+      await db.execute(sql`INSERT INTO customerPasswordRecovery(phone,codeHash,expiresAt,createdAt)
+        VALUES (${phone},${codeHash},${expiresAt},NOW())`);
+      try { await sendPasswordRecoveryEmail(String(customer.email).trim().toLowerCase(),code); }
+      catch { throw new TRPCError({ code:"SERVICE_UNAVAILABLE", message:"Nao foi possivel enviar o codigo. Tente novamente." }); }
+      return generic;
+    }),
+
+  finishPasswordRecovery: publicProcedure
+    .input(z.object({
+      phone: z.string().min(10).max(32),
+      code: z.string().regex(/^\d{6}$/),
+      newPassword: z.string().min(8).max(72),
+    }))
+    .mutation(async ({ input }) => {
+      const phone = input.phone.replace(/\D/g,"");
+      const db = (await getDb()) as any;
+      if (!db) throw new TRPCError({code:"SERVICE_UNAVAILABLE",message:"Servico indisponivel."});
+      // Validation and mutation must be atomic; manual ADM mode always wins.
+      return db.transaction(async (tx: any) => {
+        const modeRows = await tx.select().from(appSettings)
+          .where(eq(appSettings.key, "senha_cadastro_ativa")).limit(1);
+        if (modeRows?.[0]?.value !== "false") throw new TRPCError({code:"FORBIDDEN",message:"Recuperacao disponivel somente no modo automatico."});
+        const customersRows = await tx.select().from(customers).where(eq(customers.phone,phone)).limit(1);
+        const customer=customersRows?.[0];
+        const pwRows=await tx.select().from(customerPasswords)
+          .where(and(eq(customerPasswords.phone,phone),eq(customerPasswords.isActive,1))).limit(1);
+        const pw=pwRows?.[0];
+        if(!canCustomerRecoverPassword("auto",customer,pw)) throw new TRPCError({code:"FORBIDDEN",message:"Recuperacao indisponivel para este cadastro."});
+        const [raw]=await tx.execute(sql`SELECT id,codeHash,attempts,expiresAt,usedAt FROM customerPasswordRecovery
+          WHERE phone=${phone} ORDER BY id DESC LIMIT 1 FOR UPDATE`);
+        const rec=(raw as any[])?.[0];
+        if (!rec || rec.usedAt || new Date(rec.expiresAt).getTime() <= Date.now() || Number(rec.attempts)>=5)
+          throw new TRPCError({code:"BAD_REQUEST",message:"Codigo invalido ou expirado."});
+        await tx.execute(sql`UPDATE customerPasswordRecovery SET attempts=attempts+1 WHERE id=${rec.id}`);
+        const actual=Buffer.from(String(rec.codeHash),"hex");
+        const expected=Buffer.from(createHash("sha256").update(phone+"|"+input.code).digest("hex"),"hex");
+        if(actual.length!==expected.length || !timingSafeEqual(actual,expected))
+          throw new TRPCError({code:"BAD_REQUEST",message:"Codigo invalido ou expirado."});
+        const hash=await bcrypt.hash(input.newPassword,12);
+        await tx.update(customerPasswords).set({password:hash}).where(eq(customerPasswords.id,pw.id));
+        await tx.execute(sql`UPDATE customerPasswordRecovery SET usedAt=NOW() WHERE id=${rec.id}`);
+        await tx.delete(customerPasswordSessions).where(eq(customerPasswordSessions.phone,phone));
+        await tx.delete(spreadsheetSessions).where(eq(spreadsheetSessions.clientId,
+          sql`(SELECT id FROM spreadsheetClients WHERE phone=${phone} LIMIT 1)`));
+        return {success:true as const};
+      });
+    }),
 
   adminListPending: adminProcedure.query(async () => {
     const db = (await getDb()) as any;
