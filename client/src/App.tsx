@@ -1,3 +1,4 @@
+import RecuperarSenha from "./pages/RecuperarSenha";
 import { Toaster } from "@/components/ui/sonner";
 import { TooltipProvider } from "@/components/ui/tooltip";
 
@@ -193,6 +194,7 @@ function Router() {
     <Switch>
       <Route path={"/site-access"} component={SiteAccess} />
       <Route path={"/admin/login"} component={AdminLogin} />
+      <Route path={"/recuperarsenha"} component={RecuperarSenha} />
       <Route path={"/h2ads/mobile"}>
         <H2AdsGuard><H2AdsMobile /></H2AdsGuard>
       </Route>
@@ -585,6 +587,8 @@ function AppContent() {
   }
 
   // Rota /login é atalho direto para o PasswordGate — mostra a tela bonita com logo, telefone/CPF e CONTINUAR
+  if (location === "/recuperarsenha") return <Router />;
+
   if (isLoginRoute) {
     return (
       <>
