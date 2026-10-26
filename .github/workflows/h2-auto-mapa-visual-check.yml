@@ -1,0 +1,19 @@
+name: H2 AUTO mapa visual validation
+on:
+  push:
+    branches: [ui/h2-auto-mapa-visual-20261026]
+permissions:
+  contents: read
+jobs:
+  build:
+    runs-on: ubuntu-latest
+    timeout-minutes: 25
+    steps:
+      - uses: actions/checkout@v4
+      - uses: pnpm/action-setup@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '22'
+          cache: pnpm
+      - run: pnpm install --no-frozen-lockfile
+      - run: pnpm build
