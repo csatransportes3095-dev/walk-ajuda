@@ -31,8 +31,8 @@ jobs:
           const api = fs.readFileSync('server/routers/customerPassword.ts','utf8');
           const requiredUi = [
             'type GateStep = "phone" | "email" | "emailCode"',
-            'startEmailVerification.useMutation()',
-            'verifyEmailCode.useMutation()',
+            'startLoginEmailVerification.useMutation()',
+            'verifyLoginEmailCode.useMutation()',
             'loginVerified.useMutation()',
             'Digite seu telefone com DDD para continuar',
             'Código de confirmação',
@@ -42,9 +42,11 @@ jobs:
           const emailStart = ui.indexOf('{gateStep === "email"');
           const phoneBlock = ui.slice(phoneStart, emailStart);
           if (phoneBlock.includes('CPF (somente números)') || phoneBlock.includes('OU ACESSE COM')) throw new Error('CPF still visible on login');
-          for (const marker of ['startEmailVerification:', 'verifyEmailCode:', 'loginVerified:']) {
+          for (const marker of ['startLoginEmailVerification:', 'verifyLoginEmailCode:', 'loginVerified:']) {
             if (!api.includes(marker)) throw new Error('API marker missing: '+marker);
           }
-          if (!api.includes('Este e-mail não está autorizado para este cadastro.')) throw new Error('authorization error missing');
+          if (!api.includes('registeredEmail !== email')) throw new Error('registered email identity check missing');
+          if (!api.includes('assertLoginEmailProof(cleanPhone, input.emailVerificationToken)')) throw new Error('email proof required for login missing');
+          if (!ui.includes('cpwdLoginMutation.mutateAsync({ phone: getCanonicalPhone(), password, emailVerificationToken })')) throw new Error('email proof not passed to login');
           console.log('Login sequence assertions OK');
           NODE

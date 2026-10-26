@@ -2,7 +2,7 @@ import bcrypt from "bcryptjs";
 import { randomBytes } from "crypto";
 import { TRPCError } from "@trpc/server";
 import { z } from "zod";
-import { publicProcedure, router } from "../_core/trpc";
+import { publicProcedure, adminProcedure, router } from "../_core/trpc";
 import {
   createEarning, getEarningsByUserAndMonth, getEarningsByUserAndYear, updateEarning, deleteEarning,
   createExpense, getExpensesByUserAndMonth, getExpensesByUserAndYear, updateExpense, deleteExpense,
@@ -10,6 +10,7 @@ import {
   createGoal, getGoalsByUserAndMonth, updateGoal, deleteGoal,
 } from "../db";
 import { getDb } from "../db";
+import { requireCustomerSession } from "../customerSession";
 import { syncUnifiedCustomerRegistry, requireCompleteMainCustomerProfile } from "../customerIdentity";
 import { findMainCustomerByIdentity, getCustomerRouteRestrictionReason, getRouteAccess, getRouteReleaseMode, normalizeCustomerPhone, setCustomerRoutePermissions, setCustomerRouteRestrictionReason } from "../customerAccess";
 import { spreadsheetClients, spreadsheetPasswords, spreadsheetSessions, spreadsheetLoginAudit, spreadsheetReferralDeclarations, customers, appSettings, customerPasswordSessions } from "../../drizzle/schema";
@@ -1648,7 +1649,7 @@ export const spreadsheetRouter = router({
     }),
 
   // ADM alterna o modo
-  setPasswordMode: publicProcedure
+  setPasswordMode: adminProcedure
     .input(z.object({ mode: z.enum(['manual', 'auto']) }))
     .mutation(async ({ input }) => {
       try {
@@ -1974,9 +1975,9 @@ export const spreadsheetRouter = router({
     .query(async ({ input }) => {
       try {
         const db = await getDb() as any;
-        if (!db) return { allowed: true, allowedRoutes: [] };
+        if (!db) return { allowed: false, allowedRoutes: [] };
         const cleanToken = input.token.trim();
-        if (!cleanToken) return { allowed: true, allowedRoutes: [] };
+        if (!cleanToken) return { allowed: false, allowedRoutes: [] };
 
         let phone: string | null = null;
         try {
@@ -1999,12 +2000,11 @@ export const spreadsheetRouter = router({
           }
         }
 
-        if (!phone) return { allowed: true, allowedRoutes: [] };
+        if (!phone) return { allowed: false, allowedRoutes: [] };
         const mainCustomer = await findMainCustomerByIdentity({ phone }, db);
-        if (!mainCustomer) return { allowed: true, allowedRoutes: [] };
-        const releaseMode = await getRouteReleaseMode(input.route as any, db);
+        if (!mainCustomer) return { allowed: false, allowedRoutes: [] };
         const access = await getRouteAccess(mainCustomer.id, db);
-        const allowed = releaseMode === 'automatico' || !access.restricted || access.routes.includes(input.route as any);
+        const allowed = !access.restricted || access.routes.includes(input.route as any);
         const restriction = allowed
           ? null
           : await getCustomerRouteRestrictionReason(mainCustomer.id, input.route as any, db);
@@ -2015,36 +2015,40 @@ export const spreadsheetRouter = router({
         };
       } catch (_) {
         // Erro de infraestrutura não pode virar bloqueio falso para um cliente autenticado.
-        return { allowed: true, allowedRoutes: [] };
+        return { allowed: false, allowedRoutes: [] };
       }
     }),
 
+  // Consultar permissao por telefone exige vinculo com a sessao central.
+  // Um numero sozinho nao pode determinar permissoes de outro cliente.
   checkRouteAccessByPhone: publicProcedure
     .input(z.object({
+      token: z.string().min(32),
       phone: z.string(),
-      route: z.string(),
+      route: z.enum(['site','acompanhar','gastos','emprestimo']),
     }))
     .query(async ({ input }) => {
+      await requireCustomerSession(input.token, input.phone);
       try {
         const db = await getDb() as any;
-        if (!db) return { allowed: true, allowedRoutes: [] };
+        if (!db) return { allowed: false, allowedRoutes: [], restrictionReason: null };
         const phone = normalizeCustomerPhone(input.phone);
-        if (!phone) return { allowed: true, allowedRoutes: [] };
+        if (!phone) return { allowed: false, allowedRoutes: [], restrictionReason: null };
         const mainCustomer = await findMainCustomerByIdentity({ phone }, db);
-        if (!mainCustomer) return { allowed: true, allowedRoutes: [] };
-        const releaseMode = await getRouteReleaseMode(input.route as any, db);
+        if (!mainCustomer || Number((mainCustomer as any).blocked || 0) === 1)
+          return { allowed: false, allowedRoutes: [], restrictionReason: null };
         const access = await getRouteAccess(mainCustomer.id, db);
-        const allowed = releaseMode === 'automatico' || !access.restricted || access.routes.includes(input.route as any);
+        const allowed = !access.restricted || access.routes.includes(input.route);
         const restriction = allowed
           ? null
-          : await getCustomerRouteRestrictionReason(mainCustomer.id, input.route as any, db);
+          : await getCustomerRouteRestrictionReason(mainCustomer.id, input.route, db);
         return {
           allowed,
           allowedRoutes: access.restricted ? access.routes : [],
           restrictionReason: restriction?.reason || null,
         };
       } catch (_) {
-        return { allowed: true, allowedRoutes: [], restrictionReason: null };
+        return { allowed: false, allowedRoutes: [], restrictionReason: null };
       }
     }),
 

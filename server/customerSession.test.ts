@@ -12,7 +12,7 @@ import { getAdminJwtSecret } from "./adminJwt";
 import { requireCustomerSession } from "./customerSession";
 
 type SessionRow = { phone: string; expiresAt: Date } | null;
-type CustomerRow = { phone: string; blocked: number } | null;
+type CustomerRow = { phone: string; blocked: number; deletedAt?: Date | null } | null;
 
 function databaseFor(session: SessionRow, customer: CustomerRow) {
   let queryCount = 0;
@@ -77,6 +77,22 @@ describe("customer session authorization", () => {
     ));
 
     await expect(requireCustomerSession("a".repeat(64), "11999999999")).rejects.toMatchObject({ code: "FORBIDDEN" });
+  });
+
+  it("rejects a deleted customer even with an otherwise valid session", async () => {
+    getDbMock.mockResolvedValue(databaseFor(
+      { phone: "11999999999", expiresAt: new Date(Date.now() + 60_000) },
+      { phone: "11999999999", blocked: 0, deletedAt: new Date() },
+    ));
+    await expect(requireCustomerSession("a".repeat(64), "11999999999")).rejects.toMatchObject({ code: "UNAUTHORIZED" });
+  });
+
+  it("rejects an invalid session expiry instead of authorizing it", async () => {
+    getDbMock.mockResolvedValue(databaseFor(
+      { phone: "11999999999", expiresAt: new Date("invalid") },
+      { phone: "11999999999", blocked: 0 },
+    ));
+    await expect(requireCustomerSession("a".repeat(64), "11999999999")).rejects.toMatchObject({ code: "UNAUTHORIZED" });
   });
 });
 

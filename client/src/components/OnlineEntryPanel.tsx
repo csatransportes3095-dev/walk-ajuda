@@ -70,53 +70,14 @@ export function OnlineEntryPanel({ onBack, onOpenCadastro, intendedRoute = null 
     } catch { /* A validação final continua protegida pelo endpoint de login. */ }
   };
 
-  const createNewPassword = async () => {
-    if (newPassword.length < 4) { setError('Crie uma senha com pelo menos 4 caracteres.'); return; }
-    if (newPassword !== confirmNewPassword) { setError('As senhas não coincidem.'); return; }
-    try {
-      setError("");
-      const phoneForPassword = passwordSetupPhone.replace(/\D/g, "");
-      if (passwordModeQ.data?.mode === 'auto') {
-        const result = await createPasswordAutoMut.mutateAsync({ phone: phoneForPassword, password: newPassword });
-        if (!result.success || !result.token) { setError('Não foi possível criar a nova senha.'); return; }
-        localStorage.setItem(ENTRY_TOKEN_KEY, result.token);
-        localStorage.setItem('cp_token', result.token);
-        setToken(result.token);
-        setPassword("");
-        setPasswordSetupPhone("");
-        return;
-      }
-      const result = await createPasswordManualMut.mutateAsync({ phone: phoneForPassword, password: newPassword });
-      if (!result.success) { setError('Não foi possível solicitar a nova senha.'); return; }
-      setPasswordCreatedPending(true);
-    } catch (e: any) { setError(e?.message || 'Não foi possível criar a nova senha.'); }
+  // O atendimento não mantém um segundo formulário de autenticação.
+  // Criação de senha e login exigem o fluxo central com confirmação de e-mail.
+  const openCentralLogin = () => {
+    sessionStorage.setItem('h2_customer_return_to', intendedRoute ? '/'+intendedRoute : '/acompanhar');
+    window.location.assign('/login');
   };
-
-  const login = async () => {
-    setError("");
-    const cleanPhone = phone.replace(/\D/g, "");
-    if (cleanPhone.length < 10) { setError('Informe seu telefone com DDD.'); return; }
-    try {
-      const status = await passwordStatusMut.mutateAsync({ phone: cleanPhone });
-      if (status.status === 'not_found') { onOpenCadastro(); return; }
-      if (status.status === 'no_password') { openPasswordSetup(status.phone); return; }
-      if (status.status === 'pending_approval') { setError('Sua senha está aguardando liberação do administrador.'); return; }
-      if (status.status === 'expired') { openPasswordSetup(status.phone); return; }
-      if (status.status === 'blocked') { setError(status.blockReason || 'Seu acesso está bloqueado.'); return; }
-    } catch { /* O endpoint de login continua sendo a validação final. */ }
-
-    const result = await loginMut.mutateAsync({ phone: cleanPhone, password });
-    if (!result.success || !result.token) {
-      if (result.error === 'no_password') { openPasswordSetup(); return; }
-      setError(result.error === 'wrong_password' ? 'Senha incorreta.' : result.error === 'pending_approval' ? 'Sua senha está aguardando liberação do administrador.' : result.error === 'expired' ? 'Sua senha venceu. Crie uma nova senha.' : result.error === 'blocked' ? (result.blockReason || 'Seu acesso está bloqueado.') : 'Não foi possível entrar.');
-      if (result.error === 'expired') openPasswordSetup();
-      return;
-    }
-    localStorage.setItem(ENTRY_TOKEN_KEY, result.token);
-    localStorage.setItem('cp_token', result.token);
-    setToken(result.token);
-    setPassword("");
-  };
+  const createNewPassword = async () => { openCentralLogin(); };
+  const login = async () => { openCentralLogin(); };
 
   const logout = async () => {
     if (token) await logoutMut.mutate({ token });

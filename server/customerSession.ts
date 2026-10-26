@@ -42,7 +42,7 @@ export async function requireCustomerSession(
     .where(eq(customerPasswordSessions.token, sessionToken))
     .limit(1);
   const session = sessionRows?.[0];
-  if (!session || new Date(session.expiresAt) < new Date()) {
+  if (!session || !session.expiresAt || !Number.isFinite(new Date(session.expiresAt).getTime()) || new Date(session.expiresAt) <= new Date()) {
     throw new TRPCError({ code: "UNAUTHORIZED", message: "Sessão expirada. Faça login novamente." });
   }
 
@@ -53,12 +53,12 @@ export async function requireCustomerSession(
   }
 
   const customerRows = await db
-    .select({ phone: customers.phone, blocked: customers.blocked })
+    .select({ phone: customers.phone, blocked: customers.blocked, deletedAt: customers.deletedAt })
     .from(customers)
     .where(eq(customers.phone, sessionPhone))
     .limit(1);
   const customer = customerRows?.[0];
-  if (!customer) {
+  if (!customer || customer.deletedAt) {
     throw new TRPCError({ code: "UNAUTHORIZED", message: "Cliente não encontrado para esta sessão." });
   }
   if (Number((customer as { blocked?: number | null }).blocked || 0) === 1) {

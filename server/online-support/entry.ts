@@ -75,7 +75,7 @@ export async function requireOnlineEntrySession(token: string, options?: { allow
 }
 
 export async function getOnlineCustomerOrders(token: string) {
-  const session = await requireOnlineEntrySession(token);
+  const { session } = await requireOnlineRoute(token, 'acompanhar');
   const db = await getDb() as any;
   // A tabela técnica accessCodePhones pode conter vínculos antigos. A lista é
   // sempre calculada pelo customerPhone do próprio histórico do pedido.
