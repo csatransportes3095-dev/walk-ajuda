@@ -1286,6 +1286,7 @@ export default function PasswordGate({ children }: PasswordGateProps) {
         const result = await cpwdCreateAutoMutation.mutateAsync({
           phone: getCanonicalPhone(),
           password: cpwdNewPassword,
+          emailVerificationToken,
         });
         if (result.success && result.token) {
           localStorage.setItem(CP_TOKEN_KEY, result.token);
