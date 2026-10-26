@@ -214,6 +214,43 @@ export function registerH2AutoDeviceRoutes(app:Express) {
   }
  });
 
+ // Persist only the media configuration from the paired APK. The same revision
+ // mechanism protects simultaneous edits in ADM, and all other fields stay intact.
+ app.post("/api/h2-auto/media",async(req:Request,res:Response)=>{
+  try {
+   const id=String(req.header("x-h2-device-id")||"");
+   const token=String(req.header("x-h2-device-token")||"");
+   if(!/^[a-f0-9]{24}$/.test(id)||!/^[a-f0-9]{64}$/.test(token))
+      return respond(res,401,{error:"unauthorized"});
+   const payload=z.object({
+      expectedRevision:z.number().int().min(1),
+      media:mediaSchema,
+   }).safeParse(req.body);
+   if(!payload.success)return respond(res,400,{error:"invalid_media_configuration"});
+   await ensure();
+   const data=await rows(sql`SELECT token_hash,revision,config_json FROM h2_auto_devices WHERE id=${id} LIMIT 1`);
+   const device=data[0];
+   if(!device?.token_hash ||
+       !timingSafeEqual(Buffer.from(String(device.token_hash),"hex"),Buffer.from(hash(token),"hex")))
+      return respond(res,401,{error:"unauthorized"});
+   if(Number(device.revision)!==payload.data.expectedRevision)
+      return respond(res,409,{error:"outdated_revision"});
+   const previous=decodeConfig(device.config_json);
+   const updated:RemoteConfig={...previous,media:payload.data.media};
+   const db=await getDb();if(!db)throw Error("db");
+   const result:any=await db.execute(sql`
+      UPDATE h2_auto_devices
+      SET config_json=${JSON.stringify(updated)},revision=revision+1,last_seen=${Date.now()}
+      WHERE id=${id} AND revision=${payload.data.expectedRevision} AND token_hash=${hash(token)}
+   `);
+   if(!result[0]?.affectedRows)return respond(res,409,{error:"outdated_revision"});
+   return respond(res,200,{success:true,revision:payload.data.expectedRevision+1,media:updated.media});
+  }catch(error){
+   console.error("[H2Auto] media configuration update failed",
+      error instanceof Error?error.message:String(error));
+   return respond(res,500,{error:"temporary_error"});
+  }
+ });
  app.post("/api/h2-auto/ack",async(req:Request,res:Response)=>{
  try {
    const id=String(req.header("x-h2-device-id")||""), token=String(req.header("x-h2-device-token")||"");
