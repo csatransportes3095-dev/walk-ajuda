@@ -5,6 +5,7 @@ import { sql } from "drizzle-orm";
 import { TRPCError } from "@trpc/server";
 import { adminProcedure, router } from "./_core/trpc";
 import { getDb } from "./db";
+import { h2AutoTreeSchema, H2_AUTO_TREE_DEFAULT } from "../shared/h2AutoTree";
 
 const hash = (s:string)=>createHash("sha256").update(s).digest("hex");
 const mediaSchema=z.object({
@@ -20,6 +21,7 @@ const mediaSchema=z.object({
  maxAudioSeconds:z.number().int().min(5).max(120).default(30)
 });
 const configSchema=z.object({
+ tree:h2AutoTreeSchema.optional(),
  media:mediaSchema.default({}),
  enabled:z.boolean(),
  ordersEnabled:z.boolean().default(false),
@@ -38,7 +40,7 @@ const configSchema=z.object({
  rules:z.array(z.object({trigger:z.string().max(120),reply:z.string().max(6000),mode:z.enum(["exact","contains"]),enabled:z.boolean()})).max(100)
 });
 type RemoteConfig=z.infer<typeof configSchema>;
-const initial:RemoteConfig={media:mediaSchema.parse({}),ordersEnabled:false,orderSessionHours:24,orderCodeTtlMinutes:10,orderCodeMaxAttempts:5,orderNoOrdersMessage:"Cadastro localizado com sucesso, mas não encontramos nenhum pedido associado a este cadastro no momento.",enabled:false,welcome:"",menu:Array(9).fill(""),whatsappMode:-1,pauseMinutes:60,scheduleOn:false,scheduleStart:"09:00",scheduleEnd:"18:00",blocked:"",rules:[]};
+const initial:RemoteConfig={tree:H2_AUTO_TREE_DEFAULT,media:mediaSchema.parse({}),ordersEnabled:false,orderSessionHours:24,orderCodeTtlMinutes:10,orderCodeMaxAttempts:5,orderNoOrdersMessage:"Cadastro localizado com sucesso, mas não encontramos nenhum pedido associado a este cadastro no momento.",enabled:false,welcome:"",menu:Array(9).fill(""),whatsappMode:-1,pauseMinutes:60,scheduleOn:false,scheduleStart:"09:00",scheduleEnd:"18:00",blocked:"",rules:[]};
 let ready:Promise<void>|undefined;
 function ensure() {
  if(!ready) ready=(async()=>{
@@ -72,12 +74,12 @@ const decodeConfig=(raw:any):RemoteConfig=>configSchema.parse(typeof raw==="stri
 const safeDevice=(r:any)=>({id:r.id,label:r.label,paired:Boolean(r.token_hash),revision:Number(r.revision),lastSeen:r.last_seen?Number(r.last_seen):null,appliedRevision:Number(r.applied_revision||0),config:decodeConfig(r.config_json),snapshotConfig:r.snapshot_json==null?null:decodeConfig(r.snapshot_json),snapshotReceivedAt:r.received_at==null?null:Number(r.received_at)});
 function mergeWithoutDeleting(remote:RemoteConfig, local:RemoteConfig):RemoteConfig {
  const empty=!remote.welcome.trim() && remote.menu.every(t=>!t.trim()) && remote.rules.length===0 && !remote.blocked.trim();
- if(empty)return {...local,media:remote.media,ordersEnabled:remote.ordersEnabled,orderSessionHours:remote.orderSessionHours,orderCodeTtlMinutes:remote.orderCodeTtlMinutes,orderCodeMaxAttempts:remote.orderCodeMaxAttempts,orderNoOrdersMessage:remote.orderNoOrdersMessage};
+ if(empty)return {...local,tree:remote.tree??local.tree,media:remote.media,ordersEnabled:remote.ordersEnabled,orderSessionHours:remote.orderSessionHours,orderCodeTtlMinutes:remote.orderCodeTtlMinutes,orderCodeMaxAttempts:remote.orderCodeMaxAttempts,orderNoOrdersMessage:remote.orderNoOrdersMessage};
  const seen=new Set(remote.rules.map(r=>r.trigger.trim().toLowerCase()+"|"+r.mode));
  const rules=remote.rules.slice();
  for(const r of local.rules){const k=r.trigger.trim().toLowerCase()+"|"+r.mode;if(!seen.has(k) && rules.length<100){rules.push(r);seen.add(k)}}
  const blocked=[...new Set([...remote.blocked.split(/[\n;,]/),...local.blocked.split(/[\n;,]/)].map(v=>v.trim()).filter(Boolean))].join("\n").slice(0,10000);
- return {...remote,media:remote.media,ordersEnabled:remote.ordersEnabled,welcome:remote.welcome.trim()?remote.welcome:local.welcome,
+ return {...remote,tree:remote.tree??local.tree,media:remote.media,ordersEnabled:remote.ordersEnabled,welcome:remote.welcome.trim()?remote.welcome:local.welcome,
  menu:remote.menu.map((v,i)=>v.trim()?v:local.menu[i]),rules,blocked};
 }
 /** Unlinking must also revoke customer-order sessions. The order feature may
