@@ -2,7 +2,7 @@
 // Mesma lógica do Gestor de Gastos (spreadsheet), adaptada para a tabela customers
 
 import { createHash, randomBytes, randomInt, timingSafeEqual } from "crypto";
-import { canCustomerRecoverPassword } from "../customerPasswordRecoveryPolicy";
+import { canCustomerRecoverPassword, passwordRecoveryCodeHash } from "../customerPasswordRecoveryPolicy";
 import { sendPasswordRecoveryEmail } from "../passwordRecoveryEmail";
 import { TRPCError } from "@trpc/server";
 import { z } from "zod";
@@ -671,7 +671,7 @@ export const customerPasswordRouter = router({
       const recent = (recentRows as any[])?.[0];
       if (recent && Date.now() - new Date(recent.createdAt).getTime() < 60_000) return generic;
       const code = Array.from({ length: 6 }, () => randomInt(10).toString()).join("");
-      const codeHash = createHash("sha256").update(phone + "|" + code).digest("hex");
+      const codeHash = passwordRecoveryCodeHash(phone, code);
       const expiresAt = new Date(Date.now() + 10 * 60_000);
       await db.execute(sql`INSERT INTO customerPasswordRecovery(phone,codeHash,expiresAt,createdAt)
         VALUES (${phone},${codeHash},${expiresAt},NOW())`);
@@ -708,7 +708,7 @@ export const customerPasswordRouter = router({
           throw new TRPCError({code:"BAD_REQUEST",message:"Codigo invalido ou expirado."});
         await tx.execute(sql`UPDATE customerPasswordRecovery SET attempts=attempts+1 WHERE id=${rec.id}`);
         const actual=Buffer.from(String(rec.codeHash),"hex");
-        const expected=Buffer.from(createHash("sha256").update(phone+"|"+input.code).digest("hex"),"hex");
+        const expected=Buffer.from(passwordRecoveryCodeHash(phone, input.code),"hex");
         if(actual.length!==expected.length || !timingSafeEqual(actual,expected))
           return {success:false as const, message:"Codigo invalido ou expirado."};
         const hash=await bcrypt.hash(input.newPassword,12);
