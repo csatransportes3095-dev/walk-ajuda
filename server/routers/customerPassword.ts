@@ -341,7 +341,7 @@ export const customerPasswordRouter = router({
   // Cliente cria senha pelo fluxo normal; reparo de CPF fica centralizado.
 
   clientCreateAuto: publicProcedure
-    .input(z.object({ phone: z.string(), password: z.string().min(4), emailVerificationToken: z.string().min(32) }))
+    .input(z.object({ phone: z.string(), password: z.string().min(4), emailVerificationToken: z.string().min(32).optional() }))
     .mutation(async ({ input }) => {
       const db = (await getDb()) as any;
       if (!db) throw new TRPCError({ code: "INTERNAL_SERVER_ERROR", message: "Banco indisponível" });
@@ -360,6 +360,7 @@ export const customerPasswordRouter = router({
 
       // A criacao inicial exige a mesma confirmacao de e-mail usada pelo login central.
       // Telefone e senha, sozinhos, nunca autorizam criar credenciais.
+      if (!input.emailVerificationToken) throw new TRPCError({ code: "UNAUTHORIZED", message: "Confirme o e-mail no login principal." });
       const proof = assertLoginEmailProof(cleanPhone, input.emailVerificationToken);
       if (String((cust as any).email || "").trim().toLowerCase() !== proof.email) {
         throw new TRPCError({ code: "UNAUTHORIZED", message: "Confirme o e-mail do cadastro novamente." });
@@ -436,7 +437,7 @@ export const customerPasswordRouter = router({
   // â”€â”€ Cliente cria senha (modo manual) â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
 
   clientCreateManual: publicProcedure
-    .input(z.object({ phone: z.string(), password: z.string().min(4), emailVerificationToken: z.string().min(32) }))
+    .input(z.object({ phone: z.string(), password: z.string().min(4), emailVerificationToken: z.string().min(32).optional() }))
     .mutation(async ({ input }) => {
       const db = (await getDb()) as any;
       if (!db) throw new TRPCError({ code: "INTERNAL_SERVER_ERROR", message: "Banco indisponível" });
@@ -454,6 +455,7 @@ export const customerPasswordRouter = router({
 
       // A criacao inicial exige a mesma confirmacao de e-mail usada pelo login central.
       // Telefone e senha, sozinhos, nunca autorizam criar credenciais.
+      if (!input.emailVerificationToken) throw new TRPCError({ code: "UNAUTHORIZED", message: "Confirme o e-mail no login principal." });
       const proof = assertLoginEmailProof(cleanPhone, input.emailVerificationToken);
       if (String((cust as any).email || "").trim().toLowerCase() !== proof.email) {
         throw new TRPCError({ code: "UNAUTHORIZED", message: "Confirme o e-mail do cadastro novamente." });
