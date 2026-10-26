@@ -137,7 +137,13 @@ export function GastosPage() {
   }
 
   if (!isLoggedIn) return <GastosLoginPage onLoginSuccess={handleLoginSuccess} sourceRoute="gastos" requiredProfilePhone={requiredProfilePhone || undefined} />;
-  if (routeAccessQuery.data && !routeAccessQuery.data.allowed) return <AcessoNegado routeLabel="Gastos" reason={(routeAccessQuery.data as any).restrictionReason} onLogout={handleLogout} />;
+  // Fail closed: never render protected customer data until the server confirms route permission.
+  if (routeAccessQuery.isLoading || (routeAccessQuery.isFetching && !routeAccessQuery.data)) {
+    return <div className="min-h-screen flex items-center justify-center text-foreground">Verificando autorização...</div>;
+  }
+  if (routeAccessQuery.isError || routeAccessQuery.data?.allowed !== true) {
+    return <AcessoNegado routeLabel="Gastos" reason={(routeAccessQuery.data as any)?.restrictionReason || "Não foi possível confirmar sua autorização."} onLogout={handleLogout} />;
+  }
 
   return <SpreadsheetPage clientName={clientName || undefined} token={token || ''} onLogout={handleLogout} />;
 }
