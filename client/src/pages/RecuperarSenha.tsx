@@ -21,7 +21,8 @@ export default function RecuperarSenha() {
   const change = async () => {
     if (password.length<8 || password!==confirm) return setFeedback("A senha precisa ter ao menos 8 caracteres e coincidir com a confirmacao.");
     try {
-      await finish.mutateAsync({phone,code,newPassword:password});
+      const result = await finish.mutateAsync({phone,code,newPassword:password});
+      if (!result.success) { setFeedback(result.message); return; }
       setFeedback("Senha alterada. Entre novamente usando a nova senha.");
       setStep("done");
     } catch (e:any) {setFeedback(e?.message || "Nao foi possivel alterar a senha.");}
