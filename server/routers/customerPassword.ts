@@ -698,7 +698,7 @@ export const customerPasswordRouter = router({
         const actual=Buffer.from(String(rec.codeHash),"hex");
         const expected=Buffer.from(createHash("sha256").update(phone+"|"+input.code).digest("hex"),"hex");
         if(actual.length!==expected.length || !timingSafeEqual(actual,expected))
-          throw new TRPCError({code:"BAD_REQUEST",message:"Codigo invalido ou expirado."});
+          return {success:false as const, message:"Codigo invalido ou expirado."};
         const hash=await bcrypt.hash(input.newPassword,12);
         await tx.update(customerPasswords).set({password:hash}).where(eq(customerPasswords.id,pw.id));
         await tx.execute(sql`UPDATE customerPasswordRecovery SET usedAt=NOW() WHERE id=${rec.id}`);
