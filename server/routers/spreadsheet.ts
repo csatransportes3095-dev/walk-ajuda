@@ -10,6 +10,7 @@ import {
   createGoal, getGoalsByUserAndMonth, updateGoal, deleteGoal,
 } from "../db";
 import { getDb } from "../db";
+import { requireCustomerSession } from "../customerSession";
 import { syncUnifiedCustomerRegistry, requireCompleteMainCustomerProfile } from "../customerIdentity";
 import { findMainCustomerByIdentity, getCustomerRouteRestrictionReason, getRouteAccess, normalizeCustomerPhone, setCustomerRoutePermissions, setCustomerRouteRestrictionReason } from "../customerAccess";
 import { spreadsheetClients, spreadsheetPasswords, spreadsheetSessions, spreadsheetLoginAudit, spreadsheetReferralDeclarations, customers, appSettings, customerPasswordSessions } from "../../drizzle/schema";
@@ -2018,31 +2019,36 @@ export const spreadsheetRouter = router({
       }
     }),
 
+  // Consultar permissao por telefone exige vinculo com a sessao central.
+  // Um numero sozinho nao pode determinar permissoes de outro cliente.
   checkRouteAccessByPhone: publicProcedure
     .input(z.object({
+      token: z.string().min(32),
       phone: z.string(),
-      route: z.string(),
+      route: z.enum(['site','acompanhar','gastos','emprestimo']),
     }))
     .query(async ({ input }) => {
+      await requireCustomerSession(input.token, input.phone);
       try {
         const db = await getDb() as any;
-        if (!db) return { allowed: true, allowedRoutes: [] };
+        if (!db) return { allowed: false, allowedRoutes: [], restrictionReason: null };
         const phone = normalizeCustomerPhone(input.phone);
-        if (!phone) return { allowed: true, allowedRoutes: [] };
+        if (!phone) return { allowed: false, allowedRoutes: [], restrictionReason: null };
         const mainCustomer = await findMainCustomerByIdentity({ phone }, db);
-        if (!mainCustomer) return { allowed: true, allowedRoutes: [] };
+        if (!mainCustomer || Number((mainCustomer as any).blocked || 0) === 1)
+          return { allowed: false, allowedRoutes: [], restrictionReason: null };
         const access = await getRouteAccess(mainCustomer.id, db);
-        const allowed = !access.restricted || access.routes.includes(input.route as any);
+        const allowed = !access.restricted || access.routes.includes(input.route);
         const restriction = allowed
           ? null
-          : await getCustomerRouteRestrictionReason(mainCustomer.id, input.route as any, db);
+          : await getCustomerRouteRestrictionReason(mainCustomer.id, input.route, db);
         return {
           allowed,
           allowedRoutes: access.restricted ? access.routes : [],
           restrictionReason: restriction?.reason || null,
         };
       } catch (_) {
-        return { allowed: true, allowedRoutes: [], restrictionReason: null };
+        return { allowed: false, allowedRoutes: [], restrictionReason: null };
       }
     }),
 
