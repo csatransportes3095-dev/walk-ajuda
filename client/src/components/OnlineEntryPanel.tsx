@@ -82,10 +82,14 @@ export function OnlineEntryPanel({ onBack, onOpenCadastro, intendedRoute = null 
       const phoneForPassword = passwordSetupPhone.replace(/\D/g, "");
       if (passwordModeQ.data?.mode === 'auto') {
         const result = await createPasswordAutoMut.mutateAsync({ phone: phoneForPassword, password: newPassword });
-        if (!result.success || !result.token) { setError('Não foi possível criar a nova senha.'); return; }
-        localStorage.setItem(ENTRY_TOKEN_KEY, result.token);
-        localStorage.setItem('cp_token', result.token);
-        setToken(result.token);
+        const createdToken = result.token;
+        if (!result.success || typeof createdToken !== 'string' || !createdToken) {
+          setError('Não foi possível criar a nova senha.');
+          return;
+        }
+        localStorage.setItem(ENTRY_TOKEN_KEY, createdToken);
+        localStorage.setItem('cp_token', createdToken);
+        setToken(createdToken);
         setPassword("");
         setPasswordSetupPhone("");
         return;
@@ -106,9 +110,9 @@ export function OnlineEntryPanel({ onBack, onOpenCadastro, intendedRoute = null 
     try {
       const status = await passwordStatusMut.mutateAsync({ phone: cleanPhone });
       if (status.status === 'not_found') { onOpenCadastro(); return; }
-      if (status.status === 'no_password') { openPasswordSetup(status.phone); return; }
+      if (status.status === 'no_password') { openPasswordSetup(cleanPhone); return; }
       if (status.status === 'pending_approval') { setError('Sua senha está aguardando liberação do administrador.'); return; }
-      if (status.status === 'expired') { openPasswordSetup(status.phone); return; }
+      if (status.status === 'expired') { openPasswordSetup(cleanPhone); return; }
       if (status.status === 'blocked') { setError(status.blockReason || 'Seu acesso está bloqueado.'); return; }
     } catch { /* O endpoint de login continua sendo a validação final. */ }
 
