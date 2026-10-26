@@ -3,7 +3,6 @@
 
 import { createHash, randomBytes, randomInt, timingSafeEqual } from "crypto";
 import { canCustomerRecoverPassword, passwordRecoveryCodeHash } from "../customerPasswordRecoveryPolicy";
-import { sendPasswordRecoveryEmail } from "../passwordRecoveryEmail";
 import { TRPCError } from "@trpc/server";
 import { z } from "zod";
 import { publicProcedure, adminProcedure, router } from "../_core/trpc";
@@ -670,12 +669,12 @@ export const customerPasswordRouter = router({
         ORDER BY id DESC LIMIT 1`);
       const recent = (recentRows as any[])?.[0];
       if (recent && Date.now() - new Date(recent.createdAt).getTime() < 60_000) return generic;
-      const code = Array.from({ length: 6 }, () => randomInt(10).toString()).join("");
+      const code = generateOwnSiteCode();
       const codeHash = passwordRecoveryCodeHash(phone, code);
       const expiresAt = new Date(Date.now() + 10 * 60_000);
       await db.execute(sql`INSERT INTO customerPasswordRecovery(phone,codeHash,expiresAt,createdAt)
         VALUES (${phone},${codeHash},${expiresAt},NOW())`);
-      try { await sendPasswordRecoveryEmail(String(customer.email).trim().toLowerCase(),code); }
+      try { await deliverOwnSiteCode(String(customer.email).trim().toLowerCase(),code, "password-recovery"); }
       catch { throw new TRPCError({ code:"SERVICE_UNAVAILABLE", message:"Nao foi possivel enviar o codigo. Tente novamente." }); }
       return generic;
     }),
