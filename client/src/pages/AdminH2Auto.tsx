@@ -57,7 +57,8 @@ export default function AdminH2Auto(){
  const update=(key:string,v:unknown)=>change("rules",value.rules.map((x:any,j:number)=>i===j?{...x,[key]:v}:x));
  return <div key={i} className="grid gap-2 rounded-xl border border-violet-500/25 p-3">
   <div className="flex items-center justify-between"><label className="text-xs"><input type="checkbox" checked={rule.enabled} onChange={e=>update("enabled",e.target.checked)} className="mr-2"/>Regra {i+1} ativa</label><button className="rounded-lg border border-red-500/40 px-3 py-1 text-red-300" onClick={()=>change("rules",value.rules.filter((_x:any,j:number)=>i!==j))}>Excluir</button></div>
-  <input className={field} value={rule.trigger} maxLength={120} placeholder="Palavra ou frase recebida" onChange={e=>update("trigger",e.target.value)}/>
+  <input className={field} value={rule.trigger} maxLength={120} placeholder="Ex.: bom dia, boa tarde, boa noite" onChange={e=>update("trigger",e.target.value)}/>
+  <p className="text-[11px] text-violet-200/70">Separe várias palavras ou frases por vírgula. Todas usarão a mesma resposta.</p>
   <select className={field} value={rule.mode} onChange={e=>update("mode",e.target.value)}><option value="exact">Mensagem exata</option><option value="contains">Contém a palavra</option></select>
   <textarea className={field} rows={3} value={rule.reply} maxLength={6000} placeholder="Resposta automática" onChange={e=>update("reply",e.target.value)}/>
  </div>})}
