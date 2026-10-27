@@ -66,6 +66,7 @@ const configSchema = z.object({
   tree: h2AutoTreeSchema.optional(),
   media: mediaSchema.default(() => mediaSchema.parse({})),
   enabled: z.boolean(),
+  identificationEnabled: z.boolean().default(true),
   ordersEnabled: z.boolean().default(false),
   orderSessionHours: z.number().int().min(1).max(72).default(24),
   orderCodeTtlMinutes: z.number().int().min(5).max(30).default(10),
@@ -105,6 +106,7 @@ const initial: RemoteConfig = {
   orderNoOrdersMessage:
     "Cadastro localizado com sucesso, mas não encontramos nenhum pedido associado a este cadastro no momento.",
   enabled: false,
+  identificationEnabled: true,
   welcome: "",
   menu: Array(9).fill(""),
   whatsappMode: -1,
@@ -323,7 +325,18 @@ export const h2AutoAdminRouter = router({
         });
       return { success: true };
     }),
-  saveTree: adminProcedure
+  saveSafetySwitch: adminProcedure
+    .input(z.object({ id: z.string().regex(/^[a-f0-9]{24}$/), key: z.enum(["enabled","identificationEnabled"]), value: z.boolean() }))
+    .mutation(async ({input})=>{
+      await ensure();
+      const db=await getDb(); if(!db)throw new Error("DB unavailable");
+      // Atomic JSON key update; does not overwrite drafts, menus or other settings.
+      const path=input.key==="enabled"?"$.enabled":"$.identificationEnabled";
+      const updated:any=await db.execute(sql`UPDATE h2_auto_devices SET config_json=JSON_SET(config_json,${path},${input.value}),revision=revision+1 WHERE id=${input.id}`);
+      if(!updated[0]?.affectedRows)throw new TRPCError({code:"NOT_FOUND",message:"Aparelho não encontrado."});
+      return {success:true};
+    }),
+    saveTree: adminProcedure
     .input(z.object({
       id: z.string().regex(/^[a-f0-9]{24}$/),
       tree: h2AutoTreeSchema,
