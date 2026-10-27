@@ -47,12 +47,14 @@ export default function H2AutoTreeEditor({ id, revision, appliedRevision, initia
   const [folded, setFolded] = useState<Set<string>>(() => new Set());
   const [existingTarget, setExistingTarget] = useState(tree.start);
   const loadedRevision = useRef(revision);
+  const savedTree = useRef<H2AutoTree>(cloneH2AutoTree(initial || H2_AUTO_TREE_DEFAULT));
   const editRef = useRef<HTMLDivElement>(null);
 
   useEffect(() => {
     if (dirty || loadedRevision.current === revision) return;
     const fresh = cloneH2AutoTree(initial || H2_AUTO_TREE_DEFAULT);
     loadedRevision.current = revision;
+    savedTree.current = cloneH2AutoTree(fresh);
     setTree(fresh);
     setSelected(fresh.start);
     setFocusedBranch("1");
@@ -90,10 +92,14 @@ export default function H2AutoTreeEditor({ id, revision, appliedRevision, initia
   const path = useMemo(() => flowPath(tree, selected), [tree, selected]);
   const unlinked = useMemo(() => unlinkedStages(tree), [tree]);
   const currentTest = tree.nodes.find(n => n.id === test.current);
-  const stale = revision !== loadedRevision.current;
+  // Global revision changes are expected when ADM safety/identity controls save.
+  // The server compares the question tree itself before accepting this draft.
+  const stale = false;
   const questionCount = tree.nodes.filter(n => n.mode === "question").length;
   const save = trpc.h2AutoAdmin.saveTree.useMutation({
-    onSuccess: () => {
+    onSuccess: (result, variables) => {
+      loadedRevision.current = result.revision;
+      savedTree.current = cloneH2AutoTree(variables.tree);
       toast.success("SALVO NO ADM. Abra H2 Auto no celular e toque em SINCRONIZAR ADM para aplicar imediatamente.", { duration: 10000 });
       setDirty(false);
       void utils.h2AutoAdmin.list.invalidate();
@@ -129,7 +135,7 @@ export default function H2AutoTreeEditor({ id, revision, appliedRevision, initia
       setTree(updated);
       setDirty(true);
       selectStage(id);
-      toast.success("Etapa criada e posicionada na resposta do menu anterior.");
+      toast.success("Etapa criada. Clique em SALVAR E SINCRONIZAR para gravar.");
     } catch (error) {
       toast.error(error instanceof Error ? error.message : "Não foi possível criar a etapa.");
     }
@@ -174,14 +180,15 @@ export default function H2AutoTreeEditor({ id, revision, appliedRevision, initia
       return;
     }
     const newStageId = newId();
-    setTree(previous => ({
-      ...previous,
-      nodes: [...previous.nodes.map(node =>
+    const updated: H2AutoTree = {
+      ...tree,
+      nodes: [...tree.nodes.map(node =>
         node.id === parentId
           ? { ...node, options: [...node.options, { key, label, next: newStageId }] }
           : node
       ), { id: newStageId, mode: "question" as const, text, options: [] }],
-    }));
+    };
+    setTree(updated);
     setFolded(previous => {
       const next = new Set(previous);
       next.delete(parentId);
@@ -193,7 +200,12 @@ export default function H2AutoTreeEditor({ id, revision, appliedRevision, initia
     setCreatingUnder(null);
     setNewMenuOption("");
     setNewQuestion("");
-    toast.success("Pergunta criada neste caminho. Agora adicione as respostas.");
+    const parsed = h2AutoTreeSchema.safeParse(normalizeFlowTreeOptions(updated));
+    if (parsed.success) {
+      save.mutate({ id, expectedRevision: loadedRevision.current, baseTree: savedTree.current, tree: parsed.data });
+    } else {
+      toast.error("Pergunta mantida na tela. Revise os campos e clique em SALVAR E SINCRONIZAR.");
+    }
   }
 
   function createReplyInline(parentId: string) {
@@ -227,7 +239,7 @@ export default function H2AutoTreeEditor({ id, revision, appliedRevision, initia
     setReplyUnder(null);
     setNewReplyOption("");
     setNewReplyMessage("");
-    toast.success("Resposta adicionada. Voce pode criar outra.");
+    toast.success("Resposta adicionada na tela. Clique em SALVAR E SINCRONIZAR.");
   }
 
   function quickEditNode(node: H2AutoTreeNode) {
@@ -388,6 +400,7 @@ export default function H2AutoTreeEditor({ id, revision, appliedRevision, initia
     if (dirty && !window.confirm("Descartar mudanças não salvas e recarregar as etapas do ADM?")) return;
     const fresh = cloneH2AutoTree(initial || H2_AUTO_TREE_DEFAULT);
     loadedRevision.current = revision;
+    savedTree.current = cloneH2AutoTree(fresh);
     setTree(fresh);
     setSelected(fresh.start);
     setFocusedBranch("1");
@@ -405,7 +418,7 @@ export default function H2AutoTreeEditor({ id, revision, appliedRevision, initia
       toast.error("NÃO SALVOU: " + (issue?.message || "Revise as perguntas e os destinos."), { duration: 9000 });
       return;
     }
-    save.mutate({ id, expectedRevision: loadedRevision.current, tree: parsed.data });
+    save.mutate({ id, expectedRevision: loadedRevision.current, baseTree: savedTree.current, tree: parsed.data });
   }
 
   function chooseTest(key: string) {
