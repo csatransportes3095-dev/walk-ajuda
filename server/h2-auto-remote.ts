@@ -76,6 +76,7 @@ const configSchema = z.object({
   confirmation: confirmationSchema.default(() => confirmationSchema.parse({})),
   enabled: z.boolean(),
   identificationEnabled: z.boolean().default(true),
+  identificationSessionHours: z.number().int().min(1).max(720).default(24),
   ordersEnabled: z.boolean().default(false),
   orderSessionHours: z.number().int().min(1).max(72).default(24),
   orderCodeTtlMinutes: z.number().int().min(5).max(30).default(10),
@@ -117,6 +118,7 @@ const initial: RemoteConfig = {
     "Cadastro localizado com sucesso, mas não encontramos nenhum pedido associado a este cadastro no momento.",
   enabled: false,
   identificationEnabled: true,
+  identificationSessionHours: 24,
   welcome: "",
   menu: Array(9).fill(""),
   whatsappMode: -1,
@@ -210,6 +212,7 @@ function mergeWithoutDeleting(
       tree: remote.tree ?? local.tree,
       media: remote.media,
       confirmation: remote.confirmation,
+      identificationSessionHours: remote.identificationSessionHours,
       ordersEnabled: remote.ordersEnabled,
       orderSessionHours: remote.orderSessionHours,
       orderCodeTtlMinutes: remote.orderCodeTtlMinutes,
@@ -335,6 +338,17 @@ export const h2AutoAdminRouter = router({
             "A configuração mudou. Atualize antes de salvar para não sobrescrever alterações.",
         });
       return { success: true };
+    }),
+  saveIdentificationValidity: adminProcedure
+    .input(z.object({ id: z.string().regex(/^[a-f0-9]{24}$/), hours: z.number().int().min(1).max(720) }))
+    .mutation(async ({input})=>{
+      await ensure();
+      const db=await getDb(); if(!db)throw new Error("DB unavailable");
+      const result:any=await db.execute(sql`UPDATE h2_auto_devices SET
+        config_json=JSON_SET(config_json,'$.identificationSessionHours',${input.hours}),
+        revision=revision+1 WHERE id=${input.id}`);
+      if(!result[0]?.affectedRows)throw new TRPCError({code:"NOT_FOUND",message:"Aparelho não encontrado."});
+      return {success:true,hours:input.hours};
     }),
   saveSafetySwitch: adminProcedure
     .input(z.object({ id: z.string().regex(/^[a-f0-9]{24}$/), key: z.enum(["enabled","identificationEnabled"]), value: z.boolean() }))
