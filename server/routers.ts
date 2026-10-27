@@ -4040,6 +4040,43 @@ export const appRouter = router({
       const allAcpRows = [...(acpRows || []), ...orphanRows];
       if (!allAcpRows || allAcpRows.length === 0) return [];
 
+      // Resolver os indicadores em lote. A foto pertence a quem indicou e
+      // recebe a comissão, não ao cliente deste pedido.
+      const referrerPhoneKey = (value: unknown) => String(value ?? '').replace(/\D/g, '').slice(-11);
+      const referrerPhones = Array.from(new Set(
+        allAcpRows.map((row: any) => referrerPhoneKey(row.customerReferredByPhone))
+      )).filter(phone => phone.length >= 10);
+      const referrersByPhone = new Map<string, { name: string | null; photoUrl: string | null }>();
+      if (referrerPhones.length > 0) {
+        try {
+          const found = await db.execute(sql`
+            SELECT RIGHT(REGEXP_REPLACE(phone, '[^0-9]', ''), 11) AS phoneKey,
+                   name, profilePhotoUrl
+            FROM customers
+            WHERE deletedAt IS NULL
+              AND RIGHT(REGEXP_REPLACE(phone, '[^0-9]', ''), 11) IN (
+                ${sql.join(referrerPhones.map(phone => sql`${phone}`), sql`, `)}
+              )
+            ORDER BY id DESC
+          `);
+          const records = (found[0] as unknown as Array<{
+            phoneKey: string; name: string | null; profilePhotoUrl: string | null;
+          }>) || [];
+          for (const record of records) {
+            const key = referrerPhoneKey(record.phoneKey);
+            if (!referrersByPhone.has(key)) {
+              referrersByPhone.set(key, {
+                name: record.name ?? null,
+                photoUrl: record.profilePhotoUrl ?? null,
+              });
+            }
+          }
+        } catch (error) {
+          // Foto opcional: falha nessa consulta nunca deve impedir o painel de pedidos.
+          console.warn('[listOrders] Não foi possível buscar os indicadores:', error);
+        }
+      }
+
       // Para cada acp, buscar TODO o histórico de status para dividir sub-pedidos por 'recebido'
       const ids = allAcpRows.map((r: any) => r.id);
       const idsList = ids.join(',');
@@ -4104,6 +4141,7 @@ export const appRouter = router({
       // Construir lista final de pedidos (1 entrada por sub-pedido)
       const finalOrders: any[] = [];
       for (const row of allAcpRows) {
+        const referrer = referrersByPhone.get(referrerPhoneKey(row.customerReferredByPhone));
         const history = histByRegId.get(Number(row.id)) || [];
         const subOrders = splitIntoSubOrders(history);
         if (subOrders.length === 0) {
@@ -4131,6 +4169,8 @@ export const appRouter = router({
             customerUf: row.customerUf,
             customerReferredBy: row.customerReferredBy,
             customerReferredByPhone: row.customerReferredByPhone,
+            customerReferrerName: referrer?.name ?? null,
+            customerReferrerPhotoUrl: referrer?.photoUrl ?? null,
             customerProfilePhotoUrl: row.customerProfilePhotoUrl,
             customerNumber: row.customerNumber,
             isBlocked: Number(row.isBlocked) === 1,
@@ -4209,6 +4249,8 @@ export const appRouter = router({
             customerUf: row.customerUf,
             customerReferredBy: row.customerReferredBy,
             customerReferredByPhone: row.customerReferredByPhone,
+            customerReferrerName: referrer?.name ?? null,
+            customerReferrerPhotoUrl: referrer?.photoUrl ?? null,
             customerProfilePhotoUrl: row.customerProfilePhotoUrl,
             customerNumber: row.customerNumber,
             isBlocked: Number(row.isBlocked) === 1,
