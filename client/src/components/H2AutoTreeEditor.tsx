@@ -11,7 +11,7 @@ import {
 } from "@shared/h2AutoTree";
 import {
   addConnectedStage, availableOptionKey, flowPath, flowRows, flowTitle,
-  moveFlowOption, removeFlowOption, unlinkedStages, type FlowRow,
+  moveFlowOption, removeFlowOption, unlinkedStages, orderedFlowOptions, normalizeFlowTreeOptions, type FlowRow,
 } from "@/lib/h2AutoFlowMap";
 
 type Props = { id: string; revision: number; initial?: H2AutoTree };
@@ -80,6 +80,7 @@ export default function H2AutoTreeEditor({ id, revision, initial }: Props) {
         depth: row.depth + 1,
         viaKey: index === 0 ? option.key : row.viaKey,
         viaLabel: index === 0 ? option.label : row.viaLabel,
+        parentId: index === 0 ? tree.start : row.parentId,
       })),
     }));
   }, [tree, rootNode, folded]);
@@ -386,7 +387,7 @@ export default function H2AutoTreeEditor({ id, revision, initial }: Props) {
 
   function submit() {
     if (stale) { toast.error("O ADM foi atualizado em outro lugar. Recarregue para evitar sobrescrever."); return; }
-    const parsed = h2AutoTreeSchema.safeParse(tree);
+    const parsed = h2AutoTreeSchema.safeParse(normalizeFlowTreeOptions(tree));
     if (!parsed.success) {
       toast.error(parsed.error.issues[0]?.message || "Revise as perguntas e os destinos.");
       return;
@@ -410,11 +411,28 @@ export default function H2AutoTreeEditor({ id, revision, initial }: Props) {
   );
 
 
+  function reorderInline(row: FlowRow, direction: -1 | 1) {
+    if (!row.parentId || !row.viaKey) return;
+    const parent = tree.nodes.find(node => node.id === row.parentId);
+    if (!parent) return;
+    const options = orderedFlowOptions(parent.options);
+    const from = options.findIndex(option => option.key === row.viaKey && option.next === row.id);
+    const to = from + direction;
+    if (from < 0 || to < 0 || to >= options.length) return;
+    changeNode(parent.id, node => ({
+      ...node, options: moveFlowOption(orderedFlowOptions(node.options), from, to),
+    }));
+    toast.success("Ordem alterada. Clique em SALVAR E SINCRONIZAR.");
+  }
+
   function renderMapRow(row: FlowRow, index: number, levelOffset = 0, showVia = true) {
     const node = tree.nodes.find(n => n.id === row.id);
     if (!node) return null;
     const active = selected === row.id;
     const expandable = node.options.length > 0 && !row.shared && row.depth > 0;
+    const parent = row.parentId ? tree.nodes.find(candidate => candidate.id === row.parentId) : null;
+    const siblings = orderedFlowOptions(parent?.options || []);
+    const position = siblings.findIndex(option => option.key === row.viaKey && option.next === row.id);
     const indentation = Math.min(Math.max(row.depth - levelOffset, 0), 3) * 12;
     return (
       <div key={row.id + "-" + index}
@@ -454,6 +472,21 @@ export default function H2AutoTreeEditor({ id, revision, initial }: Props) {
           )}
         </div>
         <div className="mt-3 flex flex-wrap gap-2">
+          {position >= 0 && siblings.length > 1 && (
+            <div className="flex items-center gap-2 rounded-xl border border-violet-500/35 px-2 py-1">
+              <span className="text-xs font-bold text-violet-200">ORDEM</span>
+              <button type="button" aria-label="Subir esta opção" title="Subir opção" disabled={position === 0}
+                onClick={() => reorderInline(row, -1)}
+                className="rounded-lg border border-cyan-400/40 px-3 py-2 text-sm font-black text-cyan-200 disabled:opacity-25">
+                <ArrowUp className="mr-1 inline h-4 w-4" /> SUBIR
+              </button>
+              <button type="button" aria-label="Descer esta opção" title="Descer opção" disabled={position === siblings.length - 1}
+                onClick={() => reorderInline(row, 1)}
+                className="rounded-lg border border-cyan-400/40 px-3 py-2 text-sm font-black text-cyan-200 disabled:opacity-25">
+                <ArrowDown className="mr-1 inline h-4 w-4" /> DESCER
+              </button>
+            </div>
+          )}
           {node.mode === "question" && node.id !== tree.start && (
             <button type="button" className="rounded-xl bg-violet-500 px-4 py-3 text-sm font-black text-white disabled:opacity-40"
               disabled={tree.nodes.length >= 100 || node.options.length >= 10}
@@ -528,7 +561,7 @@ export default function H2AutoTreeEditor({ id, revision, initial }: Props) {
 
           <div className="w-full min-w-0 space-y-5" aria-label="Mapa do atendimento por SIM ou NÃO">
             {rootNode && <div className="w-full rounded-2xl border border-cyan-400/30 bg-cyan-950/10 p-3 md:p-4">
-              {renderMapRow({ id: rootNode.id, depth: 0, viaKey: null, viaLabel: null, shared: false }, 0)}
+              {renderMapRow({ id: rootNode.id, depth: 0, viaKey: null, viaLabel: null, shared: false, parentId: null }, 0)}
             </div>}
             <div className="grid min-w-0 grid-cols-1 items-start gap-4 lg:grid-cols-2 lg:gap-6">
               {branches.map(branch => {
