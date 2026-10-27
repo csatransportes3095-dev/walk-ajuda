@@ -14,7 +14,7 @@ import {
   moveFlowOption, removeFlowOption, unlinkedStages, orderedFlowOptions, normalizeFlowTreeOptions, type FlowRow,
 } from "@/lib/h2AutoFlowMap";
 
-type Props = { id: string; revision: number; initial?: H2AutoTree };
+type Props = { id: string; revision: number; appliedRevision: number; initial?: H2AutoTree };
 const field = "w-full min-w-0 rounded-xl border border-cyan-500/40 bg-[#061625] px-4 py-3 text-base text-white outline-none focus:border-emerald-300";
 const card = "rounded-2xl border border-cyan-400/25 bg-[#091e30] p-4 md:p-5";
 const modeLabel: Record<H2AutoTreeNode["mode"], string> = {
@@ -26,7 +26,7 @@ const modeLabel: Record<H2AutoTreeNode["mode"], string> = {
 const newText = "📋 *NOVA PERGUNTA*\n\nEscreva aqui a pergunta para o cliente.";
 const numLabel = (key: string) => key === "10" ? "🔟" : key + "️⃣";
 
-export default function H2AutoTreeEditor({ id, revision, initial }: Props) {
+export default function H2AutoTreeEditor({ id, revision, appliedRevision, initial }: Props) {
   const utils = trpc.useUtils();
   const [tree, setTree] = useState<H2AutoTree>(() => cloneH2AutoTree(initial || H2_AUTO_TREE_DEFAULT));
   const [selected, setSelected] = useState(tree.start);
@@ -93,11 +93,11 @@ export default function H2AutoTreeEditor({ id, revision, initial }: Props) {
   const questionCount = tree.nodes.filter(n => n.mode === "question").length;
   const save = trpc.h2AutoAdmin.saveTree.useMutation({
     onSuccess: () => {
-      toast.success("Árvore salva! O APK receberá a atualização na sincronização.");
+      toast.success("SALVO NO ADM. Abra H2 Auto no celular e toque em SINCRONIZAR ADM para aplicar imediatamente.", { duration: 10000 });
       setDirty(false);
       void utils.h2AutoAdmin.list.invalidate();
     },
-    onError: error => toast.error(error.message || "Erro ao salvar a árvore."),
+    onError: error => toast.error("NÃO SALVOU: " + (error.message || "Verifique as perguntas e tente novamente.")),
   });
 
   function selectStage(stageId: string) {
@@ -389,7 +389,8 @@ export default function H2AutoTreeEditor({ id, revision, initial }: Props) {
     if (stale) { toast.error("O ADM foi atualizado em outro lugar. Recarregue para evitar sobrescrever."); return; }
     const parsed = h2AutoTreeSchema.safeParse(normalizeFlowTreeOptions(tree));
     if (!parsed.success) {
-      toast.error(parsed.error.issues[0]?.message || "Revise as perguntas e os destinos.");
+      const issue = parsed.error.issues[0];
+      toast.error("NÃO SALVOU: " + (issue?.message || "Revise as perguntas e os destinos."), { duration: 9000 });
       return;
     }
     save.mutate({ id, expectedRevision: loadedRevision.current, tree: parsed.data });
@@ -522,10 +523,17 @@ export default function H2AutoTreeEditor({ id, revision, initial }: Props) {
       </div>
 
       <div className="sticky top-0 z-20 flex flex-wrap items-center justify-between gap-3 rounded-2xl border border-emerald-400/40 bg-[#092436] p-3 shadow-xl">
-        <span className="text-sm font-semibold text-white">
-          {stale ? "⚠️ Configuração alterada no ADM. Recarregue antes de salvar."
+        <div className="space-y-1">
+          <span className="block text-sm font-semibold text-white">
+            {stale ? "⚠️ Configuração alterada no ADM. Recarregue antes de salvar."
             : dirty ? "● Alterações não salvas na árvore" : "✓ Configuração salva no ADM"}
-        </span>
+          </span>
+          <span className={"block text-xs font-bold " + (appliedRevision >= revision ? "text-emerald-200" : "text-amber-200")}>
+            {appliedRevision >= revision
+              ? "✓ O CELULAR CONFIRMOU ESTA VERSÃO"
+              : "⚠️ AINDA NÃO APLICADO NO CELULAR — Abra H2 Auto e toque em SINCRONIZAR ADM. Configuração ADM: " + revision + " / Celular: " + appliedRevision}
+          </span>
+        </div>
         <div className="flex flex-wrap items-center gap-2">
           {stale && <button type="button" onClick={resetFromServer}
             className="rounded-lg border border-amber-400/60 px-3 py-2 text-sm font-semibold text-amber-200">
