@@ -32,6 +32,15 @@ export default function H2AutoTreeEditor({ id, revision, initial }: Props) {
   const [selected, setSelected] = useState(tree.start);
   // Para telas grandes: NÃO à esquerda, SIM à direita; somente o ramo escolhido abre.
   const [focusedBranch, setFocusedBranch] = useState("1");
+  // Editor simples no proprio mapa, sem procurar formularios no rodape.
+  const [quickEditId, setQuickEditId] = useState<string | null>(null);
+  const [creatingUnder, setCreatingUnder] = useState<string | null>(null);
+  const [newMenuOption, setNewMenuOption] = useState("");
+  const [newQuestion, setNewQuestion] = useState("");
+  const [replyUnder, setReplyUnder] = useState<string | null>(null);
+  const [newReplyOption, setNewReplyOption] = useState("");
+  const [newReplyMessage, setNewReplyMessage] = useState("");
+  const [advancedOpen, setAdvancedOpen] = useState(false);
   const [test, setTest] = useState<{ current: string; stack: string[] }>({ current: tree.start, stack: [] });
   const [dirty, setDirty] = useState(false);
   const [folded, setFolded] = useState<Set<string>>(() => new Set());
@@ -46,6 +55,9 @@ export default function H2AutoTreeEditor({ id, revision, initial }: Props) {
     setTree(fresh);
     setSelected(fresh.start);
     setFocusedBranch("1");
+    setQuickEditId(null);
+    setCreatingUnder(null);
+    setReplyUnder(null);
     setExistingTarget(fresh.start);
     setTest({ current: fresh.start, stack: [] });
     setFolded(new Set());
@@ -89,9 +101,9 @@ export default function H2AutoTreeEditor({ id, revision, initial }: Props) {
 
   function selectStage(stageId: string) {
     setSelected(stageId);
-    if (typeof window !== "undefined") {
-      window.requestAnimationFrame(() => editRef.current?.scrollIntoView({ behavior: "smooth", block: "start" }));
-    }
+    setCreatingUnder(null);
+    setReplyUnder(null);
+    setQuickEditId(previous => previous === stageId ? null : stageId);
   }
 
   function changeNode(stageId: string, transform: (node: H2AutoTreeNode) => H2AutoTreeNode) {
@@ -118,6 +130,203 @@ export default function H2AutoTreeEditor({ id, revision, initial }: Props) {
     } catch (error) {
       toast.error(error instanceof Error ? error.message : "Não foi possível criar a etapa.");
     }
+  }
+
+  function openNewQuestion(parentId: string) {
+    const parent = tree.nodes.find(node => node.id === parentId);
+    if (!parent || parent.mode !== "question") {
+      toast.error("Esta etapa nao recebe perguntas. Escolha um menu com respostas.");
+      return;
+    }
+    if (tree.nodes.length >= 100 || !availableOptionKey(parent.options)) {
+      toast.error("Limite de perguntas ou respostas atingido.");
+      return;
+    }
+    setCreatingUnder(parentId);
+    setQuickEditId(null);
+    setReplyUnder(null);
+    setNewMenuOption("");
+    setNewQuestion("");
+  }
+
+  function createQuestionInline(parentId: string) {
+    const parent = tree.nodes.find(node => node.id === parentId);
+    const label = newMenuOption.trim();
+    const text = newQuestion.trim();
+    if (!parent || parent.mode !== "question") {
+      toast.error("Selecione um menu que recebe perguntas.");
+      return;
+    }
+    const key = availableOptionKey(parent.options);
+    if (!key || tree.nodes.length >= 100) {
+      toast.error("Este menu nao permite mais perguntas.");
+      return;
+    }
+    if (!label || !text) {
+      toast.error("Preencha o nome da opcao e o texto da pergunta.");
+      return;
+    }
+    if (label.length > 160 || text.length > 1800) {
+      toast.error("O texto da pergunta ultrapassou o limite.");
+      return;
+    }
+    const newStageId = newId();
+    setTree(previous => ({
+      ...previous,
+      nodes: [...previous.nodes.map(node =>
+        node.id === parentId
+          ? { ...node, options: [...node.options, { key, label, next: newStageId }] }
+          : node
+      ), { id: newStageId, mode: "question" as const, text, options: [] }],
+    }));
+    setFolded(previous => {
+      const next = new Set(previous);
+      next.delete(parentId);
+      return next;
+    });
+    setDirty(true);
+    setSelected(newStageId);
+    setQuickEditId(newStageId);
+    setCreatingUnder(null);
+    setNewMenuOption("");
+    setNewQuestion("");
+    toast.success("Pergunta criada neste caminho. Agora adicione as respostas.");
+  }
+
+  function createReplyInline(parentId: string) {
+    const parent = tree.nodes.find(node => node.id === parentId);
+    const label = newReplyOption.trim();
+    const message = newReplyMessage.trim();
+    if (!parent || parent.mode !== "question") return;
+    if (!label || !message) {
+      toast.error("Preencha a resposta e a mensagem que o cliente recebe.");
+      return;
+    }
+    if (label.length > 160 || message.length > 1800) {
+      toast.error("O texto ultrapassou o limite.");
+      return;
+    }
+    const key = availableOptionKey(parent.options);
+    if (!key || tree.nodes.length >= 100) {
+      toast.error("Limite de respostas ou etapas atingido.");
+      return;
+    }
+    const nextId = newId();
+    setTree(previous => ({
+      ...previous,
+      nodes: [...previous.nodes.map(node =>
+        node.id === parentId
+          ? { ...node, options: [...node.options, { key, label, next: nextId }] }
+          : node
+      ), { id: nextId, mode: "end" as const, text: message, options: [] }],
+    }));
+    setDirty(true);
+    setReplyUnder(null);
+    setNewReplyOption("");
+    setNewReplyMessage("");
+    toast.success("Resposta adicionada. Voce pode criar outra.");
+  }
+
+  function quickEditNode(node: H2AutoTreeNode) {
+    if (quickEditId !== node.id) return null;
+    return (
+      <div className="mt-3 min-w-0 space-y-4 rounded-2xl border border-emerald-400/45 bg-[#0b2633] p-3 md:p-4">
+        <div className="flex flex-wrap items-center justify-between gap-2">
+          <span className="font-black text-emerald-200">✏️ EDITAR AQUI — {flowTitle(node, tree.start)}</span>
+          <button type="button" className="rounded-lg border border-slate-400/40 px-3 py-2 text-xs font-bold text-slate-200"
+            onClick={() => { setQuickEditId(null); setReplyUnder(null); }}>FECHAR</button>
+        </div>
+        <label className="block space-y-2 text-sm font-bold text-cyan-100">
+          {node.mode === "question" ? "PERGUNTA QUE O CLIENTE RECEBE" : "MENSAGEM QUE O CLIENTE RECEBE"}
+          <textarea className={field + " min-h-[115px] font-sans"} rows={4} maxLength={1800}
+            value={node.text}
+            onChange={event => changeNode(node.id, previous => ({ ...previous, text: event.target.value }))} />
+        </label>
+        {node.mode === "question" && (
+          <div className="space-y-3">
+            <h5 className="font-black text-violet-200">RESPOSTAS DESTA PERGUNTA</h5>
+            {node.options.map(option => (
+              <div key={option.key} className="space-y-2 rounded-xl border border-violet-400/25 bg-[#071827] p-3">
+                <label className="block space-y-1.5 text-sm font-semibold text-white">
+                  {numLabel(option.key)} O CLIENTE ESCOLHE
+                  <input className={field} value={option.label} maxLength={160}
+                    onChange={event => changeNode(node.id, old => ({
+                      ...old, options: old.options.map(answer =>
+                        answer.key === option.key ? { ...answer, label: event.target.value } : answer),
+                    }))} />
+                </label>
+                <button type="button" className="rounded-lg border border-cyan-500/50 px-3 py-2 text-xs font-black text-cyan-200"
+                  onClick={() => { setQuickEditId(option.next); setSelected(option.next); }}>
+                  ✏️ EDITAR MENSAGEM SEGUINTE
+                </button>
+              </div>
+            ))}
+            {node.options.length === 0 && <p className="text-sm text-amber-200">Ainda nao tem respostas. Adicione a primeira abaixo.</p>}
+            <button type="button" className="w-full rounded-xl bg-violet-500 px-4 py-3 text-sm font-black text-white disabled:opacity-40"
+              disabled={node.options.length >= 10 || tree.nodes.length >= 100}
+              onClick={() => { setReplyUnder(node.id); setNewReplyOption(""); setNewReplyMessage(""); }}>
+              <Plus className="mr-1 inline h-4 w-4" /> ADICIONAR RESPOSTA
+            </button>
+            {replyUnder === node.id && (
+              <div className="space-y-3 rounded-xl border border-violet-400/45 bg-violet-950/20 p-4">
+                <label className="block space-y-2 text-sm font-bold text-violet-100">
+                  RESPOSTA DO CLIENTE (EX.: SIM OU NAO)
+                  <input className={field} maxLength={160} value={newReplyOption}
+                    placeholder="Ex.: SIM" onChange={event => setNewReplyOption(event.target.value)} />
+                </label>
+                <label className="block space-y-2 text-sm font-bold text-violet-100">
+                  MENSAGEM QUE SERA ENVIADA DEPOIS DA RESPOSTA
+                  <textarea className={field} rows={3} maxLength={1800} value={newReplyMessage}
+                    placeholder="Escreva a mensagem que o cliente vai receber."
+                    onChange={event => setNewReplyMessage(event.target.value)} />
+                </label>
+                <div className="flex flex-wrap gap-2">
+                  <button type="button" className="rounded-xl bg-violet-500 px-4 py-3 font-black"
+                    onClick={() => createReplyInline(node.id)}>CRIAR RESPOSTA</button>
+                  <button type="button" className="rounded-xl border border-slate-400/30 px-4 py-3"
+                    onClick={() => setReplyUnder(null)}>CANCELAR</button>
+                </div>
+              </div>
+            )}
+          </div>
+        )}
+        {node.id !== tree.start && node.mode === "question" && (
+          <button type="button" className="w-full rounded-xl border border-emerald-400/60 px-4 py-3 text-sm font-black text-emerald-200"
+            onClick={() => openNewQuestion(node.id)}>
+            <Plus className="mr-1 inline h-4 w-4" /> CRIAR OUTRA PERGUNTA NESTE MENU
+          </button>
+        )}
+        <p className="text-xs text-emerald-200/80">Para publicar suas mudancas, clique em SALVAR E SINCRONIZAR no topo.</p>
+      </div>
+    );
+  }
+
+  function quickAddForm(parentId: string) {
+    if (creatingUnder !== parentId) return null;
+    return (
+      <div className="mt-3 space-y-3 rounded-2xl border-2 border-violet-400/60 bg-[#1a153a] p-4">
+        <h5 className="text-lg font-black text-white">➕ NOVA PERGUNTA NESTE CAMINHO</h5>
+        <p className="text-sm text-violet-100">So dois campos. A pergunta entra neste menu, sem mudar as outras opcoes.</p>
+        <label className="block space-y-2 text-sm font-bold text-white">
+          1. NOME DA NOVA OPCAO NO MENU
+          <input className={field} value={newMenuOption} maxLength={160}
+            placeholder="Ex.: Tenho uma duvida"
+            onChange={event => setNewMenuOption(event.target.value)} />
+        </label>
+        <label className="block space-y-2 text-sm font-bold text-white">
+          2. QUAL PERGUNTA O CLIENTE VAI RECEBER?
+          <textarea className={field} rows={3} maxLength={1800} value={newQuestion}
+            placeholder="Ex.: Voce possui um indicador?"
+            onChange={event => setNewQuestion(event.target.value)} />
+        </label>
+        <div className="flex flex-wrap gap-2">
+          <button type="button" className="rounded-xl bg-emerald-400 px-5 py-3 font-black text-[#052016]"
+            onClick={() => createQuestionInline(parentId)}>CRIAR PERGUNTA</button>
+          <button type="button" className="rounded-xl border border-slate-400/40 px-4 py-3 text-white"
+            onClick={() => setCreatingUnder(null)}>CANCELAR</button>
+        </div>
+      </div>
+    );
   }
 
   function newDestination(parentId: string, answerIndex: number) {
@@ -244,6 +453,19 @@ export default function H2AutoTreeEditor({ id, revision, initial }: Props) {
             </button>
           )}
         </div>
+        <div className="mt-3 flex flex-wrap gap-2">
+          {node.mode === "question" && node.id !== tree.start && (
+            <button type="button" className="rounded-xl bg-violet-500 px-4 py-3 text-sm font-black text-white disabled:opacity-40"
+              disabled={tree.nodes.length >= 100 || node.options.length >= 10}
+              onClick={() => openNewQuestion(node.id)}>
+              <Plus className="mr-1 inline h-4 w-4" /> CRIAR PERGUNTA AQUI
+            </button>
+          )}
+          <button type="button" className="rounded-xl border border-cyan-400/50 px-4 py-3 text-sm font-bold text-cyan-100"
+            onClick={() => selectStage(node.id)}>✏️ EDITAR AQUI</button>
+        </div>
+        {quickAddForm(node.id)}
+        {quickEditNode(node)}
       </div>
     );
   }
@@ -256,8 +478,7 @@ export default function H2AutoTreeEditor({ id, revision, initial }: Props) {
             <GitBranch className="h-7 w-7" /> ÁRVORE DE ATENDIMENTO
           </h3>
           <p className="max-w-4xl text-sm leading-relaxed text-slate-300">
-            Veja onde cada pergunta está posicionada. Clique em um caminho para editar
-            e use <strong className="text-emerald-300">CRIAR PRÓXIMA ETAPA</strong> para continuar exatamente naquela resposta.
+            Escolha SIM ou NÃO, encontre o menu e clique em <strong className="text-violet-300">CRIAR PERGUNTA AQUI</strong>. Tudo é editado no próprio caminho.
           </p>
         </div>
         <label className="flex items-center gap-3 rounded-xl border border-emerald-400/30 bg-emerald-900/20 px-4 py-3 text-sm font-bold text-emerald-200">
@@ -288,7 +509,7 @@ export default function H2AutoTreeEditor({ id, revision, initial }: Props) {
               <h4 className="flex items-center gap-2 text-lg font-black text-cyan-300">
                 <MapIcon className="h-5 w-5" /> 1. MAPA DO ATENDIMENTO
               </h4>
-              <p className="mt-1 text-sm text-slate-300">No computador, NÃO fica à esquerda e SIM à direita. Clique na opção para abrir apenas o caminho escolhido.</p>
+              <p className="mt-1 text-sm text-slate-300">Selecione SIM ou NÃO. Para adicionar uma pergunta, use o botão roxo CRIAR PERGUNTA AQUI dentro do caminho.</p>
             </div>
           </div>
           <div className="flex flex-wrap gap-2 text-xs">
@@ -343,7 +564,11 @@ export default function H2AutoTreeEditor({ id, revision, initial }: Props) {
           )}
         </aside>
 
-        <div className={card + " w-full min-w-0 scroll-mt-28 space-y-5"} ref={editRef}>
+        <button type="button" onClick={() => setAdvancedOpen(value => !value)}
+          className="w-full rounded-xl border border-slate-400/30 bg-[#071827] px-4 py-3 text-left text-sm font-bold text-slate-300">
+          {advancedOpen ? "OCULTAR CONFIGURACOES AVANCADAS" : "⚙️ CONFIGURACOES AVANCADAS (OPCIONAL)"}
+        </button>
+        {advancedOpen && <div className={card + " w-full min-w-0 scroll-mt-28 space-y-5"} ref={editRef}>
           {selectedNode && (
             <>
               <div className="flex flex-wrap items-start justify-between gap-3">
@@ -549,7 +774,7 @@ export default function H2AutoTreeEditor({ id, revision, initial }: Props) {
               </details>
             </>
           )}
-        </div>
+        </div>}
       </div>
 
       <section className={card + " w-full min-w-0 space-y-4"}>
