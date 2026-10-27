@@ -22,6 +22,7 @@ const modeLabel: Record<H2AutoTreeNode["mode"], string> = {
   end: "Encerrar este caminho",
   human: "Encaminhar para atendente",
   order: "Consultar pedidos do sistema",
+  referral: "Consultar minhas indicações e comissões (com e-mail confirmado)",
 };
 const newText = "📋 *NOVA PERGUNTA*\n\nEscreva aqui a pergunta para o cliente.";
 const numLabel = (key: string) => key === "10" ? "🔟" : key + "️⃣";
@@ -815,7 +816,7 @@ export default function H2AutoTreeEditor({ id, revision, appliedRevision, initia
                   <div>
                     <p className="font-black text-emerald-200">{modeLabel[selectedNode.mode]}</p>
                     <p className="mt-1 text-sm leading-relaxed text-slate-300">
-                      {selectedNode.mode === "order"
+                      {(selectedNode.mode === "order" || selectedNode.mode === "referral")
                         ? "Esta etapa usa a consulta autenticada de pedidos do H2 Colombiano. Não precisa criar opções manuais para essa consulta."
                         : selectedNode.mode === "human"
                           ? "O cliente passa para o atendimento humano. MENU permite retornar ao fluxo automático."
