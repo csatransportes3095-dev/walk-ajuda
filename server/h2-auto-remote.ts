@@ -62,9 +62,18 @@ const mediaSchema = z.object({
   cooldownSeconds: z.number().int().min(15).max(3600).default(120),
   maxAudioSeconds: z.number().int().min(5).max(120).default(30),
 });
+const confirmationSchema = z.object({
+  phonePrompt: z.string().max(2000).default("💰 *MINHAS INDICAÇÕES*\n\nPara proteger seus dados, confirme sua identidade.\nInforme o telefone cadastrado com DDD.\n\nDigite 0 para voltar."),
+  phoneInvalid: z.string().max(600).default("Informe um telefone válido com DDD, somente números. Digite 0 para voltar."),
+  phoneNotFound: z.string().max(1000).default("Não encontramos cadastro com esse telefone."),
+  codeSent: z.string().max(1500).default("Código enviado ao e-mail cadastrado. Informe os 6 números recebidos."),
+  codePrompt: z.string().max(600).default("Informe os 6 números recebidos no e-mail. Digite 0 para voltar."),
+  codeInvalid: z.string().max(600).default("Código inválido ou expirado. Digite 0 para voltar."),
+});
 const configSchema = z.object({
   tree: h2AutoTreeSchema.optional(),
   media: mediaSchema.default(() => mediaSchema.parse({})),
+  confirmation: confirmationSchema.default(() => confirmationSchema.parse({})),
   enabled: z.boolean(),
   identificationEnabled: z.boolean().default(true),
   ordersEnabled: z.boolean().default(false),
@@ -99,6 +108,7 @@ const configSchema = z.object({
 type RemoteConfig = z.infer<typeof configSchema>;
 const initial: RemoteConfig = {
   media: mediaSchema.parse({}),
+  confirmation: confirmationSchema.parse({}),
   ordersEnabled: false,
   orderSessionHours: 24,
   orderCodeTtlMinutes: 10,
@@ -199,6 +209,7 @@ function mergeWithoutDeleting(
       ...local,
       tree: remote.tree ?? local.tree,
       media: remote.media,
+      confirmation: remote.confirmation,
       ordersEnabled: remote.ordersEnabled,
       orderSessionHours: remote.orderSessionHours,
       orderCodeTtlMinutes: remote.orderCodeTtlMinutes,

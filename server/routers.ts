@@ -1408,32 +1408,14 @@ export const appRouter = router({
     update: adminProcedure
       .input(z.object({ settings: z.record(z.string(), z.string()) }))
       .mutation(async ({ input }) => {
-        const settings = { ...input.settings };
-        const confirmationTextLimits: Record<string, number> = {
-          password_gate_phone_title: 160,
-          password_gate_phone_description: 300,
-          password_gate_email_title: 160,
-          password_gate_email_description: 500,
-          password_gate_email_code_title: 160,
-          password_gate_email_code_description: 300,
-        };
-        for (const [key, max] of Object.entries(confirmationTextLimits)) {
-          if (settings[key] !== undefined) {
-            const value = settings[key].trim();
-            if (value.length > max) {
-              throw new TRPCError({ code: "BAD_REQUEST", message: `O texto de ${key} ultrapassa o limite permitido.` });
-            }
-            settings[key] = value;
-          }
-        }
         // Formata numero do WhatsApp para garantir que tenha codigo do pais (55)
-        if (settings.whatsapp_number) {
-          const digits = settings.whatsapp_number.replace(/\D/g, '');
+        if (input.settings.whatsapp_number) {
+          const digits = input.settings.whatsapp_number.replace(/\D/g, '');
           if (digits && !digits.startsWith('55')) {
-            settings.whatsapp_number = '55' + digits;
+            input.settings.whatsapp_number = '55' + digits;
           }
         }
-        await upsertSettings(settings);
+        await upsertSettings(input.settings);
         return { success: true };
       }),
 

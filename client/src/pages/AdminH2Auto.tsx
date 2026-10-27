@@ -25,6 +25,15 @@ const Box = ({ children }: { children: React.ReactNode }) => (
   </div>
 );
 
+const confirmationDefaults = {
+  phonePrompt: "💰 *MINHAS INDICAÇÕES*\n\nPara proteger seus dados, confirme sua identidade.\nInforme o telefone cadastrado com DDD.\n\nDigite 0 para voltar.",
+  phoneInvalid: "Informe um telefone válido com DDD, somente números. Digite 0 para voltar.",
+  phoneNotFound: "Não encontramos cadastro com esse telefone.",
+  codeSent: "Código enviado ao e-mail cadastrado. Informe os 6 números recebidos.",
+  codePrompt: "Informe os 6 números recebidos no e-mail. Digite 0 para voltar.",
+  codeInvalid: "Código inválido ou expirado. Digite 0 para voltar.",
+};
+
 const mediaDefaults = {
   enabled: false,
   transcribeAudio: false,
@@ -248,6 +257,10 @@ export default function AdminH2Auto() {
           const value = draft?.config || d.config;
           const expectedRevision = draft?.revision ?? d.revision;
           const media = { ...mediaDefaults, ...(value.media || {}) };
+          const confirmation = { ...confirmationDefaults, ...(value.confirmation || {}) };
+          const confirmation = { ...confirmationDefaults, ...(value.confirmation || {}) };
+          const confirmation = { ...confirmationDefaults, ...(value.confirmation || {}) };
+          const confirmation = { ...confirmationDefaults, ...(value.confirmation || {}) };
           const mediaDirty =
             Boolean(draft) &&
             JSON.stringify(media) !==
@@ -546,6 +559,33 @@ export default function AdminH2Auto() {
                   Consulta de pedidos por WhatsApp (exige APK atualizado e
                   teste)
                 </label>
+                <div className="col-span-full rounded-xl border border-violet-400/30 bg-violet-950/20 p-3 space-y-3">
+                  <h4 className="font-black text-violet-200">
+                    TEXTOS DE CONFIRMAÇÃO — H2 AUTO
+                  </h4>
+                  <p className="text-xs text-slate-300">
+                    Estes campos já aparecem preenchidos com os textos atuais do H2 AUTO. Edite e salve para o APK usar as novas mensagens nas etapas de telefone e código por e-mail.
+                  </p>
+                  {([
+                    ["phonePrompt", "Pedido do telefone / confirmação de identidade"],
+                    ["phoneInvalid", "Telefone inválido"],
+                    ["phoneNotFound", "Telefone não encontrado"],
+                    ["codeSent", "Código enviado para o e-mail"],
+                    ["codePrompt", "Pedido do código recebido por e-mail"],
+                    ["codeInvalid", "Código inválido ou expirado"],
+                  ] as const).map(([key, label]) => (
+                    <label key={key} className="block text-xs">
+                      {label}
+                      <textarea
+                        rows={key === "phonePrompt" ? 4 : 2}
+                        maxLength={2000}
+                        className={field}
+                        value={confirmation[key]}
+                        onChange={e => change("confirmation", { ...confirmation, [key]: e.target.value })}
+                      />
+                    </label>
+                  ))}
+                </div>
                 <div className="col-span-full rounded-xl border border-cyan-400/30 bg-cyan-950/20 p-3 space-y-3">
                   <h4 className="font-black text-cyan-300">
                     INTEGRAÇÃO COM PEDIDOS DO SITE

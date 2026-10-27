@@ -207,13 +207,6 @@ export default function PasswordGate({ children }: PasswordGateProps) {
       retry: 2,                         // falha transitória não pode virar logout
     }
   );
-  const { data: siteSettings } = trpc.settings.getAll.useQuery(undefined, { staleTime: 30_000 });
-  const phoneStepTitle = siteSettings?.password_gate_phone_title || "Identifique-se para acessar";
-  const phoneStepDescription = siteSettings?.password_gate_phone_description || "Digite seu telefone com DDD para continuar";
-  const emailStepTitle = siteSettings?.password_gate_email_title || "Confirme seu e-mail";
-  const emailStepDescription = siteSettings?.password_gate_email_description || "Enviaremos um código de 6 números para confirmar este e-mail antes de continuar.";
-  const emailCodeStepTitle = siteSettings?.password_gate_email_code_title || "Código de confirmação";
-  const emailCodeStepDescription = siteSettings?.password_gate_email_code_description || "Digite o código de 6 números enviado para confirmar seu e-mail.";
   const [cpwdNewPassword, setCpwdNewPassword] = useState("");
   const [cpwdConfirmPassword, setCpwdConfirmPassword] = useState("");
   const [cpwdShowNew, setCpwdShowNew] = useState(false);
@@ -1714,8 +1707,8 @@ export default function PasswordGate({ children }: PasswordGateProps) {
 
               {/* Instrução de acesso */}
               <div className="bg-white/5 border border-white/10 rounded-xl px-4 py-3 text-center">
-                <p className="text-white/90 text-sm font-semibold">{phoneStepTitle}</p>
-                <p className="text-white/50 text-xs mt-0.5">{phoneStepDescription}</p>
+                <p className="text-white/90 text-sm font-semibold">Identifique-se para acessar</p>
+                <p className="text-white/50 text-xs mt-0.5">Digite seu telefone com DDD para continuar</p>
               </div>
 
               {/* Campo Telefone */}
@@ -2044,8 +2037,8 @@ export default function PasswordGate({ children }: PasswordGateProps) {
           {gateStep === "email" && (
             <form onSubmit={handleEmailSubmit} className="space-y-5">
               <div className="bg-white/5 border border-white/10 rounded-xl px-4 py-3 text-center">
-                <p className="text-white/90 text-sm font-semibold">{emailStepTitle}</p>
-                <p className="text-white/50 text-xs mt-1">{emailStepDescription}</p>
+                <p className="text-white/90 text-sm font-semibold">Confirme seu e-mail</p>
+                <p className="text-white/50 text-xs mt-1">Enviaremos um código de 6 números para confirmar este e-mail antes de continuar.</p>
               </div>
               <div>
                 <label className="block text-xs font-bold text-white/60 mb-2 uppercase tracking-widest flex items-center gap-1.5">
@@ -2088,9 +2081,8 @@ export default function PasswordGate({ children }: PasswordGateProps) {
               </div>
               <div>
                 <label className="block text-xs font-bold text-white/60 mb-2 uppercase tracking-widest text-center">
-                  {emailCodeStepTitle}
+                  Código de confirmação
                 </label>
-                <p className="text-white/50 text-xs mb-2 text-center">{emailCodeStepDescription}</p>
                 <input
                   type="text"
                   inputMode="numeric"
