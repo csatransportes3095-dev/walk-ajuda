@@ -314,6 +314,7 @@ export default function Home() {
 
   const [isSubmitting, setIsSubmitting] = useState(false);
   const [submitProgress, setSubmitProgress] = useState('');
+  const [submitFailure, setSubmitFailure] = useState('');
   const [showFaqModal, setShowFaqModal] = useState(false);
   const [faqOpenIndex, setFaqOpenIndex] = useState<number | null>(null);
   const [whatsappClicked, setWhatsappClicked] = useState(false);
@@ -1528,21 +1529,26 @@ export default function Home() {
 
   const handleFinalSubmit = async () => {
     if (submitLockRef.current || isSubmitting) return;
+    setSubmitFailure('');
+    const reportSubmitFailure = (message: string, options?: { duration?: number }) => {
+      setSubmitFailure(message);
+      toast.error(message, options);
+    };
     submitLockRef.current = true;
 
-    if (!clientName.trim()) { toast.error('Preencha seu nome completo'); submitLockRef.current = false; return; }
-    if (!clientPhone.trim()) { toast.error('Preencha seu telefone'); submitLockRef.current = false; return; }
-    if (!clientCity.trim()) { toast.error('Preencha sua cidade'); submitLockRef.current = false; return; }
-    if (!clientEmail.trim()) { toast.error('Preencha seu email para receber atualizações do pedido'); submitLockRef.current = false; return; }
+    if (!clientName.trim()) { reportSubmitFailure('Preencha seu nome completo'); submitLockRef.current = false; return; }
+    if (!clientPhone.trim()) { reportSubmitFailure('Preencha seu telefone'); submitLockRef.current = false; return; }
+    if (!clientCity.trim()) { reportSubmitFailure('Preencha sua cidade'); submitLockRef.current = false; return; }
+    if (!clientEmail.trim()) { reportSubmitFailure('Preencha seu email para receber atualizações do pedido'); submitLockRef.current = false; return; }
     const emailRegex = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
-    if (!emailRegex.test(clientEmail.trim())) { toast.error('Digite um email válido'); submitLockRef.current = false; return; }
+    if (!emailRegex.test(clientEmail.trim())) { reportSubmitFailure('Digite um email válido'); submitLockRef.current = false; return; }
     if (!restoredFileUrls.paymentProof) {
       const message = paymentProofUploadState === 'uploading' || paymentProofUploadState === 'preparing'
         ? 'Aguarde o envio do comprovante terminar.'
         : paymentProofUploadState === 'failed'
           ? (paymentProofUploadError || 'O comprovante ainda não foi enviado. Toque em “Tentar enviar novamente”.')
           : 'Envie o comprovante de pagamento PIX';
-      toast.error(message);
+      reportSubmitFailure(message);
       submitLockRef.current = false;
       return;
     }
@@ -1587,7 +1593,7 @@ export default function Home() {
       for (const q of activeFlowQuestions) {
         const hasAudio = q.fieldType === 'audio' && !!questionAudioAnswers[q.id];
         if (q.isRequired === 1 && !(hasAudio || questionAnswers[q.id]?.trim())) {
-          toast.error(`Responda: ${q.question}`);
+          reportSubmitFailure(`Responda: ${q.question}`);
           submitLockRef.current = false;
           return;
         }
@@ -1599,7 +1605,7 @@ export default function Home() {
       for (const doc of dynamicDocs) {
         // Aceitar File local OU URL já salva no servidor
         if (!docFiles[doc.id] && !restoredFileUrls.dynamicDocs[doc.id]) {
-          toast.error(`Envie o documento: ${doc.label}`);
+          reportSubmitFailure(`Envie o documento: ${doc.label}`);
           submitLockRef.current = false;
           return;
         }
@@ -1607,12 +1613,12 @@ export default function Home() {
     } else {
       const reqSource = selectedOption || selectedProduct;
       if (!isPDFOnly) {
-        if (reqSource?.requireProfilePhoto === 1 && !profilePhoto && !restoredFileUrls.profilePhoto) { toast.error('Selecione a foto de perfil'); submitLockRef.current = false; return; }
-        if (reqSource?.requireCarDocument === 1 && !carDocument && !restoredFileUrls.carDocument) { toast.error('Selecione o documento do carro'); submitLockRef.current = false; return; }
-        if (reqSource?.requireAlvara === 1 && !alvaraFile && !restoredFileUrls.alvara) { toast.error('Selecione o Alvará'); submitLockRef.current = false; return; }
-        if (reqSource?.requireCondutaxi === 1 && !condutaxiFile && !restoredFileUrls.condutaxi) { toast.error('Selecione o Condutaxi'); submitLockRef.current = false; return; }
+        if (reqSource?.requireProfilePhoto === 1 && !profilePhoto && !restoredFileUrls.profilePhoto) { reportSubmitFailure('Selecione a foto de perfil'); submitLockRef.current = false; return; }
+        if (reqSource?.requireCarDocument === 1 && !carDocument && !restoredFileUrls.carDocument) { reportSubmitFailure('Selecione o documento do carro'); submitLockRef.current = false; return; }
+        if (reqSource?.requireAlvara === 1 && !alvaraFile && !restoredFileUrls.alvara) { reportSubmitFailure('Selecione o Alvará'); submitLockRef.current = false; return; }
+        if (reqSource?.requireCondutaxi === 1 && !condutaxiFile && !restoredFileUrls.condutaxi) { reportSubmitFailure('Selecione o Condutaxi'); submitLockRef.current = false; return; }
       } else {
-        if (!carDocument && !restoredFileUrls.carDocument) { toast.error('Selecione o documento PDF'); submitLockRef.current = false; return; }
+        if (!carDocument && !restoredFileUrls.carDocument) { reportSubmitFailure('Selecione o documento PDF'); submitLockRef.current = false; return; }
       }
     }
 
@@ -1628,7 +1634,7 @@ export default function Home() {
       const cpTokenForSubmit = localStorage.getItem('cp_token') || '';
       // Verificar se tem alguma forma de autenticação válida
       if (!accessCode && !cpTokenForSubmit) {
-        toast.error('Sessão expirada. Faça login novamente.');
+        reportSubmitFailure('Sessão expirada. Faça login novamente.');
         localStorage.removeItem('walk_access_granted');
         localStorage.removeItem('walk_access_code');
         localStorage.removeItem('walk_access_type');
@@ -1868,7 +1874,7 @@ export default function Home() {
           }
         }
         if (successCount !== cartItems.length) {
-          toast.error('Nem todos os pedidos foram registrados. Nada foi confirmado como concluído; tente novamente.');
+          reportSubmitFailure('Nem todos os pedidos foram registrados. Nada foi confirmado como concluído; tente novamente.');
           setIsSubmitting(false);
           submitLockRef.current = false;
           return;
@@ -2042,7 +2048,7 @@ export default function Home() {
         submitLockRef.current = false;
         return;
       } else {
-        toast.error(result.message || (result.success
+        reportSubmitFailure(result.message || (result.success
           ? 'O servidor não confirmou o registro do pedido. Tente novamente.'
           : 'Erro ao enviar'));
       }
@@ -2050,18 +2056,18 @@ export default function Home() {
       console.error('Erro no envio:', error);
       const msg = error?.message || 'Erro ao enviar. Tente novamente.';
       if (msg.includes('Timeout') || msg.includes('timeout') || msg.includes('network') || msg.includes('Network')) {
-        toast.error('Conexão lenta. Verifique sua internet e tente novamente.', { duration: 6000 });
+        reportSubmitFailure('Conexão lenta. Verifique sua internet e tente novamente.', { duration: 6000 });
       } else if (msg === 'UPLOAD_FAILED') {
-        toast.error('Não foi possível enviar um documento. Mantenha a tela aberta e tente reenviar o arquivo indicado.', { duration: 9000 });
+        reportSubmitFailure('Não foi possível enviar um documento. Mantenha a tela aberta e tente reenviar o arquivo indicado.', { duration: 9000 });
       } else if (msg === 'PROOF_NOT_UPLOADED') {
-        toast.error('O comprovante ainda não foi confirmado no servidor. Toque em “Tentar enviar novamente”.', { duration: 8000 });
+        reportSubmitFailure('O comprovante ainda não foi confirmado no servidor. Toque em “Tentar enviar novamente”.', { duration: 8000 });
       } else if (msg.includes('ler arquivo') || msg.includes('Leitura') || msg.includes('cancelada')) {
         // Limpar o comprovante para forçar nova seleção
         setPaymentProof(null);
         setPaymentProofPreview(null);
-        toast.error('Não foi possível ler o arquivo. Por favor, selecione o comprovante novamente.', { duration: 8000 });
+        reportSubmitFailure('Não foi possível ler o arquivo. Por favor, selecione o comprovante novamente.', { duration: 8000 });
       } else {
-        toast.error(msg, { duration: 6000 });
+        reportSubmitFailure(msg, { duration: 6000 });
       }
     } finally {
       setIsSubmitting(false);
@@ -4513,6 +4519,11 @@ export default function Home() {
                     <div className="h-full rounded-full animate-shimmer-bar" />
                   </div>
                   <p className="text-white/40 text-xs text-center">Por favor, aguarde. Isso pode levar alguns segundos...</p>
+                </div>
+              )}
+              {submitFailure && !isSubmitting && (
+                <div role="alert" aria-live="assertive" className="mb-3 rounded-xl border-2 border-red-400 bg-red-950 px-4 py-3 text-sm font-bold text-white">
+                  ⚠️ NÃO FOI POSSÍVEL FINALIZAR: {submitFailure}
                 </div>
               )}
               {/* Botão FINALIZAR — pulsa neon verde somente quando comprovante carregado */}
