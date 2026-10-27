@@ -175,7 +175,7 @@ export function registerH2AutoAccessRoutes(app: Express): void {
       // Only explicit expiry, account revocation or device unpairing can reset it.
       if (s.stage === "customer" || s.stage === "new") {
         const allowed = s.stage === "customer" ? await activeCustomerBinding(s) : await activeReferralBinding(s);
-        if (allowed && Number(s.expires_at)>now && now-Number(s.updated_at)<accessLifetime) {
+        if (allowed && Number(s.expires_at)>0 && Number(s.updated_at)<=now && now-Number(s.updated_at)<accessLifetime) {
           return respond(res,200,verified(s.stage));
         }
         await update(sessionId, sql`stage='choice',customer_id=NULL,referrer_id=NULL,
