@@ -258,9 +258,6 @@ export default function AdminH2Auto() {
           const expectedRevision = draft?.revision ?? d.revision;
           const media = { ...mediaDefaults, ...(value.media || {}) };
           const confirmation = { ...confirmationDefaults, ...(value.confirmation || {}) };
-          const confirmation = { ...confirmationDefaults, ...(value.confirmation || {}) };
-          const confirmation = { ...confirmationDefaults, ...(value.confirmation || {}) };
-          const confirmation = { ...confirmationDefaults, ...(value.confirmation || {}) };
           const mediaDirty =
             Boolean(draft) &&
             JSON.stringify(media) !==
