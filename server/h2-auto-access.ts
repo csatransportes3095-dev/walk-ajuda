@@ -23,8 +23,8 @@ const otpHash = (session: string, code: string) => {
 const respond = (res: Response, status: number, body: object) =>
   res.status(status).set("Cache-Control", "no-store").json(body);
 const initialMessage = "⚡ *H2 COLOMBIANO* 🇨🇴\n🤖 *CENTRAL DE ATENDIMENTO*\n\n👋 Olá! Seja bem-vindo!\n\n🔐 Para sua segurança,\nprecisamos identificar\nse você já é nosso cliente.\n\n1️⃣ *SIM, JÁ SOU CLIENTE*\n2️⃣ *NÃO SOU CLIENTE*\n\n⌨️ Digite *1* ou *2*.\n🔙 *MENU* para início.\n━━━━━━━━━━━━━━━━\n🛡️ *EQUIPE H2 COLOMBIANO* 🇨🇴";
-const phoneMessage = "✅ *JÁ SOU CLIENTE*\n\n📱 Informe o telefone\ncadastrado no H2 Colombiano,\ncom DDD, para confirmar\nsua identidade.";
-const referrerMessage = "🆕 *NOVO CLIENTE*\n\n🇨🇴 Atendemos somente\npor indicação.\n\n📱 Informe o telefone\ncom DDD de quem\nindicou você.";
+const phoneMessage = "✅ *JÁ SOU CLIENTE*\n\n📱 Informe o telefone\ncadastrado no H2 Colombiano,\ncom DDD, para confirmar\nsua identidade.\n\n🔙 Digite *0* ou *MENU* para voltar.";
+const referrerMessage = "🆕 *NOVO CLIENTE*\n\n🇨🇴 Atendemos somente\npor indicação.\n\n📱 Informe o telefone\ncom DDD de quem\nindicou você.\n\n🔙 Digite *0* ou *MENU* para voltar.";
 const invalidReferral = "⚠️ *INDICAÇÃO NÃO VALIDADA*\n\n❌ Não foi possível validar\no telefone informado.\n\n📱 Informe outro número\nde indicador autorizado.\n\n👨‍💻 Digite *6* para falar\ncom um atendente.";
 const noReferral = "🔐 *INDICAÇÃO OBRIGATÓRIA*\n\nPara continuar, informe\no telefone de um indicador\ncadastrado e autorizado.\n\n👨‍💻 Digite *6* para ajuda.";
 const anonymousCustomerFailure = "⚠️ Não foi possível confirmar\num cadastro autorizado\ncom esse telefone.\n\n📱 Confira o número com DDD\nou solicite atendimento.";
@@ -203,9 +203,9 @@ export function registerH2AutoAccessRoutes(app: Express): void {
 
       if (s.stage === "customer_phone") {
         const phone = normalizeCustomerPhone(input);
-        if (!phone) return respond(res, 200, { state: "customer_phone", message: "📱 Informe um telefone válido com DDD." });
+        if (!phone) return respond(res, 200, { state: "customer_phone", message: "📱 Informe um telefone válido com DDD.\n\n🔙 *0* ou *MENU* para voltar." });
         if (Number(s.resend_after) > now)
-          return respond(res, 200, { state: "customer_phone", message: "⏳ Aguarde um minuto para solicitar outro código." });
+          return respond(res, 200, { state: "customer_phone", message: "⏳ Aguarde um minuto para solicitar outro código.\n\n🔙 *0* ou *MENU* para voltar." });
         if (await limited("device:" + deviceId, 400, hour, now) ||
             await limited("phone:" + phone, 5, hour, now))
           return respond(res, 200, { state: "customer_phone", message: "⏳ Limite de tentativas atingido. Tente mais tarde." });
