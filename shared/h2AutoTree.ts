@@ -12,7 +12,7 @@ const answerSchema = z.object({
 }).strict();
 const stageSchema = z.object({
   id: idSchema,
-  text: z.string().trim().max(1800),
+  text: z.string().trim().min(1).max(1800),
   mode: z.enum(["question", "end", "human", "order"]),
   options: z.array(answerSchema).max(10),
 }).strict();
@@ -29,15 +29,6 @@ export const h2AutoTreeSchema = z.object({
       ctx.addIssue({ code: "custom", path: ["nodes", i, "id"], message: "Identificador repetido." });
     }
     ids.add(node.id);
-    // A WhatsApp menu can intentionally display only numbered options.
-    // Empty final replies, or empty questions without choices, must still be rejected.
-    if (!node.text.trim() && (node.mode !== "question" || node.options.length === 0)) {
-      ctx.addIssue({
-        code: "custom",
-        path: ["nodes", i, "text"],
-        message: "Esta etapa precisa de texto ou de pelo menos uma opção. Menus com respostas podem ficar sem apresentação.",
-      });
-    }
     if (node.mode !== "question" && node.options.length > 0) {
       ctx.addIssue({ code: "custom", path: ["nodes", i, "options"], message: "Etapas finais não podem ter opções." });
     }
