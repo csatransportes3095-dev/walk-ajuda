@@ -72,7 +72,7 @@ async function rows(statement: ReturnType<typeof sql>): Promise<any[]> {
   const db = await getDb();
   if (!db) throw new Error("db_unavailable");
   const result = await db.execute(statement);
-  return (result[0] || []) as any[];
+  return (result[0] || []) as unknown as any[];
 }
 async function update(sessionId: string, changes: ReturnType<typeof sql>) {
   const db = await getDb();
