@@ -204,7 +204,7 @@ export function registerH2AutoOrdersRoutes(app:Express){
    const me=sessions[0];if(!me)return reply(res,403,{error:"authentication_required"});
    const authDb=await getDb();if(!authDb||!(await isOwnSiteEmailAuthorized(authDb,String(me.email))))
      return reply(res,403,{error:"authentication_required"});
-   const phone=String(me.customer_phone).replace(/\\D/g,"").slice(-11);
+   const phone=String(me.customer_phone).replace(/\D/g,"").slice(-11);
    const records=await rows(sql`
      SELECT attribution.registrationId,attribution.orderNumber,attribution.referredName,
        attribution.commissionValue,attribution.status AS commissionStatus,
