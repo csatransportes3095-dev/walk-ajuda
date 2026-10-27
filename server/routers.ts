@@ -6133,7 +6133,7 @@ export const appRouter = router({
              WHERE sa.registrationId=acp.id AND sa.subOrderIndex=0
              ORDER BY sa.id DESC LIMIT 1) AS appointmentConfirmedAt,
           (SELECT st2.label FROM orderStatusHistory osh2
-             LEFT JOIN orderStatusTypes st2 ON st2.`key`=osh2.status
+             LEFT JOIN orderStatusTypes st2 ON st2.${sql.identifier("key")}=osh2.status
              WHERE osh2.registrationId=acp.id
              ORDER BY osh2.createdAt DESC,osh2.id DESC LIMIT 1) AS latestStatusLabel,
           (
