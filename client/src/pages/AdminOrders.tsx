@@ -76,6 +76,8 @@ type Order = {
   customerUf: string | null;
   customerReferredBy: string | null;
   customerReferredByPhone: string | null;
+  customerReferrerName: string | null;
+  customerReferrerPhotoUrl: string | null;
   customerProfilePhotoUrl: string | null;
   latestStatus: string | null;
   latestStatusAt: number | null;
@@ -1613,7 +1615,7 @@ export default function AdminOrders() {
 
   const toggleCommissionPaidMutation = trpc.orderStatus.toggleCommissionPaid.useMutation({
     onSuccess: () => { ordersQuery.refetch(); toast.success("Comissão atualizada!"); },
-    onError: () => toast.error("Erro ao atualizar comissão"),
+    onError: (error) => toast.error(error.message || "Não foi possível atualizar a comissão"),
   });
 
   const updateOrderSourceMutation = trpc.orderStatus.updateOrderSource.useMutation({
@@ -6104,14 +6106,25 @@ export default function AdminOrders() {
                         })()
                         )}
                         <div className="flex items-center gap-1.5 mt-1 flex-wrap">
-                            {order.customerReferredBy === 'Não informou' ? (
+                            {order.customerReferredBy === 'Não informou' && !order.customerReferredByPhone ? (
                               <span className="inline-flex items-center gap-1 px-2 py-0.5 rounded-full text-[10px] font-bold bg-red-500/20 border border-red-500/50 text-red-400">
                                 🚫 Não informou indicador
                               </span>
-                            ) : order.customerReferredBy ? (
-                              <span className="inline-flex items-center gap-1 px-2 py-0.5 rounded-full text-[10px] font-bold bg-amber-500/25 border border-amber-400/70 text-amber-300" style={{boxShadow: '0 0 6px rgba(251,191,36,0.3)'}}>
-                                👥 Indicado por: {order.customerReferredBy}
-                              </span>
+                            ) : order.customerReferredByPhone ? (
+                              <div className="inline-flex items-center gap-2 rounded-xl border border-amber-400/60 bg-amber-500/15 px-2 py-1.5 shadow-[0_0_12px_rgba(251,191,36,0.14)]">
+                                {order.customerReferrerPhotoUrl && order.customerReferrerPhotoUrl !== 'NULL' ? (
+                                  <img src={order.customerReferrerPhotoUrl} alt="Foto de quem recebe a comissão" className="h-9 w-9 rounded-full border-2 border-amber-400/70 object-cover" />
+                                ) : (
+                                  <div className="flex h-9 w-9 items-center justify-center rounded-full border-2 border-amber-400/50 bg-amber-500/20 text-sm font-black text-amber-200">
+                                    {(order.customerReferrerName || order.customerReferredBy || '?').charAt(0).toUpperCase()}
+                                  </div>
+                                )}
+                                <div className="min-w-0">
+                                  <p className="text-[9px] font-black uppercase tracking-wide text-amber-400">👥 INDICADOR — RECEBE A COMISSÃO</p>
+                                  <p className="max-w-[230px] truncate text-xs font-bold text-amber-100">{order.customerReferrerName || order.customerReferredBy || 'Indicador não localizado'}</p>
+                                  <p className="text-[10px] font-mono text-amber-200/80">{formatPhone(order.customerReferredByPhone)}</p>
+                                </div>
+                              </div>
                             ) : null}
                             {order.customerReferredByPhone && (
                               order.commissionPaid === 1 ? (
