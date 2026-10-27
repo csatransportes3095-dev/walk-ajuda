@@ -102,6 +102,7 @@ export default function H2AutoTreeEditor({ id, revision, appliedRevision, initia
 
   function selectStage(stageId: string) {
     setSelected(stageId);
+    setTest({ current: stageId, stack: [] });
     setCreatingUnder(null);
     setReplyUnder(null);
     setQuickEditId(previous => previous === stageId ? null : stageId);
@@ -257,7 +258,7 @@ export default function H2AutoTreeEditor({ id, revision, appliedRevision, initia
                     }))} />
                 </label>
                 <button type="button" className="rounded-lg border border-cyan-500/50 px-3 py-2 text-xs font-black text-cyan-200"
-                  onClick={() => { setQuickEditId(option.next); setSelected(option.next); }}>
+                  onClick={() => { setQuickEditId(option.next); setSelected(option.next); setTest({ current: option.next, stack: [] }); }}>
                   ✏️ EDITAR MENSAGEM SEGUINTE
                 </button>
               </div>
@@ -297,7 +298,17 @@ export default function H2AutoTreeEditor({ id, revision, appliedRevision, initia
             <Plus className="mr-1 inline h-4 w-4" /> CRIAR OUTRA PERGUNTA NESTE MENU
           </button>
         )}
-        <p className="text-xs text-emerald-200/80">Para publicar suas mudancas, clique em SALVAR E SINCRONIZAR no topo.</p>
+        <div className="space-y-2 rounded-xl border border-cyan-400/40 bg-[#020d18] p-3">
+          <p className="text-xs font-black text-cyan-200">📱 PRÉVIA DO WHATSAPP — ESTA ETAPA</p>
+          <div className="whitespace-pre-wrap break-words text-sm leading-relaxed text-white">{renderH2AutoNode(node)}</div>
+          <p className="text-xs text-slate-400">A prévia acompanha sua edição. Salve no ADM para o celular receber o texto.</p>
+        </div>
+        <button type="button" onClick={submit} disabled={!dirty || stale || save.isPending}
+          className="flex w-full items-center justify-center gap-2 rounded-xl bg-emerald-400 px-4 py-3 text-sm font-black text-[#052016] disabled:opacity-40">
+          <Save className="h-4 w-4" />
+          {save.isPending ? "SALVANDO NO ADM..." : dirty ? "SALVAR ALTERAÇÕES DESTE ATENDIMENTO" : "ALTERAÇÕES SALVAS NO ADM"}
+        </button>
+        <p className="text-xs text-emerald-200/80">Após salvar, confira no topo se o celular confirmou esta versão. Se estiver pendente, sincronize no H2 Auto.</p>
       </div>
     );
   }
@@ -576,7 +587,7 @@ export default function H2AutoTreeEditor({ id, revision, appliedRevision, initia
                 const active = branch.key === selectedBranchKey;
                 return <section key={branch.key} className={"min-w-0 rounded-2xl border-2 p-3 md:p-5 " + (active ? "border-emerald-400 bg-emerald-950/20" : "border-cyan-500/35 bg-[#0b172a]")}>
                   <button type="button" aria-expanded={active} aria-pressed={active}
-                    onClick={() => { setFocusedBranch(branch.key); setSelected(branch.id); }}
+                    onClick={() => { setFocusedBranch(branch.key); setSelected(branch.id); setTest({ current: branch.id, stack: [] }); setQuickEditId(null); }}
                     className={"flex w-full min-w-0 items-center gap-3 rounded-xl border px-4 py-4 text-left " + (active ? "border-emerald-300 bg-emerald-900/40" : "border-cyan-500/40 bg-[#092036] hover:border-cyan-300")}>
                     <span className={"flex h-12 w-12 shrink-0 items-center justify-center rounded-xl text-lg font-black " + (active ? "bg-emerald-400 text-[#052016]" : "bg-cyan-900 text-cyan-100")}>{numLabel(branch.key)}</span>
                     <span className="min-w-0 flex-1">
@@ -597,10 +608,15 @@ export default function H2AutoTreeEditor({ id, revision, appliedRevision, initia
             <div className="space-y-2 rounded-xl border border-amber-500/40 bg-amber-950/15 p-4">
               <h5 className="font-black text-amber-200">ETAPAS FORA DO CAMINHO ({unlinked.length})</h5>
               <p className="text-sm text-slate-300">Estas etapas ainda não são alcançadas por nenhuma resposta desde o início. Abra uma pergunta e escolha a etapa como destino.</p>
-              {unlinked.map(node => <button key={node.id} type="button" onClick={() => selectStage(node.id)}
-                className="block w-full rounded-lg border border-amber-500/30 px-3 py-2 text-left text-sm text-amber-100">
-                {flowTitle(node, tree.start)}
-              </button>)}
+              {unlinked.map(node => (
+                <div key={node.id} className="space-y-2 rounded-xl border border-amber-500/30 bg-amber-950/10 p-2">
+                  <button type="button" onClick={() => selectStage(node.id)}
+                    className="block w-full rounded-lg border border-amber-500/30 px-3 py-2 text-left text-sm font-bold text-amber-100">
+                    ✏️ EDITAR — {flowTitle(node, tree.start)}
+                  </button>
+                  {quickEditNode(node)}
+                </div>
+              ))}
             </div>
           )}
         </aside>
@@ -824,7 +840,7 @@ export default function H2AutoTreeEditor({ id, revision, appliedRevision, initia
             <h4 className="flex items-center gap-2 text-lg font-black text-cyan-300">
               <Play className="h-5 w-5" /> 3. TESTAR O CAMINHO
             </h4>
-            <p className="mt-1 text-sm text-slate-300">Clique nas respostas como se fosse um cliente. O teste não envia WhatsApp.</p>
+            <p className="mt-1 text-sm text-slate-300">O simulador acompanha o item selecionado no mapa. Clique nas respostas para avançar. Não envia WhatsApp.</p>
           </div>
           <div className="flex flex-wrap gap-2">
             <button type="button" onClick={() => setTest({ current: tree.start, stack: [] })}
