@@ -468,8 +468,8 @@ export default function AdminCommissions() {
                     const commissionStatus = (c as any).commissionStatus as string | undefined;
                     const isPaid = c.commissionPaid === 1;
                     const isInvalid = Boolean((c as any).referralInvalid);
-                    const isEligible = commissionStatus === 'elegivel' || commissionStatus === 'paga' || commissionStatus === 'legado';
-                    const isUnderReview = commissionStatus === 'em_analise';
+                    const isEligible = Boolean((c as any).paymentReady);
+                    const isUnderReview = (c as any).paymentState === 'aguardando_agendamento';
                     const isReferralAction = referralAction?.registrationId === c.registrationId;
                     return (
                       <div
@@ -548,7 +548,7 @@ export default function AdminCommissions() {
                                   ? <>✅ Pagamento confirmado{(c as any).commissionValue > 0 ? ` · ${formatMoney((c as any).commissionValue)}` : ''}</>
                                   : isUnderReview
                                     ? <>🔎 Comissão em análise · {formatMoney((c as any).commissionValue)}</>
-                                    : <>💰 {(c as any).commissionValue > 0 ? formatMoney((c as any).commissionValue) : 'Valor não definido'}</>}
+                                    : <>💰 {(c as any).paymentLabel || 'Aguardando confirmação'} · {(c as any).commissionValue > 0 ? formatMoney((c as any).commissionValue) : 'Valor não definido'}</>}
                             </span>
                             {isInvalid && (c as any).referralInvalidReason && (
                               <span className="text-[10px] text-zinc-400">Motivo: {(c as any).referralInvalidReason}</span>
