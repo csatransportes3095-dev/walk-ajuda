@@ -1440,6 +1440,26 @@ export default function AdminSettings() {
                 {updateMut.isPending ? 'Salvando...' : 'Salvar Configuração de Segurança'}
               </button>
             </div>
+            <div className="bg-[#111128] border border-sky-500/20 rounded-xl p-5">
+              <h3 className="text-sm font-bold text-sky-300 mb-1">✉️ Textos de confirmação do cliente</h3>
+              <p className="text-xs text-gray-400 mb-4">Personalize somente as mensagens exibidas durante a confirmação do telefone e do código enviado por e-mail. A validade, as tentativas e as regras de segurança continuam protegidas.</p>
+              <div className="space-y-3">
+                <Field label="Título da etapa de telefone" k="password_gate_phone_title" form={form} onChange={updateField} placeholder="Identifique-se para acessar" />
+                <Field label="Orientação abaixo do título do telefone" k="password_gate_phone_description" form={form} onChange={updateField} placeholder="Digite seu telefone com DDD para continuar" />
+                <Field label="Título da confirmação de e-mail" k="password_gate_email_title" form={form} onChange={updateField} placeholder="Confirme seu e-mail" />
+                <Field label="Orientação para enviar o código" k="password_gate_email_description" form={form} onChange={updateField} textarea placeholder="Enviaremos um código de 6 números para confirmar este e-mail antes de continuar." />
+                <Field label="Título do campo do código" k="password_gate_email_code_title" form={form} onChange={updateField} placeholder="Código de confirmação" />
+                <Field label="Orientação para digitar o código" k="password_gate_email_code_description" form={form} onChange={updateField} textarea placeholder="Digite o código de 6 números enviado para confirmar seu e-mail." />
+              </div>
+              <button
+                type="button"
+                onClick={() => saveAll()}
+                disabled={updateMut.isPending}
+                className="mt-5 w-full py-3 bg-sky-600 hover:bg-sky-700 disabled:opacity-50 text-white font-bold rounded-xl transition-all"
+              >
+                {updateMut.isPending ? 'Salvando...' : 'Salvar Textos de Confirmação'}
+              </button>
+            </div>
             <div className="bg-blue-500/10 border border-blue-500/30 rounded-xl p-4">
               <p className="text-blue-300 text-sm font-semibold mb-1">ℹ️ Modo ADM na página Acompanhar</p>
               <p className="text-blue-200/70 text-xs">Acesse <strong>/acompanhar?adm=3095</strong> para ativar o modo ADM — libera DevTools e acesso sem PIN independente desta configuração.</p>
