@@ -873,7 +873,9 @@ export default function AdminCustomers() {
   const filtered = useMemo(() => sortedCustomers.filter((c) => {
     const rawTerm = searchTerm.trim();
     const term = rawTerm.toLowerCase();
-    const isOrderSearch = rawTerm.startsWith("#");
+    const isEmailSearch = rawTerm.includes("@");
+    const emailSearch = rawTerm.toLowerCase().replace(/\s+/g, "");
+    const isOrderSearch = !isEmailSearch && rawTerm.startsWith("#");
     const isCadastroSearch = rawTerm.startsWith("*");
     const orderSearchNum = isOrderSearch ? rawTerm.slice(1) : "";
     const cadastroSearchNum = isCadastroSearch ? rawTerm.slice(1) : "";
@@ -885,6 +887,11 @@ export default function AdminCustomers() {
     let matchSearch: boolean;
     if (!rawTerm) {
       matchSearch = true;
+    } else if (isEmailSearch) {
+      // Priorizar e-mail: números e pontuação do endereço não são telefone.
+      // Também cobre cadastros antigos que ainda possuem normalizedEmail.
+      matchSearch = [c.email, (c as Customer & { normalizedEmail?: string | null }).normalizedEmail]
+        .some(value => String(value || "").toLowerCase().replace(/\s+/g, "").includes(emailSearch));
     } else if (isOrderSearch) {
       matchSearch = c.orderNumber != null && String(c.orderNumber) === orderSearchNum;
     } else if (isCadastroSearch) {
