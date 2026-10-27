@@ -424,6 +424,24 @@ export default function H2AutoTreeEditor({ id, revision, appliedRevision, initia
   );
 
 
+  function addCommissionOption(branchId: string) {
+    const parent = tree.nodes.find(n => n.id === branchId);
+    if (!parent || parent.mode !== "question") return;
+    if (parent.options.some(o => tree.nodes.find(n => n.id === o.next)?.mode === "referral")) return;
+    const key = availableOptionKey(parent.options);
+    if (!key || tree.nodes.length >= 100) { toast.error("Limite de opções atingido."); return; }
+    const id = newId();
+    setTree(prev => ({ ...prev,
+      nodes: [...prev.nodes.map(n => n.id === branchId
+        ? { ...n, options: orderedFlowOptions([...n.options, {key,label:"Minhas indicações e comissões",next:id}]) }
+        : n), {id, mode:"referral" as const,
+          text:"💰 *MINHAS INDICAÇÕES E COMISSÕES*\\n\\nConfirme seu telefone e o código enviado ao e-mail cadastrado.",options:[]}],
+    }));
+    setDirty(true);
+    setFolded(prev => { const next = new Set(prev); next.delete(branchId); return next; });
+    toast.success("Consulta criada no menu SIM. Requer APK H2 Auto 1.23 para funcionar.");
+  }
+
   function reorderInline(row: FlowRow, direction: -1 | 1) {
     if (!row.parentId || !row.viaKey) return;
     const parent = tree.nodes.find(node => node.id === row.parentId);
@@ -598,7 +616,15 @@ export default function H2AutoTreeEditor({ id, revision, appliedRevision, initia
                     </span>
                     {active ? <ChevronDown className="h-6 w-6 shrink-0 text-emerald-300" /> : <ChevronRight className="h-6 w-6 shrink-0 text-cyan-300" />}
                   </button>
-                  {active ? <div className="mt-4 min-w-0 space-y-3">{branch.rows.map((row, index) => renderMapRow(row, index, 1, index !== 0))}</div> : <p className="px-3 pt-4 text-sm text-slate-400">Selecione esta opção para ver suas etapas, uma abaixo da outra.</p>}
+                  {active ? <div className="mt-4 min-w-0 space-y-3">
+                    {branch.key === "1" && !tree.nodes.some(n => n.id === branch.id && n.options.some(o => tree.nodes.find(x => x.id === o.next)?.mode === "referral")) && (
+                      <button type="button" onClick={() => addCommissionOption(branch.id)}
+                        className="w-full rounded-xl border border-amber-400/60 bg-amber-500/15 px-4 py-3 text-sm font-black text-amber-100">
+                        💰 ADICIONAR CONSULTA DE INDICAÇÕES E COMISSÕES
+                      </button>
+                    )}
+                    {branch.rows.map((row, index) => renderMapRow(row, index, 1, index !== 0))}
+                  </div> : <p className="px-3 pt-4 text-sm text-slate-400">Selecione esta opção para ver suas etapas, uma abaixo da outra.</p>}
                 </section>;
               })}
             </div>
