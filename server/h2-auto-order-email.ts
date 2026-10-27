@@ -1,10 +1,11 @@
 import nodemailer from "nodemailer";
-export async function sendH2AutoOrderCode(to:string,code:string,validMinutes=10):Promise<void>{
+export async function sendH2AutoOrderCode(to:string,code:string,validMinutes=10,purpose:"orders"|"access"="orders"):Promise<void>{
  if(!Number.isInteger(validMinutes)||validMinutes<5||validMinutes>30)throw Error("INVALID_CODE_TTL");
  if(!/^\d{6}$/.test(code)||!/^\S+@\S+\.\S+$/.test(to))throw Error("INVALID_RECIPIENT_OR_CODE");
- const subject="H2 Colombiano - Confirmação de consulta de pedido";
- const text="Seu código para consultar pedidos pelo H2 AUTO: "+code+"\n\nCódigo de uso único, válido por "+validMinutes+" minutos. Não compartilhe. Se não solicitou, ignore.";
- const html="<div style=\"font-family:Arial;padding:20px;max-width:480px\"><h2>H2 Colombiano</h2><p>Código para acompanhar seu pedido no WhatsApp:</p><p style=\"font-size:30px;font-weight:bold\">"+code+"</p><p>Válido por 10 minutos. Não compartilhe este código.</p></div>";
+ const access=purpose==="access";
+ const subject=access?"H2 Colombiano - Confirmação do atendimento WhatsApp":"H2 Colombiano - Confirmação de consulta de pedido";
+ const text=(access?"Seu código para liberar o atendimento H2 AUTO no WhatsApp: ":"Seu código para consultar pedidos pelo H2 AUTO: ")+code+"\n\nCódigo de uso único, válido por "+validMinutes+" minutos. Não compartilhe. Se não solicitou, ignore.";
+ const html="<div style=\"font-family:Arial;padding:20px;max-width:480px\"><h2>H2 Colombiano</h2><p>"+(access?"Código para confirmar seu atendimento no WhatsApp:":"Código para acompanhar seu pedido no WhatsApp:")+"</p><p style=\"font-size:30px;font-weight:bold\">"+code+"</p><p>Válido por 10 minutos. Não compartilhe este código.</p></div>";
  const from=process.env.SMTP_FROM||process.env.SMTP_USER||"h2@h2colombiano.com";
  const password=process.env.SMTP_PASS||process.env.ZOHO_EMAIL_PASSWORD;
  if(password){
