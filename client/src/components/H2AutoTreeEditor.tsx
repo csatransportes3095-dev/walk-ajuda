@@ -30,6 +30,8 @@ export default function H2AutoTreeEditor({ id, revision, initial }: Props) {
   const utils = trpc.useUtils();
   const [tree, setTree] = useState<H2AutoTree>(() => cloneH2AutoTree(initial || H2_AUTO_TREE_DEFAULT));
   const [selected, setSelected] = useState(tree.start);
+  // Para telas grandes: NÃO à esquerda, SIM à direita; somente o ramo escolhido abre.
+  const [focusedBranch, setFocusedBranch] = useState("1");
   const [test, setTest] = useState<{ current: string; stack: string[] }>({ current: tree.start, stack: [] });
   const [dirty, setDirty] = useState(false);
   const [folded, setFolded] = useState<Set<string>>(() => new Set());
@@ -43,28 +45,34 @@ export default function H2AutoTreeEditor({ id, revision, initial }: Props) {
     loadedRevision.current = revision;
     setTree(fresh);
     setSelected(fresh.start);
+    setFocusedBranch("1");
     setExistingTarget(fresh.start);
     setTest({ current: fresh.start, stack: [] });
     setFolded(new Set());
   }, [dirty, revision, initial]);
 
   const selectedNode = useMemo(() => tree.nodes.find(n => n.id === selected), [tree, selected]);
-  const map = useMemo(() => flowRows(tree, folded), [tree, folded]);
-  // Each top-level answer is a separate full-width vertical block.
-  // Keep the DFS order, shared destinations and fold/unfold behavior unchanged.
-  const mapGroups = useMemo(() => {
-    const root = map.length && map[0].depth === 0 ? map[0] : null;
-    const branches: Array<{ key: string; title: string; rows: FlowRow[] }> = [];
-    for (const row of map) {
-      if (row.depth === 0) continue;
-      if (row.depth === 1) {
-        branches.push({ key: row.viaKey || "", title: row.viaLabel || "Resposta", rows: [row] });
-      } else if (branches.length) {
-        branches[branches.length - 1].rows.push(row);
-      }
-    }
-    return { root, branches };
-  }, [map]);
+  const rootNode = useMemo(() => tree.nodes.find(node => node.id === tree.start), [tree]);
+  // Cada resposta inicial tem um mapa independente, inclusive quando reutiliza etapas.
+  const branches = useMemo(() => {
+    const options = [...(rootNode?.options || [])].sort((left, right) => {
+      const priority = (key: string) => key === "2" ? 0 : key === "1" ? 1 : Number(key) + 2;
+      return priority(left.key) - priority(right.key);
+    });
+    return options.map(option => ({
+      key: option.key,
+      title: option.label,
+      id: option.next,
+      rows: flowRows({ ...tree, start: option.next }, folded).map((row, index): FlowRow => ({
+        ...row,
+        depth: row.depth + 1,
+        viaKey: index === 0 ? option.key : row.viaKey,
+        viaLabel: index === 0 ? option.label : row.viaLabel,
+      })),
+    }));
+  }, [tree, rootNode, folded]);
+  const selectedBranchKey = branches.some(branch => branch.key === focusedBranch)
+    ? focusedBranch : branches[0]?.key || "";
   const path = useMemo(() => flowPath(tree, selected), [tree, selected]);
   const unlinked = useMemo(() => unlinkedStages(tree), [tree]);
   const currentTest = tree.nodes.find(n => n.id === test.current);
@@ -160,6 +168,7 @@ export default function H2AutoTreeEditor({ id, revision, initial }: Props) {
     loadedRevision.current = revision;
     setTree(fresh);
     setSelected(fresh.start);
+    setFocusedBranch("1");
     setExistingTarget(fresh.start);
     setTest({ current: fresh.start, stack: [] });
     setDirty(false);
@@ -196,7 +205,7 @@ export default function H2AutoTreeEditor({ id, revision, initial }: Props) {
     const node = tree.nodes.find(n => n.id === row.id);
     if (!node) return null;
     const active = selected === row.id;
-    const expandable = node.options.length > 0 && !row.shared;
+    const expandable = node.options.length > 0 && !row.shared && row.depth > 0;
     const indentation = Math.min(Math.max(row.depth - levelOffset, 0), 3) * 12;
     return (
       <div key={row.id + "-" + index}
@@ -279,7 +288,7 @@ export default function H2AutoTreeEditor({ id, revision, initial }: Props) {
               <h4 className="flex items-center gap-2 text-lg font-black text-cyan-300">
                 <MapIcon className="h-5 w-5" /> 1. MAPA DO ATENDIMENTO
               </h4>
-              <p className="mt-1 text-sm text-slate-300">Siga as respostas de cima para baixo. Cada bloco mostra a próxima etapa.</p>
+              <p className="mt-1 text-sm text-slate-300">No computador, NÃO fica à esquerda e SIM à direita. Clique na opção para abrir apenas o caminho escolhido.</p>
             </div>
           </div>
           <div className="flex flex-wrap gap-2 text-xs">
