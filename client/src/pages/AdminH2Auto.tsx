@@ -131,6 +131,10 @@ export default function AdminH2Auto() {
       toast.error(error.message || "Falha ao salvar");
     },
   });
+  const safety = trpc.h2AutoAdmin.saveSafetySwitch.useMutation({
+    onSuccess: () => { toast.success("Controle atualizado imediatamente no servidor"); void utils.h2AutoAdmin.list.invalidate(); },
+    onError: e => toast.error(e.message || "Falha ao atualizar controle"),
+  });
   const saveMedia = trpc.h2AutoAdmin.saveMedia.useMutation({
     onSuccess: (result, variables) => {
       // Only media was persisted. Keep unsaved menus/rules and any edits made
@@ -388,6 +392,21 @@ export default function AdminH2Auto() {
                   </button>
                 </div>
               )}
+              <section className="rounded-2xl border border-rose-400/40 bg-rose-950/25 p-4 space-y-3">
+                <h4 className="font-black text-rose-200 flex items-center gap-2"><Power className="h-5 w-5"/> CONTROLES IMEDIATOS DO ROBÔ</h4>
+                <p className="text-xs text-slate-300">A atualização é aplicada no servidor sem aguardar a sincronização do celular. Se não houver internet, o APK deve bloquear envios por segurança.</p>
+                <p className="text-xs text-amber-200">Ao desativar a identificação, ficam disponíveis apenas os caminhos públicos de novos clientes. Dados de clientes continuam protegidos.</p>
+                <div className="grid gap-3 sm:grid-cols-2">
+                  <button type="button" disabled={safety.isPending} onClick={() => safety.mutate({id:d.id,key:"enabled",value:!d.config.enabled})}
+                    className={`rounded-xl p-4 font-black border ${d.config.enabled?"border-red-400 bg-red-700 text-white":"border-emerald-400 bg-emerald-800 text-white"}`}>
+                    {d.config.enabled ? "⛔ DESLIGAR TODAS AS RESPOSTAS" : "✅ ATIVAR RESPOSTAS"}
+                  </button>
+                  <button type="button" disabled={safety.isPending} onClick={() => safety.mutate({id:d.id,key:"identificationEnabled",value:d.config.identificationEnabled===false})}
+                    className="rounded-xl p-4 font-black border border-cyan-500/50 bg-slate-800 text-white">
+                    {d.config.identificationEnabled===false?"ATIVAR IDENTIFICAÇÃO INICIAL":"DESATIVAR IDENTIFICAÇÃO INICIAL"}
+                  </button>
+                </div>
+              </section>
               <H2AutoTreeEditor id={d.id} revision={d.revision} appliedRevision={d.appliedRevision} initial={d.config.tree} />
               <H2AutoHistoryPanel
                 deviceId={d.id}

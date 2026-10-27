@@ -134,6 +134,13 @@ export function registerH2AutoAccessRoutes(app: Express): void {
     try {
       await ensure();
       const deviceId = await deviceFor(req);
+      if (deviceId) {
+        const live = await rows(sql`SELECT JSON_UNQUOTE(JSON_EXTRACT(config_json,'$.enabled')) AS bot_on,
+          JSON_UNQUOTE(JSON_EXTRACT(config_json,'$.identificationEnabled')) AS identity_on
+          FROM h2_auto_devices WHERE id=${deviceId} LIMIT 1`);
+        if (live[0]?.bot_on !== "true") return respond(res,200,{state:"disabled"});
+        if (live[0]?.identity_on === "false") return respond(res,200,{state:"identification_disabled"});
+      }
       if (!deviceId) return respond(res, 401, { error: "unauthorized" });
       const conversation = req.body?.conversationId;
       const input = req.body?.input;
