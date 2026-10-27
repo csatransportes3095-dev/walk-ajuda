@@ -32,7 +32,7 @@ const minute = 60_000;
 const hour = 60 * minute;
 const defaultAccessHours = 24;
 const otpLifetime = 10 * minute;
-type Stage = "choice" | "customer_phone" | "customer_code" | "referral_phone" | "customer" | "new";
+type Stage = "choice" | "customer_phone" | "customer_code" | "referral_phone" | "customer" | "new" | "customer_menu" | "new_menu";
 type Session = {
   id: string; device_id: string; stage: Stage; customer_id: number | null; referrer_id: number | null;
   customer_phone_hash: string | null; customer_email_hash: string | null;
@@ -169,21 +169,56 @@ export function registerH2AutoAccessRoutes(app: Express): void {
         return respond(res, 200, { state: "choice", message: initialMessage });
       }
 
-      // Navigation is handled before code/phone validation, so MENU and 0
-      // are never mistaken for an invalid verification code or phone number.
-      // Authorized customers can navigate all menus without losing identity.
-      // Only explicit expiry, account revocation or device unpairing can reset it.
-      if (s.stage === "customer" || s.stage === "new") {
-        const allowed = s.stage === "customer" ? await activeCustomerBinding(s) : await activeReferralBinding(s);
-        if (allowed && Number(s.expires_at)>0 && Number(s.updated_at)<=now && now-Number(s.updated_at)<accessLifetime) {
-          return respond(res,200,verified(s.stage));
+      // MENU ALWAYS returns to the FIRST question (1 = client, 2 = new).
+      // Preserve the original verification time and customer/referrer bindings.
+      const isMenu = normalized === "menu" || normalized === "inicio" || normalized === "manu";
+      const authorizedAudience: "customer" | "new" | null =
+        s.stage === "customer" || s.stage === "customer_menu" ? "customer" :
+        s.stage === "new" || s.stage === "new_menu" ? "new" : null;
+      if (authorizedAudience) {
+        const allowed = authorizedAudience === "customer"
+          ? await activeCustomerBinding(s) : await activeReferralBinding(s);
+        const valid = allowed && Number(s.expires_at) > 0 &&
+          Number(s.updated_at) <= now && now - Number(s.updated_at) < accessLifetime;
+        if (!valid) {
+          await update(sessionId, sql`stage='choice',customer_id=NULL,referrer_id=NULL,
+            customer_phone_hash=NULL,customer_email_hash=NULL,code_hash=NULL,code_expires=NULL,
+            code_attempts=0,expires_at=0,updated_at=${now}`);
+          return respond(res, 200, { state: "choice", message: initialMessage });
         }
-        await update(sessionId, sql`stage='choice',customer_id=NULL,referrer_id=NULL,
-          customer_phone_hash=NULL,customer_email_hash=NULL,code_hash=NULL,code_expires=NULL,
-          expires_at=0,updated_at=${now}`);
-        return respond(res,200,{state:"choice",message:initialMessage});
+        if (isMenu) {
+          const menuStage = authorizedAudience === "customer" ? "customer_menu" : "new_menu";
+          // Do not touch updated_at: MENU must not extend the authorized window.
+          if (s.stage !== menuStage) await update(sessionId, sql`stage=${menuStage}`);
+          return respond(res, 200, { state: "choice", message: initialMessage });
+        }
+        if (s.stage === "customer_menu" || s.stage === "new_menu") {
+          // Selecting the already verified audience restores service access
+          // without another code or indicator check.
+          if ((authorizedAudience === "customer" && normalized === "1") ||
+              (authorizedAudience === "new" && normalized === "2")) {
+            await update(sessionId, sql`stage=${authorizedAudience}`);
+            return respond(res, 200, grant(authorizedAudience));
+          }
+          // Switching audiences requires validating the other audience.
+          if (normalized === "1" || normalized === "2") {
+            const destination = normalized === "1" ? "customer_phone" : "referral_phone";
+            await update(sessionId, sql`stage=${destination},
+              customer_id=NULL,referrer_id=NULL,customer_phone_hash=NULL,
+              customer_email_hash=NULL,code_hash=NULL,code_expires=NULL,
+              code_attempts=0,resend_after=0,expires_at=0,updated_at=${now}`);
+            return respond(res, 200, { state: destination,
+              message: destination === "customer_phone" ? phoneMessage : referrerMessage });
+          }
+          return respond(res, 200, { state: "choice", message: initialMessage });
+        }
+        // Existing normal service navigation remains authorized.
+        return respond(res, 200, verified(authorizedAudience));
       }
-      if (normalized === "menu" || normalized === "inicio" || normalized === "0" && s.stage !== "choice") {
+
+      // Before authentication, MENU/0 returns to identification; 0 in
+      // OTP confirmation returns to the phone prompt.
+      if (isMenu || normalized === "0" && s.stage !== "choice") {
         const destination = normalized === "0" && s.stage === "customer_code" ? "customer_phone" : "choice";
         await update(sessionId, sql`stage=${destination},customer_id=NULL,referrer_id=NULL,
           customer_phone_hash=NULL,customer_email_hash=NULL,code_hash=NULL,code_expires=NULL,
@@ -200,11 +235,6 @@ export function registerH2AutoAccessRoutes(app: Express): void {
           await update(sessionId, sql`stage='referral_phone',updated_at=${now}`);
           return respond(res, 200, { state: "referral_phone", message: referrerMessage });
         }
-        return respond(res, 200, { state: "choice", message: initialMessage });
-      }
-
-      if (normalized === "menu" || normalized === "inicio") {
-        await update(sessionId, sql`stage='choice',code_hash=NULL,code_expires=NULL,updated_at=${now}`);
         return respond(res, 200, { state: "choice", message: initialMessage });
       }
 
