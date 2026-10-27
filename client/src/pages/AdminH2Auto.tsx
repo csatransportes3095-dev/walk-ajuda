@@ -140,6 +140,14 @@ export default function AdminH2Auto() {
       toast.error(error.message || "Falha ao salvar");
     },
   });
+  const [validityDraft, setValidityDraft] = useState<Record<string,string>>({});
+  const validity = trpc.h2AutoAdmin.saveIdentificationValidity.useMutation({
+    onSuccess: (_result, variables) => {
+      toast.success("Validade da identificação atualizada no servidor");
+      void utils.h2AutoAdmin.list.invalidate();
+    },
+    onError: error => toast.error(error.message || "Não foi possível alterar validade"),
+  });
   const safety = trpc.h2AutoAdmin.saveSafetySwitch.useMutation({
     onSuccess: () => { toast.success("Controle atualizado imediatamente no servidor"); void utils.h2AutoAdmin.list.invalidate(); },
     onError: e => toast.error(e.message || "Falha ao atualizar controle"),
@@ -415,6 +423,21 @@ export default function AdminH2Auto() {
                     className="rounded-xl p-4 font-black border border-cyan-500/50 bg-slate-800 text-white">
                     {d.config.identificationEnabled===false?"ATIVAR IDENTIFICAÇÃO INICIAL":"DESATIVAR IDENTIFICAÇÃO INICIAL"}
                   </button>
+                </div>
+                <div className="rounded-xl border border-cyan-400/40 bg-slate-950/50 p-4 space-y-2">
+                  <label className="flex flex-wrap items-center gap-2 text-sm font-bold text-cyan-200">
+                    <Clock className="h-4 w-4"/> RECONFIRMAR IDENTIDADE APÓS (HORAS)
+                  </label>
+                  <div className="flex flex-wrap gap-2 items-center">
+                    <input type="number" min={1} max={720} step={1}
+                      className="w-28 rounded-lg bg-slate-900 border border-cyan-500/40 p-2 text-white"
+                      value={validityDraft[d.id] ?? String(d.config.identificationSessionHours ?? 24)}
+                      onChange={e => setValidityDraft(old => ({...old,[d.id]:e.target.value}))}/>
+                    <button type="button" disabled={validity.isPending || !Number.isInteger(Number(validityDraft[d.id] ?? d.config.identificationSessionHours ?? 24)) || Number(validityDraft[d.id] ?? d.config.identificationSessionHours ?? 24)<1 || Number(validityDraft[d.id] ?? d.config.identificationSessionHours ?? 24)>720}
+                      onClick={() => validity.mutate({id:d.id,hours:Number(validityDraft[d.id] ?? d.config.identificationSessionHours ?? 24)})}
+                      className="rounded-lg bg-cyan-600 px-4 py-2 text-sm font-black text-white disabled:opacity-40">SALVAR VALIDADE</button>
+                  </div>
+                  <p className="text-xs text-slate-300">Padrão: 24 horas. De 1 a 720 horas (30 dias). Mudar de opção, digitar MENU ou 0 não exige um novo código durante a validade. Bloqueio de cadastro revoga o acesso.</p>
                 </div>
               </section>
               <H2AutoTreeEditor id={d.id} revision={d.revision} appliedRevision={d.appliedRevision} initial={d.config.tree} />
