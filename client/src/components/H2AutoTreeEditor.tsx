@@ -48,10 +48,12 @@ export default function H2AutoTreeEditor({ id, revision, appliedRevision, initia
   const [existingTarget, setExistingTarget] = useState(tree.start);
   const loadedRevision = useRef(revision);
   const savedTree = useRef<H2AutoTree>(cloneH2AutoTree(initial || H2_AUTO_TREE_DEFAULT));
+  const currentTreeRef = useRef(tree);
+  currentTreeRef.current = tree;
   const editRef = useRef<HTMLDivElement>(null);
 
   useEffect(() => {
-    if (dirty || loadedRevision.current === revision) return;
+    if (dirty || revision <= loadedRevision.current) return;
     const fresh = cloneH2AutoTree(initial || H2_AUTO_TREE_DEFAULT);
     loadedRevision.current = revision;
     savedTree.current = cloneH2AutoTree(fresh);
@@ -101,7 +103,9 @@ export default function H2AutoTreeEditor({ id, revision, appliedRevision, initia
       loadedRevision.current = result.revision;
       savedTree.current = cloneH2AutoTree(variables.tree);
       toast.success("SALVO NO ADM. Abra H2 Auto no celular e toque em SINCRONIZAR ADM para aplicar imediatamente.", { duration: 10000 });
-      setDirty(false);
+      if (JSON.stringify(normalizeFlowTreeOptions(currentTreeRef.current)) === JSON.stringify(variables.tree)) {
+        setDirty(false);
+      }
       void utils.h2AutoAdmin.list.invalidate();
     },
     onError: error => toast.error("NÃO SALVOU: " + (error.message || "Verifique as perguntas e tente novamente.")),
