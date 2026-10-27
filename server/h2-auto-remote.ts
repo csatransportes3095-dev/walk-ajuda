@@ -5,7 +5,7 @@ import { sql } from "drizzle-orm";
 import { TRPCError } from "@trpc/server";
 import { adminProcedure, router } from "./_core/trpc";
 import { getDb } from "./db";
-import { h2AutoTreeSchema } from "../shared/h2AutoTree";
+import { h2AutoTreeSchema, H2_AUTO_TREE_DEFAULT } from "../shared/h2AutoTree";
 import {
   decodeH2AutoDiagnostics,
   h2AutoDiagnosticsSchema,
@@ -361,26 +361,55 @@ export const h2AutoAdminRouter = router({
       if(!updated[0]?.affectedRows)throw new TRPCError({code:"NOT_FOUND",message:"Aparelho não encontrado."});
       return {success:true};
     }),
-    saveTree: adminProcedure
+  saveTree: adminProcedure
     .input(z.object({
       id: z.string().regex(/^[a-f0-9]{24}$/),
       tree: h2AutoTreeSchema,
+      // Snapshot used to reject concurrent changes to the actual question tree.
+      // Legacy clients may omit this and continue using the global revision.
+      baseTree: h2AutoTreeSchema.optional(),
       expectedRevision: z.number().int().min(0),
     }))
     .mutation(async ({ input }) => {
       await ensure();
-      const device = (await rows(sql`SELECT config_json,revision FROM h2_auto_devices WHERE id=${input.id} LIMIT 1`))[0];
-      if (!device) throw new TRPCError({ code: "NOT_FOUND", message: "Aparelho não encontrado." });
-      if (Number(device.revision) !== input.expectedRevision)
-        throw new TRPCError({ code: "CONFLICT", message: "Configuração alterada. Atualize antes de salvar." });
-      const updated: RemoteConfig = { ...decodeConfig(device.config_json), tree: input.tree };
-      const db = await getDb(); if (!db) throw new Error("DB unavailable");
-      const result: any = await db.execute(sql`
-        UPDATE h2_auto_devices SET config_json=${JSON.stringify(updated)},revision=revision+1
-        WHERE id=${input.id} AND revision=${input.expectedRevision}`);
-      if (!result[0]?.affectedRows)
-        throw new TRPCError({ code: "CONFLICT", message: "Revisão alterada durante o salvamento." });
-      return { success: true, revision: input.expectedRevision + 1 };
+      const db = await getDb();
+      if (!db) throw new Error("DB unavailable");
+
+      // ADM switches, media configuration, and validity settings update the
+      // same device revision. Do not discard a user's edited questions just
+      // because one of those unrelated controls changed during editing.
+      for (let attempt = 0; attempt < 3; attempt++) {
+        const row = (await rows(sql`SELECT config_json,revision FROM h2_auto_devices
+          WHERE id=${input.id} LIMIT 1`))[0];
+        if (!row) throw new TRPCError({ code: "NOT_FOUND", message: "Aparelho não encontrado." });
+        const currentRevision = Number(row.revision);
+        const currentConfig = decodeConfig(row.config_json);
+        if (input.baseTree) {
+          const actualTree = currentConfig.tree ?? H2_AUTO_TREE_DEFAULT;
+          if (JSON.stringify(actualTree) !== JSON.stringify(input.baseTree))
+            throw new TRPCError({
+              code: "CONFLICT",
+              message: "As perguntas foram modificadas em outra sessão. Suas edições continuam na tela. Faça uma cópia antes de recarregar.",
+            });
+        } else if (currentRevision !== input.expectedRevision) {
+          throw new TRPCError({
+            code: "CONFLICT",
+            message: "A configuração mudou. Suas perguntas não foram apagadas. Atualize a revisão antes de salvar.",
+          });
+        }
+
+        const next: RemoteConfig = { ...currentConfig, tree: input.tree };
+        const result: any = await db.execute(sql`
+          UPDATE h2_auto_devices
+          SET config_json=${JSON.stringify(next)}, revision=revision+1
+          WHERE id=${input.id} AND revision=${currentRevision}`);
+        if (result[0]?.affectedRows)
+          return { success: true, revision: currentRevision + 1 };
+      }
+      throw new TRPCError({
+        code: "CONFLICT",
+        message: "O ADM recebeu outras alterações durante o salvamento. Tente salvar novamente; suas perguntas permanecem na tela.",
+      });
     }),
   saveMedia: adminProcedure
     .input(
