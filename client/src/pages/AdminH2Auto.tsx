@@ -388,7 +388,7 @@ export default function AdminH2Auto() {
                   </button>
                 </div>
               )}
-              <H2AutoTreeEditor id={d.id} revision={d.revision} initial={d.config.tree} />
+              <H2AutoTreeEditor id={d.id} revision={d.revision} appliedRevision={d.appliedRevision} initial={d.config.tree} />
               <H2AutoHistoryPanel
                 deviceId={d.id}
                 label={d.label}
