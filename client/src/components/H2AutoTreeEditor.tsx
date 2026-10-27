@@ -627,8 +627,9 @@ export default function H2AutoTreeEditor({ id, revision, appliedRevision, initia
                     className={"flex w-full min-w-0 items-center gap-3 rounded-xl border px-4 py-4 text-left " + (active ? "border-emerald-300 bg-emerald-900/40" : "border-cyan-500/40 bg-[#092036] hover:border-cyan-300")}>
                     <span className={"flex h-12 w-12 shrink-0 items-center justify-center rounded-xl text-lg font-black " + (active ? "bg-emerald-400 text-[#052016]" : "bg-cyan-900 text-cyan-100")}>{numLabel(branch.key)}</span>
                     <span className="min-w-0 flex-1">
-                      <span className="block text-xs font-black text-cyan-200">{branch.key === "1" ? "SIM · JÁ SOU CLIENTE" : branch.key === "2" ? "NÃO · AINDA NÃO SOU CLIENTE" : "CAMINHO " + branch.key}</span>
+                      <span className="block text-xs font-black text-cyan-200">{"OPÇÃO " + branch.key + " · CAMINHO CONFIGURADO"}</span>
                       <span className="mt-1 block break-words text-lg font-black text-white">{branch.title}</span>
+                      <span className="mt-1 block text-xs text-cyan-200">Número enviado no WhatsApp: {branch.key} · Destino configurado: {branch.id}</span>
                       <span className="mt-2 block text-xs text-emerald-200">{active ? "SELECIONADO · CAMINHO ABERTO" : "CLIQUE PARA ABRIR"}</span>
                     </span>
                     {active ? <ChevronDown className="h-6 w-6 shrink-0 text-emerald-300" /> : <ChevronRight className="h-6 w-6 shrink-0 text-cyan-300" />}
