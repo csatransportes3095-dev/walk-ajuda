@@ -1534,7 +1534,6 @@ export default function Home() {
       setSubmitFailure(message);
       toast.error(message, options);
     };
-    submitLockRef.current = true;
 
     if (!clientName.trim()) { reportSubmitFailure('Preencha seu nome completo'); submitLockRef.current = false; return; }
     if (!clientPhone.trim()) { reportSubmitFailure('Preencha seu telefone'); submitLockRef.current = false; return; }
@@ -1627,6 +1626,8 @@ export default function Home() {
     const wasExistingCustomer = customerCheck.data?.hasOrders === true;
     setIsNewCustomerOrder(!wasExistingCustomer);
 
+    // Lock only after synchronous validation; preflight exceptions must never leave the button stuck.
+    submitLockRef.current = true;
     setIsSubmitting(true);
     setSubmitProgress('Verificando dados...');
     try {
@@ -4527,7 +4528,7 @@ export default function Home() {
                 </div>
               )}
               {/* Botão FINALIZAR — pulsa neon verde somente quando comprovante carregado */}
-              <button data-tour="finalizar" onClick={handleFinalSubmit} disabled={!restoredFileUrls.paymentProof || isSubmitting}
+              <button type="button" data-tour="finalizar" onClick={handleFinalSubmit} disabled={!restoredFileUrls.paymentProof || isSubmitting}
                 className={`w-full px-4 py-4 font-black rounded-xl transition-all duration-300 text-lg flex items-center justify-center gap-3 tracking-wider ${
                   isSubmitting ? 'bg-gray-700 text-gray-400 cursor-not-allowed' :
                   restoredFileUrls.paymentProof ? 'neon-finalizar-pulse text-white cursor-pointer' :
