@@ -6116,9 +6116,9 @@ export default function AdminOrders() {
                             {order.customerReferredByPhone && (
                               order.commissionPaid === 1 ? (
                                 <button
-                                  onClick={e => { e.stopPropagation(); toggleCommissionPaidMutation.mutate({ registrationId: order.id, paid: false }); }}
+                                  onClick={e => { e.stopPropagation(); navigate("/admin/commissions"); }}
                                   className="inline-flex items-center gap-1 px-2 py-0.5 rounded-full text-[10px] font-bold bg-green-500/20 border border-green-500/50 text-green-400 hover:bg-red-500/20 hover:border-red-500/50 hover:text-red-400 transition-colors"
-                                  title="Clique para desfazer"
+                                  title="Gerenciar pagamento no painel de comissões"
                                 >
                                   ✅ Comissão Paga
                                 </button>
@@ -6126,9 +6126,9 @@ export default function AdminOrders() {
                                 <button
                                   onClick={e => { e.stopPropagation(); navigate("/admin/commissions"); }}
                                   className="inline-flex items-center gap-1 px-2 py-0.5 rounded-full text-[10px] font-bold bg-red-500/20 border border-red-500/50 text-red-400 animate-pulse hover:bg-green-500/20 hover:border-green-500/50 hover:text-green-400 transition-colors"
-                                  title="Abrir painel de comissões para validar elegibilidade e confirmar o pagamento"
+                                  title="Verificar agendamento e pagar a comissão no painel"
                                 >
-                                  💰 VER COMISSÃO
+                                  {order.scheduleStatus === "confirmed" ? "💰 LIBERADA — VER COMISSÃO" : "⏳ VER STATUS DA COMISSÃO"}
                                 </button>
                               )
                             )}
