@@ -1552,6 +1552,8 @@ export default function Home() {
       return;
     }
 
+    // Preflight: keep failures visible even when a client-side validation throws.
+    try {
     // Validar somente as perguntas que pertencem ao caminho REAL escolhido.
     // Regras "Encerrar questionário" / "Encerrar com mensagem" cortam todas as
     // perguntas posteriores também na finalização do pedido.
@@ -1619,6 +1621,12 @@ export default function Home() {
       } else {
         if (!carDocument && !restoredFileUrls.carDocument) { reportSubmitFailure('Selecione o documento PDF'); submitLockRef.current = false; return; }
       }
+    }
+
+    } catch (preflightError: any) {
+      reportSubmitFailure('Não foi possível validar os dados do pedido: ' + (preflightError?.message || 'verifique as informações preenchidas.'));
+      submitLockRef.current = false;
+      return;
     }
 
     // Capturar se o cliente é NOVO antes de enviar o pedido
