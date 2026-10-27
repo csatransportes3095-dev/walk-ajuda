@@ -671,6 +671,17 @@ export default function AdminH2Auto() {
                     />
                   </label>
                 </div>
+                <div className="rounded-xl border border-cyan-500/30 bg-cyan-500/5 p-3 text-xs space-y-1">
+                  <p className="font-bold text-cyan-200">PAUSA DO ATENDENTE — 24 HORAS</p>
+                  <p>Tempo configurado no ADM: <strong>{d.config.pauseMinutes} min</strong>{draft && value.pauseMinutes !== d.config.pauseMinutes ? ` · Novo valor ainda não salvo: ${value.pauseMinutes} min` : ""}</p>
+                  <p className={d.paired && d.appliedRevision === d.revision ? "text-emerald-300" : "text-amber-300"}>
+                    {d.paired && d.appliedRevision === d.revision
+                      ? `Revisão ${d.appliedRevision} confirmada pelo APK`
+                      : !d.paired ? "Celular não vinculado — tempo ainda não aplicado"
+                        : `Sincronização pendente: servidor ${d.revision}, APK ${d.appliedRevision}`}
+                  </p>
+                  <p className="text-muted-foreground">A pausa não depende dos horários ativos. A confirmação da revisão não garante que o WhatsApp tenha informado a resposta manual.</p>
+                </div>
                 <label className="flex items-center gap-2">
                   <Clock className="h-4 w-4" />
                   Pausa atendente (min)
