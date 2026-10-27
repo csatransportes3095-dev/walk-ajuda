@@ -225,6 +225,11 @@ function PromoCard({
   );
 }
 
+// Compartilhado entre a validacao antes de finalizar e a arvore de perguntas.
+// Deve existir fora do bloco JSX para nao gerar ReferenceError no envio.
+const normalizeConditionalValue = (value: string | null | undefined) =>
+  String(value || '').normalize('NFD').replace(/[\u0300-\u036f]/g, '').trim().toLocaleUpperCase('pt-BR');
+
 export default function Home() {
   let { user, loading, error, isAuthenticated, logout } = useAuth();
 
