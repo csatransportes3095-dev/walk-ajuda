@@ -544,6 +544,13 @@ export default function H2AutoTreeEditor({ id, revision, appliedRevision, initia
           )}
           <button type="button" className="rounded-xl border border-cyan-400/50 px-4 py-3 text-sm font-bold text-cyan-100"
             onClick={() => selectStage(node.id)}>✏️ EDITAR AQUI</button>
+          {node.id !== tree.start && (
+            <button type="button" aria-label={"Excluir pergunta " + flowTitle(node, tree.start)}
+              className="rounded-xl border border-rose-500/60 bg-rose-950/30 px-4 py-3 text-sm font-black text-rose-200 hover:bg-rose-900/50"
+              onClick={() => deleteStage(node.id)}>
+              <Trash2 className="mr-1 inline h-4 w-4" /> EXCLUIR
+            </button>
+          )}
         </div>
         {quickAddForm(node.id)}
         {quickEditNode(node)}
