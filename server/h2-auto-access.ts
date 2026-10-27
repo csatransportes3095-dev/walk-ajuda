@@ -30,7 +30,7 @@ const noReferral = "🔐 *INDICAÇÃO OBRIGATÓRIA*\n\nPara continuar, informe\n
 const anonymousCustomerFailure = "⚠️ Não foi possível confirmar\num cadastro autorizado\ncom esse telefone.\n\n📱 Confira o número com DDD\nou solicite atendimento.";
 const minute = 60_000;
 const hour = 60 * minute;
-const accessLifetime = 24 * hour;
+const defaultAccessHours = 24;
 const otpLifetime = 10 * minute;
 type Stage = "choice" | "customer_phone" | "customer_code" | "referral_phone" | "customer" | "new";
 type Session = {
@@ -136,12 +136,16 @@ export function registerH2AutoAccessRoutes(app: Express): void {
       const deviceId = await deviceFor(req);
       if (deviceId) {
         const live = await rows(sql`SELECT JSON_UNQUOTE(JSON_EXTRACT(config_json,'$.enabled')) AS bot_on,
+          CAST(JSON_UNQUOTE(JSON_EXTRACT(config_json,'$.identificationSessionHours')) AS UNSIGNED) AS session_hours,
           JSON_UNQUOTE(JSON_EXTRACT(config_json,'$.identificationEnabled')) AS identity_on
           FROM h2_auto_devices WHERE id=${deviceId} LIMIT 1`);
         if (live[0]?.bot_on !== "true") return respond(res,200,{state:"disabled"});
         if (live[0]?.identity_on === "false") return respond(res,200,{state:"identification_disabled"});
       }
       if (!deviceId) return respond(res, 401, { error: "unauthorized" });
+      const rawHours=Number((await rows(sql`SELECT JSON_UNQUOTE(JSON_EXTRACT(config_json,'$.identificationSessionHours')) AS hours FROM h2_auto_devices WHERE id=${deviceId} LIMIT 1`))[0]?.hours);
+      const configuredHours=Number.isInteger(rawHours) && rawHours>=1 && rawHours<=720 ? rawHours : defaultAccessHours;
+      const accessLifetime=configuredHours*hour;
       const conversation = req.body?.conversationId;
       const input = req.body?.input;
       // The Android client hashes the stable WhatsApp shortcut; never send raw contact identifiers.
@@ -167,21 +171,24 @@ export function registerH2AutoAccessRoutes(app: Express): void {
 
       // Navigation is handled before code/phone validation, so MENU and 0
       // are never mistaken for an invalid verification code or phone number.
+      // Authorized customers can navigate all menus without losing identity.
+      // Only explicit expiry, account revocation or device unpairing can reset it.
+      if (s.stage === "customer" || s.stage === "new") {
+        const allowed = s.stage === "customer" ? await activeCustomerBinding(s) : await activeReferralBinding(s);
+        if (allowed && Number(s.expires_at)>now && now-Number(s.updated_at)<accessLifetime) {
+          return respond(res,200,verified(s.stage));
+        }
+        await update(sessionId, sql`stage='choice',customer_id=NULL,referrer_id=NULL,
+          customer_phone_hash=NULL,customer_email_hash=NULL,code_hash=NULL,code_expires=NULL,
+          expires_at=0,updated_at=${now}`);
+        return respond(res,200,{state:"choice",message:initialMessage});
+      }
       if (normalized === "menu" || normalized === "inicio" || normalized === "0" && s.stage !== "choice") {
         const destination = normalized === "0" && s.stage === "customer_code" ? "customer_phone" : "choice";
         await update(sessionId, sql`stage=${destination},customer_id=NULL,referrer_id=NULL,
           customer_phone_hash=NULL,customer_email_hash=NULL,code_hash=NULL,code_expires=NULL,
           code_attempts=0,resend_after=0,expires_at=0,updated_at=${now}`);
         return respond(res, 200, {state: destination, message: destination === "customer_phone" ? phoneMessage : initialMessage});
-      }
-
-      if (s.stage === "customer" || s.stage === "new") {
-        const allowed = s.stage === "customer" ? await activeCustomerBinding(s) : await activeReferralBinding(s);
-        if (Number(s.expires_at) > now && allowed) return respond(res, 200, verified(s.stage));
-        await update(sessionId, sql`stage='choice',customer_id=NULL,referrer_id=NULL,
-          customer_phone_hash=NULL,customer_email_hash=NULL,code_hash=NULL,code_expires=NULL,
-          expires_at=0,updated_at=${now}`);
-        return respond(res, 200, { state: "choice", message: initialMessage });
       }
 
       if (s.stage === "choice") {
