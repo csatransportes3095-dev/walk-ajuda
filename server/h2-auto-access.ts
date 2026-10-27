@@ -22,7 +22,7 @@ const otpHash = (session: string, code: string) => {
 };
 const respond = (res: Response, status: number, body: object) =>
   res.status(status).set("Cache-Control", "no-store").json(body);
-const initialMessage = "⚡ *H2 COLOMBIANO* 🇨🇴\n🤖 *CENTRAL DE ATENDIMENTO*\n\n👋 Olá! Seja bem-vindo!\n\n🔐 Para sua segurança,\nprecisamos identificar\nse você já é nosso cliente.\n\n1️⃣ *SIM, JÁ SOU CLIENTE*\n2️⃣ *NÃO SOU CLIENTE*\n\n⌨️ Digite *1* ou *2*.\n━━━━━━━━━━━━━━━━\n🛡️ *EQUIPE H2 COLOMBIANO* 🇨🇴";
+const initialMessage = "⚡ *H2 COLOMBIANO* 🇨🇴\n🤖 *CENTRAL DE ATENDIMENTO*\n\n👋 Olá! Seja bem-vindo!\n\n🔐 Para sua segurança,\nprecisamos identificar\nse você já é nosso cliente.\n\n1️⃣ *SIM, JÁ SOU CLIENTE*\n2️⃣ *NÃO SOU CLIENTE*\n\n⌨️ Digite *1* ou *2*.\n🔙 *MENU* para início.\n━━━━━━━━━━━━━━━━\n🛡️ *EQUIPE H2 COLOMBIANO* 🇨🇴";
 const phoneMessage = "✅ *JÁ SOU CLIENTE*\n\n📱 Informe o telefone\ncadastrado no H2 Colombiano,\ncom DDD, para confirmar\nsua identidade.";
 const referrerMessage = "🆕 *NOVO CLIENTE*\n\n🇨🇴 Atendemos somente\npor indicação.\n\n📱 Informe o telefone\ncom DDD de quem\nindicou você.";
 const invalidReferral = "⚠️ *INDICAÇÃO NÃO VALIDADA*\n\n❌ Não foi possível validar\no telefone informado.\n\n📱 Informe outro número\nde indicador autorizado.\n\n👨‍💻 Digite *6* para falar\ncom um atendente.";
@@ -165,6 +165,16 @@ export function registerH2AutoAccessRoutes(app: Express): void {
         return respond(res, 200, { state: "choice", message: initialMessage });
       }
 
+      // Navigation is handled before code/phone validation, so MENU and 0
+      // are never mistaken for an invalid verification code or phone number.
+      if (normalized === "menu" || normalized === "inicio" || normalized === "0" && s.stage !== "choice") {
+        const destination = normalized === "0" && s.stage === "customer_code" ? "customer_phone" : "choice";
+        await update(sessionId, sql`stage=${destination},customer_id=NULL,referrer_id=NULL,
+          customer_phone_hash=NULL,customer_email_hash=NULL,code_hash=NULL,code_expires=NULL,
+          code_attempts=0,resend_after=0,expires_at=0,updated_at=${now}`);
+        return respond(res, 200, {state: destination, message: destination === "customer_phone" ? phoneMessage : initialMessage});
+      }
+
       if (s.stage === "customer" || s.stage === "new") {
         const allowed = s.stage === "customer" ? await activeCustomerBinding(s) : await activeReferralBinding(s);
         if (Number(s.expires_at) > now && allowed) return respond(res, 200, verified(s.stage));
@@ -223,7 +233,7 @@ export function registerH2AutoAccessRoutes(app: Express): void {
           return respond(res, 200, { state: "customer_phone", message: "⚠️ Não foi possível enviar o código agora. Tente novamente." });
         }
         return respond(res, 200, { state: "customer_code",
-          message: "📧 *CONFIRMAÇÃO DE E-MAIL*\n\n✅ Enviamos um código ao\ne-mail do seu cadastro.\n\n🔢 Digite os *6 números*.\n⏳ Validade: *10 minutos*." });
+          message: "📧 *CONFIRMAÇÃO DE E-MAIL*\n\n✅ Enviamos um código ao\ne-mail do seu cadastro.\n\n🔢 Digite os *6 números*.\n⏳ Validade: *10 minutos*.\n\n🔙 *0* para voltar.\nDigite *MENU* para início." });
       }
 
       if (s.stage === "customer_code") {
@@ -243,7 +253,7 @@ export function registerH2AutoAccessRoutes(app: Express): void {
           await db.execute(sql`UPDATE h2_auto_access_sessions SET code_attempts=LEAST(code_attempts+1,5)
             WHERE id=${sessionId} AND stage='customer_code'`);
           return respond(res, 200, { state: "customer_code",
-            message: "⚠️ Código inválido ou expirado.\nConfira o e-mail.\n\nDigite *0* para voltar." });
+            message: "⚠️ Código inválido ou expirado.\nConfira o e-mail.\n\nDigite *0* para voltar.\nDigite *MENU* para início." });
         }
         const db = await getDb();
         if (!db) throw new Error("db_unavailable");
