@@ -8,6 +8,7 @@ import {isOwnSiteEmailAuthorized} from "./siteAccessOwnCodes";
 import {getOrderStatusVisibilityForClient} from "./orderStatusVisibility";
 import {groupVisibleH2AutoOrders} from "./h2-auto-order-history";
 import {attachScheduleToOrders} from "./h2-auto-order-schedule";
+import {resolveReferralCommissionState} from "../shared/referralCommissionPolicy";
 
 const hash=(v:string)=>createHash("sha256").update(v).digest("hex");
 const otpDigest=(sid:string,code:string)=>{const secret=process.env.H2_SITE_ACCESS_SECRET||"";if(secret.length<32)throw Error("otp_secret_unavailable");return createHmac("sha256",secret).update("h2-auto-orders:"+sid+":"+code).digest("hex");};
@@ -183,6 +184,63 @@ export function registerH2AutoOrdersRoutes(app:Express){
     confirmed:"✅ Sua FOTO DE PERFIL está agendada. O atendimento será realizado pelo WhatsApp. Esteja disponível no horário confirmado.",
    });
    return reply(res,200,{state:"verified",orders:withSchedules,message:visible.length?"Pedidos encontrados.":settings.noOrders});
+  }catch{return reply(res,503,{error:"temporarily_unavailable"});}
+ });
+ // Verified, read-only referral commissions. Reuse exactly the active OTP session
+ // from order consultation: never expose a referrer's customers before OTP.
+ app.post("/api/h2-auto/orders/referrals",async(req,res)=>{
+  try{
+   const id=await authenticated(req),conversation=req.body?.conversationId;
+   if(!id)return reply(res,401,{error:"unauthorized"});
+   if(!validConversation(conversation))return reply(res,400,{error:"invalid_conversation"});
+   await ensure();const sid=sessionId(id,conversation),now=Date.now();
+   const sessions=await rows(sql`SELECT s.customer_id,s.customer_phone,c.email,c.phone FROM h2_auto_order_sessions s
+     JOIN customers c ON c.id=s.customer_id
+     WHERE s.id=${sid} AND s.device_id=${id} AND s.used_at IS NOT NULL AND s.expires_at>${now}
+      AND c.deletedAt IS NULL AND c.blocked=0
+      AND SHA2(LOWER(TRIM(c.email)),256)=s.email_hash
+      AND RIGHT(REGEXP_REPLACE(c.phone,'[^0-9]',''),11)=RIGHT(REGEXP_REPLACE(s.customer_phone,'[^0-9]',''),11)
+      LIMIT 1`);
+   const me=sessions[0];if(!me)return reply(res,403,{error:"authentication_required"});
+   const authDb=await getDb();if(!authDb||!(await isOwnSiteEmailAuthorized(authDb,String(me.email))))
+     return reply(res,403,{error:"authentication_required"});
+   const phone=String(me.customer_phone).replace(/\D/g,"").slice(-11);
+   const records=await rows(sql`
+     SELECT attribution.registrationId,attribution.orderNumber,attribution.referredName,
+       attribution.commissionValue,attribution.status AS commissionStatus,
+       attribution.invalidReason,
+       (SELECT h.status FROM orderStatusHistory h WHERE h.registrationId=attribution.registrationId
+         ORDER BY h.createdAt DESC,h.id DESC LIMIT 1) AS latestOrderStatus,
+       (SELECT st.label FROM orderStatusHistory h LEFT JOIN orderStatusTypes st
+         ON st.${sql.identifier("key")}=h.status WHERE h.registrationId=attribution.registrationId
+         ORDER BY h.createdAt DESC,h.id DESC LIMIT 1) AS latestOrderStatusLabel,
+       (SELECT sa.status FROM scheduleAppointments sa WHERE sa.registrationId=attribution.registrationId
+         AND sa.subOrderIndex=0 ORDER BY sa.id DESC LIMIT 1) AS appointmentStatus,
+       (SELECT sa.confirmedAt FROM scheduleAppointments sa WHERE sa.registrationId=attribution.registrationId
+         AND sa.subOrderIndex=0 ORDER BY sa.id DESC LIMIT 1) AS appointmentConfirmedAt
+     FROM referralCommissionAttributions attribution
+     WHERE RIGHT(REGEXP_REPLACE(attribution.referrerPhone,'[^0-9]',''),11)=${phone}
+     ORDER BY attribution.createdAt DESC LIMIT 100`);
+   const commissions=records.map((row:any)=>{
+     const status=resolveReferralCommissionState({
+       frozenStatus:row.commissionStatus,
+       appointmentStatus:row.appointmentStatus,
+       appointmentConfirmedAt:row.appointmentConfirmedAt,
+       latestOrderStatus:row.latestOrderStatus,
+       latestOrderStatusLabel:row.latestOrderStatusLabel,
+     });
+     return {
+       orderNumber:row.orderNumber||null,
+       customerName:String(row.referredName||"Cliente").slice(0,90),
+       orderStatus:String(row.latestOrderStatusLabel||row.latestOrderStatus||"Pedido recebido").slice(0,100),
+       commissionValue:Math.max(0,Number(row.commissionValue)||0),
+       commissionState:status.state,
+       commissionLabel:status.label,
+     };
+   });
+   const total=commissions.reduce((acc:number,row:any)=>acc+row.commissionValue,0);
+   const available=commissions.filter((row:any)=>row.commissionState==="liberada").reduce((acc:number,row:any)=>acc+row.commissionValue,0);
+   return reply(res,200,{state:"verified",totalReferrals:commissions.length,amountTotal:total,amountReady:available,commissions});
   }catch{return reply(res,503,{error:"temporarily_unavailable"});}
  });
  app.post("/api/h2-auto/orders/logout",async(req,res)=>{

@@ -72,6 +72,7 @@ import { h2bicoIntelligenceRouter } from "./h2bicoReviewIntelligence";
 import { createSqlOrderPersistenceStore, isPersistedPublicOrder, notifyOnlyAfterPersistence, persistPublicOrder } from "./orderPersistence";
 import { ensureAutomaticScheduleForOrder, regenerateAutomaticScheduleForOrder } from "./autoSchedule";
 import { resolveLegacyCommissionValue, type CommissionCandidate } from "./commissionResolver";
+import { resolveReferralCommissionState } from "../shared/referralCommissionPolicy";
 import { backupRouter } from "./routers/backup";
 import { MAINTENANCE_ROUTE_OPTIONS, parseMaintenanceManifest } from "../shared/maintenanceManifest";
 import { getConfiguredGlobalProgressKeys, sanitizeGlobalProgressKeys } from "../shared/orderProgressSequence";
@@ -5811,6 +5812,39 @@ export const appRouter = router({
         await ensureCommissionReferralStatusColumns(db);
         const { getReferralCommissionAttributionByRegistration, updateReferralCommissionAttributionStatus } = await import('./db');
         let frozenAttribution = await getReferralCommissionAttributionByRegistration(input.registrationId);
+        if (input.paid) {
+          const appointmentRows = await db.execute(sql`
+            SELECT status, confirmedAt FROM scheduleAppointments
+            WHERE registrationId=${input.registrationId} AND subOrderIndex=0
+            ORDER BY id DESC LIMIT 1
+          `);
+          const appt = (appointmentRows[0] as unknown as any[])?.[0];
+          const latestRows = await db.execute(sql`
+            SELECT h.status, st.label AS statusLabel FROM orderStatusHistory h
+            LEFT JOIN orderStatusTypes st ON st.${sql.identifier("key")}=h.status
+            WHERE h.registrationId=${input.registrationId}
+            ORDER BY h.createdAt DESC,h.id DESC LIMIT 1
+          `);
+          const latest = (latestRows[0] as unknown as any[])?.[0];
+          const state = resolveReferralCommissionState({
+            frozenStatus: frozenAttribution?.status,
+            appointmentStatus: appt?.status,
+            appointmentConfirmedAt: appt?.confirmedAt,
+            latestOrderStatus: latest?.status,
+            latestOrderStatusLabel: latest?.statusLabel,
+          });
+          if (!state.paymentReady) {
+            throw new TRPCError({ code: "BAD_REQUEST",
+              message: state.state === "nao_elegivel" ? "Indicação não válida." :
+                "Pagamento bloqueado: o pedido precisa ter agendamento confirmado." });
+          }
+          if (frozenAttribution?.status === "em_analise") {
+            await updateReferralCommissionAttributionStatus({
+              registrationId: input.registrationId, status: "elegivel"
+            });
+            frozenAttribution = await getReferralCommissionAttributionByRegistration(input.registrationId);
+          }
+        }
         if (input.paid && frozenAttribution && frozenAttribution.status !== 'elegivel') {
           throw new TRPCError({ code: 'BAD_REQUEST', message: 'A comissão precisa ser aprovada antes do pagamento.' });
         }
@@ -6092,6 +6126,16 @@ export const appRouter = router({
           rca.serviceName as frozenServiceName,
           rca.serviceOption as frozenServiceOption,
           rca.createdAt as frozenCreatedAt,
+          (SELECT sa.status FROM scheduleAppointments sa
+             WHERE sa.registrationId=acp.id AND sa.subOrderIndex=0
+             ORDER BY sa.id DESC LIMIT 1) AS appointmentStatus,
+          (SELECT sa.confirmedAt FROM scheduleAppointments sa
+             WHERE sa.registrationId=acp.id AND sa.subOrderIndex=0
+             ORDER BY sa.id DESC LIMIT 1) AS appointmentConfirmedAt,
+          (SELECT st2.label FROM orderStatusHistory osh2
+             LEFT JOIN orderStatusTypes st2 ON st2.\`key\`=osh2.status
+             WHERE osh2.registrationId=acp.id
+             ORDER BY osh2.createdAt DESC,osh2.id DESC LIMIT 1) AS latestStatusLabel,
           (
             SELECT osh.status FROM orderStatusHistory osh
             WHERE osh.registrationId = acp.id
@@ -6174,7 +6218,20 @@ export const appRouter = router({
         const commissionValue = r.frozenCommissionStatus
           ? Number(r.frozenCommissionValue ?? 0)
           : Number(legacyResolution?.value ?? 0);
+        const currentState = resolveReferralCommissionState({
+          frozenStatus: r.frozenCommissionStatus,
+          paid: r.frozenCommissionStatus ? r.frozenCommissionStatus === "paga" : Number(r.commissionPaid) === 1,
+          invalid: r.frozenCommissionStatus ? ["nao_elegivel","cancelada"].includes(String(r.frozenCommissionStatus)) : Number(r.referralInvalid || 0) === 1,
+          appointmentStatus: r.appointmentStatus,
+          appointmentConfirmedAt: r.appointmentConfirmedAt,
+          latestOrderStatus: r.latestStatus,
+          latestOrderStatusLabel: r.latestStatusLabel,
+        });
         return {
+          paymentReady: currentState.paymentReady,
+          paymentState: currentState.state,
+          paymentLabel: currentState.label,
+          appointmentStatus: r.appointmentStatus ?? null,
           registrationId: r.registrationId as number,
           phone: r.phone as string,
           customerName: r.customerName as string | null,

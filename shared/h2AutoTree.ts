@@ -13,7 +13,7 @@ const answerSchema = z.object({
 const stageSchema = z.object({
   id: idSchema,
   text: z.string().trim().min(1).max(1800),
-  mode: z.enum(["question", "end", "human", "order"]),
+  mode: z.enum(["question", "end", "human", "order", "referral"]),
   options: z.array(answerSchema).max(10),
 }).strict();
 
