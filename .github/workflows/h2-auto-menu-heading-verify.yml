@@ -1,0 +1,22 @@
+name: H2 AUTO heading validation
+on:
+  push:
+    branches: [fix/h2-auto-texto-opcional-menu-20261027]
+permissions:
+  contents: read
+jobs:
+  build:
+    runs-on: ubuntu-latest
+    timeout-minutes: 25
+    steps:
+      - uses: actions/checkout@v4
+      - uses: pnpm/action-setup@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '22'
+          cache: pnpm
+      - run: pnpm install --no-frozen-lockfile
+      - name: Validate heading in menu with options
+        run: |
+          node -e "const fs=require('fs');const s=fs.readFileSync('shared/h2AutoTree.ts','utf8'); if(!s.includes('node.options.length === 0')||!s.includes('text: z.string().trim().max(1800)'))process.exit(1)"
+      - run: pnpm build
