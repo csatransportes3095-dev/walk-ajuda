@@ -6,6 +6,7 @@ export type FlowRow = {
   viaKey: string | null;
   viaLabel: string | null;
   shared: boolean;
+  parentId: string | null;
 };
 
 export type FlowPathStep = {
@@ -15,6 +16,22 @@ export type FlowPathStep = {
 };
 
 const byId = (tree: H2AutoTree) => new Map(tree.nodes.map(node => [node.id, node]));
+
+/** The WhatsApp menu number, not creation time, determines display order. */
+export function orderedFlowOptions(options: readonly H2AutoTreeOption[]): H2AutoTreeOption[] {
+  return [...options].sort((a, b) => Number(a.key) - Number(b.key));
+}
+
+/** Persist the same numbering sequence that is shown in the ADM. */
+export function normalizeFlowTreeOptions(tree: H2AutoTree): H2AutoTree {
+  return {
+    ...tree,
+    nodes: tree.nodes.map(node => ({
+      ...node,
+      options: orderedFlowOptions(node.options),
+    })),
+  };
+}
 
 /** Visible, human-readable labels. Technical IDs remain stable for the Android protocol. */
 export function flowTitle(node: H2AutoTreeNode, startId: string): string {
@@ -34,16 +51,16 @@ export function flowRows(tree: H2AutoTree, folded: ReadonlySet<string> = new Set
   const nodes = byId(tree);
   const seen = new Set<string>();
   const rows: FlowRow[] = [];
-  function visit(id: string, depth: number, key: string | null, label: string | null) {
+  function visit(id: string, depth: number, key: string | null, label: string | null, parentId: string | null) {
     const current = nodes.get(id);
     if (!current || rows.length >= 250) return;
     const shared = seen.has(id);
-    rows.push({ id, depth, viaKey: key, viaLabel: label, shared });
+    rows.push({ id, depth, viaKey: key, viaLabel: label, shared, parentId });
     if (shared || depth >= 100 || folded.has(id)) return;
     seen.add(id);
-    for (const option of current.options) visit(option.next, depth + 1, option.key, option.label);
+    for (const option of orderedFlowOptions(current.options)) visit(option.next, depth + 1, option.key, option.label, id);
   }
-  visit(tree.start, 0, null, null);
+  visit(tree.start, 0, null, null, null);
   return rows;
 }
 
@@ -60,7 +77,7 @@ export function flowPath(tree: H2AutoTree, target: string): FlowPathStep[] {
     if (next.id === target) return next.path;
     const current = nodes.get(next.id);
     if (!current) continue;
-    for (const option of current.options) {
+    for (const option of orderedFlowOptions(current.options)) {
       if (!nodes.has(option.next) || visited.has(option.next)) continue;
       visited.add(option.next);
       queue.push({
@@ -120,7 +137,7 @@ export function addConnectedStage(tree: H2AutoTree, parentId: string, id: string
     nodes: [
       ...tree.nodes.map(node => node.id !== parentId ? node : {
         ...node,
-        options: [...node.options, { key, label: "Nova resposta", next: id }],
+        options: orderedFlowOptions([...node.options, { key, label: "Nova resposta", next: id }]),
       }),
       { id, text: "📋 *NOVA PERGUNTA*\n\nEscreva aqui a pergunta para o cliente.", mode: "question", options: [] },
     ],
