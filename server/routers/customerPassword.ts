@@ -19,7 +19,7 @@ import {
 } from "../../drizzle/schema";
 import { eq, and, sql, or } from "drizzle-orm";
 import bcrypt from "bcryptjs";
-import { ensureCustomerIdentityInfrastructure, getRouteAccess, setCustomerRoutePermissions, type CustomerRoute } from "../customerAccess";
+import { ensureCustomerIdentityInfrastructure, findMainCustomerByIdentity, getRouteAccess, setCustomerRoutePermissions, type CustomerRoute } from "../customerAccess";
 import { getMissingCustomerProfileFields } from "../customerProfileRequirements";
 import { deliverOwnSiteCode } from "../siteAccessCodeDelivery";
 import { generateOwnSiteCode } from "../siteAccessOwnCodes";
@@ -110,7 +110,10 @@ async function getCustomerByCleanPhone(cleanPhone: string) {
     .from(customers)
     .where(eq(customers.phone, cleanPhone))
     .limit(1);
-  return rows?.[0] ?? null;
+  if (rows?.[0]) return rows[0];
+  // Cadastros antigos podem ter DDI 55 ou telefone formatado.
+  // Reutilizar a identidade principal ativa antes de considerar este telefone novo.
+  return await findMainCustomerByIdentity({ phone: cleanPhone }, db);
 }
 
 type VerifiedLoginResult =
