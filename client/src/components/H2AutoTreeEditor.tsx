@@ -435,7 +435,7 @@ export default function H2AutoTreeEditor({ id, revision, appliedRevision, initia
       nodes: [...prev.nodes.map(n => n.id === branchId
         ? { ...n, options: orderedFlowOptions([...n.options, {key,label:"Minhas indicações e comissões",next:id}]) }
         : n), {id, mode:"referral" as const,
-          text:"💰 *MINHAS INDICAÇÕES E COMISSÕES*\\n\\nConfirme seu telefone e o código enviado ao e-mail cadastrado.",options:[]}],
+          text:"💰 *MINHAS INDICAÇÕES E COMISSÕES*\n\nConfirme seu telefone e o código enviado ao e-mail cadastrado.",options:[]}],
     }));
     setDirty(true);
     setFolded(prev => { const next = new Set(prev); next.delete(branchId); return next; });
