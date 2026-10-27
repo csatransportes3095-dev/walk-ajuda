@@ -30,6 +30,8 @@ export default function H2AutoTreeEditor({ id, revision, initial }: Props) {
   const utils = trpc.useUtils();
   const [tree, setTree] = useState<H2AutoTree>(() => cloneH2AutoTree(initial || H2_AUTO_TREE_DEFAULT));
   const [selected, setSelected] = useState(tree.start);
+  // Para telas grandes: NÃO à esquerda, SIM à direita; somente o ramo escolhido abre.
+  const [focusedBranch, setFocusedBranch] = useState("1");
   const [test, setTest] = useState<{ current: string; stack: string[] }>({ current: tree.start, stack: [] });
   const [dirty, setDirty] = useState(false);
   const [folded, setFolded] = useState<Set<string>>(() => new Set());
@@ -43,28 +45,34 @@ export default function H2AutoTreeEditor({ id, revision, initial }: Props) {
     loadedRevision.current = revision;
     setTree(fresh);
     setSelected(fresh.start);
+    setFocusedBranch("1");
     setExistingTarget(fresh.start);
     setTest({ current: fresh.start, stack: [] });
     setFolded(new Set());
   }, [dirty, revision, initial]);
 
   const selectedNode = useMemo(() => tree.nodes.find(n => n.id === selected), [tree, selected]);
-  const map = useMemo(() => flowRows(tree, folded), [tree, folded]);
-  // Each top-level answer is a separate full-width vertical block.
-  // Keep the DFS order, shared destinations and fold/unfold behavior unchanged.
-  const mapGroups = useMemo(() => {
-    const root = map.length && map[0].depth === 0 ? map[0] : null;
-    const branches: Array<{ key: string; title: string; rows: FlowRow[] }> = [];
-    for (const row of map) {
-      if (row.depth === 0) continue;
-      if (row.depth === 1) {
-        branches.push({ key: row.viaKey || "", title: row.viaLabel || "Resposta", rows: [row] });
-      } else if (branches.length) {
-        branches[branches.length - 1].rows.push(row);
-      }
-    }
-    return { root, branches };
-  }, [map]);
+  const rootNode = useMemo(() => tree.nodes.find(node => node.id === tree.start), [tree]);
+  // Cada resposta inicial tem um mapa independente, inclusive quando reutiliza etapas.
+  const branches = useMemo(() => {
+    const options = [...(rootNode?.options || [])].sort((left, right) => {
+      const priority = (key: string) => key === "2" ? 0 : key === "1" ? 1 : Number(key) + 2;
+      return priority(left.key) - priority(right.key);
+    });
+    return options.map(option => ({
+      key: option.key,
+      title: option.label,
+      id: option.next,
+      rows: flowRows({ ...tree, start: option.next }, folded).map((row, index): FlowRow => ({
+        ...row,
+        depth: row.depth + 1,
+        viaKey: index === 0 ? option.key : row.viaKey,
+        viaLabel: index === 0 ? option.label : row.viaLabel,
+      })),
+    }));
+  }, [tree, rootNode, folded]);
+  const selectedBranchKey = branches.some(branch => branch.key === focusedBranch)
+    ? focusedBranch : branches[0]?.key || "";
   const path = useMemo(() => flowPath(tree, selected), [tree, selected]);
   const unlinked = useMemo(() => unlinkedStages(tree), [tree]);
   const currentTest = tree.nodes.find(n => n.id === test.current);
@@ -160,6 +168,7 @@ export default function H2AutoTreeEditor({ id, revision, initial }: Props) {
     loadedRevision.current = revision;
     setTree(fresh);
     setSelected(fresh.start);
+    setFocusedBranch("1");
     setExistingTarget(fresh.start);
     setTest({ current: fresh.start, stack: [] });
     setDirty(false);
@@ -196,7 +205,7 @@ export default function H2AutoTreeEditor({ id, revision, initial }: Props) {
     const node = tree.nodes.find(n => n.id === row.id);
     if (!node) return null;
     const active = selected === row.id;
-    const expandable = node.options.length > 0 && !row.shared;
+    const expandable = node.options.length > 0 && !row.shared && row.depth > 0;
     const indentation = Math.min(Math.max(row.depth - levelOffset, 0), 3) * 12;
     return (
       <div key={row.id + "-" + index}
@@ -279,7 +288,7 @@ export default function H2AutoTreeEditor({ id, revision, initial }: Props) {
               <h4 className="flex items-center gap-2 text-lg font-black text-cyan-300">
                 <MapIcon className="h-5 w-5" /> 1. MAPA DO ATENDIMENTO
               </h4>
-              <p className="mt-1 text-sm text-slate-300">Siga as respostas de cima para baixo. Cada bloco mostra a próxima etapa.</p>
+              <p className="mt-1 text-sm text-slate-300">No computador, NÃO fica à esquerda e SIM à direita. Clique na opção para abrir apenas o caminho escolhido.</p>
             </div>
           </div>
           <div className="flex flex-wrap gap-2 text-xs">
@@ -296,33 +305,30 @@ export default function H2AutoTreeEditor({ id, revision, initial }: Props) {
             </button>
           </div>
 
-          <div className="w-full min-w-0 space-y-4" aria-label="Mapa completo das perguntas e respostas">
-            {mapGroups.root && (
-              <div className="w-full min-w-0 rounded-2xl border border-cyan-400/30 bg-cyan-950/10 p-3 md:p-4">
-                {renderMapRow(mapGroups.root, 0)}
-              </div>
-            )}
-            {mapGroups.branches.map((branch, branchIndex) => (
-              <section key={branch.key + "-" + branchIndex}
-                className="w-full min-w-0 space-y-3 rounded-2xl border border-violet-400/35 bg-[#0b172a] p-3 md:p-4">
-                <div className="flex min-w-0 flex-col items-start gap-2 border-b border-violet-400/20 pb-3 sm:flex-row sm:items-center">
-                  <span className="shrink-0 rounded-xl bg-violet-800/60 px-3 py-2 text-sm font-black text-white">
-                    OPÇÃO {numLabel(branch.key)}
-                  </span>
-                  <span className="min-w-0 break-words text-base font-black leading-snug text-violet-100">
-                    {branch.title}
-                  </span>
-                </div>
-                <div className="min-w-0 space-y-2">
-                  {branch.rows.map((row, index) => renderMapRow(row, index, 1, index !== 0))}
-                </div>
-              </section>
-            ))}
-            {!mapGroups.branches.length && (
-              <p className="rounded-xl border border-amber-400/30 bg-amber-950/15 p-3 text-sm text-amber-100">
-                Abra as respostas da primeira mensagem para visualizar os caminhos.
-              </p>
-            )}
+          <div className="w-full min-w-0 space-y-5" aria-label="Mapa do atendimento por SIM ou NÃO">
+            {rootNode && <div className="w-full rounded-2xl border border-cyan-400/30 bg-cyan-950/10 p-3 md:p-4">
+              {renderMapRow({ id: rootNode.id, depth: 0, viaKey: null, viaLabel: null, shared: false }, 0)}
+            </div>}
+            <div className="grid min-w-0 grid-cols-1 items-start gap-4 lg:grid-cols-2 lg:gap-6">
+              {branches.map(branch => {
+                const active = branch.key === selectedBranchKey;
+                return <section key={branch.key} className={"min-w-0 rounded-2xl border-2 p-3 md:p-5 " + (active ? "border-emerald-400 bg-emerald-950/20" : "border-cyan-500/35 bg-[#0b172a]")}>
+                  <button type="button" aria-expanded={active} aria-pressed={active}
+                    onClick={() => { setFocusedBranch(branch.key); setSelected(branch.id); }}
+                    className={"flex w-full min-w-0 items-center gap-3 rounded-xl border px-4 py-4 text-left " + (active ? "border-emerald-300 bg-emerald-900/40" : "border-cyan-500/40 bg-[#092036] hover:border-cyan-300")}>
+                    <span className={"flex h-12 w-12 shrink-0 items-center justify-center rounded-xl text-lg font-black " + (active ? "bg-emerald-400 text-[#052016]" : "bg-cyan-900 text-cyan-100")}>{numLabel(branch.key)}</span>
+                    <span className="min-w-0 flex-1">
+                      <span className="block text-xs font-black text-cyan-200">{branch.key === "1" ? "SIM · JÁ SOU CLIENTE" : branch.key === "2" ? "NÃO · AINDA NÃO SOU CLIENTE" : "CAMINHO " + branch.key}</span>
+                      <span className="mt-1 block break-words text-lg font-black text-white">{branch.title}</span>
+                      <span className="mt-2 block text-xs text-emerald-200">{active ? "SELECIONADO · CAMINHO ABERTO" : "CLIQUE PARA ABRIR"}</span>
+                    </span>
+                    {active ? <ChevronDown className="h-6 w-6 shrink-0 text-emerald-300" /> : <ChevronRight className="h-6 w-6 shrink-0 text-cyan-300" />}
+                  </button>
+                  {active ? <div className="mt-4 min-w-0 space-y-3">{branch.rows.map((row, index) => renderMapRow(row, index, 1, index !== 0))}</div> : <p className="px-3 pt-4 text-sm text-slate-400">Selecione esta opção para ver suas etapas, uma abaixo da outra.</p>}
+                </section>;
+              })}
+            </div>
+            {!branches.length && <p className="p-3 text-sm text-amber-200">Crie as opções SIM e NÃO na primeira mensagem.</p>}
           </div>
 
           {unlinked.length > 0 && (
