@@ -93,11 +93,11 @@ export default function H2AutoTreeEditor({ id, revision, initial }: Props) {
   const questionCount = tree.nodes.filter(n => n.mode === "question").length;
   const save = trpc.h2AutoAdmin.saveTree.useMutation({
     onSuccess: () => {
-      toast.success("Árvore salva! O APK receberá a atualização na sincronização.");
+      toast.success("SALVO NO ADM! O APK receberá a atualização na sincronização.");
       setDirty(false);
       void utils.h2AutoAdmin.list.invalidate();
     },
-    onError: error => toast.error(error.message || "Erro ao salvar a árvore."),
+    onError: error => toast.error("NÃO SALVOU: " + (error.message || "Verifique as perguntas e tente novamente.")),
   });
 
   function selectStage(stageId: string) {
@@ -389,7 +389,8 @@ export default function H2AutoTreeEditor({ id, revision, initial }: Props) {
     if (stale) { toast.error("O ADM foi atualizado em outro lugar. Recarregue para evitar sobrescrever."); return; }
     const parsed = h2AutoTreeSchema.safeParse(normalizeFlowTreeOptions(tree));
     if (!parsed.success) {
-      toast.error(parsed.error.issues[0]?.message || "Revise as perguntas e os destinos.");
+      const issue = parsed.error.issues[0];
+      toast.error("NÃO SALVOU: " + (issue?.message || "Revise as perguntas e os destinos."), { duration: 9000 });
       return;
     }
     save.mutate({ id, expectedRevision: loadedRevision.current, tree: parsed.data });
