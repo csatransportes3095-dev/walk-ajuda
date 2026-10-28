@@ -226,6 +226,11 @@ export default function AdminCommissions() {
   // Totais financeiros
   const totalValuePending = all.filter(c => c.commissionPaid !== 1 && !(c as any).referralInvalid).reduce((sum, c) => sum + ((c as any).commissionValue ?? 0), 0);
   const totalValuePaid = all.filter(c => c.commissionPaid === 1 && !(c as any).referralInvalid).reduce((sum, c) => sum + ((c as any).commissionValue ?? 0), 0);
+  const totalARelease = all.filter(c => (c as any).paymentState === "aguardando_agendamento" &&
+      !((c as any).referralInvalid)).reduce((sum,c)=>sum+Number((c as any).commissionValue||0),0);
+  const totalReleased = all.filter(c => (c as any).paymentState === "liberada" &&
+      !((c as any).referralInvalid)).reduce((sum,c)=>sum+Number((c as any).commissionValue||0),0);
+  const totalCommission = all.filter(c=>!((c as any).referralInvalid)).reduce((sum,c)=>sum+Number((c as any).commissionValue||0),0);
 
   function formatMoney(cents: number) {
     if (!cents) return "—";
@@ -319,6 +324,21 @@ export default function AdminCommissions() {
           <div className="rounded-2xl border border-amber-500/40 bg-gradient-to-br from-amber-500/15 to-slate-950 p-4 text-center shadow-[0_0_18px_rgba(245,158,11,.10)]">
             <p className="text-2xl font-bold text-amber-400">{uniqueReferrers}</p>
             <p className="text-xs text-muted-foreground mt-0.5">Indicadores</p>
+          </div>
+        </div>
+
+        <div className="grid grid-cols-1 sm:grid-cols-3 gap-3">
+          <div className="rounded-2xl border border-amber-400/40 bg-gradient-to-br from-amber-500/15 to-slate-950 p-4 shadow-[0_0_16px_rgba(245,158,11,.12)]">
+            <p className="text-xs font-black tracking-wider text-amber-300">⏳ VALOR A LIBERAR</p>
+            <p className="mt-2 text-xl font-black tabular-nums text-white">{formatMoney(totalARelease)}</p>
+          </div>
+          <div className="rounded-2xl border border-emerald-400/40 bg-gradient-to-br from-emerald-500/15 to-slate-950 p-4 shadow-[0_0_16px_rgba(16,185,129,.12)]">
+            <p className="text-xs font-black tracking-wider text-emerald-300">✅ VALOR LIBERADO</p>
+            <p className="mt-2 text-xl font-black tabular-nums text-white">{formatMoney(totalReleased)}</p>
+          </div>
+          <div className="rounded-2xl border border-cyan-400/40 bg-gradient-to-br from-cyan-500/15 to-slate-950 p-4 shadow-[0_0_16px_rgba(6,182,212,.12)]">
+            <p className="text-xs font-black tracking-wider text-cyan-300">💰 VALOR TOTAL</p>
+            <p className="mt-2 text-xl font-black tabular-nums text-white">{formatMoney(totalCommission)}</p>
           </div>
         </div>
 
