@@ -589,7 +589,25 @@ export const customerPasswordRouter = router({
 
   checkSession: publicProcedure
     .input(z.object({ token: z.string() }))
-    .query(async ({ input }) => {
+    .query(async ({ input }): Promise<{
+      valid: false;
+      reason: 'missing' | 'expired' | 'blocked';
+      blocked?: boolean;
+      blockReason?: string;
+      phone?: undefined;
+      source?: undefined;
+      profileUpdateRequired?: undefined;
+      profileUpdateFields?: undefined;
+    } | {
+      valid: true;
+      phone: string;
+      source: 'customer' | 'spreadsheet';
+      profileUpdateRequired: boolean;
+      profileUpdateFields: string[];
+      reason?: undefined;
+      blocked?: undefined;
+      blockReason?: undefined;
+    }> => {
       const db = (await getDb()) as any;
       if (!db) throw new TRPCError({ code: "INTERNAL_SERVER_ERROR", message: "Banco indisponível" });
       const cleanToken = input.token.trim();
