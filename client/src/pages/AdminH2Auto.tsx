@@ -19,6 +19,7 @@ import { toast } from "sonner";
 import H2AutoHistoryPanel from "@/components/H2AutoHistoryPanel";
 import H2AutoValidationBlocks from "@/components/H2AutoValidationBlocks";
 import H2AutoSilencedContacts from "@/components/H2AutoSilencedContacts";
+import H2AutoSilencedContacts from "@/components/H2AutoSilencedContacts";
 import H2AutoTreeEditor from "@/components/H2AutoTreeEditor";
 
 const Box = ({ children }: { children: React.ReactNode }) => (
@@ -444,6 +445,7 @@ export default function AdminH2Auto() {
               </section>
               <H2AutoTreeEditor id={d.id} revision={d.revision} appliedRevision={d.appliedRevision} initial={d.config.tree} />
               <H2AutoValidationBlocks deviceId={d.id} deviceLabel={d.label} />
+              <H2AutoSilencedContacts deviceId={d.id} deviceLabel={d.label} />
               <H2AutoSilencedContacts deviceId={d.id} deviceLabel={d.label} />
               <H2AutoHistoryPanel
                 deviceId={d.id}
