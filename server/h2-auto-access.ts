@@ -219,7 +219,8 @@ export function registerH2AutoAccessRoutes(app: Express): void {
             code_attempts=0,expires_at=0,updated_at=${now}`);
           return respond(res, 200, { state: "choice", message: initialMessage });
         }
-        if (isMenu) {
+        if (isMenu || normalized === "0") {
+          // Zero and MENU both return to the first audience selection without invalidating OTP.
           const menuStage = authorizedAudience === "customer" ? "customer_menu" : "new_menu";
           // Do not touch updated_at: MENU must not extend the authorized window.
           if (s.stage !== menuStage) await update(sessionId, sql`stage=${menuStage}`);
