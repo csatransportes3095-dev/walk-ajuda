@@ -442,6 +442,24 @@ export default function AdminH2Auto() {
                   <p className="text-xs text-slate-300">Padrão: 24 horas. De 1 a 720 horas (30 dias). Mudar de opção, digitar MENU ou 0 não exige um novo código durante a validade. Bloqueio de cadastro revoga o acesso.</p>
                 </div>
               </section>
+              <section className="rounded-2xl border border-cyan-400/40 bg-gradient-to-br from-cyan-950/40 to-slate-950 p-4 space-y-3">
+                <h4 className="text-lg font-black text-cyan-200">🖥️ MODO WHATSAPP DESKTOP — SOMENTE LEITURA</h4>
+                <p className="text-sm text-slate-300">Deixe o WhatsApp aberto no PC para acompanhar mensagens. O robô tenta usar somente notificações Android ainda ativas; leitura no computador não cancela a pausa manual nem os contatos silenciados.</p>
+                <p className="text-xs text-amber-200">Não garante respostas quando o WhatsApp remove a notificação antes do Android receber a mensagem. A resposta pelo PC não é identificada como atendimento manual; pause o contato no ADM antes de responder.</p>
+                <button type="button" disabled={safety.isPending}
+                  onClick={() => safety.mutate({id:d.id,key:"desktopReadOnly",value:d.config.desktopReadOnly!==true})}
+                  className={`w-full rounded-xl border px-4 py-3 font-black ${d.config.desktopReadOnly?"border-cyan-400 bg-cyan-800 text-white":"border-slate-600 bg-slate-800 text-slate-200"}`}>
+                  {d.config.desktopReadOnly?"✅ DESKTOP SOMENTE LEITURA — ATIVADO":"ATIVAR DESKTOP SOMENTE LEITURA"}
+                </button>
+                <p className={d.paired && d.appliedRevision===d.revision?"text-emerald-300 text-xs":"text-amber-200 text-xs"}>
+                  {d.paired && d.appliedRevision===d.revision?"Configuração sincronizada com o APK":"Após ativar, sincronize o H2 AUTO no celular para aplicar."}
+                </p>
+                <div className="rounded-lg border border-white/10 bg-black/25 p-3 space-y-1 text-xs text-slate-300">
+                  <p><strong>Diagnóstico Android:</strong> {diagnostic?.desktopLastCode ?? "Sem registro"}</p>
+                  <p><strong>Último evento:</strong> {dateLabel(diagnostic?.desktopLastAt)}</p>
+                  <p><strong>Modo no APK:</strong> {diagnostic?.desktopReadOnly?"Ativado":diagnostic?"Desativado":"Não informado"}</p>
+                </div>
+              </section>
               <H2AutoTreeEditor id={d.id} revision={d.revision} appliedRevision={d.appliedRevision} initial={d.config.tree} />
               <H2AutoValidationBlocks deviceId={d.id} deviceLabel={d.label} />
               <H2AutoSilencedContacts deviceId={d.id} deviceLabel={d.label} />

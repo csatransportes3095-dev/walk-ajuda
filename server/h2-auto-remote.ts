@@ -77,6 +77,7 @@ const configSchema = z.object({
   media: mediaSchema.default(() => mediaSchema.parse({})),
   confirmation: confirmationSchema.default(() => confirmationSchema.parse({})),
   enabled: z.boolean(),
+  desktopReadOnly: z.boolean().default(false),
   identificationEnabled: z.boolean().default(true),
   identificationSessionHours: z.number().int().min(1).max(720).default(24),
   ordersEnabled: z.boolean().default(false),
@@ -119,6 +120,7 @@ const initial: RemoteConfig = {
   orderNoOrdersMessage:
     "Cadastro localizado com sucesso, mas não encontramos nenhum pedido associado a este cadastro no momento.",
   enabled: false,
+  desktopReadOnly: false,
   identificationEnabled: true,
   identificationSessionHours: 24,
   welcome: "",
@@ -215,6 +217,7 @@ function mergeWithoutDeleting(
       media: remote.media,
       confirmation: remote.confirmation,
       identificationSessionHours: remote.identificationSessionHours,
+      desktopReadOnly: remote.desktopReadOnly,
       ordersEnabled: remote.ordersEnabled,
       orderSessionHours: remote.orderSessionHours,
       orderCodeTtlMinutes: remote.orderCodeTtlMinutes,
@@ -246,6 +249,7 @@ function mergeWithoutDeleting(
     tree: remote.tree ?? local.tree,
     media: remote.media,
     ordersEnabled: remote.ordersEnabled,
+    desktopReadOnly: remote.desktopReadOnly,
     welcome: remote.welcome.trim() ? remote.welcome : local.welcome,
     menu: remote.menu.map((v, i) => (v.trim() ? v : local.menu[i])),
     rules,
@@ -397,12 +401,12 @@ export const h2AutoAdminRouter = router({
       return {success:true,hours:input.hours};
     }),
   saveSafetySwitch: adminProcedure
-    .input(z.object({ id: z.string().regex(/^[a-f0-9]{24}$/), key: z.enum(["enabled","identificationEnabled"]), value: z.boolean() }))
+    .input(z.object({ id: z.string().regex(/^[a-f0-9]{24}$/), key: z.enum(["enabled","identificationEnabled","desktopReadOnly"]), value: z.boolean() }))
     .mutation(async ({input})=>{
       await ensure();
       const db=await getDb(); if(!db)throw new Error("DB unavailable");
       // Atomic JSON key update; does not overwrite drafts, menus or other settings.
-      const path=input.key==="enabled"?"$.enabled":"$.identificationEnabled";
+      const path=input.key==="enabled"?"$.enabled":input.key==="desktopReadOnly"?"$.desktopReadOnly":"$.identificationEnabled";
       const updated:any=await db.execute(sql`UPDATE h2_auto_devices SET config_json=JSON_SET(config_json,${path},JSON_EXTRACT(${input.value ? "true" : "false"},'$')),revision=revision+1 WHERE id=${input.id}`);
       if(!updated[0]?.affectedRows)throw new TRPCError({code:"NOT_FOUND",message:"Aparelho não encontrado."});
       return {success:true};
