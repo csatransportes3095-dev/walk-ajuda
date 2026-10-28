@@ -138,6 +138,7 @@ export function registerH2AutoAccessRoutes(app: Express): void {
     try {
       await ensure();
       const deviceId = await deviceFor(req);
+      let identificationDisabled = false;
       if (deviceId) {
         const live = await rows(sql`SELECT JSON_UNQUOTE(JSON_EXTRACT(config_json,'$.enabled')) AS bot_on,
           CAST(JSON_UNQUOTE(JSON_EXTRACT(config_json,'$.identificationSessionHours')) AS UNSIGNED) AS session_hours,
@@ -145,7 +146,7 @@ export function registerH2AutoAccessRoutes(app: Express): void {
           JSON_UNQUOTE(JSON_EXTRACT(config_json,'$.blocked')) AS blocked_phones
           FROM h2_auto_devices WHERE id=${deviceId} LIMIT 1`);
         if (live[0]?.bot_on !== "true") return respond(res,200,{state:"disabled"});
-        if (live[0]?.identity_on === "false") return respond(res,200,{state:"identification_disabled"});
+        identificationDisabled = live[0]?.identity_on === "false";
       }
       if (!deviceId) return respond(res, 401, { error: "unauthorized" });
       const rawHours=Number((await rows(sql`SELECT JSON_UNQUOTE(JSON_EXTRACT(config_json,'$.identificationSessionHours')) AS hours FROM h2_auto_devices WHERE id=${deviceId} LIMIT 1`))[0]?.hours);
@@ -182,6 +183,7 @@ export function registerH2AutoAccessRoutes(app: Express): void {
           blockedPhones.includes(normalizeCustomerPhone(input) || ""))
         return respond(res, 200, {state:"disabled"});
       if (s?.stage === "blocked") return respond(res, 200, { state: "blocked", message: "" });
+      if (identificationDisabled) return respond(res,200,{state:"identification_disabled"});
       if (s?.stage === "released_customer_phone" || s?.stage === "released_referral_phone" || s?.stage === "released_referrals_phone") {
         const stage = s.stage === "released_customer_phone" ? "customer_phone" :
           s.stage === "released_referrals_phone" ? "referrals_phone" : "referral_phone";
