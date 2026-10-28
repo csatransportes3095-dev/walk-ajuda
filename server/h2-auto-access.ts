@@ -130,7 +130,7 @@ async function activeReferralBinding(s: Session) {
   const found = await resolveReferralDeclaration({ customerPhone: "", referrerPhone: customer[0].phone });
   return found.issue === null && found.linkedReferrer?.id === Number(s.referrer_id);
 }
-const grant = (audience: "customer" | "new") => ({ state: "granted", audience });
+const grant = (audience: "customer" | "new" | "referrals") => ({ state: "granted", audience });
 const verified = (audience: "customer" | "new") => ({ state: "authorized", audience });
 
 export function registerH2AutoAccessRoutes(app: Express): void {
