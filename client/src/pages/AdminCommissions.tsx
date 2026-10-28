@@ -265,7 +265,7 @@ export default function AdminCommissions() {
   }
 
   return (
-    <div className="min-h-screen bg-[#050815] text-slate-100">
+    <div className="min-h-screen bg-background text-foreground">
       <style>{`
         @keyframes commissionNeonPending {
           0%, 100% { box-shadow: inset 3px 0 0 rgba(239,68,68,.75), 0 0 8px rgba(239,68,68,.10); }
