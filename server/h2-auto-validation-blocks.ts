@@ -1,7 +1,7 @@
 import { sql } from "drizzle-orm";
 import { getDb } from "./db";
 
-export type PhoneStage = "customer_phone" | "referral_phone";
+export type PhoneStage = "customer_phone" | "referral_phone" | "referrals_phone";
 export const INVALID_PHONE_REPLY =
   "⚠️ *H2 COLOMBIANO*\n\n🚫 *VALIDAÇÃO NÃO APROVADA*\n\n" +
   "Sua resposta não corresponde\nao formato solicitado.\n\n" +
@@ -96,7 +96,7 @@ export async function releaseValidationBlock(
     const row = selected[0]?.[0];
     if (!row) return false;
     const stage = restart ? "choice" : "released_" + String(row.failed_stage);
-    if (stage !== "choice" && stage !== "released_customer_phone" && stage !== "released_referral_phone")
+    if (stage !== "choice" && stage !== "released_customer_phone" && stage !== "released_referral_phone" && stage !== "released_referrals_phone")
       throw Error("invalid_restore_stage");
     await tx.execute(sql`UPDATE h2_auto_access_sessions
       SET stage=${stage},code_hash=NULL,code_expires=NULL,
