@@ -25,7 +25,7 @@ const otpHash = (session: string, code: string) => {
 };
 const respond = (res: Response, status: number, body: object) =>
   res.status(status).set("Cache-Control", "no-store").json(body);
-const initialMessage = "⚡ *H2 COLOMBIANO* 🇨🇴\n🤖 *CENTRAL DE ATENDIMENTO*\n\n👋 Olá! Seja bem-vindo!\n\n🔐 Para sua segurança,\nprecisamos identificar\nse você já é nosso cliente.\n\n1️⃣ *SIM, JÁ SOU CLIENTE*\n2️⃣ *NÃO SOU CLIENTE*\n\n⌨️ Digite *1* ou *2*.\n🔙 *MENU* para início.\n━━━━━━━━━━━━━━━━\n🛡️ *EQUIPE H2 COLOMBIANO* 🇨🇴";
+const initialMessage = "⚡ *H2 COLOMBIANO* 🇨🇴\n🤖 *CENTRAL DE ATENDIMENTO*\n\n👋 Olá! Seja bem-vindo!\n\n🔐 Para sua segurança,\nprecisamos identificar\nse você já é nosso cliente.\n\n1️⃣ *SIM, JÁ SOU CLIENTE*\n2️⃣ *NÃO SOU CLIENTE*\n3️⃣ *CONSULTAR MINHAS INDICAÇÕES*\n\n⌨️ Digite *1*, *2* ou *3*.\n🔙 *MENU* para início.\n━━━━━━━━━━━━━━━━\n🛡️ *EQUIPE H2 COLOMBIANO* 🇨🇴";
 const phoneMessage = "✅ *JÁ SOU CLIENTE*\n\n📱 Informe o telefone\ncadastrado no H2 Colombiano,\ncom DDD, para confirmar\nsua identidade.\n\n⌨️ Envie somente 11 números com DDD.";
 const referrerMessage = "🆕 *NOVO CLIENTE*\n\n🇨🇴 Atendemos somente\npor indicação.\n\n📱 Informe o telefone\ncom DDD de quem\nindicou você.\n\n⌨️ Envie somente 11 números com DDD.";
 const invalidReferral = "⚠️ *INDICAÇÃO NÃO VALIDADA*\n\n❌ Não foi possível validar\no telefone informado.\n\n📱 Informe outro número\nde indicador autorizado.\n\n👨‍💻 Digite *6* para falar\ncom um atendente.";
@@ -35,7 +35,7 @@ const minute = 60_000;
 const hour = 60 * minute;
 const defaultAccessHours = 24;
 const otpLifetime = 10 * minute;
-type Stage = "choice" | "customer_phone" | "customer_code" | "referral_phone" | "customer" | "new" | "customer_menu" | "new_menu" | "blocked" | "released_customer_phone" | "released_referral_phone";
+type Stage = "choice" | "referrals_phone" | "referrals_code" | "customer_phone" | "customer_code" | "referral_phone" | "customer" | "new" | "customer_menu" | "new_menu" | "blocked" | "released_customer_phone" | "released_referral_phone" | "released_referrals_phone";
 type Session = {
   id: string; device_id: string; stage: Stage; customer_id: number | null; referrer_id: number | null;
   customer_phone_hash: string | null; customer_email_hash: string | null;
@@ -162,10 +162,11 @@ export function registerH2AutoAccessRoutes(app: Express): void {
       const s = existing[0] as Session | undefined;
 
       if (s?.stage === "blocked") return respond(res, 200, { state: "blocked", message: "" });
-      if (s?.stage === "released_customer_phone" || s?.stage === "released_referral_phone") {
-        const stage = s.stage === "released_customer_phone" ? "customer_phone" : "referral_phone";
+      if (s?.stage === "released_customer_phone" || s?.stage === "released_referral_phone" || s?.stage === "released_referrals_phone") {
+        const stage = s.stage === "released_customer_phone" ? "customer_phone" :
+          s.stage === "released_referrals_phone" ? "referrals_phone" : "referral_phone";
         await update(sessionId, sql`stage=${stage},updated_at=${now}`);
-        return respond(res, 200, { state: stage, message: stage === "customer_phone" ? phoneMessage : referrerMessage });
+        return respond(res, 200, { state: stage, message: stage === "referral_phone" ? referrerMessage : phoneMessage });
       }
 
       if (!s || now - Number(s.updated_at) >= accessLifetime || Number(s.updated_at) > now) {
@@ -205,6 +206,10 @@ export function registerH2AutoAccessRoutes(app: Express): void {
         if (s.stage === "customer_menu" || s.stage === "new_menu") {
           // Selecting the already verified audience restores service access
           // without another code or indicator check.
+          if (authorizedAudience === "customer" && normalized === "3") {
+            await update(sessionId, sql`stage='customer'`);
+            return respond(res, 200, grant("referrals"));
+          }
           if ((authorizedAudience === "customer" && normalized === "1") ||
               (authorizedAudience === "new" && normalized === "2")) {
             await update(sessionId, sql`stage=${authorizedAudience}`);
@@ -228,19 +233,24 @@ export function registerH2AutoAccessRoutes(app: Express): void {
 
       // Before authentication, MENU/0 returns to identification; 0 in
       // OTP confirmation returns to the phone prompt.
-      if (s.stage !== "customer_phone" && s.stage !== "referral_phone" &&
+      if (s.stage !== "customer_phone" && s.stage !== "referrals_phone" && s.stage !== "referral_phone" &&
           (isMenu || normalized === "0" && s.stage !== "choice")) {
-        const destination = normalized === "0" && s.stage === "customer_code" ? "customer_phone" : "choice";
+        const destination = normalized === "0" && (s.stage === "customer_code" || s.stage === "referrals_code")
+          ? (s.stage === "referrals_code" ? "referrals_phone" : "customer_phone") : "choice";
         await update(sessionId, sql`stage=${destination},customer_id=NULL,referrer_id=NULL,
           customer_phone_hash=NULL,customer_email_hash=NULL,code_hash=NULL,code_expires=NULL,
           code_attempts=0,resend_after=0,expires_at=0,updated_at=${now}`);
-        return respond(res, 200, {state: destination, message: destination === "customer_phone" ? phoneMessage : initialMessage});
+        return respond(res, 200, {state: destination, message: destination === "customer_phone" || destination === "referrals_phone" ? phoneMessage : initialMessage});
       }
 
       if (s.stage === "choice") {
         if (normalized === "1") {
           await update(sessionId, sql`stage='customer_phone',updated_at=${now}`);
           return respond(res, 200, { state: "customer_phone", message: phoneMessage });
+        }
+        if (normalized === "3") {
+          await update(sessionId, sql`stage='referrals_phone',updated_at=${now}`);
+          return respond(res, 200, { state: "referrals_phone", message: phoneMessage });
         }
         if (normalized === "2") {
           await update(sessionId, sql`stage='referral_phone',updated_at=${now}`);
@@ -249,12 +259,13 @@ export function registerH2AutoAccessRoutes(app: Express): void {
         return respond(res, 200, { state: "choice", message: initialMessage });
       }
 
-      if (s.stage === "customer_phone") {
+      if (s.stage === "customer_phone" || s.stage === "referrals_phone") {
         const phone = normalizeCustomerPhone(input);
+        const referralEntry = s.stage === "referrals_phone";
         if (invalidH2AutoPhoneStageAnswer(s.stage, input) || !phone) {
           const first = await blockInvalidPhone({deviceId,sessionId,conversationId:conversation,
             contactLabel:String(req.body?.contactLabel || ""),invalidAnswer:input,
-            stage:"customer_phone",reason:"Telefone do cliente fora do formato"});
+            stage:referralEntry ? "referrals_phone" : "customer_phone",reason:"Telefone do cliente fora do formato"});
           return respond(res, 200, {state:"blocked",message:first?INVALID_PHONE_REPLY:""});
         }
         if (Number(s.resend_after) > now)
@@ -272,30 +283,31 @@ export function registerH2AutoAccessRoutes(app: Express): void {
         const code = generateOwnSiteCode();
         const codeHash = otpHash(sessionId, code);
         const changed: any = await db.execute(sql`UPDATE h2_auto_access_sessions SET
-          stage='customer_code',customer_id=${customer.id},referrer_id=NULL,
+          stage=${referralEntry ? "referrals_code" : "customer_code"},customer_id=${customer.id},referrer_id=NULL,
           customer_phone_hash=${digest(String(normalizeCustomerPhone(customer.phone) || ""))},
           customer_email_hash=${digest(customer.email.trim().toLowerCase())},
           code_hash=${codeHash},code_expires=${now+otpLifetime},code_attempts=0,
           resend_after=${now+minute},updated_at=${now}
-          WHERE id=${sessionId} AND stage='customer_phone' AND resend_after<=${now}`);
+          WHERE id=${sessionId} AND stage=${referralEntry ? 'referrals_phone' : 'customer_phone'} AND resend_after<=${now}`);
         if (!changed[0]?.affectedRows)
           return respond(res, 200, { state: "customer_phone", message: "⏳ Aguarde e tente novamente." });
         try {
           await sendH2AutoOrderCode(customer.email, code, 10, "access");
         } catch {
-          await db.execute(sql`UPDATE h2_auto_access_sessions SET stage='customer_phone',
+          await db.execute(sql`UPDATE h2_auto_access_sessions SET stage=${referralEntry ? 'referrals_phone' : 'customer_phone'},
             code_hash=NULL,code_expires=NULL,updated_at=${Date.now()}
             WHERE id=${sessionId} AND code_hash=${codeHash}`);
           return respond(res, 200, { state: "customer_phone", message: "⚠️ Não foi possível enviar o código agora. Tente novamente." });
         }
-        return respond(res, 200, { state: "customer_code",
+        return respond(res, 200, { state: referralEntry ? "referrals_code" : "customer_code",
           message: "📧 *CONFIRMAÇÃO DE E-MAIL*\n\n✅ Enviamos um código ao\ne-mail do seu cadastro.\n\n🔢 Digite os *6 números*.\n⏳ Validade: *10 minutos*.\n\n🔙 *0* para voltar.\nDigite *MENU* para início." });
       }
 
-      if (s.stage === "customer_code") {
+      if (s.stage === "customer_code" || s.stage === "referrals_code") {
+        const referralEntry = s.stage === "referrals_code";
         if (normalized === "0" || normalized === "voltar") {
-          await update(sessionId, sql`stage='customer_phone',code_hash=NULL,code_expires=NULL,updated_at=${now}`);
-          return respond(res, 200, { state: "customer_phone", message: phoneMessage });
+          await update(sessionId, sql`stage=${referralEntry ? 'referrals_phone' : 'customer_phone'},code_hash=NULL,code_expires=NULL,updated_at=${now}`);
+          return respond(res, 200, { state: referralEntry ? "referrals_phone" : "customer_phone", message: phoneMessage });
         }
         const actual = /^[0-9]{6}$/.test(input.trim()) ? otpHash(sessionId, input.trim()) : "";
         const expected = String(s.code_hash || "");
@@ -307,8 +319,8 @@ export function registerH2AutoAccessRoutes(app: Express): void {
           const db = await getDb();
           if (!db) throw new Error("db_unavailable");
           await db.execute(sql`UPDATE h2_auto_access_sessions SET code_attempts=LEAST(code_attempts+1,5)
-            WHERE id=${sessionId} AND stage='customer_code'`);
-          return respond(res, 200, { state: "customer_code",
+            WHERE id=${sessionId} AND stage=${referralEntry ? 'referrals_code' : 'customer_code'}`);
+          return respond(res, 200, { state: referralEntry ? "referrals_code" : "customer_code",
             message: "⚠️ Código inválido ou expirado.\nConfira o e-mail.\n\nDigite *0* para voltar.\nDigite *MENU* para início." });
         }
         const db = await getDb();
@@ -316,11 +328,11 @@ export function registerH2AutoAccessRoutes(app: Express): void {
         const changed: any = await db.execute(sql`UPDATE h2_auto_access_sessions SET
           stage='customer',code_hash=NULL,code_expires=NULL,code_attempts=0,
           expires_at=${now+accessLifetime},updated_at=${now}
-          WHERE id=${sessionId} AND stage='customer_code' AND code_hash=${expected}
+          WHERE id=${sessionId} AND stage=${referralEntry ? 'referrals_code' : 'customer_code'} AND code_hash=${expected}
             AND code_expires>${now} AND code_attempts<5`);
         if (!changed[0]?.affectedRows)
-          return respond(res, 200, { state: "customer_code", message: "⚠️ Código inválido ou expirado." });
-        return respond(res, 200, grant("customer"));
+          return respond(res, 200, { state: referralEntry ? "referrals_code" : "customer_code", message: "⚠️ Código inválido ou expirado." });
+        return respond(res, 200, grant(referralEntry ? "referrals" : "customer"));
       }
 
       if (s.stage === "referral_phone") {
