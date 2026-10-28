@@ -1,0 +1,36 @@
+name: H2 Colombiano - Pagina Cliente Indicacoes
+on:
+  push:
+    branches:
+      - feature/client-referrals-gamer-20261028
+  pull_request:
+    branches:
+      - recovery/organizar-salvos-2026-08-24
+permissions:
+  contents: read
+jobs:
+  validation:
+    runs-on: ubuntu-latest
+    timeout-minutes: 25
+    steps:
+      - uses: actions/checkout@v4
+      - uses: pnpm/action-setup@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: "22"
+          cache: pnpm
+      - run: pnpm install --frozen-lockfile
+      - name: Test client referral totals and existing state policies
+        run: pnpm exec vitest run server/clientReferralsRouter.test.ts server/referralCommissionManual.test.ts server/referralCommissionPolicy.test.ts server/h2-auto-referral-commissions.test.ts
+      - name: Check new client page and router types
+        run: |
+          pnpm exec tsc --noEmit > /tmp/client-referrals-tsc.log 2>&1 && exit 0
+          if grep -E '^(client/src/pages/ClientReferrals\.tsx|server/clientReferralsRouter\.ts|server/clientReferralsRouter\.test\.ts)\([0-9]+,[0-9]+\): error TS' /tmp/client-referrals-tsc.log; then
+            cat /tmp/client-referrals-tsc.log
+            exit 1
+          fi
+          echo "No TypeScript errors in new client referrals files"
+      - name: Compile server
+        run: pnpm exec esbuild server/clientReferralsRouter.ts --bundle --platform=node --packages=external --format=esm --outfile=/tmp/client-referrals.js
+      - name: Build production site
+        run: pnpm build
