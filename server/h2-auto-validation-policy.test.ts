@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { validH2AutoPhone11 } from "./h2-auto-validation-policy";
+import { validH2AutoPhone11, allowsH2AutoMenuReset, invalidH2AutoPhoneStageAnswer } from "./h2-auto-validation-policy";
 
 describe("H2 Auto strict 11-digit WhatsApp phone validation", () => {
   it("accepts mobile phone numbers with a two-digit DDD", () => {
@@ -17,5 +17,22 @@ describe("H2 Auto strict 11-digit WhatsApp phone validation", () => {
       "11387654321", "99999999999"]) {
       expect(validH2AutoPhone11(answer)).toBe(false);
     }
+  });
+});
+
+describe("H2 Auto phone challenge cannot be bypassed", () => {
+  for (const stage of ["customer_phone", "referral_phone"]) {
+    it(stage + " rejects MENU, 0, 6, and text", () => {
+      for (const text of ["MENU", "inicio", "0", "6", "voltar", "não tenho"]) {
+        expect(invalidH2AutoPhoneStageAnswer(stage, text)).toBe(true);
+        expect(allowsH2AutoMenuReset(stage, text)).toBe(false);
+      }
+      expect(invalidH2AutoPhoneStageAnswer(stage, "11987654321")).toBe(false);
+    });
+  }
+  it("keeps explicit MENU recovery only during verification-code stage", () => {
+    expect(allowsH2AutoMenuReset("customer_code", "MENU")).toBe(true);
+    expect(allowsH2AutoMenuReset("blocked", "MENU")).toBe(false);
+    expect(allowsH2AutoMenuReset("customer", "MENU")).toBe(false);
   });
 });
