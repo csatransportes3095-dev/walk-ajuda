@@ -8,6 +8,7 @@ import { resolveReferralDeclaration } from "./referral";
 import { sendH2AutoOrderCode } from "./h2-auto-order-email";
 import { blockInvalidPhone, INVALID_PHONE_REPLY } from "./h2-auto-validation-blocks";
 import { invalidH2AutoPhoneStageAnswer } from "./h2-auto-validation-policy";
+import { manualSilencedPhones } from "./h2-auto-silenced-contacts";
 import { h2AutoCustomerNeedsProfileUpdate, H2_AUTO_CUSTOMER_NOT_CONFIRMED_MESSAGE } from "./h2-auto-customer-profile-guidance";
 
 /**
@@ -140,7 +141,8 @@ export function registerH2AutoAccessRoutes(app: Express): void {
       if (deviceId) {
         const live = await rows(sql`SELECT JSON_UNQUOTE(JSON_EXTRACT(config_json,'$.enabled')) AS bot_on,
           CAST(JSON_UNQUOTE(JSON_EXTRACT(config_json,'$.identificationSessionHours')) AS UNSIGNED) AS session_hours,
-          JSON_UNQUOTE(JSON_EXTRACT(config_json,'$.identificationEnabled')) AS identity_on
+          JSON_UNQUOTE(JSON_EXTRACT(config_json,'$.identificationEnabled')) AS identity_on,
+          JSON_UNQUOTE(JSON_EXTRACT(config_json,'$.blocked')) AS blocked_phones
           FROM h2_auto_devices WHERE id=${deviceId} LIMIT 1`);
         if (live[0]?.bot_on !== "true") return respond(res,200,{state:"disabled"});
         if (live[0]?.identity_on === "false") return respond(res,200,{state:"identification_disabled"});
@@ -161,6 +163,18 @@ export function registerH2AutoAccessRoutes(app: Express): void {
       const existing = await rows(sql`SELECT * FROM h2_auto_access_sessions WHERE id=${sessionId} AND device_id=${deviceId} LIMIT 1`);
       const s = existing[0] as Session | undefined;
 
+      // Verified customers are identified by the phone from their existing OTP
+      // session, even if WhatsApp displays only a saved name. No chat identity
+      // is inferred from a name, and blocked clients receive no automatic reply.
+      const blockedPhones = manualSilencedPhones(String((await rows(sql`SELECT
+        JSON_UNQUOTE(JSON_EXTRACT(config_json,'$.blocked')) AS blocked_phones
+        FROM h2_auto_devices WHERE id=${deviceId} LIMIT 1`))[0]?.blocked_phones || ""));
+      if (blockedPhones.length && s?.customer_phone_hash &&
+          blockedPhones.some(number => digest(number) === s.customer_phone_hash))
+        return respond(res, 200, {state:"disabled"});
+      if (blockedPhones.length && (s?.stage === "customer_phone" || s?.stage === "referrals_phone") &&
+          blockedPhones.includes(normalizeCustomerPhone(input) || ""))
+        return respond(res, 200, {state:"disabled"});
       if (s?.stage === "blocked") return respond(res, 200, { state: "blocked", message: "" });
       if (s?.stage === "released_customer_phone" || s?.stage === "released_referral_phone" || s?.stage === "released_referrals_phone") {
         const stage = s.stage === "released_customer_phone" ? "customer_phone" :
