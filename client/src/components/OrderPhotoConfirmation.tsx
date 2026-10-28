@@ -5,6 +5,7 @@ import { toast } from "sonner";
 import { Camera, CheckCircle2, ClipboardCopy, ExternalLink, MessageCircle, Plus, RotateCcw, Save, Trash2, X } from "lucide-react";
 import { publicSiteUrl } from "@shared/publicLinks";
 import { buildWhatsappMessageUrl } from "@shared/whatsappUrl";
+import { buildPhotoConfirmationWhatsappMessage } from "@/lib/photoConfirmationWhatsappMessage";
 
 type QuestionType = "check_cross" | "thumbs" | "mood" | "text";
 type Question = { id: string; text: string; type: QuestionType; required: boolean };
@@ -123,10 +124,12 @@ export default function OrderPhotoConfirmation({ registrationId, subOrderIndex, 
 
   function openWhatsapp() {
     if (!link || !customerPhone) return;
-    const when = record?.appointment?.slotDate
-      ? `\n\nHorário: ${formatDate(record.appointment.slotDate)}${record.appointment.slotTime ? ` às ${record.appointment.slotTime.slice(0,5)}` : ""}`
-      : "";
-    const msg = `Olá${customerName ? " "+customerName : ""}! Preencha sua *CONFIRMAÇÃO PARA FOTO* antes do procedimento.${when}\n\n${link}`;
+    const msg = buildPhotoConfirmationWhatsappMessage({
+      customerName,
+      slotDate: record?.appointment?.slotDate,
+      slotTime: record?.appointment?.slotTime,
+      link,
+    });
     window.open(buildWhatsappMessageUrl(customerPhone, msg), "_blank", "noopener,noreferrer");
   }
 
