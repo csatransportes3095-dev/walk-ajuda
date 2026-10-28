@@ -482,6 +482,7 @@ export default function AdminCommissions() {
                     const isInvalid = Boolean((c as any).referralInvalid);
                     const isEligible = Boolean((c as any).paymentReady);
                     const isUnderReview = (c as any).paymentState === 'aguardando_agendamento';
+                    const manualState = (c as any).manualStatus as "a_liberar" | "liberado" | null;
                     const isReferralAction = referralAction?.registrationId === c.registrationId;
                     return (
                       <div
@@ -532,6 +533,11 @@ export default function AdminCommissions() {
                             <span className="text-xs text-muted-foreground">{formatDate(c.submittedAt)}</span>
                           </div>
 
+                          {manualState && !isInvalid && !isPaid && (
+                            <div className={`mt-2 rounded-lg border px-3 py-2 text-xs font-black ${manualState==="liberado"?"border-emerald-400/50 bg-emerald-500/10 text-emerald-300":"border-amber-400/50 bg-amber-500/10 text-amber-300"}`}>
+                              {manualState==="liberado"?"✅ LIBERADO":"⏳ A LIBERAR"} · {formatMoney((c as any).commissionValue||0)}
+                            </div>
+                          )}
                           {/* Status do pedido + valor comissão — sempre visível */}
                           <div className="flex items-center gap-1.5 flex-wrap mt-0.5">
                             {c.latestStatus ? (
@@ -568,6 +574,52 @@ export default function AdminCommissions() {
                           </div>
                         </div>
 
+                        {/* Controle por indicação: o estado liberado não é pagamento */}
+                        {!isInvalid && !isPaid && (
+                          <div className="min-w-[180px] rounded-xl border border-cyan-400/30 bg-slate-950/90 p-3 space-y-2 shadow-[0_0_18px_rgba(34,211,238,.12)]">
+                            {manualEdit === c.registrationId ? (
+                              <>
+                                <p className="text-xs font-black text-cyan-200">⚡ VALOR E STATUS</p>
+                                <label className="block text-xs font-semibold text-slate-200">Comissão (R$)</label>
+                                <input value={manualEditValue} inputMode="decimal"
+                                  onChange={e=>setManualEditValue(e.target.value.replace(/[^0-9.,]/g,""))}
+                                  placeholder="50,00"
+                                  className="w-full rounded-lg border border-cyan-400/40 bg-slate-900 px-3 py-2 text-sm font-bold text-white focus:outline-none focus:ring-2 focus:ring-cyan-400/30" />
+                                <div className="grid grid-cols-2 gap-2">
+                                  <button type="button" onClick={()=>setManualEditStatus("a_liberar")}
+                                    className={`rounded-lg border px-2 py-2 text-xs font-bold ${manualEditStatus==="a_liberar"?"border-amber-400 bg-amber-500/20 text-amber-200":"border-slate-700 text-slate-400"}`}>⏳ A LIBERAR</button>
+                                  <button type="button" onClick={()=>setManualEditStatus("liberado")}
+                                    className={`rounded-lg border px-2 py-2 text-xs font-bold ${manualEditStatus==="liberado"?"border-emerald-400 bg-emerald-500/20 text-emerald-200":"border-slate-700 text-slate-400"}`}>✅ LIBERADO</button>
+                                </div>
+                                <p className="text-[10px] text-slate-400">Liberado não é pago. O pagamento é separado.</p>
+                                <div className="flex flex-wrap gap-2">
+                                  <button type="button" disabled={saveManualCommission.isPending || parseCommissionReaisToCents(manualEditValue)<=0}
+                                    onClick={()=>saveManualCommission.mutate({
+                                      registrationId:c.registrationId,
+                                      commissionValue:parseCommissionReaisToCents(manualEditValue),
+                                      releaseStatus:manualEditStatus,
+                                    })}
+                                    className="rounded-lg bg-cyan-400 px-3 py-2 text-xs font-black text-slate-950 disabled:opacity-40">
+                                    {saveManualCommission.isPending?"Salvando...":"SALVAR"}
+                                  </button>
+                                  <button type="button" onClick={()=>setManualEdit(null)}
+                                    disabled={saveManualCommission.isPending}
+                                    className="rounded-lg border border-slate-600 px-3 py-2 text-xs text-slate-200">Cancelar</button>
+                                </div>
+                              </>
+                            ) : (
+                              <button type="button"
+                                onClick={()=>{
+                                  setManualEdit(c.registrationId);
+                                  setManualEditValue((Number((c as any).commissionValue||0)/100).toFixed(2).replace(".",","));
+                                  setManualEditStatus((c as any).manualStatus==="liberado"?"liberado":"a_liberar");
+                                }}
+                                className="w-full rounded-lg border border-cyan-400/35 bg-cyan-500/10 px-3 py-2 text-xs font-black text-cyan-200 hover:bg-cyan-500/20">
+                                ✎ DEFINIR VALOR E STATUS
+                              </button>
+                            )}
+                          </div>
+                        )}
                         {/* Botões de ação */}
                         <div className="flex-shrink-0 flex flex-col items-end gap-1.5 pt-0.5">
                           {confirmPayment === c.registrationId ? (
