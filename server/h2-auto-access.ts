@@ -9,7 +9,7 @@ import { sendH2AutoOrderCode } from "./h2-auto-order-email";
 import { blockInvalidPhone, INVALID_PHONE_REPLY } from "./h2-auto-validation-blocks";
 import { invalidH2AutoPhoneStageAnswer } from "./h2-auto-validation-policy";
 import { manualSilencedPhones, normalizeSilencedPhone } from "./h2-auto-silenced-contacts";
-import { h2AutoCustomerNeedsProfileUpdate, H2_AUTO_CUSTOMER_NOT_CONFIRMED_MESSAGE } from "./h2-auto-customer-profile-guidance";
+import { h2AutoCustomerNeedsProfileUpdate, selectH2AutoCustomerByPhone, H2_AUTO_CUSTOMER_PROFILE_UPDATE_MESSAGE, H2_AUTO_CUSTOMER_NOT_CONFIRMED_MESSAGE } from "./h2-auto-customer-profile-guidance";
 
 /**
  * WhatsApp first-contact gate. State is server-side and bound to a paired device
@@ -106,11 +106,15 @@ async function deviceFor(req: Request): Promise<string | null> {
 async function customerFor(phone: string) {
   const normalized = normalizeCustomerPhone(phone);
   if (!normalized) return null;
+  // Prefilter by final 10 digits to include legacy mobiles with/without
+  // the ninth digit. The helper confirms the full DDD/phone equivalence.
+  // Ambiguous matches must not receive an OTP.
   const found = await rows(sql`SELECT id,phone,email,blocked,name,cpf,cep,street,addressNumber,neighborhood,city,uf,profilePhotoUrl FROM customers
     WHERE deletedAt IS NULL AND COALESCE(blocked,0)=0
-    AND RIGHT(REGEXP_REPLACE(phone,'[^0-9]',''),11)=${normalized.slice(-11)} LIMIT 2`);
-  if (found.length !== 1 || Number(found[0].blocked) !== 0) return null;
-  return { ...found[0], id: Number(found[0].id), phone: String(found[0].phone), email: String(found[0].email || "") };
+    AND RIGHT(REGEXP_REPLACE(phone,'[^0-9]',''),10)=${normalized.slice(-10)} LIMIT 50`);
+  const customer = selectH2AutoCustomerByPhone(found, normalized);
+  if (!customer || Number(customer.blocked) !== 0) return null;
+  return { ...customer, id: Number(customer.id), phone: String(customer.phone), email: String(customer.email || "") };
 }
 async function activeCustomerBinding(s: Session) {
   if (!s.customer_id || !s.customer_email_hash || !s.customer_phone_hash) return false;
@@ -298,10 +302,13 @@ export function registerH2AutoAccessRoutes(app: Express): void {
           return respond(res, 200, { state: "customer_phone", message: "⏳ Limite de tentativas atingido. Tente mais tarde." });
         const customer = await customerFor(phone);
         const db = await getDb();
-        // Use the same public guidance for missing, incomplete and unauthorized
-        // accounts, avoiding disclosure that an arbitrary phone is registered.
-        if (!customer || !db || h2AutoCustomerNeedsProfileUpdate(customer) ||
-            !(await isOwnSiteEmailAuthorized(db, customer.email)))
+        // Never tell a fully completed customer to update the profile because
+        // the phone lookup or site-email authorization could not be confirmed.
+        if (!customer || !db)
+          return respond(res, 200, { state: "customer_phone", message: H2_AUTO_CUSTOMER_NOT_CONFIRMED_MESSAGE });
+        if (h2AutoCustomerNeedsProfileUpdate(customer))
+          return respond(res, 200, { state: "customer_phone", message: H2_AUTO_CUSTOMER_PROFILE_UPDATE_MESSAGE });
+        if (!(await isOwnSiteEmailAuthorized(db, customer.email)))
           return respond(res, 200, { state: "customer_phone", message: H2_AUTO_CUSTOMER_NOT_CONFIRMED_MESSAGE });
         const code = generateOwnSiteCode();
         const codeHash = otpHash(sessionId, code);
