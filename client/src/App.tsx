@@ -125,6 +125,7 @@ import Raffle from "./pages/Raffle";
 import OrderTracking from "./pages/OrderTracking";
 import VideoTutorial from "./pages/VideoTutorial";
 import Tutorial from "./pages/Tutorial";
+import ClientReferrals from "./pages/ClientReferrals";
 import PasswordGate from "./components/PasswordGate";
 import AdminPWABanner from "./components/AdminPWABanner";
 import InstallWall from "./components/InstallWall";
@@ -280,6 +281,7 @@ function Router() {
       <Route path={"/foto"} component={ProtectedPhotoPage} />
       <Route path={"/sorteio"} component={Raffle} />
       <Route path={"/acompanhar"} component={OrderTracking} />
+      <Route path={"/indicacoes"} component={ClientReferrals} />
       <Route path={"/parcelas-vip"} component={VipInstallmentPayments} />
       <Route path={"/login"} component={Home} />
       <Route path={"/revendedor"} component={ResellerLogin} />
@@ -421,6 +423,7 @@ function AppContent() {
   const isH2AdsRoute = isH2AdsPath(location);
   const isSimilarityRoute = location.toLowerCase() === "/similaridade";
   const isTrackingRoute = location === "/acompanhar";
+  const isReferralsRoute = location === "/indicacoes";
   const isLoginRoute = location === "/login";
   const isRaffleRoute = location === "/sorteio";
   const isAppDownloadRoute = location === "/app" || location === "/app-pro";
@@ -603,6 +606,10 @@ function AppContent() {
   }
 
   // Acompanhamento continua público; a tela inicial legada foi aposentada.
+  // Extrato de indicações: página própria com consulta por sessão de cliente.
+  // A tela faz a checagem do cp_token no servidor; o conteúdo não é público.
+  if (isReferralsRoute) return <Router />;
+
   if (isTrackingRoute) {
     return (
       <>

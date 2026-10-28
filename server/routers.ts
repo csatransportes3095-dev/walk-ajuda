@@ -213,6 +213,7 @@ import { r2DeleteObjects, r2GetObjectBuffer } from "./r2Storage";
 import { getAdminJwtSecret } from "./adminJwt";
 import { configureRaffleAutomation, performRaffleDraw, updateRafflePrizeStatus } from "./raffleAutomation";
 import { requireCustomerSession } from "./customerSession";
+import { clientReferralsRouter } from "./clientReferralsRouter";
 import { resolveReferralDeclaration, restrictedReferralAccessError } from "./referral";
 import {
   SHARE_PREVIEW_H2_SHIELD,
@@ -463,6 +464,7 @@ export const appRouter = router({
   loans: loanRouter,
   apk: apkRouter,
   customerPassword: customerPasswordRouter,
+  clientReferrals: clientReferralsRouter,
   customerUpdate: customerUpdateRouter,
   adCampaigns: adCampaignsRouter,
   preRegistrations: preRegistrationsRouter,
