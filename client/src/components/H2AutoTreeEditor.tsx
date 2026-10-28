@@ -6,7 +6,7 @@ import {
 import { toast } from "sonner";
 import { trpc } from "@/lib/trpc";
 import {
-  cloneH2AutoTree, H2_AUTO_TREE_DEFAULT, h2AutoTreeSchema, renderH2AutoNode,
+  cloneH2AutoTree, H2_AUTO_TREE_DEFAULT, H2_AUTO_DEFAULT_FOOTER, h2AutoTreeSchema, renderH2AutoNode,
   type H2AutoTree, type H2AutoTreeNode,
 } from "@shared/h2AutoTree";
 import {
@@ -317,7 +317,7 @@ export default function H2AutoTreeEditor({ id, revision, appliedRevision, initia
         )}
         <div className="space-y-2 rounded-xl border border-cyan-400/40 bg-[#020d18] p-3">
           <p className="text-xs font-black text-cyan-200">📱 PRÉVIA DO WHATSAPP — ESTA ETAPA</p>
-          <div className="whitespace-pre-wrap break-words text-sm leading-relaxed text-white">{renderH2AutoNode(node)}</div>
+          <div className="whitespace-pre-wrap break-words text-sm leading-relaxed text-white">{renderH2AutoNode(node, tree.footer ?? H2_AUTO_DEFAULT_FOOTER)}</div>
           <p className="text-xs text-slate-400">A prévia acompanha sua edição. Salve no ADM para o celular receber o texto.</p>
         </div>
         <button type="button" onClick={submit} disabled={!dirty || stale || save.isPending}
@@ -574,6 +574,19 @@ export default function H2AutoTreeEditor({ id, revision, appliedRevision, initia
             onChange={event => { setTree(prev => ({ ...prev, enabled: event.target.checked })); setDirty(true); }} />
           Árvore ativa no atendimento
         </label>
+      </div>
+
+      <div className="rounded-2xl border border-cyan-400/40 bg-gradient-to-r from-[#081c31] to-[#111935] p-4 md:p-5">
+        <h4 className="text-lg font-black text-cyan-200">✏️ RODAPÉ DO WHATSAPP</h4>
+        <p className="mt-1 mb-3 text-sm text-slate-300">Edite a orientação exibida abaixo das opções de cada menu. O texto é único para este aparelho e sincroniza pelo ADM. Para desativar, deixe vazio.</p>
+        <textarea aria-label="Texto do rodapé do WhatsApp" className={field + " min-h-24 whitespace-pre-wrap"} rows={3}
+          maxLength={400} value={tree.footer ?? H2_AUTO_DEFAULT_FOOTER}
+          onChange={event => {setTree(previous => ({...previous, footer:event.target.value}));setDirty(true);}} />
+        <div className="mt-2 flex items-center justify-between gap-2">
+          <span className="text-xs text-slate-400">{(tree.footer ?? H2_AUTO_DEFAULT_FOOTER).length}/400 caracteres · Salve no botão SALVAR E SINCRONIZAR abaixo.</span>
+          <button type="button" onClick={() => {setTree(previous => ({...previous,footer:H2_AUTO_DEFAULT_FOOTER}));setDirty(true);}}
+            className="rounded-lg border border-cyan-400/50 px-3 py-2 text-xs font-black text-cyan-100">RESTAURAR PADRÃO</button>
+        </div>
       </div>
 
       <div className="sticky top-0 z-20 flex flex-wrap items-center justify-between gap-3 rounded-2xl border border-emerald-400/40 bg-[#092436] p-3 shadow-xl">
@@ -910,7 +923,7 @@ export default function H2AutoTreeEditor({ id, revision, appliedRevision, initia
             {currentTest ? flowTitle(currentTest, tree.start) : "Etapa não encontrada"}
           </p>
           <div className="whitespace-pre-wrap text-base leading-relaxed text-white">
-            {currentTest ? renderH2AutoNode(currentTest) : "Etapa indisponível."}
+            {currentTest ? renderH2AutoNode(currentTest, tree.footer ?? H2_AUTO_DEFAULT_FOOTER) : "Etapa indisponível."}
           </div>
         </div>
         <div className="flex w-full flex-col gap-2">
