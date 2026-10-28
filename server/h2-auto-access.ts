@@ -130,7 +130,7 @@ async function activeReferralBinding(s: Session) {
   const found = await resolveReferralDeclaration({ customerPhone: "", referrerPhone: customer[0].phone });
   return found.issue === null && found.linkedReferrer?.id === Number(s.referrer_id);
 }
-const grant = (audience: "customer" | "new") => ({ state: "granted", audience });
+const grant = (audience: "customer" | "new" | "referrals") => ({ state: "granted", audience });
 const verified = (audience: "customer" | "new") => ({ state: "authorized", audience });
 
 export function registerH2AutoAccessRoutes(app: Express): void {
@@ -219,7 +219,8 @@ export function registerH2AutoAccessRoutes(app: Express): void {
             code_attempts=0,expires_at=0,updated_at=${now}`);
           return respond(res, 200, { state: "choice", message: initialMessage });
         }
-        if (isMenu) {
+        if (isMenu || normalized === "0") {
+          // Zero and MENU both return to the first audience selection without invalidating OTP.
           const menuStage = authorizedAudience === "customer" ? "customer_menu" : "new_menu";
           // Do not touch updated_at: MENU must not extend the authorized window.
           if (s.stage !== menuStage) await update(sessionId, sql`stage=${menuStage}`);

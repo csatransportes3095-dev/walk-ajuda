@@ -4,6 +4,8 @@ import { z } from "zod";
  * Wire format supported by H2 AUTO Android 1.21+.
  * Keep field names and limits aligned with android-overrides/FlowTree.java.
  */
+export const H2_AUTO_DEFAULT_FOOTER = "⌨️ *Digite o número desejado.*\n🔙 *0* ou *MENU* para voltar ao início.";
+
 const idSchema = z.string().regex(/^[a-z][a-z0-9_-]{0,39}$/, "Use letras minúsculas, números, - ou _.");
 const answerSchema = z.object({
   key: z.string().regex(/^(?:[1-9]|10)$/, "Escolha uma opção de 1 a 10."),
@@ -21,6 +23,7 @@ export const h2AutoTreeSchema = z.object({
   version: z.literal(1),
   enabled: z.boolean(),
   start: idSchema,
+  footer: z.string().max(400, "Rodapé com até 400 caracteres.").optional(),
   nodes: z.array(stageSchema).min(1).max(100),
 }).strict().superRefine((tree, ctx) => {
   const ids = new Set<string>();
@@ -60,6 +63,7 @@ export const H2_AUTO_TREE_DEFAULT: H2AutoTree = {
   version: 1,
   enabled: true,
   start: "inicio",
+  footer: H2_AUTO_DEFAULT_FOOTER,
   nodes: [
     { id: "inicio", mode: "question", text: "⚡ *H2 COLOMBIANO*\n🇨🇴 *CENTRAL DE ATENDIMENTO*\n\n👋 Olá! Você já é nosso cliente?",
       options: [
@@ -104,10 +108,10 @@ export function cloneH2AutoTree(tree: H2AutoTree = H2_AUTO_TREE_DEFAULT): H2Auto
 }
 
 /** Produces exactly the menu numbers that the APK shows to WhatsApp clients. */
-export function renderH2AutoNode(node: H2AutoTreeNode): string {
+export function renderH2AutoNode(node: H2AutoTreeNode, footer: string = H2_AUTO_DEFAULT_FOOTER): string {
   const symbols: Record<string, string> = { "1": "1️⃣", "2": "2️⃣", "3": "3️⃣", "4": "4️⃣", "5": "5️⃣", "6": "6️⃣", "7": "7️⃣", "8": "8️⃣", "9": "9️⃣", "10": "🔟" };
   const options = node.options.map(o => (symbols[o.key] || o.key) + " " + o.label).join("\n");
   return [node.text.trim(), options,
-    node.options.length ? "⌨️ *Digite o número desejado.*\n🔙 *0* para voltar • *MENU* para início." : ""]
+    node.options.length ? footer : ""]
     .filter(Boolean).join("\n\n");
 }
