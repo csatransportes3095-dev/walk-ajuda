@@ -30,5 +30,7 @@ jobs:
             echo 'Changed files have TypeScript errors.'
             exit 1
           fi
+      - name: Verify production CSS runtime patch compatibility
+        run: node scripts/patch-status-custom-colors-20260909.mjs
       - name: Production build
         run: pnpm build
