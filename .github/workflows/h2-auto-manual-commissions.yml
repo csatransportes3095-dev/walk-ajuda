@@ -31,6 +31,20 @@ jobs:
             exit 1
           fi
       - name: Verify production CSS runtime patch compatibility
-        run: node scripts/patch-status-custom-colors-20260909.mjs
+        run: |
+          node scripts/patch-admin-login-data-reload.mjs
+          node scripts/patch-loans-due-today-filter.mjs
+          node scripts/patch-backup-resilience-20260909.mjs
+          node scripts/patch-backup-direct-stream-20260909.mjs
+          node scripts/patch-media-backup-recovery-tool-20260909.mjs
+          node scripts/patch-admin-backup-media-panel-20260909.mjs
+          node scripts/patch-backup-core-no-r2-20260909.mjs
+          node scripts/patch-media-drive-auth-diagnostics-20260909.mjs
+          node scripts/patch-admin-customers-mobile-performance-20260909.mjs
+          node scripts/patch-admin-customers-referrer-photo-20260909.mjs
+          node scripts/patch-admin-customers-referral-filter-20260909.mjs
+          node scripts/patch-admin-customers-referral-photo-stack-20260909.mjs
+          node scripts/patch-admin-orders-status-background-20260909.mjs
+          node scripts/patch-status-custom-colors-20260909.mjs
       - name: Production build
         run: pnpm build
