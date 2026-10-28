@@ -5854,6 +5854,8 @@ export const appRouter = router({
         await ensureCommissionReferralStatusColumns(db);
         const { getReferralCommissionAttributionByRegistration, updateReferralCommissionAttributionStatus } = await import('./db');
         let frozenAttribution = await getReferralCommissionAttributionByRegistration(input.registrationId);
+        const { getCommissionManualOverrides } = await import("./referralCommissionManual");
+        const manualPaymentOverride = (await getCommissionManualOverrides(db,[input.registrationId])).get(input.registrationId);
         if (input.paid) {
           const appointmentRows = await db.execute(sql`
             SELECT status, confirmedAt FROM scheduleAppointments
@@ -5875,12 +5877,13 @@ export const appRouter = router({
             latestOrderStatus: latest?.status,
             latestOrderStatusLabel: latest?.statusLabel,
           });
-          if (!state.paymentReady) {
+          if (!state.paymentReady && manualPaymentOverride?.releaseStatus !== "liberado") {
             throw new TRPCError({ code: "BAD_REQUEST",
               message: state.state === "nao_elegivel" ? "Indicação não válida." :
                 "Pagamento bloqueado: o pedido precisa ter agendamento confirmado." });
           }
-          if (frozenAttribution?.status === "em_analise") {
+          if (frozenAttribution?.status === "em_analise" &&
+              (state.paymentReady || manualPaymentOverride?.releaseStatus === "liberado")) {
             await updateReferralCommissionAttributionStatus({
               registrationId: input.registrationId, status: "elegivel"
             });
@@ -5904,8 +5907,14 @@ export const appRouter = router({
           throw new TRPCError({ code: 'BAD_REQUEST', message: 'Esta indicação está marcada como não válida. Revalide-a antes de marcar como paga.' });
         }
 
-        let resolvedCommissionValue = Number(frozenAttribution?.commissionValue || 0);
-        if (!frozenAttribution) {
+        let resolvedCommissionValue = Number(manualPaymentOverride?.commissionValue ?? frozenAttribution?.commissionValue ?? 0);
+        if (input.paid && frozenAttribution && manualPaymentOverride) {
+          // Persist the manually approved value on the frozen attribution before payment.
+          await db.execute(sql`UPDATE referralCommissionAttributions
+            SET commissionValue=${resolvedCommissionValue},commissionRule='manual_admin',updatedAt=NOW()
+            WHERE registrationId=${input.registrationId}`);
+        }
+        if (!frozenAttribution && !manualPaymentOverride) {
           const candidates = await loadCommissionCandidates(db);
           resolvedCommissionValue = resolveLegacyCommissionValue({
             serviceName: orderState?.serviceName,
