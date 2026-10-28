@@ -8,7 +8,7 @@ import { resolveReferralDeclaration } from "./referral";
 import { sendH2AutoOrderCode } from "./h2-auto-order-email";
 import { blockInvalidPhone, INVALID_PHONE_REPLY } from "./h2-auto-validation-blocks";
 import { invalidH2AutoPhoneStageAnswer } from "./h2-auto-validation-policy";
-import { manualSilencedPhones } from "./h2-auto-silenced-contacts";
+import { manualSilencedPhones, normalizeSilencedPhone } from "./h2-auto-silenced-contacts";
 import { h2AutoCustomerNeedsProfileUpdate, H2_AUTO_CUSTOMER_NOT_CONFIRMED_MESSAGE } from "./h2-auto-customer-profile-guidance";
 
 /**
@@ -169,6 +169,12 @@ export function registerH2AutoAccessRoutes(app: Express): void {
       const blockedPhones = manualSilencedPhones(String((await rows(sql`SELECT
         JSON_UNQUOTE(JSON_EXTRACT(config_json,'$.blocked')) AS blocked_phones
         FROM h2_auto_devices WHERE id=${deviceId} LIMIT 1`))[0]?.blocked_phones || ""));
+      // If WhatsApp exposes the actual number in the notification label, stop
+      // even on first contact before the phone challenge or a config sync.
+      const labelPhone=typeof req.body?.contactLabel === "string" ?
+        normalizeSilencedPhone(req.body.contactLabel) : null;
+      if (labelPhone && blockedPhones.includes(labelPhone))
+        return respond(res,200,{state:"disabled"});
       if (blockedPhones.length && s?.customer_phone_hash &&
           blockedPhones.some(number => digest(number) === s.customer_phone_hash))
         return respond(res, 200, {state:"disabled"});
