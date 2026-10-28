@@ -6,6 +6,8 @@ import { normalizeCustomerPhone } from "./customerAccess";
 import { isOwnSiteEmailAuthorized, generateOwnSiteCode } from "./siteAccessOwnCodes";
 import { resolveReferralDeclaration } from "./referral";
 import { sendH2AutoOrderCode } from "./h2-auto-order-email";
+import { blockInvalidPhone, INVALID_PHONE_REPLY } from "./h2-auto-validation-blocks";
+import { invalidH2AutoPhoneStageAnswer } from "./h2-auto-validation-policy";
 
 /**
  * WhatsApp first-contact gate. State is server-side and bound to a paired device
@@ -32,7 +34,7 @@ const minute = 60_000;
 const hour = 60 * minute;
 const defaultAccessHours = 24;
 const otpLifetime = 10 * minute;
-type Stage = "choice" | "customer_phone" | "customer_code" | "referral_phone" | "customer" | "new" | "customer_menu" | "new_menu";
+type Stage = "choice" | "customer_phone" | "customer_code" | "referral_phone" | "customer" | "new" | "customer_menu" | "new_menu" | "blocked" | "released_customer_phone" | "released_referral_phone";
 type Session = {
   id: string; device_id: string; stage: Stage; customer_id: number | null; referrer_id: number | null;
   customer_phone_hash: string | null; customer_email_hash: string | null;
@@ -158,6 +160,13 @@ export function registerH2AutoAccessRoutes(app: Express): void {
       const existing = await rows(sql`SELECT * FROM h2_auto_access_sessions WHERE id=${sessionId} AND device_id=${deviceId} LIMIT 1`);
       const s = existing[0] as Session | undefined;
 
+      if (s?.stage === "blocked") return respond(res, 200, { state: "blocked", message: "" });
+      if (s?.stage === "released_customer_phone" || s?.stage === "released_referral_phone") {
+        const stage = s.stage === "released_customer_phone" ? "customer_phone" : "referral_phone";
+        await update(sessionId, sql`stage=${stage},updated_at=${now}`);
+        return respond(res, 200, { state: stage, message: stage === "customer_phone" ? phoneMessage : referrerMessage });
+      }
+
       if (!s || now - Number(s.updated_at) >= accessLifetime || Number(s.updated_at) > now) {
         const db = await getDb();
         if (!db) throw new Error("db_unavailable");
@@ -218,7 +227,8 @@ export function registerH2AutoAccessRoutes(app: Express): void {
 
       // Before authentication, MENU/0 returns to identification; 0 in
       // OTP confirmation returns to the phone prompt.
-      if (isMenu || normalized === "0" && s.stage !== "choice") {
+      if (s.stage !== "customer_phone" && s.stage !== "referral_phone" &&
+          (isMenu || normalized === "0" && s.stage !== "choice")) {
         const destination = normalized === "0" && s.stage === "customer_code" ? "customer_phone" : "choice";
         await update(sessionId, sql`stage=${destination},customer_id=NULL,referrer_id=NULL,
           customer_phone_hash=NULL,customer_email_hash=NULL,code_hash=NULL,code_expires=NULL,
@@ -240,7 +250,12 @@ export function registerH2AutoAccessRoutes(app: Express): void {
 
       if (s.stage === "customer_phone") {
         const phone = normalizeCustomerPhone(input);
-        if (!phone) return respond(res, 200, { state: "customer_phone", message: "📱 Informe um telefone válido com DDD.\n\n🔙 *0* ou *MENU* para voltar." });
+        if (invalidH2AutoPhoneStageAnswer(s.stage, input) || !phone) {
+          const first = await blockInvalidPhone({deviceId,sessionId,conversationId:conversation,
+            contactLabel:String(req.body?.contactLabel || ""),invalidAnswer:input,
+            stage:"customer_phone",reason:"Telefone do cliente fora do formato"});
+          return respond(res, 200, {state:"blocked",message:first?INVALID_PHONE_REPLY:""});
+        }
         if (Number(s.resend_after) > now)
           return respond(res, 200, { state: "customer_phone", message: "⏳ Aguarde um minuto para solicitar outro código.\n\n🔙 *0* ou *MENU* para voltar." });
         if (await limited("device:" + deviceId, 400, hour, now) ||
@@ -305,6 +320,12 @@ export function registerH2AutoAccessRoutes(app: Express): void {
       }
 
       if (s.stage === "referral_phone") {
+        if (invalidH2AutoPhoneStageAnswer(s.stage, input) || !normalizeCustomerPhone(input)) {
+          const first = await blockInvalidPhone({deviceId,sessionId,conversationId:conversation,
+            contactLabel:String(req.body?.contactLabel || ""),invalidAnswer:input,
+            stage:"referral_phone",reason:"Telefone de indicador fora do formato"});
+          return respond(res, 200, {state:"blocked",message:first?INVALID_PHONE_REPLY:""});
+        }
         if (normalized === "6") return respond(res, 200, { state: "human",
           message: "👨‍💻 *ATENDIMENTO HUMANO*\n\nSua solicitação foi encaminhada.\n⏳ Tempo médio: 5 minutos.\n\nDigite *MENU* para voltar." });
         if (normalized === "nao" || normalized === "não" || normalized.includes("nao tenho") || normalized.includes("não tenho") || normalized.includes("sem indicador"))
