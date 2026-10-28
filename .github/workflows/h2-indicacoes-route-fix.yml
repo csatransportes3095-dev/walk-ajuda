@@ -21,6 +21,6 @@ jobs:
           cache: pnpm
       - run: pnpm install --frozen-lockfile
       - name: Verify /indicacoes and other public routes
-        run: pnpm exec vitest run client/route-fallback-indicacoes.test.ts
+        run: pnpm exec vitest run server/route-fallback-indicacoes.test.ts
       - name: Build production site
         run: pnpm build
