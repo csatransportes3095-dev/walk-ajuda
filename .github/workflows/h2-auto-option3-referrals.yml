@@ -1,0 +1,30 @@
+name: H2 AUTO - Opcao 3 indicacoes
+on:
+  push:
+    branches:
+      - fix/h2auto-opcao3-indicacoes-direto-20261028
+  pull_request:
+    branches:
+      - recovery/organizar-salvos-2026-08-24
+permissions:
+  contents: read
+jobs:
+  check:
+    runs-on: ubuntu-latest
+    timeout-minutes: 25
+    steps:
+      - uses: actions/checkout@v4
+      - uses: pnpm/action-setup@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '22'
+          cache: pnpm
+      - run: pnpm install --frozen-lockfile
+      - name: Validate referral OTP entry and phone locking
+        run: pnpm exec vitest run server/h2-auto-validation-policy.test.ts server/h2-auto-customer-profile-guidance.test.ts server/h2-auto-once-verified-totals.test.ts
+      - name: Compile access and referral endpoints
+        run: |
+          pnpm exec esbuild server/h2-auto-access.ts --bundle --platform=node --packages=external --format=esm --outfile=/tmp/h2-auto-access.js
+          pnpm exec esbuild server/h2-auto-orders.ts --bundle --platform=node --packages=external --format=esm --outfile=/tmp/h2-auto-orders.js
+      - name: Build site and server
+        run: pnpm build
