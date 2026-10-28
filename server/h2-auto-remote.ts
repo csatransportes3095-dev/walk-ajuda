@@ -5,6 +5,7 @@ import { sql } from "drizzle-orm";
 import { TRPCError } from "@trpc/server";
 import { adminProcedure, router } from "./_core/trpc";
 import { getDb } from "./db";
+import { listActiveValidationBlocks, releaseValidationBlock, releaseAllValidationBlocks } from "./h2-auto-validation-blocks";
 import { h2AutoTreeSchema } from "../shared/h2AutoTree";
 import {
   decodeH2AutoDiagnostics,
@@ -262,6 +263,15 @@ async function clearH2AutoCustomerSessions(
   }
 }
 export const h2AutoAdminRouter = router({
+  validationBlocks: adminProcedure
+    .input(z.object({id:z.string().regex(/^[a-f0-9]{24}$/)}))
+    .query(async ({input}) => listActiveValidationBlocks(input.id)),
+  releaseValidationBlock: adminProcedure
+    .input(z.object({id:z.string().regex(/^[a-f0-9]{24}$/),sessionId:z.string().regex(/^[a-f0-9]{64}$/),restart:z.boolean().default(false)}))
+    .mutation(async ({input}) => ({success:await releaseValidationBlock(input.id,input.sessionId,input.restart)})),
+  releaseAllValidationBlocks: adminProcedure
+    .input(z.object({id:z.string().regex(/^[a-f0-9]{24}$/),confirmed:z.literal(true)}))
+    .mutation(async ({input}) => ({released:await releaseAllValidationBlocks(input.id)})),
   list: adminProcedure.query(async () => {
     await ensure();
     return (

@@ -96,7 +96,7 @@ function loadHistory(): HistoryItem[] {
   if (current && Array.isArray(current.used)) {
     return current.used
       .filter((item: unknown): item is HistoryItem => Boolean(item && typeof item === "object" && typeof (item as HistoryItem).email === "string"))
-      .map((item, index) => ({
+      .map((item: HistoryItem, index: number) => ({
         id: item.id || `saved-${index}-${item.createdAt || Date.now()}`,
         email: item.email,
         domain: item.domain || item.email.split("@")[1] || "",
@@ -108,7 +108,7 @@ function loadHistory(): HistoryItem[] {
   if (legacy && Array.isArray(legacy.used)) {
     return legacy.used
       .filter((item: unknown): item is { email: string; createdAt?: string } => Boolean(item && typeof item === "object" && typeof (item as { email?: unknown }).email === "string"))
-      .map((item, index) => ({
+      .map((item: HistoryItem, index: number) => ({
         id: `legacy-${index}-${item.createdAt || Date.now()}`,
         email: item.email,
         domain: item.email.split("@")[1] || "",
