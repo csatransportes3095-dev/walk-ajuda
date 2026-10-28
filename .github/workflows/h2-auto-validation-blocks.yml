@@ -1,0 +1,33 @@
+name: H2 AUTO - Validacao e Bloqueios (PR)
+on:
+  pull_request:
+    branches:
+      - feature/h2auto-whatsapp-identity-gate-20261027
+    paths:
+      - "server/h2-auto-access.ts"
+      - "server/h2-auto-remote.ts"
+      - "server/h2-auto-validation-*.ts"
+      - "client/src/components/H2AutoValidationBlocks.tsx"
+      - "client/src/pages/AdminH2Auto.tsx"
+      - ".github/workflows/h2-auto-validation-blocks.yml"
+  workflow_dispatch:
+permissions:
+  contents: read
+jobs:
+  check:
+    runs-on: ubuntu-latest
+    timeout-minutes: 25
+    steps:
+      - uses: actions/checkout@v4
+      - uses: pnpm/action-setup@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: "22"
+          cache: pnpm
+      - run: pnpm install --frozen-lockfile
+      - name: TypeScript validation
+        run: pnpm exec tsc --noEmit
+      - name: Phone-number policy tests
+        run: pnpm exec vitest run server/h2-auto-validation-policy.test.ts
+      - name: Build web and server
+        run: pnpm build
