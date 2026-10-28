@@ -53,7 +53,7 @@ export default function H2AutoValidationBlocks({ deviceId, deviceLabel }: Props)
       {list.isError ? <p role="alert" className="text-rose-300">Falha ao consultar bloqueios.</p> : null}
       {list.data?.length === 0 ? <p className="text-emerald-300">Nenhuma conversa bloqueada.</p> : null}
       <div className="space-y-3">
-        {list.data?.map(item => (
+        {list.data?.map((item: {sessionId:string;conversationId:string;contactLabel:string;invalidAnswer:string;reason:string;failedStage:string;blockedAt:number}) => (
           <article key={item.sessionId} className="rounded-xl border border-rose-500/30 bg-slate-900 p-4 space-y-2">
             <div className="font-bold text-white">{item.contactLabel || "Conversa identificada"} · {new Date(item.blockedAt).toLocaleString("pt-BR")}</div>
             <p className="text-sm text-slate-300">Motivo: {item.reason}</p>
