@@ -34,7 +34,7 @@ const hour = 60 * minute;
 const accessLifetime = 24 * hour;
 const otpLifetime = 10 * minute;
 const phone11 = (raw: string) => /^[1-9][0-9]9[0-9]{8}$/.test(raw.trim()) && !/^(.)\1{10}$/.test(raw.trim());
-type Stage = "choice" | "customer_phone" | "customer_code" | "referral_phone" | "customer" | "new" | "blocked";
+type Stage = "choice" | "customer_phone" | "customer_code" | "referral_phone" | "customer" | "new" | "blocked" | "released_customer_phone" | "released_referral_phone";
 type Session = {
   id: string; device_id: string; stage: Stage; customer_id: number | null; referrer_id: number | null;
   customer_phone_hash: string | null; customer_email_hash: string | null;
@@ -150,6 +150,11 @@ export function registerH2AutoAccessRoutes(app: Express): void {
       const s = existing[0] as Session | undefined;
 
       if (s?.stage === "blocked") return respond(res, 200, { state: "blocked", message: "" });
+      if (s?.stage === "released_customer_phone" || s?.stage === "released_referral_phone") {
+        const stage = s.stage === "released_customer_phone" ? "customer_phone" : "referral_phone";
+        await update(sessionId, sql`stage=${stage},updated_at=${now}`);
+        return respond(res, 200, { state: stage, message: stage === "customer_phone" ? phoneMessage : referrerMessage });
+      }
 
       if (!s || now - Number(s.updated_at) >= accessLifetime || Number(s.updated_at) > now) {
         const db = await getDb();
