@@ -7,6 +7,7 @@ import { isOwnSiteEmailAuthorized, generateOwnSiteCode } from "./siteAccessOwnCo
 import { resolveReferralDeclaration } from "./referral";
 import { sendH2AutoOrderCode } from "./h2-auto-order-email";
 import { blockInvalidPhone, INVALID_PHONE_REPLY } from "./h2-auto-validation-blocks";
+import { validH2AutoPhone11 } from "./h2-auto-validation-policy";
 
 /**
  * WhatsApp first-contact gate. State is server-side and bound to a paired device
@@ -33,7 +34,7 @@ const minute = 60_000;
 const hour = 60 * minute;
 const accessLifetime = 24 * hour;
 const otpLifetime = 10 * minute;
-const phone11 = (raw: string) => /^[1-9][0-9]9[0-9]{8}$/.test(raw.trim()) && !/^(.)\1{10}$/.test(raw.trim());
+
 type Stage = "choice" | "customer_phone" | "customer_code" | "referral_phone" | "customer" | "new" | "blocked" | "released_customer_phone" | "released_referral_phone";
 type Session = {
   id: string; device_id: string; stage: Stage; customer_id: number | null; referrer_id: number | null;
@@ -195,7 +196,7 @@ export function registerH2AutoAccessRoutes(app: Express): void {
 
       if (s.stage === "customer_phone") {
         const phone = normalizeCustomerPhone(input);
-        if (!phone11(input) || !phone) {
+        if (!validH2AutoPhone11(input) || !phone) {
           const first = await blockInvalidPhone({deviceId,sessionId,conversationId:conversation,
             contactLabel: String(req.body?.contactLabel || ""),invalidAnswer:input,
             stage:"customer_phone",reason:"Telefone do cliente fora do formato"});
@@ -265,7 +266,7 @@ export function registerH2AutoAccessRoutes(app: Express): void {
       }
 
       if (s.stage === "referral_phone") {
-        if (!phone11(input) || !normalizeCustomerPhone(input)) {
+        if (!validH2AutoPhone11(input) || !normalizeCustomerPhone(input)) {
           const first = await blockInvalidPhone({deviceId,sessionId,conversationId:conversation,
             contactLabel:String(req.body?.contactLabel || ""),invalidAnswer:input,
             stage:"referral_phone",reason:"Telefone de indicador fora do formato"});
