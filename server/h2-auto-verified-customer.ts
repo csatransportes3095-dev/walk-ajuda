@@ -23,6 +23,7 @@ export async function getH2AutoVerifiedAccessCustomer(
   customer_phone: string;
   customer_created: Date | string;
   current_email: string;
+  email: string;
 } | null> {
   if (!/^[a-f0-9]{24}$/.test(deviceId) || !/^[a-f0-9]{64}$/.test(conversationId))
     return null;
@@ -64,5 +65,6 @@ export async function getH2AutoVerifiedAccessCustomer(
     customer_phone: String(found.customer_phone),
     customer_created: found.customer_created,
     current_email: currentEmail,
+    email: currentEmail,
   };
 }
