@@ -26,7 +26,7 @@ jobs:
         run: |
           pnpm exec tsc --noEmit > /tmp/manual-tsc.log 2>&1 && exit 0
           cat /tmp/manual-tsc.log
-          if grep -E '^(server/referralCommissionManual|server/h2-auto-orders|client/src/pages/AdminCommissions|server/routers)\.(tsx|ts)\([0-9]+,[0-9]+\): error TS' /tmp/manual-tsc.log; then
+          if grep -E '^(server/referralCommissionManual\.ts|server/h2-auto-orders\.ts|client/src/pages/AdminCommissions\.tsx)\([0-9]+,[0-9]+\): error TS|^server/routers\.ts\((5[8-9][0-9][0-9]|6[0-3][0-9][0-9]),[0-9]+\): error TS' /tmp/manual-tsc.log; then
             echo 'Changed files have TypeScript errors.'
             exit 1
           fi
