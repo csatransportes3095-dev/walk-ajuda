@@ -1,0 +1,33 @@
+name: H2 AUTO - Contatos Silenciados
+on:
+  push:
+    branches:
+      - feature/h2auto-manual-silenced-contacts-20261028
+  pull_request:
+    branches:
+      - recovery/organizar-salvos-2026-08-24
+permissions:
+  contents: read
+jobs:
+  check:
+    runs-on: ubuntu-latest
+    timeout-minutes: 25
+    steps:
+      - uses: actions/checkout@v4
+      - uses: pnpm/action-setup@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: "22"
+          cache: pnpm
+      - run: pnpm install --frozen-lockfile
+      - name: Test manual contacts and existing validation blocks
+        run: pnpm exec vitest run server/h2-auto-silenced-contacts.test.ts server/h2-auto-validation-policy.test.ts
+      - name: Audit new types
+        run: |
+          pnpm exec tsc --noEmit > /tmp/h2auto-silence-tsc.log 2>&1 && exit 0
+          if grep -E '^(server/h2-auto-silenced-contacts\.ts|client/src/components/H2AutoSilencedContacts\.tsx|server/h2-auto-remote\.ts|client/src/pages/AdminH2Auto\.tsx)\([0-9]+,[0-9]+\): error TS' /tmp/h2auto-silence-tsc.log; then
+            cat /tmp/h2auto-silence-tsc.log
+            exit 1
+          fi
+      - name: Build website
+        run: pnpm build
