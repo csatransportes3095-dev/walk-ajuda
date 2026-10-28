@@ -1,0 +1,28 @@
+name: H2 AUTO - Confirmacao unica e valores das indicacoes
+on:
+  pull_request:
+    branches:
+      - recovery/organizar-salvos-2026-08-24
+  push:
+    branches:
+      - fix/h2auto-once-verified-referral-totals-20261028
+permissions:
+  contents: read
+jobs:
+  check:
+    runs-on: ubuntu-latest
+    timeout-minutes: 25
+    steps:
+      - uses: actions/checkout@v4
+      - uses: pnpm/action-setup@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: "22"
+          cache: pnpm
+      - run: pnpm install --frozen-lockfile
+      - name: Test financial categories and existing referral policies
+        run: pnpm exec vitest run server/h2-auto-once-verified-totals.test.ts server/h2-auto-referral-commissions.test.ts server/referralCommissionPolicy.test.ts
+      - name: Compile protected customer verification and referrals
+        run: pnpm exec esbuild server/h2-auto-orders.ts --bundle --platform=node --packages=external --format=esm --outfile=/tmp/h2-auto-orders.js
+      - name: Build site
+        run: pnpm build

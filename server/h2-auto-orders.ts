@@ -9,6 +9,7 @@ import {getOrderStatusVisibilityForClient} from "./orderStatusVisibility";
 import {groupVisibleH2AutoOrders} from "./h2-auto-order-history";
 import {attachScheduleToOrders} from "./h2-auto-order-schedule";
 import {resolveReferralCommissionState} from "../shared/referralCommissionPolicy";
+import {getH2AutoVerifiedAccessCustomer} from "./h2-auto-verified-customer";
 import {loadH2AutoLegacyReferrals,mergeH2AutoReferralItems} from "./h2-auto-referral-commissions";
 
 const hash=(v:string)=>createHash("sha256").update(v).digest("hex");
@@ -155,7 +156,8 @@ export function registerH2AutoOrdersRoutes(app:Express){
    const sessions=await rows(sql`SELECT s.customer_id,s.customer_phone,c.createdAt AS customer_created,c.email AS current_email FROM h2_auto_order_sessions s
      JOIN customers c ON c.id=s.customer_id WHERE s.id=${sid} AND s.device_id=${id} AND SHA2(LOWER(TRIM(c.email)),256)=s.email_hash AND RIGHT(REGEXP_REPLACE(c.phone,'[^0-9]',''),11)=RIGHT(REGEXP_REPLACE(s.customer_phone,'[^0-9]',''),11) AND s.used_at IS NOT NULL
      AND s.expires_at>${now} AND c.deletedAt IS NULL AND c.blocked=0 LIMIT 1`);
-   const s=sessions[0];if(!s)return reply(res,403,{error:"authentication_required"});
+   const s=sessions[0] || await getH2AutoVerifiedAccessCustomer(id,conversation,now);
+   if(!s)return reply(res,403,{error:"authentication_required"});
    const authDb=await getDb();if(!authDb || !(await isOwnSiteEmailAuthorized(authDb,String(s.current_email))))return reply(res,403,{error:"authentication_required"});
    const orders=await rows(sql`SELECT h.id,h.registrationId,h.orderNumber,h.status, st.label AS statusLabel, h.serviceName,h.serviceOption,h.createdAt
     FROM orderStatusHistory h LEFT JOIN orderStatusTypes st ON st.${sql.identifier("key")}=h.status INNER JOIN accessCodePhones a ON a.id=h.registrationId
@@ -202,7 +204,8 @@ export function registerH2AutoOrdersRoutes(app:Express){
       AND SHA2(LOWER(TRIM(c.email)),256)=s.email_hash
       AND RIGHT(REGEXP_REPLACE(c.phone,'[^0-9]',''),11)=RIGHT(REGEXP_REPLACE(s.customer_phone,'[^0-9]',''),11)
       LIMIT 1`);
-   const me=sessions[0];if(!me)return reply(res,403,{error:"authentication_required"});
+   const me=sessions[0] || await getH2AutoVerifiedAccessCustomer(id,conversation,now);
+   if(!me)return reply(res,403,{error:"authentication_required"});
    const authDb=await getDb();if(!authDb||!(await isOwnSiteEmailAuthorized(authDb,String(me.email))))
      return reply(res,403,{error:"authentication_required"});
    const phone=String(me.customer_phone).replace(/\D/g,"").slice(-11);
@@ -244,7 +247,9 @@ export function registerH2AutoOrdersRoutes(app:Express){
    const allCommissions=mergeH2AutoReferralItems(commissions,legacy);
    const total=allCommissions.reduce((acc,row)=>acc+row.commissionValue,0);
    const available=allCommissions.filter(row=>row.commissionState==="liberada").reduce((acc,row)=>acc+row.commissionValue,0);
-   return reply(res,200,{state:"verified",totalReferrals:allCommissions.length,amountTotal:total,amountReady:available,commissions:allCommissions});
+   const pending=allCommissions.filter(row=>row.commissionState==="aguardando_agendamento").reduce((acc,row)=>acc+row.commissionValue,0);
+   const paid=allCommissions.filter(row=>row.commissionState==="paga").reduce((acc,row)=>acc+row.commissionValue,0);
+   return reply(res,200,{state:"verified",totalReferrals:allCommissions.length,amountTotal:total,amountPending:pending,amountReady:available,amountPaid:paid,commissions:allCommissions});
   }catch{return reply(res,503,{error:"temporarily_unavailable"});}
  });
  app.post("/api/h2-auto/orders/logout",async(req,res)=>{
