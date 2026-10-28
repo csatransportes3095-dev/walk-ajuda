@@ -291,7 +291,7 @@ export const h2AutoAdminRouter = router({
         appliedRevision:Number(data[0].applied_revision||0)};
     }),
   setSilencedContact: adminProcedure
-    .input(z.object({id:z.string().regex(/^[a-f0-9]{24}$/}),
+    .input(z.object({id:z.string().regex(/^[a-f0-9]{24}$/),
       phone:z.string().trim().min(10).max(30),
       action:z.enum(["block","release"])}))
     .mutation(async({input})=>{
