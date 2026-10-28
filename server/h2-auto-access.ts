@@ -106,12 +106,13 @@ async function deviceFor(req: Request): Promise<string | null> {
 async function customerFor(phone: string) {
   const normalized = normalizeCustomerPhone(phone);
   if (!normalized) return null;
-  // Prefilter by final 10 digits to include legacy mobiles with/without
+  // Prefilter by DDD and final 8 digits to include legacy mobiles with/without
   // the ninth digit. The helper confirms the full DDD/phone equivalence.
   // Ambiguous matches must not receive an OTP.
   const found = await rows(sql`SELECT id,phone,email,blocked,name,cpf,cep,street,addressNumber,neighborhood,city,uf,profilePhotoUrl FROM customers
     WHERE deletedAt IS NULL AND COALESCE(blocked,0)=0
-    AND RIGHT(REGEXP_REPLACE(phone,'[^0-9]',''),10)=${normalized.slice(-10)} LIMIT 50`);
+    AND RIGHT(REGEXP_REPLACE(phone,'[^0-9]',''),8)=${normalized.slice(-8)}
+    AND LEFT(RIGHT(REGEXP_REPLACE(phone,'[^0-9]',''),11),2)=${normalized.slice(0,2)} LIMIT 50`);
   const customer = selectH2AutoCustomerByPhone(found, normalized);
   if (!customer || Number(customer.blocked) !== 0) return null;
   return { ...customer, id: Number(customer.id), phone: String(customer.phone), email: String(customer.email || "") };
