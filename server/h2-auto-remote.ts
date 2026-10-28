@@ -281,6 +281,39 @@ async function clearH2AutoCustomerSessions(
 }
 export const h2AutoAdminRouter = router({
   silencedContacts: adminProcedure
+    .input(z.object({ id:z.string().regex(/^[a-f0-9]{24}$/) }))
+    .query(async({input})=>{
+      await ensure();
+      const rowsForDevice=await rows(sql`SELECT config_json,revision,applied_revision FROM h2_auto_devices WHERE id=${input.id} LIMIT 1`);
+      if(!rowsForDevice.length)throw new TRPCError({code:"NOT_FOUND",message:"Aparelho não encontrado."});
+      const {manualSilencedPhones}=await import("./h2-auto-silenced-contacts");
+      const d=rowsForDevice[0];
+      return {phones:manualSilencedPhones(decodeConfig(d.config_json).blocked),
+        revision:Number(d.revision),appliedRevision:Number(d.applied_revision||0)};
+    }),
+  changeSilencedContact: adminProcedure
+    .input(z.object({id:z.string().regex(/^[a-f0-9]{24}$/),
+      phone:z.string().min(10).max(32),action:z.enum(["block","release"])}))
+    .mutation(async({input})=>{
+      await ensure();const db=await getDb();if(!db)throw new Error("Banco indisponível.");
+      const {changeSilencedPhone,normalizeSilencedPhone}=await import("./h2-auto-silenced-contacts");
+      const normalized=normalizeSilencedPhone(input.phone);
+      if(!normalized)throw new TRPCError({code:"BAD_REQUEST",message:"Informe telefone com DDD válido."});
+      for(let i=0;i<5;i++){
+        const found=await rows(sql`SELECT config_json,revision FROM h2_auto_devices WHERE id=${input.id} LIMIT 1`);
+        if(!found.length)throw new TRPCError({code:"NOT_FOUND",message:"Aparelho não encontrado."});
+        const current=decodeConfig(found[0].config_json);
+        const next={...current,blocked:changeSilencedPhone(current.blocked,normalized,input.action)};
+        const revision=Number(found[0].revision);
+        const saved:any=await db.execute(sql`UPDATE h2_auto_devices
+          SET config_json=${JSON.stringify(next)},revision=revision+1
+          WHERE id=${input.id} AND revision=${revision}`);
+        if(saved[0]?.affectedRows)return {success:true,phone:normalized,revision:revision+1};
+      }
+      throw new TRPCError({code:"CONFLICT",message:"A configuração mudou. Tente novamente."});
+    }),
+
+  silencedContacts: adminProcedure
     .input(z.object({id:z.string().regex(/^[a-f0-9]{24}$/)}))
     .query(async({input})=>{
       await ensure();
