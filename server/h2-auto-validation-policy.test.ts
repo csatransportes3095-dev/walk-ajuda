@@ -21,7 +21,7 @@ describe("H2 Auto strict 11-digit WhatsApp phone validation", () => {
 });
 
 describe("H2 Auto phone challenge cannot be bypassed", () => {
-  for (const stage of ["customer_phone", "referral_phone"]) {
+  for (const stage of ["customer_phone", "referral_phone", "referrals_phone"]) {
     it(stage + " rejects MENU, 0, 6, and text", () => {
       for (const text of ["MENU", "inicio", "0", "6", "voltar", "não tenho"]) {
         expect(invalidH2AutoPhoneStageAnswer(stage, text)).toBe(true);
