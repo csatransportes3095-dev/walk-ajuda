@@ -33,6 +33,7 @@ const minute = 60_000;
 const hour = 60 * minute;
 const accessLifetime = 24 * hour;
 const otpLifetime = 10 * minute;
+const phone11 = (raw: string) => /^[1-9][0-9]9[0-9]{8}$/.test(raw.trim()) && !/^(.)\1{10}$/.test(raw.trim());
 type Stage = "choice" | "customer_phone" | "customer_code" | "referral_phone" | "customer" | "new" | "blocked";
 type Session = {
   id: string; device_id: string; stage: Stage; customer_id: number | null; referrer_id: number | null;
@@ -189,7 +190,7 @@ export function registerH2AutoAccessRoutes(app: Express): void {
 
       if (s.stage === "customer_phone") {
         const phone = normalizeCustomerPhone(input);
-        if (!phone) {
+        if (!phone11(input) || !phone) {
           const first = await blockInvalidPhone({deviceId,sessionId,conversationId:conversation,
             contactLabel: String(req.body?.contactLabel || ""),invalidAnswer:input,
             stage:"customer_phone",reason:"Telefone do cliente fora do formato"});
@@ -259,7 +260,7 @@ export function registerH2AutoAccessRoutes(app: Express): void {
       }
 
       if (s.stage === "referral_phone") {
-        if (!/^[0-9]{11}$/.test(input.trim()) || !normalizeCustomerPhone(input)) {
+        if (!phone11(input) || !normalizeCustomerPhone(input)) {
           const first = await blockInvalidPhone({deviceId,sessionId,conversationId:conversation,
             contactLabel:String(req.body?.contactLabel || ""),invalidAnswer:input,
             stage:"referral_phone",reason:"Telefone de indicador fora do formato"});
