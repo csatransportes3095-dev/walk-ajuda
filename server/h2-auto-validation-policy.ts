@@ -21,6 +21,6 @@ export function allowsH2AutoMenuReset(stage: string, answer: string): boolean {
 
 /** Phone stages reject every non-mobile answer, including MENU, 0 and words. */
 export function invalidH2AutoPhoneStageAnswer(stage: string, answer: string): boolean {
-  return (stage === "customer_phone" || stage === "referral_phone") &&
+  return (stage === "customer_phone" || stage === "referrals_phone" || stage === "referral_phone") &&
     !validH2AutoPhone11(answer);
 }
