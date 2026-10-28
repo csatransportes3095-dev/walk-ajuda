@@ -1,0 +1,38 @@
+name: H2 AUTO - Comissoes e Indicacoes (Producao)
+on:
+  push:
+    branches:
+      - fix/h2auto-referrals-commissions-parity-20261028
+  pull_request:
+    branches:
+      - recovery/organizar-salvos-2026-08-24
+  workflow_dispatch:
+permissions:
+  contents: read
+jobs:
+  audit:
+    runs-on: ubuntu-latest
+    timeout-minutes: 25
+    steps:
+      - uses: actions/checkout@v4
+      - uses: pnpm/action-setup@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: "22"
+          cache: pnpm
+      - run: pnpm install --frozen-lockfile
+      - name: Run H2 AUTO referral and existing commission policy tests
+        run: pnpm exec vitest run server/h2-auto-referral-commissions.test.ts server/commissionResolver.test.ts server/referralCommissionPolicy.test.ts server/h2-auto-order-history.test.ts
+      - name: Compile H2 AUTO referral endpoint and resolver
+        run: pnpm exec esbuild server/h2-auto-orders.ts --bundle --platform=node --packages=external --format=esm --outfile=/tmp/h2-auto-orders.js
+      - name: Validate no new TypeScript errors in changed files
+        run: |
+          pnpm exec tsc --noEmit > /tmp/h2-auto-commissions-tsc.log 2>&1 && exit 0
+          cat /tmp/h2-auto-commissions-tsc.log
+          if grep -E '^server/h2-auto-(orders|referral-commissions)\.ts\([0-9]+,[0-9]+\): error TS' /tmp/h2-auto-commissions-tsc.log; then
+            echo "ERROR: H2 AUTO referral TypeScript validation failed"
+            exit 1
+          fi
+          echo "No TypeScript errors in the changed H2 AUTO backend files"
+      - name: Build web and server
+        run: pnpm build
