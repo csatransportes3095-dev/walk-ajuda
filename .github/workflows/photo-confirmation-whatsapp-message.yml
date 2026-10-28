@@ -6,7 +6,7 @@ on:
     paths:
       - 'client/src/components/OrderPhotoConfirmation.tsx'
       - 'client/src/lib/photoConfirmationWhatsappMessage.ts'
-      - 'client/src/lib/photoConfirmationWhatsappMessage.test.ts'
+      - 'server/photoConfirmationWhatsappMessage.test.ts'
       - '.github/workflows/photo-confirmation-whatsapp-message.yml'
 permissions:
   contents: read
