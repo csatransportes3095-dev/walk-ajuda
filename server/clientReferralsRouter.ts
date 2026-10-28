@@ -56,7 +56,7 @@ export const clientReferralsRouter = router({
           ORDER BY attribution.createdAt DESC LIMIT 500`),
         loadH2AutoLegacyReferrals(phone),
       ]);
-      const frozen=((result[0]||[]) as any[]).map(row=>{
+      const frozen=((result[0]||[]) as unknown as any[]).map(row=>{
         const resolved=resolveReferralCommissionState({
           frozenStatus:row.commissionStatus,
           appointmentStatus:row.appointmentStatus,
