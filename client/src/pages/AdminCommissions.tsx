@@ -50,6 +50,18 @@ export default function AdminCommissions() {
   const [filterPaid, setFilterPaid] = useState<"all" | "pending" | "paid" | "invalid">("all");
   const [searchTerm, setSearchTerm] = useState("");
   const [manualCommissionValue, setManualCommissionValue] = useState("");
+  const [manualEdit, setManualEdit] = useState<number | null>(null);
+  const [manualEditValue, setManualEditValue] = useState("");
+  const [manualEditStatus, setManualEditStatus] = useState<"a_liberar" | "liberado">("a_liberar");
+  const saveManualCommission = trpc.orderStatus.setCommissionManual.useMutation({
+    onSuccess: () => {
+      setManualEdit(null);
+      setManualEditValue("");
+      void utils.orderStatus.listCommissions.invalidate();
+      toast.success("Valor e status atualizados no site e na consulta H2 AUTO.");
+    },
+    onError: error => toast.error(error.message),
+  });
 
   const commissionsQuery = trpc.orderStatus.listCommissions.useQuery();
   const customersQuery = trpc.customers.list.useQuery(undefined, {
