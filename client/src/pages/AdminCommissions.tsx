@@ -50,6 +50,18 @@ export default function AdminCommissions() {
   const [filterPaid, setFilterPaid] = useState<"all" | "pending" | "paid" | "invalid">("all");
   const [searchTerm, setSearchTerm] = useState("");
   const [manualCommissionValue, setManualCommissionValue] = useState("");
+  const [manualEdit, setManualEdit] = useState<number | null>(null);
+  const [manualEditValue, setManualEditValue] = useState("");
+  const [manualEditStatus, setManualEditStatus] = useState<"a_liberar" | "liberado">("a_liberar");
+  const saveManualCommission = trpc.orderStatus.setCommissionManual.useMutation({
+    onSuccess: () => {
+      setManualEdit(null);
+      setManualEditValue("");
+      void utils.orderStatus.listCommissions.invalidate();
+      toast.success("Valor e status atualizados no site e na consulta H2 AUTO.");
+    },
+    onError: error => toast.error(error.message),
+  });
 
   const commissionsQuery = trpc.orderStatus.listCommissions.useQuery();
   const customersQuery = trpc.customers.list.useQuery(undefined, {
@@ -214,6 +226,11 @@ export default function AdminCommissions() {
   // Totais financeiros
   const totalValuePending = all.filter(c => c.commissionPaid !== 1 && !(c as any).referralInvalid).reduce((sum, c) => sum + ((c as any).commissionValue ?? 0), 0);
   const totalValuePaid = all.filter(c => c.commissionPaid === 1 && !(c as any).referralInvalid).reduce((sum, c) => sum + ((c as any).commissionValue ?? 0), 0);
+  const totalARelease = all.filter(c => (c as any).paymentState === "aguardando_agendamento" &&
+      !((c as any).referralInvalid)).reduce((sum,c)=>sum+Number((c as any).commissionValue||0),0);
+  const totalReleased = all.filter(c => (c as any).paymentState === "liberada" &&
+      !((c as any).referralInvalid)).reduce((sum,c)=>sum+Number((c as any).commissionValue||0),0);
+  const totalCommission = all.filter(c=>!((c as any).referralInvalid)).reduce((sum,c)=>sum+Number((c as any).commissionValue||0),0);
 
   function formatMoney(cents: number) {
     if (!cents) return "—";
@@ -248,7 +265,7 @@ export default function AdminCommissions() {
   }
 
   return (
-    <div className="min-h-screen bg-background text-foreground">
+    <div className="min-h-screen bg-[#050815] text-slate-100">
       <style>{`
         @keyframes commissionNeonPending {
           0%, 100% { box-shadow: inset 3px 0 0 rgba(239,68,68,.75), 0 0 8px rgba(239,68,68,.10); }
@@ -271,11 +288,16 @@ export default function AdminCommissions() {
         </button>
       } />
 
-      <div className="max-w-3xl mx-auto px-4 py-4 space-y-4">
+      <div className="max-w-6xl mx-auto px-3 sm:px-5 py-5 space-y-5">
 
+        <div className="rounded-2xl border border-cyan-400/25 bg-gradient-to-r from-cyan-500/10 via-blue-500/5 to-fuchsia-500/10 px-4 py-4 shadow-[0_0_24px_rgba(6,182,212,.08)]">
+          <p className="text-xs font-black uppercase tracking-[.24em] text-cyan-300">🇨🇴 H2 COLOMBIANO • CENTRAL DE COMISSÕES</p>
+          <h2 className="mt-2 text-xl sm:text-2xl font-black tracking-tight text-white">⚡ INDICAÇÕES & CONTROLE FINANCEIRO</h2>
+          <p className="mt-1 text-xs text-slate-300">Configure o valor de cada indicação. Escolha A LIBERAR ou LIBERADO sem marcar o pagamento.</p>
+        </div>
         {/* Resumo em cards */}
-        <div className="grid grid-cols-2 sm:grid-cols-5 gap-3">
-          <div className="bg-card border border-border rounded-xl p-3 text-center">
+        <div className="grid grid-cols-2 md:grid-cols-5 gap-3">
+          <div className="rounded-2xl border border-cyan-400/30 bg-gradient-to-br from-cyan-500/15 to-slate-950 p-4 text-center shadow-[0_0_18px_rgba(6,182,212,.10)]">
             <p className="text-2xl font-bold text-foreground">{all.length}</p>
             <p className="text-xs text-muted-foreground mt-0.5">Total</p>
           </div>
@@ -295,13 +317,28 @@ export default function AdminCommissions() {
             {totalValuePaid > 0 && <p className="text-[10px] text-green-300/80 font-mono">{formatMoney(totalValuePaid)}</p>}
             <p className="text-xs text-muted-foreground mt-0.5">Pagas</p>
           </div>
-          <div className="bg-card border border-zinc-500/30 rounded-xl p-3 text-center cursor-pointer" onClick={() => setFilterPaid(filterPaid === "invalid" ? "all" : "invalid")}>
+          <div className="rounded-2xl border border-zinc-500/40 bg-gradient-to-br from-zinc-500/15 to-slate-950 p-4 text-center cursor-pointer shadow-lg transition hover:border-zinc-300/50" onClick={() => setFilterPaid(filterPaid === "invalid" ? "all" : "invalid")}>
             <p className="text-2xl font-bold text-zinc-300">{totalInvalid}</p>
             <p className="text-xs text-muted-foreground mt-0.5">Não válidas</p>
           </div>
-          <div className="bg-card border border-amber-500/30 rounded-xl p-3 text-center">
+          <div className="rounded-2xl border border-amber-500/40 bg-gradient-to-br from-amber-500/15 to-slate-950 p-4 text-center shadow-[0_0_18px_rgba(245,158,11,.10)]">
             <p className="text-2xl font-bold text-amber-400">{uniqueReferrers}</p>
             <p className="text-xs text-muted-foreground mt-0.5">Indicadores</p>
+          </div>
+        </div>
+
+        <div className="grid grid-cols-1 sm:grid-cols-3 gap-3">
+          <div className="rounded-2xl border border-amber-400/40 bg-gradient-to-br from-amber-500/15 to-slate-950 p-4 shadow-[0_0_16px_rgba(245,158,11,.12)]">
+            <p className="text-xs font-black tracking-wider text-amber-300">⏳ VALOR A LIBERAR</p>
+            <p className="mt-2 text-xl font-black tabular-nums text-white">{formatMoney(totalARelease)}</p>
+          </div>
+          <div className="rounded-2xl border border-emerald-400/40 bg-gradient-to-br from-emerald-500/15 to-slate-950 p-4 shadow-[0_0_16px_rgba(16,185,129,.12)]">
+            <p className="text-xs font-black tracking-wider text-emerald-300">✅ VALOR LIBERADO</p>
+            <p className="mt-2 text-xl font-black tabular-nums text-white">{formatMoney(totalReleased)}</p>
+          </div>
+          <div className="rounded-2xl border border-cyan-400/40 bg-gradient-to-br from-cyan-500/15 to-slate-950 p-4 shadow-[0_0_16px_rgba(6,182,212,.12)]">
+            <p className="text-xs font-black tracking-wider text-cyan-300">💰 VALOR TOTAL</p>
+            <p className="mt-2 text-xl font-black tabular-nums text-white">{formatMoney(totalCommission)}</p>
           </div>
         </div>
 
@@ -387,9 +424,9 @@ export default function AdminCommissions() {
             const totalPagoValor = pedidos.filter(p => p.commissionPaid === 1 && !(p as any).referralInvalid).reduce((s, p) => s + ((p as any).commissionValue ?? 0), 0);
 
             return (
-              <div key={key} className="bg-card border border-border rounded-xl overflow-hidden shadow-sm">
+              <div key={key} className="overflow-hidden rounded-2xl border border-cyan-400/25 bg-gradient-to-b from-[#10172a] to-[#090e1d] shadow-[0_0_26px_rgba(14,165,233,.10)] transition-all hover:border-cyan-400/45">
                 {/* Cabeçalho do indicador */}
-                <div className={`px-4 py-3 border-b flex items-start justify-between gap-3 ${
+                <div className={`px-4 py-4 border-b flex flex-wrap items-start justify-between gap-3 ${
                   pendentes > 0
                     ? "bg-amber-500/10 border-amber-500/20"
                     : "bg-green-500/5 border-green-500/15"
@@ -462,7 +499,7 @@ export default function AdminCommissions() {
                 </div>
 
                 {/* Pedidos do grupo */}
-                <div className="divide-y divide-border">
+                <div className="divide-y divide-cyan-500/15">
                   {pedidos.map(c => {
                     const statusCfg = c.latestStatus ? STATUS_MAP[c.latestStatus] : null;
                     const commissionStatus = (c as any).commissionStatus as string | undefined;
@@ -470,11 +507,12 @@ export default function AdminCommissions() {
                     const isInvalid = Boolean((c as any).referralInvalid);
                     const isEligible = Boolean((c as any).paymentReady);
                     const isUnderReview = (c as any).paymentState === 'aguardando_agendamento';
+                    const manualState = (c as any).manualStatus as "a_liberar" | "liberado" | null;
                     const isReferralAction = referralAction?.registrationId === c.registrationId;
                     return (
                       <div
                         key={c.registrationId}
-                        className={`px-4 py-3 flex items-start gap-3 rounded-lg ${isInvalid ? "" : isPaid ? "commission-neon-paid" : "commission-neon-pending"}`}
+                        className={`px-4 py-4 flex flex-col xl:flex-row xl:items-start gap-4 rounded-xl transition-colors hover:bg-cyan-500/5 ${isInvalid ? "" : isPaid ? "commission-neon-paid" : "commission-neon-pending"}`}
                       >
                         {/* Info do cliente indicado */}
                         <div className="flex-1 min-w-0 space-y-1">
@@ -520,6 +558,11 @@ export default function AdminCommissions() {
                             <span className="text-xs text-muted-foreground">{formatDate(c.submittedAt)}</span>
                           </div>
 
+                          {manualState && !isInvalid && !isPaid && (
+                            <div className={`mt-2 rounded-lg border px-3 py-2 text-xs font-black ${manualState==="liberado"?"border-emerald-400/50 bg-emerald-500/10 text-emerald-300":"border-amber-400/50 bg-amber-500/10 text-amber-300"}`}>
+                              {manualState==="liberado"?"✅ LIBERADO":"⏳ A LIBERAR"} · {formatMoney((c as any).commissionValue||0)}
+                            </div>
+                          )}
                           {/* Status do pedido + valor comissão — sempre visível */}
                           <div className="flex items-center gap-1.5 flex-wrap mt-0.5">
                             {c.latestStatus ? (
@@ -556,8 +599,54 @@ export default function AdminCommissions() {
                           </div>
                         </div>
 
+                        {/* Controle por indicação: o estado liberado não é pagamento */}
+                        {!isInvalid && !isPaid && (
+                          <div className="min-w-[180px] rounded-xl border border-cyan-400/30 bg-slate-950/90 p-3 space-y-2 shadow-[0_0_18px_rgba(34,211,238,.12)]">
+                            {manualEdit === c.registrationId ? (
+                              <>
+                                <p className="text-xs font-black text-cyan-200">⚡ VALOR E STATUS</p>
+                                <label className="block text-xs font-semibold text-slate-200">Comissão (R$)</label>
+                                <input value={manualEditValue} inputMode="decimal"
+                                  onChange={e=>setManualEditValue(e.target.value.replace(/[^0-9.,]/g,""))}
+                                  placeholder="50,00"
+                                  className="w-full rounded-lg border border-cyan-400/40 bg-slate-900 px-3 py-2 text-sm font-bold text-white focus:outline-none focus:ring-2 focus:ring-cyan-400/30" />
+                                <div className="grid grid-cols-2 gap-2">
+                                  <button type="button" onClick={()=>setManualEditStatus("a_liberar")}
+                                    className={`rounded-lg border px-2 py-2 text-xs font-bold ${manualEditStatus==="a_liberar"?"border-amber-400 bg-amber-500/20 text-amber-200":"border-slate-700 text-slate-400"}`}>⏳ A LIBERAR</button>
+                                  <button type="button" onClick={()=>setManualEditStatus("liberado")}
+                                    className={`rounded-lg border px-2 py-2 text-xs font-bold ${manualEditStatus==="liberado"?"border-emerald-400 bg-emerald-500/20 text-emerald-200":"border-slate-700 text-slate-400"}`}>✅ LIBERADO</button>
+                                </div>
+                                <p className="text-[10px] text-slate-400">Liberado não é pago. O pagamento é separado.</p>
+                                <div className="flex flex-wrap gap-2">
+                                  <button type="button" disabled={saveManualCommission.isPending || parseCommissionReaisToCents(manualEditValue)<=0}
+                                    onClick={()=>saveManualCommission.mutate({
+                                      registrationId:c.registrationId,
+                                      commissionValue:parseCommissionReaisToCents(manualEditValue),
+                                      releaseStatus:manualEditStatus,
+                                    })}
+                                    className="rounded-lg bg-cyan-400 px-3 py-2 text-xs font-black text-slate-950 disabled:opacity-40">
+                                    {saveManualCommission.isPending?"Salvando...":"SALVAR"}
+                                  </button>
+                                  <button type="button" onClick={()=>setManualEdit(null)}
+                                    disabled={saveManualCommission.isPending}
+                                    className="rounded-lg border border-slate-600 px-3 py-2 text-xs text-slate-200">Cancelar</button>
+                                </div>
+                              </>
+                            ) : (
+                              <button type="button"
+                                onClick={()=>{
+                                  setManualEdit(c.registrationId);
+                                  setManualEditValue((Number((c as any).commissionValue||0)/100).toFixed(2).replace(".",","));
+                                  setManualEditStatus((c as any).manualStatus==="liberado"?"liberado":"a_liberar");
+                                }}
+                                className="w-full rounded-lg border border-cyan-400/35 bg-cyan-500/10 px-3 py-2 text-xs font-black text-cyan-200 hover:bg-cyan-500/20">
+                                ✎ DEFINIR VALOR E STATUS
+                              </button>
+                            )}
+                          </div>
+                        )}
                         {/* Botões de ação */}
-                        <div className="flex-shrink-0 flex flex-col items-end gap-1.5 pt-0.5">
+                        <div className="w-full xl:w-auto flex-shrink-0 flex flex-row flex-wrap xl:flex-col items-start xl:items-stretch gap-2 pt-0.5">
                           {confirmPayment === c.registrationId ? (
                             <div className="w-full min-w-[220px] rounded-lg border border-emerald-500/50 bg-emerald-500/10 p-2 space-y-2 shadow-[0_0_18px_rgba(34,197,94,0.12)]">
                               <p className="text-[10px] font-semibold text-emerald-300">Autorizar pagamento da comissão?</p>

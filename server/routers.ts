@@ -5854,6 +5854,8 @@ export const appRouter = router({
         await ensureCommissionReferralStatusColumns(db);
         const { getReferralCommissionAttributionByRegistration, updateReferralCommissionAttributionStatus } = await import('./db');
         let frozenAttribution = await getReferralCommissionAttributionByRegistration(input.registrationId);
+        const { getCommissionManualOverrides } = await import("./referralCommissionManual");
+        const manualPaymentOverride = (await getCommissionManualOverrides(db,[input.registrationId])).get(input.registrationId);
         if (input.paid) {
           const appointmentRows = await db.execute(sql`
             SELECT status, confirmedAt FROM scheduleAppointments
@@ -5875,12 +5877,13 @@ export const appRouter = router({
             latestOrderStatus: latest?.status,
             latestOrderStatusLabel: latest?.statusLabel,
           });
-          if (!state.paymentReady) {
+          if (!state.paymentReady && manualPaymentOverride?.releaseStatus !== "liberado") {
             throw new TRPCError({ code: "BAD_REQUEST",
               message: state.state === "nao_elegivel" ? "Indicação não válida." :
                 "Pagamento bloqueado: o pedido precisa ter agendamento confirmado." });
           }
-          if (frozenAttribution?.status === "em_analise") {
+          if (frozenAttribution?.status === "em_analise" &&
+              (state.paymentReady || manualPaymentOverride?.releaseStatus === "liberado")) {
             await updateReferralCommissionAttributionStatus({
               registrationId: input.registrationId, status: "elegivel"
             });
@@ -5904,8 +5907,14 @@ export const appRouter = router({
           throw new TRPCError({ code: 'BAD_REQUEST', message: 'Esta indicação está marcada como não válida. Revalide-a antes de marcar como paga.' });
         }
 
-        let resolvedCommissionValue = Number(frozenAttribution?.commissionValue || 0);
-        if (!frozenAttribution) {
+        let resolvedCommissionValue = Number(manualPaymentOverride?.commissionValue ?? frozenAttribution?.commissionValue ?? 0);
+        if (input.paid && frozenAttribution && manualPaymentOverride) {
+          // Persist the manually approved value on the frozen attribution before payment.
+          await db.execute(sql`UPDATE referralCommissionAttributions
+            SET commissionValue=${resolvedCommissionValue},commissionRule='manual_admin',updatedAt=NOW()
+            WHERE registrationId=${input.registrationId}`);
+        }
+        if (!frozenAttribution && !manualPaymentOverride) {
           const candidates = await loadCommissionCandidates(db);
           resolvedCommissionValue = resolveLegacyCommissionValue({
             serviceName: orderState?.serviceName,
@@ -6139,12 +6148,31 @@ export const appRouter = router({
         return rows.map((r: { statusKey: string }) => r.statusKey);
       }),
 
+    // ADM: valor e liberacao manual de uma indicacao (nao registra pagamento).
+    setCommissionManual: adminProcedure
+      .input(z.object({
+        registrationId: z.number().int().positive(),
+        commissionValue: z.number().int().positive().max(100_000_000),
+        releaseStatus: z.enum(["a_liberar","liberado"]),
+      }))
+      .mutation(async ({ input, ctx }) => {
+        const db = await (await import("./db")).getDb();
+        if (!db) throw new TRPCError({ code: "INTERNAL_SERVER_ERROR", message: "Banco indisponivel." });
+        const { setCommissionManualOverride } = await import("./referralCommissionManual");
+        try {
+          return await setCommissionManualOverride(db, input, String((ctx as any).user?.name || (ctx as any).user?.email || "admin"));
+        } catch (err) {
+          throw new TRPCError({ code: "BAD_REQUEST", message: err instanceof Error ? err.message : "Falha ao salvar a comissao." });
+        }
+      }),
+
     // Admin: relatorio de comissoes (pedidos com indicador)
     listCommissions: adminProcedure.query(async () => {
       const db = await (await import('./db')).getDb();
       if (!db) return [];
       await ensureCommissionReferralStatusColumns(db);
       const commissionCandidates = await loadCommissionCandidates(db);
+      const { getCommissionManualOverrides, applyManualCommissionOverride } = await import('./referralCommissionManual');
       const rows = await db.execute(`
         SELECT
           acp.id as registrationId,
@@ -6249,6 +6277,9 @@ export const appRouter = router({
         ORDER BY c.referredBy, acp.id DESC
       `);
 
+      const manualOverrides = await getCommissionManualOverrides(db,
+        (rows[0] as unknown as any[]).map(r => Number(r.registrationId)));
+
       return (rows[0] as unknown as any[]).map((r: any) => {
         const legacyResolution = r.frozenCommissionStatus
           ? null
@@ -6269,10 +6300,15 @@ export const appRouter = router({
           latestOrderStatus: r.latestStatus,
           latestOrderStatusLabel: r.latestStatusLabel,
         });
+        const manualResult = applyManualCommissionOverride({
+          commissionValue, paymentState: currentState.state,
+          paymentLabel: currentState.label, paymentReady: currentState.paymentReady,
+        }, manualOverrides.get(Number(r.registrationId)));
         return {
-          paymentReady: currentState.paymentReady,
-          paymentState: currentState.state,
-          paymentLabel: currentState.label,
+          paymentReady: manualResult.paymentReady,
+          paymentState: manualResult.paymentState,
+          paymentLabel: manualResult.paymentLabel,
+          manualStatus: manualResult.manualStatus,
           appointmentStatus: r.appointmentStatus ?? null,
           registrationId: r.registrationId as number,
           phone: r.phone as string,
@@ -6287,7 +6323,7 @@ export const appRouter = router({
           commissionPaid: r.frozenCommissionStatus ? (r.frozenCommissionStatus === 'paga' ? 1 : 0) : Number(r.commissionPaid),
           referralInvalid: r.frozenCommissionStatus ? (r.frozenCommissionStatus === 'nao_elegivel' || r.frozenCommissionStatus === 'cancelada') : Number(r.referralInvalid || 0) === 1,
           referralInvalidReason: r.frozenCommissionStatus ? (r.frozenCommissionInvalidReason ? String(r.frozenCommissionInvalidReason) : null) : (r.referralInvalidReason ? String(r.referralInvalidReason) : null),
-          commissionValue,
+          commissionValue: manualResult.commissionValue,
           commissionStatus: r.frozenCommissionStatus ? String(r.frozenCommissionStatus) : (Number(r.referralInvalid || 0) === 1 ? 'nao_elegivel' : (Number(r.commissionPaid) === 1 ? 'paga' : 'legado')),
           commissionResolution: r.frozenCommissionStatus ? 'frozen' : (legacyResolution?.reason || 'not_found'),
           orderNumber: r.frozenOrderNumber ? Number(r.frozenOrderNumber) : (r.orderNumber ? Number(r.orderNumber) : null),

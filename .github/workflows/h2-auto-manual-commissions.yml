@@ -1,0 +1,34 @@
+name: H2 AUTO - Comissoes manuais e ADM Gamer
+on:
+  pull_request:
+    branches:
+      - recovery/organizar-salvos-2026-08-24
+  push:
+    branches:
+      - fix/commission-manual-status-gamer-20261028
+permissions:
+  contents: read
+jobs:
+  check:
+    runs-on: ubuntu-latest
+    timeout-minutes: 25
+    steps:
+      - uses: actions/checkout@v4
+      - uses: pnpm/action-setup@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '22'
+          cache: pnpm
+      - run: pnpm install --frozen-lockfile
+      - name: Test manual value and referral-state separation
+        run: pnpm exec vitest run server/referralCommissionManual.test.ts server/referralCommissionPolicy.test.ts server/h2-auto-referral-commissions.test.ts
+      - name: Check changed server types
+        run: |
+          pnpm exec tsc --noEmit > /tmp/manual-tsc.log 2>&1 && exit 0
+          cat /tmp/manual-tsc.log
+          if grep -E '^(server/referralCommissionManual\.ts|server/h2-auto-orders\.ts|client/src/pages/AdminCommissions\.tsx)\([0-9]+,[0-9]+\): error TS|^server/routers\.ts\((5[8-9][0-9][0-9]|6[0-3][0-9][0-9]),[0-9]+\): error TS' /tmp/manual-tsc.log; then
+            echo 'Changed files have TypeScript errors.'
+            exit 1
+          fi
+      - name: Production build
+        run: pnpm build

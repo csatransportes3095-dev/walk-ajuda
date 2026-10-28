@@ -10,6 +10,7 @@ import {groupVisibleH2AutoOrders} from "./h2-auto-order-history";
 import {attachScheduleToOrders} from "./h2-auto-order-schedule";
 import {resolveReferralCommissionState} from "../shared/referralCommissionPolicy";
 import {getH2AutoVerifiedAccessCustomer} from "./h2-auto-verified-customer";
+import {getCommissionManualOverrides,applyManualCommissionOverride} from "./referralCommissionManual";
 import {loadH2AutoLegacyReferrals,mergeH2AutoReferralItems} from "./h2-auto-referral-commissions";
 
 const hash=(v:string)=>createHash("sha256").update(v).digest("hex");
@@ -244,7 +245,18 @@ export function registerH2AutoOrdersRoutes(app:Express){
      };
    });
    const legacy=await loadH2AutoLegacyReferrals(phone);
-   const allCommissions=mergeH2AutoReferralItems(commissions,legacy);
+   const merged=mergeH2AutoReferralItems(commissions,legacy);
+   const manual=await getCommissionManualOverrides(authDb,merged.map(row=>row.registrationId));
+   const allCommissions=merged.map(item=>{
+     const adjusted=applyManualCommissionOverride({
+       commissionValue:item.commissionValue,
+       paymentState:item.commissionState,
+       paymentLabel:item.commissionLabel,
+       paymentReady:item.commissionState==="liberada",
+     },manual.get(item.registrationId));
+     return {...item,commissionValue:adjusted.commissionValue,
+       commissionState:adjusted.paymentState,commissionLabel:adjusted.paymentLabel};
+   });
    const total=allCommissions.reduce((acc,row)=>acc+row.commissionValue,0);
    const available=allCommissions.filter(row=>row.commissionState==="liberada").reduce((acc,row)=>acc+row.commissionValue,0);
    const pending=allCommissions.filter(row=>row.commissionState==="aguardando_agendamento").reduce((acc,row)=>acc+row.commissionValue,0);
