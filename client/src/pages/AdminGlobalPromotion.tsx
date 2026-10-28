@@ -53,7 +53,8 @@ export default function AdminGlobalPromotion() {
       setStartTime(query.data.schedule.startTime);
       setEndTime(query.data.schedule.endTime);
       setWeekdays(query.data.schedule.weekdays);
-      setWindows(query.data.schedule.weekdays.map(day => ({startDay:day,startTime:query.data.schedule!.mode === "weekly" ? query.data.schedule.startTime : "23:00",endDay:(day + ((query.data.schedule!.mode === "weekly" && query.data.schedule.endTime < query.data.schedule.startTime) ? 1 : 0)) % 7,endTime:query.data.schedule!.mode === "weekly" ? query.data.schedule.endTime : "06:00"})));
+      const schedule = query.data.schedule;
+      setWindows(schedule.weekdays.map(day => ({startDay:day,startTime:schedule.startTime,endDay:(day + (schedule.endTime < schedule.startTime ? 1 : 0)) % 7,endTime:schedule.endTime})));
     }
     setReady(true);
   }, [query.data, ready]);
