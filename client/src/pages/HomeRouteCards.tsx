@@ -1,11 +1,12 @@
 import { Link } from "wouter";
-import { ClipboardList, PackageCheck, Wallet, HandCoins, ArrowUpRight } from "lucide-react";
+import { ClipboardList, PackageCheck, Wallet, HandCoins, Users, ArrowUpRight } from "lucide-react";
 
 export const HOME_ROUTE_CARDS = [
   { label:"FAZER PEDIDO", description:"Escolha seus serviços e acompanhe a contratação", href:"/login", Icon:ClipboardList, color:"border-violet-400/40 from-violet-700/45 to-indigo-950/80", iconColor:"text-violet-300" },
   { label:"ACOMPANHAR PEDIDO", description:"Consulte o andamento do seu pedido", href:"/acompanhar", Icon:PackageCheck, color:"border-cyan-400/40 from-cyan-700/40 to-sky-950/80", iconColor:"text-cyan-300" },
   { label:"PLANILHA DE GASTOS", description:"Controle de ganhos e despesas", href:"/gastos", Icon:Wallet, color:"border-emerald-400/40 from-emerald-700/40 to-green-950/80", iconColor:"text-emerald-300" },
   { label:"EMPRÉSTIMO", description:"Consulte os serviços de empréstimo", href:"/emprestimo", Icon:HandCoins, color:"border-amber-400/40 from-amber-700/40 to-orange-950/80", iconColor:"text-amber-300" },
+  { label:"MINHAS INDICAÇÕES", description:"Acompanhe comissões, valores a liberar, liberados e pagos", href:"/indicacoes", Icon:Users, color:"border-fuchsia-400/40 from-fuchsia-700/35 to-purple-950/80", iconColor:"text-fuchsia-300" },
 ] as const;
 
 /** Public route selector only. Each service keeps its own existing access gate. */
