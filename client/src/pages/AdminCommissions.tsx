@@ -260,7 +260,7 @@ export default function AdminCommissions() {
   }
 
   return (
-    <div className="min-h-screen bg-background text-foreground">
+    <div className="min-h-screen bg-[#050815] text-slate-100">
       <style>{`
         @keyframes commissionNeonPending {
           0%, 100% { box-shadow: inset 3px 0 0 rgba(239,68,68,.75), 0 0 8px rgba(239,68,68,.10); }
@@ -283,11 +283,16 @@ export default function AdminCommissions() {
         </button>
       } />
 
-      <div className="max-w-3xl mx-auto px-4 py-4 space-y-4">
+      <div className="max-w-6xl mx-auto px-3 sm:px-5 py-5 space-y-5">
 
+        <div className="rounded-2xl border border-cyan-400/25 bg-gradient-to-r from-cyan-500/10 via-blue-500/5 to-fuchsia-500/10 px-4 py-4 shadow-[0_0_24px_rgba(6,182,212,.08)]">
+          <p className="text-xs font-black uppercase tracking-[.24em] text-cyan-300">🇨🇴 H2 COLOMBIANO • CENTRAL DE COMISSÕES</p>
+          <h2 className="mt-2 text-xl sm:text-2xl font-black tracking-tight text-white">⚡ INDICAÇÕES & CONTROLE FINANCEIRO</h2>
+          <p className="mt-1 text-xs text-slate-300">Configure o valor de cada indicação. Escolha A LIBERAR ou LIBERADO sem marcar o pagamento.</p>
+        </div>
         {/* Resumo em cards */}
-        <div className="grid grid-cols-2 sm:grid-cols-5 gap-3">
-          <div className="bg-card border border-border rounded-xl p-3 text-center">
+        <div className="grid grid-cols-2 md:grid-cols-5 gap-3">
+          <div className="rounded-2xl border border-cyan-400/30 bg-gradient-to-br from-cyan-500/15 to-slate-950 p-4 text-center shadow-[0_0_18px_rgba(6,182,212,.10)]">
             <p className="text-2xl font-bold text-foreground">{all.length}</p>
             <p className="text-xs text-muted-foreground mt-0.5">Total</p>
           </div>
@@ -307,11 +312,11 @@ export default function AdminCommissions() {
             {totalValuePaid > 0 && <p className="text-[10px] text-green-300/80 font-mono">{formatMoney(totalValuePaid)}</p>}
             <p className="text-xs text-muted-foreground mt-0.5">Pagas</p>
           </div>
-          <div className="bg-card border border-zinc-500/30 rounded-xl p-3 text-center cursor-pointer" onClick={() => setFilterPaid(filterPaid === "invalid" ? "all" : "invalid")}>
+          <div className="rounded-2xl border border-zinc-500/40 bg-gradient-to-br from-zinc-500/15 to-slate-950 p-4 text-center cursor-pointer shadow-lg transition hover:border-zinc-300/50" onClick={() => setFilterPaid(filterPaid === "invalid" ? "all" : "invalid")}>
             <p className="text-2xl font-bold text-zinc-300">{totalInvalid}</p>
             <p className="text-xs text-muted-foreground mt-0.5">Não válidas</p>
           </div>
-          <div className="bg-card border border-amber-500/30 rounded-xl p-3 text-center">
+          <div className="rounded-2xl border border-amber-500/40 bg-gradient-to-br from-amber-500/15 to-slate-950 p-4 text-center shadow-[0_0_18px_rgba(245,158,11,.10)]">
             <p className="text-2xl font-bold text-amber-400">{uniqueReferrers}</p>
             <p className="text-xs text-muted-foreground mt-0.5">Indicadores</p>
           </div>
@@ -399,9 +404,9 @@ export default function AdminCommissions() {
             const totalPagoValor = pedidos.filter(p => p.commissionPaid === 1 && !(p as any).referralInvalid).reduce((s, p) => s + ((p as any).commissionValue ?? 0), 0);
 
             return (
-              <div key={key} className="bg-card border border-border rounded-xl overflow-hidden shadow-sm">
+              <div key={key} className="overflow-hidden rounded-2xl border border-cyan-400/25 bg-gradient-to-b from-[#10172a] to-[#090e1d] shadow-[0_0_26px_rgba(14,165,233,.10)] transition-all hover:border-cyan-400/45">
                 {/* Cabeçalho do indicador */}
-                <div className={`px-4 py-3 border-b flex items-start justify-between gap-3 ${
+                <div className={`px-4 py-4 border-b flex flex-wrap items-start justify-between gap-3 ${
                   pendentes > 0
                     ? "bg-amber-500/10 border-amber-500/20"
                     : "bg-green-500/5 border-green-500/15"
@@ -474,7 +479,7 @@ export default function AdminCommissions() {
                 </div>
 
                 {/* Pedidos do grupo */}
-                <div className="divide-y divide-border">
+                <div className="divide-y divide-cyan-500/15">
                   {pedidos.map(c => {
                     const statusCfg = c.latestStatus ? STATUS_MAP[c.latestStatus] : null;
                     const commissionStatus = (c as any).commissionStatus as string | undefined;
@@ -487,7 +492,7 @@ export default function AdminCommissions() {
                     return (
                       <div
                         key={c.registrationId}
-                        className={`px-4 py-3 flex items-start gap-3 rounded-lg ${isInvalid ? "" : isPaid ? "commission-neon-paid" : "commission-neon-pending"}`}
+                        className={`px-4 py-4 flex flex-col xl:flex-row xl:items-start gap-4 rounded-xl transition-colors hover:bg-cyan-500/5 ${isInvalid ? "" : isPaid ? "commission-neon-paid" : "commission-neon-pending"}`}
                       >
                         {/* Info do cliente indicado */}
                         <div className="flex-1 min-w-0 space-y-1">
@@ -621,7 +626,7 @@ export default function AdminCommissions() {
                           </div>
                         )}
                         {/* Botões de ação */}
-                        <div className="flex-shrink-0 flex flex-col items-end gap-1.5 pt-0.5">
+                        <div className="w-full xl:w-auto flex-shrink-0 flex flex-row flex-wrap xl:flex-col items-start xl:items-stretch gap-2 pt-0.5">
                           {confirmPayment === c.registrationId ? (
                             <div className="w-full min-w-[220px] rounded-lg border border-emerald-500/50 bg-emerald-500/10 p-2 space-y-2 shadow-[0_0_18px_rgba(34,197,94,0.12)]">
                               <p className="text-[10px] font-semibold text-emerald-300">Autorizar pagamento da comissão?</p>
