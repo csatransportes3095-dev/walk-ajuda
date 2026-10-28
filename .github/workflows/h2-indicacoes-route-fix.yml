@@ -1,0 +1,26 @@
+name: H2 Indicacoes - corrigir rota publica
+on:
+  push:
+    branches:
+      - fix/client-referrals-allowlist-20261028
+  pull_request:
+    branches:
+      - recovery/organizar-salvos-2026-08-24
+permissions:
+  contents: read
+jobs:
+  check:
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+    steps:
+      - uses: actions/checkout@v4
+      - uses: pnpm/action-setup@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '22'
+          cache: pnpm
+      - run: pnpm install --frozen-lockfile
+      - name: Verify /indicacoes and other public routes
+        run: pnpm exec vitest run client/route-fallback-indicacoes.test.ts
+      - name: Build production site
+        run: pnpm build
