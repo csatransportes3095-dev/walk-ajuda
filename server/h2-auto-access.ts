@@ -8,6 +8,7 @@ import { resolveReferralDeclaration } from "./referral";
 import { sendH2AutoOrderCode } from "./h2-auto-order-email";
 import { blockInvalidPhone, INVALID_PHONE_REPLY } from "./h2-auto-validation-blocks";
 import { invalidH2AutoPhoneStageAnswer } from "./h2-auto-validation-policy";
+import { h2AutoCustomerNeedsProfileUpdate, H2_AUTO_CUSTOMER_NOT_CONFIRMED_MESSAGE } from "./h2-auto-customer-profile-guidance";
 
 /**
  * WhatsApp first-contact gate. State is server-side and bound to a paired device
@@ -104,11 +105,11 @@ async function deviceFor(req: Request): Promise<string | null> {
 async function customerFor(phone: string) {
   const normalized = normalizeCustomerPhone(phone);
   if (!normalized) return null;
-  const found = await rows(sql`SELECT id,phone,email,blocked FROM customers
+  const found = await rows(sql`SELECT id,phone,email,blocked,name,cpf,cep,street,addressNumber,neighborhood,city,uf,profilePhotoUrl FROM customers
     WHERE deletedAt IS NULL AND COALESCE(blocked,0)=0
     AND RIGHT(REGEXP_REPLACE(phone,'[^0-9]',''),11)=${normalized.slice(-11)} LIMIT 2`);
-  if (found.length !== 1 || !found[0].email || Number(found[0].blocked) !== 0) return null;
-  return { id: Number(found[0].id), phone: String(found[0].phone), email: String(found[0].email) };
+  if (found.length !== 1 || Number(found[0].blocked) !== 0) return null;
+  return { ...found[0], id: Number(found[0].id), phone: String(found[0].phone), email: String(found[0].email || "") };
 }
 async function activeCustomerBinding(s: Session) {
   if (!s.customer_id || !s.customer_email_hash || !s.customer_phone_hash) return false;
@@ -263,8 +264,11 @@ export function registerH2AutoAccessRoutes(app: Express): void {
           return respond(res, 200, { state: "customer_phone", message: "⏳ Limite de tentativas atingido. Tente mais tarde." });
         const customer = await customerFor(phone);
         const db = await getDb();
-        if (!customer || !db || !(await isOwnSiteEmailAuthorized(db, customer.email)))
-          return respond(res, 200, { state: "customer_phone", message: anonymousCustomerFailure });
+        // Use the same public guidance for missing, incomplete and unauthorized
+        // accounts, avoiding disclosure that an arbitrary phone is registered.
+        if (!customer || !db || h2AutoCustomerNeedsProfileUpdate(customer) ||
+            !(await isOwnSiteEmailAuthorized(db, customer.email)))
+          return respond(res, 200, { state: "customer_phone", message: H2_AUTO_CUSTOMER_NOT_CONFIRMED_MESSAGE });
         const code = generateOwnSiteCode();
         const codeHash = otpHash(sessionId, code);
         const changed: any = await db.execute(sql`UPDATE h2_auto_access_sessions SET
