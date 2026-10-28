@@ -9,6 +9,7 @@ import {getOrderStatusVisibilityForClient} from "./orderStatusVisibility";
 import {groupVisibleH2AutoOrders} from "./h2-auto-order-history";
 import {attachScheduleToOrders} from "./h2-auto-order-schedule";
 import {resolveReferralCommissionState} from "../shared/referralCommissionPolicy";
+import {loadH2AutoLegacyReferrals,mergeH2AutoReferralItems} from "./h2-auto-referral-commissions";
 
 const hash=(v:string)=>createHash("sha256").update(v).digest("hex");
 const otpDigest=(sid:string,code:string)=>{const secret=process.env.H2_SITE_ACCESS_SECRET||"";if(secret.length<32)throw Error("otp_secret_unavailable");return createHmac("sha256",secret).update("h2-auto-orders:"+sid+":"+code).digest("hex");};
@@ -220,7 +221,7 @@ export function registerH2AutoOrdersRoutes(app:Express){
          AND sa.subOrderIndex=0 ORDER BY sa.id DESC LIMIT 1) AS appointmentConfirmedAt
      FROM referralCommissionAttributions attribution
      WHERE RIGHT(REGEXP_REPLACE(attribution.referrerPhone,'[^0-9]',''),11)=${phone}
-     ORDER BY attribution.createdAt DESC LIMIT 100`);
+     ORDER BY attribution.createdAt DESC LIMIT 500`);
    const commissions=records.map((row:any)=>{
      const status=resolveReferralCommissionState({
        frozenStatus:row.commissionStatus,
@@ -230,6 +231,7 @@ export function registerH2AutoOrdersRoutes(app:Express){
        latestOrderStatusLabel:row.latestOrderStatusLabel,
      });
      return {
+       registrationId:Number(row.registrationId),
        orderNumber:row.orderNumber||null,
        customerName:String(row.referredName||"Cliente").slice(0,90),
        orderStatus:String(row.latestOrderStatusLabel||row.latestOrderStatus||"Pedido recebido").slice(0,100),
@@ -238,9 +240,11 @@ export function registerH2AutoOrdersRoutes(app:Express){
        commissionLabel:status.label,
      };
    });
-   const total=commissions.reduce((acc:number,row:any)=>acc+row.commissionValue,0);
-   const available=commissions.filter((row:any)=>row.commissionState==="liberada").reduce((acc:number,row:any)=>acc+row.commissionValue,0);
-   return reply(res,200,{state:"verified",totalReferrals:commissions.length,amountTotal:total,amountReady:available,commissions});
+   const legacy=await loadH2AutoLegacyReferrals(phone);
+   const allCommissions=mergeH2AutoReferralItems(commissions,legacy);
+   const total=allCommissions.reduce((acc,row)=>acc+row.commissionValue,0);
+   const available=allCommissions.filter(row=>row.commissionState==="liberada").reduce((acc,row)=>acc+row.commissionValue,0);
+   return reply(res,200,{state:"verified",totalReferrals:allCommissions.length,amountTotal:total,amountReady:available,commissions:allCommissions});
   }catch{return reply(res,503,{error:"temporarily_unavailable"});}
  });
  app.post("/api/h2-auto/orders/logout",async(req,res)=>{
