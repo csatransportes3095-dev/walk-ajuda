@@ -22,7 +22,7 @@ describe("H2 AUTO: atualização de cadastro pelo login", () => {
   it("provides /login and explicit instructions without displaying customer details", () => {
     expect(H2_AUTO_CUSTOMER_NOT_CONFIRMED_MESSAGE).toContain("https://h2colombiano.com/login");
     expect(H2_AUTO_CUSTOMER_NOT_CONFIRMED_MESSAGE).toContain("atualizar");
-    expect(H2_AUTO_CUSTOMER_NOT_CONFIRMED_MESSAGE).toContain("volte");
+    expect(H2_AUTO_CUSTOMER_NOT_CONFIRMED_MESSAGE).toContain("retorne ao WhatsApp");
     expect(H2_AUTO_CUSTOMER_NOT_CONFIRMED_MESSAGE).not.toContain(complete.email);
   });
   it("keeps a generic public message so callers cannot enumerate registered phones", () => {
