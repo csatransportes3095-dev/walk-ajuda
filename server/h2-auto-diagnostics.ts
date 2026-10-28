@@ -53,7 +53,7 @@ export const h2AutoDiagnosticsSchema = z
     recordAudioPermission: z.boolean(),
     listenerConnected: z.boolean(),
     desktopReadOnly: z.boolean().default(false),
-    desktopLastCode: z.enum(["NOT_CHECKED","NOTIFICATION_REMOVED","FRESH_ACTION_FOUND","NO_ACTIVE_NOTIFICATION","NO_REPLY_ACTION","ACTION_EXPIRED_AFTER_READ","SEND_FAILED_OR_EXPIRED"]).default("NOT_CHECKED"),
+    desktopLastCode: z.enum(["NOT_CHECKED","NOTIFICATION_REMOVED","FRESH_ACTION_FOUND","NO_ACTIVE_NOTIFICATION","NO_REPLY_ACTION","ACTION_EXPIRED_AFTER_READ","ORIGINAL_ACTION_ATTEMPT","SEND_FAILED_OR_EXPIRED"]).default("NOT_CHECKED"),
     desktopLastAt: z.number().int().min(0).max(H2_AUTO_MAX_TIMESTAMP).default(0),
     statusCode: z.enum(H2_AUTO_STATUS_CODES),
     statusAt: z.number().int().min(0).max(H2_AUTO_MAX_TIMESTAMP),
