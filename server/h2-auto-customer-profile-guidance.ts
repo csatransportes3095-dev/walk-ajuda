@@ -58,12 +58,12 @@ export const H2_AUTO_CUSTOMER_PROFILE_UPDATE_MESSAGE =
  * response; do not reveal whether a specific phone is on file.
  */
 export const H2_AUTO_CUSTOMER_NOT_CONFIRMED_MESSAGE =
-  "⚠️ *H2 COLOMBIANO* 🇨🇴\\n" +
-  "🚫 *ACESSO NÃO CONFIRMADO*\\n\\n" +
-  "Não foi possível confirmar\\n" +
-  "seu acesso com esse telefone.\\n\\n" +
-  "📱 Confira o número com DDD\\n" +
-  "e o telefone do seu cadastro.\\n\\n" +
-  "👨‍💻 Se estiver correto, solicite\\n" +
-  "atendimento humano.\\n\\n" +
+  "⚠️ *H2 COLOMBIANO* 🇨🇴\n" +
+  "🚫 *ACESSO NÃO CONFIRMADO*\n\n" +
+  "Não foi possível confirmar\n" +
+  "seu acesso com esse telefone.\n\n" +
+  "📱 Confira o número com DDD\n" +
+  "e o telefone do seu cadastro.\n\n" +
+  "👨‍💻 Se estiver correto, solicite\n" +
+  "atendimento humano.\n\n" +
   "🛡️ *EQUIPE H2 COLOMBIANO* 🇨🇴";
