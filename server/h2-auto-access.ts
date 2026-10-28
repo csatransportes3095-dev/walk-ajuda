@@ -7,7 +7,7 @@ import { isOwnSiteEmailAuthorized, generateOwnSiteCode } from "./siteAccessOwnCo
 import { resolveReferralDeclaration } from "./referral";
 import { sendH2AutoOrderCode } from "./h2-auto-order-email";
 import { blockInvalidPhone, INVALID_PHONE_REPLY } from "./h2-auto-validation-blocks";
-import { validH2AutoPhone11 } from "./h2-auto-validation-policy";
+import { validH2AutoPhone11, allowsH2AutoMenuReset, invalidH2AutoPhoneStageAnswer } from "./h2-auto-validation-policy";
 
 /**
  * WhatsApp first-contact gate. State is server-side and bound to a paired device
@@ -189,14 +189,14 @@ export function registerH2AutoAccessRoutes(app: Express): void {
         return respond(res, 200, { state: "choice", message: initialMessage });
       }
 
-      if (normalized === "menu" || normalized === "inicio") {
+      if (allowsH2AutoMenuReset(s.stage, input)) {
         await update(sessionId, sql`stage='choice',code_hash=NULL,code_expires=NULL,updated_at=${now}`);
         return respond(res, 200, { state: "choice", message: initialMessage });
       }
 
       if (s.stage === "customer_phone") {
         const phone = normalizeCustomerPhone(input);
-        if (!validH2AutoPhone11(input) || !phone) {
+        if (invalidH2AutoPhoneStageAnswer(s.stage, input) || !phone) {
           const first = await blockInvalidPhone({deviceId,sessionId,conversationId:conversation,
             contactLabel: String(req.body?.contactLabel || ""),invalidAnswer:input,
             stage:"customer_phone",reason:"Telefone do cliente fora do formato"});
@@ -266,16 +266,12 @@ export function registerH2AutoAccessRoutes(app: Express): void {
       }
 
       if (s.stage === "referral_phone") {
-        if (!validH2AutoPhone11(input) || !normalizeCustomerPhone(input)) {
+        if (invalidH2AutoPhoneStageAnswer(s.stage, input) || !normalizeCustomerPhone(input)) {
           const first = await blockInvalidPhone({deviceId,sessionId,conversationId:conversation,
             contactLabel:String(req.body?.contactLabel || ""),invalidAnswer:input,
             stage:"referral_phone",reason:"Telefone de indicador fora do formato"});
           return respond(res,200,{state:"blocked",message:first?INVALID_PHONE_REPLY:""});
         }
-        if (normalized === "6") return respond(res, 200, { state: "human",
-          message: "👨‍💻 *ATENDIMENTO HUMANO*\n\nSua solicitação foi encaminhada.\n⏳ Tempo médio: 5 minutos.\n\nDigite *MENU* para voltar." });
-        if (normalized === "nao" || normalized === "não" || normalized.includes("nao tenho") || normalized.includes("não tenho") || normalized.includes("sem indicador"))
-          return respond(res, 200, { state: "referral_phone", message: noReferral });
         if (await limited("referral:" + sessionId, 30, hour, now))
           return respond(res, 200, { state: "referral_phone", message: "⏳ Muitas tentativas. Aguarde e tente novamente." });
         const found = await resolveReferralDeclaration({ customerPhone: "", referrerPhone: input });
