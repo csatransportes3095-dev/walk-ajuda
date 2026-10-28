@@ -17,7 +17,7 @@
   const exact = new Set([
     '/', '/login', '/recuperarsenha', '/foto', '/sorteio', '/acompanhar', '/revendedor',
     '/pre-cadastro', '/consultar-cadastro', '/atualizarcadastro', '/locadora',
-    '/gastos', '/emprestimo', '/cartoes', '/gerador-chassi', '/gerador-chassi/',
+    '/gastos', '/emprestimo', '/cartoes', '/indicacoes', '/gerador-chassi', '/gerador-chassi/',
     '/adm/chassis', '/adm/chassis/', '/adm/placa', '/adm/placa/', '/h2chassis', '/h2chassis/', '/ajuda',
     '/video/tutorial', '/tutorial', '/bot', '/app', '/app-pro', '/vip', '/similaridade', '/404'
   ]);
