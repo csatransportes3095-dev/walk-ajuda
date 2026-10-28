@@ -25,9 +25,15 @@ jobs:
           node-version: "22"
           cache: pnpm
       - run: pnpm install --frozen-lockfile
-      - name: TypeScript audit (existing errors outside H2 AUTO do not block build)
-        continue-on-error: true
-        run: pnpm exec tsc --noEmit
+      - name: TypeScript audit with strict regression checks on reported screens
+        run: |
+          pnpm exec tsc --noEmit > /tmp/h2auto-typescript.log 2>&1 && exit 0
+          cat /tmp/h2auto-typescript.log
+          if grep -E '^(client/src/components/(AdminEmailGenerator|PasswordGate|UnifiedCustomerAccessGate|H2AutoValidationBlocks)|client/src/pages/(AdminGlobalPromotion|EmprestimoPage|GastosPage|OrderTracking|ProtectedPhotoPage)|server/(routers/customerPassword|h2-auto-[^/]+))\.(ts|tsx)\([0-9]+,[0-9]+\): error TS' /tmp/h2auto-typescript.log; then
+            echo "ERROR: reported customer-access or H2 Auto TypeScript failures remain."
+            exit 1
+          fi
+          echo "Unrelated baseline TypeScript errors are still present; none on the reported screens."
       - name: Compile validation backend
         run: pnpm exec esbuild server/h2-auto-access.ts --bundle --platform=node --packages=external --format=esm --outfile=/tmp/h2-auto-access.js
       - name: Phone-number policy tests
