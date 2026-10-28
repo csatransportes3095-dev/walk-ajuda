@@ -95,8 +95,8 @@ export async function releaseValidationBlock(
       FOR UPDATE`);
     const row = selected[0]?.[0];
     if (!row) return false;
-    const stage = restart ? "choice" : String(row.failed_stage);
-    if (stage !== "choice" && stage !== "customer_phone" && stage !== "referral_phone")
+    const stage = restart ? "choice" : "released_" + String(row.failed_stage);
+    if (stage !== "choice" && stage !== "released_customer_phone" && stage !== "released_referral_phone")
       throw Error("invalid_restore_stage");
     await tx.execute(sql`UPDATE h2_auto_access_sessions
       SET stage=${stage},code_hash=NULL,code_expires=NULL,
@@ -117,7 +117,7 @@ export async function releaseAllValidationBlocks(deviceId: string): Promise<numb
   return await (db as any).transaction(async (tx: any) => {
     const changed: any = await tx.execute(sql`UPDATE h2_auto_access_sessions AS s
       INNER JOIN h2_auto_validation_blocks AS b ON b.session_id=s.id
-      SET s.stage=b.failed_stage,s.updated_at=${now},s.code_hash=NULL,
+      SET s.stage=CONCAT('released_', b.failed_stage),s.updated_at=${now},s.code_hash=NULL,
         s.code_expires=NULL,s.resend_after=0,s.code_attempts=0
       WHERE b.device_id=${deviceId} AND b.released_at IS NULL AND s.stage='blocked'`);
     await tx.execute(sql`UPDATE h2_auto_validation_blocks
