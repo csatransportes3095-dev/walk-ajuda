@@ -5803,59 +5803,14 @@ export default function AdminOrders() {
                             <img
                               src={order.customerProfilePhotoUrl}
                               alt={name}
-                              className={`w-10 h-10 rounded-full object-cover border ${order.isBlocked ? 'border-red-500/60' : 'border-border'}`}
+                              className={`w-14 h-14 sm:w-10 sm:h-10 rounded-full object-cover border ${order.isBlocked ? 'border-red-500/60' : 'border-border'}`}
                             />
                           ) : (
-                            <div className={`w-10 h-10 rounded-full bg-primary/20 flex items-center justify-center border ${order.isBlocked ? 'border-red-500/60' : 'border-border'}`}>
+                            <div className={`w-14 h-14 sm:w-10 sm:h-10 rounded-full bg-primary/20 flex items-center justify-center border ${order.isBlocked ? 'border-red-500/60' : 'border-border'}`}>
                               <User className="w-5 h-5 text-primary/60" />
                             </div>
                           )}
                         </div>
-                        {/* Etapas Internas abaixo da foto */}
-                        {(() => {
-                          const stages = stagesListQuery.data ?? [];
-                          if (stages.length === 0) return null;
-                          const stageOrderKey = getOrderKey(order);
-                          const batchEntry = orderStagesMap.get(stageOrderKey);
-                          const currentStageId = pendingStageByOrder[stageOrderKey] ?? batchEntry?.stageId ?? null;
-                          return (
-                            <div className="flex flex-col gap-1 mt-2 w-[72px]">
-                              {stages.map(stage => {
-                                const isActive = currentStageId === stage.id;
-                                return (
-                                  <button
-                                    key={stage.id}
-                                    onClick={e => {
-                                      e.stopPropagation();
-                                      const stageOrderKey = getOrderKey(order);
-                                      setPendingStageByOrder(prev => ({ ...prev, [stageOrderKey]: stage.id }));
-                                      setOrderStageMut.mutate({ registrationId: order.id, subOrderIndex: order.subOrderIndex ?? 0, stageId: stage.id });
-                                    }}
-                                    disabled={setOrderStageMut.isPending}
-                                    title={stage.name}
-                                    className={`w-full px-1.5 py-1 rounded-lg border text-center transition-all duration-200 ${
-                                      isActive
-                                        ? 'shadow-md scale-[1.02]'
-                                        : 'bg-[#0d0d1f] border-white/5 hover:border-white/20 hover:bg-white/5'
-                                    }`}
-                                    style={isActive ? {
-                                      backgroundColor: stage.color + '33',
-                                      borderColor: stage.color + '99',
-                                      boxShadow: `0 0 8px ${stage.color}44`,
-                                    } : {}}
-                                  >
-                                    <span
-                                      className="text-[9px] font-semibold leading-tight block truncate"
-                                      style={isActive ? { color: stage.color } : { color: '#6b7280' }}
-                                    >
-                                      {stage.name}
-                                    </span>
-                                  </button>
-                                );
-                              })}
-                            </div>
-                          );
-                        })()}
 
                       </div>
                       <div className="flex-1 min-w-0">
