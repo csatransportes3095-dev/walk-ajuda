@@ -1,7 +1,7 @@
 import { useEffect, useMemo, useRef, useState } from "react";
 import {
   ArrowDown, ArrowRight, ArrowUp, CheckCircle2, ChevronDown, ChevronRight,
-  GitBranch, Link2, Map as MapIcon, Play, Plus, RotateCcw, Save, Trash2,
+  GitBranch, Link2, Map as MapIcon, Play, Plus, RotateCcw, Save, Trash2, Search, MoreVertical, X,
 } from "lucide-react";
 import { toast } from "sonner";
 import { trpc } from "@/lib/trpc";
@@ -42,6 +42,7 @@ export default function H2AutoTreeEditor({ id, revision, appliedRevision, initia
   const [newReplyOption, setNewReplyOption] = useState("");
   const [newReplyMessage, setNewReplyMessage] = useState("");
   const [advancedOpen, setAdvancedOpen] = useState(false);
+  const [search, setSearch] = useState("");
   const [test, setTest] = useState<{ current: string; stack: string[] }>({ current: tree.start, stack: [] });
   const [dirty, setDirty] = useState(false);
   const [folded, setFolded] = useState<Set<string>>(() => new Set());
@@ -116,7 +117,8 @@ export default function H2AutoTreeEditor({ id, revision, appliedRevision, initia
     setTest({ current: stageId, stack: [] });
     setCreatingUnder(null);
     setReplyUnder(null);
-    setQuickEditId(previous => previous === stageId ? null : stageId);
+    setQuickEditId(null);
+    setAdvancedOpen(true);
   }
 
   function changeNode(stageId: string, transform: (node: H2AutoTreeNode) => H2AutoTreeNode) {
@@ -481,14 +483,14 @@ export default function H2AutoTreeEditor({ id, revision, appliedRevision, initia
     const parent = row.parentId ? tree.nodes.find(candidate => candidate.id === row.parentId) : null;
     const siblings = orderedFlowOptions(parent?.options || []);
     const position = siblings.findIndex(option => option.key === row.viaKey && option.next === row.id);
-    const indentation = Math.min(Math.max(row.depth - levelOffset, 0), 3) * 12;
+    const indentation = Math.min(Math.max(row.depth - levelOffset, 0), 3) * 5;
     return (
       <div key={row.id + "-" + index}
         style={{ marginLeft: indentation }}
-        className={"min-w-0 rounded-xl border-l-[3px] p-2 " +
+        className={"min-w-0 rounded-lg border-l-2 p-1.5 " +
           (active ? "border-l-emerald-300 bg-emerald-900/25" : "border-l-cyan-600/65 bg-slate-950/20")}>
         {showVia && row.viaKey !== null && (
-          <div className="mb-2 flex min-w-0 items-start gap-2 pl-2 text-sm leading-snug text-violet-200">
+          <div className="mb-1 flex min-w-0 items-start gap-2 pl-1 text-xs leading-snug text-violet-200">
             <span className="shrink-0 rounded-md border border-violet-400/40 bg-violet-950/60 px-2 py-1 font-black">{row.viaKey}</span>
             <span className="min-w-0 flex-1 break-words">{row.viaLabel}</span>
             <ArrowRight className="mt-1 h-4 w-4 shrink-0" />
@@ -496,10 +498,10 @@ export default function H2AutoTreeEditor({ id, revision, appliedRevision, initia
         )}
         <div className="flex min-w-0 items-stretch gap-2">
           <button type="button" onClick={() => selectStage(row.id)} aria-pressed={active}
-            className={"min-w-0 flex-1 rounded-xl border px-3 py-3 text-left " +
+            className={"min-w-0 flex-1 rounded-lg border px-3 py-2 text-left " +
               (active ? "border-emerald-300 bg-emerald-950/70 text-white" :
                 "border-cyan-500/25 bg-[#092036] text-slate-100 hover:border-cyan-300")}>
-            <span className="block text-[11px] font-bold uppercase tracking-wide text-cyan-300">
+            <span className="block text-[10px] font-bold uppercase tracking-wide text-cyan-300">
               {row.depth === 0 ? "🏠 PRIMEIRA MENSAGEM" : row.shared ? "↗ ETAPA COMPARTILHADA" : "↳ PRÓXIMA ETAPA"}
             </span>
             <span className="mt-1 block break-words text-sm font-black leading-snug">{flowTitle(node, tree.start)}</span>
@@ -519,47 +521,53 @@ export default function H2AutoTreeEditor({ id, revision, appliedRevision, initia
             </button>
           )}
         </div>
-        <div className="mt-3 flex flex-wrap gap-2">
+        <div className="mt-2 flex min-w-0 items-center gap-2">
+          <button type="button" onClick={() => selectStage(node.id)}
+            className="flex min-h-9 flex-1 items-center justify-center gap-1 rounded-lg border border-cyan-400/40 px-2 py-1.5 text-xs font-black text-cyan-100 hover:bg-cyan-900/30">
+            ✏️ EDITAR
+          </button>
           {position >= 0 && siblings.length > 1 && (
-            <div className="flex items-center gap-2 rounded-xl border border-violet-500/35 px-2 py-1">
-              <span className="text-xs font-bold text-violet-200">ORDEM</span>
-              <button type="button" aria-label="Subir esta opção" title="Subir opção" disabled={position === 0}
-                onClick={() => reorderInline(row, -1)}
-                className="rounded-lg border border-cyan-400/40 px-3 py-2 text-sm font-black text-cyan-200 disabled:opacity-25">
-                <ArrowUp className="mr-1 inline h-4 w-4" /> SUBIR
+            <div className="flex items-center gap-1" aria-label="Ordenação">
+              <button type="button" aria-label="Subir opção" title="Subir" disabled={position === 0}
+                onClick={() => reorderInline(row,-1)}
+                className="rounded-lg border border-cyan-400/30 p-2 text-cyan-200 disabled:opacity-25">
+                <ArrowUp className="h-4 w-4" />
               </button>
-              <button type="button" aria-label="Descer esta opção" title="Descer opção" disabled={position === siblings.length - 1}
-                onClick={() => reorderInline(row, 1)}
-                className="rounded-lg border border-cyan-400/40 px-3 py-2 text-sm font-black text-cyan-200 disabled:opacity-25">
-                <ArrowDown className="mr-1 inline h-4 w-4" /> DESCER
+              <button type="button" aria-label="Descer opção" title="Descer" disabled={position === siblings.length-1}
+                onClick={() => reorderInline(row,1)}
+                className="rounded-lg border border-cyan-400/30 p-2 text-cyan-200 disabled:opacity-25">
+                <ArrowDown className="h-4 w-4" />
               </button>
             </div>
           )}
-          {node.mode === "question" && node.id !== tree.start && (
-            <button type="button" className="rounded-xl bg-violet-500 px-4 py-3 text-sm font-black text-white disabled:opacity-40"
-              disabled={tree.nodes.length >= 100 || node.options.length >= 10}
-              onClick={() => openNewQuestion(node.id)}>
-              <Plus className="mr-1 inline h-4 w-4" /> CRIAR PERGUNTA AQUI
-            </button>
-          )}
-          <button type="button" className="rounded-xl border border-cyan-400/50 px-4 py-3 text-sm font-bold text-cyan-100"
-            onClick={() => selectStage(node.id)}>✏️ EDITAR AQUI</button>
-          {node.id !== tree.start && (
-            <button type="button" aria-label={"Excluir pergunta " + flowTitle(node, tree.start)}
-              className="rounded-xl border border-rose-500/60 bg-rose-950/30 px-4 py-3 text-sm font-black text-rose-200 hover:bg-rose-900/50"
-              onClick={() => deleteStage(node.id)}>
-              <Trash2 className="mr-1 inline h-4 w-4" /> EXCLUIR
-            </button>
-          )}
+          <details className="relative shrink-0">
+            <summary aria-label={"Mais ações para " + flowTitle(node,tree.start)}
+              className="list-none cursor-pointer rounded-lg border border-slate-500/40 p-2 text-slate-200 [&::-webkit-details-marker]:hidden">
+              <MoreVertical className="h-4 w-4"/>
+            </summary>
+            <div className="absolute right-0 z-10 mt-1 flex w-48 flex-col gap-1 rounded-xl border border-cyan-400/35 bg-[#081c30] p-2 shadow-2xl">
+              {node.mode === "question" && node.id !== tree.start && (
+                <button type="button" disabled={tree.nodes.length >= 100 || node.options.length >= 10}
+                  onClick={() => openNewQuestion(node.id)}
+                  className="rounded-lg px-3 py-2 text-left text-xs font-bold text-violet-200 disabled:opacity-30">➕ Criar pergunta</button>
+              )}
+              {node.id !== tree.start && (
+                <button type="button" onClick={() => deleteStage(node.id)}
+                  className="rounded-lg px-3 py-2 text-left text-xs font-bold text-rose-300">🗑 Excluir etapa</button>
+              )}
+              <button type="button" onClick={() => selectStage(node.id)}
+                className="rounded-lg px-3 py-2 text-left text-xs font-bold text-cyan-200">✏️ Editar detalhes</button>
+            </div>
+          </details>
         </div>
         {quickAddForm(node.id)}
-        {quickEditNode(node)}
+
       </div>
     );
   }
 
   return (
-    <section className="space-y-5 rounded-3xl border-2 border-emerald-400/60 bg-[#061321] p-4 shadow-[0_0_40px_rgba(16,185,129,0.1)] md:p-7">
+    <section className="min-w-0 space-y-4 rounded-2xl border border-emerald-400/35 bg-[#061321] p-3 shadow-[0_0_30px_rgba(16,185,129,0.08)] md:p-5">
       <div className="flex flex-wrap items-start justify-between gap-4">
         <div className="space-y-2">
           <h3 className="flex items-center gap-3 text-2xl font-black text-emerald-300 md:text-3xl">
@@ -576,8 +584,8 @@ export default function H2AutoTreeEditor({ id, revision, appliedRevision, initia
         </label>
       </div>
 
-      <div className="rounded-2xl border border-cyan-400/40 bg-gradient-to-r from-[#081c31] to-[#111935] p-4 md:p-5">
-        <h4 className="text-lg font-black text-cyan-200">✏️ RODAPÉ DO WHATSAPP</h4>
+      <details className="rounded-xl border border-cyan-400/30 bg-[#081c31] p-3 md:p-4">
+        <summary className="cursor-pointer text-sm font-black text-cyan-200">✏️ EDITAR RODAPÉ DO WHATSAPP</summary>
         <p className="mt-1 mb-3 text-sm text-slate-300">Edite a orientação exibida abaixo das opções de cada menu. O texto é único para este aparelho e sincroniza pelo ADM. Para desativar, deixe vazio.</p>
         <textarea aria-label="Texto do rodapé do WhatsApp" className={field + " min-h-24 whitespace-pre-wrap"} rows={3}
           maxLength={400} value={tree.footer ?? H2_AUTO_DEFAULT_FOOTER}
@@ -587,7 +595,7 @@ export default function H2AutoTreeEditor({ id, revision, appliedRevision, initia
           <button type="button" onClick={() => {setTree(previous => ({...previous,footer:H2_AUTO_DEFAULT_FOOTER}));setDirty(true);}}
             className="rounded-lg border border-cyan-400/50 px-3 py-2 text-xs font-black text-cyan-100">RESTAURAR PADRÃO</button>
         </div>
-      </div>
+      </details>
 
       <div className="sticky top-0 z-20 flex flex-wrap items-center justify-between gap-3 rounded-2xl border border-emerald-400/40 bg-[#092436] p-3 shadow-xl">
         <div className="space-y-1">
@@ -610,8 +618,8 @@ export default function H2AutoTreeEditor({ id, revision, appliedRevision, initia
         </div>
       </div>
 
-      <div className="flex w-full min-w-0 flex-col gap-6">
-        <aside className={card + " w-full min-w-0 space-y-4"}>
+      <div className="grid w-full min-w-0 grid-cols-1 items-start gap-4 lg:grid-cols-[minmax(0,0.85fr)_minmax(0,1.15fr)]">
+        <aside className={card + " w-full min-w-0 space-y-3 lg:max-h-[75vh] lg:overflow-y-auto"}>
           <div className="flex items-center justify-between gap-3">
             <div>
               <h4 className="flex items-center gap-2 text-lg font-black text-cyan-300">
@@ -620,6 +628,12 @@ export default function H2AutoTreeEditor({ id, revision, appliedRevision, initia
               <p className="mt-1 text-sm text-slate-300">Selecione SIM ou NÃO. Para adicionar uma pergunta, use o botão roxo CRIAR PERGUNTA AQUI dentro do caminho.</p>
             </div>
           </div>
+          <label className="flex items-center gap-2 rounded-xl border border-cyan-500/35 bg-[#061625] px-3 py-2 text-cyan-200">
+            <Search className="h-4 w-4 shrink-0" />
+            <input aria-label="Buscar etapa no atendimento" placeholder="Buscar pergunta ou destino..."
+              value={search} onChange={event => setSearch(event.target.value)}
+              className="w-full min-w-0 bg-transparent text-sm text-white outline-none placeholder:text-slate-500" />
+          </label>
           <div className="flex flex-wrap gap-2 text-xs">
             <span className="rounded-lg bg-cyan-950 px-3 py-2 font-bold text-cyan-200">{tree.nodes.length} etapas</span>
             <span className="rounded-lg bg-violet-950 px-3 py-2 font-bold text-violet-200">{questionCount} com respostas</span>
@@ -638,19 +652,19 @@ export default function H2AutoTreeEditor({ id, revision, appliedRevision, initia
             {rootNode && <div className="w-full rounded-2xl border border-cyan-400/30 bg-cyan-950/10 p-3 md:p-4">
               {renderMapRow({ id: rootNode.id, depth: 0, viaKey: null, viaLabel: null, shared: false, parentId: null }, 0)}
             </div>}
-            <div className="grid min-w-0 grid-cols-1 items-start gap-4 lg:grid-cols-2 lg:gap-6">
-              {branches.map(branch => {
+            <div className="grid min-w-0 grid-cols-1 items-start gap-2">
+              {branches.filter(branch => !search.trim() || branch.title.toLocaleLowerCase().includes(search.trim().toLocaleLowerCase()) || branch.rows.some(row => flowTitle(tree.nodes.find(n => n.id === row.id) || rootNode!, tree.start).toLocaleLowerCase().includes(search.trim().toLocaleLowerCase()))).map(branch => {
                 const active = branch.key === selectedBranchKey;
-                return <section key={branch.key} className={"min-w-0 rounded-2xl border-2 p-3 md:p-5 " + (active ? "border-emerald-400 bg-emerald-950/20" : "border-cyan-500/35 bg-[#0b172a]")}>
+                return <section key={branch.key} className={"min-w-0 rounded-xl border p-2 md:p-3 " + (active ? "border-emerald-400 bg-emerald-950/20" : "border-cyan-500/35 bg-[#0b172a]")}>
                   <button type="button" aria-expanded={active} aria-pressed={active}
                     onClick={() => { setFocusedBranch(branch.key); setSelected(branch.id); setTest({ current: branch.id, stack: [] }); setQuickEditId(null); }}
-                    className={"flex w-full min-w-0 items-center gap-3 rounded-xl border px-4 py-4 text-left " + (active ? "border-emerald-300 bg-emerald-900/40" : "border-cyan-500/40 bg-[#092036] hover:border-cyan-300")}>
-                    <span className={"flex h-12 w-12 shrink-0 items-center justify-center rounded-xl text-lg font-black " + (active ? "bg-emerald-400 text-[#052016]" : "bg-cyan-900 text-cyan-100")}>{numLabel(branch.key)}</span>
+                    className={"flex w-full min-w-0 items-center gap-2 rounded-lg border px-3 py-2.5 text-left " + (active ? "border-emerald-300 bg-emerald-900/40" : "border-cyan-500/40 bg-[#092036] hover:border-cyan-300")}>
+                    <span className={"flex h-9 w-9 shrink-0 items-center justify-center rounded-lg text-sm font-black " + (active ? "bg-emerald-400 text-[#052016]" : "bg-cyan-900 text-cyan-100")}>{numLabel(branch.key)}</span>
                     <span className="min-w-0 flex-1">
                       <span className="block text-xs font-black text-cyan-200">{"OPÇÃO " + branch.key + " · CAMINHO CONFIGURADO"}</span>
-                      <span className="mt-1 block break-words text-lg font-black text-white">{branch.title}</span>
-                      <span className="mt-1 block text-xs text-cyan-200">Número enviado no WhatsApp: {branch.key} · Destino configurado: {branch.id}</span>
-                      <span className="mt-2 block text-xs text-emerald-200">{active ? "SELECIONADO · CAMINHO ABERTO" : "CLIQUE PARA ABRIR"}</span>
+                      <span className="mt-1 block break-words text-sm font-black text-white">{branch.title}</span>
+                      <span className="mt-1 block text-[11px] text-slate-400">{branch.rows.length} etapas no caminho</span>
+
                     </span>
                     {active ? <ChevronDown className="h-6 w-6 shrink-0 text-emerald-300" /> : <ChevronRight className="h-6 w-6 shrink-0 text-cyan-300" />}
                   </button>
@@ -661,7 +675,7 @@ export default function H2AutoTreeEditor({ id, revision, appliedRevision, initia
                         💰 ADICIONAR CONSULTA DE INDICAÇÕES E COMISSÕES
                       </button>
                     )}
-                    {branch.rows.map((row, index) => renderMapRow(row, index, 1, index !== 0))}
+                    {branch.rows.filter(row => !search.trim() || branch.title.toLocaleLowerCase().includes(search.trim().toLocaleLowerCase()) || flowTitle(tree.nodes.find(n => n.id === row.id) || rootNode!, tree.start).toLocaleLowerCase().includes(search.trim().toLocaleLowerCase()) || String(row.viaLabel || "").toLocaleLowerCase().includes(search.trim().toLocaleLowerCase())).map((row, index) => renderMapRow(row, index, 1, index !== 0))}
                   </div> : <p className="px-3 pt-4 text-sm text-slate-400">Selecione esta opção para ver suas etapas, uma abaixo da outra.</p>}
                 </section>;
               })}
@@ -686,11 +700,16 @@ export default function H2AutoTreeEditor({ id, revision, appliedRevision, initia
           )}
         </aside>
 
+        <div className="min-w-0 lg:sticky lg:top-20 lg:max-h-[75vh] lg:overflow-y-auto">
         <button type="button" onClick={() => setAdvancedOpen(value => !value)}
-          className="w-full rounded-xl border border-slate-400/30 bg-[#071827] px-4 py-3 text-left text-sm font-bold text-slate-300">
+          className="hidden w-full rounded-xl border border-slate-400/30 bg-[#071827] px-4 py-3 text-left text-sm font-bold text-slate-300">
           {advancedOpen ? "OCULTAR CONFIGURACOES AVANCADAS" : "⚙️ CONFIGURACOES AVANCADAS (OPCIONAL)"}
         </button>
-        {advancedOpen && <div className={card + " w-full min-w-0 scroll-mt-28 space-y-5"} ref={editRef}>
+        <div className={(advancedOpen ? "fixed inset-0 z-[100] overflow-y-auto bg-[#061321] p-3 " : "hidden ") + "min-w-0 space-y-4 rounded-xl border border-cyan-400/30 lg:static lg:block lg:max-h-none lg:bg-[#091e30] lg:p-4"} ref={editRef}>
+          <div className="flex items-center justify-between gap-2 border-b border-cyan-400/20 pb-2">
+            <h4 className="text-sm font-black text-emerald-200">✏️ EDITAR ETAPA SELECIONADA</h4>
+            <button type="button" onClick={() => setAdvancedOpen(false)} aria-label="Fechar editor" className="rounded-lg border border-cyan-400/40 p-2 text-cyan-100 lg:hidden"><X className="h-5 w-5"/></button>
+          </div>
           {selectedNode && (
             <>
               <div className="flex flex-wrap items-start justify-between gap-3">
@@ -896,10 +915,12 @@ export default function H2AutoTreeEditor({ id, revision, appliedRevision, initia
               </details>
             </>
           )}
-        </div>}
+        </div>
+        </div>
       </div>
 
-      <section className={card + " w-full min-w-0 space-y-4"}>
+      <details className={card + " w-full min-w-0 space-y-4"}>
+        <summary className="cursor-pointer text-sm font-black text-cyan-200">▶️ TESTAR O CAMINHO — Prévia sem enviar WhatsApp</summary>
         <div className="flex flex-wrap items-center justify-between gap-3">
           <div>
             <h4 className="flex items-center gap-2 text-lg font-black text-cyan-300">
@@ -942,7 +963,7 @@ export default function H2AutoTreeEditor({ id, revision, appliedRevision, initia
           <button type="button" className="rounded-lg border border-slate-500/40 px-3 py-2 text-sm text-slate-200"
             onClick={() => setTest({ current: tree.start, stack: [] })}>MENU — INÍCIO</button>
         </div>
-      </section>
+      </details>
 
       <div className="flex flex-wrap items-center justify-between gap-3 rounded-2xl border border-emerald-400/35 bg-[#092436] p-4">
         <p className="text-sm text-slate-200">As alterações serão enviadas ao APK na próxima sincronização. Pedidos e outros serviços não serão alterados.</p>
