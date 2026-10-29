@@ -20,23 +20,13 @@ import H2AutoHistoryPanel from "@/components/H2AutoHistoryPanel";
 import H2AutoValidationBlocks from "@/components/H2AutoValidationBlocks";
 import H2AutoSilencedContacts from "@/components/H2AutoSilencedContacts";
 import H2AutoTreeEditor from "@/components/H2AutoTreeEditor";
+import { H2_AUTO_CONFIRMATION_DEFAULTS as confirmationDefaults, H2_AUTO_CONFIRMATION_GROUPS as confirmationGroups } from "@shared/h2AutoConfirmation";
 
 const Box = ({ children }: { children: React.ReactNode }) => (
   <div className="rounded-2xl border border-cyan-500/30 bg-slate-900/90 p-5 space-y-3">
     {children}
   </div>
 );
-
-const confirmationDefaults = {
-  identificationWelcome: "👋 Olá! Seja bem-vindo!\n\n🔐 Para sua segurança, precisamos identificar se você já é nosso cliente.\n\n1️⃣ SIM, JÁ SOU CLIENTE\n2️⃣ NÃO SOU CLIENTE\n3️⃣ CONSULTAR MINHAS INDICAÇÕES\n\n⌨️ Digite 1, 2 ou 3.\n⬅️ MENU para início.\n━━━━━━━━━━━━━━━━\n🛡️ EQUIPE H2 COLOMBIANO 🇨🇴",
-  existingCustomerPrompt: "✅ JÁ SOU CLIENTE\n\n📱 Informe o telefone cadastrado no H2 Colombiano, com DDD, para confirmar sua identidade.\n\n⌨️ Envie 11 números com DDD.\n\n⬅️ Digite 0 para voltar.\n🏠 Digite MENU para início.",
-  phonePrompt: "💰 *MINHAS INDICAÇÕES*\n\nPara proteger seus dados, confirme sua identidade.\nInforme o telefone cadastrado com DDD.\n\nDigite 0 para voltar.",
-  phoneInvalid: "Informe um telefone válido com DDD, somente números. Digite 0 para voltar.",
-  phoneNotFound: "Não encontramos cadastro com esse telefone.",
-  codeSent: "Código enviado ao e-mail cadastrado. Informe os 6 números recebidos.",
-  codePrompt: "Informe os 6 números recebidos no e-mail. Digite 0 para voltar.",
-  codeInvalid: "Código inválido ou expirado. Digite 0 para voltar.",
-};
 
 const mediaDefaults = {
   enabled: false,
@@ -142,6 +132,19 @@ export default function AdminH2Auto() {
       if (error.data?.code === "CONFLICT")
         setConflicts(previous => ({ ...previous, [variables.id]: true }));
       toast.error(error.message || "Falha ao salvar");
+    },
+  });
+  const saveConfirmation = trpc.h2AutoAdmin.saveConfirmation.useMutation({
+    onSuccess: (_result, variables) => {
+      clearDraft(variables.id);
+      setConflicts(previous => ({ ...previous, [variables.id]: false }));
+      toast.success("Textos de confirmação salvos no servidor. O H2 Auto receberá a atualização na sincronização.");
+      void utils.h2AutoAdmin.list.invalidate();
+    },
+    onError: (error, variables) => {
+      if (error.data?.code === "CONFLICT")
+        setConflicts(previous => ({ ...previous, [variables.id]: true }));
+      toast.error(error.message || "Falha ao salvar textos de confirmação.");
     },
   });
   const [validityDraft, setValidityDraft] = useState<Record<string,string>>({});
@@ -603,38 +606,68 @@ export default function AdminH2Auto() {
                   Consulta de pedidos por WhatsApp (exige APK atualizado e
                   teste)
                 </label>
-                <div className="col-span-full rounded-xl border border-violet-400/30 bg-violet-950/20 p-3 space-y-3">
-                  <h4 className="font-black text-violet-200">
-                    TODOS OS TEXTOS DE CONFIRMAÇÃO — H2 AUTO
-                  </h4>
-                  <p className="text-xs text-slate-300">
-                    Formulário editável das respostas de identificação, telefone e código por e-mail. Personalize cada mensagem e clique em SALVAR TEXTOS abaixo.
-                  </p>
-                  {([
-                    ["identificationWelcome", "Mensagem inicial — SIM / NÃO / CONSULTAR INDICAÇÕES"],
-                    ["existingCustomerPrompt", "Resposta ao digitar 1 — JÁ SOU CLIENTE"],
-                    ["phonePrompt", "Pedido do telefone / confirmação de identidade"],
-                    ["phoneInvalid", "Telefone inválido"],
-                    ["phoneNotFound", "Telefone não encontrado"],
-                    ["codeSent", "Código enviado para o e-mail"],
-                    ["codePrompt", "Pedido do código recebido por e-mail"],
-                    ["codeInvalid", "Código inválido ou expirado"],
-                  ] as const).map(([key, label]) => (
-                    <label key={key} className="block text-xs">
-                      {label}
-                      <textarea
-                        rows={key === "phonePrompt" ? 4 : 2}
-                        maxLength={2000}
-                        className={field}
-                        value={confirmation[key]}
-                        onChange={e => change("confirmation", { ...confirmation, [key]: e.target.value })}
-                      />
-                    </label>
+                <div className="col-span-full rounded-2xl border border-violet-400/40 bg-violet-950/20 p-3 sm:p-5 space-y-4">
+                  <div className="flex flex-wrap items-center justify-between gap-3">
+                    <div>
+                      <h4 className="text-base font-black text-violet-200">
+                        📝 TODOS OS TEXTOS DE CONFIRMAÇÃO — H2 AUTO
+                      </h4>
+                      <p className="mt-1 text-xs text-slate-300">
+                        Edite cada mensagem separadamente. O conteúdo salvo passa a ser usado pelo atendimento automático deste aparelho.
+                        Os números do menu, os limites de tentativas, os bloqueios e a verificação de e-mail continuam obrigatórios.
+                      </p>
+                    </div>
+                    <span className="rounded-lg border border-violet-400/30 px-3 py-2 text-xs font-bold text-violet-200">
+                      {confirmationGroups.reduce((total, group) => total + group.fields.length, 0)} campos editáveis
+                    </span>
+                  </div>
+                  {confirmationGroups.map((group, groupIndex) => (
+                    <details key={group.id} open={groupIndex === 0} className="rounded-xl border border-violet-400/20 bg-slate-950/60 p-3 sm:p-4">
+                      <summary className="cursor-pointer select-none text-sm font-black text-violet-200">
+                        {groupIndex + 1}. {group.title} ({group.fields.length})
+                      </summary>
+                      <p className="mt-2 text-xs text-slate-400">{group.description}</p>
+                      <div className="mt-3 space-y-4">
+                        {group.fields.map(({ key, label, help }) => (
+                          <div key={key} className="space-y-2 rounded-xl border border-white/10 bg-black/20 p-3">
+                            <div className="flex flex-wrap items-center justify-between gap-2">
+                              <label htmlFor={`h2-confirm-${d.id}-${key}`} className="text-xs font-bold text-white">
+                                {label}
+                              </label>
+                              <button type="button" className="rounded-lg border border-slate-500/40 px-2 py-1 text-[11px] font-bold text-slate-300 hover:bg-slate-800"
+                                onClick={() => change("confirmation", { ...confirmation, [key]: confirmationDefaults[key] })}>
+                                Restaurar padrão
+                              </button>
+                            </div>
+                            {help && <p className="text-[11px] text-amber-200">{help}</p>}
+                            <textarea id={`h2-confirm-${d.id}-${key}`}
+                              rows={key === "identificationWelcome" || key === "customerProfileUpdate" ? 9 : 4}
+                              maxLength={2000}
+                              className={field + " min-h-24 resize-y whitespace-pre-wrap"}
+                              value={confirmation[key]}
+                              onChange={e => change("confirmation", { ...confirmation, [key]: e.target.value })}
+                            />
+                            <div className="text-right text-[11px] text-slate-400">{confirmation[key].length}/2000 caracteres</div>
+                            <details className="rounded-lg border border-cyan-500/20 bg-cyan-950/20 px-3 py-2">
+                              <summary className="cursor-pointer text-xs font-bold text-cyan-200">Visualizar mensagem no WhatsApp</summary>
+                              <div className="mt-2 whitespace-pre-wrap break-words rounded-lg bg-[#0b1d18] p-3 text-xs leading-5 text-emerald-100">{confirmation[key]}</div>
+                            </details>
+                          </div>
+                        ))}
+                      </div>
+                    </details>
                   ))}
-                  <button type="button" disabled={save.isPending || needsRefresh} onClick={saveGeneral} className="w-full rounded-xl border border-emerald-400/60 bg-emerald-700 px-4 py-3 text-sm font-black text-white hover:bg-emerald-600 disabled:opacity-50">
-                    {save.isPending ? "SALVANDO..." : "💾 SALVAR TEXTOS DE CONFIRMAÇÃO"}
+                  {needsRefresh && <p role="alert" className="text-xs font-bold text-amber-200">Configuração alterada em outro lugar. Atualize os dados antes de salvar.</p>}
+                  <button type="button" disabled={saveConfirmation.isPending || needsRefresh}
+                    onClick={() => {
+                      const invalid = Object.entries(confirmation).find(([, message]) => !String(message).trim());
+                      if (invalid) { toast.error("Preencha todos os textos de confirmação antes de salvar."); return; }
+                      saveConfirmation.mutate({ id: d.id, confirmation, expectedRevision });
+                    }}
+                    className="w-full rounded-xl border border-emerald-400/60 bg-emerald-700 px-4 py-3 text-sm font-black text-white transition hover:bg-emerald-600 disabled:opacity-50">
+                    {saveConfirmation.isPending ? "SALVANDO..." : "💾 SALVAR TODOS OS TEXTOS DE CONFIRMAÇÃO"}
                   </button>
-                  <p className="text-xs text-slate-400">As alterações são salvas nas configurações do dispositivo H2 Auto selecionado.</p>
+                  <p className="text-xs text-slate-400">O salvamento atualiza somente os textos deste aparelho, sem sobrescrever outras configurações.</p>
                 </div>
                 <div className="col-span-full rounded-xl border border-cyan-400/30 bg-cyan-950/20 p-3 space-y-3">
                   <h4 className="font-black text-cyan-300">
