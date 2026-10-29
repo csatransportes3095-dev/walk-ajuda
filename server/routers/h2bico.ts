@@ -310,14 +310,14 @@ export const h2bicoRouter = router({
   }),
 
   importScreenshotRecord: adminProcedure.input(z.object({
-    name:z.string().min(2).max(200),
+    name:z.string().max(200),
     cpf:z.string().regex(/^\d{11}$/),
     base64:z.string().min(100).max(5_500_000),
     photoMode:z.enum(["original","white"]).optional(),
   }).strict()).mutation(async ({input})=>{
     const name=normalizeScreenshotName(input.name);
-    if(!isReviewableName(name) || !isValidCpf(input.cpf))
-      throw new TRPCError({code:"BAD_REQUEST",message:"Confira o nome completo e o CPF válido."});
+    if(!isValidCpf(input.cpf) || (name.length>0 && !isReviewableName(name)))
+      throw new TRPCError({code:"BAD_REQUEST",message:"CPF inválido ou nome informado incorretamente."});
     const db=await dbOrThrow();
     const found=await db.execute(sql`SELECT id FROM h2bico_records WHERE cpf=${input.cpf} LIMIT 1`);
     if((found[0] as any[]).length)return {result:"duplicate" as const};
@@ -338,7 +338,7 @@ export const h2bicoRouter = router({
     try{
       const result:any=await db.execute(sql`
         INSERT INTO h2bico_records(name,cpf,photoUrl,originalFilename,source,status)
-        VALUES(${name},${input.cpf},${url},${name+"_"+input.cpf+".jpg"},'importacao-print','available')
+        VALUES(${name || "SEM NOME"},${input.cpf},${url},${(name || "SEM NOME")+"_"+input.cpf+".jpg"},'importacao-print','available')
       `);
       const id=Number((result[0] as any).insertId||0);
       if(id)await db.execute(sql`INSERT INTO h2bico_history(recordId,action,details)
