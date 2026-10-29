@@ -10,6 +10,7 @@ import { recordH2AutoPhoneFailure, clearH2AutoPhoneFailures, type PhoneStage } f
 import { h2AutoPhoneFailureMessage, type H2AutoPhoneKind, type H2AutoPhoneFailure } from "./h2-auto-phone-attempt-message";
 import { invalidH2AutoPhoneStageAnswer, h2AutoNavigationCommand } from "./h2-auto-validation-policy";
 import { manualSilencedPhones, normalizeSilencedPhone } from "./h2-auto-silenced-contacts";
+import { h2AutoConfirmationSchema } from "../shared/h2AutoConfirmation";
 import { h2AutoCustomerNeedsProfileUpdate, selectH2AutoCustomerByPhone, H2_AUTO_CUSTOMER_PROFILE_UPDATE_MESSAGE, H2_AUTO_CUSTOMER_NOT_CONFIRMED_MESSAGE } from "./h2-auto-customer-profile-guidance";
 
 /**
@@ -27,13 +28,6 @@ const otpHash = (session: string, code: string) => {
 };
 const respond = (res: Response, status: number, body: object) =>
   res.status(status).set("Cache-Control", "no-store").json(body);
-const initialMessage = "⚡ *H2 COLOMBIANO* 🇨🇴\n🤖 *CENTRAL DE ATENDIMENTO*\n\n👋 Olá! Seja bem-vindo!\n\n🔐 Para sua segurança,\nprecisamos identificar\nse você já é nosso cliente.\n\n1️⃣ *SIM, JÁ SOU CLIENTE*\n2️⃣ *NÃO SOU CLIENTE*\n3️⃣ *CONSULTAR MINHAS INDICAÇÕES*\n\n⌨️ Digite *1*, *2* ou *3*.\n🔙 *MENU* para início.\n━━━━━━━━━━━━━━━━\n🛡️ *EQUIPE H2 COLOMBIANO* 🇨🇴";
-const navigationFooter = "\n\n🔙 Digite *0* para voltar.\n🏠 Digite *MENU* para início.";
-const phoneMessage = "✅ *JÁ SOU CLIENTE*\n\n📱 Informe o telefone\ncadastrado no H2 Colombiano,\ncom DDD, para confirmar\nsua identidade.\n\n⌨️ Envie 11 números com DDD." + navigationFooter;
-const referrerMessage = "🆕 *NOVO CLIENTE*\n\n🇨🇴 Atendemos somente\npor indicação.\n\n📱 Informe o telefone\ncom DDD de quem\nindicou você.\n\n⌨️ Envie 11 números com DDD." + navigationFooter;
-const invalidReferral = "⚠️ *INDICAÇÃO NÃO VALIDADA*\n\n❌ Não foi possível validar\no telefone informado.\n\n📱 Informe outro número\nde indicador autorizado.\n\n👨‍💻 Digite *6* para falar\ncom um atendente.";
-const noReferral = "🔐 *INDICAÇÃO OBRIGATÓRIA*\n\nPara continuar, informe\no telefone de um indicador\ncadastrado e autorizado.\n\n👨‍💻 Digite *6* para ajuda.";
-const anonymousCustomerFailure = "⚠️ Não foi possível confirmar\num cadastro autorizado\ncom esse telefone.\n\n📱 Confira o número com DDD\nou solicite atendimento.";
 const minute = 60_000;
 const hour = 60 * minute;
 const defaultAccessHours = 24;
@@ -146,16 +140,25 @@ export function registerH2AutoAccessRoutes(app: Express): void {
       await ensure();
       const deviceId = await deviceFor(req);
       let identificationDisabled = false;
+      let confirmation = h2AutoConfirmationSchema.parse({});
       if (deviceId) {
-        const live = await rows(sql`SELECT JSON_UNQUOTE(JSON_EXTRACT(config_json,'$.enabled')) AS bot_on,
+        const live = await rows(sql`SELECT JSON_EXTRACT(config_json,'$.confirmation') AS confirmation_json, JSON_UNQUOTE(JSON_EXTRACT(config_json,'$.enabled')) AS bot_on,
           CAST(JSON_UNQUOTE(JSON_EXTRACT(config_json,'$.identificationSessionHours')) AS UNSIGNED) AS session_hours,
           JSON_UNQUOTE(JSON_EXTRACT(config_json,'$.identificationEnabled')) AS identity_on,
           JSON_UNQUOTE(JSON_EXTRACT(config_json,'$.blocked')) AS blocked_phones
           FROM h2_auto_devices WHERE id=${deviceId} LIMIT 1`);
         if (live[0]?.bot_on !== "true") return respond(res,200,{state:"disabled"});
         identificationDisabled = live[0]?.identity_on === "false";
+        try {
+          const raw = live[0]?.confirmation_json;
+          confirmation = h2AutoConfirmationSchema.parse(typeof raw === "string" ? JSON.parse(raw) : raw || {});
+        } catch { confirmation = h2AutoConfirmationSchema.parse({}); }
       }
       if (!deviceId) return respond(res, 401, { error: "unauthorized" });
+      const initialMessage = confirmation.identificationWelcome;
+      const phoneMessage = confirmation.existingCustomerPrompt;
+      const referrerMessage = confirmation.newCustomerPrompt;
+      const noReferral = confirmation.noIndicatorMessage;
       const rawHours=Number((await rows(sql`SELECT JSON_UNQUOTE(JSON_EXTRACT(config_json,'$.identificationSessionHours')) AS hours FROM h2_auto_devices WHERE id=${deviceId} LIMIT 1`))[0]?.hours);
       const configuredHours=Number.isInteger(rawHours) && rawHours>=1 && rawHours<=720 ? rawHours : defaultAccessHours;
       const accessLifetime=configuredHours*hour;
@@ -197,7 +200,7 @@ export function registerH2AutoAccessRoutes(app: Express): void {
           stage,reason:reason === "formato" ? "Telefone fora do formato" : "Telefone não confirmado"});
         if (!result.accepted) return {state:"blocked",message:""};
         return {state:result.blocked ? "blocked" : stage,
-          message:h2AutoPhoneFailureMessage(kind,reason,result.attempts)};
+          message:h2AutoPhoneFailureMessage(kind,reason,result.attempts,confirmation)};
       };
       if (identificationDisabled) return respond(res,200,{state:"identification_disabled"});
       if (s?.stage === "released_customer_phone" || s?.stage === "released_referral_phone" || s?.stage === "released_referrals_phone") {
