@@ -7,7 +7,7 @@ import { isOwnSiteEmailAuthorized, generateOwnSiteCode } from "./siteAccessOwnCo
 import { resolveReferralDeclaration } from "./referral";
 import { sendH2AutoOrderCode } from "./h2-auto-order-email";
 import { blockInvalidPhone, INVALID_PHONE_REPLY } from "./h2-auto-validation-blocks";
-import { invalidH2AutoPhoneStageAnswer } from "./h2-auto-validation-policy";
+import { invalidH2AutoPhoneStageAnswer, h2AutoNavigationCommand } from "./h2-auto-validation-policy";
 import { manualSilencedPhones, normalizeSilencedPhone } from "./h2-auto-silenced-contacts";
 import { h2AutoCustomerNeedsProfileUpdate, selectH2AutoCustomerByPhone, H2_AUTO_CUSTOMER_PROFILE_UPDATE_MESSAGE, H2_AUTO_CUSTOMER_NOT_CONFIRMED_MESSAGE } from "./h2-auto-customer-profile-guidance";
 
@@ -27,8 +27,9 @@ const otpHash = (session: string, code: string) => {
 const respond = (res: Response, status: number, body: object) =>
   res.status(status).set("Cache-Control", "no-store").json(body);
 const initialMessage = "⚡ *H2 COLOMBIANO* 🇨🇴\n🤖 *CENTRAL DE ATENDIMENTO*\n\n👋 Olá! Seja bem-vindo!\n\n🔐 Para sua segurança,\nprecisamos identificar\nse você já é nosso cliente.\n\n1️⃣ *SIM, JÁ SOU CLIENTE*\n2️⃣ *NÃO SOU CLIENTE*\n3️⃣ *CONSULTAR MINHAS INDICAÇÕES*\n\n⌨️ Digite *1*, *2* ou *3*.\n🔙 *MENU* para início.\n━━━━━━━━━━━━━━━━\n🛡️ *EQUIPE H2 COLOMBIANO* 🇨🇴";
-const phoneMessage = "✅ *JÁ SOU CLIENTE*\n\n📱 Informe o telefone\ncadastrado no H2 Colombiano,\ncom DDD, para confirmar\nsua identidade.\n\n⌨️ Envie somente 11 números com DDD.";
-const referrerMessage = "🆕 *NOVO CLIENTE*\n\n🇨🇴 Atendemos somente\npor indicação.\n\n📱 Informe o telefone\ncom DDD de quem\nindicou você.\n\n⌨️ Envie somente 11 números com DDD.";
+const navigationFooter = "\n\n🔙 Digite *0* para voltar.\n🏠 Digite *MENU* para início.";
+const phoneMessage = "✅ *JÁ SOU CLIENTE*\n\n📱 Informe o telefone\ncadastrado no H2 Colombiano,\ncom DDD, para confirmar\nsua identidade.\n\n⌨️ Envie 11 números com DDD." + navigationFooter;
+const referrerMessage = "🆕 *NOVO CLIENTE*\n\n🇨🇴 Atendemos somente\npor indicação.\n\n📱 Informe o telefone\ncom DDD de quem\nindicou você.\n\n⌨️ Envie 11 números com DDD." + navigationFooter;
 const invalidReferral = "⚠️ *INDICAÇÃO NÃO VALIDADA*\n\n❌ Não foi possível validar\no telefone informado.\n\n📱 Informe outro número\nde indicador autorizado.\n\n👨‍💻 Digite *6* para falar\ncom um atendente.";
 const noReferral = "🔐 *INDICAÇÃO OBRIGATÓRIA*\n\nPara continuar, informe\no telefone de um indicador\ncadastrado e autorizado.\n\n👨‍💻 Digite *6* para ajuda.";
 const anonymousCustomerFailure = "⚠️ Não foi possível confirmar\num cadastro autorizado\ncom esse telefone.\n\n📱 Confira o número com DDD\nou solicite atendimento.";
@@ -207,9 +208,12 @@ export function registerH2AutoAccessRoutes(app: Express): void {
         return respond(res, 200, { state: "choice", message: initialMessage });
       }
 
-      // MENU ALWAYS returns to the FIRST question (1 = client, 2 = new).
-      // Preserve the original verification time and customer/referrer bindings.
-      const isMenu = normalized === "menu" || normalized === "inicio" || normalized === "manu";
+      // Navigation commands must be handled BEFORE the strict phone validator.
+      // Persistent validation blocks and ADM contact silencing already took precedence.
+      const navigation = h2AutoNavigationCommand(input);
+      const isMenu = navigation === "home";
+      const isBack = navigation === "back";
+      // MENU returns to the first question without extending a verified session.
       const authorizedAudience: "customer" | "new" | null =
         s.stage === "customer" || s.stage === "customer_menu" ? "customer" :
         s.stage === "new" || s.stage === "new_menu" ? "new" : null;
@@ -224,14 +228,15 @@ export function registerH2AutoAccessRoutes(app: Express): void {
             code_attempts=0,expires_at=0,updated_at=${now}`);
           return respond(res, 200, { state: "choice", message: initialMessage });
         }
-        if (isMenu || normalized === "0") {
-          // Zero and MENU both return to the first audience selection without invalidating OTP.
+        if (isMenu) {
+          // Only MENU resets the audience choice. Zero stays local to the tree back stack.
           const menuStage = authorizedAudience === "customer" ? "customer_menu" : "new_menu";
           // Do not touch updated_at: MENU must not extend the authorized window.
           if (s.stage !== menuStage) await update(sessionId, sql`stage=${menuStage}`);
           return respond(res, 200, { state: "choice", message: initialMessage });
         }
         if (s.stage === "customer_menu" || s.stage === "new_menu") {
+          if (isBack) return respond(res, 200, {state: "choice", message: initialMessage});
           // Selecting the already verified audience restores service access
           // without another code or indicator check.
           if (authorizedAudience === "customer" && normalized === "3") {
@@ -259,16 +264,17 @@ export function registerH2AutoAccessRoutes(app: Express): void {
         return respond(res, 200, verified(authorizedAudience));
       }
 
-      // Before authentication, MENU/0 returns to identification; 0 in
-      // OTP confirmation returns to the phone prompt.
-      if (s.stage !== "customer_phone" && s.stage !== "referrals_phone" && s.stage !== "referral_phone" &&
-          (isMenu || normalized === "0" && s.stage !== "choice")) {
-        const destination = normalized === "0" && (s.stage === "customer_code" || s.stage === "referrals_code")
+      // MENU = home; 0 = previous step. In phone and code stages these are
+      // navigation, never failed phone answers or OTP attempts.
+      // Do not allow these commands to release a previously blocked session.
+      if (isMenu || (isBack && s.stage !== "choice")) {
+        const destination = isBack && (s.stage === "customer_code" || s.stage === "referrals_code")
           ? (s.stage === "referrals_code" ? "referrals_phone" : "customer_phone") : "choice";
         await update(sessionId, sql`stage=${destination},customer_id=NULL,referrer_id=NULL,
           customer_phone_hash=NULL,customer_email_hash=NULL,code_hash=NULL,code_expires=NULL,
           code_attempts=0,resend_after=0,expires_at=0,updated_at=${now}`);
-        return respond(res, 200, {state: destination, message: destination === "customer_phone" || destination === "referrals_phone" ? phoneMessage : initialMessage});
+        return respond(res, 200, {state: destination,
+          message: destination === "customer_phone" || destination === "referrals_phone" ? phoneMessage : initialMessage});
       }
 
       if (s.stage === "choice") {
@@ -336,10 +342,6 @@ export function registerH2AutoAccessRoutes(app: Express): void {
 
       if (s.stage === "customer_code" || s.stage === "referrals_code") {
         const referralEntry = s.stage === "referrals_code";
-        if (normalized === "0" || normalized === "voltar") {
-          await update(sessionId, sql`stage=${referralEntry ? 'referrals_phone' : 'customer_phone'},code_hash=NULL,code_expires=NULL,updated_at=${now}`);
-          return respond(res, 200, { state: referralEntry ? "referrals_phone" : "customer_phone", message: phoneMessage });
-        }
         const actual = /^[0-9]{6}$/.test(input.trim()) ? otpHash(sessionId, input.trim()) : "";
         const expected = String(s.code_hash || "");
         const same = /^[a-f0-9]{64}$/.test(expected) && /^[a-f0-9]{64}$/.test(actual) &&
