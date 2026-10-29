@@ -12,6 +12,12 @@ export default function AdminReferrals() {
   const [selectedPhone, setSelectedPhone] = useState<string | null>(null);
   const [activeTab, setActiveTab] = useState<"stats" | "history" | "chain" | "indicated">("stats");
   const [copiedCustomerId, setCopiedCustomerId] = useState<number | null>(null);
+  const [manualTarget, setManualTarget] = useState<{id:number;name:string;phone:string}|null>(null);
+  const [manualAmount, setManualAmount] = useState("");
+  const [manualStatus, setManualStatus] = useState<"a_liberar"|"liberado">("a_liberar");
+  const utils = trpc.useUtils();
+  const manualQuery = trpc.referrals.listManualCommissions.useQuery({referrerPhone:selectedPhone||""},{enabled:!!selectedPhone && activeTab==="indicated"});
+  const saveManual = trpc.referrals.saveManualCommission.useMutation({onSuccess:()=>{void manualQuery.refetch();void utils.orderStatus.listCommissions.invalidate();setManualTarget(null);setManualAmount("");},onError:(error)=>alert(error.message)});
   const createReportMutation = trpc.referrals.createReport.useMutation();
   const deleteIndicatedMutation = trpc.referrals.deleteIndicated.useMutation();
 
@@ -67,6 +73,15 @@ export default function AdminReferrals() {
   return (
     <div className="min-h-screen bg-gray-950 p-6">
       <div className="max-w-7xl mx-auto">
+        {manualTarget && <div className="fixed inset-0 z-[100] flex items-center justify-center bg-black/80 p-4"><div className="w-full max-w-md space-y-4 rounded-2xl border border-amber-500/40 bg-slate-950 p-5 text-white">
+          <h2 className="text-lg font-bold">💰 Comissão manual</h2>
+          <p className="text-sm">Indicado: {manualTarget.name} · {manualTarget.phone}</p>
+          <p className="text-sm">Indicador: {selectedStats?.name || selectedPhone}</p>
+          <label className="block text-sm">Valor em reais<Input inputMode="decimal" value={manualAmount} onChange={e=>setManualAmount(e.target.value)} placeholder="Ex.: 50,00" className="mt-1 bg-slate-900"/></label>
+          <label className="block text-sm">Status<select className="mt-1 w-full rounded-lg border border-slate-700 bg-slate-900 p-2" value={manualStatus} onChange={e=>setManualStatus(e.target.value as "a_liberar"|"liberado")}><option value="a_liberar">A LIBERAR</option><option value="liberado">LIBERADO</option></select></label>
+          <p className="text-xs text-amber-300">Liberado significa disponível para pagamento, não pago.</p>
+          <div className="flex gap-2"><Button variant="outline" onClick={()=>setManualTarget(null)}>Cancelar</Button><Button disabled={saveManual.isPending} onClick={()=>{const amount=Number(manualAmount.replace(",", "."));const cents=Math.round(amount*100);if(!Number.isFinite(amount)||cents<=0){alert("Informe um valor válido.");return;}if(!selectedPhone)return;saveManual.mutate({referrerPhone:selectedPhone,referredCustomerId:manualTarget.id,amountCents:cents,releaseStatus:manualStatus});}}>Salvar comissão</Button></div>
+        </div></div>}
         {/* Header */}
         <div className="mb-8">
           <div className="flex items-center justify-between mb-4">
@@ -295,6 +310,10 @@ export default function AdminReferrals() {
                                   </div>
                                 </div>
                                 <button type="button" onClick={() => window.location.assign(`/admin/customers?phone=${encodeURIComponent(customer.phone)}`)} className="mt-2 rounded-lg border border-cyan-500/40 bg-cyan-500/15 px-3 py-1.5 text-xs font-bold text-cyan-200 hover:bg-cyan-500/25">ABRIR CADASTRO</button>
+                                <div className="mt-2 flex flex-wrap items-center gap-2">
+                                  <button type="button" className="rounded-lg border border-amber-500/40 bg-amber-500/15 px-3 py-1.5 text-xs font-bold text-amber-200" onClick={()=>{const previous=(manualQuery.data||[]).find((x:any)=>Number(x.referredCustomerId)===customer.customerId);setManualTarget({id:customer.customerId,name:customer.name,phone:customer.phone});setManualAmount(previous?String((Number(previous.amountCents)/100).toFixed(2)):"");setManualStatus(previous?.releaseStatus==="liberado"?"liberado":"a_liberar");}}>💰 {manualQuery.data?.some((x:any)=>Number(x.referredCustomerId)===customer.customerId)?"EDITAR COMISSÃO":"ATIVAR COMISSÃO"}</button>
+                                  {manualQuery.data?.filter((x:any)=>Number(x.referredCustomerId)===customer.customerId).map((x:any)=><span key={x.id} className="text-xs text-amber-200">R$ {(Number(x.amountCents)/100).toFixed(2)} · {x.releaseStatus==="liberado"?"LIBERADO":"A LIBERAR"}</span>)}
+                                </div>
                                 <div className="flex items-center gap-2 mt-2">
                                   <button
                                     onClick={handleCopyPhone}
