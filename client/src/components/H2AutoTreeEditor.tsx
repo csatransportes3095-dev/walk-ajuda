@@ -584,8 +584,8 @@ export default function H2AutoTreeEditor({ id, revision, appliedRevision, initia
         </label>
       </div>
 
-      <div className="rounded-2xl border border-cyan-400/40 bg-gradient-to-r from-[#081c31] to-[#111935] p-4 md:p-5">
-        <h4 className="text-lg font-black text-cyan-200">✏️ RODAPÉ DO WHATSAPP</h4>
+      <details className="rounded-xl border border-cyan-400/30 bg-[#081c31] p-3 md:p-4">
+        <summary className="cursor-pointer text-sm font-black text-cyan-200">✏️ EDITAR RODAPÉ DO WHATSAPP</summary>
         <p className="mt-1 mb-3 text-sm text-slate-300">Edite a orientação exibida abaixo das opções de cada menu. O texto é único para este aparelho e sincroniza pelo ADM. Para desativar, deixe vazio.</p>
         <textarea aria-label="Texto do rodapé do WhatsApp" className={field + " min-h-24 whitespace-pre-wrap"} rows={3}
           maxLength={400} value={tree.footer ?? H2_AUTO_DEFAULT_FOOTER}
@@ -595,7 +595,7 @@ export default function H2AutoTreeEditor({ id, revision, appliedRevision, initia
           <button type="button" onClick={() => {setTree(previous => ({...previous,footer:H2_AUTO_DEFAULT_FOOTER}));setDirty(true);}}
             className="rounded-lg border border-cyan-400/50 px-3 py-2 text-xs font-black text-cyan-100">RESTAURAR PADRÃO</button>
         </div>
-      </div>
+      </details>
 
       <div className="sticky top-0 z-20 flex flex-wrap items-center justify-between gap-3 rounded-2xl border border-emerald-400/40 bg-[#092436] p-3 shadow-xl">
         <div className="space-y-1">
@@ -919,7 +919,8 @@ export default function H2AutoTreeEditor({ id, revision, appliedRevision, initia
         </div>
       </div>
 
-      <section className={card + " w-full min-w-0 space-y-4"}>
+      <details className={card + " w-full min-w-0 space-y-4"}>
+        <summary className="cursor-pointer text-sm font-black text-cyan-200">▶️ TESTAR O CAMINHO — Prévia sem enviar WhatsApp</summary>
         <div className="flex flex-wrap items-center justify-between gap-3">
           <div>
             <h4 className="flex items-center gap-2 text-lg font-black text-cyan-300">
@@ -962,7 +963,7 @@ export default function H2AutoTreeEditor({ id, revision, appliedRevision, initia
           <button type="button" className="rounded-lg border border-slate-500/40 px-3 py-2 text-sm text-slate-200"
             onClick={() => setTest({ current: tree.start, stack: [] })}>MENU — INÍCIO</button>
         </div>
-      </section>
+      </details>
 
       <div className="flex flex-wrap items-center justify-between gap-3 rounded-2xl border border-emerald-400/35 bg-[#092436] p-4">
         <p className="text-sm text-slate-200">As alterações serão enviadas ao APK na próxima sincronização. Pedidos e outros serviços não serão alterados.</p>
