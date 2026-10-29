@@ -46,7 +46,7 @@ export function h2AutoPhoneFailureMessage(
     ...cause,
     "",
     "🔢 *TENTATIVA " + used + " DE 3*",
-    (remaining === 1 ? "🟠" : "🟡") + " *RESTAM " + remaining +
+    (remaining === 1 ? "🟠" : "🟡") + (remaining === 1 ? " *RESTA " : " *RESTAM ") + remaining +
       (remaining === 1 ? " TENTATIVA*" : " TENTATIVAS*"),
     "",
     "📱 Confira o número informado",
