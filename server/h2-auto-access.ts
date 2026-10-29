@@ -207,7 +207,7 @@ export function registerH2AutoAccessRoutes(app: Express): void {
         const stage = s.stage === "released_customer_phone" ? "customer_phone" :
           s.stage === "released_referrals_phone" ? "referrals_phone" : "referral_phone";
         await update(sessionId, sql`stage=${stage},updated_at=${now}`);
-        return respond(res, 200, { state: stage, message: stage === "referral_phone" ? referrerMessage : phoneMessage });
+        return respond(res, 200, { state: stage, message: stage === "referral_phone" ? referrerMessage : stage === "referrals_phone" ? confirmation.phonePrompt : phoneMessage });
       }
 
       if (!s || now - Number(s.updated_at) >= accessLifetime || Number(s.updated_at) > now) {
@@ -288,7 +288,7 @@ export function registerH2AutoAccessRoutes(app: Express): void {
           customer_phone_hash=NULL,customer_email_hash=NULL,code_hash=NULL,code_expires=NULL,
           code_attempts=0,resend_after=0,expires_at=0,updated_at=${now}`);
         return respond(res, 200, {state: destination,
-          message: destination === "customer_phone" || destination === "referrals_phone" ? phoneMessage : initialMessage});
+          message: destination === "referrals_phone" ? confirmation.phonePrompt : destination === "customer_phone" ? phoneMessage : initialMessage});
       }
 
       if (s.stage === "choice") {
@@ -298,7 +298,7 @@ export function registerH2AutoAccessRoutes(app: Express): void {
         }
         if (normalized === "3") {
           await update(sessionId, sql`stage='referrals_phone',updated_at=${now}`);
-          return respond(res, 200, { state: "referrals_phone", message: phoneMessage });
+          return respond(res, 200, { state: "referrals_phone", message: confirmation.phonePrompt });
         }
         if (normalized === "2") {
           await update(sessionId, sql`stage='referral_phone',updated_at=${now}`);
@@ -318,7 +318,7 @@ export function registerH2AutoAccessRoutes(app: Express): void {
           return respond(res, 200, { state: "customer_phone", message: "⏳ Aguarde um minuto para solicitar outro código.\n\n🔙 *0* ou *MENU* para voltar." });
         if (await limited("device:" + deviceId, 400, hour, now) ||
             await limited("phone:" + phone, 5, hour, now))
-          return respond(res, 200, { state: "customer_phone", message: "⏳ Limite de tentativas atingido. Tente mais tarde." });
+          return respond(res, 200, { state: "customer_phone", message: confirmation.codeRateLimit });
         const customer = await customerFor(phone);
         const db = await getDb();
         // Never tell a fully completed customer to update the profile because
@@ -328,9 +328,9 @@ export function registerH2AutoAccessRoutes(app: Express): void {
           referralEntry ? "referrals_phone" : "customer_phone",
           referralEntry ? "indicacoes" : "cadastro","nao_confirmado"));
         if (h2AutoCustomerNeedsProfileUpdate(customer))
-          return respond(res, 200, { state: "customer_phone", message: H2_AUTO_CUSTOMER_PROFILE_UPDATE_MESSAGE });
+          return respond(res, 200, { state: "customer_phone", message: confirmation.customerProfileUpdate });
         if (!(await isOwnSiteEmailAuthorized(db, customer.email)))
-          return respond(res, 200, { state: "customer_phone", message: H2_AUTO_CUSTOMER_NOT_CONFIRMED_MESSAGE });
+          return respond(res, 200, { state: "customer_phone", message: confirmation.customerAccessNotConfirmed });
         const code = generateOwnSiteCode();
         const codeHash = otpHash(sessionId, code);
         const changed: any = await db.execute(sql`UPDATE h2_auto_access_sessions SET
@@ -341,14 +341,14 @@ export function registerH2AutoAccessRoutes(app: Express): void {
           resend_after=${now+minute},updated_at=${now}
           WHERE id=${sessionId} AND stage=${referralEntry ? 'referrals_phone' : 'customer_phone'} AND resend_after<=${now}`);
         if (!changed[0]?.affectedRows)
-          return respond(res, 200, { state: "customer_phone", message: "⏳ Aguarde e tente novamente." });
+          return respond(res, 200, { state: "customer_phone", message: confirmation.codeRequestWait });
         try {
           await sendH2AutoOrderCode(customer.email, code, 10, "access");
         } catch {
           await db.execute(sql`UPDATE h2_auto_access_sessions SET stage=${referralEntry ? 'referrals_phone' : 'customer_phone'},
             code_hash=NULL,code_expires=NULL,updated_at=${Date.now()}
             WHERE id=${sessionId} AND code_hash=${codeHash}`);
-          return respond(res, 200, { state: "customer_phone", message: "⚠️ Não foi possível enviar o código agora. Tente novamente." });
+          return respond(res, 200, { state: "customer_phone", message: confirmation.codeSendFailed });
         }
         await clearH2AutoPhoneFailures(deviceId,sessionId);
         return respond(res, 200, { state: referralEntry ? "referrals_code" : "customer_code",
@@ -379,7 +379,7 @@ export function registerH2AutoAccessRoutes(app: Express): void {
           WHERE id=${sessionId} AND stage=${referralEntry ? 'referrals_code' : 'customer_code'} AND code_hash=${expected}
             AND code_expires>${now} AND code_attempts<5`);
         if (!changed[0]?.affectedRows)
-          return respond(res, 200, { state: referralEntry ? "referrals_code" : "customer_code", message: "⚠️ Código inválido ou expirado." });
+          return respond(res, 200, { state: referralEntry ? "referrals_code" : "customer_code", message: confirmation.codeInvalid });
         return respond(res, 200, grant(referralEntry ? "referrals" : "customer"));
       }
 
@@ -389,11 +389,11 @@ export function registerH2AutoAccessRoutes(app: Express): void {
         if (normalized === "nao" || normalized === "não" ||
             normalized.includes("nao tenho") || normalized.includes("não tenho") ||
             normalized.includes("sem indicador"))
-          return respond(res,200,{state:"referral_phone",message:noReferral + navigationFooter});
+          return respond(res,200,{state:"referral_phone",message:noReferral});
         if (invalidH2AutoPhoneStageAnswer(s.stage, input) || !normalizeCustomerPhone(input))
           return respond(res,200,await phoneError("referral_phone","indicador","formato"));
         if (await limited("referral:" + sessionId, 30, hour, now))
-          return respond(res, 200, { state: "referral_phone", message: "⏳ Muitas tentativas. Aguarde e tente novamente." });
+          return respond(res, 200, { state: "referral_phone", message: confirmation.referrerRateLimit });
         // A service outage is not a wrong indicator and must not consume a chance.
         if (!(await getDb())) throw Error("db_unavailable");
         const found = await resolveReferralDeclaration({ customerPhone: "", referrerPhone: input });
