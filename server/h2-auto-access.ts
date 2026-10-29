@@ -11,7 +11,7 @@ import { h2AutoPhoneFailureMessage, type H2AutoPhoneKind, type H2AutoPhoneFailur
 import { invalidH2AutoPhoneStageAnswer, h2AutoNavigationCommand } from "./h2-auto-validation-policy";
 import { manualSilencedPhones, normalizeSilencedPhone } from "./h2-auto-silenced-contacts";
 import { h2AutoConfirmationSchema } from "../shared/h2AutoConfirmation";
-import { h2AutoCustomerNeedsProfileUpdate, selectH2AutoCustomerByPhone, H2_AUTO_CUSTOMER_PROFILE_UPDATE_MESSAGE, H2_AUTO_CUSTOMER_NOT_CONFIRMED_MESSAGE } from "./h2-auto-customer-profile-guidance";
+import { h2AutoCustomerNeedsProfileUpdate, selectH2AutoCustomerByPhone } from "./h2-auto-customer-profile-guidance";
 
 /**
  * WhatsApp first-contact gate. State is server-side and bound to a paired device
@@ -315,7 +315,7 @@ export function registerH2AutoAccessRoutes(app: Express): void {
             referralEntry ? "referrals_phone" : "customer_phone",
             referralEntry ? "indicacoes" : "cadastro","formato"));
         if (Number(s.resend_after) > now)
-          return respond(res, 200, { state: "customer_phone", message: "⏳ Aguarde um minuto para solicitar outro código.\n\n🔙 *0* ou *MENU* para voltar." });
+          return respond(res, 200, { state: "customer_phone", message: confirmation.codeResendWait });
         if (await limited("device:" + deviceId, 400, hour, now) ||
             await limited("phone:" + phone, 5, hour, now))
           return respond(res, 200, { state: "customer_phone", message: confirmation.codeRateLimit });
@@ -352,7 +352,7 @@ export function registerH2AutoAccessRoutes(app: Express): void {
         }
         await clearH2AutoPhoneFailures(deviceId,sessionId);
         return respond(res, 200, { state: referralEntry ? "referrals_code" : "customer_code",
-          message: "📧 *CONFIRMAÇÃO DE E-MAIL*\n\n✅ Enviamos um código ao\ne-mail do seu cadastro.\n\n🔢 Digite os *6 números*.\n⏳ Validade: *10 minutos*.\n\n🔙 *0* para voltar.\nDigite *MENU* para início." });
+          message: confirmation.codeSent });
       }
 
       if (s.stage === "customer_code" || s.stage === "referrals_code") {
@@ -369,7 +369,7 @@ export function registerH2AutoAccessRoutes(app: Express): void {
           await db.execute(sql`UPDATE h2_auto_access_sessions SET code_attempts=LEAST(code_attempts+1,5)
             WHERE id=${sessionId} AND stage=${referralEntry ? 'referrals_code' : 'customer_code'}`);
           return respond(res, 200, { state: referralEntry ? "referrals_code" : "customer_code",
-            message: "⚠️ Código inválido ou expirado.\nConfira o e-mail.\n\nDigite *0* para voltar.\nDigite *MENU* para início." });
+            message: confirmation.codeInvalid });
         }
         const db = await getDb();
         if (!db) throw new Error("db_unavailable");
@@ -385,7 +385,7 @@ export function registerH2AutoAccessRoutes(app: Express): void {
 
       if (s.stage === "referral_phone") {
         if (normalized === "6") return respond(res, 200, { state: "human",
-          message: "👨‍💻 *ATENDIMENTO HUMANO*\n\nSua solicitação foi encaminhada.\n⏳ Tempo médio: 5 minutos.\n\n🏠 *MENU* para início." });
+          message: confirmation.referralHumanHelp });
         if (normalized === "nao" || normalized === "não" ||
             normalized.includes("nao tenho") || normalized.includes("não tenho") ||
             normalized.includes("sem indicador"))
