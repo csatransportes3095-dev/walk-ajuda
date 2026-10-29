@@ -5777,7 +5777,7 @@ export default function AdminOrders() {
                 <div
                   role="button"
                   tabIndex={0}
-                  className="flex-1 text-left p-4 cursor-pointer"
+                  className="min-w-0 flex-1 text-left p-2 sm:p-4 cursor-pointer"
                   onClick={() => {
                     const opening = !isExpanded;
                     setExpandedId(opening ? getOrderKey(order) : null);
