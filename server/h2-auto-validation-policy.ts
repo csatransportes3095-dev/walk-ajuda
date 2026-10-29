@@ -24,3 +24,11 @@ export function invalidH2AutoPhoneStageAnswer(stage: string, answer: string): bo
   return (stage === "customer_phone" || stage === "referrals_phone" || stage === "referral_phone") &&
     !validH2AutoPhone11(answer);
 }
+
+/** Navigation takes priority over phone format validation, never over a block. */
+export function h2AutoNavigationCommand(answer: string): "home" | "back" | null {
+  const normalized=answer.trim().toLowerCase();
+  if (normalized==="menu" || normalized==="inicio" || normalized==="início" || normalized==="manu") return "home";
+  if (normalized==="0" || normalized==="voltar") return "back";
+  return null;
+}
