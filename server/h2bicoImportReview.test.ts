@@ -4,6 +4,7 @@ import {shouldPreselectH2BicoPhoto,formatMissingH2BicoCpfs} from "../client/src/
 const base={alreadyExists:false,validCpf:true,name:"MARIA SILVA",confidence:93,cpfSuggestion:null,whitePhotoCrop:{x:100,y:300,width:180,height:225},warnings:["Bordas da foto pouco visíveis. Confira o enquadramento antes de salvar."]};
 describe("H2BICO safe automatic checkbox and copy",()=>{
  it("auto-selects valid new white-background photo, without auto-saving",()=>expect(shouldPreselectH2BicoPhoto(base)).toBe(true));
+ it("permite selecionar CPF valido mesmo sem nome identificado",()=>expect(shouldPreselectH2BicoPhoto({...base,name:""})).toBe(true));
  it("accepts a valid OCR crop when face-to-CPF matching is unavailable",()=>expect(shouldPreselectH2BicoPhoto({...base,whitePhotoCrop:null,crop:{x:120,y:240,size:180}})).toBe(true));
  it("never selects existing or invalid or missing photo",()=>{
   expect(shouldPreselectH2BicoPhoto({...base,alreadyExists:true})).toBe(false);

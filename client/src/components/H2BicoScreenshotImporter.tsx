@@ -9,6 +9,7 @@ import { matchCpfAvatarFaces, type CpfAnchor } from "@/lib/h2bicoCpfAvatarMatche
 import { toast } from "sonner";
 import { trpc } from "@/lib/trpc";
 import { isValidCpf } from "@/lib/h2bicoCpfExtractor";
+import { persistH2BicoPrintSession, restoreH2BicoPrintSession } from "@/lib/h2bicoImportSession";
 import { resolveH2BicoCardName } from "@/lib/h2bicoCardName";
 import { applyStableAvatarResult, isValidAvatarReplacement, keepPreviewOnFailedPreset } from "@/lib/h2bicoStablePreview";
 import { shouldPreselectH2BicoPhoto } from "@/lib/h2bicoImportReview";
@@ -82,6 +83,9 @@ function CropPreview({item}:{item:Item}){
 export default function H2BicoScreenshotImporter(){
   const input=useRef<HTMLInputElement>(null);
   const [items,setItems]=useState<Item[]>([]);
+  const [restored,setRestored]=useState(false);
+  const [persistError,setPersistError]=useState(false);
+  const [serverExisting,setServerExisting]=useState<Set<string>>(new Set());
   const [busy,setBusy]=useState(false);
   const [saving,setSaving]=useState(false);
   const [status,setStatus]=useState("");
@@ -160,6 +164,49 @@ export default function H2BicoScreenshotImporter(){
   const avatarCache=useRef(new Map<string,Promise<AvatarCandidate[]>>());
   const itemsRef=useRef<Item[]>([]);
   useEffect(()=>{itemsRef.current=items;},[items]);
+  useEffect(()=>{
+    let active=true;
+    void restoreH2BicoPrintSession<Item>().then(snapshot=>{
+      if(!active){for(const url of snapshot.urls)URL.revokeObjectURL(url);return;}
+      for(const url of snapshot.urls)photoUrlsRef.current.add(url);
+      setItems(current=>[...snapshot.items,...current].filter((item,index,rows)=>rows.findIndex(other=>other.id===item.id)===index));
+      if(snapshot.items.length)toast.success(snapshot.items.length+" registro(s) da sessão recuperado(s).");
+    }).catch(()=>{if(active){setPersistError(true);toast.error("Falha ao recuperar a sessão local do H2BICO.");}}).finally(()=>{if(active)setRestored(true);});
+    return ()=>{active=false;};
+  },[]);
+  useEffect(()=>{
+    if(!restored)return;
+    const timer=window.setTimeout(()=>{
+      void persistH2BicoPrintSession(items).then(()=>setPersistError(false)).catch(()=>{
+        setPersistError(true);
+        toast.error("Rascunho local não foi salvo. Não atualize a página.");
+      });
+    },125);
+    return ()=>window.clearTimeout(timer);
+  },[items,restored]);
+  // Esta rota e uma consulta tRPC, nao uma mutation.
+  const checkExisting=utils.h2bico.checkExtractedCpfs;
+  useEffect(()=>{
+    const cpfs=[...new Set(items.map(row=>digits(row.cpf)).filter(isValidCpf))];
+    if(!cpfs.length){setServerExisting(new Set());return;}
+    let active=true;
+    const timer=window.setTimeout(async()=>{
+      try{
+        const found=new Set<string>();
+        for(let i=0;i<cpfs.length;i+=300){
+          const result=await checkExisting.fetch({cpfs:cpfs.slice(i,i+300)});
+          for(const cpf of result.existing)found.add(cpf);
+        }
+        if(active){
+          setServerExisting(found);
+          setItems(current=>current.some(row=>row.selected&&found.has(digits(row.cpf)))
+            ?current.map(row=>found.has(digits(row.cpf))?{...row,selected:false}:row)
+            :current);
+        }
+      }catch{if(active)toast.warning("Não foi possível verificar CPFs duplicados. O servidor continuará protegendo o salvamento.");}
+    },400);
+    return ()=>{active=false;window.clearTimeout(timer);};
+  },[items.map(row=>row.cpf).join("|")]);
   const detectAvatar=async(item:Item,peopleInPrint?:Item[])=>{
     const token=(scanTokens.current.get(item.id)||0)+1;
     scanTokens.current.set(item.id,token);
@@ -470,6 +517,7 @@ export default function H2BicoScreenshotImporter(){
     itemsRef.current=[];
     setEditingPhotoId(null);
     setItems([]);
+    void persistH2BicoPrintSession([]).catch(()=>setPersistError(true));
     setProcessedCount(0);
     nextPrintNumber.current=0;
   };
@@ -481,12 +529,13 @@ export default function H2BicoScreenshotImporter(){
     try{
       // A validacao final e feita de novo no servidor, inclusive duplicidade.
       for(const item of items.filter(row=>row.selected&&!row.saved)){
-        if(!isValidCpf(item.cpf)||item.name.trim().split(/\s+/).length<2){
-          update(item.id,{error:"Nome completo ou CPF inválido.",selected:false});errors++;continue;
+        if(!isValidCpf(item.cpf)){
+          update(item.id,{error:"CPF inválido.",selected:false});errors++;continue;
         }
         setStatus("Salvando "+item.name+"...");
         try{
           // Both legacy square and automatic white crops are already bounded to the portrait preview.
+          if(serverExisting.has(digits(item.cpf)))throw new Error("CPF já cadastrado no H2BICO.");
           if(item.avatarBusy)throw new Error("Aguarde a análise facial.");
           if(item.cropMode==="manual"&&(!item.manualCrop||!validateManualPhotoCrop(item.manualCrop,item.width,item.height)))throw new Error("Recorte manual inválido.");
           const base64=await cropPhoto(item);
@@ -516,11 +565,8 @@ export default function H2BicoScreenshotImporter(){
       toast.info("Concluído: "+imported+" novo(s), "+duplicates+" duplicado(s), "+errors+" erro(s)"+(earErrors?" • "+earErrors+" marcação(ões) EAR pendente(s).":"."));
     }finally{savingRef.current=false;setSaving(false);setStatus("");}
   };
-  const eligible=(item:Item)=>!item.existing&&!item.saved&&isValidCpf(item.cpf)&&
-    item.name.trim().split(/\s+/).length>=2&&item.confidence!==undefined&&item.confidence>=70&&
-    !item.cpfSuggestion&&!item.warnings.some(w=>/CONFIRA O N[UÚ]MERO|CPF REPETIDO|LEITURA DIVERGENTE/i.test(w))&&
-    (item.cropMode==="avatar"&&!!item.avatarCrop&&item.matchedCpf===true||item.cropMode==="white"&&!!item.whiteCrop||item.cropMode==="manual"&&!!item.manualCrop&&validateManualPhotoCrop(item.manualCrop,item.width,item.height));
-  const selected=items.filter(item=>item.selected&&!item.saved&&!item.existing);
+  const eligible=(item:Item)=>!item.existing&&!item.saved&&!serverExisting.has(digits(item.cpf))&&isValidCpf(item.cpf);
+  const selected=items.filter(item=>item.selected&&!item.saved&&!item.existing&&!serverExisting.has(digits(item.cpf))&&isValidCpf(item.cpf));
   const selectable=items.filter(eligible);
   const selectAll=()=>setItems(current=>current.map(item=>({...item,selected:eligible(item)})));
   const deselectAll=()=>setItems(current=>current.map(item=>({...item,selected:false})));
@@ -552,6 +598,7 @@ export default function H2BicoScreenshotImporter(){
     {items.length>0&&<>
       {pastedPhoto&&<H2BicoManualCropDialog open={true} onOpenChange={open=>{if(!open)setPastedPhoto(null);}} imageUrl={pastedPhoto.url} imageWidth={pastedPhoto.width} imageHeight={pastedPhoto.height} onConfirm={crop=>{const pending=pastedPhoto;if(!pending)return;scanTokens.current.set(pending.id,(scanTokens.current.get(pending.id)||0)+1);update(pending.id,{photo:pending.url,source:"print-colado-foto",width:pending.width,height:pending.height,manualCrop:crop,cropMode:"manual",avatarBusy:false,matchedCpf:false,selected:false,avatarCrop:null,whiteCrop:null,error:undefined});setPastedPhoto(null);toast.success("Somente a foto deste card mudou; CPF, nome e EAR preservados.");}}/>}
       {items.filter(item=>item.id===editingPhotoId).map(item=><H2BicoManualCropDialog key={item.id} open={true} onOpenChange={open=>{if(!open)setEditingPhotoId(null);}} imageUrl={item.photo} imageWidth={item.width} imageHeight={item.height} initialCrop={item.manualCrop||item.avatarCrop||item.whiteCrop||portraitFromLegacySquare(item.width,item.height,item.crop)} onConfirm={crop=>{scanTokens.current.set(item.id,(scanTokens.current.get(item.id)||0)+1);update(item.id,{manualCrop:crop,cropMode:"manual",avatarBusy:false,selected:false,error:undefined,avatarError:undefined});toast.success("Recorte atualizado. Somente a foto foi alterada.");}}/>)}
+      {persistError&&<p role="alert" className="text-xs font-bold text-red-300">Sessão local não armazenada. Não atualize até resolver a falha de armazenamento.</p>}
       <div className="flex flex-wrap items-center justify-between gap-2">
         <div className="text-sm font-bold">{items.length} identificado(s) • {items.filter(x=>x.existing).length} já cadastrado(s) • {selected.length} selecionado(s)</div>
         <div className="flex gap-2">
@@ -622,9 +669,9 @@ export default function H2BicoScreenshotImporter(){
                   <p className="text-[11px] text-amber-200">Consultando o cadastro já existente para gravar o marcador.</p>}
               </div>
               <label className="inline-flex items-center gap-2 text-sm">
-                <input type="checkbox" checked={item.selected} disabled={saving||item.saved||item.existing||!isValidCpf(item.cpf)||item.name.trim().split(/\s+/).length<2}
+                <input type="checkbox" checked={item.selected} disabled={saving||item.saved||item.existing||serverExisting.has(digits(item.cpf))||!isValidCpf(item.cpf)}
                   onChange={e=>update(item.id,{selected:e.target.checked})}/>
-                {item.saved?"SALVO":item.existing?"CPF JÁ CADASTRADO":isValidCpf(item.cpf)?"Conferido — salvar":"CPF INVÁLIDO"}
+                {item.saved?"SALVO":item.existing||serverExisting.has(digits(item.cpf))?"CPF JÁ CADASTRADO":isValidCpf(item.cpf)?"CPF VÁLIDO — PODE SALVAR SEM NOME":"CPF INVÁLIDO"}
               </label>
               {item.warnings.some(w=>w.includes("CONFIRA O NUMERO"))&&<p className="text-xs font-bold text-amber-200">OCR apresentou leituras diferentes. Verifique o CPF e marque manualmente antes de salvar.</p>}
               {item.warnings.map((w,i)=><p key={i} className="text-xs text-amber-200">{w}</p>)}
