@@ -454,7 +454,7 @@ export default function OrderH2AdsBrowserShortcut({ registrationId, subOrderInde
       ? `A instância já está em ${deliveredGroup.name}.`
       : `Mover esta instância para ${deliveredGroup.name}.`;
 
-  return <span className="flex w-full max-w-full flex-wrap items-center gap-1.5 rounded-xl border border-cyan-500/35 bg-cyan-500/10 p-1.5 sm:gap-2 sm:p-2 xl:gap-2.5" title={statusTitle} onClick={event => event.stopPropagation()}>
+  return <span className="flex w-full min-w-0 max-w-full flex-wrap items-center gap-1.5 rounded-xl border border-cyan-500/35 bg-cyan-500/10 p-1.5 max-sm:[&>button]:min-w-0 max-sm:[&>button]:max-w-full max-sm:[&>button]:whitespace-normal max-sm:[&>button]:break-words max-sm:[&>select]:min-w-0 max-sm:[&>select]:w-full sm:gap-2 sm:p-2 xl:gap-2.5" title={statusTitle} onClick={event => event.stopPropagation()}>
     <span className="rounded-lg border border-cyan-400/20 bg-cyan-400/10 px-2 py-1.5 text-[10px] font-black uppercase tracking-wide text-cyan-200 sm:px-2.5 sm:text-[11px] lg:text-xs">H2ADS</span>
     {linkedIds.length > 1 && <select aria-label="Selecionar instância H2ADS" value={activeInstanceId ?? ""} onChange={event => { event.stopPropagation(); setSelectedInstanceId(Number(event.target.value)); setEditingNote(false); }} className="h-8 min-w-[120px] max-w-full rounded-lg border border-cyan-400/30 bg-slate-950 px-2 text-[10px] font-bold text-white sm:h-9 sm:min-w-[140px] sm:text-[11px] lg:h-10 lg:text-xs">{linkedIds.map(id => { const item = (dashboard?.instances ?? []).find(instance => instance.id === id); return <option key={id} value={id}>{item?.name || `Instância #${id}`}</option>; })}</select>}
     {linkedInstance && <select
