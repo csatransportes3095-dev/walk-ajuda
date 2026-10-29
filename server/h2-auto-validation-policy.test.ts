@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { validH2AutoPhone11, allowsH2AutoMenuReset, invalidH2AutoPhoneStageAnswer } from "./h2-auto-validation-policy";
+import { validH2AutoPhone11, allowsH2AutoMenuReset, invalidH2AutoPhoneStageAnswer, h2AutoNavigationCommand } from "./h2-auto-validation-policy";
 
 describe("H2 Auto strict 11-digit WhatsApp phone validation", () => {
   it("accepts mobile phone numbers with a two-digit DDD", () => {
@@ -34,5 +34,19 @@ describe("H2 Auto phone challenge cannot be bypassed", () => {
     expect(allowsH2AutoMenuReset("customer_code", "MENU")).toBe(true);
     expect(allowsH2AutoMenuReset("blocked", "MENU")).toBe(false);
     expect(allowsH2AutoMenuReset("customer", "MENU")).toBe(false);
+  });
+});
+
+
+describe("MENU e 0 são comandos de navegação, não resposta de telefone", () => {
+  it("MENU retorna ao início em qualquer etapa ainda não bloqueada", () => {
+    for (const command of ["MENU", "menu", "Início", "inicio", "manu"])
+      expect(h2AutoNavigationCommand(command)).toBe("home");
+  });
+  it("0 retorna à etapa anterior; outros textos não são navegação", () => {
+    expect(h2AutoNavigationCommand("0")).toBe("back");
+    expect(h2AutoNavigationCommand("voltar")).toBe("back");
+    expect(h2AutoNavigationCommand("11987654321")).toBeNull();
+    expect(h2AutoNavigationCommand("texto qualquer")).toBeNull();
   });
 });
