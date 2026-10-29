@@ -382,6 +382,26 @@ export const h2AutoAdminRouter = router({
         });
       return { success: true };
     }),
+  saveConfirmation: adminProcedure
+    .input(z.object({
+      id: z.string().regex(/^[a-f0-9]{24}$/),
+      confirmation: confirmationSchema,
+      expectedRevision: z.number().int().min(0),
+    }))
+    .mutation(async ({ input }) => {
+      await ensure();
+      const db = await getDb();
+      if (!db) throw new TRPCError({ code: "INTERNAL_SERVER_ERROR", message: "Banco indisponível." });
+      const changed: any = await db.execute(sql`UPDATE h2_auto_devices
+        SET config_json=JSON_SET(config_json, '$.confirmation', CAST(${JSON.stringify(input.confirmation)} AS JSON)),
+            revision=revision+1
+        WHERE id=${input.id} AND revision=${input.expectedRevision}`);
+      if (!changed[0]?.affectedRows) throw new TRPCError({
+        code: "CONFLICT",
+        message: "O aparelho recebeu outras alterações. Atualize o ADM antes de salvar para evitar conflitos.",
+      });
+      return { success: true, revision: input.expectedRevision + 1 };
+    }),
   saveIdentificationValidity: adminProcedure
     .input(z.object({ id: z.string().regex(/^[a-f0-9]{24}$/), hours: z.number().int().min(1).max(720) }))
     .mutation(async ({input})=>{
