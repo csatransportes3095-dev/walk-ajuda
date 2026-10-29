@@ -235,7 +235,7 @@ function ReferralCountButton({ phone, name }: { phone: string; name: string }) {
         <button
           onClick={(e) => {
             e.stopPropagation();
-            setLocation(`/admin/referrals?phone=${phone.replace(/\D/g, '')}`);
+            setLocation(`/admin/referrals?phone=${phone.replace(/\D/g, '')}&tab=indicated`);
           }}
           className={`flex-1 text-[10px] px-2 py-1 rounded bg-green-500/20 hover:bg-green-500/30 text-green-400 transition-colors ${!hasReferrals ? 'opacity-50 cursor-not-allowed' : ''}`}
           disabled={!hasReferrals}
@@ -380,7 +380,7 @@ function LoginHistoryColumn({ phone, formatDate }: { phone: string; formatDate: 
 export default function AdminCustomers() {
   const profilePhotoUtils = trpc.useUtils();
   const [customerSaveGate] = useState(createCustomerSaveGate);
-  const [searchTerm, setSearchTerm] = useState("");
+  const [searchTerm, setSearchTerm] = useState(() => new URLSearchParams(window.location.search).get("phone") || "");
   const [editingId, setEditingId] = useState<number | null>(null);
   const [editName, setEditName] = useState("");
   const [editPhone, setEditPhone] = useState("");
