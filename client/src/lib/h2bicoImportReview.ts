@@ -20,7 +20,6 @@ export function shouldPreselectH2BicoPhoto(row:PhotoReviewCandidate):boolean{
   const fallback=row.crop;
   if(row.alreadyExists||!row.validCpf||row.cpfSuggestion)return false;
   if(!Number.isFinite(row.confidence)||row.confidence<70)return false;
-  if(row.name.trim().length<6||row.name.trim().split(/\s+/).length<2)return false;
   if(crop){
     if(![crop.x,crop.y,crop.width,crop.height].every(Number.isFinite)||
         crop.x<0||crop.y<0||crop.width<48||crop.height<60)return false;
