@@ -5811,6 +5811,16 @@ export default function AdminOrders() {
                             </div>
                           )}
                         </div>
+                        <div className="flex flex-wrap items-center justify-center gap-2" onClick={e => e.stopPropagation()}>
+                          <label className="inline-flex cursor-pointer items-center gap-1 rounded-lg border border-cyan-400/40 bg-cyan-500/15 px-3 py-1.5 text-xs font-bold text-cyan-100 hover:bg-cyan-500/25">
+                            <Camera className="h-3.5 w-3.5" />
+                            {uploadingPhotoOrderId === getOrderKey(order) ? "ENVIANDO..." : "TROCAR FOTO"}
+                            <input type="file" accept="image/*" className="hidden" disabled={uploadingPhotoOrderId === getOrderKey(order)} onChange={e => { const file = e.target.files?.[0]; if (file) handlePhotoUpload(getOrderKey(order), order.phone, file); e.target.value = ""; }} />
+                          </label>
+                          <button type="button" disabled={!order.customerProfilePhotoUrl} onClick={e => { e.stopPropagation(); if (order.customerProfilePhotoUrl) setPhotoLightboxUrl(order.customerProfilePhotoUrl); }} className="inline-flex items-center gap-1 rounded-lg border border-violet-400/40 bg-violet-500/15 px-3 py-1.5 text-xs font-bold text-violet-100 hover:bg-violet-500/25 disabled:cursor-not-allowed disabled:opacity-40">
+                            <ZoomIn className="h-3.5 w-3.5" /> EXPANDIR
+                          </button>
+                        </div>
 
                       </div>
                       <div className="w-full min-w-0 flex-1">
