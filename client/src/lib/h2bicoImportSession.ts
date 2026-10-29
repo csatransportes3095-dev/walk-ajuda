@@ -81,7 +81,7 @@ export async function restoreH2BicoPrintSession<T extends PendingRow>(): Promise
     for (const row of snapshot.rows) {
       const url = byKey.get(row.photoKey);
       if (!url || !row.data || typeof row.data !== "object") continue;
-      const item = { ...(row.data as object), photo: url, avatarBusy: false, avatarOptions: undefined } as T;
+      const item = { ...(row.data as object), photo: url, avatarBusy: false, avatarOptions: undefined } as unknown as T;
       if (typeof item.id !== "string" || typeof item.cpf !== "string") continue;
       items.push(item);
     }
