@@ -130,7 +130,13 @@ export default function OrderPhotoConfirmation({ registrationId, subOrderIndex, 
       slotTime: record?.appointment?.slotTime,
       link,
     });
-    window.open(buildWhatsappMessageUrl(customerPhone, msg), "_blank", "noopener,noreferrer");
+    const digits = customerPhone.replace(/\D/g, "");
+    const local = digits.startsWith("55") && (digits.length === 12 || digits.length === 13) ? digits.slice(2) : digits;
+    if (local.length !== 10 && local.length !== 11) {
+      toast.error("Telefone do cliente inválido. Confira o DDD antes de enviar.");
+      return;
+    }
+    window.open(buildWhatsappMessageUrl(`55${local}`, msg), "_blank", "noopener,noreferrer");
   }
 
   const modal = open ? createPortal(
