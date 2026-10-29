@@ -8,6 +8,7 @@ import { getDb } from "./db";
 import { listActiveValidationBlocks, releaseValidationBlock, releaseAllValidationBlocks } from "./h2-auto-validation-blocks";
 import { changeSilencedPhone, manualSilencedPhones } from "./h2-auto-silenced-contacts";
 import { h2AutoTreeSchema, H2_AUTO_TREE_DEFAULT } from "../shared/h2AutoTree";
+import { h2AutoConfirmationSchema as confirmationSchema } from "../shared/h2AutoConfirmation";
 import {
   decodeH2AutoDiagnostics,
   h2AutoDiagnosticsSchema,
@@ -63,16 +64,6 @@ const mediaSchema = z.object({
     .default("📎 Recebemos sua mídia. Escreva sua dúvida ou digite MENU."),
   cooldownSeconds: z.number().int().min(15).max(3600).default(120),
   maxAudioSeconds: z.number().int().min(5).max(120).default(30),
-});
-const confirmationSchema = z.object({
-  identificationWelcome: z.string().max(2000).default("👋 Olá! Seja bem-vindo!\n\n🔐 Para sua segurança, precisamos identificar se você já é nosso cliente.\n\n1️⃣ SIM, JÁ SOU CLIENTE\n2️⃣ NÃO SOU CLIENTE\n3️⃣ CONSULTAR MINHAS INDICAÇÕES\n\n⌨️ Digite 1, 2 ou 3.\n⬅️ MENU para início.\n━━━━━━━━━━━━━━━━\n🛡️ EQUIPE H2 COLOMBIANO 🇨🇴"),
-  existingCustomerPrompt: z.string().max(2000).default("✅ JÁ SOU CLIENTE\n\n📱 Informe o telefone cadastrado no H2 Colombiano, com DDD, para confirmar sua identidade.\n\n⌨️ Envie 11 números com DDD.\n\n⬅️ Digite 0 para voltar.\n🏠 Digite MENU para início."),
-  phonePrompt: z.string().max(2000).default("💰 *MINHAS INDICAÇÕES*\n\nPara proteger seus dados, confirme sua identidade.\nInforme o telefone cadastrado com DDD.\n\nDigite 0 para voltar."),
-  phoneInvalid: z.string().max(600).default("Informe um telefone válido com DDD, somente números. Digite 0 para voltar."),
-  phoneNotFound: z.string().max(1000).default("Não encontramos cadastro com esse telefone."),
-  codeSent: z.string().max(1500).default("Código enviado ao e-mail cadastrado. Informe os 6 números recebidos."),
-  codePrompt: z.string().max(600).default("Informe os 6 números recebidos no e-mail. Digite 0 para voltar."),
-  codeInvalid: z.string().max(600).default("Código inválido ou expirado. Digite 0 para voltar."),
 });
 const configSchema = z.object({
   tree: h2AutoTreeSchema.optional(),
