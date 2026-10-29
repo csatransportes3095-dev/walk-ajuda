@@ -40,6 +40,6 @@ jobs:
       - name: Compile validation backend
         run: pnpm exec esbuild server/h2-auto-access.ts --bundle --platform=node --packages=external --format=esm --outfile=/tmp/h2-auto-access.js
       - name: Phone-number policy tests
-        run: pnpm exec vitest run server/h2-auto-validation-policy.test.ts
+        run: pnpm exec vitest run server/h2-auto-validation-policy.test.ts server/h2-auto-phone-attempt-message.test.ts
       - name: Build web and server
         run: pnpm build
