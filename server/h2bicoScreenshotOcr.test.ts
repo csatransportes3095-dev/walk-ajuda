@@ -84,7 +84,8 @@ describe("H2BICO: extracao de pessoas em prints",()=>{
   expect(page).toContain("<H2BicoScreenshotImporter/>");
   expect(server).toContain('importScreenshotRecord: adminProcedure.input');
   expect(server).toContain('SELECT id FROM h2bico_records WHERE cpf=');
-  expect(server).toContain('VALUES(${name},${input.cpf},${url}');
+  expect(server).toContain('VALUES(${name || "SEM NOME"},${input.cpf},${url}');
+   expect(server).toContain('if(!isValidCpf(input.cpf)');
   expect(component).toContain('SALVAR ');
   expect(component).toContain('selected&&!row.saved');
   expect(component).toContain('await cropPhoto(item)');
