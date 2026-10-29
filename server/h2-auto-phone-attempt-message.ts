@@ -20,8 +20,8 @@ export function h2AutoPhoneFailureMessage(
       ? ["Não foi possível localizar", "ou autorizar o indicador", "com esse telefone."]
       : ["Não foi possível localizar", "ou confirmar um cadastro ativo", "com esse telefone."];
 
-  const key = reason === "formato" ? (kind === "indicador" ? "referrerPhoneInvalid" : kind === "indicacoes" ? "referralsPhoneInvalid" : "phoneInvalid") : (kind === "indicador" ? "referrerNotFound" : kind === "indicacoes" ? "referralsPhoneNotFound" : "phoneNotFound");
-  const cause = templates?.[key].trim() ? templates[key].split("\n") : defaultCause;
+  const key: keyof H2AutoConfirmation = reason === "formato" ? (kind === "indicador" ? "referrerPhoneInvalid" : kind === "indicacoes" ? "referralsPhoneInvalid" : "phoneInvalid") : (kind === "indicador" ? "referrerNotFound" : kind === "indicacoes" ? "referralsPhoneNotFound" : "phoneNotFound");
+  const cause = templates?.[key]?.trim() ? templates[key].split("\n") : defaultCause;
 
   if (remaining === 0) {
     return [
