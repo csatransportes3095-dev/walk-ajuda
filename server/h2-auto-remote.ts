@@ -65,6 +65,8 @@ const mediaSchema = z.object({
   maxAudioSeconds: z.number().int().min(5).max(120).default(30),
 });
 const confirmationSchema = z.object({
+  identificationWelcome: z.string().max(2000).default("👋 Olá! Seja bem-vindo!\n\n🔐 Para sua segurança, precisamos identificar se você já é nosso cliente.\n\n1️⃣ SIM, JÁ SOU CLIENTE\n2️⃣ NÃO SOU CLIENTE\n3️⃣ CONSULTAR MINHAS INDICAÇÕES\n\n⌨️ Digite 1, 2 ou 3.\n⬅️ MENU para início.\n━━━━━━━━━━━━━━━━\n🛡️ EQUIPE H2 COLOMBIANO 🇨🇴"),
+  existingCustomerPrompt: z.string().max(2000).default("✅ JÁ SOU CLIENTE\n\n📱 Informe o telefone cadastrado no H2 Colombiano, com DDD, para confirmar sua identidade.\n\n⌨️ Envie 11 números com DDD.\n\n⬅️ Digite 0 para voltar.\n🏠 Digite MENU para início."),
   phonePrompt: z.string().max(2000).default("💰 *MINHAS INDICAÇÕES*\n\nPara proteger seus dados, confirme sua identidade.\nInforme o telefone cadastrado com DDD.\n\nDigite 0 para voltar."),
   phoneInvalid: z.string().max(600).default("Informe um telefone válido com DDD, somente números. Digite 0 para voltar."),
   phoneNotFound: z.string().max(1000).default("Não encontramos cadastro com esse telefone."),
