@@ -28,6 +28,8 @@ const Box = ({ children }: { children: React.ReactNode }) => (
 );
 
 const confirmationDefaults = {
+  identificationWelcome: "👋 Olá! Seja bem-vindo!\n\n🔐 Para sua segurança, precisamos identificar se você já é nosso cliente.\n\n1️⃣ SIM, JÁ SOU CLIENTE\n2️⃣ NÃO SOU CLIENTE\n3️⃣ CONSULTAR MINHAS INDICAÇÕES\n\n⌨️ Digite 1, 2 ou 3.\n⬅️ MENU para início.\n━━━━━━━━━━━━━━━━\n🛡️ EQUIPE H2 COLOMBIANO 🇨🇴",
+  existingCustomerPrompt: "✅ JÁ SOU CLIENTE\n\n📱 Informe o telefone cadastrado no H2 Colombiano, com DDD, para confirmar sua identidade.\n\n⌨️ Envie 11 números com DDD.\n\n⬅️ Digite 0 para voltar.\n🏠 Digite MENU para início.",
   phonePrompt: "💰 *MINHAS INDICAÇÕES*\n\nPara proteger seus dados, confirme sua identidade.\nInforme o telefone cadastrado com DDD.\n\nDigite 0 para voltar.",
   phoneInvalid: "Informe um telefone válido com DDD, somente números. Digite 0 para voltar.",
   phoneNotFound: "Não encontramos cadastro com esse telefone.",
@@ -609,6 +611,8 @@ export default function AdminH2Auto() {
                     Estes campos já aparecem preenchidos com os textos atuais do H2 AUTO. Edite e salve para o APK usar as novas mensagens nas etapas de telefone e código por e-mail.
                   </p>
                   {([
+                    ["identificationWelcome", "Mensagem inicial — SIM / NÃO / CONSULTAR INDICAÇÕES"],
+                    ["existingCustomerPrompt", "Resposta ao digitar 1 — JÁ SOU CLIENTE"],
                     ["phonePrompt", "Pedido do telefone / confirmação de identidade"],
                     ["phoneInvalid", "Telefone inválido"],
                     ["phoneNotFound", "Telefone não encontrado"],
