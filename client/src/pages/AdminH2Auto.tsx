@@ -605,10 +605,10 @@ export default function AdminH2Auto() {
                 </label>
                 <div className="col-span-full rounded-xl border border-violet-400/30 bg-violet-950/20 p-3 space-y-3">
                   <h4 className="font-black text-violet-200">
-                    TEXTOS DE CONFIRMAÇÃO — H2 AUTO
+                    TODOS OS TEXTOS DE CONFIRMAÇÃO — H2 AUTO
                   </h4>
                   <p className="text-xs text-slate-300">
-                    Estes campos já aparecem preenchidos com os textos atuais do H2 AUTO. Edite e salve para o APK usar as novas mensagens nas etapas de telefone e código por e-mail.
+                    Formulário editável das respostas de identificação, telefone e código por e-mail. Personalize cada mensagem e clique em SALVAR TEXTOS abaixo.
                   </p>
                   {([
                     ["identificationWelcome", "Mensagem inicial — SIM / NÃO / CONSULTAR INDICAÇÕES"],
@@ -631,6 +631,10 @@ export default function AdminH2Auto() {
                       />
                     </label>
                   ))}
+                  <button type="button" disabled={save.isPending || needsRefresh} onClick={saveGeneral} className="w-full rounded-xl border border-emerald-400/60 bg-emerald-700 px-4 py-3 text-sm font-black text-white hover:bg-emerald-600 disabled:opacity-50">
+                    {save.isPending ? "SALVANDO..." : "💾 SALVAR TEXTOS DE CONFIRMAÇÃO"}
+                  </button>
+                  <p className="text-xs text-slate-400">As alterações são salvas nas configurações do dispositivo H2 Auto selecionado.</p>
                 </div>
                 <div className="col-span-full rounded-xl border border-cyan-400/30 bg-cyan-950/20 p-3 space-y-3">
                   <h4 className="font-black text-cyan-300">
