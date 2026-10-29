@@ -23,6 +23,7 @@ export default function AdminReferrals() {
       const cleanPhone = phoneParam.replace(/\D/g, '');
       setSearchPhone(cleanPhone);
       setSelectedPhone(cleanPhone);
+      if (params.get("tab") === "indicated") setActiveTab("indicated");
     }
   }, []);
 
@@ -293,6 +294,7 @@ export default function AdminReferrals() {
                                     <p className="text-gray-400 text-sm">{customer.phone}</p>
                                   </div>
                                 </div>
+                                <button type="button" onClick={() => window.location.assign(`/admin/customers?phone=${encodeURIComponent(customer.phone)}`)} className="mt-2 rounded-lg border border-cyan-500/40 bg-cyan-500/15 px-3 py-1.5 text-xs font-bold text-cyan-200 hover:bg-cyan-500/25">ABRIR CADASTRO</button>
                                 <div className="flex items-center gap-2 mt-2">
                                   <button
                                     onClick={handleCopyPhone}
