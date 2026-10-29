@@ -17,7 +17,7 @@ describe("H2 AUTO - 3 tentativas de telefone por conversa", () => {
     const second=h2AutoPhoneFailureMessage("indicador","nao_confirmado",2);
     expect(second).toContain("*INDICADOR NÃO VALIDADO*");
     expect(second).toContain("*TENTATIVA 2 DE 3*");
-    expect(second).toContain("*RESTAM 1 TENTATIVA*");
+    expect(second).toContain("*RESTA 1 TENTATIVA*");
     expect(second).toContain("indicador");
   });
   it("na terceira informa suspensão e encaminha ao ADM", () => {
