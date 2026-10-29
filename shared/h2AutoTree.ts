@@ -4,7 +4,7 @@ import { z } from "zod";
  * Wire format supported by H2 AUTO Android 1.21+.
  * Keep field names and limits aligned with android-overrides/FlowTree.java.
  */
-export const H2_AUTO_DEFAULT_FOOTER = "⌨️ *Digite o número desejado.*\n🔙 *0* ou *MENU* para voltar ao início.";
+export const H2_AUTO_DEFAULT_FOOTER = "⌨️ *Digite o número desejado.*\n🔙 *0* para voltar.\n🏠 *MENU* para início.";
 
 const idSchema = z.string().regex(/^[a-z][a-z0-9_-]{0,39}$/, "Use letras minúsculas, números, - ou _.");
 const answerSchema = z.object({
