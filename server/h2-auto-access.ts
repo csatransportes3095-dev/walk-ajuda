@@ -391,6 +391,8 @@ export function registerH2AutoAccessRoutes(app: Express): void {
           return respond(res,200,await phoneError("referral_phone","indicador","formato"));
         if (await limited("referral:" + sessionId, 30, hour, now))
           return respond(res, 200, { state: "referral_phone", message: "⏳ Muitas tentativas. Aguarde e tente novamente." });
+        // A service outage is not a wrong indicator and must not consume a chance.
+        if (!(await getDb())) throw Error("db_unavailable");
         const found = await resolveReferralDeclaration({ customerPhone: "", referrerPhone: input });
         if (found.issue || !found.linkedReferrer)
           return respond(res,200,await phoneError("referral_phone","indicador","nao_confirmado"));
