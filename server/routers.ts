@@ -9575,6 +9575,59 @@ export const appRouter = router({
 
   // Rastreamento de Indicacoes
   referrals: router({
+    // Comissão manual para indicado sem pedido. Independente do registro de pedidos.
+    listManualCommissions: adminProcedure
+      .input(z.object({ referrerPhone: z.string() }))
+      .query(async ({ input }) => {
+        const db = await (await import("./db")).getDb();
+        if (!db) throw new TRPCError({ code: "INTERNAL_SERVER_ERROR", message: "Banco indisponível." });
+        await db.execute(sql`CREATE TABLE IF NOT EXISTS referralManualCommissions (
+          id INT AUTO_INCREMENT PRIMARY KEY,
+          referrerPhone VARCHAR(20) NOT NULL,
+          referredCustomerId INT NOT NULL,
+          referredPhone VARCHAR(20) NOT NULL,
+          amountCents INT NOT NULL,
+          releaseStatus VARCHAR(20) NOT NULL DEFAULT 'a_liberar',
+          createdAt TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+          updatedAt TIMESTAMP DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP,
+          UNIQUE KEY unique_referral_manual (referrerPhone, referredCustomerId)
+        ) ENGINE=InnoDB`);
+        const phone = input.referrerPhone.replace(/\\D/g, "").slice(-11);
+        const rows: any = await db.execute(sql`SELECT id, referrerPhone, referredCustomerId, referredPhone, amountCents, releaseStatus, createdAt FROM referralManualCommissions WHERE RIGHT(referrerPhone,11)=${phone}`);
+        return rows[0] as any[];
+      }),
+    saveManualCommission: adminProcedure
+      .input(z.object({
+        referrerPhone: z.string(), referredCustomerId: z.number().int().positive(),
+        amountCents: z.number().int().positive().max(100000000),
+        releaseStatus: z.enum(["a_liberar","liberado"]),
+      }))
+      .mutation(async ({ input }) => {
+        const db = await (await import("./db")).getDb();
+        if (!db) throw new TRPCError({ code: "INTERNAL_SERVER_ERROR", message: "Banco indisponível." });
+        await db.execute(sql`CREATE TABLE IF NOT EXISTS referralManualCommissions (
+          id INT AUTO_INCREMENT PRIMARY KEY, referrerPhone VARCHAR(20) NOT NULL,
+          referredCustomerId INT NOT NULL, referredPhone VARCHAR(20) NOT NULL,
+          amountCents INT NOT NULL, releaseStatus VARCHAR(20) NOT NULL DEFAULT 'a_liberar',
+          createdAt TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+          updatedAt TIMESTAMP DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP,
+          UNIQUE KEY unique_referral_manual (referrerPhone, referredCustomerId)
+        ) ENGINE=InnoDB`);
+        const referrer = input.referrerPhone.replace(/\\D/g, "").slice(-11);
+        const rows: any = await db.execute(sql`SELECT id, phone, referredByPhone FROM customers WHERE id=${input.referredCustomerId} LIMIT 1`);
+        const customer = rows[0]?.[0];
+        if (!customer || String(customer.referredByPhone || "").replace(/\\D/g, "").slice(-11) !== referrer) {
+          throw new TRPCError({ code: "BAD_REQUEST", message: "O cliente não pertence às indicações deste indicador." });
+        }
+        const referredPhone = String(customer.phone || "").replace(/\\D/g, "").slice(-11);
+        const existing: any = await db.execute(sql`SELECT acp.id FROM accessCodePhones acp JOIN orderStatusHistory h ON h.registrationId=acp.id WHERE RIGHT(REGEXP_REPLACE(acp.phone,'[^0-9]',''),11)=${referredPhone} LIMIT 1`);
+        if (existing[0]?.length) throw new TRPCError({ code: "BAD_REQUEST", message: "Este indicado já possui pedido. Gerencie a comissão no painel de comissões." });
+        await db.execute(sql`INSERT INTO referralManualCommissions (referrerPhone,referredCustomerId,referredPhone,amountCents,releaseStatus)
+          VALUES (${referrer},${input.referredCustomerId},${referredPhone},${input.amountCents},${input.releaseStatus})
+          ON DUPLICATE KEY UPDATE amountCents=VALUES(amountCents),releaseStatus=VALUES(releaseStatus)`);
+        return { success: true };
+      }),
+
     getStats: adminProcedure
       .input(z.object({ phone: z.string() }))
       .query(async ({ input }) => {
