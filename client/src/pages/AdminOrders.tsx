@@ -5789,9 +5789,9 @@ export default function AdminOrders() {
                   onKeyDown={(e) => { if (e.key === 'Enter' || e.key === ' ') { const opening = !isExpanded; setExpandedId(opening ? getOrderKey(order) : null); if (opening) { if (!activeTab[getOrderKey(order)]) setTab(getOrderKey(order), 'status'); markAsViewed(getOrderKey(order)); } } }}
                 >
                   <div className="flex items-start justify-between gap-2">
-                    <div className="flex items-start gap-3 flex-1 min-w-0">
+                    <div className="flex w-full min-w-0 flex-1 flex-col items-stretch gap-3 sm:w-auto sm:flex-row sm:items-start">
                       {/* Avatar */}
-                      <div className="flex flex-col items-center gap-1.5 flex-shrink-0">
+                      <div className="flex flex-col items-center self-center gap-1.5 flex-shrink-0 sm:self-auto">
                         <div className="relative">
                           {order.isBlocked && (
                             <span
@@ -5803,7 +5803,7 @@ export default function AdminOrders() {
                             <img
                               src={order.customerProfilePhotoUrl}
                               alt={name}
-                              className={`w-14 h-14 sm:w-10 sm:h-10 rounded-full object-cover border ${order.isBlocked ? 'border-red-500/60' : 'border-border'}`}
+                              className={`w-20 h-20 sm:w-10 sm:h-10 rounded-full object-cover border ${order.isBlocked ? 'border-red-500/60' : 'border-border'}`}
                             />
                           ) : (
                             <div className={`w-14 h-14 sm:w-10 sm:h-10 rounded-full bg-primary/20 flex items-center justify-center border ${order.isBlocked ? 'border-red-500/60' : 'border-border'}`}>
@@ -5813,7 +5813,7 @@ export default function AdminOrders() {
                         </div>
 
                       </div>
-                      <div className="flex-1 min-w-0">
+                      <div className="w-full min-w-0 flex-1 sm:w-auto">
                         <div className="flex items-center gap-1.5 flex-wrap">
                           {order.customerNumber && (
                             <span className="flex-shrink-0 text-[11px] font-mono font-bold text-cyan-400/80 bg-cyan-500/10 border border-cyan-500/20 rounded px-1.5 py-0.5 leading-none" title="Número de cadastro">
