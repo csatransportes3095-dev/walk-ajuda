@@ -381,12 +381,14 @@ export function registerH2AutoAccessRoutes(app: Express): void {
       }
 
       if (s.stage === "referral_phone") {
+        if (normalized === "6") return respond(res, 200, { state: "human",
+          message: "👨‍💻 *ATENDIMENTO HUMANO*\n\nSua solicitação foi encaminhada.\n⏳ Tempo médio: 5 minutos.\n\n🏠 *MENU* para início." });
+        if (normalized === "nao" || normalized === "não" ||
+            normalized.includes("nao tenho") || normalized.includes("não tenho") ||
+            normalized.includes("sem indicador"))
+          return respond(res,200,{state:"referral_phone",message:noReferral + navigationFooter});
         if (invalidH2AutoPhoneStageAnswer(s.stage, input) || !normalizeCustomerPhone(input))
           return respond(res,200,await phoneError("referral_phone","indicador","formato"));
-        if (normalized === "6") return respond(res, 200, { state: "human",
-          message: "👨‍💻 *ATENDIMENTO HUMANO*\n\nSua solicitação foi encaminhada.\n⏳ Tempo médio: 5 minutos.\n\nDigite *MENU* para voltar." });
-        if (normalized === "nao" || normalized === "não" || normalized.includes("nao tenho") || normalized.includes("não tenho") || normalized.includes("sem indicador"))
-          return respond(res, 200, { state: "referral_phone", message: noReferral });
         if (await limited("referral:" + sessionId, 30, hour, now))
           return respond(res, 200, { state: "referral_phone", message: "⏳ Muitas tentativas. Aguarde e tente novamente." });
         const found = await resolveReferralDeclaration({ customerPhone: "", referrerPhone: input });
