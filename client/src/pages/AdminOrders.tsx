@@ -6135,7 +6135,7 @@ export default function AdminOrders() {
                           </div>
                         <p className="text-xs text-muted-foreground mt-0.5">{formatDate(order.accessedAt)}</p>
                         {/* Botões de ação abaixo da data/hora */}
-                        <div className="flex flex-wrap gap-1 mt-1.5">
+                        <div className="flex w-full min-w-0 flex-wrap gap-1 mt-1.5 [&>*]:max-w-full sm:w-auto">
                           {/* Botão Automático/Manual */}
                           <button
                             onClick={(e) => {
