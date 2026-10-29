@@ -175,16 +175,17 @@ export default function H2BicoScreenshotImporter(){
     return ()=>{active=false;};
   },[]);
   useEffect(()=>{
-    if(!restored||busy)return;
+    if(!restored)return;
     const timer=window.setTimeout(()=>{
       void persistH2BicoPrintSession(items).then(()=>setPersistError(false)).catch(()=>{
         setPersistError(true);
         toast.error("Rascunho local não foi salvo. Não atualize a página.");
       });
-    },350);
+    },125);
     return ()=>window.clearTimeout(timer);
-  },[items,restored,busy]);
-  const checkExisting=trpc.h2bico.checkExtractedCpfs.useMutation();
+  },[items,restored]);
+  // Esta rota e uma consulta tRPC, nao uma mutation.
+  const checkExisting=utils.h2bico.checkExtractedCpfs;
   useEffect(()=>{
     const cpfs=[...new Set(items.map(row=>digits(row.cpf)).filter(isValidCpf))];
     if(!cpfs.length){setServerExisting(new Set());return;}
@@ -193,10 +194,15 @@ export default function H2BicoScreenshotImporter(){
       try{
         const found=new Set<string>();
         for(let i=0;i<cpfs.length;i+=300){
-          const result=await checkExisting.mutateAsync({cpfs:cpfs.slice(i,i+300)});
+          const result=await checkExisting.fetch({cpfs:cpfs.slice(i,i+300)});
           for(const cpf of result.existing)found.add(cpf);
         }
-        if(active)setServerExisting(found);
+        if(active){
+          setServerExisting(found);
+          setItems(current=>current.some(row=>row.selected&&found.has(digits(row.cpf)))
+            ?current.map(row=>found.has(digits(row.cpf))?{...row,selected:false}:row)
+            :current);
+        }
       }catch{if(active)toast.warning("Não foi possível verificar CPFs duplicados. O servidor continuará protegendo o salvamento.");}
     },400);
     return ()=>{active=false;window.clearTimeout(timer);};
@@ -560,7 +566,7 @@ export default function H2BicoScreenshotImporter(){
     }finally{savingRef.current=false;setSaving(false);setStatus("");}
   };
   const eligible=(item:Item)=>!item.existing&&!item.saved&&!serverExisting.has(digits(item.cpf))&&isValidCpf(item.cpf);
-  const selected=items.filter(item=>item.selected&&!item.saved&&!item.existing);
+  const selected=items.filter(item=>item.selected&&!item.saved&&!item.existing&&!serverExisting.has(digits(item.cpf))&&isValidCpf(item.cpf));
   const selectable=items.filter(eligible);
   const selectAll=()=>setItems(current=>current.map(item=>({...item,selected:eligible(item)})));
   const deselectAll=()=>setItems(current=>current.map(item=>({...item,selected:false})));
