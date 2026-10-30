@@ -27,7 +27,13 @@ jobs:
       - run: pnpm install --frozen-lockfile
       - name: New OTP feature flag unit tests
         run: pnpm exec vitest run server/customerOtpAccess.test.ts server/customerLoginEmailProof.test.ts
-      - name: Build and TypeScript validation
+      - name: Compare TypeScript errors against untouched target branch
         run: |
-          pnpm check
-          pnpm build
+          git fetch --depth=1 origin 6356666b0a79ef7334aa26a503978d790778bbad
+          mkdir -p .baseline
+          git archive FETCH_HEAD | tar -x -C .baseline
+          ln -s ../node_modules .baseline/node_modules
+          # Existing diagnostics may remain, but introducing ANY new diagnostic fails.
+          node scripts/compare-password-pr-typecheck.mjs
+      - name: Production build validation
+        run: pnpm build
