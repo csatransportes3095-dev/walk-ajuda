@@ -371,8 +371,21 @@ export const h2AutoAdminRouter = router({
       await ensure();
       const db = await getDb();
       if (!db) throw new Error("DB unavailable");
+      // Legacy WhatsApp response texts are edited through saveReplyRules only.
+      // Never erase them when saving unrelated timing, schedule or device settings.
+      const current = (await rows(sql`SELECT config_json, revision FROM h2_auto_devices WHERE id=${input.id} LIMIT 1`))[0];
+      if (!current) throw new TRPCError({ code: "NOT_FOUND", message: "Aparelho H2 AUTO não encontrado." });
+      if (Number(current.revision) !== input.expectedRevision)
+        throw new TRPCError({ code: "CONFLICT", message: "As configurações foram atualizadas. Recarregue antes de salvar." });
+      const saved = decodeConfig(current.config_json);
+      const preserved: RemoteConfig = {
+        ...input.config,
+        welcome: saved.welcome,
+        menu: saved.menu,
+        rules: saved.rules,
+      };
       const result: any = await db.execute(
-        sql`UPDATE h2_auto_devices SET config_json=${JSON.stringify(input.config)},revision=revision+1 WHERE id=${input.id} AND revision=${input.expectedRevision}`
+        sql`UPDATE h2_auto_devices SET config_json=${JSON.stringify(preserved)},revision=revision+1 WHERE id=${input.id} AND revision=${input.expectedRevision}`
       );
       if (!result[0]?.affectedRows)
         throw new TRPCError({
