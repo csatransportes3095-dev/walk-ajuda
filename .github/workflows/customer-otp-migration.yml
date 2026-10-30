@@ -1,0 +1,34 @@
+name: Customer OTP Migration Checks
+
+on:
+  push:
+    branches:
+      - audit/cliente-otp-sem-senha-20261030
+  pull_request:
+    branches:
+      - recovery/organizar-salvos-2026-08-24
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  verify-passwordless-draft:
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+    steps:
+      - uses: actions/checkout@v4
+      - uses: pnpm/action-setup@v4
+        with:
+          version: 10.4.1
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+          cache: pnpm
+      - run: pnpm install --frozen-lockfile
+      - name: New OTP feature flag unit tests
+        run: pnpm exec vitest run server/customerOtpAccess.test.ts server/customerLoginEmailProof.test.ts
+      - name: Build and TypeScript validation
+        run: |
+          pnpm check
+          pnpm build
