@@ -363,28 +363,6 @@ export default function AdminCodes() {
 
       <div className="max-w-4xl mx-auto py-6 px-4 space-y-6">
 
-        {/* Acesso permanente às notificações por status — independente da ordem de cards salva. */}
-        <div className="grid gap-3 sm:grid-cols-2" aria-label="Configurações de notificações dos pedidos">
-          <a href="/admin/whatsapp-templates"
-             className="flex min-w-0 items-center gap-3 rounded-2xl border border-emerald-400/45 bg-emerald-500/10 p-4 transition-colors hover:bg-emerald-500/20"
-             title="Ver e editar as mensagens WhatsApp previamente vinculadas aos status dos pedidos">
-            <Bell className="h-7 w-7 shrink-0 text-emerald-300" />
-            <span className="min-w-0">
-              <strong className="block text-sm text-white">🔔 Notificações de Status</strong>
-              <span className="mt-1 block text-xs text-emerald-100/80">Abrir mensagens configuradas por status do pedido</span>
-            </span>
-          </a>
-          <a href="/admin/settings"
-             className="flex min-w-0 items-center gap-3 rounded-2xl border border-sky-400/40 bg-sky-500/10 p-4 transition-colors hover:bg-sky-500/20"
-             title="Editar o modelo geral de atualização dos pedidos em Configurações → WhatsApp Pedidos">
-            <MessageCircle className="h-7 w-7 shrink-0 text-sky-300" />
-            <span className="min-w-0">
-              <strong className="block text-sm text-white">📲 Texto Geral dos Pedidos</strong>
-              <span className="mt-1 block text-xs text-sky-100/80">Configurações → WhatsApp Pedidos</span>
-            </span>
-          </a>
-        </div>
-
         {/* Atalhos administrativos — ordem configurável pelo ADM */}
         <section className="space-y-4" aria-label="Atalhos do painel administrativo">
           <div className="rounded-2xl border border-purple-400/20 bg-gradient-to-r from-purple-600/15 via-[#111127] to-transparent p-4 shadow-[0_12px_38px_rgba(0,0,0,.16)]">
