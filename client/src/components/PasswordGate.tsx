@@ -1279,6 +1279,11 @@ export default function PasswordGate({ children }: PasswordGateProps) {
       toast.error("As senhas não coincidem");
       return;
     }
+    if (!emailVerificationToken || !getCanonicalPhone()) {
+      toast.error("Para criar a senha, confirme primeiro o código enviado ao e-mail do cadastro.");
+      setGateStep("email");
+      return;
+    }
     setCpwdIsCreating(true);
     try {
       // Tentar modo auto primeiro, se falhar usar manual
@@ -1325,8 +1330,21 @@ export default function PasswordGate({ children }: PasswordGateProps) {
         }
         throw autoErr;
       }
-    } catch {
-      toast.error("Erro ao criar senha. Tente novamente.");
+    } catch (error: any) {
+      const reason = String(error?.message || error?.data?.message || "");
+      const code = error?.data?.code;
+      if (code === "UNAUTHORIZED" || /confirmação.*e-mail|confirme.*e-mail|email.*expir/i.test(reason)) {
+        setEmailVerificationToken("");
+        sessionStorage.removeItem(LOGIN_EMAIL_PROOF_STORAGE_KEY);
+        setGateStep("email");
+        toast.error("A confirmação do e-mail expirou ou não foi encontrada. Confirme novamente o código para criar sua senha.");
+      } else if (code === "CONFLICT" || code === "NOT_FOUND" || code === "BAD_REQUEST") {
+        toast.error(reason || "Não foi possível criar a senha. Confira seu cadastro ou utilize Recuperar Senha.");
+      } else if (code === "SERVICE_UNAVAILABLE") {
+        toast.error("Serviço de criação de senha indisponível. Tente novamente mais tarde.");
+      } else {
+        toast.error(reason && reason.length < 160 ? reason : "Não foi possível salvar a senha. Tente novamente ou procure o atendimento.");
+      }
     } finally {
       setCpwdIsCreating(false);
     }
