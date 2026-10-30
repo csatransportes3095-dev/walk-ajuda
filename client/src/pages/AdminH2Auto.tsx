@@ -463,6 +463,23 @@ export default function AdminH2Auto() {
                   <p className="text-xs text-slate-300">Padrão: 24 horas. De 1 a 720 horas (30 dias). Mudar de opção, digitar MENU ou 0 não exige um novo código durante a validade. Bloqueio de cadastro revoga o acesso.</p>
                 </div>
               </section>
+              <section className="rounded-2xl border border-emerald-400/50 bg-emerald-950/25 p-4 space-y-3">
+                <h4 className="text-lg font-black text-emerald-200">📦 ACOMPANHAR PEDIDO — STATUS PELO WHATSAPP</h4>
+                <p className="text-sm text-slate-200">Ao escolher a opção <strong>2 — Acompanhar pedido</strong> no menu do cliente, o H2 Auto consulta os pedidos do cadastro e responde com o número, produto e status atual de cada pedido. Ao selecionar um pedido, mostra os detalhes e o agendamento, quando houver.</p>
+                <p className="text-xs text-slate-300">A numeração do botão é controlada pela árvore de atendimento. A consulta só funciona para clientes autenticados; a sessão já confirmada deve ser reutilizada, sem solicitar outro código enquanto estiver válida.</p>
+                <div className="flex flex-wrap items-center justify-between gap-3 rounded-xl border border-emerald-500/30 bg-slate-950/55 p-3">
+                  <div>
+                    <p className="text-sm font-black">{d.config.ordersEnabled ? "✅ CONSULTA DE STATUS ATIVADA" : "⛔ CONSULTA DE STATUS DESATIVADA"}</p>
+                    <p className="mt-1 text-xs text-slate-400">Ação independente. Não apaga perguntas, regras ou mensagens existentes.</p>
+                  </div>
+                  <button type="button" disabled={safety.isPending}
+                    onClick={() => safety.mutate({id:d.id,key:"ordersEnabled",value:!Boolean(d.config.ordersEnabled)})}
+                    className={`rounded-xl border px-4 py-3 text-sm font-black disabled:opacity-50 ${d.config.ordersEnabled ? "border-rose-400/50 bg-rose-700 text-white" : "border-emerald-400 bg-emerald-500 text-slate-950"}`}>
+                    {d.config.ordersEnabled ? "DESATIVAR CONSULTA" : "ATIVAR CONSULTA DE PEDIDOS"}
+                  </button>
+                </div>
+                <p className="text-xs text-amber-200">Requer APK H2 Auto 1.45 instalado e sincronizado para corrigir o encaminhamento do menu.</p>
+              </section>
               <section className="rounded-2xl border border-cyan-400/40 bg-gradient-to-br from-cyan-950/40 to-slate-950 p-4 space-y-3">
                 <h4 className="text-lg font-black text-cyan-200">🖥️ MODO WHATSAPP DESKTOP — SOMENTE LEITURA</h4>
                 <p className="text-sm text-slate-300">Deixe o WhatsApp aberto no PC para acompanhar mensagens. O robô tenta usar somente notificações Android ainda ativas; leitura no computador não cancela a pausa manual nem os contatos silenciados.</p>
@@ -613,15 +630,7 @@ export default function AdminH2Auto() {
                   />
                   <Power className="h-4 w-4" /> Robô habilitado remotamente
                 </label>
-                <label className="flex items-center gap-2">
-                  <input
-                    type="checkbox"
-                    checked={Boolean(value.ordersEnabled)}
-                    onChange={e => change("ordersEnabled", e.target.checked)}
-                  />
-                  Consulta de pedidos por WhatsApp (exige APK atualizado e
-                  teste)
-                </label>
+                <p className="col-span-full text-xs text-emerald-200/80">A consulta de pedidos pode ser ativada e desativada no card “ACOMPANHAR PEDIDO — STATUS PELO WHATSAPP” acima.</p>
                 <div className="col-span-full rounded-2xl border border-violet-400/40 bg-violet-950/20 p-3 sm:p-5 space-y-4">
                   <div className="flex flex-wrap items-center justify-between gap-3">
                     <div>
