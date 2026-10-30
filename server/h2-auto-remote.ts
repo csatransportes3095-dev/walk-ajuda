@@ -87,6 +87,12 @@ const configSchema = z.object({
   menu: z.array(z.string().max(6000)).length(9),
   whatsappMode: z.number().int().min(-1).max(1),
   pauseMinutes: z.number().int().min(1).max(1440),
+  manualControls: z.array(z.object({
+    phone: z.string().regex(/^[0-9]{11}$/),
+    mode: z.enum(["paused","silenced","active"]),
+    until: z.number().int().min(0).default(0),
+  })).max(500).default([]),
+
   scheduleOn: z.boolean(),
   scheduleStart: z.string().regex(/^([01][0-9]|2[0-3]):[0-5][0-9]$/),
   scheduleEnd: z.string().regex(/^([01][0-9]|2[0-3]):[0-5][0-9]$/),
@@ -120,6 +126,7 @@ const initial: RemoteConfig = {
   menu: Array(9).fill(""),
   whatsappMode: -1,
   pauseMinutes: 60,
+  manualControls: [],
   scheduleOn: false,
   scheduleStart: "09:00",
   scheduleEnd: "18:00",
@@ -208,6 +215,7 @@ function mergeWithoutDeleting(
       ...local,
       tree: remote.tree ?? local.tree,
       media: remote.media,
+      manualControls: remote.manualControls,
       confirmation: remote.confirmation,
       identificationSessionHours: remote.identificationSessionHours,
       desktopReadOnly: remote.desktopReadOnly,
@@ -242,6 +250,7 @@ function mergeWithoutDeleting(
     tree: remote.tree ?? local.tree,
     media: remote.media,
     ordersEnabled: remote.ordersEnabled,
+    manualControls: remote.manualControls,
     desktopReadOnly: remote.desktopReadOnly,
     welcome: remote.welcome.trim() ? remote.welcome : local.welcome,
     menu: remote.menu.map((v, i) => (v.trim() ? v : local.menu[i])),
@@ -277,6 +286,45 @@ async function clearH2AutoCustomerSessions(
   }
 }
 export const h2AutoAdminRouter = router({
+  manualControls: adminProcedure
+    .input(z.object({id:z.string().regex(/^[a-f0-9]{24}$/)}))
+    .query(async ({input})=>{
+      await ensure();
+      const data=await rows(sql`SELECT config_json,revision,applied_revision FROM h2_auto_devices WHERE id=${input.id} LIMIT 1`);
+      if(!data.length)throw new TRPCError({code:"NOT_FOUND",message:"Aparelho não encontrado."});
+      const config=decodeConfig(data[0].config_json);
+      return {contacts:config.manualControls,revision:Number(data[0].revision),
+        appliedRevision:Number(data[0].applied_revision||0)};
+    }),
+  setManualControl: adminProcedure
+    .input(z.object({
+      id:z.string().regex(/^[a-f0-9]{24}$/),
+      phone:z.string().regex(/^[0-9]{11}$/),
+      mode:z.enum(["active","paused","silenced"]),
+      minutes:z.number().int().min(1).max(1440).optional(),
+    }))
+    .mutation(async ({input})=>{
+      await ensure();
+      const db=await getDb();
+      if(!db)throw new TRPCError({code:"INTERNAL_SERVER_ERROR",message:"Banco indisponível"});
+      if(input.mode==="paused"&&!input.minutes)
+        throw new TRPCError({code:"BAD_REQUEST",message:"Informe os minutos da pausa."});
+      for(let retry=0;retry<3;retry++){
+        const data=await rows(sql`SELECT config_json,revision FROM h2_auto_devices WHERE id=${input.id} LIMIT 1`);
+        if(!data.length)throw new TRPCError({code:"NOT_FOUND",message:"Aparelho não encontrado"});
+        const cfg=decodeConfig(data[0].config_json);
+        const until=input.mode==="paused"?Date.now()+input.minutes!*60000:0;
+        const contacts=cfg.manualControls.filter(c=>c.phone!==input.phone);
+        contacts.push({phone:input.phone,mode:input.mode,until});
+        if(contacts.length>500)throw new TRPCError({code:"BAD_REQUEST",message:"Limite de contatos atingido"});
+        const changed:any=await db.execute(sql`UPDATE h2_auto_devices SET
+          config_json=JSON_SET(config_json,'$.manualControls',CAST(${JSON.stringify(contacts)} AS JSON)),
+          revision=revision+1 WHERE id=${input.id} AND revision=${Number(data[0].revision)}`);
+        if(changed[0]?.affectedRows)
+          return {success:true,revision:Number(data[0].revision)+1};
+      }
+      throw new TRPCError({code:"CONFLICT",message:"Outra alteração foi salva. Atualize e tente novamente."});
+    }),
   silencedContacts: adminProcedure
     .input(z.object({id:z.string().regex(/^[a-f0-9]{24}$/)}))
     .query(async({input})=>{
@@ -383,6 +431,7 @@ export const h2AutoAdminRouter = router({
         welcome: saved.welcome,
         menu: saved.menu,
         rules: saved.rules,
+        manualControls: saved.manualControls,
       };
       const result: any = await db.execute(
         sql`UPDATE h2_auto_devices SET config_json=${JSON.stringify(preserved)},revision=revision+1 WHERE id=${input.id} AND revision=${input.expectedRevision}`
