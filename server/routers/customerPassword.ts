@@ -29,7 +29,6 @@ import { emailBelongsToAnotherCustomer, CUSTOMER_EMAIL_IN_USE_MESSAGE } from "..
 const SESSION_DURATION_MS = 90 * 24 * 60 * 60 * 1000; // 90 dias
 const LOGIN_EMAIL_CODE_TTL_MS = 10 * 60 * 1000;
 const LOGIN_EMAIL_CODE_RESEND_MS = 60 * 1000;
-const LOGIN_EMAIL_PROOF_TTL_MS = 20 * 60 * 1000;
 
 type LoginEmailPending = {
   phone: string;
@@ -40,6 +39,9 @@ type LoginEmailPending = {
   lastSentAt: number;
   attempts: number;
 };
+
+// Armazena o código enviado até sua validação. O comprovante posterior é assinado.
+const loginEmailPending = new Map<string, LoginEmailPending>();
 
 function loginEmailKey(phone: string, email: string) {
   return phone + "|" + email.trim().toLowerCase();
