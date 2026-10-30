@@ -395,6 +395,25 @@ export const h2AutoAdminRouter = router({
         });
       return { success: true };
     }),
+  saveReplyRules: adminProcedure
+    .input(z.object({
+      id: z.string().regex(/^[a-f0-9]{24}$/),
+      expectedRevision: z.number().int().min(0),
+      rules: configSchema.shape.rules,
+    }))
+    .mutation(async ({ input }) => {
+      await ensure();
+      const db = await getDb();
+      if (!db) throw new TRPCError({ code: "INTERNAL_SERVER_ERROR", message: "Banco indisponível." });
+      const result: any = await db.execute(sql`UPDATE h2_auto_devices
+        SET config_json=JSON_SET(config_json, '$.rules', CAST(${JSON.stringify(input.rules)} AS JSON)),
+            revision=revision+1
+        WHERE id=${input.id} AND revision=${input.expectedRevision}`);
+      if (!result[0]?.affectedRows) throw new TRPCError({
+        code: "CONFLICT", message: "As respostas mudaram no servidor. Atualize antes de salvar para não sobrescrever mensagens.",
+      });
+      return { success: true, revision: input.expectedRevision + 1 };
+    }),
   saveConfirmation: adminProcedure
     .input(z.object({
       id: z.string().regex(/^[a-f0-9]{24}$/),
