@@ -446,12 +446,12 @@ export const h2AutoAdminRouter = router({
       return {success:true,hours:input.hours};
     }),
   saveSafetySwitch: adminProcedure
-    .input(z.object({ id: z.string().regex(/^[a-f0-9]{24}$/), key: z.enum(["enabled","identificationEnabled","desktopReadOnly"]), value: z.boolean() }))
+    .input(z.object({ id: z.string().regex(/^[a-f0-9]{24}$/), key: z.enum(["enabled","identificationEnabled","desktopReadOnly","ordersEnabled"]), value: z.boolean() }))
     .mutation(async ({input})=>{
       await ensure();
       const db=await getDb(); if(!db)throw new Error("DB unavailable");
       // Atomic JSON key update; does not overwrite drafts, menus or other settings.
-      const path=input.key==="enabled"?"$.enabled":input.key==="desktopReadOnly"?"$.desktopReadOnly":"$.identificationEnabled";
+      const path=input.key==="enabled"?"$.enabled":input.key==="desktopReadOnly"?"$.desktopReadOnly":input.key==="ordersEnabled"?"$.ordersEnabled":"$.identificationEnabled";
       const updated:any=await db.execute(sql`UPDATE h2_auto_devices SET config_json=JSON_SET(config_json,${path},JSON_EXTRACT(${input.value ? "true" : "false"},'$')),revision=revision+1 WHERE id=${input.id}`);
       if(!updated[0]?.affectedRows)throw new TRPCError({code:"NOT_FOUND",message:"Aparelho não encontrado."});
       return {success:true};
