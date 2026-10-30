@@ -2,6 +2,7 @@
 // Mesma lógica do Gestor de Gastos (spreadsheet), adaptada para a tabela customers
 
 import { createHash, randomBytes, randomInt, timingSafeEqual } from "crypto";
+import { issueLoginEmailProof, assertLoginEmailProof } from "../customerLoginEmailProof";
 import { canCustomerRecoverPassword, passwordRecoveryCodeHash } from "../customerPasswordRecoveryPolicy";
 import { TRPCError } from "@trpc/server";
 import { z } from "zod";
@@ -40,15 +41,6 @@ type LoginEmailPending = {
   attempts: number;
 };
 
-type LoginEmailProof = {
-  phone: string;
-  email: string;
-  expiresAt: number;
-};
-
-const loginEmailPending = new Map<string, LoginEmailPending>();
-const loginEmailProofs = new Map<string, LoginEmailProof>();
-
 function loginEmailKey(phone: string, email: string) {
   return phone + "|" + email.trim().toLowerCase();
 }
@@ -57,14 +49,6 @@ function loginEmailCodeHash(phone: string, email: string, code: string) {
   return createHash("sha256").update("h2-login-email|" + phone + "|" + email.trim().toLowerCase() + "|" + code).digest("hex");
 }
 
-function assertLoginEmailProof(phone: string, token: string) {
-  const proof = loginEmailProofs.get(token);
-  if (!proof || proof.phone !== phone || proof.expiresAt < Date.now()) {
-    if (proof) loginEmailProofs.delete(token);
-    throw new TRPCError({ code: "UNAUTHORIZED", message: "Confirmação de e-mail expirada. Confirme o código novamente." });
-  }
-  return proof;
-}
 function getProfileUpdateMeta(customer: any) {
   const fields = customer ? getMissingCustomerProfileFields(customer) : [];
   return { profileUpdateRequired: fields.length > 0, profileUpdateFields: fields };
@@ -152,7 +136,7 @@ async function authenticateVerifiedCustomer(db: any, phone: string, password: st
       phone, token, expiresAt: new Date(Date.now() + SESSION_DURATION_MS), lastAccessAt: new Date(),
     });
     try { await tx.insert(customerLoginHistory).values({ phone, loginAt: new Date() }); } catch {}
-    loginEmailProofs.delete(verificationToken);
+    // Signed proof expires automatically.
     return { success: true, token, ...getProfileUpdateMeta(customer) };
   });
 }
@@ -351,12 +335,7 @@ export const customerPasswordRouter = router({
       }
 
       loginEmailPending.delete(key);
-      const verificationToken = randomBytes(32).toString("hex");
-      loginEmailProofs.set(verificationToken, {
-        phone: cleanPhone,
-        email,
-        expiresAt: Date.now() + LOGIN_EMAIL_PROOF_TTL_MS,
-      });
+      const verificationToken = issueLoginEmailProof(cleanPhone, email);
       return { success: true, verificationToken, email };
     }),
 
@@ -501,7 +480,7 @@ export const customerPasswordRouter = router({
         lastAccessAt: new Date(),
       });
 
-      loginEmailProofs.delete(input.emailVerificationToken);
+      // Signed proof expires automatically.
       return { success: true, token, expiresAt: expiresAt.getTime() };
     }),
 
@@ -563,7 +542,7 @@ export const customerPasswordRouter = router({
         clientCreatedAt: new Date(),
       });
 
-      loginEmailProofs.delete(input.emailVerificationToken);
+      // Signed proof expires automatically.
       return { success: true, pending: true };
     }),
 
