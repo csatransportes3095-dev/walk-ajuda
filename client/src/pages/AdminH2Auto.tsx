@@ -19,7 +19,6 @@ import { toast } from "sonner";
 import H2AutoHistoryPanel from "@/components/H2AutoHistoryPanel";
 import H2AutoValidationBlocks from "@/components/H2AutoValidationBlocks";
 import H2AutoSilencedContacts from "@/components/H2AutoSilencedContacts";
-import H2AutoManualControls from "@/components/H2AutoManualControls";
 import H2AutoTreeEditor from "@/components/H2AutoTreeEditor";
 import { H2_AUTO_CONFIRMATION_DEFAULTS as confirmationDefaults, H2_AUTO_CONFIRMATION_GROUPS as confirmationGroups } from "@shared/h2AutoConfirmation";
 
@@ -502,7 +501,6 @@ export default function AdminH2Auto() {
               <H2AutoTreeEditor id={d.id} revision={d.revision} appliedRevision={d.appliedRevision} initial={d.config.tree} />
               <H2AutoValidationBlocks deviceId={d.id} deviceLabel={d.label} />
               <H2AutoSilencedContacts deviceId={d.id} deviceLabel={d.label} />
-              <H2AutoManualControls deviceId={d.id} deviceLabel={d.label} />
               <H2AutoHistoryPanel
                 deviceId={d.id}
                 label={d.label}
