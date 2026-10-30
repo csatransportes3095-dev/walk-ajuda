@@ -134,6 +134,22 @@ export default function AdminH2Auto() {
       toast.error(error.message || "Falha ao salvar");
     },
   });
+  const saveReplyRules = trpc.h2AutoAdmin.saveReplyRules.useMutation({
+    onSuccess: (result, variables) => {
+      setEditing(previous => {
+        const draft = previous[variables.id];
+        if (!draft || draft.revision !== variables.expectedRevision) return previous;
+        return { ...previous, [variables.id]: { ...draft, revision: result.revision } };
+      });
+      setConflicts(previous => ({ ...previous, [variables.id]: false }));
+      toast.success("Respostas antigas preservadas e salvas. Aguardando sincronização do aparelho.");
+      void utils.h2AutoAdmin.list.invalidate();
+    },
+    onError: (error, variables) => {
+      if (error.data?.code === "CONFLICT") setConflicts(previous => ({ ...previous, [variables.id]: true }));
+      toast.error(error.message || "Não foi possível salvar as respostas.");
+    },
+  });
   const saveConfirmation = trpc.h2AutoAdmin.saveConfirmation.useMutation({
     onSuccess: (_result, variables) => {
       clearDraft(variables.id);
@@ -782,6 +798,80 @@ export default function AdminH2Auto() {
                   />
                 </div>
               </div>
+              <section className="rounded-2xl border border-fuchsia-400/40 bg-fuchsia-950/20 p-4 space-y-4">
+                <div>
+                  <h4 className="text-lg font-black text-fuchsia-200">📨 RESPOSTAS WHATSAPP ANTIGAS — H2 AUTO</h4>
+                  <p className="mt-1 text-xs text-slate-300">Área recuperada das configurações existentes do robô. Exibe as mensagens previamente salvas, inclusive regras relacionadas a status, quando houver. Não altera o fluxo de pedidos nem ativa envio automático de notificações.</p>
+                  <p className="mt-2 text-sm font-semibold text-fuchsia-200">{(value.rules || []).length} resposta(s) no servidor · {(d.snapshotConfig?.rules || []).length} na cópia original do celular</p>
+                </div>
+                {(!value.rules || value.rules.length === 0) && <p className="rounded-lg border border-amber-500/30 bg-amber-950/20 p-3 text-xs text-amber-200">Não há respostas antigas na configuração atual do aparelho. Confira a cópia local abaixo antes de cadastrar uma nova.</p>}
+                {(value.rules || []).map((rule: any, i: number) => (
+                  <div key={i} className="grid gap-3 rounded-xl border border-fuchsia-400/20 bg-slate-950/65 p-3">
+                    <div className="flex flex-wrap items-center justify-between gap-2">
+                      <label className="text-xs font-bold text-white">
+                        <input type="checkbox" className="mr-2" checked={rule.enabled}
+                          onChange={e => change("rules", value.rules.map((x: any, j: number) => j === i ? { ...x, enabled: e.target.checked } : x))}/>
+                        Resposta {i + 1} habilitada
+                      </label>
+                      <button type="button" className="rounded-lg border border-red-500/30 px-3 py-1 text-xs text-red-200"
+                        onClick={() => { if (window.confirm("Excluir esta resposta? Só será removida ao clicar em SALVAR RESPOSTAS.")) change("rules", value.rules.filter((_x: any, j: number) => i !== j)); }}>
+                        Remover
+                      </button>
+                    </div>
+                    <label className="text-xs text-fuchsia-100">Palavra-chave / gatilho
+                      <input className={field} maxLength={120} value={rule.trigger}
+                        onChange={e => change("rules", value.rules.map((x: any, j: number) => j === i ? { ...x, trigger: e.target.value } : x))}/>
+                    </label>
+                    <label className="text-xs text-fuchsia-100">Tipo de correspondência
+                      <select className={field} value={rule.mode}
+                        onChange={e => change("rules", value.rules.map((x: any, j: number) => j === i ? { ...x, mode: e.target.value } : x))}>
+                        <option value="exact">Mensagem exata</option>
+                        <option value="contains">Contém palavras</option>
+                      </select>
+                    </label>
+                    <label className="text-xs text-fuchsia-100">Resposta enviada no WhatsApp
+                      <textarea className={field} rows={4} maxLength={6000} value={rule.reply}
+                        onChange={e => change("rules", value.rules.map((x: any, j: number) => j === i ? { ...x, reply: e.target.value } : x))}/>
+                    </label>
+                  </div>
+                ))}
+                <button type="button" className="w-full rounded-xl border border-fuchsia-400/45 bg-fuchsia-500/15 px-3 py-3 text-sm font-black text-fuchsia-100"
+                  onClick={() => change("rules", [...(value.rules || []), { trigger: "", reply: "", mode: "exact", enabled: false }])}>
+                  + ADICIONAR RESPOSTA (DESATIVADA)
+                </button>
+                {d.snapshotConfig?.rules?.length > 0 && (
+                  <details className="rounded-xl border border-amber-400/35 bg-amber-950/20 p-3">
+                    <summary className="cursor-pointer text-sm font-bold text-amber-200">📦 Ver cópia de segurança anterior do celular ({d.snapshotConfig.rules.length})</summary>
+                    <p className="my-2 text-xs text-slate-300">A cópia é apenas para consulta. A recuperação importa somente regras ausentes, sem substituir as já salvas.</p>
+                    {d.snapshotConfig.rules.map((rule: any, i: number) => (
+                      <div key={i} className="mt-2 rounded-lg border border-white/10 p-2 text-xs">
+                        <p className="font-bold text-white">Gatilho: {rule.trigger || "(vazio)"}</p>
+                        <p className="mt-1 whitespace-pre-wrap break-words text-slate-300">{rule.reply}</p>
+                      </div>
+                    ))}
+                    <button type="button" className="mt-3 w-full rounded-lg bg-amber-400 px-3 py-2 text-xs font-black text-slate-950"
+                      onClick={() => {
+                        const current = value.rules || [];
+                        const keys = new Set(current.map((x: any) => x.trigger.trim().toLowerCase() + "|" + x.mode));
+                        const missing = d.snapshotConfig.rules.filter((x: any) => x.trigger && !keys.has(x.trigger.trim().toLowerCase() + "|" + x.mode));
+                        if (!missing.length) { toast.info("Todas as respostas da cópia já estão listadas."); return; }
+                        if (!window.confirm(`Recuperar ${missing.length} resposta(s) ausente(s) sem substituir as existentes? Elas só serão aplicadas depois de SALVAR RESPOSTAS.`)) return;
+                        change("rules", [...current, ...missing].slice(0, 100));
+                        toast.success("Respostas recuperadas no formulário. Revise antes de salvar.");
+                      }}
+                    >RECUPERAR SOMENTE RESPOSTAS AUSENTES</button>
+                  </details>
+                )}
+                <button type="button" className="w-full rounded-xl bg-emerald-400 px-4 py-3 text-sm font-black text-slate-950 disabled:opacity-50"
+                  disabled={needsRefresh || saveReplyRules.isPending}
+                  onClick={() => {
+                    const rules = value.rules || [];
+                    if (rules.some((x: any) => !x.trigger?.trim() || !x.reply?.trim())) { toast.error("Preencha o gatilho e a resposta de todas as regras."); return; }
+                    saveReplyRules.mutate({ id: d.id, rules, expectedRevision });
+                  }}>
+                  <Save className="mr-1 inline h-4 w-4"/> {saveReplyRules.isPending ? "SALVANDO..." : "SALVAR SOMENTE RESPOSTAS WHATSAPP"}
+                </button>
+              </section>
               <section className="rounded-2xl border border-sky-400/35 bg-sky-950/25 p-4 space-y-3">
                 <h4 className="font-black text-sky-300 flex items-center gap-2">
                   <Mic className="h-5 w-5" /> CENTRAL DE ÁUDIOS E MÍDIAS
