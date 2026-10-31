@@ -459,6 +459,7 @@ function AppContent() {
   const isEmprestimoRoute = location.toLowerCase() === "/emprestimo";
   const isCartoesRoute = location === "/cartoes" || location.startsWith("/cartoes/") || location.startsWith("/cartoes");
   const isPreCadastroRoute = location === "/pre-cadastro";
+  const isCustomerRegistrationRoute = location === "/cadastro";
   const isConsultarCadastroRoute = location === "/consultar-cadastro";
   const isAtualizarCadastroRoute = location === "/atualizarcadastro";
   const isLocadoraRoute = location === "/locadora" || location === "/locadora/";
