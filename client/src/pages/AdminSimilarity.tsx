@@ -553,7 +553,7 @@ export default function AdminSimilarity() {
       // Reaproveita arquivos já carregados da mesma foto nesta sessão.
       // Fotos recortadas ou substituídas não são reutilizadas.
       const previous = new Map(candidates.filter(item => item.h2bicoId && item.h2bicoRevision &&
-        item.h2bicoRevision === item.h2bicoRevision).map(item => [item.h2bicoId!, item]));
+        item.file instanceof File).map(item => [item.h2bicoId!, item]));
       const reusedPreviews = new Set<string>();
       const loaded: Array<CandidatePhoto | null> = new Array(records.length).fill(null);
       let failed = 0;
