@@ -4,8 +4,8 @@
 import { createHash, randomBytes, randomInt, timingSafeEqual } from "crypto";
 import { issueLoginEmailProof, assertLoginEmailProof } from "../customerLoginEmailProof";
 import { requestCustomerCode, verifyCustomerCode, redeemNewRegistrationProof, isCustomerOtpModeEnabled, getVerifiedCustomerOtpSession, revokeCustomerOtpSession, ensureCustomerOtpTables } from "../customerOtpAccess";
-import { generateOwnSiteCode } from "../siteAccessOwnCodes";
 import { validSiteCode } from "../../shared/siteAccessCodePolicy";
+import { getAdminJwtSecret } from "../adminJwt";
 import { canCustomerRecoverPassword, passwordRecoveryCodeHash } from "../customerPasswordRecoveryPolicy";
 import { TRPCError } from "@trpc/server";
 import { z } from "zod";
