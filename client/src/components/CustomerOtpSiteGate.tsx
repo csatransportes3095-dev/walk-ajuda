@@ -5,6 +5,7 @@ import { CustomerOtpLogin, type CustomerOtpResult } from "./CustomerOtpLogin";
 
 export function CustomerOtpSiteGate({ children }: { children: React.ReactNode }) {
   const [token, setToken] = useState(() => localStorage.getItem("cp_token") || "");
+  const [confirmedToken,setConfirmedToken] = useState("");
   const [, navigate] = useLocation();
   const session = trpc.customerPassword.checkSession.useQuery(
     { token },
@@ -18,8 +19,18 @@ export function CustomerOtpSiteGate({ children }: { children: React.ReactNode })
   useEffect(() => {
     if (!session.data || session.data.valid !== false) return;
     localStorage.removeItem("cp_token");
+    localStorage.removeItem("walk_client_phone");
+    setConfirmedToken("");
     setToken("");
   }, [session.data]);
+
+  // A valid OTP session is the only source for the phone passed to the site.
+  // Do not mount Home.tsx until its legacy read-only phone hint is synchronized.
+  useEffect(() => {
+    if (!session.data?.valid || !session.data.phone || !token) return;
+    localStorage.setItem("walk_client_phone",session.data.phone);
+    setConfirmedToken(token);
+  }, [session.data,token]);
 
   useEffect(() => {
     if (!session.data?.valid || !session.data.profileUpdateRequired) return;
@@ -29,6 +40,8 @@ export function CustomerOtpSiteGate({ children }: { children: React.ReactNode })
   }, [session.data, token, navigate]);
 
   async function authenticated(value: CustomerOtpResult) {
+    localStorage.setItem("walk_client_phone",value.phone);
+    setConfirmedToken("");
     setToken(value.token);
     if (value.profileUpdateRequired) {
       localStorage.setItem("customer_update_token", value.token);
@@ -49,7 +62,7 @@ export function CustomerOtpSiteGate({ children }: { children: React.ReactNode })
         onClick={() => { void session.refetch(); void route.refetch(); }}>Tentar novamente</button>
     </div>;
   }
-  if (!session.data?.valid || route.isLoading || session.isLoading || (session.data.profileUpdateRequired)) {
+  if (!session.data?.valid || confirmedToken!==token || route.isLoading || session.isLoading || (session.data.profileUpdateRequired)) {
     return <div className="min-h-screen flex items-center justify-center bg-slate-950 text-white">
       Verificando sua autorização...
     </div>;

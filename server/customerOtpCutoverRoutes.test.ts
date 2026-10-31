@@ -70,6 +70,24 @@ describe("OTP-only shared customer route cutover",()=>{
     expect(update.slice(pos,pos+600)).toContain("isCustomerOtpModeEnabled()");
   });
 
+  it("keeps the verified phone for legacy read-only site modules without trusting it for authorization",()=>{
+    const login=file("client/src/components/CustomerOtpLogin.tsx");
+    const site=file("client/src/components/CustomerOtpSiteGate.tsx");
+    expect(login).toContain('localStorage.setItem("walk_client_phone", cleanPhone)');
+    expect(site).toContain('localStorage.setItem("walk_client_phone",session.data.phone)');
+    expect(site).toContain('confirmedToken!==token');
+    expect(site).toContain('localStorage.removeItem("walk_client_phone")');
+    const home=file("client/src/pages/Home.tsx");
+    expect(home).toContain("localStorage.getItem('walk_client_phone')");
+  });
+  it("resolves new spending customer IDs from a persisted row, not driver-specific insertId",()=>{
+    const spending=file("server/routers/spreadsheet.ts");
+    expect(spending).not.toContain("(inserted as any).insertId");
+    expect(spending).toContain("client=createdRows?.[0]||null;");
+  });
+  it("updates customer referral login copy to OTP",()=>{
+    expect(file("client/src/pages/ClientReferrals.tsx")).toContain("código enviado ao e-mail cadastrado");
+  });
   it("retains protected server OTP session and rejection of legacy customer password endpoints",()=>{
     const server=file("server/routers/customerPassword.ts");
     expect(server).toContain("getVerifiedCustomerOtpSession(db, cleanToken)");

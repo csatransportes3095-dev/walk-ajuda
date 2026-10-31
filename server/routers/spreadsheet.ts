@@ -63,7 +63,11 @@ export async function resolveClientId(token: string): Promise<number> {
             createdAt: new Date(),
             updatedAt: new Date(),
           });
-          client = { id: (inserted as any).insertId, phone: cleanPhone, name: mainCustomer.name || cleanPhone, cpf: mainCustomer.cpf || null, status: 'active' };
+          // Drizzle/mysql2 insert result shape differs across drivers. Resolve
+          // the persisted row instead of trusting an undefined insertId.
+          const createdRows=await db.select().from(spreadsheetClients)
+            .where(eq(spreadsheetClients.phone,cleanPhone)).limit(1);
+          client=createdRows?.[0]||null;
         }
       }
     }
@@ -1068,7 +1072,9 @@ export const spreadsheetRouter = router({
             const main = await findMainCustomerByIdentity({ phone: cleanPhone }, db);
             if (main) {
               const inserted = await db.insert(spreadsheetClients).values({ phone: cleanPhone, name: main.name || cleanPhone, cpf: main.cpf || null, status: 'active', createdAt: new Date(), updatedAt: new Date() });
-              client = { id: (inserted as any).insertId, phone: cleanPhone, name: main.name || cleanPhone, cpf: main.cpf || null, status: 'active' };
+              const createdRows=await db.select().from(spreadsheetClients)
+                .where(eq(spreadsheetClients.phone,cleanPhone)).limit(1);
+              client=createdRows?.[0]||null;
             }
           }
         }
