@@ -372,6 +372,7 @@ export default function AdminSimilarity() {
   );
   const [loadingH2Bico, setLoadingH2Bico] = useState(false);
   const autoAnalyzeH2BicoRef = useRef(false);
+  const h2bicoLoadingRef = useRef(false);
 
   useEffect(() => {
     if (thresholdLoadedRef.current || !settingsQuery.data) return;
@@ -523,7 +524,7 @@ export default function AdminSimilarity() {
       setCandidates((current) => current.map((candidate) => {
         if (candidate.id !== cropTarget.id) return candidate;
         URL.revokeObjectURL(candidate.preview);
-        return { ...candidate, file: croppedFile, preview: URL.createObjectURL(croppedFile) };
+        return { ...candidate, file: croppedFile, preview: URL.createObjectURL(croppedFile), h2bicoRevision: undefined };
       }));
       setResults([]);
       setPairwiseResults([]);
@@ -532,11 +533,12 @@ export default function AdminSimilarity() {
   };
 
   const loadH2BicoCandidates = async () => {
-    if (analyzing || loadingH2Bico) return;
+    if (analyzing || h2bicoLoadingRef.current) return;
     if (h2bicoMode === "name" && !h2bicoSearch.trim()) {
       toast.info("Digite um nome para buscar no H2BICO.");
       return;
     }
+    h2bicoLoadingRef.current = true;
     setLoadingH2Bico(true);
     setProgress({ current: 0, total: 0, name: "Buscando banco H2BICO..." });
 
@@ -548,8 +550,11 @@ export default function AdminSimilarity() {
         return;
       }
 
-      candidates.forEach((item) => URL.revokeObjectURL(item.preview));
-
+      // Reaproveita arquivos já carregados da mesma foto nesta sessão.
+      // Fotos recortadas ou substituídas não são reutilizadas.
+      const previous = new Map(candidates.filter(item => item.h2bicoId && item.h2bicoRevision &&
+        item.file instanceof File).map(item => [item.h2bicoId!, item]));
+      const reusedPreviews = new Set<string>();
       const loaded: Array<CandidatePhoto | null> = new Array(records.length).fill(null);
       let failed = 0;
       let nextIndex = 0;
@@ -560,6 +565,14 @@ export default function AdminSimilarity() {
 
       const loadOne = async (index: number) => {
         const record = records[index];
+        const previousCandidate = previous.get(record.id);
+        if (previousCandidate && previousCandidate.h2bicoRevision === record.photoUrl) {
+          loaded[index] = previousCandidate;
+          reusedPreviews.add(previousCandidate.preview);
+          completed++;
+          setProgress({current:completed,total:records.length,name:`Reutilizando H2BICO • ${completed}/${records.length}`});
+          return;
+        }
         const controller = new AbortController();
         const timeout = window.setTimeout(() => controller.abort(), 12000);
 
@@ -621,6 +634,7 @@ export default function AdminSimilarity() {
       await Promise.all(Array.from({ length: concurrency }, () => worker()));
 
       const ready = loaded.filter((item): item is CandidatePhoto => item !== null);
+      candidates.forEach(item => { if (!reusedPreviews.has(item.preview)) URL.revokeObjectURL(item.preview); });
       setCandidates(ready);
       autoAnalyzeH2BicoRef.current = Boolean(masterFile && ready.length);
       setResults([]);
@@ -631,12 +645,11 @@ export default function AdminSimilarity() {
         return;
       }
 
-      toast.success(
-        `${ready.length} foto(s) do H2BICO carregada(s) em paralelo${failed ? ` • ${failed} falha(s)` : ""}.`
-      );
+      toast.success(`${ready.length} foto(s) prontas • ${reusedPreviews.size} reutilizada(s) sem novo download${failed ? ` • ${failed} falha(s)` : ""}.`);
     } catch (error: any) {
       toast.error(error?.message || "Falha ao buscar fotos do H2BICO.");
     } finally {
+      h2bicoLoadingRef.current = false;
       setLoadingH2Bico(false);
       setProgress({ current: 0, total: 0, name: "" });
     }
