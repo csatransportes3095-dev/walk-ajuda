@@ -62,5 +62,13 @@ describe("H2 AUTO - escolha inicial e repetição",()=> {
     expect(repeatedH2AutoChoice("referral_phone","2")).toBe(true);
     expect(repeatedH2AutoChoice("referral_phone","11993425306")).toBe(false);
     expect(repeatedH2AutoChoice("blocked","2")).toBe(false);
+    expect(repeatedH2AutoChoice("customer_phone","1")).toBe(true);
+    expect(repeatedH2AutoChoice("referrals_phone","3")).toBe(true);
+  });
+  it("indicador com 11 dígitos válidos não recebe erro de formato",()=>{
+    const phone="11993425306";
+    expect(validH2AutoPhone11(phone)).toBe(true);
+    expect(invalidH2AutoPhoneStageAnswer("referral_phone",phone)).toBe(false);
+    expect(repeatedH2AutoChoice("referral_phone",phone)).toBe(false);
   });
 });
