@@ -284,7 +284,7 @@ export default function AdminCommissions() {
           </div>
           <div
             className={`bg-card border rounded-xl p-3 text-center cursor-pointer transition-all ${filterPaid === "a_liberar" ? "border-red-500 ring-1 ring-red-500/50" : "border-red-500/30 hover:border-red-500/60"}`}
-            onClick={() => setFilterPaid(filterPaid === "a_liberar" ? "all" : "pending")}
+            onClick={() => setFilterPaid(filterPaid === "a_liberar" ? "all" : "a_liberar")}
           >
             <p className="text-2xl font-bold text-red-400">{totalPending}</p>
             {totalValuePending > 0 && <p className="text-[10px] text-red-300/80 font-mono">{formatMoney(totalValuePending)}</p>}
