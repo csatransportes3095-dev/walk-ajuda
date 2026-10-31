@@ -8,7 +8,9 @@ describe("H2 AUTO - 3 tentativas de telefone por conversa", () => {
     const first=h2AutoPhoneFailureMessage("cadastro","formato",1);
     expect(first).toContain("*TENTATIVA 1 DE 3*");
     expect(first).toContain("*RESTAM 2 TENTATIVAS*");
-    expect(first).toContain("*11 números com DDD*");
+    expect(first).toContain("Informe um celular válido");
+    expect(first).toContain("com DDD. Aceitamos espaços,");
+    expect(first).toContain("hífens, parênteses e +55.");
     expect(first).toContain("*MENU* para início");
     expect(first).toContain("*0* para voltar");
     expect(first).not.toContain("ATENDIMENTO SUSPENSO");

@@ -1,13 +1,27 @@
 /**
- * Strict 11-digit Brazilian cellphone answer with DDD.
- * Format only: client/referrer eligibility is verified separately.
+ * Normaliza o celular brasileiro ANTES da validação nos três fluxos do H2 AUTO.
+ * Aceita número sem máscara, com parênteses, espaços, ponto, hífen e DDI 55,
+ * inclusive +55 e 0055. Nunca extrai números de mensagens livres ou combina
+ * múltiplos telefones: a entrada precisa conter somente telefone e máscara.
+ *
+ * Formato é diferente de autorização: cadastro, indicador, OTP e bloqueios
+ * continuam sendo verificados pelo fluxo existente.
  */
-export function validH2AutoPhone11(answer: string): boolean {
-  if (typeof answer !== "string") return false;
+export function normalizeH2AutoPhone11(answer: string): string {
+  if (typeof answer !== "string") return "";
   const value = answer.trim();
-  if (!/^[1-9][1-9]9[0-9]{8}$/.test(value)) return false;
-  if (/^(.)\1{10}$/.test(value)) return false;
-  return true;
+  if (!value || value.length > 64 || !/^[0-9\s()+.\-–—/]+$/.test(value)) return "";
+  let digits = value.replace(/\D/g, "");
+  if (digits.length === 15 && digits.startsWith("0055")) digits = digits.slice(4);
+  else if (digits.length === 13 && digits.startsWith("55")) digits = digits.slice(2);
+  if (!/^[1-9][1-9]9[0-9]{8}$/.test(digits)) return "";
+  if (/^(.)\1{10}$/.test(digits)) return "";
+  return digits;
+}
+
+/** Validação estrutural, independente da máscara digitada pelo cliente. */
+export function validH2AutoPhone11(answer: string): boolean {
+  return Boolean(normalizeH2AutoPhone11(answer));
 }
 
 /** Menu cannot bypass a phone-number challenge or a persistent block.
