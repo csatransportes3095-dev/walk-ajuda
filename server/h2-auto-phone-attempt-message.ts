@@ -15,7 +15,7 @@ export function h2AutoPhoneFailureMessage(
   const title = kind === "indicador" ? "INDICADOR NÃO VALIDADO" :
     kind === "indicacoes" ? "CONSULTA NÃO VALIDADA" : "CADASTRO NÃO VALIDADO";
   const defaultCause = reason === "formato"
-    ? ["O telefone está fora do formato.", "Informe *11 números com DDD*,", "sem espaços ou símbolos."]
+    ? ["Informe um celular válido", "com DDD. Aceitamos espaços,", "hífens, parênteses e +55."]
     : kind === "indicador"
       ? ["Não foi possível localizar", "ou autorizar o indicador", "com esse telefone."]
       : ["Não foi possível localizar", "ou confirmar um cadastro ativo", "com esse telefone."];
