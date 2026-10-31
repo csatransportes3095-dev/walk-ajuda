@@ -23,3 +23,16 @@ describe("Página cliente: resumo de indicações",()=>{
     expect(clientReferralSummary([])).toMatchObject({totalReferrals:0,amountTotal:0,amountPaid:0});
   });
 });
+
+describe("Indicação promocional não conta como válida",()=>{
+ it("mantém pedido no histórico e exclui dos totais",()=>{
+   const rows=[
+     {commissionValue:0,commissionState:"nao_elegivel",promotionNoCommission:true},
+     {commissionValue:3500,commissionState:"liberada"},
+   ];
+   expect(clientReferralSummary(rows)).toMatchObject({
+     totalReferrals:1,historyCount:2,promotionalCount:1,
+     amountTotal:3500,amountReleased:3500,
+   });
+ });
+});
