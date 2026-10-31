@@ -321,6 +321,7 @@ function Router() {
         <AdminGuard><AdminPreCadastroQuestions /></AdminGuard>
       </Route>
       <Route path={"/pre-cadastro"} component={PreCadastro} />
+      <Route path={"/cadastro"}><PasswordGate registrationOnly><></></PasswordGate></Route>
       <Route path={"/consultar-cadastro"} component={ConsultarCadastro} />
       <Route path={"/atualizarcadastro"} component={AtualizarCadastro} />
       <Route path={"/admin/referrer-bypass"}>
@@ -458,6 +459,7 @@ function AppContent() {
   const isEmprestimoRoute = location.toLowerCase() === "/emprestimo";
   const isCartoesRoute = location === "/cartoes" || location.startsWith("/cartoes/") || location.startsWith("/cartoes");
   const isPreCadastroRoute = location === "/pre-cadastro";
+  const isCustomerRegistrationRoute = location === "/cadastro";
   const isConsultarCadastroRoute = location === "/consultar-cadastro";
   const isAtualizarCadastroRoute = location === "/atualizarcadastro";
   const isLocadoraRoute = location === "/locadora" || location === "/locadora/";
@@ -651,7 +653,7 @@ function AppContent() {
     return <Router />;
   }
   // Rota /pre-cadastro é pública — formulário de pré-cadastro sem senha
-  if (isPreCadastroRoute) {
+  if (isPreCadastroRoute || isCustomerRegistrationRoute) {
     return <Router />;
   }
   // Rota /consultar-cadastro é pública — consulta de status por CPF

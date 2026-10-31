@@ -52,7 +52,7 @@ export function CustomerOtpSiteGate({ children }: { children: React.ReactNode })
 
   if (!token || session.data?.valid === false) {
     return <CustomerOtpLogin title="H2 COLOMBIANO 🇨🇴" onAuthenticated={authenticated}
-      onRegister={() => navigate("/pre-cadastro")} />;
+      onRegister={() => navigate("/cadastro")} />;
   }
 
   if (session.isError || route.isError) {
