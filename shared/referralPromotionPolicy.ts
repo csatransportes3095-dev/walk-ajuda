@@ -18,7 +18,7 @@ export function hasActiveProductPromotion(
   if (!item) return false;
   const finalPrice = parseBrazilMoney(item.price);
   const originalPrice = parseBrazilMoney(item.originalPrice);
-  const expiry = Number(item.promoEndsAt || 0);
+  const expiry = item.promoEndsAt == null ? 0 : Number(item.promoEndsAt);
   return Number.isFinite(finalPrice) && Number.isFinite(originalPrice)
     && originalPrice > 0 && finalPrice >= 0 && finalPrice < originalPrice
     && (!expiry || (Number.isFinite(expiry) && expiry > nowMs));
