@@ -7,8 +7,16 @@ import { Card } from '@/components/ui/card';
 import { trpc } from '@/lib/trpc';
 import { toast } from 'sonner';
 import { publicTrackingShareUrl } from '@shared/publicLinks';
+import { AdminCustomerAccessPage } from './AdminCustomerAccessPage';
 
 export default function AdminCustomerPasswordPage() {
+  const mode=trpc.customerPassword.authMode.useQuery(undefined,{retry:1,staleTime:0});
+  if (mode.isPending) return <div className="p-8 text-white">Verificando configurações...</div>;
+  if (mode.isError) return <div className="p-8 text-white">Não foi possível verificar a autenticação.</div>;
+  return mode.data?.passwordless ? <AdminCustomerAccessPage /> : <LegacyCustomerPasswordAdmin />;
+}
+
+function LegacyCustomerPasswordAdmin() {
   const [searchPhone, setSearchPhone] = useState('');
   const [searchedPhone, setSearchedPhone] = useState('');
   const [isSearching, setIsSearching] = useState(false);

@@ -73,13 +73,15 @@ export function CustomerOtpLogin({ title = "Acesso H2 Colombiano", initialPhone 
       }
       // Only the server can issue the session after consuming a valid code.
       // Local storage alone is never used to authorize a protected route.
-      localStorage.setItem("cp_token", result.token);
       await onAuthenticated({
         token: result.token,
         phone: cleanPhone,
         profileUpdateRequired: result.profileUpdateRequired,
         profileUpdateFields: result.profileUpdateFields || [],
       });
+      // Store only after the route-specific server authorization callback
+      // succeeds, preventing failed permissions from leaving a cached token.
+      localStorage.setItem("cp_token", result.token);
       toast.success("Identidade confirmada!");
     } catch (err: any) {
       toast.error(err?.message || "Falha ao verificar o código.");

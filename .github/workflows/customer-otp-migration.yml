@@ -26,7 +26,7 @@ jobs:
           cache: pnpm
       - run: pnpm install --frozen-lockfile
       - name: New OTP feature flag unit tests
-        run: pnpm exec vitest run server/customerOtpAccess.test.ts server/customerLoginEmailProof.test.ts
+        run: pnpm exec vitest run server/customerOtpAccess.test.ts server/customerLoginEmailProof.test.ts server/customerOtpCutoverRoutes.test.ts
       - name: Compare TypeScript errors against untouched target branch
         run: |
           git fetch --depth=1 origin 6356666b0a79ef7334aa26a503978d790778bbad

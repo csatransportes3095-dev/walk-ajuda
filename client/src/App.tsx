@@ -127,6 +127,7 @@ import VideoTutorial from "./pages/VideoTutorial";
 import Tutorial from "./pages/Tutorial";
 import ClientReferrals from "./pages/ClientReferrals";
 import PasswordGate from "./components/PasswordGate";
+import { CustomerOtpSiteGate } from "./components/CustomerOtpSiteGate";
 import AdminPWABanner from "./components/AdminPWABanner";
 import InstallWall from "./components/InstallWall";
 import CustomerRouteSecurityMonitor from "./components/CustomerRouteSecurityMonitor";
@@ -140,6 +141,24 @@ import { MaintenanceManifestGate } from "@/components/MaintenanceManifestGate";
 import { isMaintenanceManifestActiveForPath } from "@shared/maintenanceManifest";
 import { isH2AdsPath } from "@shared/h2adsRoute";
 import { CHASSIS_ADMIN_PATH, isChassisAdminPath } from "@shared/chassisRoute";
+
+// The server decides which login is active. Never fall back to the old
+// password UI if this check is unavailable during the cutover.
+function UnifiedCustomerGate({ children }: { children: React.ReactNode }) {
+  const mode=trpc.customerPassword.authMode.useQuery(undefined,{retry:1,staleTime:0});
+  if (mode.isPending) return <div className="min-h-screen bg-slate-950 text-white flex items-center justify-center">Verificando autenticação...</div>;
+  if (mode.isError) return <div className="min-h-screen bg-slate-950 text-white flex items-center justify-center">Acesso temporariamente indisponível. Tente novamente.</div>;
+  return mode.data?.passwordless
+    ? <CustomerOtpSiteGate>{children}</CustomerOtpSiteGate>
+    : <PasswordGate>{children}</PasswordGate>;
+}
+
+function RecoveryRoute() {
+  const mode=trpc.customerPassword.authMode.useQuery(undefined,{retry:1,staleTime:0});
+  if (mode.isPending) return <div className="min-h-screen bg-slate-950 text-white flex items-center justify-center">Verificando autenticação...</div>;
+  if (mode.isError) return <div className="min-h-screen bg-slate-950 text-white flex items-center justify-center">Serviço temporariamente indisponível.</div>;
+  return mode.data?.passwordless ? <Redirect to="/login" /> : <RecuperarSenha />;
+}
 
 // Guard para rotas admin — redireciona para /admin/login se não autenticado
 function AdminGuard({ children }: { children: React.ReactNode }) {
@@ -196,7 +215,7 @@ function Router() {
     <Switch>
       <Route path={"/site-access"} component={SiteAccess} />
       <Route path={"/admin/login"} component={AdminLogin} />
-      <Route path={"/recuperarsenha"} component={RecuperarSenha} />
+      <Route path={"/recuperarsenha"} component={RecoveryRoute} />
       <Route path={"/h2ads/mobile"}>
         <H2AdsGuard><H2AdsMobile /></H2AdsGuard>
       </Route>
@@ -597,9 +616,9 @@ function AppContent() {
   if (isLoginRoute) {
     return (
       <>
-        <PasswordGate>
+        <UnifiedCustomerGate>
           <Router />
-        </PasswordGate>
+        </UnifiedCustomerGate>
         <WarningOverlay />
       </>
     );
@@ -668,9 +687,9 @@ function AppContent() {
   // Os serviços continuam sob seus próprios gates e o login permanece ativo.
   return (
     <>
-      <PasswordGate>
+      <UnifiedCustomerGate>
         <Router />
-      </PasswordGate>
+      </UnifiedCustomerGate>
       <WarningOverlay />
     </>
   );

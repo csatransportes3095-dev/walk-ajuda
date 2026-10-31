@@ -10,6 +10,7 @@ import { trpc } from '@/lib/trpc';
 import { toast } from 'sonner';
 import { isValidCPF, normalizeCpf } from '@shared/cpf';
 import { ReferralAccessManifest } from '@/components/ReferralAccessManifest';
+import { CustomerOtpLogin, type CustomerOtpResult } from '@/components/CustomerOtpLogin';
 
 interface GastosLoginPageProps {
   onLoginSuccess: (token: string, clientId: number, clientName: string) => void;
@@ -48,7 +49,42 @@ function fileToBase64(file: File): Promise<string> {
   });
 }
 
-export function GastosLoginPage({ onLoginSuccess, sourceRoute, requiredProfilePhone }: GastosLoginPageProps) {
+// The OTP flow is shared with the rest of the site. The legacy form is
+// retained only while the server advertises the legacy auth mode.
+export function GastosLoginPage(props: GastosLoginPageProps) {
+  const mode=trpc.customerPassword.authMode.useQuery(undefined,{retry:1,staleTime:0});
+  if (mode.isPending) return <div className="min-h-screen bg-slate-950 text-white flex items-center justify-center">Verificando autenticação...</div>;
+  if (mode.isError) return <div className="min-h-screen bg-slate-950 text-white flex items-center justify-center">Não foi possível confirmar seu acesso. Tente novamente.</div>;
+  return mode.data?.passwordless
+    ? <GastosOtpLogin {...props} />
+    : <LegacyGastosLoginPage {...props} />;
+}
+
+function GastosOtpLogin({onLoginSuccess,sourceRoute,requiredProfilePhone}: GastosLoginPageProps) {
+  const utils=trpc.useUtils();
+  async function onAuthenticated(value: CustomerOtpResult) {
+    if (value.profileUpdateRequired) {
+      localStorage.setItem('customer_update_token',value.token);
+      localStorage.setItem('customer_update_phone_hint',value.phone);
+      sessionStorage.setItem('h2_customer_return_to',sourceRoute==='emprestimo'?'/emprestimo':'/gastos');
+      window.location.assign('/atualizarcadastro');
+      return;
+    }
+    const session=await utils.spreadsheet.verifySession.fetch({token:value.token});
+    if (!session?.valid || !session.clientId) {
+      throw new Error('Não foi possível validar o cadastro de Gastos. Procure o atendimento.');
+    }
+    onLoginSuccess(value.token,Number(session.clientId),String(session.clientName||'Cliente'));
+  }
+  return <CustomerOtpLogin
+    title={sourceRoute==='emprestimo'?'EMPRÉSTIMOS · H2 COLOMBIANO':'GASTOS · H2 COLOMBIANO'}
+    initialPhone={requiredProfilePhone||''}
+    onAuthenticated={onAuthenticated}
+    onRegister={() => window.location.assign('/pre-cadastro')}
+  />;
+}
+
+function LegacyGastosLoginPage({ onLoginSuccess, sourceRoute, requiredProfilePhone }: GastosLoginPageProps) {
   const requestedAccessRoute: AccessRoute = ['site', 'gastos', 'emprestimo', 'acompanhar'].includes(sourceRoute || '') ? sourceRoute as AccessRoute : 'gastos';
   const requestedCheckRoute: CheckRoute = requestedAccessRoute === 'acompanhar' ? 'gastos' : requestedAccessRoute;
   const { data: settings } = trpc.settings.getAll.useQuery();

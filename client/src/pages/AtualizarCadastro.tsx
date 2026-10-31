@@ -4,6 +4,7 @@ import { CheckCircle2, Eye, EyeOff, LockKeyhole, Phone, ShieldCheck, Upload, Use
 import { toast } from "sonner";
 import { trpc } from "@/lib/trpc";
 import { isValidCPF, normalizeCpf } from "@shared/cpf";
+import { CustomerOtpLogin } from "@/components/CustomerOtpLogin";
 
 const TOKEN_KEY = "customer_update_token";
 const RETURN_TO_KEY = "h2_customer_return_to";
@@ -48,6 +49,7 @@ function formatCpf(value: string) {
 type Step = "phone" | "password" | "create_password" | "profile" | "done" | "already_done";
 
 export default function AtualizarCadastro() {
+  const otpMode=trpc.customerPassword.authMode.useQuery(undefined,{retry:1,staleTime:0});
   const [step, setStep] = useState<Step>("phone");
   const [phone, setPhone] = useState("");
   const [password, setPassword] = useState("");
@@ -277,6 +279,19 @@ export default function AtualizarCadastro() {
     profilePhotoUrl: "Foto de perfil",
   } as Record<string, string>)[field] || field);
   const busy = statusMutation.isPending || loginMutation.isPending || createPasswordMutation.isPending || profileQuery.isLoading;
+
+  // Never expose the existing password forms when the server has activated
+  // the OTP-only cutover. The profile editor still uses its protected API.
+  if (otpMode.isPending) return <div className="min-h-screen bg-slate-950 text-white flex items-center justify-center">Verificando autenticação...</div>;
+  if (otpMode.isError) return <div className="min-h-screen bg-slate-950 text-white flex items-center justify-center">Não foi possível confirmar o acesso. Tente novamente.</div>;
+  if (otpMode.data?.passwordless && !token && step!=="done" && step!=="already_done")
+    return <CustomerOtpLogin title="ATUALIZAR CADASTRO · H2 COLOMBIANO"
+      initialPhone={localStorage.getItem("customer_update_phone_hint") || ""}
+      onAuthenticated={value => {
+        acceptToken(value.token);
+        setStep("phone");
+      }}
+    />;
 
   return (
     <main className="min-h-screen bg-[#060818] px-4 py-8 text-white sm:py-12">
