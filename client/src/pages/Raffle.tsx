@@ -2,6 +2,7 @@ import { useState, useEffect, useMemo } from "react";
 import { trpc } from "@/lib/trpc";
 import { isValidCPF, normalizeCpf } from "@shared/cpf";
 import { toast } from "sonner";
+import { CustomerOtpLogin, type CustomerOtpResult } from "@/components/CustomerOtpLogin";
 import { Gift, Lock, Trophy, Users, Ticket, CheckCircle2, Star, Phone, User, RefreshCw, Hash, LogOut, CalendarClock, Clock3, ShieldCheck, Sparkles, Info, AlertTriangle, UserPlus, ArrowLeft } from "lucide-react";
 
 const RAFFLE_SESSION_KEY = "walk_raffle_access";
@@ -13,6 +14,26 @@ function normalizeRafflePhone(value: string) {
 }
 
 export default function Raffle() {
+  const authMode = trpc.customerPassword.authMode.useQuery(undefined, { retry: 1 });
+  const [token, setToken] = useState(() => localStorage.getItem("cp_token") || "");
+  const session = trpc.customerPassword.checkSession.useQuery({ token }, {
+    enabled: authMode.data?.passwordless === true && !!token, retry: 1,
+  });
+  if (authMode.isPending || (authMode.data?.passwordless && token && session.isPending))
+    return <div className="min-h-screen bg-slate-950 flex items-center justify-center text-white">Verificando acesso...</div>;
+  if (authMode.isError || (authMode.data?.passwordless && session.isError))
+    return <div className="min-h-screen bg-slate-950 flex items-center justify-center text-white">Acesso temporariamente indisponível.</div>;
+  if (authMode.data?.passwordless && (!token || session.data?.valid !== true))
+    return <CustomerOtpLogin title="SORTEIO · H2 COLOMBIANO"
+      onAuthenticated={async (result: CustomerOtpResult) => {
+        localStorage.setItem("cp_token", result.token);
+        localStorage.setItem("walk_client_phone", result.phone);
+        setToken(result.token);
+      }} />;
+  return <RaffleContent passwordless={authMode.data?.passwordless === true} />;
+}
+
+function RaffleContent({ passwordless }: { passwordless: boolean }) {
   const [accessGranted, setAccessGranted] = useState(false);
   const [password, setPassword] = useState("");
   const [passwordError, setPasswordError] = useState("");
@@ -78,6 +99,7 @@ export default function Raffle() {
   // Verificar acesso na sessão
   useEffect(() => {
     if (configLoading) return;
+    if (passwordless) { setAccessGranted(true); setChecking(false); return; }
     const sessionType = localStorage.getItem("walk_access_type");
     const sessionGranted = localStorage.getItem("walk_access_granted");
     if (sessionGranted === "true" && sessionType === "raffle") {
@@ -95,7 +117,7 @@ export default function Raffle() {
       setAccessGranted(true);
     }
     setChecking(false);
-  }, [config, configLoading]);
+  }, [config, configLoading, passwordless]);
 
   useEffect(() => {
     const timer = window.setInterval(() => setNowMs(Date.now()), 1000);
