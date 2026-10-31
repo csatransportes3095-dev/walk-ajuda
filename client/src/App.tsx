@@ -653,7 +653,7 @@ function AppContent() {
     return <Router />;
   }
   // Rota /pre-cadastro é pública — formulário de pré-cadastro sem senha
-  if (isPreCadastroRoute) {
+  if (isPreCadastroRoute || isCustomerRegistrationRoute) {
     return <Router />;
   }
   // Rota /consultar-cadastro é pública — consulta de status por CPF
