@@ -1,3 +1,4 @@
+import { H2_AUTO_SHORT_CONFIRMATION } from "../shared/h2AutoShortReplies";
 import { getMissingCustomerProfileFields } from "./customerProfileRequirements";
 import { normalizeCustomerPhone } from "./customerAccess";
 
@@ -37,33 +38,10 @@ export function selectH2AutoCustomerByPhone<T extends { phone?: unknown }>(
   return matching.length === 1 ? matching[0] : null;
 }
 
-export const H2_AUTO_CUSTOMER_PROFILE_UPDATE_MESSAGE =
-  "⚠️ *H2 COLOMBIANO* 🇨🇴\n" +
-  "📝 *ATUALIZAÇÃO DE CADASTRO*\n\n" +
-  "Para continuar seu atendimento,\n" +
-  "é necessário completar ou\n" +
-  "atualizar seu cadastro.\n\n" +
-  "🔗 *ACESSE SEU CADASTRO:*\n" +
-  "https://h2colombiano.com/login\n\n" +
-  "✅ Faça login e preencha\n" +
-  "os dados que estiverem pendentes.\n\n" +
-  "📱 Depois, volte ao WhatsApp\n" +
-  "e informe seu telefone com DDD.\n\n" +
-  "👨‍💻 Se não conseguir acessar,\n" +
-  "solicite atendimento humano.\n\n" +
-  "🛡️ *EQUIPE H2 COLOMBIANO* 🇨🇴";
+export const H2_AUTO_CUSTOMER_PROFILE_UPDATE_MESSAGE = H2_AUTO_SHORT_CONFIRMATION.customerProfileUpdate;
 
 /**
  * Unknown, ambiguous and otherwise unauthorized phone numbers keep one generic
  * response; do not reveal whether a specific phone is on file.
  */
-export const H2_AUTO_CUSTOMER_NOT_CONFIRMED_MESSAGE =
-  "⚠️ *H2 COLOMBIANO* 🇨🇴\n" +
-  "🚫 *ACESSO NÃO CONFIRMADO*\n\n" +
-  "Não foi possível confirmar\n" +
-  "seu acesso com esse telefone.\n\n" +
-  "📱 Confira o número com DDD\n" +
-  "e o telefone do seu cadastro.\n\n" +
-  "👨‍💻 Se estiver correto, solicite\n" +
-  "atendimento humano.\n\n" +
-  "🛡️ *EQUIPE H2 COLOMBIANO* 🇨🇴";
+export const H2_AUTO_CUSTOMER_NOT_CONFIRMED_MESSAGE = H2_AUTO_SHORT_CONFIRMATION.customerAccessNotConfirmed;

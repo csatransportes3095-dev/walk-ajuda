@@ -8,6 +8,7 @@ import { getDb } from "./db";
 import { listActiveValidationBlocks, releaseValidationBlock, releaseAllValidationBlocks } from "./h2-auto-validation-blocks";
 import { changeSilencedPhone, manualSilencedPhones } from "./h2-auto-silenced-contacts";
 import { h2AutoTreeSchema, H2_AUTO_TREE_DEFAULT } from "../shared/h2AutoTree";
+import { H2_AUTO_SHORT_MEDIA, H2_AUTO_SHORT_ORDER_NOT_FOUND, applyH2AutoShortCopy } from "../shared/h2AutoShortReplies";
 import { h2AutoConfirmationSchema as confirmationSchema } from "../shared/h2AutoConfirmation";
 import {
   decodeH2AutoDiagnostics,
@@ -34,34 +35,34 @@ const mediaSchema = z.object({
     .string()
     .max(3000)
     .default(
-      "🎤 Recebemos seu áudio. Por favor, envie sua dúvida por escrito ou digite 6 para falar com um atendente."
+      H2_AUTO_SHORT_MEDIA.audioFallback
     ),
   photoReply: z
     .string()
     .max(3000)
     .default(
-      "📸 Recebemos sua foto. Descreva sua dúvida por escrito ou digite 6."
+      H2_AUTO_SHORT_MEDIA.photoReply
     ),
   videoReply: z
     .string()
     .max(3000)
     .default(
-      "🎥 Recebemos seu vídeo. Descreva sua dúvida por escrito ou digite 6."
+      H2_AUTO_SHORT_MEDIA.videoReply
     ),
   documentReply: z
     .string()
     .max(3000)
     .default(
-      "📄 Recebemos seu documento. Descreva sua solicitação por escrito ou digite 6."
+      H2_AUTO_SHORT_MEDIA.documentReply
     ),
   stickerReply: z
     .string()
     .max(3000)
-    .default("📎 Recebemos sua mídia. Digite MENU para escolher uma opção."),
+    .default(H2_AUTO_SHORT_MEDIA.stickerReply),
   unknownReply: z
     .string()
     .max(3000)
-    .default("📎 Recebemos sua mídia. Escreva sua dúvida ou digite MENU."),
+    .default(H2_AUTO_SHORT_MEDIA.unknownReply),
   cooldownSeconds: z.number().int().min(15).max(3600).default(120),
   maxAudioSeconds: z.number().int().min(5).max(120).default(30),
 });
@@ -81,7 +82,7 @@ const configSchema = z.object({
     .string()
     .max(600)
     .default(
-      "Cadastro localizado com sucesso, mas não encontramos nenhum pedido associado a este cadastro no momento."
+      H2_AUTO_SHORT_ORDER_NOT_FOUND
     ),
   welcome: z.string().max(6000),
   menu: z.array(z.string().max(6000)).length(9),
@@ -117,7 +118,7 @@ const initial: RemoteConfig = {
   orderCodeTtlMinutes: 10,
   orderCodeMaxAttempts: 5,
   orderNoOrdersMessage:
-    "Cadastro localizado com sucesso, mas não encontramos nenhum pedido associado a este cadastro no momento.",
+    H2_AUTO_SHORT_ORDER_NOT_FOUND,
   enabled: false,
   desktopReadOnly: false,
   identificationEnabled: true,
@@ -167,6 +168,19 @@ function ensure() {
 		 history_json JSON NOT NULL,
 		 received_at BIGINT NOT NULL
 		)`);
+      await db.execute(sql`CREATE TABLE IF NOT EXISTS h2_auto_short_copy_backups (
+        device_id VARCHAR(32) NOT NULL,
+        campaign_key VARCHAR(80) NOT NULL,
+        previous_config JSON NOT NULL,
+        previous_revision INT NOT NULL,
+        applied_at TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP,
+        PRIMARY KEY (device_id, campaign_key)
+      )`);
+      // Uma migração idempotente, apenas de textos. Cada aparelho tem backup.
+      // A importação inicial de um APK novo (revision=0) permanece intacta.
+      void migrateH2AutoShortCopyOnce(db).catch(error => {
+        console.error("[H2Auto] falha na atualização de mensagens curtas", error);
+      });
     })().catch(e => {
       ready = undefined;
       throw e;
@@ -181,6 +195,58 @@ const rows = async (query: any): Promise<any[]> => {
 };
 const decodeConfig = (raw: any): RemoteConfig =>
   configSchema.parse(typeof raw === "string" ? JSON.parse(raw) : raw);
+
+const H2_AUTO_SHORT_COPY_CAMPAIGN = "short-whatsapp-ptbr-20261031-v1";
+async function migrateH2AutoShortCopyOnce(db: any): Promise<void> {
+  // O conteúdo de contas já configuradas é migrado uma única vez; cadastros
+  // novos recebem os textos curtos definidos nos defaults.
+  let devices: any[] = [];
+  try {
+    const result = await db.execute(sql`SELECT id FROM h2_auto_devices WHERE revision > 0 ORDER BY created_at ASC LIMIT 1000`);
+    devices = (result[0] || []) as any[];
+  } catch (error) {
+    console.error("[H2Auto] não foi possível listar aparelhos para atualizar textos", error);
+    return;
+  }
+  let migrated = 0;
+  let failed = 0;
+  for (const device of devices) {
+    try {
+      const applied = await db.transaction(async (tx: any) => {
+        const fetched = await tx.execute(sql`SELECT config_json,revision FROM h2_auto_devices
+          WHERE id=${String(device.id)} FOR UPDATE`);
+        const row = (fetched[0] as any[])[0];
+        if (!row) return false;
+        const previous = await tx.execute(sql`SELECT device_id FROM h2_auto_short_copy_backups
+          WHERE device_id=${String(device.id)} AND campaign_key=${H2_AUTO_SHORT_COPY_CAMPAIGN} LIMIT 1`);
+        if ((previous[0] as any[]).length) return false;
+        const original = decodeConfig(row.config_json);
+        const compact = configSchema.parse(applyH2AutoShortCopy(original));
+        const originalJson = JSON.stringify(original);
+        const compactJson = JSON.stringify(compact);
+        // O backup e a atualização são uma única transação. Nenhum estado
+        // parcial pode ser enviado ao aparelho.
+        await tx.execute(sql`INSERT INTO h2_auto_short_copy_backups
+          (device_id,campaign_key,previous_config,previous_revision)
+          VALUES (${String(device.id)},${H2_AUTO_SHORT_COPY_CAMPAIGN},
+            ${originalJson},${Number(row.revision)})`);
+        if (compactJson !== originalJson) {
+          await tx.execute(sql`UPDATE h2_auto_devices SET
+            config_json=${compactJson}, revision=revision+1
+            WHERE id=${String(device.id)} AND revision=${Number(row.revision)}`);
+        }
+        return true;
+      });
+      if (applied) migrated++;
+    } catch (error) {
+      failed++;
+      // Nenhum texto parcialmente aplicado: rollback é automático.
+      console.error("[H2Auto] migração de texto não aplicada a aparelho", String(device.id), error);
+    }
+  }
+  console.info("[H2Auto] mensagens curtas:", migrated, "aparelho(s) atualizados; falhas:", failed);
+}
+
 const safeDevice = (r: any) => ({
   id: r.id,
   label: r.label,
