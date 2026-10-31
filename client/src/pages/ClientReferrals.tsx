@@ -86,7 +86,7 @@ export default function ClientReferrals() {
           <section className="mx-auto max-w-xl rounded-3xl border border-amber-400/30 bg-slate-900/90 p-6 text-center shadow-xl sm:p-9">
             <LockKeyhole className="mx-auto h-12 w-12 text-amber-300"/>
             <h2 className="mt-4 text-xl font-black">ACESSO AO EXTRATO DE INDICAÇÕES</h2>
-            <p className="mt-3 text-sm leading-relaxed text-slate-300">Entre na sua conta H2 Colombiano com o telefone e a senha do cadastro. Apenas suas próprias indicações serão exibidas.</p>
+            <p className="mt-3 text-sm leading-relaxed text-slate-300">Entre na sua conta H2 Colombiano com telefone e código enviado ao e-mail cadastrado. Apenas suas próprias indicações serão exibidas.</p>
             <a href="/login" className="mt-6 inline-flex min-h-12 items-center justify-center gap-2 rounded-xl bg-gradient-to-r from-cyan-400 to-blue-500 px-6 py-3 font-black text-slate-950 hover:brightness-110">ENTRAR NA MINHA CONTA <ArrowUpRight className="h-4 w-4"/></a>
           </section>
         ) : query.isLoading ? (

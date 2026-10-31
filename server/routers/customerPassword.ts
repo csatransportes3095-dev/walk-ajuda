@@ -3,6 +3,7 @@
 
 import { createHash, randomBytes, randomInt, timingSafeEqual } from "crypto";
 import { issueLoginEmailProof, assertLoginEmailProof } from "../customerLoginEmailProof";
+import { requestCustomerCode, verifyCustomerCode, redeemNewRegistrationProof, isCustomerOtpModeEnabled, getVerifiedCustomerOtpSession, revokeCustomerOtpSession } from "../customerOtpAccess";
 import { canCustomerRecoverPassword, passwordRecoveryCodeHash } from "../customerPasswordRecoveryPolicy";
 import { TRPCError } from "@trpc/server";
 import { z } from "zod";
@@ -180,10 +181,26 @@ async function getCustomerByPhoneOrCpf(input: string, isCpf = false) {
 
 // â”€â”€â”€ router â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
 
+function requireLegacyPasswordMode(): void {
+  if (isCustomerOtpModeEnabled()) throw new TRPCError({ code: "FORBIDDEN", message: "Acesso por senha de cliente desativado. Utilize telefone e código do e-mail." });
+}
+
 export const customerPasswordRouter = router({
+  authMode: publicProcedure.query(() => ({ passwordless: isCustomerOtpModeEnabled() })),
+  requestCustomerCode: publicProcedure
+    .input(z.object({ phone: z.string().min(10).max(32) }))
+    .mutation(async ({ input, ctx }) => requestCustomerCode(input.phone, ctx.req)),
+  verifyCustomerCode: publicProcedure
+    .input(z.object({ phone: z.string().min(10).max(32), code: z.string().regex(/^\d{6}$/) }))
+    .mutation(async ({ input }) => verifyCustomerCode(input.phone, input.code)),
+  finishRegistrationWithoutPassword: publicProcedure
+    .input(z.object({ phone: z.string().min(10).max(32), emailVerificationToken: z.string().min(75).max(1500) }))
+    .mutation(async ({ input }) => redeemNewRegistrationProof(input.phone, input.emailVerificationToken)),
+
   // â”€â”€ Modo global (auto / manual) â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
 
   getMode: publicProcedure.query(async () => {
+    requireLegacyPasswordMode();
     const mode = await getPasswordMode();
     return { mode };
   }),
@@ -191,6 +208,7 @@ export const customerPasswordRouter = router({
   setMode: adminProcedure
     .input(z.object({ mode: z.enum(["auto", "manual"]) }))
     .mutation(async ({ input }) => {
+      requireLegacyPasswordMode();
       const db = (await getDb()) as any;
       if (!db) throw new TRPCError({ code: "INTERNAL_SERVER_ERROR", message: "Banco indisponível" });
       const val = input.mode === "auto" ? "false" : "true";
@@ -346,6 +364,8 @@ export const customerPasswordRouter = router({
   checkStatus: publicProcedure
     .input(z.object({ phone: z.string(), isCpf: z.boolean().optional() }))
     .query(async ({ input }) => {
+      requireLegacyPasswordMode();
+
       const found = await getCustomerByPhoneOrCpf(input.phone, input.isCpf === true);
       if (!found) return { status: "not_found" as const };
       const { customer: cust, resolvedPhone } = found;
@@ -366,6 +386,8 @@ export const customerPasswordRouter = router({
   checkStatusMutation: publicProcedure
     .input(z.object({ phone: z.string(), isCpf: z.boolean().optional() }))
     .mutation(async ({ input }) => {
+      requireLegacyPasswordMode();
+
       const found = await getCustomerByPhoneOrCpf(input.phone, input.isCpf === true);
       if (!found) return { status: "not_found" as const };
       const { customer: cust, resolvedPhone } = found;
@@ -392,6 +414,7 @@ export const customerPasswordRouter = router({
   clientCreateAuto: publicProcedure
     .input(z.object({ phone: z.string(), password: z.string().min(4), emailVerificationToken: z.string().min(32).optional() }))
     .mutation(async ({ input }) => {
+      requireLegacyPasswordMode();
       const db = (await getDb()) as any;
       if (!db) throw new TRPCError({ code: "INTERNAL_SERVER_ERROR", message: "Banco indisponível" });
       const cleanPhone = input.phone.replace(/\D/g, "");
@@ -491,6 +514,7 @@ export const customerPasswordRouter = router({
   clientCreateManual: publicProcedure
     .input(z.object({ phone: z.string(), password: z.string().min(4), emailVerificationToken: z.string().min(32).optional() }))
     .mutation(async ({ input }) => {
+      requireLegacyPasswordMode();
       const db = (await getDb()) as any;
       if (!db) throw new TRPCError({ code: "INTERNAL_SERVER_ERROR", message: "Banco indisponível" });
       const cleanPhone = input.phone.replace(/\D/g, "");
@@ -552,6 +576,7 @@ export const customerPasswordRouter = router({
   loginVerified: publicProcedure
     .input(z.object({ phone: z.string(), password: z.string(), emailVerificationToken: z.string().min(32) }))
     .mutation(async ({ input }) => {
+      requireLegacyPasswordMode();
       const db = (await getDb()) as any;
       if (!db) throw new TRPCError({ code: "INTERNAL_SERVER_ERROR", message: "Banco indisponível" });
       return authenticateVerifiedCustomer(db, input.phone.replace(/\D/g, ""), input.password, input.emailVerificationToken);
@@ -560,6 +585,7 @@ export const customerPasswordRouter = router({
   login: publicProcedure
     .input(z.object({ phone: z.string(), password: z.string(), emailVerificationToken: z.string().min(32).optional() }))
     .mutation(async ({ input }) => {
+      requireLegacyPasswordMode();
       const db = (await getDb()) as any;
       if (!db) throw new TRPCError({ code: "INTERNAL_SERVER_ERROR", message: "Banco indisponível" });
       if (!input.emailVerificationToken) {
@@ -593,6 +619,11 @@ export const customerPasswordRouter = router({
       if (!db) throw new TRPCError({ code: "INTERNAL_SERVER_ERROR", message: "Banco indisponível" });
       const cleanToken = input.token.trim();
       if (!cleanToken) return { valid: false, reason: 'missing' as const };
+      if (isCustomerOtpModeEnabled()) {
+        const verified = await getVerifiedCustomerOtpSession(db, cleanToken);
+        if (!verified) return { valid: false, reason: 'expired' as const };
+        return { valid: true, source: 'customer' as const, phone: verified.phone, ...getProfileUpdateMeta(verified) };
+      }
 
       const rows = await db.select().from(customerPasswordSessions)
         .where(eq(customerPasswordSessions.token, cleanToken)).limit(1);
@@ -650,6 +681,10 @@ export const customerPasswordRouter = router({
       const db = (await getDb()) as any;
       if (!db) throw new TRPCError({ code: "INTERNAL_SERVER_ERROR", message: "Banco indisponível" });
       const cleanToken = input.token.trim();
+      if (isCustomerOtpModeEnabled()) {
+        await revokeCustomerOtpSession(db, cleanToken);
+        return { success: true };
+      }
       await db.delete(customerPasswordSessions).where(eq(customerPasswordSessions.token, cleanToken));
       await db.delete(spreadsheetSessions).where(eq(spreadsheetSessions.token, cleanToken));
       return { success: true };
@@ -662,6 +697,7 @@ export const customerPasswordRouter = router({
   requestPasswordRecovery: publicProcedure
     .input(z.object({ phone: z.string().min(10).max(32) }))
     .mutation(async ({ input }) => {
+      requireLegacyPasswordMode();
       const generic = { success: true as const, message: "Se o cadastro estiver habilitado, enviaremos um codigo ao e-mail cadastrado." };
       const phone = input.phone.replace(/\D/g, "");
       if (!/^\d{10,11}$/.test(phone)) return generic;
@@ -711,6 +747,7 @@ export const customerPasswordRouter = router({
       newPassword: z.string().min(8).max(72),
     }))
     .mutation(async ({ input }) => {
+      requireLegacyPasswordMode();
       const phone = input.phone.replace(/\D/g,"");
       const db = (await getDb()) as any;
       if (!db) throw new TRPCError({code:"SERVICE_UNAVAILABLE",message:"Servico indisponivel."});
@@ -749,6 +786,8 @@ export const customerPasswordRouter = router({
     }),
 
   adminListPending: adminProcedure.query(async () => {
+      requireLegacyPasswordMode();
+
     const db = (await getDb()) as any;
     if (!db) return [];
     const rows = await db
@@ -833,6 +872,7 @@ export const customerPasswordRouter = router({
   adminApprove: adminProcedure
     .input(z.object({ passwordId: z.number(), days: z.number().min(1).max(3650) }))
     .mutation(async ({ input }) => {
+      requireLegacyPasswordMode();
       const db = (await getDb()) as any;
       if (!db) throw new TRPCError({ code: "INTERNAL_SERVER_ERROR", message: "Banco indisponível" });
       // Buscar senha e telefone antes de liberar
@@ -860,6 +900,7 @@ export const customerPasswordRouter = router({
   adminReset: adminProcedure
     .input(z.object({ phone: z.string() }))
     .mutation(async ({ input }) => {
+      requireLegacyPasswordMode();
       const db = (await getDb()) as any;
       if (!db) throw new TRPCError({ code: "INTERNAL_SERVER_ERROR", message: "Banco indisponível" });
       const cleanPhone = input.phone.replace(/\D/g, "");
@@ -897,6 +938,7 @@ export const customerPasswordRouter = router({
   adminSetPassword: adminProcedure
     .input(z.object({ phone: z.string(), password: z.string().min(4), days: z.number().min(1).max(3650) }))
     .mutation(async ({ input }) => {
+      requireLegacyPasswordMode();
       const db = (await getDb()) as any;
       if (!db) throw new TRPCError({ code: "INTERNAL_SERVER_ERROR", message: "Banco indisponível" });
       const cleanPhone = input.phone.replace(/\D/g, "");
@@ -927,6 +969,8 @@ export const customerPasswordRouter = router({
   adminGetStatus: adminProcedure
     .input(z.object({ phone: z.string() }))
     .query(async ({ input }) => {
+      requireLegacyPasswordMode();
+
       const cleanPhone = input.phone.replace(/\D/g, "");
       const pwd = await getActivePassword(cleanPhone);
       if (!pwd) return { hasPassword: false };

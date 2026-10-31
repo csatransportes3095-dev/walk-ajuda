@@ -1,0 +1,37 @@
+name: Customer OTP Migration Checks
+
+# PR checks run once per change; no redundant push + pull_request job.
+on:
+  pull_request:
+    branches:
+      - recovery/organizar-salvos-2026-08-24
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  verify-passwordless-draft:
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+    steps:
+      - uses: actions/checkout@v4
+      # pnpm version comes exclusively from package.json packageManager.
+      - uses: pnpm/action-setup@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+          cache: pnpm
+      - run: pnpm install --frozen-lockfile
+      - name: New OTP feature flag unit tests
+        run: pnpm exec vitest run server/customerOtpAccess.test.ts server/customerLoginEmailProof.test.ts server/customerOtpCutoverRoutes.test.ts
+      - name: Compare TypeScript errors against untouched target branch
+        run: |
+          git fetch --depth=1 origin 6356666b0a79ef7334aa26a503978d790778bbad
+          mkdir -p .baseline
+          git archive FETCH_HEAD | tar -x -C .baseline
+          ln -s ../node_modules .baseline/node_modules
+          # Existing diagnostics may remain, but introducing ANY new diagnostic fails.
+          node scripts/compare-password-pr-typecheck.mjs
+      - name: Production build validation
+        run: pnpm build

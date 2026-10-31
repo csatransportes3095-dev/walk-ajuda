@@ -3,6 +3,7 @@ import { eq } from "drizzle-orm";
 import type { Request } from "express";
 import { customerPasswordSessions, customers } from "../drizzle/schema";
 import { getDb } from "./db";
+import { getVerifiedCustomerOtpSession, isCustomerOtpModeEnabled } from "./customerOtpAccess";
 
 export type CustomerSessionIdentity = {
   phone: string;
@@ -34,6 +35,18 @@ export async function requireCustomerSession(
   const db = await getDb() as any;
   if (!db) {
     throw new TRPCError({ code: "INTERNAL_SERVER_ERROR", message: "Banco indisponível." });
+  }
+
+  // In OTP mode, reject every legacy 90-day password session, even if it
+  // exists in the same table. Verify the one-time-email binding first.
+  if (isCustomerOtpModeEnabled()) {
+    const current=await getVerifiedCustomerOtpSession(db,sessionToken);
+    if (!current) throw new TRPCError({code:"UNAUTHORIZED",message:"Confirme telefone e código do e-mail novamente."});
+    const currentPhone=normalizeSessionPhone(current.phone);
+    const requested=normalizeSessionPhone(requestedPhone);
+    if (!currentPhone || (requested && currentPhone!==requested))
+      throw new TRPCError({code:"FORBIDDEN",message:"A sessão não autoriza este cliente."});
+    return {phone:currentPhone};
   }
 
   const sessionRows = await db
