@@ -372,7 +372,6 @@ export default function AdminSimilarity() {
   );
   const [loadingH2Bico, setLoadingH2Bico] = useState(false);
   const autoAnalyzeH2BicoRef = useRef(false);
-  const h2bicoIndexRef = useRef<Map<number, H2BicoFaceIndexRow>>(new Map());
 
   useEffect(() => {
     if (thresholdLoadedRef.current || !settingsQuery.data) return;
@@ -757,7 +756,6 @@ export default function AdminSimilarity() {
 
     const isH2BicoBatch = candidates.some((candidate) => Boolean(candidate.h2bicoId));
     const indexed = isH2BicoBatch ? await readH2BicoFaceIndex() : new Map<number, H2BicoFaceIndexRow>();
-    h2bicoIndexRef.current = indexed;
     const newlyEmbedded: H2BicoFaceIndexRow[] = [];
 
     setAnalyzing(true);
