@@ -321,6 +321,7 @@ function Router() {
         <AdminGuard><AdminPreCadastroQuestions /></AdminGuard>
       </Route>
       <Route path={"/pre-cadastro"} component={PreCadastro} />
+      <Route path={"/cadastro"}><PasswordGate registrationOnly><></></PasswordGate></Route>
       <Route path={"/consultar-cadastro"} component={ConsultarCadastro} />
       <Route path={"/atualizarcadastro"} component={AtualizarCadastro} />
       <Route path={"/admin/referrer-bypass"}>
