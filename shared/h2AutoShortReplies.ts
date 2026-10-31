@@ -137,12 +137,18 @@ export type H2AutoCopyConfig = {
 };
 
 export function applyH2AutoShortCopy<T extends H2AutoCopyConfig>(config: T): T {
-  const nodes = config.tree?.nodes.map(node => ({
-    ...node,
-    text: H2_AUTO_SHORT_TREE[node.id] ?? compactH2AutoFreeform(node.text),
-    // options, key, label, next and mode are strictly preserved.
-  }));
-  return {
+  const nodes = config.tree?.nodes.map(node => {
+    const standard = H2_AUTO_SHORT_TREE[node.id];
+    if (!standard) return { ...node, text: compactH2AutoFreeform(node.text) };
+    // Preserve links and placeholders added by the administrator even if the
+    // surrounding original explanation is replaced by a short message.
+    const extras = [
+      ...(node.text.match(/https?:\\/\\/[^\\s]+/g) || []),
+      ...(node.text.match(/\\{\\{?[a-zA-Z_][a-zA-Z_0-9.]*\\}\\}?/g) || []),
+    ].filter(part => !standard.includes(part));
+    return { ...node, text: [standard, ...new Set(extras)].join("\\n") };
+  });
+  const updated = {
     ...config,
     confirmation: { ...H2_AUTO_SHORT_CONFIRMATION },
     media: { ...config.media, ...H2_AUTO_SHORT_MEDIA },
@@ -156,4 +162,5 @@ export function applyH2AutoShortCopy<T extends H2AutoCopyConfig>(config: T): T {
     menu: config.menu.map(compactH2AutoFreeform),
     rules: config.rules.map(rule => ({ ...rule, reply: compactH2AutoFreeform(rule.reply) })),
   };
+  return updated as T;
 }
