@@ -21,6 +21,7 @@ import H2AutoValidationBlocks from "@/components/H2AutoValidationBlocks";
 import H2AutoSilencedContacts from "@/components/H2AutoSilencedContacts";
 import H2AutoTreeEditor from "@/components/H2AutoTreeEditor";
 import { H2_AUTO_CONFIRMATION_DEFAULTS as confirmationDefaults, H2_AUTO_CONFIRMATION_GROUPS as confirmationGroups } from "@shared/h2AutoConfirmation";
+import { H2_AUTO_SHORT_MEDIA, H2_AUTO_SHORT_ORDER_NOT_FOUND } from "@shared/h2AutoShortReplies";
 
 const Box = ({ children }: { children: React.ReactNode }) => (
   <div className="rounded-2xl border border-cyan-500/30 bg-slate-900/90 p-5 space-y-3">
@@ -32,15 +33,15 @@ const mediaDefaults = {
   enabled: false,
   transcribeAudio: false,
   audioFallback:
-    "🎤 Recebemos seu áudio. Por favor, envie sua dúvida por escrito ou digite 6 para falar com um atendente.",
+    H2_AUTO_SHORT_MEDIA.audioFallback,
   photoReply:
-    "📸 Recebemos sua foto. Descreva sua dúvida por escrito ou digite 6.",
+    H2_AUTO_SHORT_MEDIA.photoReply,
   videoReply:
-    "🎥 Recebemos seu vídeo. Descreva sua dúvida por escrito ou digite 6.",
+    H2_AUTO_SHORT_MEDIA.videoReply,
   documentReply:
-    "📄 Recebemos seu documento. Descreva sua solicitação por escrito ou digite 6.",
-  stickerReply: "📎 Recebemos sua mídia. Digite MENU para escolher uma opção.",
-  unknownReply: "📎 Recebemos sua mídia. Escreva sua dúvida ou digite MENU.",
+    H2_AUTO_SHORT_MEDIA.documentReply,
+  stickerReply: H2_AUTO_SHORT_MEDIA.stickerReply,
+  unknownReply: H2_AUTO_SHORT_MEDIA.unknownReply,
   cooldownSeconds: 120,
   maxAudioSeconds: 30,
 };
@@ -751,7 +752,7 @@ export default function AdminH2Auto() {
                       maxLength={600}
                       value={
                         value.orderNoOrdersMessage ??
-                        "Cadastro localizado com sucesso, mas não encontramos nenhum pedido associado a este cadastro no momento."
+                        H2_AUTO_SHORT_ORDER_NOT_FOUND
                       }
                       onChange={e =>
                         change("orderNoOrdersMessage", e.target.value)
