@@ -200,7 +200,7 @@ async function migrateH2AutoShortCopyOnce(db: any): Promise<void> {
   // novos recebem os textos curtos definidos nos defaults.
   let devices: any[] = [];
   try {
-    const result = await db.execute(sql\`SELECT id FROM h2_auto_devices WHERE revision > 0 ORDER BY created_at ASC LIMIT 1000\`);
+    const result = await db.execute(sql`SELECT id FROM h2_auto_devices WHERE revision > 0 ORDER BY created_at ASC LIMIT 1000`);
     devices = (result[0] || []) as any[];
   } catch (error) {
     console.error("[H2Auto] não foi possível listar aparelhos para atualizar textos", error);
@@ -209,12 +209,12 @@ async function migrateH2AutoShortCopyOnce(db: any): Promise<void> {
   for (const device of devices) {
     try {
       await db.transaction(async (tx: any) => {
-        const fetched = await tx.execute(sql\`SELECT config_json,revision FROM h2_auto_devices
-          WHERE id=\${String(device.id)} FOR UPDATE\`);
+        const fetched = await tx.execute(sql`SELECT config_json,revision FROM h2_auto_devices
+          WHERE id=${String(device.id)} FOR UPDATE`);
         const row = (fetched[0] as any[])[0];
         if (!row) return;
-        const previous = await tx.execute(sql\`SELECT device_id FROM h2_auto_short_copy_backups
-          WHERE device_id=\${String(device.id)} AND campaign_key=\${H2_AUTO_SHORT_COPY_CAMPAIGN} LIMIT 1\`);
+        const previous = await tx.execute(sql`SELECT device_id FROM h2_auto_short_copy_backups
+          WHERE device_id=${String(device.id)} AND campaign_key=${H2_AUTO_SHORT_COPY_CAMPAIGN} LIMIT 1`);
         if ((previous[0] as any[]).length) return;
         const original = decodeConfig(row.config_json);
         const compact = configSchema.parse(applyH2AutoShortCopy(original));
@@ -222,14 +222,14 @@ async function migrateH2AutoShortCopyOnce(db: any): Promise<void> {
         const compactJson = JSON.stringify(compact);
         // O backup e a atualização são uma única transação. Nenhum estado
         // parcial pode ser enviado ao aparelho.
-        await tx.execute(sql\`INSERT INTO h2_auto_short_copy_backups
+        await tx.execute(sql`INSERT INTO h2_auto_short_copy_backups
           (device_id,campaign_key,previous_config,previous_revision)
-          VALUES (\${String(device.id)},\${H2_AUTO_SHORT_COPY_CAMPAIGN},
-            \${originalJson},\${Number(row.revision)})\`);
+          VALUES (${String(device.id)},${H2_AUTO_SHORT_COPY_CAMPAIGN},
+            ${originalJson},${Number(row.revision)})`);
         if (compactJson !== originalJson) {
-          await tx.execute(sql\`UPDATE h2_auto_devices SET
-            config_json=\${compactJson}, revision=revision+1
-            WHERE id=\${String(device.id)} AND revision=\${Number(row.revision)}\`);
+          await tx.execute(sql`UPDATE h2_auto_devices SET
+            config_json=${compactJson}, revision=revision+1
+            WHERE id=${String(device.id)} AND revision=${Number(row.revision)}`);
         }
       });
     } catch (error) {
