@@ -33,6 +33,7 @@ type StoredLoginEmailProof = {
 
 interface PasswordGateProps {
   children: React.ReactNode;
+  registrationOnly?: boolean;
 }
 
 function getSafeScheduleReturnTo(): string | null {
@@ -100,7 +101,7 @@ function useInstallPWA() {
 
 type GateStep = "phone" | "email" | "emailCode" | "newUser" | "indicador" | "registration" | "profilePhoto" | "referral" | "password" | "blocked" | "updateCpf" | "cpwd_create" | "cpwd_pending" | "cpwd_add_cpf" | "route_blocked";
 
-export default function PasswordGate({ children }: PasswordGateProps) {
+export default function PasswordGate({ children, registrationOnly = false }: PasswordGateProps) {
   const [accessGranted, setAccessGranted] = useState(() => !!localStorage.getItem(CP_TOKEN_KEY) || localStorage.getItem(SESSION_KEY) === "true");
   const [gateStep, setGateStep] = useState<GateStep>("phone");
   const [blockedRoutes, setBlockedRoutes] = useState<string[]>([]);
@@ -223,6 +224,7 @@ export default function PasswordGate({ children }: PasswordGateProps) {
     { enabled: false }
   );
   const registerMutation = trpc.customers.register.useMutation();
+  const finishRegistration = trpc.customerPassword.finishRegistrationWithoutPassword.useMutation();
   const updateCpfMutation = trpc.customers.updateCpfByPhone.useMutation();
   const uploadProfilePhotoMutation = trpc.customers.uploadProfilePhoto.useMutation();
   const updateReferralMutation = trpc.customers.updateReferral.useMutation();
@@ -704,6 +706,25 @@ export default function PasswordGate({ children }: PasswordGateProps) {
         expiresAt: Date.now() + 20 * 60 * 1000,
       } satisfies StoredLoginEmailProof));
       toast.success("E-mail confirmado.");
+      if (registrationOnly) {
+        // Novo cliente: aproveita o cadastro principal existente e suas validações.
+        // A confirmação de e-mail já foi feita; não pede nem cria senha.
+        const checked = await checkByPhoneMutation.mutateAsync({ phone: getPhoneDigits(clientPhone) });
+        if ((checked as any).customerBlocked || (checked as any).blocked) {
+          setCustomerBlockReason((checked as any).blockReason || null);
+          setGateStep("blocked");
+          return;
+        }
+        if (checked.exists) {
+          toast.info("Este telefone já possui cadastro. Entre pelo login.");
+          navigate("/login");
+          return;
+        }
+        setCustomerExists(false);
+        setEnteredByCpf(false);
+        setGateStep("registration");
+        return;
+      }
       await handlePhoneSubmit({ preventDefault: () => undefined } as React.FormEvent, getPhoneDigits(clientPhone), true);
     } catch (err: any) {
       toast.error(err?.message || "Não foi possível confirmar o código.");
@@ -918,6 +939,17 @@ export default function PasswordGate({ children }: PasswordGateProps) {
         if (enteredByCpf && getPhoneDigits(regPhone).length === 11) {
           setClientPhone(regPhone);
           setResolvedPhone(getPhoneDigits(regPhone));
+        }
+        if (registrationOnly) {
+          const created = await finishRegistration.mutateAsync({
+            phone: clientPhoneDigits, emailVerificationToken,
+          });
+          if (!created.success || !created.token) throw new Error("Cadastro salvo, mas não foi possível liberar o acesso por e-mail.");
+          localStorage.setItem(CP_TOKEN_KEY, created.token);
+          localStorage.setItem(SESSION_PHONE_KEY, clientPhoneDigits);
+          sessionStorage.removeItem(LOGIN_EMAIL_PROOF_STORAGE_KEY);
+          window.location.assign(created.profileUpdateRequired ? "/atualizarcadastro" : "/");
+          return;
         }
         // Ir para a tela de criar senha (novo sistema)
         setGateStep("cpwd_create");
