@@ -3,6 +3,7 @@ import type { Request } from "express";
 import { sql } from "drizzle-orm";
 import { TRPCError } from "@trpc/server";
 import { getDb } from "./db";
+import { getRegistrationReviewStatus } from "./customerRegistrationReview";
 import { normalizeCustomerPhone, normalizeCustomerEmail } from "./customerAccess";
 import { emailBelongsToAnotherCustomer } from "./customerEmailOwnership";
 import { deliverOwnSiteCode } from "./siteAccessCodeDelivery";
@@ -188,6 +189,8 @@ export async function verifyCustomerCode(phoneInput: string, code: string) {
     if (!customer || Number(challenge.customerId)!==Number(customer.id) ||
         String(challenge.emailKey)!==digest("email",normalizeCustomerEmail(customer.email)))
       return { success:false as const,message:"Cadastro alterado. Solicite outro código." };
+    if (await getRegistrationReviewStatus(tx,Number(customer.id)) !== "approved")
+      return { success:false as const,message:"Seu cadastro está aguardando aprovação do administrador." };
     await tx.execute(sql`UPDATE customerOtpChallenges SET usedAt=${now},
       codeDigest='',expiresAt=0 WHERE phoneKey=${key}`);
     return issueSession(tx,customer,now);
@@ -208,6 +211,8 @@ export async function redeemNewRegistrationProof(phoneInput:string,proofToken:st
     const customer=await uniqueCustomer(tx,phone);
     if (!customer || normalizeCustomerEmail(customer.email)!==proof.email)
       throw new TRPCError({code:"UNAUTHORIZED",message:"Confirme o e-mail cadastrado novamente."});
+    if (await getRegistrationReviewStatus(tx,Number(customer.id)) !== "approved")
+      return { success:false as const, pendingApproval:true as const, message:"Cadastro recebido. Aguarde a aprovação do administrador." };
     const nonceKey=digest("proof",proof.nonce);
     const consumed=await tx.execute(sql`INSERT IGNORE INTO customerOtpUsedProofs (nonceKey,usedAt)
       VALUES (${nonceKey},${now})`);
@@ -233,6 +238,7 @@ export async function getVerifiedCustomerOtpSession(db:any, tokenInput:string) {
     WHERE s.token=${token} AND b.expiresAt>${now} AND s.expiresAt>NOW()
     LIMIT 1`);
   if (!session || session.deletedAt || Number(session.blocked||0)!==0) return null;
+  if (await getRegistrationReviewStatus(db,Number(session.customerId)) !== "approved") return null;
   const phone=normalizeCustomerPhone(session.phone), email=normalizeCustomerEmail(session.email);
   if (!phone || !email ||
       phone!==normalizeCustomerPhone(session.sessionPhone) ||
