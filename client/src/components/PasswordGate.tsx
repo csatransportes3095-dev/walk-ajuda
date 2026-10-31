@@ -4,7 +4,7 @@ import { ESTADOS_BR, CIDADES_POR_UF } from "@/lib/brasilData";
 import { trpc } from "@/lib/trpc";
 import { isValidCPF, normalizeCpf } from "@shared/cpf";
 import { isRecoveredCustomerName } from "@shared/customerProfile";
-import { Zap, Lock, Eye, EyeOff, Clock, Phone, Download, X, UserPlus, MessageCircle, AlertTriangle, CheckCircle2, User, Mail, CreditCard, UserRound } from "lucide-react";
+import { Zap, Lock, Eye, EyeOff, Clock, Phone, Download, X, UserPlus, MessageCircle, AlertTriangle, CheckCircle2, ShieldCheck, User, Mail, CreditCard, UserRound } from "lucide-react";
 import { toast } from "sonner";
 import { useLocation } from "wouter";
 
@@ -99,7 +99,7 @@ function useInstallPWA() {
   return { isInstallable, isInstalled, dismissed, install, dismiss, deferredPrompt };
 }
 
-type GateStep = "registration_pending" | "phone" | "email" | "emailCode" | "newUser" | "indicador" | "registration" | "profilePhoto" | "referral" | "password" | "blocked" | "updateCpf" | "cpwd_create" | "cpwd_pending" | "cpwd_add_cpf" | "route_blocked";
+type GateStep = "phone" | "email" | "emailCode" | "registration_pending" | "newUser" | "indicador" | "registration" | "profilePhoto" | "referral" | "password" | "blocked" | "updateCpf" | "cpwd_create" | "cpwd_pending" | "cpwd_add_cpf" | "route_blocked";
 
 export default function PasswordGate({ children, registrationOnly = false }: PasswordGateProps) {
   const [accessGranted, setAccessGranted] = useState(() => !!localStorage.getItem(CP_TOKEN_KEY) || localStorage.getItem(SESSION_KEY) === "true");
