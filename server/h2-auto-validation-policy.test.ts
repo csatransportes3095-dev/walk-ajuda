@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { validH2AutoPhone11, allowsH2AutoMenuReset, invalidH2AutoPhoneStageAnswer, h2AutoNavigationCommand, initialH2AutoChoiceStage, repeatedH2AutoChoice } from "./h2-auto-validation-policy";
+import { validH2AutoPhone11, normalizeH2AutoPhone11, allowsH2AutoMenuReset, invalidH2AutoPhoneStageAnswer, h2AutoNavigationCommand, initialH2AutoChoiceStage, repeatedH2AutoChoice } from "./h2-auto-validation-policy";
 
 describe("H2 Auto strict 11-digit WhatsApp phone validation", () => {
   it("accepts mobile phone numbers with a two-digit DDD", () => {
@@ -7,9 +7,15 @@ describe("H2 Auto strict 11-digit WhatsApp phone validation", () => {
     expect(validH2AutoPhone11("61991234567")).toBe(true);
   });
   it("rejects missing or excessive digits and nonnumeric answers", () => {
-    for (const answer of ["", "11", "1198765432", "5511987654321",
-      "+5511987654321", "(11) 98765-4321", "MENU", "zero", "0", "abc123"]) {
+    for (const answer of ["", "11", "1198765432", "fone: 11987654321", "11987654321 21987654321", "MENU", "zero", "0", "abc123"]) {
       expect(validH2AutoPhone11(answer)).toBe(false);
+    }
+  });
+  it("normalizes common formats in all three customer phone stages", () => {
+    for(const phone of ["11 98765-4321","(11) 98765-4321","+55 (11) 98765-4321","55 11 98765-4321","0055 11 98765-4321","11.98765.4321"]) {
+      expect(normalizeH2AutoPhone11(phone)).toBe("11987654321");
+      for(const stage of ["customer_phone","referral_phone","referrals_phone"])
+        expect(invalidH2AutoPhoneStageAnswer(stage,phone)).toBe(false);
     }
   });
   it("rejects invalid DDD format, landlines and repeating placeholders", () => {
