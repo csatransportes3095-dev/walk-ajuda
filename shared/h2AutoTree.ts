@@ -1,10 +1,11 @@
 import { z } from "zod";
+import { H2_AUTO_SHORT_TREE } from "./h2AutoShortReplies";
 
 /**
  * Wire format supported by H2 AUTO Android 1.21+.
  * Keep field names and limits aligned with android-overrides/FlowTree.java.
  */
-export const H2_AUTO_DEFAULT_FOOTER = "⌨️ *Digite o número desejado.*\n🔙 *0* para voltar.\n🏠 *MENU* para início.";
+export const H2_AUTO_DEFAULT_FOOTER = "⌨️ Digite a opção.\n🔙 *0* volta | *MENU* início.";
 
 const idSchema = z.string().regex(/^[a-z][a-z0-9_-]{0,39}$/, "Use letras minúsculas, números, - ou _.");
 const answerSchema = z.object({
@@ -65,12 +66,12 @@ export const H2_AUTO_TREE_DEFAULT: H2AutoTree = {
   start: "inicio",
   footer: H2_AUTO_DEFAULT_FOOTER,
   nodes: [
-    { id: "inicio", mode: "question", text: "⚡ *H2 COLOMBIANO*\n🇨🇴 *CENTRAL DE ATENDIMENTO*\n\n👋 Olá! Você já é nosso cliente?",
+    { id: "inicio", mode: "question", text: H2_AUTO_SHORT_TREE.inicio,
       options: [
         { key: "1", label: "SIM — Já sou cliente", next: "clientes" },
         { key: "2", label: "NÃO — Ainda não sou cliente", next: "novos" },
       ] },
-    { id: "clientes", mode: "question", text: "📋 *ATENDIMENTO PARA CLIENTES*\n\nEscolha o serviço desejado:",
+    { id: "clientes", mode: "question", text: H2_AUTO_SHORT_TREE.clientes,
       options: [
         { key: "1", label: "Acompanhar pedido", next: "acompanhar" },
         { key: "2", label: "Agendar foto", next: "foto" },
@@ -79,27 +80,27 @@ export const H2_AUTO_TREE_DEFAULT: H2AutoTree = {
         { key: "5", label: "Falar com atendente", next: "atendente" },
         { key: "6", label: "Ajuda e outros serviços", next: "ajuda" },
       ] },
-    { id: "novos", mode: "question", text: "🛒 *NOVOS CLIENTES*\n\nComo podemos ajudar?",
+    { id: "novos", mode: "question", text: H2_AUTO_SHORT_TREE.novos,
       options: [
         { key: "1", label: "Fazer primeiro pedido", next: "indicador" },
         { key: "2", label: "Consultar valores", next: "valores" },
         { key: "3", label: "Como funciona", next: "ajuda" },
         { key: "4", label: "Falar com atendente", next: "atendente" },
       ] },
-    { id: "indicador", mode: "question", text: "📋 *NOVO PEDIDO*\n\nVocê possui um indicador válido?",
+    { id: "indicador", mode: "question", text: H2_AUTO_SHORT_TREE.indicador,
       options: [
         { key: "1", label: "SIM — Tenho indicador", next: "pedido_novo" },
         { key: "2", label: "NÃO — Não tenho indicador", next: "sem_indicador" },
       ] },
-    { id: "pedido_novo", mode: "end", text: "✅ *FAZER NOVO PEDIDO*\n\nAcesse:\nhttps://h2colombiano.com/pedidos\n\nInforme o telefone do indicador no cadastro.\n\n🇨🇴 *H2 COLOMBIANO*", options: [] },
-    { id: "sem_indicador", mode: "end", text: "⚠️ *INDICADOR OBRIGATÓRIO*\n\nPara iniciar o atendimento, você precisa informar o telefone de um indicador válido.\n\nDigite MENU para recomeçar.", options: [] },
-    { id: "acompanhar", mode: "order", text: "📦 *ACOMPANHAR PEDIDO*\n\nhttps://h2colombiano.com/acompanhar\n\nDigite MENU para voltar ao início.", options: [] },
-    { id: "foto", mode: "end", text: "📸 *AGENDAR FOTO*\n\nConsulte o seu pedido e, quando o agendamento estiver disponível, escolha data e horário:\nhttps://h2colombiano.com/acompanhar", options: [] },
-    { id: "corridas", mode: "end", text: "🚗 *CONTROLE DE CORRIDAS*\n\nhttps://h2colombiano.com/gastos\n\nDigite MENU para voltar.", options: [] },
-    { id: "emprestimos", mode: "end", text: "🏦 *EMPRÉSTIMOS*\n\nhttps://h2colombiano.com/emprestimo\n\nDigite MENU para voltar.", options: [] },
-    { id: "valores", mode: "end", text: "💰 *VALORES DOS SERVIÇOS*\n\nConsulte as opções disponíveis:\nhttps://h2colombiano.com/pedidos", options: [] },
-    { id: "ajuda", mode: "end", text: "❓ *AJUDA E ORIENTAÇÕES*\n\nhttps://h2colombiano.com/ajuda", options: [] },
-    { id: "atendente", mode: "human", text: "👨‍💻 *ATENDIMENTO HUMANO*\n\nSua solicitação foi encaminhada para atendimento. Você pode digitar MENU para retornar ao atendimento automático.", options: [] },
+    { id: "pedido_novo", mode: "end", text: H2_AUTO_SHORT_TREE.pedido_novo, options: [] },
+    { id: "sem_indicador", mode: "end", text: H2_AUTO_SHORT_TREE.sem_indicador, options: [] },
+    { id: "acompanhar", mode: "order", text: H2_AUTO_SHORT_TREE.acompanhar, options: [] },
+    { id: "foto", mode: "end", text: H2_AUTO_SHORT_TREE.foto, options: [] },
+    { id: "corridas", mode: "end", text: H2_AUTO_SHORT_TREE.corridas, options: [] },
+    { id: "emprestimos", mode: "end", text: H2_AUTO_SHORT_TREE.emprestimos, options: [] },
+    { id: "valores", mode: "end", text: H2_AUTO_SHORT_TREE.valores, options: [] },
+    { id: "ajuda", mode: "end", text: H2_AUTO_SHORT_TREE.ajuda, options: [] },
+    { id: "atendente", mode: "human", text: H2_AUTO_SHORT_TREE.atendente, options: [] },
   ],
 };
 
