@@ -469,6 +469,13 @@ export default function AdminCustomers() {
     return () => document.removeEventListener("keydown", handleKey);
   }, [photoModal]);
 
+  const registrationReviewsQuery = trpc.registrationReview.list.useQuery(undefined, { refetchInterval: 30000 });
+  const registrationReviewById = new Map((registrationReviewsQuery.data || []).map(r => [r.customerId, r.status]));
+  const approveRegistrationMut = trpc.registrationReview.approve.useMutation({
+    onSuccess: () => { void registrationReviewsQuery.refetch(); toast.success("Cadastro aprovado!"); },
+    onError: e => toast.error(e.message || "Falha ao aprovar cadastro."),
+  });
+
   // A lista geral de Clientes permanece visível durante recargas transitórias.
   // Esta área não carrega nem apresenta informações de H2 Score.
   const customersQuery = trpc.customers.list.useQuery(undefined, {
@@ -1442,6 +1449,14 @@ export default function AdminCustomers() {
                   ? '0 4px 20px rgba(34,197,94,0.3)'
                   : '0 4px 20px rgba(99,102,241,0.25)',
               }}>
+              {registrationReviewById.get(c.id) === "pending" && (
+                <div className="flex flex-wrap items-center justify-between gap-2 border-b border-amber-400/30 bg-gradient-to-r from-red-900/60 to-amber-700/40 px-3 py-2">
+                  <span className="text-xs font-black uppercase text-amber-100">⚠ NOVO CADASTRO — REVISAR</span>
+                  <button type="button" onClick={() => approveRegistrationMut.mutate({customerId:c.id})}
+                    disabled={approveRegistrationMut.isPending}
+                    className="rounded-lg bg-green-500 px-3 py-2 text-xs font-black text-black disabled:opacity-50">OK APROVADO</button>
+                </div>
+              )}
               {/* Topo: foto + info + ações */}
               <div className="p-4 pb-3">
                 {/* Linha 1: checkbox + foto + info + ações */}

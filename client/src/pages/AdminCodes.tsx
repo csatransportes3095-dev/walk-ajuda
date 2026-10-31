@@ -69,7 +69,7 @@ const ADMIN_SHORTCUTS: AdminShortcut[] = [
   { id: 'pre-cadastros', href: '/admin/pre-cadastros', label: 'Pré-Cadastros', emoji: '📋', tone: 'bg-purple-600/20 border-purple-500/30 hover:bg-purple-600/30' },
   { id: 'propagandas', href: '/admin/propagandas', label: 'Propagandas', icon: Bell, tone: 'bg-cyan-600/20 border-cyan-500/30 hover:bg-cyan-600/30', iconTone: 'text-cyan-400' },
   { id: 'resellers', href: '/admin/resellers', label: 'Revendedores', icon: ShoppingBag, tone: 'bg-amber-600/20 border-amber-500/30 hover:bg-amber-600/30', iconTone: 'text-amber-400' },
-  { id: 'codes', href: '/admin/codes', label: 'Senhas Cadastro', icon: KeyRound, tone: 'bg-purple-600/20 border-purple-500/40 hover:bg-purple-600/30', iconTone: 'text-purple-400' },
+  { id: 'codes', href: '/admin/codes', label: 'Análise Cadastros', icon: KeyRound, tone: 'bg-purple-600/20 border-purple-500/40 hover:bg-purple-600/30', iconTone: 'text-purple-400' },
   { id: 'raffles', href: '/admin/raffles', label: 'Sorteios', icon: Gift, tone: 'bg-yellow-600/20 border-yellow-500/30 hover:bg-yellow-600/30', iconTone: 'text-yellow-400' },
   { id: 'status-types', href: '/admin/status-types', label: 'Status', icon: Shield, tone: 'bg-indigo-600/20 border-indigo-500/30 hover:bg-indigo-600/30', iconTone: 'text-indigo-400' },
   { id: 'media', href: '/admin/media', label: 'Upload Mídia', icon: Upload, tone: 'bg-violet-600/20 border-violet-500/30 hover:bg-violet-600/30', iconTone: 'text-violet-400' },
@@ -194,135 +194,20 @@ export default function AdminCodes() {
     onError: () => toast.error('Erro ao remover bloqueio'),
   });
 
-  // ─── Customer Password ────────────────────────────────────────────────────
-  const [searchPhone, setSearchPhone] = useState(urlPhone);
-  const [searchedPhone, setSearchedPhone] = useState(urlPhone);
-  const [isSearching, setIsSearching] = useState(false);
-
-  // Modal de foto expandida
-  const [expandedPhoto, setExpandedPhoto] = useState<{ url: string; name: string } | null>(null);
-
-  // Modal de liberar senha pendente
-  const [pendingModal, setPendingModal] = useState<{ id: number; name: string; phone: string } | null>(null);
-  const [pendingDays, setPendingDays] = useState(30);
-  const [isApproving, setIsApproving] = useState(false);
-
-  // Modal de definir senha manual
-  const [setPasswordModal, setSetPasswordModal] = useState<{ phone: string; name: string } | null>(null);
-  const [setPwdValue, setSetPwdValue] = useState('');
-  const [setPwdDays, setSetPwdDays] = useState(30);
-  const [showSetPwd, setShowSetPwd] = useState(false);
-  const [isSetting, setIsSetting] = useState(false);
-
-  const modeQuery = trpc.customerPassword.getMode.useQuery();
-  const setModeMutation = trpc.customerPassword.setMode.useMutation({
-    onSuccess: (data) => {
-      modeQuery.refetch();
-      pendingQuery.refetch();
-      toast.success(data.mode === 'auto'
-        ? '✅ Modo AUTOMÁTICO ativado: cliente cria a própria senha (30 dias).'
-        : '✅ Modo MANUAL ativado: ADM precisa liberar cada senha.');
-    },
-    onError: (e) => toast.error(e.message || 'Erro ao alterar modo'),
+  // Análise de novos cadastros: controle unificado, sem senhas de clientes.
+  const [expandedPhoto,setExpandedPhoto] = useState<{url:string;name:string}|null>(null);
+  const reviewModeQuery = trpc.registrationReview.mode.useQuery();
+  const reviewsQuery = trpc.registrationReview.list.useQuery(undefined,{refetchInterval:30000});
+  const reviewModeMutation = trpc.registrationReview.setMode.useMutation({
+    onSuccess: () => { void reviewModeQuery.refetch(); void reviewsQuery.refetch(); toast.success("Modo de análise atualizado."); },
+    onError: e => toast.error(e.message || "Falha ao alterar o modo."),
   });
-
-  const pendingQuery = trpc.customerPassword.adminListPending.useQuery(undefined, { refetchInterval: 30000 });
-  const pendingAccessQuery = trpc.customerPassword.adminListPendingAccess.useQuery(undefined, { refetchInterval: 30000 });
-  const decideAccessMutation = trpc.customerPassword.adminDecideAccess.useMutation({
-    onSuccess: () => { pendingAccessQuery.refetch(); toast.success('Acesso liberado.'); },
-    onError: (e) => toast.error(e.message || 'Erro ao atualizar acesso.'),
+  const approveReviewMutation = trpc.registrationReview.approve.useMutation({
+    onSuccess: () => { void reviewsQuery.refetch(); toast.success("Cadastro aprovado. Acesso liberado."); },
+    onError: e => toast.error(e.message || "Falha ao aprovar o cadastro."),
   });
-
-  const approveMutation = trpc.customerPassword.adminApprove.useMutation({
-    onSuccess: () => { pendingQuery.refetch(); },
-    onError: (e) => toast.error(e.message || 'Erro ao liberar senha'),
-  });
-
-  const resetMutation = trpc.customerPassword.adminReset.useMutation({
-    onSuccess: () => {
-      toast.success('Senha resetada! O cliente poderá criar uma nova senha.');
-      statusQuery.refetch();
-    },
-    onError: (e) => toast.error(e.message || 'Erro ao resetar senha'),
-  });
-
-  const setPasswordMutation = trpc.customerPassword.adminSetPassword.useMutation({
-    onSuccess: () => {
-      toast.success('Senha definida com sucesso!');
-      setSetPasswordModal(null);
-      setSetPwdValue('');
-      statusQuery.refetch();
-    },
-    onError: (e) => toast.error(e.message || 'Erro ao definir senha'),
-  });
-
-  const statusQuery = trpc.customerPassword.adminGetStatus.useQuery(
-    { phone: searchedPhone },
-    { enabled: searchedPhone.length >= 10 }
-  );
-
-  const currentMode = modeQuery.data?.mode ?? 'manual';
-  const pendingList = pendingQuery.data ?? [];
-
-  const handleToggleMode = () => {
-    const newMode = currentMode === 'manual' ? 'auto' : 'manual';
-    setModeMutation.mutate({ mode: newMode });
-  };
-
-  const handleSearch = async (e: React.FormEvent) => {
-    e.preventDefault();
-    const clean = searchPhone.replace(/\D/g, '');
-    if (clean.length < 10) { toast.error('Informe um telefone válido (com DDD).'); return; }
-    setIsSearching(true);
-    setSearchedPhone(clean);
-    setIsSearching(false);
-  };
-
-  const handleApprove = async () => {
-    if (!pendingModal) return;
-    setIsApproving(true);
-    try {
-      await approveMutation.mutateAsync({ passwordId: pendingModal.id, days: pendingDays });
-      toast.success(`Senha de ${pendingModal.name} liberada por ${pendingDays} dias!`);
-      setPendingModal(null);
-    } finally {
-      setIsApproving(false);
-    }
-  };
-
-  const handleSetPassword = async () => {
-    if (!setPasswordModal) return;
-    if (setPwdValue.length < 4) { toast.error('A senha deve ter pelo menos 4 caracteres.'); return; }
-    setIsSetting(true);
-    try {
-      await setPasswordMutation.mutateAsync({ phone: setPasswordModal.phone, password: setPwdValue, days: setPwdDays });
-    } finally {
-      setIsSetting(false);
-    }
-  };
-
-  const statusData = statusQuery.data;
-
-  const statusBadge = () => {
-    if (!searchedPhone) return null;
-    if (statusQuery.isLoading) return <span className="text-slate-400 text-sm">Carregando...</span>;
-    if (!statusData?.hasPassword) return (
-      <span className="flex items-center gap-1 text-slate-400 text-sm"><ShieldX className="w-4 h-4" /> Sem senha cadastrada</span>
-    );
-    if (statusData.pending) return (
-      <span className="flex items-center gap-1 text-amber-400 text-sm"><ShieldAlert className="w-4 h-4" /> Aguardando liberação do ADM</span>
-    );
-    if (!statusData.expiresAt || statusData.expiresAt < Date.now()) return (
-      <span className="flex items-center gap-1 text-red-400 text-sm"><ShieldX className="w-4 h-4" /> Senha expirada</span>
-    );
-    const daysLeft = Math.ceil((statusData.expiresAt - Date.now()) / (1000 * 60 * 60 * 24));
-    return (
-      <span className="flex items-center gap-1 text-green-400 text-sm">
-        <ShieldCheck className="w-4 h-4" /> Ativa — vence em {daysLeft} dia{daysLeft !== 1 ? 's' : ''}
-        <span className="text-slate-400 ml-1">({new Date(statusData.expiresAt).toLocaleDateString('pt-BR')})</span>
-      </span>
-    );
-  };
+  const reviewMode = reviewModeQuery.data || "automatico";
+  const pendingReviews = (reviewsQuery.data || []).filter(item => item.status === "pending");
 
   const renderShortcutCard = (card: AdminShortcut, index: number, featured = false) => {
     const Icon = card.icon;
@@ -405,208 +290,53 @@ export default function AdminCodes() {
           )}
         </section>
 
-        {/* ─── Senhas do Cadastro ─────────────────────────────────────────────── */}
-        <div className="bg-black/40 backdrop-blur-md border border-purple-500/30 rounded-2xl p-4 md:p-6 space-y-6">
-
-          {/* Header + Toggle */}
-          <div className="flex items-center justify-between flex-wrap gap-4">
+        {/* Gestão de novos cadastros: não usar o sistema legado de senhas. */}
+        <section className="space-y-4 rounded-2xl border border-purple-500/30 bg-black/40 p-4 backdrop-blur-md md:p-6">
+          <div className="flex flex-col justify-between gap-4 sm:flex-row sm:items-center">
             <div>
-              <h2 className="text-xl font-bold text-white flex items-center gap-2">
-                <KeyRound className="w-6 h-6 text-purple-400" />
-                Senhas do Cadastro
+              <h2 className="flex items-center gap-2 text-xl font-bold text-white">
+                <ShieldCheck className="h-6 w-6 text-purple-300" /> Análise de Novos Cadastros
               </h2>
-              <p className="text-white/50 mt-0.5 text-sm">Gerenciar acesso dos clientes ao acompanhamento de pedido</p>
+              <p className="mt-1 text-sm text-white/60">O cliente confirma o e-mail e aguarda aprovação somente quando o modo manual estiver ativo.</p>
             </div>
-
-            <div
-              className={`flex items-center gap-3 px-4 py-3 rounded-xl border-2 transition-all cursor-pointer select-none ${
-                currentMode === 'auto'
-                  ? 'border-green-500/60 bg-green-500/10'
-                  : 'border-amber-500/60 bg-amber-500/10'
-              }`}
-              onClick={handleToggleMode}
-            >
-              {currentMode === 'auto'
-                ? <ToggleRight className="w-7 h-7 text-green-400" />
-                : <ToggleLeft className="w-7 h-7 text-amber-400" />}
-              <div>
-                <p className={`text-sm font-bold ${currentMode === 'auto' ? 'text-green-300' : 'text-amber-300'}`}>
-                  Liberação {currentMode === 'auto' ? 'AUTOMÁTICA' : 'MANUAL'}
-                </p>
-                <p className="text-xs text-white/40">
-                  {currentMode === 'auto'
-                    ? 'Cliente cria a própria senha (30 dias)'
-                    : 'ADM libera manualmente cada cliente'}
-                </p>
-              </div>
+            <div className="grid grid-cols-2 gap-2 rounded-xl border border-white/15 bg-white/5 p-1.5">
+              <button type="button" disabled={reviewModeMutation.isPending || reviewModeQuery.isLoading}
+                onClick={() => reviewModeMutation.mutate({mode:"automatico"})}
+                className={`rounded-lg px-3 py-2 text-xs font-black ${reviewMode==="automatico"?"bg-green-600 text-white":"text-white/60 hover:bg-white/10"}`}>AUTOMÁTICO</button>
+              <button type="button" disabled={reviewModeMutation.isPending || reviewModeQuery.isLoading}
+                onClick={() => reviewModeMutation.mutate({mode:"manual"})}
+                className={`rounded-lg px-3 py-2 text-xs font-black ${reviewMode==="manual"?"bg-amber-500 text-black":"text-white/60 hover:bg-white/10"}`}>MANUAL</button>
             </div>
           </div>
-
-          {/* Pendentes */}
-          {pendingList.length > 0 && (
-            <Card className="bg-amber-500/10 border-2 border-amber-500/50 p-5">
-              <div className="flex items-center gap-3 mb-4">
-                <Bell className="w-6 h-6 text-amber-400 flex-shrink-0" />
-                <div>
-                  <h3 className="text-lg font-bold text-amber-300">
-                    {pendingList.length} senha{pendingList.length > 1 ? 's' : ''} aguardando liberação
-                  </h3>
-                  <p className="text-xs text-amber-200/70">
-                    {pendingList.length > 1 ? 'Clientes criaram' : 'Cliente criou'} senha e aguarda você definir a validade
-                  </p>
-                </div>
-              </div>
-              <div className="space-y-3">
-                {pendingList.map((c: any) => (
-                  <div key={c.id} className="bg-amber-500/10 border border-amber-500/30 rounded-xl p-3 space-y-3">
-                    <div className="flex items-center gap-3">
-                      {/* Foto do cliente - clique para expandir */}
-                      <div className="flex-shrink-0">
-                        {c.profilePhotoUrl ? (
-                          <button
-                            onClick={() => setExpandedPhoto({ url: c.profilePhotoUrl, name: c.name })}
-                            className="block relative group focus:outline-none"
-                            title="Expandir foto"
-                          >
-                            <img
-                              src={c.profilePhotoUrl}
-                              alt={c.name}
-                              className="w-12 h-12 rounded-full object-cover border-2 border-amber-400/60 group-hover:border-amber-300 transition-all group-hover:scale-105"
-                            />
-                            <span className="absolute inset-0 rounded-full bg-black/40 opacity-0 group-hover:opacity-100 transition-opacity flex items-center justify-center">
-                              <svg className="w-4 h-4 text-white" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M21 21l-6-6m2-5a7 7 0 11-14 0 7 7 0 0114 0zM10 7v3m0 0v3m0-3h3m-3 0H7" /></svg>
-                            </span>
-                          </button>
-                        ) : (
-                          <div className="w-12 h-12 rounded-full bg-amber-500/30 border-2 border-amber-400/60 flex items-center justify-center text-amber-300 font-bold text-lg">
-                            {(c.name || '?').charAt(0).toUpperCase()}
-                          </div>
-                        )}
-                      </div>
-                      <div className="flex-1 min-w-0">
-                        <p className="text-white font-bold text-sm truncate">{c.name}</p>
-                        <p className="text-amber-200/80 text-sm font-mono">{c.phone}</p>
-                        {c.clientCreatedAt && (
-                          <p className="text-amber-200/50 text-xs mt-0.5">
-                            Criou em: {new Date(c.clientCreatedAt).toLocaleString('pt-BR')}
-                          </p>
-                        )}
-                      </div>
-                    </div>
-                    <div className="flex gap-2">
-                      <a
-                        href={`https://wa.me/55${c.phone.replace(/\D/g, '')}`}
-                        target="_blank"
-                        rel="noopener noreferrer"
-                        className="flex-1 inline-flex items-center justify-center gap-2 bg-green-600 hover:bg-green-700 text-white font-bold text-sm px-3 py-2.5 rounded-lg transition-colors"
-                        title={`WhatsApp: ${c.phone}`}
-                      >
-                        <svg className="w-4 h-4" fill="currentColor" viewBox="0 0 24 24"><path d="M17.472 14.382c-.297-.149-1.758-.867-2.03-.967-.273-.099-.471-.148-.67.15-.197.297-.767.966-.94 1.164-.173.199-.347.223-.644.075-.297-.15-1.255-.463-2.39-1.475-.883-.788-1.48-1.761-1.653-2.059-.173-.297-.018-.458.13-.606.134-.133.298-.347.446-.52.149-.174.198-.298.298-.497.099-.198.05-.371-.025-.52-.075-.149-.669-1.612-.916-2.207-.242-.579-.487-.5-.669-.51-.173-.008-.371-.01-.57-.01-.198 0-.52.074-.792.372-.272.297-1.04 1.016-1.04 2.479 0 1.462 1.065 2.875 1.213 3.074.149.198 2.096 3.2 5.077 4.487.709.306 1.262.489 1.694.625.712.227 1.36.195 1.871.118.571-.085 1.758-.719 2.006-1.413.248-.694.248-1.289.173-1.413-.074-.124-.272-.198-.57-.347m-5.421 7.403h-.004a9.87 9.87 0 01-5.031-1.378l-.361-.214-3.741.982.998-3.648-.235-.374a9.86 9.86 0 01-1.51-5.26c.001-5.45 4.436-9.884 9.888-9.884 2.64 0 5.122 1.03 6.988 2.898a9.825 9.825 0 012.893 6.994c-.003 5.45-4.437 9.884-9.885 9.884m8.413-18.297A11.815 11.815 0 0012.05 0C5.495 0 .16 5.335.157 11.892c0 2.096.547 4.142 1.588 5.945L.057 24l6.305-1.654a11.882 11.882 0 005.683 1.448h.005c6.554 0 11.89-5.335 11.893-11.893a11.821 11.821 0 00-3.48-8.413z"/></svg>
-                        WhatsApp
-                      </a>
-                      <button
-                        onClick={() => { setPendingModal({ id: c.id, name: c.name, phone: c.phone }); setPendingDays(30); }}
-                        className="flex-1 inline-flex items-center justify-center gap-2 bg-amber-500 hover:bg-amber-600 text-black font-bold text-sm px-3 py-2.5 rounded-lg transition-colors"
-                      >
-                        <CalendarClock className="w-4 h-4 flex-shrink-0" />
-                        Liberar
-                      </button>
-                    </div>
-                  </div>
-                ))}
-              </div>
-            </Card>
-          )}
-
-          {(pendingAccessQuery.data || []).length > 0 && (
-            <Card className="bg-sky-500/10 border-2 border-sky-500/50 p-5">
-              <div className="flex items-center gap-3 mb-4">
-                <KeyRound className="w-6 h-6 text-sky-300 flex-shrink-0" />
-                <div>
-                  <h3 className="text-lg font-bold text-sky-200">{pendingAccessQuery.data?.length} liberaç{pendingAccessQuery.data?.length === 1 ? 'ão' : 'ões'} de acesso aguardando</h3>
-                  <p className="text-xs text-sky-100/70">Solicitações do Atendimento Online — use a mesma ficha de senha para liberar ou negar.</p>
-                </div>
-              </div>
-              <div className="space-y-3">
-                {pendingAccessQuery.data?.map((request: any) => {
-                  const routeLabel = request.route === 'acompanhar' ? 'Acompanhar Pedido' : request.route === 'gastos' ? 'Controle de Gastos' : request.route === 'emprestimo' ? 'Empréstimos' : 'Site de Pedidos';
-                  return <div key={request.id} className="bg-sky-500/10 border border-sky-500/30 rounded-xl p-3 space-y-3">
-                    <div className="flex items-center gap-3">
-                      <div className="flex-shrink-0">
-                        {request.profilePhotoUrl ? <button onClick={() => setExpandedPhoto({ url: request.profilePhotoUrl, name: request.name })} className="block relative group focus:outline-none" title="Expandir foto"><img src={request.profilePhotoUrl} alt={request.name} className="w-12 h-12 rounded-full object-cover border-2 border-sky-300/60 group-hover:scale-105 transition-all" /></button> : <div className="w-12 h-12 rounded-full bg-sky-500/30 border-2 border-sky-300/60 flex items-center justify-center text-sky-200 font-bold text-lg">{(request.name || '?').charAt(0).toUpperCase()}</div>}
-                      </div>
-                      <div className="flex-1 min-w-0"><p className="text-white font-bold text-sm truncate">{request.name}</p><p className="text-sky-100/80 text-sm font-mono">{request.phone}</p><p className="text-sky-200 text-xs mt-0.5">Solicitou: <b>{routeLabel}</b></p></div>
-                    </div>
-                    <div className="flex gap-2">
-                      <a href={`https://wa.me/55${String(request.phone || '').replace(/\D/g, '')}`} target="_blank" rel="noopener noreferrer" className="flex-1 inline-flex items-center justify-center gap-2 bg-green-600 hover:bg-green-700 text-white font-bold text-sm px-3 py-2.5 rounded-lg transition-colors"><MessageCircle className="w-4 h-4" />WhatsApp</a>
-                      <button onClick={() => decideAccessMutation.mutate({ requestId: request.id, approved: true, adminName: 'Administrador' })} disabled={decideAccessMutation.isPending} className="flex-1 inline-flex items-center justify-center gap-2 bg-amber-500 hover:bg-amber-600 text-black font-bold text-sm px-3 py-2.5 rounded-lg transition-colors disabled:opacity-50"><CalendarClock className="w-4 h-4" />Liberar</button>
-                      <button onClick={() => decideAccessMutation.mutate({ requestId: request.id, approved: false, adminName: 'Administrador' })} disabled={decideAccessMutation.isPending} className="inline-flex items-center justify-center bg-red-600 hover:bg-red-700 text-white font-bold text-sm px-3 py-2.5 rounded-lg transition-colors disabled:opacity-50">Negar</button>
-                    </div>
-                  </div>;
-                })}
-              </div>
-            </Card>
-          )}
-
-          {/* Buscar cliente */}
+          <p className="text-xs text-white/65">{reviewMode==="manual"
+            ? "MANUAL: novos cadastros ficam aguardando o OK APROVADO do ADM."
+            : "AUTOMÁTICO: novos cadastros são aprovados após cumprir as validações obrigatórias."}</p>
+          {reviewsQuery.isLoading && <p className="text-sm text-white/50">Carregando cadastros...</p>}
+          {reviewsQuery.isError && <p className="text-sm text-red-300">Não foi possível consultar as análises.</p>}
           <div className="space-y-3">
-            <div>
-              <h3 className="text-base font-bold text-white mb-1">Gerenciar senha de um cliente</h3>
-              <p className="text-white/40 text-sm mb-3">Busque pelo telefone para ver o status e gerenciar a senha</p>
-              <form onSubmit={handleSearch} className="flex gap-2">
-                <Input
-                  value={searchPhone}
-                  onChange={(e) => setSearchPhone(e.target.value)}
-                  placeholder="Telefone do cliente (com DDD)"
-                  className="bg-white/10 text-white border-white/20 placeholder:text-white/40 focus:border-purple-500"
-                  style={{ fontSize: '16px' }}
-                />
-                <Button type="submit" disabled={isSearching} className="bg-purple-600 hover:bg-purple-700 text-white px-4 flex-shrink-0">
-                  {isSearching ? <Loader2 className="w-4 h-4 animate-spin" /> : <Search className="w-4 h-4" />}
-                </Button>
-              </form>
-            </div>
-
-            {searchedPhone && (
-              <div className="p-4 bg-white/5 border border-white/10 rounded-xl space-y-3">
-                <div className="flex items-center justify-between flex-wrap gap-2">
-                  <div>
-                    <p className="text-white/40 text-xs mb-1">Telefone: <span className="text-white">{searchedPhone}</span></p>
-                    <div>{statusBadge()}</div>
-                    {statusData?.clientCreatedAt && (
-                      <p className="text-white/30 text-xs mt-1 flex items-center gap-1">
-                        <Clock className="w-3 h-3" />
-                        Criada pelo cliente em {new Date(statusData.clientCreatedAt).toLocaleString('pt-BR')}
-                      </p>
-                    )}
-                  </div>
-                  <div className="flex gap-2 flex-wrap">
-                    <Button
-                      onClick={() => setSetPasswordModal({ phone: searchedPhone, name: searchedPhone })}
-                      size="sm"
-                      className="bg-purple-600 hover:bg-purple-700 text-white"
-                    >
-                      <KeyRound className="w-3.5 h-3.5 mr-1" />
-                      Definir senha
-                    </Button>
-                    {statusData?.hasPassword && (
-                      <Button
-                        onClick={() => { if (confirm(`Resetar a senha de ${searchedPhone}? O cliente precisará criar uma nova senha.`)) resetMutation.mutate({ phone: searchedPhone }); }}
-                        size="sm"
-                        variant="outline"
-                        className="border-red-500/50 text-red-400 hover:bg-red-500/10"
-                        disabled={resetMutation.isPending}
-                      >
-                        {resetMutation.isPending ? <Loader2 className="w-3.5 h-3.5 animate-spin" /> : <RefreshCw className="w-3.5 h-3.5 mr-1" />}
-                        Resetar
-                      </Button>
-                    )}
-                  </div>
+            <p className="text-sm font-bold text-amber-200">{pendingReviews.length} cadastro(s) aguardando análise</p>
+            {pendingReviews.map(c => (
+              <div key={c.customerId} className="flex flex-col gap-3 rounded-xl border border-amber-400/30 bg-amber-500/10 p-3 sm:flex-row sm:items-center">
+                {c.profilePhotoUrl && <button type="button" onClick={()=>setExpandedPhoto({url:c.profilePhotoUrl!,name:c.name})}
+                  aria-label={`Ver foto de ${c.name}`}>
+                  <img src={c.profilePhotoUrl} alt="" className="h-12 w-12 rounded-full border border-amber-400 object-cover" />
+                </button>}
+                <div className="min-w-0 flex-1">
+                  <p className="truncate text-sm font-bold text-white">{c.name} {c.customerNumber ? `*${c.customerNumber}` : ""}</p>
+                  <p className="text-xs text-amber-100/70">{c.phone}</p>
+                  <p className="text-xs text-amber-300">AGUARDANDO APROVAÇÃO</p>
                 </div>
+                <button type="button" disabled={approveReviewMutation.isPending}
+                  onClick={()=>approveReviewMutation.mutate({customerId:c.customerId})}
+                  className="rounded-xl bg-green-500 px-4 py-3 text-sm font-black text-black disabled:opacity-50">
+                  OK APROVADO
+                </button>
               </div>
-            )}
+            ))}
+            {!reviewsQuery.isLoading && !reviewsQuery.isError && pendingReviews.length === 0 &&
+              <p className="rounded-xl border border-white/10 p-3 text-center text-sm text-white/50">Nenhum cadastro aguardando aprovação.</p>}
           </div>
-        </div>
+        </section>
 
         {/* ─── Bloqueio de Cadastro ───────────────────────────────────────────── */}
         <div className="bg-black/20 border border-red-500/30 rounded-xl p-5 space-y-4">
@@ -729,109 +459,6 @@ export default function AdminCodes() {
         </div>
 
       </div>
-
-      {/* ─── Modal: liberar senha pendente ──────────────────────────────────── */}
-      {pendingModal && (
-        <div className="fixed inset-0 bg-black/70 flex items-center justify-center z-50 p-4">
-          <div className="bg-[#1a1a2e] border border-amber-500/40 rounded-xl p-6 w-full max-w-sm space-y-4">
-            <div className="flex items-center justify-between">
-              <h3 className="text-white font-bold text-lg">Liberar senha</h3>
-              <button onClick={() => setPendingModal(null)} className="text-white/40 hover:text-white"><X className="w-5 h-5" /></button>
-            </div>
-            <p className="text-white/70 text-sm">
-              Definir validade para a senha de <span className="text-amber-300 font-bold">{pendingModal.name}</span>
-            </p>
-            <div>
-              <label className="text-white/40 text-xs block mb-1">Validade (dias)</label>
-              <div className="flex gap-2 flex-wrap mb-2">
-                {[7, 15, 30, 60, 90, 180, 365].map(d => (
-                  <button key={d} onClick={() => setPendingDays(d)}
-                    className={`px-3 py-1 rounded text-sm font-bold transition ${pendingDays === d ? 'bg-amber-500 text-black' : 'bg-white/10 text-white/60 hover:bg-white/20'}`}>
-                    {d}d
-                  </button>
-                ))}
-              </div>
-              <input
-                type="number" min={1} max={3650}
-                value={pendingDays}
-                onChange={(e) => setPendingDays(Number(e.target.value))}
-                style={whiteInputStyle}
-              />
-              <p className="text-white/30 text-xs mt-1">
-                Vence em: {new Date(Date.now() + pendingDays * 24 * 60 * 60 * 1000).toLocaleDateString('pt-BR')}
-              </p>
-            </div>
-            <div className="flex gap-2">
-              <Button onClick={() => setPendingModal(null)} variant="outline" className="flex-1 border-white/20 text-white/60">Cancelar</Button>
-              <Button onClick={handleApprove} disabled={isApproving} className="flex-1 bg-amber-500 hover:bg-amber-600 text-black font-bold">
-                {isApproving ? <Loader2 className="w-4 h-4 animate-spin" /> : <><Check className="w-4 h-4 mr-1" /> Liberar</>}
-              </Button>
-            </div>
-          </div>
-        </div>
-      )}
-
-      {/* ─── Modal: definir senha manual ────────────────────────────────────── */}
-      {setPasswordModal && (
-        <div className="fixed inset-0 bg-black/70 flex items-center justify-center z-50 p-4">
-          <div className="bg-[#1a1a2e] border border-purple-500/40 rounded-xl p-6 w-full max-w-sm space-y-4">
-            <div className="flex items-center justify-between">
-              <h3 className="text-white font-bold text-lg">Definir senha</h3>
-              <button onClick={() => { setSetPasswordModal(null); setSetPwdValue(''); }} className="text-white/40 hover:text-white"><X className="w-5 h-5" /></button>
-            </div>
-            <p className="text-white/70 text-sm">
-              Definir senha para <span className="text-purple-300 font-bold">{setPasswordModal.phone}</span>
-            </p>
-            <div className="space-y-3">
-              <div>
-                <label className="text-white/40 text-xs block mb-1">Nova senha (mín. 4 caracteres)</label>
-                <div className="relative">
-                  <input
-                    type={showSetPwd ? 'text' : 'password'}
-                    value={setPwdValue}
-                    onChange={(e) => setSetPwdValue(e.target.value)}
-                    placeholder="Digite a senha"
-                    style={{ ...whiteInputStyle, paddingRight: '40px' }}
-                  />
-                  <button
-                    type="button"
-                    onClick={() => setShowSetPwd(v => !v)}
-                    className="absolute right-3 top-1/2 -translate-y-1/2 text-gray-500 hover:text-gray-700"
-                  >
-                    {showSetPwd ? <EyeOff className="w-4 h-4" /> : <Eye className="w-4 h-4" />}
-                  </button>
-                </div>
-              </div>
-              <div>
-                <label className="text-white/40 text-xs block mb-1">Validade (dias)</label>
-                <div className="flex gap-2 flex-wrap mb-2">
-                  {[7, 15, 30, 60, 90, 180, 365].map(d => (
-                    <button key={d} onClick={() => setSetPwdDays(d)}
-                      className={`px-3 py-1 rounded text-sm font-bold transition ${setPwdDays === d ? 'bg-purple-500 text-white' : 'bg-white/10 text-white/60 hover:bg-white/20'}`}>
-                      {d}d
-                    </button>
-                  ))}
-                </div>
-                <input
-                  type="number" min={1} max={3650}
-                  value={setPwdDays}
-                  onChange={(e) => setSetPwdDays(Number(e.target.value))}
-                  style={whiteInputStyle}
-                />
-                <p className="text-white/30 text-xs mt-1">
-                  Vence em: {new Date(Date.now() + setPwdDays * 24 * 60 * 60 * 1000).toLocaleDateString('pt-BR')}
-                </p>
-              </div>
-            </div>
-            <div className="flex gap-2">
-              <Button onClick={() => { setSetPasswordModal(null); setSetPwdValue(''); }} variant="outline" className="flex-1 border-white/20 text-white/60">Cancelar</Button>
-              <Button onClick={handleSetPassword} disabled={isSetting || setPwdValue.length < 4} className="flex-1 bg-purple-600 hover:bg-purple-700 text-white font-bold">
-                {isSetting ? <Loader2 className="w-4 h-4 animate-spin" /> : <><Check className="w-4 h-4 mr-1" /> Salvar</>}
-              </Button>
-            </div>
-          </div>
-        </div>
-      )}
 
       {/* Modal de foto expandida */}
       {expandedPhoto && (

@@ -36,6 +36,7 @@ import { apkRouter } from "./routers/apk";
 import { customerPasswordRouter } from "./routers/customerPassword";
 import { customerUpdateRouter } from "./routers/customerUpdate";
 import { syncUnifiedCustomerRegistry } from "./customerIdentity";
+import { getRegistrationReviewMode, setRegistrationReviewMode, registerNewCustomerForReview, listRegistrationReviews, approveRegistration } from "./customerRegistrationReview";
 import { adjustCustomerH2Score, getCustomerH2ScoreSummary, getH2ScoreCustomerDirectory, setCustomerCommercialProfileMode } from "./loans/h2Score";
 import { CUSTOMER_ROUTES, ensureCustomerIdentityInfrastructure, findMainCustomerByIdentity, getRouteAccess, getRouteReleaseMode, listRouteReleaseModes, normalizeCustomerCpf, normalizeCustomerEmail, normalizeCustomerPhone, requestCustomerRouteAccess, setCustomerRoutePermissions, setRouteReleaseMode } from "./customerAccess";
 import { adCampaignsRouter } from "./routers/adCampaigns";
@@ -2424,6 +2425,12 @@ export const appRouter = router({
   }),
 
   // === CLIENTES (CADASTRO) ===
+  registrationReview: router({
+    mode: adminProcedure.query(() => getRegistrationReviewMode()),
+    setMode: adminProcedure.input(z.object({ mode: z.enum(["automatico","manual"]) })).mutation(({ input }) => setRegistrationReviewMode(input.mode)),
+    list: adminProcedure.query(() => listRegistrationReviews()),
+    approve: adminProcedure.input(z.object({ customerId: z.number().int().positive() })).mutation(async ({ input }) => { await approveRegistration(input.customerId); return { success: true }; }),
+  }),
   customers: router({
     routeReleaseModes: adminProcedure.query(async () => listRouteReleaseModes()),
 
@@ -2677,11 +2684,12 @@ export const appRouter = router({
           referredByPhone: referral.declaredPhone || undefined,
         };
         const customer = await createCustomer(safeInput);
+        const reviewStatus = await registerNewCustomerForReview(customer.id);
         const sourceRoute = input.sourceRoute || 'site';
         const releaseMode = await getRouteReleaseMode(sourceRoute);
-        if (releaseMode === 'automatico') {
+        if (reviewStatus === 'approved' && releaseMode === 'automatico') {
           await setCustomerRoutePermissions(customer.id, [sourceRoute], 'Cadastro inicial automático');
-        } else {
+        } else if (reviewStatus === 'approved') {
           await requestCustomerRouteAccess(customer.id, sourceRoute);
         }
         
@@ -2727,7 +2735,7 @@ export const appRouter = router({
             });
           } catch (e) { console.error('Email finalização cadastro:', e); }
         })();
-        return { success: true, customer, alreadyExists: false, releaseMode, accessGranted: releaseMode === 'automatico' };
+        return { success: true, customer, alreadyExists: false, releaseMode, reviewStatus, accessGranted: reviewStatus === 'approved' && releaseMode === 'automatico' };
       }),
 
     list: adminProcedure.query(async () => {

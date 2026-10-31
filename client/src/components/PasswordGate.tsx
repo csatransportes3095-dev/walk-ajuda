@@ -4,7 +4,7 @@ import { ESTADOS_BR, CIDADES_POR_UF } from "@/lib/brasilData";
 import { trpc } from "@/lib/trpc";
 import { isValidCPF, normalizeCpf } from "@shared/cpf";
 import { isRecoveredCustomerName } from "@shared/customerProfile";
-import { Zap, Lock, Eye, EyeOff, Clock, Phone, Download, X, UserPlus, MessageCircle, AlertTriangle, CheckCircle2, User, Mail, CreditCard, UserRound } from "lucide-react";
+import { Zap, Lock, Eye, EyeOff, Clock, Phone, Download, X, UserPlus, MessageCircle, AlertTriangle, CheckCircle2, ShieldCheck, User, Mail, CreditCard, UserRound } from "lucide-react";
 import { toast } from "sonner";
 import { useLocation } from "wouter";
 
@@ -99,7 +99,7 @@ function useInstallPWA() {
   return { isInstallable, isInstalled, dismissed, install, dismiss, deferredPrompt };
 }
 
-type GateStep = "phone" | "email" | "emailCode" | "newUser" | "indicador" | "registration" | "profilePhoto" | "referral" | "password" | "blocked" | "updateCpf" | "cpwd_create" | "cpwd_pending" | "cpwd_add_cpf" | "route_blocked";
+type GateStep = "phone" | "email" | "emailCode" | "registration_pending" | "newUser" | "indicador" | "registration" | "profilePhoto" | "referral" | "password" | "blocked" | "updateCpf" | "cpwd_create" | "cpwd_pending" | "cpwd_add_cpf" | "route_blocked";
 
 export default function PasswordGate({ children, registrationOnly = false }: PasswordGateProps) {
   const [accessGranted, setAccessGranted] = useState(() => !!localStorage.getItem(CP_TOKEN_KEY) || localStorage.getItem(SESSION_KEY) === "true");
@@ -945,10 +945,19 @@ export default function PasswordGate({ children, registrationOnly = false }: Pas
           setResolvedPhone(getPhoneDigits(regPhone));
         }
         if (registrationOnly) {
+          if (result.reviewStatus === "pending") {
+            sessionStorage.removeItem(LOGIN_EMAIL_PROOF_STORAGE_KEY);
+            sessionStorage.removeItem("h2_new_registration_phone");
+            setGateStep("registration_pending");
+            return;
+          }
           const created = await finishRegistration.mutateAsync({
             phone: clientPhoneDigits, emailVerificationToken,
           });
-          if (!created.success || !created.token) throw new Error("Cadastro salvo, mas não foi possível liberar o acesso por e-mail.");
+          if (!created.success || !created.token) {
+            if ("pendingApproval" in created && created.pendingApproval) { setGateStep("registration_pending"); return; }
+            throw new Error("Cadastro salvo, mas não foi possível liberar o acesso por e-mail.");
+          }
           localStorage.setItem(CP_TOKEN_KEY, created.token);
           localStorage.setItem(SESSION_PHONE_KEY, clientPhoneDigits);
           sessionStorage.removeItem(LOGIN_EMAIL_PROOF_STORAGE_KEY);
@@ -1900,6 +1909,15 @@ export default function PasswordGate({ children, registrationOnly = false }: Pas
               )}
 
             </form>
+          )}
+
+          {gateStep === "registration_pending" && (
+            <div className="space-y-4 rounded-2xl border border-amber-400/40 bg-amber-400/10 p-5 text-center">
+              <ShieldCheck className="mx-auto h-10 w-10 text-amber-300" />
+              <h2 className="text-xl font-black text-white">Cadastro enviado para análise</h2>
+              <p className="text-sm text-amber-100/90">Seus dados foram recebidos. O acesso será liberado após o administrador aprovar seu cadastro.</p>
+              <a href="https://h2colombiano.com/" className="block rounded-xl border border-cyan-400/40 bg-cyan-400/10 p-3 text-sm font-bold text-cyan-200">← VOLTAR AO SITE</a>
+            </div>
           )}
 
           {/* ===== STEP BLOQUEADO: NÚMERO NA LISTA NEGRA ===== */}
