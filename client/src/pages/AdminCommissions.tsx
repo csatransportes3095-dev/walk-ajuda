@@ -243,7 +243,7 @@ export default function AdminCommissions() {
       const phone = indicadorPhone.replace(/\\D/g, "").replace(/^55(?=\\d{10,11}$)/, "");
       if (phone.length === 10 || phone.length === 11) {
         const details = completed.map((p, i) =>
-          `${i+1}️⃣ *${p.customerName || "Cliente indicado"}*\\n📋 Cadastro: ${(p as any).customerNumber || p.registrationId}\\n💰 Comissão: ${formatMoney(Number((p as any).commissionValue))}`
+          `${i+1}️⃣ *${p.customerName || "Cliente indicado"}*\n📋 Cadastro: ${(p as any).customerNumber || p.registrationId}\n💰 Comissão: ${formatMoney(Number((p as any).commissionValue))}`
         );
         const message = [
           "✅ *COMISSÕES PAGAS*",
@@ -257,7 +257,7 @@ export default function AdminCommissions() {
           "",
           "Obrigado pelas indicações! 🎉",
           "🛡️ *EQUIPE H2 COLOMBIANO* 🇨🇴",
-        ].join("\\n");
+        ].join("\n");
         window.open(`https://wa.me/55${phone}?text=${encodeWhatsappMessage(repairCommissionWhatsappMessage(message))}`, "_blank", "noopener,noreferrer");
       } else {
         toast.warning("Pagamento registrado. Confira o telefone do indicador para notificar.");
