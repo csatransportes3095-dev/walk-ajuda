@@ -21,6 +21,7 @@ import * as path from "path";
 import * as os from "os";
 import { execSync } from "child_process";
 import { isLoanEditPasswordValid } from "../loanEditAuthorization";
+import { getVerifiedCustomerOtpSession, isCustomerOtpModeEnabled } from "../customerOtpAccess";
 
 // ââ€â‚¬ââ€â‚¬ââ€â‚¬ Helper: obter data de hoje em UTC-3 (Brasil) ââ€â‚¬ââ€â‚¬ââ€â‚¬ââ€â‚¬ââ€â‚¬ââ€â‚¬ââ€â‚¬ââ€â‚¬ââ€â‚¬ââ€â‚¬ââ€â‚¬ââ€â‚¬ââ€â‚¬ââ€â‚¬ââ€â‚¬ââ€â‚¬ââ€â‚¬ââ€â‚¬ââ€â‚¬ââ€â‚¬ââ€â‚¬ââ€â‚¬ââ€â‚¬ââ€â‚¬ââ€â‚¬ââ€â‚¬ââ€â‚¬ââ€â‚¬ââ€â‚¬
 function getBrazilClock(now = new Date()): { today: string; date: string; hour: number; minute: number } {
@@ -81,6 +82,8 @@ async function syncLegacyLoanAccess(db: any, session: any, enabled: boolean): Pr
 async function requireLoanRouteAccess(db: any, rawToken: string): Promise<any> {
   const token = rawToken.trim();
   if (!token) throw new TRPCError({ code: 'UNAUTHORIZED', message: 'Sessão inválida ou expirada.' });
+  if (isCustomerOtpModeEnabled() && !(await getVerifiedCustomerOtpSession(db,token)))
+    throw new TRPCError({code:"UNAUTHORIZED",message:"Entre novamente com telefone e código do e-mail."});
 
   // A Planilha e o módulo de Empréstimos compartilham a mesma sessão central.
   const spreadsheetSessionRows = await qRows(db, drizzleSql`

@@ -19,6 +19,7 @@ import { syncUnifiedCustomerRegistry } from "../customerIdentity";
 import { storagePut } from "../storage";
 import { getMissingCustomerProfileFields } from "../customerProfileRequirements";
 import { generateNextCustomerNumber } from "../customerNumberSequence";
+import { getVerifiedCustomerOtpSession, isCustomerOtpModeEnabled } from "../customerOtpAccess";
 
 const SESSION_DURATION_MS = 90 * 24 * 60 * 60 * 1000;
 const PASSWORD_DURATION_MS = 30 * 24 * 60 * 60 * 1000;
@@ -69,6 +70,14 @@ async function requireCustomerSession(token: string) {
   const db = await getDb() as any;
   if (!db) throw new TRPCError({ code: "INTERNAL_SERVER_ERROR", message: "Banco indisponível." });
   const cleanToken = token.trim();
+  if (isCustomerOtpModeEnabled()) {
+    const verified=await getVerifiedCustomerOtpSession(db,cleanToken);
+    if (!verified) throw new TRPCError({code:"UNAUTHORIZED",message:"Entre com telefone e código do e-mail novamente."});
+    const customer=await findMainCustomerByIdentity({phone:verified.phone},db);
+    if (!customer || customer.deletedAt || Number(customer.blocked || 0)===1)
+      throw new TRPCError({code:"FORBIDDEN",message:"Cadastro não autorizado."});
+    return {db,customer};
+  }
   let sessions = await rows(db, sql`
     SELECT phone, expiresAt
     FROM customerPasswordSessions
@@ -127,6 +136,8 @@ export const customerUpdateRouter = router({
   login: publicProcedure
     .input(z.object({ phone: z.string().min(10).max(32), password: z.string().min(4).max(72) }))
     .mutation(async ({ input }) => {
+      if (isCustomerOtpModeEnabled()) throw new TRPCError({code:"FORBIDDEN",message:"A senha foi removida. Entre por código de e-mail."});
+
       const db = await getDb() as any;
       if (!db) throw new TRPCError({ code: "INTERNAL_SERVER_ERROR", message: "Banco indisponível." });
       const phone = normalizeCustomerPhone(input.phone);
@@ -144,6 +155,8 @@ export const customerUpdateRouter = router({
   createPassword: publicProcedure
     .input(z.object({ phone: z.string().min(10).max(32), password: z.string().min(4).max(72) }))
     .mutation(async ({ input }) => {
+      if (isCustomerOtpModeEnabled()) throw new TRPCError({code:"FORBIDDEN",message:"A senha foi removida. Entre por código de e-mail."});
+
       const db = await getDb() as any;
       if (!db) throw new TRPCError({ code: "INTERNAL_SERVER_ERROR", message: "Banco indisponível." });
       const phone = normalizeCustomerPhone(input.phone);

@@ -11,6 +11,7 @@ import {
 } from "../db";
 import { getDb } from "../db";
 import { requireCustomerSession } from "../customerSession";
+import { getVerifiedCustomerOtpSession, isCustomerOtpModeEnabled, revokeCustomerOtpSession } from "../customerOtpAccess";
 import { syncUnifiedCustomerRegistry, requireCompleteMainCustomerProfile } from "../customerIdentity";
 import { findMainCustomerByIdentity, getCustomerRouteRestrictionReason, getRouteAccess, getRouteReleaseMode, normalizeCustomerPhone, setCustomerRoutePermissions, setCustomerRouteRestrictionReason } from "../customerAccess";
 import { spreadsheetClients, spreadsheetPasswords, spreadsheetSessions, spreadsheetLoginAudit, spreadsheetReferralDeclarations, customers, appSettings, customerPasswordSessions } from "../../drizzle/schema";
@@ -26,6 +27,9 @@ export async function resolveClientId(token: string): Promise<number> {
   const db = await getDb() as any;
   if (!db) throw new TRPCError({ code: "INTERNAL_SERVER_ERROR", message: "Banco de dados indisponível" });
   const cleanToken = token.trim();
+  // A valid legacy spreadsheet token must never bypass the new email proof.
+  if (isCustomerOtpModeEnabled() && !(await getVerifiedCustomerOtpSession(db,cleanToken)))
+    throw new TRPCError({code:"UNAUTHORIZED",message:"Entre novamente com telefone e código de e-mail."});
 
   let sessionResult = await db.select().from(spreadsheetSessions)
     .where(eq(spreadsheetSessions.token, cleanToken)).limit(1);
@@ -83,7 +87,7 @@ export async function resolveClientId(token: string): Promise<number> {
   try {
     const newExpiry = new Date(Date.now() + SESSION_DURATION_MS);
     const currentExpiry = new Date(session.expiresAt);
-    if (newExpiry.getTime() - currentExpiry.getTime() > 24 * 60 * 60 * 1000) {
+    if (!isCustomerOtpModeEnabled() && newExpiry.getTime() - currentExpiry.getTime() > 24 * 60 * 60 * 1000) {
       if (source === 'spreadsheet') await db.update(spreadsheetSessions).set({ expiresAt: newExpiry }).where(eq(spreadsheetSessions.token, cleanToken));
       else await db.update(customerPasswordSessions).set({ expiresAt: newExpiry, lastAccessAt: new Date() }).where(eq(customerPasswordSessions.token, cleanToken));
     }
@@ -99,6 +103,19 @@ async function resolveReferralManifestClient(token: string, route: 'gastos' | 'e
   if (!db) throw new TRPCError({ code: 'INTERNAL_SERVER_ERROR', message: 'Banco de dados indisponível' });
 
   const cleanToken = token.trim();
+  if (isCustomerOtpModeEnabled()) {
+    const verified=await getVerifiedCustomerOtpSession(db,cleanToken);
+    if (!verified) throw new TRPCError({code:"UNAUTHORIZED",message:"Acesso expirado. Confirme o e-mail."});
+    const clientId=await resolveClientId(cleanToken);
+    const clientRows=await db.select().from(spreadsheetClients)
+      .where(eq(spreadsheetClients.id,clientId)).limit(1);
+    const client=clientRows?.[0];
+    if (!client) throw new TRPCError({code:"UNAUTHORIZED",message:"Cadastro não encontrado."});
+    const access=await getRouteAccess(verified.customerId,db);
+    if (access.restricted && !access.routes.includes(route))
+      throw new TRPCError({code:"FORBIDDEN",message:"Acesso não autorizado para esta área."});
+    return {db,client};
+  }
   const sessionResult = await db.select().from(spreadsheetSessions)
     .where(eq(spreadsheetSessions.token, cleanToken)).limit(1);
   const session = sessionResult?.[0] || null;
@@ -683,6 +700,8 @@ export const spreadsheetRouter = router({
       confirmPassword: z.string().min(6),
     }))
     .mutation(async ({ input }) => {
+      if (isCustomerOtpModeEnabled()) throw new TRPCError({code:"FORBIDDEN",message:"As senhas de cliente foram desativadas. Utilize o código do e-mail."});
+
       try {
         const db = await getDb() as any;
         if (!db) throw new TRPCError({ code: "INTERNAL_SERVER_ERROR", message: "Banco de dados indisponível" });
@@ -766,6 +785,8 @@ export const spreadsheetRouter = router({
       expirationHours: z.number().min(1).max(8760), // até 1 ano
     }))
     .mutation(async ({ input }) => {
+      if (isCustomerOtpModeEnabled()) throw new TRPCError({code:"FORBIDDEN",message:"As senhas de cliente foram desativadas. Utilize o código do e-mail."});
+
       try {
         const db = await getDb() as any;
         if (!db) throw new TRPCError({ code: "INTERNAL_SERVER_ERROR", message: "Banco de dados indisponível" });
@@ -805,6 +826,10 @@ export const spreadsheetRouter = router({
         const db = await getDb() as any;
         if (!db) return { success: false };
         const cleanToken = input.token.trim();
+        if (isCustomerOtpModeEnabled()) {
+          const session=await getVerifiedCustomerOtpSession(db,cleanToken);
+          return {success:!!session};
+        }
         const sessionResult = await db.select().from(spreadsheetSessions)
           .where(eq(spreadsheetSessions.token, cleanToken)).limit(1);
         const session = sessionResult?.[0] || null;
@@ -831,6 +856,8 @@ export const spreadsheetRouter = router({
       isCpf: z.boolean().optional(),
     }))
     .mutation(async ({ input, ctx }) => {
+      if (isCustomerOtpModeEnabled()) throw new TRPCError({code:"FORBIDDEN",message:"As senhas de cliente foram desativadas. Utilize o código do e-mail."});
+
       try {
         const db = await getDb() as any;
         if (!db) throw new TRPCError({ code: "INTERNAL_SERVER_ERROR", message: "Banco de dados indisponível" });
@@ -1003,6 +1030,19 @@ export const spreadsheetRouter = router({
       const db = await getDb() as any;
       if (!db) throw new TRPCError({ code: "INTERNAL_SERVER_ERROR", message: "Banco de dados indisponível" });
       const cleanToken = input.token.trim();
+      if (isCustomerOtpModeEnabled()) {
+        try {
+          const verified=await getVerifiedCustomerOtpSession(db,cleanToken);
+          if (!verified) return {valid:false as const};
+          const clientId=await resolveClientId(cleanToken);
+          const clients=await db.select().from(spreadsheetClients)
+            .where(eq(spreadsheetClients.id,clientId)).limit(1);
+          const client=clients?.[0];
+          if (!client) return {valid:false as const};
+          return {valid:true as const,source:"customer" as const,profileIncomplete:false,
+                  clientId:Number(client.id),clientName:client.name,clientPhone:client.phone};
+        } catch {return {valid:false as const};}
+      }
 
       let sessionRows = await db.select().from(spreadsheetSessions)
         .where(eq(spreadsheetSessions.token, cleanToken)).limit(1);
@@ -1056,6 +1096,15 @@ export const spreadsheetRouter = router({
       try {
         const db = await getDb() as any;
         if (!db) return null;
+        if (isCustomerOtpModeEnabled()) {
+          const verified=await getVerifiedCustomerOtpSession(db,input.token);
+          if (!verified) return null;
+          const access=await getRouteAccess(Number(verified.customerId),db);
+          if (access.restricted && !access.routes.includes("gastos")) return null;
+          return {clientName:verified.name,phone:verified.phone,cpf:verified.cpf,
+            email:verified.email,expiresAt:null,isActive:true,
+            profilePhotoUrl:verified.profilePhotoUrl||null};
+        }
 
         const sessionResult = await db.select().from(spreadsheetSessions)
           .where(eq(spreadsheetSessions.token, input.token)).limit(1);
@@ -1105,6 +1154,10 @@ export const spreadsheetRouter = router({
         if (!db) return { success: false };
 
         const cleanToken = input.token.trim();
+        if (isCustomerOtpModeEnabled()) {
+          await revokeCustomerOtpSession(db,cleanToken);
+          return {success:true};
+        }
         await db.delete(spreadsheetSessions).where(eq(spreadsheetSessions.token, cleanToken));
         await db.delete(customerPasswordSessions).where(eq(customerPasswordSessions.token, cleanToken));
         return { success: true };
@@ -1122,6 +1175,8 @@ export const spreadsheetRouter = router({
       password: z.string().min(6, "Senha deve ter pelo menos 6 caracteres"),
     }))
     .mutation(async ({ input }) => {
+      if (isCustomerOtpModeEnabled()) throw new TRPCError({code:"FORBIDDEN",message:"As senhas de cliente foram desativadas. Utilize o código do e-mail."});
+
       try {
         const db = await getDb() as any;
         if (!db) throw new TRPCError({ code: "INTERNAL_SERVER_ERROR", message: "Banco de dados indisponível" });
@@ -1211,6 +1266,8 @@ export const spreadsheetRouter = router({
       password: z.string().min(6, "Senha deve ter pelo menos 6 caracteres"),
     }))
     .mutation(async ({ input }) => {
+      if (isCustomerOtpModeEnabled()) throw new TRPCError({code:"FORBIDDEN",message:"As senhas de cliente foram desativadas. Utilize o código do e-mail."});
+
       try {
         const db = await getDb() as any;
         if (!db) throw new TRPCError({ code: "INTERNAL_SERVER_ERROR", message: "Banco de dados indisponível" });
@@ -1311,6 +1368,8 @@ export const spreadsheetRouter = router({
       searchOnly: z.boolean().optional(),
     }))
     .mutation(async ({ input }) => {
+      if (isCustomerOtpModeEnabled()) throw new TRPCError({code:"FORBIDDEN",message:"As senhas de cliente foram desativadas. Utilize o código do e-mail."});
+
       try {
         const db = await getDb() as any;
         if (!db) throw new TRPCError({ code: "INTERNAL_SERVER_ERROR", message: "Banco de dados indisponível" });
@@ -1427,6 +1486,8 @@ export const spreadsheetRouter = router({
   adminDeletePassword: publicProcedure
     .input(z.object({ clientId: z.number() }))
     .mutation(async ({ input }) => {
+      if (isCustomerOtpModeEnabled()) throw new TRPCError({code:"FORBIDDEN",message:"As senhas de cliente foram desativadas. Utilize o código do e-mail."});
+
       try {
         const db = await getDb() as any;
         if (!db) throw new TRPCError({ code: "INTERNAL_SERVER_ERROR", message: "Banco de dados indisponível" });
@@ -1450,6 +1511,8 @@ export const spreadsheetRouter = router({
       expirationHours: z.number().min(1).max(8760).optional(), // opcional: se informado, já define nova validade
     }))
     .mutation(async ({ input }) => {
+      if (isCustomerOtpModeEnabled()) throw new TRPCError({code:"FORBIDDEN",message:"As senhas de cliente foram desativadas. Utilize o código do e-mail."});
+
       try {
         const db = await getDb() as any;
         if (!db) throw new TRPCError({ code: "INTERNAL_SERVER_ERROR", message: "Banco de dados indisponível" });
@@ -1652,6 +1715,8 @@ export const spreadsheetRouter = router({
   setPasswordMode: adminProcedure
     .input(z.object({ mode: z.enum(['manual', 'auto']) }))
     .mutation(async ({ input }) => {
+      if (isCustomerOtpModeEnabled()) throw new TRPCError({code:"FORBIDDEN",message:"As senhas de cliente foram desativadas. Utilize o código do e-mail."});
+
       try {
         const db = await getDb() as any;
         if (!db) throw new TRPCError({ code: 'INTERNAL_SERVER_ERROR', message: 'Banco indisponível' });
@@ -1675,6 +1740,8 @@ export const spreadsheetRouter = router({
       sourceRoute: z.string().optional(), // rota de origem: 'gastos' ou 'emprestimo'
     }))
     .mutation(async ({ input }) => {
+      if (isCustomerOtpModeEnabled()) throw new TRPCError({code:"FORBIDDEN",message:"As senhas de cliente foram desativadas. Utilize o código do e-mail."});
+
       try {
         const db = await getDb() as any;
         if (!db) throw new TRPCError({ code: 'INTERNAL_SERVER_ERROR', message: 'Banco indisponível' });
@@ -1978,6 +2045,16 @@ export const spreadsheetRouter = router({
         if (!db) return { allowed: false, allowedRoutes: [] };
         const cleanToken = input.token.trim();
         if (!cleanToken) return { allowed: false, allowedRoutes: [] };
+        if (isCustomerOtpModeEnabled()) {
+          const verified=await getVerifiedCustomerOtpSession(db,cleanToken);
+          if (!verified) return {allowed:false,allowedRoutes:[]};
+          const access=await getRouteAccess(Number(verified.customerId),db);
+          const allowed=!access.restricted || access.routes.includes(input.route as any);
+          const restriction=allowed?null:await getCustomerRouteRestrictionReason(
+            Number(verified.customerId),input.route as any,db);
+          return {allowed,allowedRoutes:access.restricted?access.routes:[],
+            restrictionReason:restriction?.reason||null};
+        }
 
         let phone: string | null = null;
         try {

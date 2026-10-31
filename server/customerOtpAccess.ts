@@ -8,6 +8,7 @@ import { emailBelongsToAnotherCustomer } from "./customerEmailOwnership";
 import { deliverOwnSiteCode } from "./siteAccessCodeDelivery";
 import { getMissingCustomerProfileFields } from "./customerProfileRequirements";
 import { assertLoginEmailProof } from "./customerLoginEmailProof";
+import { getAdminJwtSecret } from "./adminJwt";
 
 /**
  * Customer authentication v2: registered phone + one-time email code.
@@ -39,7 +40,9 @@ const GENERIC = "Se o telefone estiver cadastrado, enviaremos um código ao e-ma
 const isToken = (v: string) => /^h2otp_[0-9a-f]{64}$/.test(v);
 
 function secret(): string {
-  const key = process.env.H2_SITE_ACCESS_SECRET || "";
+  // Dedicated key preferred; existing server signing secret is an isolated
+  // fallback so the Zoho email-code flow does not depend on a new credential.
+  const key = process.env.H2_SITE_ACCESS_SECRET || getAdminJwtSecret() || "";
   if (key.length < 32) throw new TRPCError({ code: "SERVICE_UNAVAILABLE", message: "Autenticação temporariamente indisponível." });
   return key;
 }
