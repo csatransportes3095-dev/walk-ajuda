@@ -314,6 +314,9 @@ export function registerH2AutoAccessRoutes(app: Express): void {
       }
 
       if (s.stage === "customer_phone" || s.stage === "referrals_phone") {
+        // A retransmissão da opção inicial não é um telefone inválido.
+        if (repeatedH2AutoChoice(s.stage, input))
+          return respond(res,200,{state:s.stage,message:s.stage==="referrals_phone" ? confirmation.phonePrompt : phoneMessage});
         const phone = normalizeCustomerPhone(input);
         const referralEntry = s.stage === "referrals_phone";
         if (invalidH2AutoPhoneStageAnswer(s.stage, input) || !phone)
