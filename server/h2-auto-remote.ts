@@ -168,6 +168,17 @@ function ensure() {
 		 history_json JSON NOT NULL,
 		 received_at BIGINT NOT NULL
 		)`);
+      await db.execute(sql`CREATE TABLE IF NOT EXISTS h2_auto_short_copy_backups (
+        device_id VARCHAR(32) NOT NULL,
+        campaign_key VARCHAR(80) NOT NULL,
+        previous_config JSON NOT NULL,
+        previous_revision INT NOT NULL,
+        applied_at TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP,
+        PRIMARY KEY (device_id, campaign_key)
+      )`);
+      // Uma migração idempotente, apenas de textos. Cada aparelho tem backup.
+      // A importação inicial de um APK novo (revision=0) permanece intacta.
+      await migrateH2AutoShortCopyOnce(db);
     })().catch(e => {
       ready = undefined;
       throw e;
@@ -182,6 +193,52 @@ const rows = async (query: any): Promise<any[]> => {
 };
 const decodeConfig = (raw: any): RemoteConfig =>
   configSchema.parse(typeof raw === "string" ? JSON.parse(raw) : raw);
+
+const H2_AUTO_SHORT_COPY_CAMPAIGN = "short-whatsapp-ptbr-20261031-v1";
+async function migrateH2AutoShortCopyOnce(db: any): Promise<void> {
+  // O conteúdo de contas já configuradas é migrado uma única vez; cadastros
+  // novos recebem os textos curtos definidos nos defaults.
+  let devices: any[] = [];
+  try {
+    const result = await db.execute(sql\`SELECT id FROM h2_auto_devices WHERE revision > 0 ORDER BY created_at ASC LIMIT 1000\`);
+    devices = (result[0] || []) as any[];
+  } catch (error) {
+    console.error("[H2Auto] não foi possível listar aparelhos para atualizar textos", error);
+    return;
+  }
+  for (const device of devices) {
+    try {
+      await db.transaction(async (tx: any) => {
+        const fetched = await tx.execute(sql\`SELECT config_json,revision FROM h2_auto_devices
+          WHERE id=\${String(device.id)} FOR UPDATE\`);
+        const row = (fetched[0] as any[])[0];
+        if (!row) return;
+        const previous = await tx.execute(sql\`SELECT device_id FROM h2_auto_short_copy_backups
+          WHERE device_id=\${String(device.id)} AND campaign_key=\${H2_AUTO_SHORT_COPY_CAMPAIGN} LIMIT 1\`);
+        if ((previous[0] as any[]).length) return;
+        const original = decodeConfig(row.config_json);
+        const compact = configSchema.parse(applyH2AutoShortCopy(original));
+        const originalJson = JSON.stringify(original);
+        const compactJson = JSON.stringify(compact);
+        // O backup e a atualização são uma única transação. Nenhum estado
+        // parcial pode ser enviado ao aparelho.
+        await tx.execute(sql\`INSERT INTO h2_auto_short_copy_backups
+          (device_id,campaign_key,previous_config,previous_revision)
+          VALUES (\${String(device.id)},\${H2_AUTO_SHORT_COPY_CAMPAIGN},
+            \${originalJson},\${Number(row.revision)})\`);
+        if (compactJson !== originalJson) {
+          await tx.execute(sql\`UPDATE h2_auto_devices SET
+            config_json=\${compactJson}, revision=revision+1
+            WHERE id=\${String(device.id)} AND revision=\${Number(row.revision)}\`);
+        }
+      });
+    } catch (error) {
+      // Nenhum texto parcialmente aplicado: rollback é automático.
+      console.error("[H2Auto] migração de texto não aplicada a aparelho", String(device.id), error);
+    }
+  }
+}
+
 const safeDevice = (r: any) => ({
   id: r.id,
   label: r.label,
