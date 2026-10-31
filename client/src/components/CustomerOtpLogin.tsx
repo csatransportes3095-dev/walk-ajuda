@@ -163,7 +163,7 @@ export function CustomerOtpLogin({ title = "Acesso H2 Colombiano", initialPhone 
               {busy ? "Solicitando..." : "RECEBER CÓDIGO NO E-MAIL"}
             </button>
             {onRegister && (
-              <button type="button" className="w-full py-2 text-sm text-cyan-300" onClick={startRegistration}>
+              <button type="button" className="flex min-h-12 w-full items-center justify-center rounded-xl border border-cyan-400/40 bg-cyan-400/10 px-4 py-3 text-center text-sm font-black text-cyan-200 transition-colors hover:bg-cyan-400/20" onClick={startRegistration}>
                 Ainda não tenho cadastro
               </button>
             )}
