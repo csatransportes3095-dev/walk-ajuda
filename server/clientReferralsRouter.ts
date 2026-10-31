@@ -5,19 +5,22 @@ import { TRPCError } from "@trpc/server";
 import { getDb } from "./db";
 import { requireCustomerSession } from "./customerSession";
 import { loadH2AutoLegacyReferrals, mergeH2AutoReferralItems } from "./h2-auto-referral-commissions";
+import { isPromotionWithoutCommission, REFERRAL_PROMOTION_LABEL } from "../shared/referralPromotionPolicy";
 import { resolveReferralCommissionState } from "../shared/referralCommissionPolicy";
 import { getCommissionManualOverrides, applyManualCommissionOverride } from "./referralCommissionManual";
 
 export type ClientReferralStatus = "paga" | "liberada" | "aguardando_agendamento" | "nao_elegivel";
 
-export function clientReferralSummary(items: Array<{commissionValue:number;commissionState:string}>) {
+export function clientReferralSummary(items: Array<{commissionValue:number;commissionState:string;promotionNoCommission?:boolean}>) {
   const amount = (status: string) => items.filter(row => row.commissionState === status)
     .reduce((sum,row) => sum + Math.max(0, Number(row.commissionValue)||0), 0);
   const pending = amount("aguardando_agendamento");
   const released = amount("liberada");
   const paid = amount("paga");
   return {
-    totalReferrals:items.length,
+    totalReferrals:items.filter(row=>!row.promotionNoCommission).length,
+    promotionalCount:items.filter(row=>row.promotionNoCommission).length,
+    historyCount:items.length,
     pendingCount:items.filter(row=>row.commissionState==="aguardando_agendamento").length,
     releasedCount:items.filter(row=>row.commissionState==="liberada").length,
     paidCount:items.filter(row=>row.commissionState==="paga").length,
@@ -41,7 +44,7 @@ export const clientReferralsRouter = router({
       const [result, legacy]=await Promise.all([
         db.execute(sql`SELECT attribution.registrationId,attribution.orderNumber,
           attribution.referredName,attribution.commissionValue,
-          attribution.status AS commissionStatus,
+          attribution.status AS commissionStatus,attribution.commissionRule,
           (SELECT h.status FROM orderStatusHistory h WHERE h.registrationId=attribution.registrationId
             ORDER BY h.createdAt DESC,h.id DESC LIMIT 1) AS latestOrderStatus,
           (SELECT st.label FROM orderStatusHistory h LEFT JOIN orderStatusTypes st
@@ -64,19 +67,22 @@ export const clientReferralsRouter = router({
           latestOrderStatus:row.latestOrderStatus,
           latestOrderStatusLabel:row.latestOrderStatusLabel,
         });
+        const promotional=isPromotionWithoutCommission(row.commissionRule);
         return {
+          promotionNoCommission:promotional,
           registrationId:Number(row.registrationId),
           orderNumber:row.orderNumber==null?null:Number(row.orderNumber),
           customerName:String(row.referredName||"Cliente").slice(0,90),
           orderStatus:String(row.latestOrderStatusLabel||row.latestOrderStatus||"Pedido recebido").slice(0,100),
-          commissionValue:Math.max(0,Number(row.commissionValue)||0),
-          commissionState:resolved.state,
-          commissionLabel:resolved.label,
+          commissionValue:promotional?0:Math.max(0,Number(row.commissionValue)||0),
+          commissionState:promotional?"nao_elegivel" as const:resolved.state,
+          commissionLabel:promotional?REFERRAL_PROMOTION_LABEL:resolved.label,
         };
       });
       const merged=mergeH2AutoReferralItems(frozen,legacy);
       const overrides=await getCommissionManualOverrides(db,merged.map(row=>row.registrationId));
       const commissions=merged.map(row=>{
+        if(row.promotionNoCommission) return {...row,commissionValue:0,commissionState:"nao_elegivel" as const,commissionLabel:REFERRAL_PROMOTION_LABEL,manualStatus:null};
         const modified=applyManualCommissionOverride({
           commissionValue:row.commissionValue,paymentState:row.commissionState,
           paymentLabel:row.commissionLabel,paymentReady:row.commissionState==="liberada",

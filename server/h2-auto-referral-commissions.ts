@@ -11,6 +11,7 @@ export type H2AutoReferralItem = {
   commissionValue: number;
   commissionState: string;
   commissionLabel: string;
+  promotionNoCommission?: boolean;
 };
 
 function itemFromLegacy(row: any, candidates: CommissionCandidate[]): H2AutoReferralItem {

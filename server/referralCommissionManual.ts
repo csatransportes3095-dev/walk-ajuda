@@ -110,7 +110,7 @@ export async function setCommissionManualOverride(
         WHERE h.registrationId=acp.id),0) AS paid,
       COALESCE((SELECT MAX(h.referralInvalid) FROM orderStatusHistory h
         WHERE h.registrationId=acp.id),0) AS invalid,
-      rca.status AS frozenStatus
+      rca.status AS frozenStatus,rca.commissionRule
       FROM accessCodePhones acp
       JOIN customers c ON RIGHT(REGEXP_REPLACE(c.phone,'[^0-9]',''),11)=
         RIGHT(REGEXP_REPLACE(acp.phone,'[^0-9]',''),11)
@@ -125,6 +125,7 @@ export async function setCommissionManualOverride(
       LIMIT 1 FOR UPDATE`);
     const row = (rows[0] || [])[0] as any;
     if (!row) throw new Error("Indicação não encontrada no painel.");
+    if(row.commissionRule==="promotion_no_commission")throw new Error("Produto promocional não gera comissão.");
     if (Number(row.paid) === 1 || String(row.frozenStatus) === "paga")
       throw new Error("Comissão já paga. Desfaça o pagamento antes de editar valores.");
     if (Number(row.invalid) === 1 || ["nao_elegivel","cancelada"].includes(String(row.frozenStatus)))

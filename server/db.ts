@@ -5734,6 +5734,7 @@ export async function deletePendingZohoOAuth(sessionId: string) {
 
 // ─── Comissão de indicação congelada por pedido elegível ───────────────────
 export type ReferralCommissionStatus = "em_analise" | "elegivel" | "paga" | "nao_elegivel" | "cancelada";
+const PROMOTION_REFERRAL_RULE = "promotion_no_commission";
 
 export async function getReferralCommissionAttributionByOrderStatus(orderStatusId: number): Promise<ReferralCommissionAttribution | null> {
   const db = await getDb();
@@ -5761,6 +5762,7 @@ export async function createReferralCommissionAttribution(input: {
   serviceName?: string | null;
   serviceOption?: string | null;
   commissionValue: number;
+  promotionNoCommission?: boolean;
 }): Promise<ReferralCommissionAttribution | null> {
   const db = await getDb();
   if (!db) return null;
@@ -5785,9 +5787,11 @@ export async function createReferralCommissionAttribution(input: {
       optionId: input.optionId ?? null,
       serviceName: input.serviceName ?? null,
       serviceOption: input.serviceOption ?? null,
-      commissionRule: "fixed_option",
-      commissionValue: Math.max(0, Math.round(input.commissionValue)),
-      status: "em_analise",
+      commissionRule: input.promotionNoCommission ? PROMOTION_REFERRAL_RULE : "fixed_option",
+      commissionValue: input.promotionNoCommission ? 0 : Math.max(0, Math.round(input.commissionValue)),
+      status: input.promotionNoCommission ? "nao_elegivel" : "em_analise",
+      invalidReason: input.promotionNoCommission ? "Produto em promoção: sem comissão de indicação." : null,
+      invalidatedAt: input.promotionNoCommission ? new Date() : null,
     } satisfies InsertReferralCommissionAttribution);
   } catch (error: any) {
     // Uma criação concorrente do mesmo pedido deve devolver o snapshot já gravado.
@@ -5811,6 +5815,12 @@ export async function updateReferralCommissionAttributionStatus(input: {
     .limit(1);
   const attribution = rows[0];
   if (!attribution) return null;
+  // Promoções ficam permanentemente sem comissão. O ADM não pode
+  // revalidar nem marcar como paga uma indicação promocional.
+  if (attribution.commissionRule === PROMOTION_REFERRAL_RULE &&
+      !["nao_elegivel","cancelada"].includes(input.status)) {
+    throw new Error("Indicação de produto promocional não gera comissão.");
+  }
 
   const now = new Date();
   const values: Partial<InsertReferralCommissionAttribution> = { status: input.status };
