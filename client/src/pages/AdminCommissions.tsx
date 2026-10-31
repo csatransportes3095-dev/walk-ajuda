@@ -650,7 +650,7 @@ export default function AdminCommissions() {
                                   : 'bg-red-500/20 border-red-500/40 text-red-400'
                             }`}>
                               {isInvalid
-                                ? (isPromotion ? '🏷️ PROMOÇÃO — SEM COMISSÃO' : '⛔ Indicação não válida')
+                                ? (isPromotion || String((c as any).referralInvalidReason || "").toLowerCase().includes("promoção") ? '🏷️ PROMOÇÃO — SEM COMISSÃO' : '⛔ Indicação não válida')
                                 : isPaid
                                   ? <>✅ Pagamento confirmado{(c as any).commissionValue > 0 ? ` · ${formatMoney((c as any).commissionValue)}` : ''}</>
                                   : isUnderReview
@@ -772,7 +772,10 @@ export default function AdminCommissions() {
                               </div>
                             </div>
                           ) : isPromotion ? null : isUnderReview ? (
-                            <button onClick={() => setReferralAction({ registrationId: c.registrationId, mode: 'revalidate' })} className="flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-xs font-bold border border-emerald-500/40 bg-emerald-500/10 text-emerald-300 hover:bg-emerald-500/20" title="Aprovar comissão"><CheckCircle className="w-3.5 h-3.5" /> Aprovar</button>
+                            <div className="flex flex-wrap gap-2">
+                              <button onClick={() => setReferralAction({ registrationId: c.registrationId, mode: 'revalidate' })} className="flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-xs font-bold border border-emerald-500/40 bg-emerald-500/10 text-emerald-300 hover:bg-emerald-500/20" title="Aprovar comissão"><CheckCircle className="w-3.5 h-3.5" /> Aprovar</button>
+                              <button onClick={() => { setInvalidReason("Produto em promoção: sem comissão de indicação."); setReferralAction({ registrationId: c.registrationId, mode: 'invalidate' }); }} className="flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-xs font-bold border border-red-500/40 bg-red-500/10 text-red-300 hover:bg-red-500/20" title="Classificar promoção ou indicação inválida">⛔ Invalidar / Promoção</button>
+                            </div>
                           ) : (
                             <button onClick={() => setReferralAction({ registrationId: c.registrationId, mode: isInvalid ? 'revalidate' : 'invalidate' })} className={`flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-xs font-bold border ${isInvalid ? 'border-emerald-500/40 bg-emerald-500/10 text-emerald-300' : 'border-zinc-500/40 bg-zinc-500/10 text-zinc-300 hover:bg-amber-500/10 hover:border-amber-500/40 hover:text-amber-300'}`} title={isInvalid ? 'Revalidar indicação' : 'Marcar como indicação não válida'}>{isInvalid ? '↺ Revalidar' : '⛔ Não válida'}</button>
                           )}
