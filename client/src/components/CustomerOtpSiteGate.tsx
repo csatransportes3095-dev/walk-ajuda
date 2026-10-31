@@ -71,9 +71,9 @@ export function CustomerOtpSiteGate({ children }: { children: React.ReactNode })
     return <div className="min-h-screen flex flex-col items-center justify-center gap-4 bg-slate-950 text-center text-white p-6">
       <p className="text-lg font-semibold">Sua conta não está autorizada para esta área.</p>
       <p>Confira suas permissões com o atendimento.</p>
-      <button className="rounded-lg border border-cyan-400 p-3" onClick={() => navigate("/gastos")}>
-        Consultar outras áreas
-      </button>
+      <a href="https://h2colombiano.com/" className="flex min-h-11 w-full max-w-sm items-center justify-center rounded-xl border border-cyan-400/40 bg-cyan-400/10 px-4 py-3 text-sm font-bold text-cyan-200 transition-colors hover:bg-cyan-400/20">
+        ← VOLTAR AO SITE
+      </a>
     </div>;
   }
   return <>{children}</>;
