@@ -589,6 +589,10 @@ export default function AdminCommissions() {
                             </div>
                           </div>
 
+                          {/* Valor registrado no pedido, independente da comissão */}
+                          <div className="text-xs font-bold text-sky-300">
+                            🛒 Valor do produto: {(c as any).productPurchasePrice || "Não informado no pedido"}
+                          </div>
                           {/* Serviço e opção */}
                           {(c.serviceName || c.serviceOption) && (
                             <div className="flex items-center gap-1.5 flex-wrap">
