@@ -11,11 +11,11 @@ export const H2_AUTO_CONFIRMATION_DEFAULTS = {
   phonePrompt:
     "💰 *MINHAS INDICAÇÕES*\n\n📱 Informe seu telefone\ncadastrado com DDD.\n\n🔙 *0* para voltar.\n🏠 *MENU* para início.",
   phoneInvalid:
-    "⚠️ Telefone inválido.\nDigite 11 números com DDD.",
+    "⚠️ Informe um celular válido\nDigite 11 números com DDD.",
   phoneNotFound:
     "⚠️ Não foi possível confirmar\nseu acesso. Confira o DDD.",
   referrerPhoneInvalid:
-    "⚠️ Indicador inválido.\nDigite 11 números com DDD.",
+    "⚠️ Informe o celular do indicador\nDigite 11 números com DDD.",
   referrerNotFound:
     "⚠️ Não foi possível confirmar\no indicador informado.",
   referralsPhoneInvalid:
