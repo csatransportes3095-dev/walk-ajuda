@@ -9,11 +9,67 @@ import { toast } from 'sonner';
 import { publicTrackingShareUrl } from '@shared/publicLinks';
 import { AdminCustomerAccessPage } from './AdminCustomerAccessPage';
 
+/** Readiness verification is invoked only by a real ADM click.
+ * It does not send an email or enable passwordless authentication.
+ */
+function CustomerOtpReadinessCard() {
+  const preflight=trpc.customerPassword.otpPreflight.useQuery(undefined,{enabled:false,retry:false});
+  const checks=preflight.data?.checks;
+  const rows=[
+    {label:"Banco de códigos",ok:checks?.database},
+    {label:"Gerador próprio H2",ok:checks?.generator},
+    {label:"Configuração de e-mail",ok:checks?.mail},
+    {label:"Assinatura das sessões",ok:checks?.signing},
+  ];
+  return <section className="mx-auto mb-6 max-w-6xl rounded-2xl border border-cyan-400/30 bg-slate-950 px-5 py-5 text-white shadow-lg">
+    <div className="flex flex-wrap items-center justify-between gap-4">
+      <div>
+        <p className="text-xs font-bold uppercase tracking-wide text-cyan-300">H2 Colombiano · Segurança</p>
+        <h2 className="mt-1 text-xl font-bold">Preparação do acesso sem senha</h2>
+        <p className="mt-2 max-w-2xl text-sm text-slate-300">
+          Confira banco, gerador H2, e-mail e sessão antes de substituir as senhas dos clientes.
+          Esta verificação não envia códigos nem ativa o novo login.
+        </p>
+      </div>
+      <button type="button" disabled={preflight.isFetching}
+        onClick={()=>{void preflight.refetch();}}
+        className="rounded-xl bg-cyan-500 px-5 py-3 text-sm font-bold text-slate-950 disabled:opacity-50">
+        {preflight.isFetching?"VERIFICANDO...":preflight.data?"VERIFICAR NOVAMENTE":"VERIFICAR PREPARAÇÃO"}
+      </button>
+    </div>
+    {preflight.isError && <p role="alert" className="mt-4 text-sm text-red-300">
+      Não foi possível verificar. Confira sua sessão do ADM e tente novamente.
+    </p>}
+    {preflight.data && <div className="mt-5">
+      <div className="grid grid-cols-1 gap-2 sm:grid-cols-2 lg:grid-cols-4">
+        {rows.map(row=><div key={row.label} className="rounded-xl border border-white/10 bg-slate-900 px-4 py-3">
+          <p className="text-sm text-slate-300">{row.label}</p>
+          <p className={row.ok?"mt-1 font-bold text-emerald-300":"mt-1 font-bold text-amber-300"}>
+            {row.ok?"APROVADO":"PENDENTE"}
+          </p>
+        </div>)}
+      </div>
+      <p className={preflight.data.ready?"mt-4 text-sm font-semibold text-emerald-300":"mt-4 text-sm font-semibold text-amber-300"}>
+        {preflight.data.ready
+          ?"Configurações básicas aprovadas. Ainda falta testar o recebimento e a confirmação de um código real."
+          :"Há configurações pendentes. O acesso por código não deve ser ativado."}
+      </p>
+      <p className="mt-2 text-xs text-slate-400">
+        Novo login: {preflight.data.enabled?"ATIVADO":"DESATIVADO"}.
+        A aprovação não comprova a entrega de e-mail, apenas sua configuração.
+      </p>
+    </div>}
+  </section>;
+}
+
 export default function AdminCustomerPasswordPage() {
   const mode=trpc.customerPassword.authMode.useQuery(undefined,{retry:1,staleTime:0});
   if (mode.isPending) return <div className="p-8 text-white">Verificando configurações...</div>;
   if (mode.isError) return <div className="p-8 text-white">Não foi possível verificar a autenticação.</div>;
-  return mode.data?.passwordless ? <AdminCustomerAccessPage /> : <LegacyCustomerPasswordAdmin />;
+  return <>
+    <CustomerOtpReadinessCard />
+    {mode.data?.passwordless ? <AdminCustomerAccessPage /> : <LegacyCustomerPasswordAdmin />}
+  </>;
 }
 
 function LegacyCustomerPasswordAdmin() {
