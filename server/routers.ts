@@ -41,7 +41,8 @@ import { adjustCustomerH2Score, getCustomerH2ScoreSummary, getH2ScoreCustomerDir
 import { CUSTOMER_ROUTES, ensureCustomerIdentityInfrastructure, findMainCustomerByIdentity, getRouteAccess, getRouteReleaseMode, listRouteReleaseModes, normalizeCustomerCpf, normalizeCustomerEmail, normalizeCustomerPhone, requestCustomerRouteAccess, setCustomerRoutePermissions, setRouteReleaseMode } from "./customerAccess";
 import { adCampaignsRouter } from "./routers/adCampaigns";
 import { globalPromotionRouter } from "./routers/globalPromotion";
-import { parseGlobalPromotionConfig, globalPromotionOverridesIndividual, globalPromotionPrice } from "../shared/globalPromotion";
+import { hasActiveProductPromotion, isPromotionWithoutCommission, REFERRAL_PROMOTION_LABEL } from "../shared/referralPromotionPolicy";
+import { parseGlobalPromotionConfig, globalPromotionOverridesIndividual, calculateGlobalPromotionPrice, globalPromotionPrice } from "../shared/globalPromotion";
 import { optionPriceModelsRouter, checkOptionPriceModelCheckoutAccess, cloneOptionPriceModelsComplete } from "./routers/optionPriceModels";
 import { vipMembershipsRouter, getVipMembershipSnapshotMap, isVipMemberByPhone } from "./routers/vipMemberships";
 import { vipInstallmentsRouter } from "./routers/vipInstallments";
@@ -1571,6 +1572,7 @@ export const appRouter = router({
           // Promoção geral sempre vence os descontos de cupom, VIP e revendedor.
           // O backend não confia no valor enviado pelo navegador.
           const globalPromo = parseGlobalPromotionConfig(await getSetting("global_promotion_config_v1"));
+          let promotionalOrderAtCheckout = false;
           if (globalPromotionOverridesIndividual(globalPromo)) {
             if (!input.optionId || !input.productId) {
               return { success: false, message: "Seleção do produto ausente. Reabra a compra para confirmar a promoção geral." };
@@ -1591,7 +1593,9 @@ export const appRouter = router({
               if (!tier) return { success: false, message: "Garantia de preço indisponível." };
               source = tier;
             }
-            input.price = globalPromotionPrice(source, globalPromo);
+            const promotionalPricing = calculateGlobalPromotionPrice(source, globalPromo);
+            input.price = promotionalPricing.final;
+            promotionalOrderAtCheckout = promotionalPricing.applied && promotionalPricing.savingsCents > 0;
             input.couponCode = undefined;
             input.cartCouponCode = undefined;
             input.cartCouponDiscount = undefined;
@@ -1600,6 +1604,20 @@ export const appRouter = router({
             // servidor de cada item, sem aceitar um desconto complementar.
           }
 
+          if (!globalPromotionOverridesIndividual(globalPromo) && input.optionId && input.productId) {
+            const options = await listProductOptions(input.productId);
+            const opt = options.find(o=>o.id===input.optionId && o.isActive===1);
+            if (opt) {
+              if (input.priceModelId) {
+                const models=await import("./routers/optionPriceModels");
+                const rows=await models.getActiveOptionPriceModelsForPromotion([input.optionId]);
+                promotionalOrderAtCheckout=hasActiveProductPromotion(rows.find(m=>m.id===input.priceModelId));
+              } else if (input.warrantyTierId) {
+                const tiers=await listWarrantyTiers(input.optionId);
+                promotionalOrderAtCheckout=hasActiveProductPromotion(tiers.find(t=>t.id===input.warrantyTierId));
+              } else promotionalOrderAtCheckout=hasActiveProductPromotion(opt);
+            }
+          }
           // Cupom: o servidor é a fonte oficial do valor final.
           // Nunca confia no desconto calculado pelo navegador.
           if (!globalPromotionOverridesIndividual(globalPromo) && input.couponCode) {
@@ -2066,7 +2084,7 @@ export const appRouter = router({
                         FROM productOptions WHERE id = ${input.optionId} LIMIT 1
                       `);
                       const option = (optionRows[0] as unknown as Array<{ id: number; productId: number; label: string; commissionValue: number }>)[0];
-                      if (referrer && option && Number(option.commissionValue || 0) > 0) {
+                      if (referrer && option && (promotionalOrderAtCheckout || Number(option.commissionValue || 0) > 0)) {
                         const { createReferralCommissionAttribution } = await import('./db');
                         await createReferralCommissionAttribution({
                           referrerCustomerId: referrer.id,
@@ -2084,7 +2102,8 @@ export const appRouter = router({
                           optionId: option.id,
                           serviceName: input.service,
                           serviceOption: option.label || input.nameOption,
-                          commissionValue: Number(option.commissionValue),
+                          commissionValue: promotionalOrderAtCheckout ? 0 : Number(option.commissionValue),
+                          promotionNoCommission: promotionalOrderAtCheckout,
                         });
                       }
                     }
