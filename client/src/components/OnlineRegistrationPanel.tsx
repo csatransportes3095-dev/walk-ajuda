@@ -53,7 +53,8 @@ export function OnlineRegistrationPanel({ conversationId, visitorId, onBack, onD
   const utils = trpc.useUtils();
   const saveDraft = trpc.onlineSupport.registrationDraftSave.useMutation();
   const register = trpc.customers.register.useMutation();
-  const passwordMode = trpc.customerPassword.getMode.useQuery();
+  const authMode = trpc.customerPassword.authMode.useQuery(undefined, { retry: 1 });
+  const passwordMode = trpc.customerPassword.getMode.useQuery(undefined, { enabled: authMode.data?.passwordless === false });
   const createPasswordAuto = trpc.customerPassword.clientCreateAuto.useMutation();
   const createPasswordManual = trpc.customerPassword.clientCreateManual.useMutation();
 
@@ -115,7 +116,11 @@ export function OnlineRegistrationPanel({ conversationId, visitorId, onBack, onD
       const result = await register.mutateAsync({ ...data, phone: data.phone.replace(/\D/g, ''), referredByPhone: data.referrerPhone, sourceRoute: route });
       if (!result.success) { setError(result.message || 'Não foi possível concluir o cadastro.'); return; }
       await saveDraft.mutateAsync({ conversationId, visitorId, requestedRoute: route, step: 'confirm', data: { ...data, route } });
-      // O cadastro nunca retorna à tela inicial sem a senha ser criada no passo seguinte.
+      if (authMode.data?.passwordless) {
+        sessionStorage.setItem("h2_customer_return_to", route === "site" ? "/" : "/"+route);
+        window.location.assign("/login");
+        return;
+      }
       setIndex(index + 1);
       return;
     }
@@ -178,7 +183,7 @@ export function OnlineRegistrationPanel({ conversationId, visitorId, onBack, onD
     }
   };
 
-  const loading = isUploadingPhoto || saveDraft.isPending || register.isPending || createPasswordAuto.isPending || createPasswordManual.isPending || passwordMode.isLoading;
+  const loading = authMode.isPending || authMode.isError || isUploadingPhoto || saveDraft.isPending || register.isPending || createPasswordAuto.isPending || createPasswordManual.isPending || passwordMode.isLoading;
   const passwordIsManual = passwordMode.data?.mode === 'manual';
 
   return <div style={{ display: 'flex', flexDirection: 'column', gap: 12 }}>
