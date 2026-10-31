@@ -5,6 +5,8 @@ import CartaoDashboardPage from "./CartaoDashboardPage";
 import CartaoDetailPage from "./CartaoDetailPage";
 import CartaoDespesasPage from "./CartaoDespesasPage";
 import PWAInstallPrompt from "@/components/PWAInstallPrompt";
+import { useState } from "react";
+import { CustomerOtpLogin, type CustomerOtpResult } from "@/components/CustomerOtpLogin";
 
 function CartaoRoutes() {
   const [location, navigate] = useLocation();
@@ -77,10 +79,46 @@ function CartaoRoutes() {
 }
 
 export default function CartaoPage() {
-  return (
-    <>
-      <CartaoRoutes />
-      <PWAInstallPrompt />
-    </>
-  );
+  const mode = trpc.customerPassword.authMode.useQuery(undefined, { retry: 1 });
+  const utils = trpc.useUtils();
+  const [token, setToken] = useState(() => localStorage.getItem("cp_token") || "");
+  const [ready, setReady] = useState(false);
+  const [error, setError] = useState("");
+  const session = trpc.customerPassword.checkSession.useQuery({ token }, {
+    enabled: mode.data?.passwordless === true && !!token, retry: 1,
+  });
+  const prepareCards = async (value: CustomerOtpResult | { token: string }) => {
+    const response = await fetch("/api/customer-session/cartoes", {
+      method: "POST", credentials: "include",
+      headers: { Authorization: "Bearer " + value.token },
+    });
+    const data = await response.json().catch(() => ({}));
+    if (!response.ok) throw new Error(data?.message || "Não foi possível acessar seus cartões.");
+    localStorage.setItem("cp_token", value.token);
+    await utils.cartoes.auth.me.invalidate();
+    setReady(true);
+  };
+  if (mode.isPending || (mode.data?.passwordless && token && session.isPending)) {
+    return <div className="min-h-screen bg-slate-950 text-white flex items-center justify-center">Verificando autenticação...</div>;
+  }
+  if (mode.isError || (mode.data?.passwordless && session.isError)) {
+    return <div className="min-h-screen bg-slate-950 text-white flex items-center justify-center">Não foi possível verificar o acesso.</div>;
+  }
+  if (mode.data?.passwordless) {
+    if (!token || session.data?.valid !== true) {
+      return <CustomerOtpLogin title="MEUS CARTÕES · H2 COLOMBIANO"
+        onAuthenticated={async (value: CustomerOtpResult) => {
+          await prepareCards(value);
+          setToken(value.token);
+        }} />;
+    }
+    if (!ready) return <div className="min-h-screen bg-slate-950 text-white flex flex-col gap-4 items-center justify-center">
+      {error ? <p>{error}</p> : <p>Preparando cartões...</p>}
+      <button className="rounded-xl bg-cyan-500 px-5 py-3 text-black font-bold" onClick={() => {
+        setError("");
+        void prepareCards({ token }).catch(e => setError(e.message || "Falha no acesso."));
+      }}>Acessar meus cartões</button>
+    </div>;
+  }
+  return <><CartaoRoutes /><PWAInstallPrompt /></>;
 }
