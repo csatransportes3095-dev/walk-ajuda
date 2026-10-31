@@ -12,6 +12,7 @@ import { decideFaceMatch, type MatchVerdict } from "@/lib/faceMatchDecision";
 import { getCachedH2FaceModelBytes, loadH2FaceRuntimeFromBytes, loadH2FaceRuntimeFromUrls, type SimilarFaceRuntime } from "@/lib/similarFaceTfliteRuntime";
 import { cosineSimilarity512, similarFaceScorePercent } from "@/lib/similarFaceReference";
 import { trpc } from "@/lib/trpc";
+import { readH2BicoFaceIndex, writeH2BicoFaceIndex, usableH2BicoEmbedding, H2BICO_EMBEDDING_MODEL_VERSION, type H2BicoFaceIndexRow } from "@/lib/h2bicoFaceIndex";
 import { H2_FACE_MINIMUM_PERCENT, meetsH2FaceMinimum, canHighlightH2Face, needsDetailedH2BicoAnalysis } from "@/lib/faceSimilarityPolicy";
 
 type FaceCropTarget = { kind: "master" } | { kind: "candidate"; id: string };
@@ -21,6 +22,7 @@ type CandidatePhoto = {
   file: File;
   preview: string;
   h2bicoId?: number;
+  h2bicoRevision?: string;
   h2bicoCpf?: string;
   h2bicoName?: string;
 };
@@ -589,6 +591,7 @@ export default function AdminSimilarity() {
             file,
             preview: URL.createObjectURL(blob),
             h2bicoId: record.id,
+            h2bicoRevision: record.photoUrl,
             h2bicoCpf: record.cpf,
             h2bicoName: record.name,
           };
@@ -752,6 +755,8 @@ export default function AdminSimilarity() {
     }
 
     const isH2BicoBatch = candidates.some((candidate) => Boolean(candidate.h2bicoId));
+    const indexed = isH2BicoBatch ? await readH2BicoFaceIndex() : new Map<number, H2BicoFaceIndexRow>();
+    const newlyEmbedded: H2BicoFaceIndexRow[] = [];
 
     setAnalyzing(true);
     setResults([]);
@@ -853,7 +858,20 @@ export default function AdminSimilarity() {
           // H2BICO: pontuar com o mesmo motor TFLite antes do diagnostico geométrico.
           let precomputedH2BicoEmbedding: Float32Array | null = null;
           if (isH2BicoBatch && candidate.h2bicoId && masterReferenceEmbedding && similarRuntime) {
-            precomputedH2BicoEmbedding = await similarRuntime.embedFile(candidate.file);
+            const cached = candidate.h2bicoRevision ? indexed.get(candidate.h2bicoId) : undefined;
+            if (candidate.h2bicoRevision && usableH2BicoEmbedding(cached, candidate.h2bicoRevision)) {
+              precomputedH2BicoEmbedding = cached.embedding;
+            } else {
+              precomputedH2BicoEmbedding = await similarRuntime.embedFile(candidate.file);
+              if (candidate.h2bicoRevision && precomputedH2BicoEmbedding.length === 512) {
+                const entry: H2BicoFaceIndexRow = {
+                  id: candidate.h2bicoId, revision: candidate.h2bicoRevision,
+                  modelVersion: H2BICO_EMBEDDING_MODEL_VERSION, embedding: precomputedH2BicoEmbedding,
+                };
+                indexed.set(candidate.h2bicoId, entry);
+                newlyEmbedded.push(entry);
+              }
+            }
             const fastScore = similarFaceScorePercent(cosineSimilarity512(masterReferenceEmbedding, precomputedH2BicoEmbedding));
             if (!needsDetailedH2BicoAnalysis(fastScore, similarityMinPercent)) {
               nextResults.push({ id: candidate.id, name: candidate.file.name, preview: candidate.preview,
@@ -1136,6 +1154,7 @@ export default function AdminSimilarity() {
         setPairwiseResults(pairs);
       }
 
+      if (newlyEmbedded.length) void writeH2BicoFaceIndex(newlyEmbedded);
       toast.success("Comparação concluída.");
     } catch (error: any) {
       toast.error(error?.message || "Não foi possível iniciar a análise facial.");
