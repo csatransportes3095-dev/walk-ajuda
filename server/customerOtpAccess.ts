@@ -1,4 +1,4 @@
-import { createHmac, randomBytes, randomInt, timingSafeEqual } from "node:crypto";
+import { createHmac, randomBytes, timingSafeEqual } from "node:crypto";
 import type { Request } from "express";
 import { sql } from "drizzle-orm";
 import { TRPCError } from "@trpc/server";
@@ -6,6 +6,7 @@ import { getDb } from "./db";
 import { normalizeCustomerPhone, normalizeCustomerEmail } from "./customerAccess";
 import { emailBelongsToAnotherCustomer } from "./customerEmailOwnership";
 import { deliverOwnSiteCode } from "./siteAccessCodeDelivery";
+import { generateOwnSiteCode } from "./siteAccessOwnCodes";
 import { getMissingCustomerProfileFields } from "./customerProfileRequirements";
 import { assertLoginEmailProof } from "./customerLoginEmailProof";
 import { getAdminJwtSecret } from "./adminJwt";
@@ -152,7 +153,8 @@ export async function requestCustomerCode(phoneInput: string, request: Request):
       VALUES (${phoneKey},${Number(customer.id)},${emailKey},'',0,0,0,${now})`);
     const [current] = await rows(tx,sql`SELECT resendAfter FROM customerOtpChallenges WHERE phoneKey=${phoneKey} FOR UPDATE`);
     if (Number(current?.resendAfter || 0) > now) return;
-    const code = String(randomInt(0,1000000)).padStart(6,"0");
+    // Reuse the existing H2 site code generator; do not invent a second OTP system.
+    const code = generateOwnSiteCode();
     const codeHash = digest("code:"+phoneKey,code);
     await tx.execute(sql`UPDATE customerOtpChallenges
       SET customerId=${Number(customer.id)},emailKey=${emailKey},codeDigest=${codeHash},
