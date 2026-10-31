@@ -891,7 +891,7 @@ function OrderTrackingContent() {
       )}
       {/* Header */}
       <div className="sticky top-0 z-10 bg-[#0d0d1a]/95 backdrop-blur border-b border-white/5 px-4 py-3 flex items-center gap-3">
-        <Link href="/">
+        <Link href="/login">
           <button className="p-2 rounded-lg hover:bg-white/5 transition-colors text-muted-foreground hover:text-white">
             <ArrowLeft className="w-5 h-5" />
           </button>
