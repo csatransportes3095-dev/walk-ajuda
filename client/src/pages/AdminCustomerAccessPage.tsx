@@ -22,7 +22,10 @@ export function AdminCustomerAccessPage() {
       toast.error(error?.message||"Não foi possível atualizar a autorização.");
     } finally {setWorking(null);}
   }
-  const items=pending.data||[];
+  // The ADM API returns row data from SQL (untyped). Type the UI rows
+  // explicitly to prevent implicit-any regressions and unintended fields.
+  type AccessRequestRow = { id: number; name: string; phone: string; route: string };
+  const items: AccessRequestRow[] = pending.data || [];
   return <main className="mx-auto max-w-5xl px-4 py-8 text-white">
     <div className="rounded-3xl border border-cyan-400/30 bg-slate-950 p-6 shadow-2xl">
       <div className="flex items-center gap-3">
