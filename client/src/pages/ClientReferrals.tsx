@@ -114,7 +114,7 @@ export default function ClientReferrals() {
                 </div><CircleDollarSign className="h-10 w-10 shrink-0 text-cyan-400/70"/></div>
               </div>
               <div className="flex items-center justify-between rounded-2xl border border-violet-400/25 bg-[#151129] p-5">
-                <div><p className="text-xs font-black uppercase tracking-widest text-violet-300">CLIENTES INDICADOS</p><p className="mt-2 text-4xl font-black">{details?.totalReferrals||0}</p><p className="mt-1 text-xs text-slate-400">Registros encontrados</p></div>
+                <div><p className="text-xs font-black uppercase tracking-widest text-violet-300">CLIENTES INDICADOS</p><p className="mt-2 text-4xl font-black">{details?.totalReferrals||0}</p><p className="mt-1 text-xs text-slate-400">Indicações válidas</p><p className="mt-1 text-xs text-amber-300">🏷️ {details?.promotionalCount||0} promocionais sem comissão</p></div>
                 <Users className="h-9 w-9 text-violet-300"/>
               </div>
             </section>
@@ -124,7 +124,7 @@ export default function ClientReferrals() {
                 <button type="button" onClick={()=>void query.refetch()} disabled={query.isFetching} className="inline-flex min-h-11 items-center gap-2 rounded-xl border border-cyan-400/30 bg-cyan-500/10 px-4 text-xs font-black text-cyan-200 disabled:opacity-50"><RefreshCw className={"h-4 w-4 "+(query.isFetching?"animate-spin":"")}/> ATUALIZAR</button>
               </div>
               <div className="flex flex-wrap gap-2">
-                {([["todas","TODAS",details?.totalReferrals||0],["aguardando_agendamento","A LIBERAR",details?.pendingCount||0],["liberada","LIBERADAS",details?.releasedCount||0],["paga","PAGAS",details?.paidCount||0],["nao_elegivel","NÃO VÁLIDAS",details?.invalidCount||0]] as const).map(([key,label,count])=>(
+                {([["todas","TODAS",details?.historyCount||0],["aguardando_agendamento","A LIBERAR",details?.pendingCount||0],["liberada","LIBERADAS",details?.releasedCount||0],["paga","PAGAS",details?.paidCount||0],["nao_elegivel","NÃO VÁLIDAS",details?.invalidCount||0]] as const).map(([key,label,count])=>(
                   <button key={key} type="button" onClick={()=>setFilter(key)} aria-pressed={filter===key} className={"min-h-10 rounded-xl border px-3 py-2 text-[11px] font-black tracking-wide transition sm:px-4 "+(filter===key?"border-cyan-300 bg-cyan-500/20 text-cyan-100 shadow-[0_0_14px_rgba(6,182,212,.15)]":"border-white/10 bg-white/5 text-slate-300 hover:border-white/30")}>{label} <span className="ml-1 opacity-70">{count}</span></button>
                 ))}
               </div>
@@ -141,17 +141,18 @@ export default function ClientReferrals() {
               ) : <div className="grid grid-cols-1 gap-4 lg:grid-cols-2">{visible.map((item,index)=>{
                 const state=item.commissionState as Exclude<Filter,"todas">;
                 const style=styles[state]||styles.aguardando_agendamento;
+                const promotional=Boolean(item.promotionNoCommission);
                 const Icon=style.icon;
                 const open=expanded===item.registrationId;
                 return <article key={item.registrationId} className={"overflow-hidden rounded-2xl border border-white/10 bg-gradient-to-br "+style.accent+" via-[#0c1326] to-[#0a0e1e] shadow-[0_16px_42px_rgba(0,0,0,.18)]"}>
                   <button type="button" onClick={()=>setExpanded(open?null:item.registrationId)} aria-expanded={open} className="flex w-full flex-col gap-4 p-4 text-left sm:p-5">
                     <div className="flex w-full items-start justify-between gap-2">
                       <span className="inline-flex items-center gap-1.5 text-[11px] font-bold uppercase tracking-widest text-slate-400"><Users className="h-3.5 w-3.5"/> INDICAÇÃO {index+1}</span>
-                      <span className={"inline-flex items-center gap-1.5 rounded-full border px-2.5 py-1 text-[10px] font-black "+style.pill}><Icon className="h-3.5 w-3.5"/>{titleByState[state]||"EM ANÁLISE"}</span>
+                      <span className={"inline-flex items-center gap-1.5 rounded-full border px-2.5 py-1 text-[10px] font-black "+style.pill}><Icon className="h-3.5 w-3.5"/>{promotional?"PROMOÇÃO — SEM COMISSÃO":titleByState[state]||"EM ANÁLISE"}</span>
                     </div>
                     <div className="w-full"><h3 className="break-words text-lg font-black text-white sm:text-xl">{item.customerName}</h3><p className="mt-1 text-xs font-medium text-slate-400">Pedido {item.orderNumber?"#"+item.orderNumber:"em acompanhamento"}</p></div>
                     <div className="flex w-full items-end justify-between gap-3 border-t border-white/10 pt-4">
-                      <div><p className="text-[11px] font-bold uppercase tracking-wide text-slate-400">Comissão</p><p className="mt-1 text-2xl font-black text-white">{money(item.commissionValue)}</p></div>
+                      <div><p className="text-[11px] font-bold uppercase tracking-wide text-slate-400">Comissão</p><p className="mt-1 text-2xl font-black text-white">{money(promotional?0:item.commissionValue)}</p></div>
                       <span className="flex items-center gap-1.5 text-xs font-bold text-cyan-300">DETALHES {open?<ChevronUp className="h-4 w-4"/>:<ChevronDown className="h-4 w-4"/>}</span>
                     </div>
                   </button>
@@ -159,7 +160,7 @@ export default function ClientReferrals() {
                     <div><p className="text-xs font-semibold uppercase text-slate-400">Cliente indicado</p><p className="mt-1 font-bold text-white">{item.customerName}</p></div>
                     <div><p className="text-xs font-semibold uppercase text-slate-400">Status do pedido</p><p className="mt-1 font-bold text-slate-200">{item.orderStatus}</p></div>
                     <div><p className="text-xs font-semibold uppercase text-slate-400">Situação da comissão</p><p className="mt-1 font-bold text-white">{item.commissionLabel}</p></div>
-                    <p className="rounded-xl border border-white/10 bg-white/5 p-3 text-xs leading-relaxed text-slate-300">{state==="paga"?"Pagamento confirmado pela equipe.":state==="liberada"?"Valor liberado para pagamento.":state==="nao_elegivel"?"Esta indicação não está apta para comissão.":"Aguardando liberação conforme o andamento do pedido."}</p>
+                    <p className="rounded-xl border border-white/10 bg-white/5 p-3 text-xs leading-relaxed text-slate-300">{promotional?"Este pedido foi realizado em promoção. A indicação fica no histórico, mas não gera comissão e não entra na contagem válida.":state==="paga"?"Pagamento confirmado pela equipe.":state==="liberada"?"Valor liberado para pagamento.":state==="nao_elegivel"?"Esta indicação não está apta para comissão.":"Aguardando liberação conforme o andamento do pedido."}</p>
                   </div>}
                 </article>;
               })}</div>}
