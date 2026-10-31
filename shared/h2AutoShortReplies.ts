@@ -143,10 +143,10 @@ export function applyH2AutoShortCopy<T extends H2AutoCopyConfig>(config: T): T {
     // Preserve links and placeholders added by the administrator even if the
     // surrounding original explanation is replaced by a short message.
     const extras = [
-      ...(node.text.match(/https?:\\/\\/[^\\s]+/g) || []),
-      ...(node.text.match(/\\{\\{?[a-zA-Z_][a-zA-Z_0-9.]*\\}\\}?/g) || []),
+      ...(node.text.match(/https?:\/\/[^\s]+/g) || []),
+      ...(node.text.match(/\{\{?[a-zA-Z_][a-zA-Z_0-9.]*\}\}?/g) || []),
     ].filter(part => !standard.includes(part));
-    return { ...node, text: [standard, ...new Set(extras)].join("\\n") };
+    return { ...node, text: [standard, ...new Set(extras)].join("\n") };
   });
   const updated = {
     ...config,
