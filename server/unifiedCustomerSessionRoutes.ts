@@ -13,6 +13,7 @@ import {
 } from "./customerAccess";
 import { requireCompleteMainCustomerProfile } from "./customerIdentity";
 import { getCustomerProfileUpdateState } from "./customerProfileUpdatePolicy";
+import { getVerifiedCustomerOtpSession, isCustomerOtpModeEnabled } from "./customerOtpAccess";
 
 const SPREADSHEET_SESSION_MS = 90 * 24 * 60 * 60 * 1000;
 const CC_SESSION_MS = 30 * 24 * 60 * 60 * 1000;
@@ -100,20 +101,40 @@ async function authenticateCustomer(req: Request, res: Response): Promise<Authen
     return null;
   }
 
-  const sessionRows = await rows(db, sql`
-    SELECT phone, expiresAt
-    FROM customerPasswordSessions
-    WHERE token=${token}
-    LIMIT 1
-  `);
-  const session = sessionRows[0];
-  if (!session || !session.expiresAt || new Date(session.expiresAt) < new Date()) {
-    res.status(401).json({ code: "UNAUTHORIZED", message: "Sessão central inválida ou expirada." });
-    return null;
+  // During passwordless access, a legacy password session in the same table
+  // is NOT proof of email verification. Never fall back to that table alone.
+  let phone = "";
+  let verifiedCustomerId: number | null = null;
+  if (isCustomerOtpModeEnabled()) {
+    const verified = await getVerifiedCustomerOtpSession(db, token);
+    if (!verified) {
+      res.status(401).json({ code: "UNAUTHORIZED", message: "Confirme seu telefone e o código do e-mail novamente." });
+      return null;
+    }
+    phone = normalizeCustomerPhone(verified.phone);
+    verifiedCustomerId = Number(verified.customerId);
+  } else {
+    // Keep the current customer login unchanged until full OTP cutover.
+    const sessionRows = await rows(db, sql`
+      SELECT phone, expiresAt
+      FROM customerPasswordSessions
+      WHERE token=${token}
+      LIMIT 1
+    `);
+    const session = sessionRows[0];
+    if (!session || !session.expiresAt || new Date(session.expiresAt) < new Date()) {
+      res.status(401).json({ code: "UNAUTHORIZED", message: "Sessão central inválida ou expirada." });
+      return null;
+    }
+    phone = normalizeCustomerPhone(session.phone);
   }
 
-  const phone = normalizeCustomerPhone(session.phone);
   const customer = phone ? await findMainCustomerByIdentity({ phone }, db) : null;
+  // OTP must authorize the EXACT customer id, not a different matching phone.
+  if (verifiedCustomerId !== null && (!customer || Number(customer.id) !== verifiedCustomerId)) {
+    res.status(401).json({ code: "UNAUTHORIZED", message: "Sessão inválida para este cadastro." });
+    return null;
+  }
   if (!customer) {
     res.status(401).json({ code: "CUSTOMER_NOT_FOUND", message: "Cadastro principal não encontrado." });
     return null;
