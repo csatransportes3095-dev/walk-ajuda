@@ -8,6 +8,7 @@ import { getDb } from "./db";
 import { listActiveValidationBlocks, releaseValidationBlock, releaseAllValidationBlocks } from "./h2-auto-validation-blocks";
 import { changeSilencedPhone, manualSilencedPhones } from "./h2-auto-silenced-contacts";
 import { h2AutoTreeSchema, H2_AUTO_TREE_DEFAULT } from "../shared/h2AutoTree";
+import { H2_AUTO_SHORT_MEDIA, H2_AUTO_SHORT_ORDER_NOT_FOUND, applyH2AutoShortCopy } from "../shared/h2AutoShortReplies";
 import { h2AutoConfirmationSchema as confirmationSchema } from "../shared/h2AutoConfirmation";
 import {
   decodeH2AutoDiagnostics,
@@ -34,34 +35,34 @@ const mediaSchema = z.object({
     .string()
     .max(3000)
     .default(
-      "🎤 Recebemos seu áudio. Por favor, envie sua dúvida por escrito ou digite 6 para falar com um atendente."
+      H2_AUTO_SHORT_MEDIA.audioFallback
     ),
   photoReply: z
     .string()
     .max(3000)
     .default(
-      "📸 Recebemos sua foto. Descreva sua dúvida por escrito ou digite 6."
+      H2_AUTO_SHORT_MEDIA.photoReply
     ),
   videoReply: z
     .string()
     .max(3000)
     .default(
-      "🎥 Recebemos seu vídeo. Descreva sua dúvida por escrito ou digite 6."
+      H2_AUTO_SHORT_MEDIA.videoReply
     ),
   documentReply: z
     .string()
     .max(3000)
     .default(
-      "📄 Recebemos seu documento. Descreva sua solicitação por escrito ou digite 6."
+      H2_AUTO_SHORT_MEDIA.documentReply
     ),
   stickerReply: z
     .string()
     .max(3000)
-    .default("📎 Recebemos sua mídia. Digite MENU para escolher uma opção."),
+    .default(H2_AUTO_SHORT_MEDIA.stickerReply),
   unknownReply: z
     .string()
     .max(3000)
-    .default("📎 Recebemos sua mídia. Escreva sua dúvida ou digite MENU."),
+    .default(H2_AUTO_SHORT_MEDIA.unknownReply),
   cooldownSeconds: z.number().int().min(15).max(3600).default(120),
   maxAudioSeconds: z.number().int().min(5).max(120).default(30),
 });
@@ -81,7 +82,7 @@ const configSchema = z.object({
     .string()
     .max(600)
     .default(
-      "Cadastro localizado com sucesso, mas não encontramos nenhum pedido associado a este cadastro no momento."
+      H2_AUTO_SHORT_ORDER_NOT_FOUND
     ),
   welcome: z.string().max(6000),
   menu: z.array(z.string().max(6000)).length(9),
@@ -117,7 +118,7 @@ const initial: RemoteConfig = {
   orderCodeTtlMinutes: 10,
   orderCodeMaxAttempts: 5,
   orderNoOrdersMessage:
-    "Cadastro localizado com sucesso, mas não encontramos nenhum pedido associado a este cadastro no momento.",
+    H2_AUTO_SHORT_ORDER_NOT_FOUND,
   enabled: false,
   desktopReadOnly: false,
   identificationEnabled: true,
