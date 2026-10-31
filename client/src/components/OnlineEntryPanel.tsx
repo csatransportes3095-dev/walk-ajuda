@@ -1,6 +1,7 @@
 import { useEffect, useState } from "react";
 import { AlertTriangle, ArrowLeft, BarChart3, KeyRound, LogOut, Package, WalletCards } from "lucide-react";
 import { trpc } from "@/lib/trpc";
+import { CustomerOtpLogin, type CustomerOtpResult } from "./CustomerOtpLogin";
 
 const ENTRY_TOKEN_KEY = "walk_online_entry_token";
 function fileToBase64(file: File) { return new Promise<string>((resolve, reject) => { const reader = new FileReader(); reader.onload = () => resolve(String(reader.result)); reader.onerror = reject; reader.readAsDataURL(file); }); }
@@ -10,6 +11,7 @@ type Props = { onBack: () => void; onOpenCadastro: () => void; intendedRoute?: P
 
 export function OnlineEntryPanel({ onBack, onOpenCadastro, intendedRoute = null }: Props) {
   const [token, setToken] = useState(() => localStorage.getItem(ENTRY_TOKEN_KEY) || localStorage.getItem('cp_token') || "");
+  const authMode = trpc.customerPassword.authMode.useQuery(undefined, { retry: 1 });
   const [phone, setPhone] = useState("");
   const [password, setPassword] = useState("");
   const [error, setError] = useState("");
@@ -206,6 +208,16 @@ export function OnlineEntryPanel({ onBack, onOpenCadastro, intendedRoute = null 
     window.location.assign('/atualizarcadastro');
   };
 
+  if (authMode.isPending || authMode.isError) return <p style={smallStyle}>{authMode.isError ? "Não foi possível verificar o acesso." : "Verificando autenticação..."}</p>;
+  if (authMode.data?.passwordless && (!token || !sessionQ.data?.authenticated)) {
+    return <CustomerOtpLogin title="ATENDIMENTO · H2 COLOMBIANO"
+      onRegister={onOpenCadastro}
+      onAuthenticated={async (result: CustomerOtpResult) => {
+        localStorage.setItem("cp_token", result.token);
+        localStorage.setItem(ENTRY_TOKEN_KEY, result.token);
+        setToken(result.token);
+      }} />;
+  }
   const customer = sessionQ.data?.authenticated ? sessionQ.data.customer : null;
   if (customer?.profileUpdateRequired) return <div style={{ display: 'flex', flexDirection: 'column', gap: 12 }}>
     <div style={{ ...cardStyle, border: '1px solid rgba(245,158,11,.35)' }}>

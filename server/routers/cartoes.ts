@@ -20,6 +20,7 @@ import * as jose from "jose";
 import bcrypt from "bcryptjs";
 import { bootstrapCardInvoices, createExpenseInvoiceLink, getCardInvoices, getCurrentInvoice, getNextInvoice, getOverdueInvoices, markInvoiceAsPaid, refreshInvoice, reverseInvoicePayment } from "../cardsBilling";
 import { historicalPaidInvoice, historicalPaymentDate } from "../cartaoRetroactiveRules";
+import { isCustomerOtpModeEnabled } from "../customerOtpAccess";
 import { buildInstallmentSchedule, saoPauloDateOnly } from "../cartaoInstallmentSchedule";
 
 const CC_JWT_SECRET = new TextEncoder().encode(
@@ -281,6 +282,7 @@ export const cartoesRouter = router({
         password: z.string().min(6),
       }))
       .mutation(async ({ input, ctx }) => {
+        if (isCustomerOtpModeEnabled()) throw new TRPCError({ code: "FORBIDDEN", message: "Entre com telefone e código do e-mail cadastrado." });
         const existing = await ccExec(`SELECT id FROM cc_app_users WHERE phone = '${input.phone}' LIMIT 1`);
         if (existing.length > 0) throw new TRPCError({ code: "CONFLICT", message: "Este número já está cadastrado" });
         const hash = await bcrypt.hash(input.password, 10);
@@ -300,6 +302,7 @@ export const cartoesRouter = router({
         password: z.string().min(1),
       }))
       .mutation(async ({ input, ctx }) => {
+        if (isCustomerOtpModeEnabled()) throw new TRPCError({ code: "FORBIDDEN", message: "Entre com telefone e código do e-mail cadastrado." });
         const rows = await ccExec(`SELECT id, phone, name, passwordHash FROM cc_app_users WHERE phone = '${input.phone}' LIMIT 1`);
         const user = rows[0];
         if (!user) throw new TRPCError({ code: "UNAUTHORIZED", message: "Número não cadastrado" });

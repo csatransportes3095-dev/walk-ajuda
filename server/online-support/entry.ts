@@ -4,6 +4,7 @@ import { storagePut } from "../storage";
 import { registerH2ScoreSubmission } from "../loans/h2Score";
 import { hasRouteAccess, type CustomerRoute } from "../customerAccess";
 import { getMissingCustomerProfileFields } from "../customerProfileRequirements";
+import { getVerifiedCustomerOtpSession, isCustomerOtpModeEnabled } from "../customerOtpAccess";
 
 export type OnlineEntrySession = {
   customerId: number;
@@ -30,6 +31,10 @@ export async function requireOnlineEntrySession(token: string, options?: { allow
   if (!db) throw new Error("Banco indisponível");
   const safeToken = String(token || "").trim();
   if (!safeToken) throw new Error("Sessão inválida");
+  // Reutiliza a sessão do código por e-mail já implementada. Nunca aceita token antigo.
+  const otpMode = isCustomerOtpModeEnabled();
+  const verifiedOtp = otpMode ? await getVerifiedCustomerOtpSession(db, safeToken) : null;
+  if (otpMode && !verifiedOtp) throw new Error("Confirme telefone e código do e-mail para continuar.");
 
   let rows = resultRows(await db.execute(sql`
     SELECT c.id, c.customerNumber, c.name, c.phone, c.cpf, c.email, c.cep, c.street, c.addressNumber, c.neighborhood, c.city, c.uf, c.profilePhotoUrl, c.blocked,
@@ -39,7 +44,7 @@ export async function requireOnlineEntrySession(token: string, options?: { allow
     WHERE s.token=${safeToken} AND c.deletedAt IS NULL
     LIMIT 1
   `));
-  if (!rows[0]) {
+  if (!rows[0] && !otpMode) {
     rows = resultRows(await db.execute(sql`
       SELECT c.id, c.customerNumber, c.name, c.phone, c.cpf, c.email, c.cep, c.street, c.addressNumber, c.neighborhood, c.city, c.uf, c.profilePhotoUrl, c.blocked,
              s.expiresAt
@@ -53,6 +58,9 @@ export async function requireOnlineEntrySession(token: string, options?: { allow
   const session = rows[0];
   if (!session || !session.expiresAt || new Date(session.expiresAt) < new Date()) {
     throw new Error("Sessão expirada. Informe telefone e senha novamente.");
+  }
+  if (verifiedOtp && Number(session.id) !== Number(verifiedOtp.customerId)) {
+    throw new Error("A sessão não pertence ao cliente confirmado por e-mail.");
   }
   if (Number(session.blocked) === 1) throw new Error("Acesso bloqueado. Entre em contato com o administrador.");
   const profileUpdateFields = getMissingCustomerProfileFields(session);
