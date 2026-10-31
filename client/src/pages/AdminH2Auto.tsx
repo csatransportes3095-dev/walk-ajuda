@@ -20,6 +20,7 @@ import H2AutoHistoryPanel from "@/components/H2AutoHistoryPanel";
 import H2AutoValidationBlocks from "@/components/H2AutoValidationBlocks";
 import H2AutoSilencedContacts from "@/components/H2AutoSilencedContacts";
 import H2AutoTreeEditor from "@/components/H2AutoTreeEditor";
+import H2AutoWhatsAppPreview from "@/components/H2AutoWhatsAppPreview";
 import { H2_AUTO_CONFIRMATION_DEFAULTS as confirmationDefaults, H2_AUTO_CONFIRMATION_GROUPS as confirmationGroups } from "@shared/h2AutoConfirmation";
 import { H2_AUTO_SHORT_MEDIA, H2_AUTO_SHORT_ORDER_NOT_FOUND } from "@shared/h2AutoShortReplies";
 
@@ -499,7 +500,18 @@ export default function AdminH2Auto() {
                   <p><strong>Modo no APK:</strong> {diagnostic?.desktopReadOnly?"Ativado":diagnostic?"Desativado":"Não informado"}</p>
                 </div>
               </section>
+              <nav aria-label="Central de respostas" className="sticky top-1 z-20 rounded-xl border border-cyan-400/30 bg-[#071629]/95 p-3 shadow-xl">
+                <p className="mb-2 text-sm font-black text-cyan-200">💬 CENTRAL DE RESPOSTAS — ACESSO RÁPIDO</p>
+                <div className="flex flex-wrap gap-2">
+                  <a href={`#h2-tree-${d.id}`} className="rounded-lg border border-cyan-400/30 px-3 py-2 text-xs font-bold text-cyan-100">Menus</a>
+                  <a href={`#h2-confirm-${d.id}`} className="rounded-lg border border-violet-400/30 px-3 py-2 text-xs font-bold text-violet-100">Confirmações</a>
+                  <a href={`#h2-rules-${d.id}`} className="rounded-lg border border-fuchsia-400/30 px-3 py-2 text-xs font-bold text-fuchsia-100">Respostas</a>
+                  <a href={`#h2-media-${d.id}`} className="rounded-lg border border-sky-400/30 px-3 py-2 text-xs font-bold text-sky-100">Mídias</a>
+                </div>
+              </nav>
+              <div id={`h2-tree-${d.id}`} className="scroll-mt-32">
               <H2AutoTreeEditor id={d.id} revision={d.revision} appliedRevision={d.appliedRevision} initial={d.config.tree} />
+              </div>
               <H2AutoValidationBlocks deviceId={d.id} deviceLabel={d.label} />
               <H2AutoSilencedContacts deviceId={d.id} deviceLabel={d.label} />
               <H2AutoHistoryPanel
@@ -632,7 +644,7 @@ export default function AdminH2Auto() {
                   <Power className="h-4 w-4" /> Robô habilitado remotamente
                 </label>
                 <p className="col-span-full text-xs text-emerald-200/80">A consulta de pedidos pode ser ativada e desativada no card “ACOMPANHAR PEDIDO — STATUS PELO WHATSAPP” acima.</p>
-                <div className="col-span-full rounded-2xl border border-violet-400/40 bg-violet-950/20 p-3 sm:p-5 space-y-4">
+                <div id={`h2-confirm-${d.id}`} className="col-span-full scroll-mt-32 rounded-2xl border border-violet-400/40 bg-violet-950/20 p-3 sm:p-5 space-y-4">
                   <div className="flex flex-wrap items-center justify-between gap-3">
                     <div>
                       <h4 className="text-base font-black text-violet-200">
@@ -676,7 +688,7 @@ export default function AdminH2Auto() {
                             <div className="text-right text-[11px] text-slate-400">{confirmation[key].length}/2000 caracteres</div>
                             <details className="rounded-lg border border-cyan-500/20 bg-cyan-950/20 px-3 py-2">
                               <summary className="cursor-pointer text-xs font-bold text-cyan-200">Visualizar mensagem no WhatsApp</summary>
-                              <div className="mt-2 whitespace-pre-wrap break-words rounded-lg bg-[#0b1d18] p-3 text-xs leading-5 text-emerald-100">{confirmation[key]}</div>
+                              <div className="mt-2"><H2AutoWhatsAppPreview message={confirmation[key]} /></div>
                             </details>
                           </div>
                         ))}
@@ -808,9 +820,9 @@ export default function AdminH2Auto() {
                   />
                 </div>
               </div>
-              <section className="rounded-2xl border border-fuchsia-400/40 bg-fuchsia-950/20 p-4 space-y-4">
+              <section id={`h2-rules-${d.id}`} className="scroll-mt-32 rounded-2xl border border-fuchsia-400/40 bg-fuchsia-950/20 p-4 space-y-4">
                 <div>
-                  <h4 className="text-lg font-black text-fuchsia-200">📨 RESPOSTAS WHATSAPP ANTIGAS — H2 AUTO</h4>
+                  <h4 className="text-lg font-black text-fuchsia-200">💬 RESPOSTAS DO WHATSAPP — H2 AUTO</h4>
                   <p className="mt-1 text-xs text-slate-300">Área recuperada das configurações existentes do robô. Exibe as mensagens previamente salvas, inclusive regras relacionadas a status, quando houver. Não altera o fluxo de pedidos nem ativa envio automático de notificações.</p>
                   <p className="mt-2 text-sm font-semibold text-fuchsia-200">{(value.rules || []).length} resposta(s) no servidor · {(d.snapshotConfig?.rules || []).length} na cópia original do celular</p>
                 </div>
@@ -882,7 +894,7 @@ export default function AdminH2Auto() {
                   <Save className="mr-1 inline h-4 w-4"/> {saveReplyRules.isPending ? "SALVANDO..." : "SALVAR SOMENTE RESPOSTAS WHATSAPP"}
                 </button>
               </section>
-              <section className="rounded-2xl border border-sky-400/35 bg-sky-950/25 p-4 space-y-3">
+              <section id={`h2-media-${d.id}`} className="scroll-mt-32 rounded-2xl border border-sky-400/35 bg-sky-950/25 p-4 space-y-3">
                 <h4 className="font-black text-sky-300 flex items-center gap-2">
                   <Mic className="h-5 w-5" /> CENTRAL DE ÁUDIOS E MÍDIAS
                 </h4>
