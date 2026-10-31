@@ -1818,13 +1818,6 @@ export default function PasswordGate({ children, registrationOnly = false }: Pas
                 )}
               </button>
 
-              <a
-                href="/recuperarsenha"
-                className="flex min-h-11 w-full items-center justify-center gap-2 rounded-xl border border-sky-400/35 bg-sky-400/10 px-4 py-3 text-sm font-bold text-sky-200 transition-colors hover:bg-sky-400/20"
-              >
-                <Mail className="h-4 w-4" /> RECUPERAR SENHA
-              </a>
-
               {/* Botão WhatsApp ao errar senha */}
               {showPasswordError && (
                 <div className="mt-2 animate-in fade-in slide-in-from-bottom-2 duration-300">
@@ -3047,6 +3040,13 @@ export default function PasswordGate({ children, registrationOnly = false }: Pas
               </button>
             </form>
           )}
+          {/* Acesso simples de retorno, visível em todas as etapas do login e cadastro. */}
+          <a
+            href="https://h2colombiano.com/"
+            className="mt-5 flex min-h-11 w-full items-center justify-center gap-2 rounded-xl border border-sky-400/35 bg-sky-400/10 px-4 py-3 text-sm font-bold text-sky-200 transition-colors hover:bg-sky-400/20"
+          >
+            ← VOLTAR AO SITE
+          </a>
         </div>
       </div>
     </div>
