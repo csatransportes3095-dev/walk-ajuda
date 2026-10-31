@@ -910,8 +910,8 @@ export default function PasswordGate({ children, registrationOnly = false }: Pas
       }
       if (result.success) {
         toast.success("Cadastro realizado com sucesso!");
-        // Se veio por link de indicação, liberar acesso automático sem exigir senha
-        if (urlRefCode) {
+        // No novo cadastro, a sessão é sempre criada pela confirmação de e-mail.
+        if (urlRefCode && !registrationOnly) {
           try {
             const refResult = await startRefSessionMutation.mutateAsync({
               code: urlRefCode,
