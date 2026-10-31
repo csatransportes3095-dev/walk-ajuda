@@ -6,6 +6,7 @@ import AdminHeader from "@/components/AdminHeader";
 import { useLocation } from "wouter";
 import { toast } from "sonner";
 import { encodeWhatsappMessage, repairCommissionWhatsappMessage } from "@shared/whatsappMessageText";
+import { classifyAdminCommission, adminCommissionTotals, ADMIN_COMMISSION_FILTER_LABELS, type AdminCommissionFilter } from "@shared/adminCommissionFilters";
 
 function formatPhone(phone: string) {
   const d = phone.replace(/\D/g, "");
@@ -47,7 +48,7 @@ export default function AdminCommissions() {
   useAdminAuth();
   const utils = trpc.useUtils();
   const [, navigate] = useLocation();
-  const [filterPaid, setFilterPaid] = useState<"all" | "pending" | "paid" | "invalid">("all");
+  const [filterPaid, setFilterPaid] = useState<AdminCommissionFilter>("all");
   const [searchTerm, setSearchTerm] = useState("");
   const [manualCommissionValue, setManualCommissionValue] = useState("");
   const [manualEdit, setManualEdit] = useState<number | null>(null);
@@ -171,12 +172,7 @@ export default function AdminCommissions() {
   const normalizedSearch = searchTerm.trim().toLowerCase();
   const searchDigits = searchTerm.replace(/\D/g, "");
   const filtered = all.filter(c => {
-    const invalid = Boolean((c as any).referralInvalid);
-    const statusMatches =
-      filterPaid === "all" ? true :
-      filterPaid === "paid" ? c.commissionPaid === 1 && !invalid :
-      filterPaid === "invalid" ? invalid :
-      c.commissionPaid !== 1 && !invalid;
+    const statusMatches = filterPaid === "all" || classifyAdminCommission(c) === filterPaid;
     if (!statusMatches) return false;
     if (!normalizedSearch) return true;
 
@@ -209,28 +205,13 @@ export default function AdminCommissions() {
     return acc;
   }, {});
 
-  // Ordenar grupos: indicadores com mais pendentes primeiro
-  const sortedGroups = Object.entries(grouped).sort(([, a], [, b]) => {
-    const aPending = a.filter(x => x.commissionPaid !== 1 && !(x as any).referralInvalid).length;
-    const bPending = b.filter(x => x.commissionPaid !== 1 && !(x as any).referralInvalid).length;
-    return bPending - aPending;
-  });
-
-  const totalPending = all.filter(c => c.commissionPaid !== 1 && !(c as any).referralInvalid).length;
-  const totalPaid = all.filter(c => c.commissionPaid === 1 && !(c as any).referralInvalid).length;
-  const totalInvalid = all.filter(c => Boolean((c as any).referralInvalid)).length;
-
-  // Contar indicadores únicos
-  const uniqueReferrers = new Set(all.map(c => c.referredByPhone ?? c.referredBy)).size;
-
-  // Totais financeiros
-  const totalValuePending = all.filter(c => c.commissionPaid !== 1 && !(c as any).referralInvalid).reduce((sum, c) => sum + ((c as any).commissionValue ?? 0), 0);
-  const totalValuePaid = all.filter(c => c.commissionPaid === 1 && !(c as any).referralInvalid).reduce((sum, c) => sum + ((c as any).commissionValue ?? 0), 0);
-  const totalARelease = all.filter(c => (c as any).paymentState === "aguardando_agendamento" &&
-      !((c as any).referralInvalid)).reduce((sum,c)=>sum+Number((c as any).commissionValue||0),0);
-  const totalReleased = all.filter(c => (c as any).paymentState === "liberada" &&
-      !((c as any).referralInvalid)).reduce((sum,c)=>sum+Number((c as any).commissionValue||0),0);
-  const totalCommission = all.filter(c=>!((c as any).referralInvalid)).reduce((sum,c)=>sum+Number((c as any).commissionValue||0),0);
+  const {counts,values}=adminCommissionTotals(all);
+  const totalPending=counts.a_liberar, totalPaid=counts.paid, totalInvalid=counts.invalid;
+  const sortedGroups=Object.entries(grouped).sort(([,a],[,b])=>b.length-a.length);
+  const uniqueReferrers=new Set(all.map(c=>c.referredByPhone??c.referredBy)).size;
+  const totalValuePending=values.a_liberar,totalValuePaid=values.paid;
+  const totalARelease=values.a_liberar,totalReleased=values.liberado;
+  const totalCommission=values.a_liberar+values.liberado+values.paid;
 
   function formatMoney(cents: number) {
     if (!cents) return "—";
@@ -249,7 +230,7 @@ export default function AdminCommissions() {
       c.serviceOption ?? "",
       c.orderNumber ? String(c.orderNumber) : "",
       c.latestStatus ?? "Sem status",
-      c.commissionPaid === 1 ? "Paga" : "Pendente",
+      ADMIN_COMMISSION_FILTER_LABELS[classifyAdminCommission(c)],
       (c as any).commissionValue ? formatMoney((c as any).commissionValue) : "Não definido",
       formatDate(c.submittedAt),
     ]);
@@ -302,12 +283,12 @@ export default function AdminCommissions() {
             <p className="text-xs text-muted-foreground mt-0.5">Total</p>
           </div>
           <div
-            className={`bg-card border rounded-xl p-3 text-center cursor-pointer transition-all ${filterPaid === "pending" ? "border-red-500 ring-1 ring-red-500/50" : "border-red-500/30 hover:border-red-500/60"}`}
-            onClick={() => setFilterPaid(filterPaid === "pending" ? "all" : "pending")}
+            className={`bg-card border rounded-xl p-3 text-center cursor-pointer transition-all ${filterPaid === "a_liberar" ? "border-red-500 ring-1 ring-red-500/50" : "border-red-500/30 hover:border-red-500/60"}`}
+            onClick={() => setFilterPaid(filterPaid === "a_liberar" ? "all" : "a_liberar")}
           >
             <p className="text-2xl font-bold text-red-400">{totalPending}</p>
             {totalValuePending > 0 && <p className="text-[10px] text-red-300/80 font-mono">{formatMoney(totalValuePending)}</p>}
-            <p className="text-xs text-muted-foreground mt-0.5">Pendentes</p>
+            <p className="text-xs text-muted-foreground mt-0.5">A liberar</p>
           </div>
           <div
             className={`bg-card border rounded-xl p-3 text-center cursor-pointer transition-all ${filterPaid === "paid" ? "border-green-500 ring-1 ring-green-500/50" : "border-green-500/30 hover:border-green-500/60"}`}
@@ -319,7 +300,7 @@ export default function AdminCommissions() {
           </div>
           <div className="rounded-2xl border border-zinc-500/40 bg-gradient-to-br from-zinc-500/15 to-slate-950 p-4 text-center cursor-pointer shadow-lg transition hover:border-zinc-300/50" onClick={() => setFilterPaid(filterPaid === "invalid" ? "all" : "invalid")}>
             <p className="text-2xl font-bold text-zinc-300">{totalInvalid}</p>
-            <p className="text-xs text-muted-foreground mt-0.5">Não válidas</p>
+            <p className="text-xs text-muted-foreground mt-0.5">Inválidas / Promoção</p>
           </div>
           <div className="rounded-2xl border border-amber-500/40 bg-gradient-to-br from-amber-500/15 to-slate-950 p-4 text-center shadow-[0_0_18px_rgba(245,158,11,.10)]">
             <p className="text-2xl font-bold text-amber-400">{uniqueReferrers}</p>
@@ -365,10 +346,11 @@ export default function AdminCommissions() {
         {/* Filtros */}
         <div className="flex gap-2 flex-wrap">
           {([
-            { value: "all",     label: "Todas",       count: all.length },
-            { value: "pending", label: "💰 Pendentes", count: totalPending },
-            { value: "paid",    label: "✅ Pagas",     count: totalPaid },
-            { value: "invalid", label: "⛔ Não válidas", count: totalInvalid },
+            {value:"all",label:"Todas",count:counts.all},
+            {value:"a_liberar",label:"⏳ A liberar",count:counts.a_liberar},
+            {value:"liberado",label:"✅ Liberado",count:counts.liberado},
+            {value:"paid",label:"💵 Já pagas",count:counts.paid},
+            {value:"invalid",label:"⛔ Inválidas / Promoção",count:counts.invalid},
           ] as const).map(f => (
             <button
               key={f.value}
@@ -387,41 +369,33 @@ export default function AdminCommissions() {
           ))}
         </div>
 
-        {/* Aviso se filtro ativo */}
         {filterPaid !== "all" && (
-          <div className={`flex items-center gap-2 px-3 py-2 rounded-lg text-xs font-medium border ${
-            filterPaid === "pending"
-              ? "bg-red-500/10 border-red-500/30 text-red-400"
-              : filterPaid === "invalid"
-                ? "bg-zinc-500/10 border-zinc-500/30 text-zinc-300"
-                : "bg-green-500/10 border-green-500/30 text-green-400"
-          }`}>
-            <AlertCircle className="w-3.5 h-3.5 flex-shrink-0" />
-            Mostrando apenas indicações {filterPaid === "pending" ? "pendentes" : filterPaid === "invalid" ? "não válidas" : "pagas"} — clique no card acima ou no filtro "Todas" para ver tudo
+          <div className="flex items-center gap-2 rounded-lg border border-cyan-400/30 bg-cyan-500/10 px-3 py-2 text-xs text-cyan-100">
+            <AlertCircle className="h-3.5 w-3.5 shrink-0"/>
+            Exibindo somente: {ADMIN_COMMISSION_FILTER_LABELS[filterPaid]} — {counts[filterPaid]} indicação(ões).
           </div>
         )}
-
         {/* Grupos por indicador */}
         {commissionsQuery.isLoading ? (
           <div className="text-center py-12 text-muted-foreground text-sm">Carregando...</div>
         ) : sortedGroups.length === 0 ? (
           <div className="text-center py-12 text-muted-foreground text-sm">
             <Users className="w-10 h-10 mx-auto mb-3 opacity-30" />
-            {filterPaid === "pending" ? "Nenhuma comissão pendente 🎉" : filterPaid === "paid" ? "Nenhuma comissão paga ainda" : "Nenhuma comissão encontrada"}
+            {`Nenhuma indicação em ${ADMIN_COMMISSION_FILTER_LABELS[filterPaid].toLowerCase()}`}
           </div>
         ) : (
           sortedGroups.map(([key, pedidos]) => {
-            const pendentes = pedidos.filter(p => p.commissionPaid !== 1 && !(p as any).referralInvalid).length;
-            const pagas = pedidos.filter(p => p.commissionPaid === 1 && !(p as any).referralInvalid).length;
-            const invalidas = pedidos.filter(p => Boolean((p as any).referralInvalid)).length;
+            const pendentes = pedidos.filter(p => classifyAdminCommission(p) === "a_liberar").length;
+            const pagas = pedidos.filter(p => classifyAdminCommission(p) === "paid").length;
+            const invalidas = pedidos.filter(p => classifyAdminCommission(p) === "invalid").length;
             const indicadorNome = pedidos[0]?.referredBy ?? "—";
             const indicadorPhone = pedidos[0]?.referredByPhone;
             const indicadorPhotoUrl = indicadorPhone
               ? (profilePhotoByPhone.get(normalizePhoneKey(indicadorPhone)) || null)
               : null;
-            const totalIndicacoes = pedidos[0]?.totalReferrals ?? pedidos.length;
-            const totalPendenteValor = pedidos.filter(p => p.commissionPaid !== 1 && !(p as any).referralInvalid).reduce((s, p) => s + ((p as any).commissionValue ?? 0), 0);
-            const totalPagoValor = pedidos.filter(p => p.commissionPaid === 1 && !(p as any).referralInvalid).reduce((s, p) => s + ((p as any).commissionValue ?? 0), 0);
+            const totalIndicacoes = pedidos.length;
+            const totalPendenteValor = pedidos.filter(p => classifyAdminCommission(p) === "a_liberar").reduce((s, p) => s + ((p as any).commissionValue ?? 0), 0);
+            const totalPagoValor = pedidos.filter(p => classifyAdminCommission(p) === "paid").reduce((s, p) => s + ((p as any).commissionValue ?? 0), 0);
 
             return (
               <div key={key} className="overflow-hidden rounded-2xl border border-cyan-400/25 bg-gradient-to-b from-[#10172a] to-[#090e1d] shadow-[0_0_26px_rgba(14,165,233,.10)] transition-all hover:border-cyan-400/45">
@@ -503,10 +477,11 @@ export default function AdminCommissions() {
                   {pedidos.map(c => {
                     const statusCfg = c.latestStatus ? STATUS_MAP[c.latestStatus] : null;
                     const commissionStatus = (c as any).commissionStatus as string | undefined;
-                    const isPaid = c.commissionPaid === 1;
-                    const isInvalid = Boolean((c as any).referralInvalid);
-                    const isEligible = Boolean((c as any).paymentReady);
-                    const isUnderReview = (c as any).paymentState === 'aguardando_agendamento';
+                    const isPaid = classifyAdminCommission(c) === "paid";
+                    const isInvalid = classifyAdminCommission(c) === "invalid";
+                    const isPromotion = Boolean((c as any).promotionNoCommission);
+                    const isEligible = classifyAdminCommission(c) === "liberado";
+                    const isUnderReview = classifyAdminCommission(c) === "a_liberar";
                     const manualState = (c as any).manualStatus as "a_liberar" | "liberado" | null;
                     const isReferralAction = referralAction?.registrationId === c.registrationId;
                     return (
@@ -586,7 +561,7 @@ export default function AdminCommissions() {
                                   : 'bg-red-500/20 border-red-500/40 text-red-400'
                             }`}>
                               {isInvalid
-                                ? '⛔ Indicação não válida'
+                                ? (isPromotion ? '🏷️ PROMOÇÃO — SEM COMISSÃO' : '⛔ Indicação não válida')
                                 : isPaid
                                   ? <>✅ Pagamento confirmado{(c as any).commissionValue > 0 ? ` · ${formatMoney((c as any).commissionValue)}` : ''}</>
                                   : isUnderReview
@@ -699,7 +674,7 @@ export default function AdminCommissions() {
                           ) : !isInvalid && isEligible ? (
                             <button onClick={() => { setManualCommissionValue(""); setConfirmPayment(c.registrationId); }} disabled={toggleCommissionPaidMutation.isPending} className="flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-xs font-bold border bg-red-500/20 border-red-500/40 text-red-400 hover:bg-green-500/10 hover:border-green-500/30 hover:text-green-400 disabled:opacity-50" title="Marcar como paga"><Clock className="w-3.5 h-3.5" /> Pagar</button>
                           ) : null}
-                          {isReferralAction ? (
+                          {!isPromotion && isReferralAction ? (
                             <div className="w-full rounded-lg border border-amber-500/40 bg-amber-500/10 p-2 space-y-1.5">
                               {referralAction?.mode === 'invalidate' ? <input value={invalidReason} onChange={e => setInvalidReason(e.target.value)} placeholder="Motivo obrigatório" className="w-full rounded-md border border-amber-500/30 bg-background px-2 py-1 text-[10px] text-foreground" autoFocus /> : <p className="text-[10px] font-semibold text-emerald-300">Revalidar esta indicação?</p>}
                               <div className="flex gap-1.5">
@@ -707,7 +682,7 @@ export default function AdminCommissions() {
                                 <button onClick={() => { setReferralAction(null); setInvalidReason(''); }} className="rounded-md border border-border px-2 py-1 text-[10px] text-muted-foreground">Cancelar</button>
                               </div>
                             </div>
-                          ) : isUnderReview ? (
+                          ) : isPromotion ? null : isUnderReview ? (
                             <button onClick={() => setReferralAction({ registrationId: c.registrationId, mode: 'revalidate' })} className="flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-xs font-bold border border-emerald-500/40 bg-emerald-500/10 text-emerald-300 hover:bg-emerald-500/20" title="Aprovar comissão"><CheckCircle className="w-3.5 h-3.5" /> Aprovar</button>
                           ) : (
                             <button onClick={() => setReferralAction({ registrationId: c.registrationId, mode: isInvalid ? 'revalidate' : 'invalidate' })} className={`flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-xs font-bold border ${isInvalid ? 'border-emerald-500/40 bg-emerald-500/10 text-emerald-300' : 'border-zinc-500/40 bg-zinc-500/10 text-zinc-300 hover:bg-amber-500/10 hover:border-amber-500/40 hover:text-amber-300'}`} title={isInvalid ? 'Revalidar indicação' : 'Marcar como indicação não válida'}>{isInvalid ? '↺ Revalidar' : '⛔ Não válida'}</button>
