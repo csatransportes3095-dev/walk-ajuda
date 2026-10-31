@@ -512,11 +512,6 @@ export default function AdminCustomers() {
     const cpf = String(customer.cpf ?? '').replace(/\D/g, '');
     return (!!phone && loanCustomerLookup.phones.has(phone)) || (!!cpf && loanCustomerLookup.cpfs.has(cpf));
   };
-  const routeReleaseModesQuery = trpc.customers.routeReleaseModes.useQuery();
-  const setRouteReleaseModeMut = trpc.customers.setRouteReleaseMode.useMutation({
-    onSuccess: () => { routeReleaseModesQuery.refetch(); toast.success('Modo de liberação atualizado.'); },
-    onError: (error) => toast.error(error.message || 'Não foi possível atualizar o modo de liberação.'),
-  });
   const updateMut = trpc.customers.update.useMutation({
     onSuccess: async (saved, input) => {
       try {
@@ -1176,30 +1171,6 @@ export default function AdminCustomers() {
           </button>
         </div>
       } />
-
-      <section className="mx-3 mt-3 rounded-xl border border-sky-500/30 bg-sky-500/5 p-3 sm:mx-4">
-        <div className="mb-2">
-          <p className="text-sm font-bold text-sky-100">Modo de liberação de acesso</p>
-          <p className="text-xs text-sky-100/70">Automático libera a rota após o cadastro completo; manual envia para aprovação.</p>
-        </div>
-        <div className="grid gap-2 sm:grid-cols-2 lg:grid-cols-4">
-          {[
-            { key: 'site', label: 'Site de Pedidos' },
-            { key: 'acompanhar', label: 'Acompanhar Pedido' },
-            { key: 'gastos', label: 'Controle de Gastos' },
-            { key: 'emprestimo', label: 'Empréstimos' },
-          ].map((route) => {
-            const mode = (routeReleaseModesQuery.data as any)?.[route.key] || 'automatico';
-            return <div key={route.key} className="rounded-lg border border-sky-500/20 bg-background/50 p-2.5">
-              <p className="mb-2 text-xs font-bold">{route.label}</p>
-              <div className="flex gap-1">
-                {(['automatico', 'manual'] as const).map((option) => <button key={option} onClick={() => setRouteReleaseModeMut.mutate({ route: route.key as any, mode: option })} disabled={setRouteReleaseModeMut.isPending} className={`flex-1 rounded-md px-2 py-1.5 text-[11px] font-bold transition-colors ${mode === option ? 'bg-sky-600 text-white' : 'bg-muted text-muted-foreground hover:bg-muted/80'}`}>{option === 'automatico' ? 'Automático' : 'Manual'}</button>)}
-              </div>
-            </div>;
-          })}
-        </div>
-      </section>
-
 
       {showCsvImportModal && (
         <div className="fixed inset-0 z-[9999] bg-black/60 flex items-center justify-center p-4">
