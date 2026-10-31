@@ -103,9 +103,13 @@ type GateStep = "phone" | "email" | "emailCode" | "newUser" | "indicador" | "reg
 
 export default function PasswordGate({ children, registrationOnly = false }: PasswordGateProps) {
   const [accessGranted, setAccessGranted] = useState(() => !!localStorage.getItem(CP_TOKEN_KEY) || localStorage.getItem(SESSION_KEY) === "true");
-  const [gateStep, setGateStep] = useState<GateStep>("phone");
+  const [gateStep, setGateStep] = useState<GateStep>(() =>
+    registrationOnly && /^\d{11}$/.test(sessionStorage.getItem("h2_new_registration_phone") || "") ? "email" : "phone"
+  );
   const [blockedRoutes, setBlockedRoutes] = useState<string[]>([]);
-  const [clientPhone, setClientPhone] = useState("");
+  const [clientPhone, setClientPhone] = useState(() =>
+    registrationOnly ? (sessionStorage.getItem("h2_new_registration_phone") || "").replace(/\D/g, "").slice(0, 11) : ""
+  );
   const [clientCpf, setClientCpf] = useState("");
   const [loginEmail, setLoginEmail] = useState("");
   const [loginEmailCode, setLoginEmailCode] = useState("");
@@ -948,6 +952,7 @@ export default function PasswordGate({ children, registrationOnly = false }: Pas
           localStorage.setItem(CP_TOKEN_KEY, created.token);
           localStorage.setItem(SESSION_PHONE_KEY, clientPhoneDigits);
           sessionStorage.removeItem(LOGIN_EMAIL_PROOF_STORAGE_KEY);
+          sessionStorage.removeItem("h2_new_registration_phone");
           window.location.assign(created.profileUpdateRequired ? "/atualizarcadastro" : "/");
           return;
         }
