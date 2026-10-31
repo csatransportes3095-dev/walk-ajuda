@@ -178,7 +178,9 @@ function ensure() {
       )`);
       // Uma migração idempotente, apenas de textos. Cada aparelho tem backup.
       // A importação inicial de um APK novo (revision=0) permanece intacta.
-      await migrateH2AutoShortCopyOnce(db);
+      void migrateH2AutoShortCopyOnce(db).catch(error => {
+        console.error("[H2Auto] falha na atualização de mensagens curtas", error);
+      });
     })().catch(e => {
       ready = undefined;
       throw e;
