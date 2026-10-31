@@ -3,7 +3,9 @@
 
 import { createHash, randomBytes, randomInt, timingSafeEqual } from "crypto";
 import { issueLoginEmailProof, assertLoginEmailProof } from "../customerLoginEmailProof";
-import { requestCustomerCode, verifyCustomerCode, redeemNewRegistrationProof, isCustomerOtpModeEnabled, getVerifiedCustomerOtpSession, revokeCustomerOtpSession } from "../customerOtpAccess";
+import { requestCustomerCode, verifyCustomerCode, redeemNewRegistrationProof, isCustomerOtpModeEnabled, getVerifiedCustomerOtpSession, revokeCustomerOtpSession, ensureCustomerOtpTables } from "../customerOtpAccess";
+import { validSiteCode } from "../../shared/siteAccessCodePolicy";
+import { getAdminJwtSecret } from "../adminJwt";
 import { canCustomerRecoverPassword, passwordRecoveryCodeHash } from "../customerPasswordRecoveryPolicy";
 import { TRPCError } from "@trpc/server";
 import { z } from "zod";
@@ -187,6 +189,21 @@ function requireLegacyPasswordMode(): void {
 
 export const customerPasswordRouter = router({
   authMode: publicProcedure.query(() => ({ passwordless: isCustomerOtpModeEnabled() })),
+  // Admin-only readiness verification. Never sends email or reveals customer data,
+  // code, mail credentials, token or any secret to the client.
+  otpPreflight: adminProcedure.query(async () => {
+    const db = await getDb() as any;
+    if (!db) return {ready:false,checks:{database:false,generator:false,mail:false,signing:false},enabled:isCustomerOtpModeEnabled()};
+    let database=false;
+    try { await ensureCustomerOtpTables(db); database=true; } catch { database=false; }
+    const generator=validSiteCode(generateOwnSiteCode());
+    const mail=Boolean((process.env.SMTP_PASS||process.env.ZOHO_EMAIL_PASSWORD) &&
+      (process.env.SMTP_USER||"h2@h2colombiano.com")) || Boolean(process.env.RESEND_API_KEY);
+    const signing=Boolean((process.env.H2_SITE_ACCESS_SECRET||getAdminJwtSecret()||"").length>=32);
+    const checks={database,generator,mail,signing};
+    return {ready:Object.values(checks).every(Boolean),checks,enabled:isCustomerOtpModeEnabled()};
+  }),
+
   requestCustomerCode: publicProcedure
     .input(z.object({ phone: z.string().min(10).max(32) }))
     .mutation(async ({ input, ctx }) => requestCustomerCode(input.phone, ctx.req)),
