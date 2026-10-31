@@ -1729,10 +1729,10 @@ export default function PasswordGate({ children, registrationOnly = false }: Pas
               <h1 className="text-3xl font-bold text-white">{loginTitle}</h1>
             )}
             <p className="text-white/60 text-sm mt-1">
-              {gateStep === "phone" && loginShowSubtitle && loginSubtitle}
-              {gateStep === "email" && "Confirme seu e-mail"}
-              {gateStep === "emailCode" && "Digite o código recebido"}
-              {gateStep === "registration" && "Cadastre-se"}
+              {gateStep === "phone" && (registrationOnly ? "Novo cadastro de cliente" : loginShowSubtitle && loginSubtitle)}
+              {gateStep === "email" && (registrationOnly ? "Confirme seu e-mail de cadastro" : "Confirme seu e-mail")}
+              {gateStep === "emailCode" && (registrationOnly ? "Confirmação do e-mail" : "Digite o código recebido")}
+              {gateStep === "registration" && (registrationOnly ? "Complete seu cadastro" : "Cadastre-se")}
               {gateStep === "profilePhoto" && "Foto de Perfil"}
               {gateStep === "password" && "Entre com sua senha pessoal"}
               {gateStep === "updateCpf" && "Atualizar Cadastro"}
@@ -1762,8 +1762,8 @@ export default function PasswordGate({ children, registrationOnly = false }: Pas
 
               {/* Instrução de acesso */}
               <div className="bg-white/5 border border-white/10 rounded-xl px-4 py-3 text-center">
-                <p className="text-white/90 text-sm font-semibold">Identifique-se para acessar</p>
-                <p className="text-white/50 text-xs mt-0.5">Digite seu telefone com DDD para continuar</p>
+                <p className="text-white/90 text-sm font-semibold">{registrationOnly ? "Faça seu cadastro" : "Identifique-se para acessar"}</p>
+                <p className="text-white/50 text-xs mt-0.5">{registrationOnly ? "Informe seu telefone com DDD para começar. Depois, confirme seu e-mail para continuar." : "Digite seu telefone com DDD para continuar"}</p>
               </div>
 
               {/* Campo Telefone */}
@@ -1818,13 +1818,13 @@ export default function PasswordGate({ children, registrationOnly = false }: Pas
                   </span>
                 ) : (
                   <span className="flex items-center justify-center gap-2">
-                    CONTINUAR →
+                    {registrationOnly ? "CONTINUAR CADASTRO →" : "CONTINUAR →"}
                   </span>
                 )}
               </button>
 
               {/* Botão WhatsApp ao errar senha */}
-              {showPasswordError && (
+              {!registrationOnly && showPasswordError && (
                 <div className="mt-2 animate-in fade-in slide-in-from-bottom-2 duration-300">
                   <div className="bg-orange-950/40 border border-orange-500/40 rounded-xl p-4 mb-3 text-center">
                     <p className="text-orange-300 font-bold text-sm">🔑 Senha não reconhecida</p>
@@ -1851,12 +1851,14 @@ export default function PasswordGate({ children, registrationOnly = false }: Pas
                 </div>
               )}
 
-              {loginShowFooter && (
+              {!registrationOnly && loginShowFooter && (
                 <p className="text-center text-white/50 text-sm mt-4">
                   {loginFooter}
                 </p>
               )}
 
+              {!registrationOnly && (
+                <>
               {/* Divisor novo cadastro */}
               <div className="flex items-center gap-3 pt-1">
                 <div className="flex-1 h-px bg-white/10" />
@@ -1894,6 +1896,8 @@ export default function PasswordGate({ children, registrationOnly = false }: Pas
                   CRIAR MINHA CONTA AGORA
                 </button>
               </div>
+                </>
+              )}
 
             </form>
           )}
@@ -2086,7 +2090,7 @@ export default function PasswordGate({ children, registrationOnly = false }: Pas
             <form onSubmit={handleEmailSubmit} className="space-y-5">
               <div className="bg-white/5 border border-white/10 rounded-xl px-4 py-3 text-center">
                 <p className="text-white/90 text-sm font-semibold">Confirme seu e-mail</p>
-                <p className="text-white/50 text-xs mt-1">Enviaremos um código de 6 números para confirmar este e-mail antes de continuar.</p>
+                <p className="text-white/50 text-xs mt-1">{registrationOnly ? "Enviaremos um código de 6 dígitos para validar seu e-mail e prosseguir com o cadastro." : "Enviaremos um código de 6 números para confirmar este e-mail antes de continuar."}</p>
               </div>
               <div>
                 <label className="block text-xs font-bold text-white/60 mb-2 uppercase tracking-widest flex items-center gap-1.5">
@@ -2171,7 +2175,7 @@ export default function PasswordGate({ children, registrationOnly = false }: Pas
           {/* ===== STEP 2: CADASTRO ===== */}
           {gateStep === "registration" && (
             <form onSubmit={handleRegistration} className="space-y-5">
-              <p className="text-white/60 text-sm text-center mb-2">Preencha seus dados para continuar</p>
+              <p className="text-white/60 text-sm text-center mb-2">{registrationOnly ? "Informe seus dados para finalizar o cadastro. Não é necessário criar senha." : "Preencha seus dados para continuar"}</p>
 
               {/* --- Seus dados --- */}
               <div className="border border-white/20 rounded-xl p-5 space-y-4">
