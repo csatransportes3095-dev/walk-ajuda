@@ -8,7 +8,7 @@ import { resolveReferralDeclaration } from "./referral";
 import { sendH2AutoOrderCode } from "./h2-auto-order-email";
 import { recordH2AutoPhoneFailure, clearH2AutoPhoneFailures, type PhoneStage } from "./h2-auto-validation-blocks";
 import { h2AutoPhoneFailureMessage, type H2AutoPhoneKind, type H2AutoPhoneFailure } from "./h2-auto-phone-attempt-message";
-import { invalidH2AutoPhoneStageAnswer, h2AutoNavigationCommand, initialH2AutoChoiceStage, repeatedH2AutoChoice } from "./h2-auto-validation-policy";
+import { invalidH2AutoPhoneStageAnswer, normalizeH2AutoPhone11, h2AutoNavigationCommand, initialH2AutoChoiceStage, repeatedH2AutoChoice } from "./h2-auto-validation-policy";
 import { manualSilencedPhones, normalizeSilencedPhone } from "./h2-auto-silenced-contacts";
 import { h2AutoConfirmationSchema } from "../shared/h2AutoConfirmation";
 import { h2AutoCustomerNeedsProfileUpdate, selectH2AutoCustomerByPhone } from "./h2-auto-customer-profile-guidance";
@@ -317,7 +317,7 @@ export function registerH2AutoAccessRoutes(app: Express): void {
         // A retransmissão da opção inicial não é um telefone inválido.
         if (repeatedH2AutoChoice(s.stage, input))
           return respond(res,200,{state:s.stage,message:s.stage==="referrals_phone" ? confirmation.phonePrompt : phoneMessage});
-        const phone = normalizeCustomerPhone(input);
+        const phone = normalizeH2AutoPhone11(input);
         const referralEntry = s.stage === "referrals_phone";
         if (invalidH2AutoPhoneStageAnswer(s.stage, input) || !phone)
           return respond(res,200,await phoneError(
@@ -403,13 +403,13 @@ export function registerH2AutoAccessRoutes(app: Express): void {
             normalized.includes("nao tenho") || normalized.includes("não tenho") ||
             normalized.includes("sem indicador"))
           return respond(res,200,{state:"referral_phone",message:noReferral});
-        if (invalidH2AutoPhoneStageAnswer(s.stage, input) || !normalizeCustomerPhone(input))
+        if (invalidH2AutoPhoneStageAnswer(s.stage, input))
           return respond(res,200,await phoneError("referral_phone","indicador","formato"));
         if (await limited("referral:" + sessionId, 30, hour, now))
           return respond(res, 200, { state: "referral_phone", message: confirmation.referrerRateLimit });
         // A service outage is not a wrong indicator and must not consume a chance.
         if (!(await getDb())) throw Error("db_unavailable");
-        const found = await resolveReferralDeclaration({ customerPhone: "", referrerPhone: input });
+        const found = await resolveReferralDeclaration({ customerPhone: "", referrerPhone: normalizeH2AutoPhone11(input) });
         if (found.issue || !found.linkedReferrer)
           return respond(res,200,await phoneError("referral_phone","indicador","nao_confirmado"));
         const db = await getDb();
