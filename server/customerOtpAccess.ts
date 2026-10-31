@@ -21,8 +21,12 @@ export const CUSTOMER_CODE_MS = 10 * 60 * 1000;
 /** Never expose draft authentication in production before every customer
  * route and legacy password endpoint has passed the migration checklist.
  */
+export function isCustomerOtpModeEnabled(): boolean {
+  return process.env.H2_CUSTOMER_OTP_V2_ENABLED === "true";
+}
+
 export function requireOtpMigrationEnabled(): void {
-  if (process.env.H2_CUSTOMER_OTP_V2_ENABLED !== "true") {
+  if (!isCustomerOtpModeEnabled()) {
     throw new TRPCError({
       code: "SERVICE_UNAVAILABLE",
       message: "O novo acesso por código ainda não está disponível.",
