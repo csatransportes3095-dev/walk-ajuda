@@ -10,7 +10,7 @@ const TOKEN_KEY = 'gastos_token';
 const CLIENT_ID_KEY = 'gastos_clientId';
 const CLIENT_NAME_KEY = 'gastos_clientName';
 
-function AcessoNegado({ routeLabel, reason, onLogout }: { routeLabel: string; reason?: string | null; onLogout: () => void }) {
+function AcessoNegado({ routeLabel, reason }: { routeLabel: string; reason?: string | null }) {
   const { data: settings } = trpc.settings.getAll.useQuery();
   const rawNumber = settings?.whatsapp_number || '5511978307371';
   const adminNumber = rawNumber.replace(/\D/g, '');
@@ -28,7 +28,7 @@ function AcessoNegado({ routeLabel, reason, onLogout }: { routeLabel: string; re
           <p className="mt-1 text-sm leading-5 text-foreground">{reason || 'Acesso ainda não liberado para esta área.'}</p>
         </div>
         <a href={href} target="_blank" rel="noopener noreferrer" className="flex items-center justify-center gap-2 w-full h-12 rounded-xl font-semibold text-white bg-[#25D366] hover:bg-[#1ebe5d] transition-colors">💬 Solicitar liberação pelo WhatsApp</a>
-        <button onClick={onLogout} className="w-full text-xs text-muted-foreground hover:text-foreground text-center">← Sair</button>
+        <a href="https://h2colombiano.com/" className="flex min-h-11 w-full items-center justify-center gap-2 rounded-xl border border-cyan-400/40 bg-cyan-400/10 px-4 py-3 text-center text-sm font-bold text-cyan-200 transition-colors hover:bg-cyan-400/20">← VOLTAR AO SITE</a>
       </div>
     </div>
   );
@@ -145,7 +145,7 @@ export function EmprestimoPage() {
     return <div className="min-h-screen flex items-center justify-center text-foreground">Verificando autorização...</div>;
   }
   if (routeAccessQuery.isError || routeAccessQuery.data?.allowed !== true) {
-    return <AcessoNegado routeLabel="Empréstimos" reason={(routeAccessQuery.data as any)?.restrictionReason || "Não foi possível confirmar sua autorização."} onLogout={handleLogout} />;
+    return <AcessoNegado routeLabel="Empréstimos" reason={(routeAccessQuery.data as any)?.restrictionReason || "Não foi possível confirmar sua autorização."} />;
   }
   if (!manifestCompleted) return <PostLoginReferralManifest token={token || ''} route="emprestimo" onComplete={() => setManifestCompleted(true)} />;
 
