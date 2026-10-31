@@ -88,6 +88,22 @@ describe("OTP-only shared customer route cutover",()=>{
   it("updates customer referral login copy to OTP",()=>{
     expect(file("client/src/pages/ClientReferrals.tsx")).toContain("código enviado ao e-mail cadastrado");
   });
+  it("rejects password-era customer sessions in the Gastos, Emprestimo and Cartoes bridge when OTP is active",()=>{
+    const bridge=file("server/unifiedCustomerSessionRoutes.ts");
+    expect(bridge).toContain('import { getVerifiedCustomerOtpSession, isCustomerOtpModeEnabled } from "./customerOtpAccess"');
+    const start=bridge.indexOf("async function authenticateCustomer(");
+    const end=bridge.indexOf("async function ensureReferralDeclaration(",start);
+    const guard=bridge.slice(start,end);
+    expect(guard).toContain("if (isCustomerOtpModeEnabled()) {");
+    expect(guard).toContain("const verified = await getVerifiedCustomerOtpSession(db, token)");
+    expect(guard).toContain('if (!verified) {');
+    expect(guard).toContain("Number(customer.id) !== verifiedCustomerId");
+    expect(guard).toContain("} else {");
+    expect(guard).toContain("FROM customerPasswordSessions");
+    expect(bridge).toContain('app.post("/api/customer-session/gastos"');
+    expect(bridge).toContain('app.post("/api/customer-session/emprestimo"');
+    expect(bridge).toContain('app.post("/api/customer-session/cartoes"');
+  });
   it("retains protected server OTP session and rejection of legacy customer password endpoints",()=>{
     const server=file("server/routers/customerPassword.ts");
     expect(server).toContain("getVerifiedCustomerOtpSession(db, cleanToken)");
