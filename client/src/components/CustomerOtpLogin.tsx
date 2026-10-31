@@ -155,6 +155,12 @@ export function CustomerOtpLogin({ title = "Acesso H2 Colombiano", initialPhone 
             </button>
           </form>
         )}
+        <a
+          href="https://h2colombiano.com/"
+          className="mt-4 flex min-h-11 w-full items-center justify-center gap-2 rounded-xl border border-cyan-400/40 bg-cyan-400/10 px-4 py-3 text-center text-sm font-bold text-cyan-200 transition-colors hover:bg-cyan-400/20"
+        >
+          ← VOLTAR AO SITE
+        </a>
         <p className="mt-4 text-center text-xs text-slate-400">
           O código expira em 10 minutos. Nunca compartilhe o código recebido.
         </p>
