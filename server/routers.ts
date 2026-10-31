@@ -6252,6 +6252,11 @@ export const appRouter = router({
             ORDER BY osh.createdAt ASC LIMIT 1
           ) as serviceOption,
           (
+            SELECT NULLIF(TRIM(osh.pricePaid), '') FROM orderStatusHistory osh
+            WHERE osh.registrationId = acp.id AND osh.pricePaid IS NOT NULL AND TRIM(osh.pricePaid) != ''
+            ORDER BY osh.createdAt ASC, osh.id ASC LIMIT 1
+          ) as productPurchasePrice,
+          (
             SELECT UNIX_TIMESTAMP(osh.createdAt) * 1000 FROM orderStatusHistory osh
             WHERE osh.registrationId = acp.id
             ORDER BY osh.createdAt ASC LIMIT 1
@@ -6354,6 +6359,7 @@ export const appRouter = router({
           latestStatus: r.latestStatus as string | null,
           serviceName: (r.frozenServiceName || r.serviceName) as string | null,
           serviceOption: (r.frozenServiceOption || r.serviceOption) as string | null,
+          productPurchasePrice: r.productPurchasePrice ? String(r.productPurchasePrice) : null,
           submittedAt: r.frozenCreatedAt ? new Date(r.frozenCreatedAt).getTime() : (r.submittedAt ? Number(r.submittedAt) : null),
           commissionPaid: r.frozenCommissionStatus ? (r.frozenCommissionStatus === 'paga' ? 1 : 0) : Number(r.commissionPaid),
           referralInvalid: promotionNoCommission || (r.frozenCommissionStatus ? (r.frozenCommissionStatus === 'nao_elegivel' || r.frozenCommissionStatus === 'cancelada') : Number(r.referralInvalid || 0) === 1),
