@@ -2,28 +2,50 @@ import { z } from "zod";
 
 /** All editable H2 AUTO confirmation copy. Navigation and security rules stay server-controlled. */
 export const H2_AUTO_CONFIRMATION_DEFAULTS = {
-  "identificationWelcome": "⚡ *H2 COLOMBIANO* 🇨🇴\n🤖 *CENTRAL DE ATENDIMENTO*\n\n👋 Olá! Seja bem-vindo!\n\n🔐 Para sua segurança,\nprecisamos identificar\nse você já é nosso cliente.\n\n1️⃣ *SIM, JÁ SOU CLIENTE*\n2️⃣ *NÃO SOU CLIENTE*\n3️⃣ *CONSULTAR MINHAS INDICAÇÕES*\n\n⌨️ Digite *1*, *2* ou *3*.\n🔙 *MENU* para início.\n━━━━━━━━━━━━━━━━\n🛡️ *EQUIPE H2 COLOMBIANO* 🇨🇴",
-  "existingCustomerPrompt": "✅ *JÁ SOU CLIENTE*\n\n📱 Informe o telefone\ncadastrado no H2 Colombiano,\ncom DDD, para confirmar\nsua identidade.\n\n⌨️ Envie 11 números com DDD.\n\n🔙 Digite *0* para voltar.\n🏠 Digite *MENU* para início.",
-  "newCustomerPrompt": "🆕 *NOVO CLIENTE*\n\n🇨🇴 Atendemos somente\npor indicação.\n\n📱 Informe o telefone\ncom DDD de quem\nindicou você.\n\n⌨️ Envie 11 números com DDD.\n\n🔙 Digite *0* para voltar.\n🏠 Digite *MENU* para início.",
-  "phonePrompt": "💰 *MINHAS INDICAÇÕES*\n\nPara proteger seus dados,\nconfirme sua identidade.\n\n📱 Informe seu telefone\ncadastrado com DDD.\n\n⌨️ Digite 11 números.\n🔙 *0* para voltar.\n🏠 *MENU* para início.",
-  "phoneInvalid": "O telefone está fora do formato.\nInforme *11 números com DDD*,\nsem espaços ou símbolos.",
-  "phoneNotFound": "Não foi possível localizar\nou confirmar um cadastro ativo\ncom esse telefone.",
-  "referrerPhoneInvalid": "O telefone do indicador está\nfora do formato. Informe\n*11 números com DDD*.",
-  "referrerNotFound": "Não foi possível localizar\nou autorizar o indicador\ncom esse telefone.",
-  "referralsPhoneInvalid": "Informe o telefone do seu\ncadastro com *11 números e DDD*,\nsem espaços ou símbolos.",
-  "referralsPhoneNotFound": "Não foi possível confirmar\num cadastro autorizado\npara consultar indicações.",
-  "noIndicatorMessage": "🔐 *INDICAÇÃO OBRIGATÓRIA*\n\nPara continuar, informe\no telefone de um indicador\ncadastrado e autorizado.\n\n👨‍💻 Digite *6* para ajuda.\n\n🔙 Digite *0* para voltar.\n🏠 Digite *MENU* para início.",
-  "codeSent": "📧 *CONFIRMAÇÃO DE E-MAIL*\n\n✅ Enviamos um código ao\ne-mail do seu cadastro.\n\n🔢 Digite os *6 números*.\n⏳ Validade: *10 minutos*.\n\n🔙 *0* para voltar.\n🏠 *MENU* para início.",
-  "codePrompt": "🔢 Informe os *6 números*\nrecebidos no e-mail.\n\n🔙 *0* para voltar.\n🏠 *MENU* para início.",
-  "codeInvalid": "⚠️ Código inválido ou expirado.\nConfira o e-mail.\n\n🔙 *0* para voltar.\n🏠 *MENU* para início.",
-  "codeResendWait": "⏳ Aguarde um minuto\npara solicitar outro código.\n\n🔙 *0* ou *MENU* para voltar.",
-  "codeRateLimit": "⏳ Limite de tentativas atingido.\nTente mais tarde.",
-  "codeRequestWait": "⏳ Aguarde e tente novamente.",
-  "codeSendFailed": "⚠️ Não foi possível enviar\no código agora.\n\nTente novamente.",
-  "customerProfileUpdate": "⚠️ *H2 COLOMBIANO* 🇨🇴\n📝 *ATUALIZAÇÃO DE CADASTRO*\n\nPara continuar seu atendimento,\né necessário completar ou\natualizar seu cadastro.\n\n🔗 *ACESSE SEU CADASTRO:*\nhttps://h2colombiano.com/login\n\n✅ Faça login e preencha\nos dados que estiverem pendentes.\n\n📱 Depois, volte ao WhatsApp\ne informe seu telefone com DDD.\n\n👨‍💻 Se não conseguir acessar,\nsolicite atendimento humano.\n\n🛡️ *EQUIPE H2 COLOMBIANO* 🇨🇴",
-  "customerAccessNotConfirmed": "⚠️ *H2 COLOMBIANO* 🇨🇴\n🚫 *ACESSO NÃO CONFIRMADO*\n\nNão foi possível confirmar\nseu acesso com esse telefone.\n\n📱 Confira o número com DDD\ne o telefone do seu cadastro.\n\n👨‍💻 Se estiver correto, solicite\natendimento humano.\n\n🛡️ *EQUIPE H2 COLOMBIANO* 🇨🇴",
-  "referrerRateLimit": "⏳ Muitas tentativas.\nAguarde e tente novamente.",
-  "referralHumanHelp": "👨‍💻 *ATENDIMENTO HUMANO*\n\nSua solicitação foi encaminhada.\n⏳ Tempo médio: 5 minutos.\n\n🏠 *MENU* para início."
+  identificationWelcome:
+    "⚡ *H2 COLOMBIANO* 🇨🇴\n📋 *COMO DESEJA CONTINUAR?*\n\n1️⃣ *JÁ SOU CLIENTE*\n2️⃣ *AINDA NÃO SOU CLIENTE*\n3️⃣ *MINHAS INDICAÇÕES*\n\n⌨️ Digite *1, 2 ou 3*.\n🏠 *MENU* para início.",
+  existingCustomerPrompt:
+    "✅ *JÁ SOU CLIENTE*\n\n📱 Digite seu telefone\ncom DDD (11 números).\n\n🔙 *0* para voltar.\n🏠 *MENU* para início.",
+  newCustomerPrompt:
+    "🆕 *NOVO CLIENTE*\n\n📱 Informe o telefone\ncom DDD do seu indicador.\n\n🔙 *0* para voltar.\n🏠 *MENU* para início.",
+  phonePrompt:
+    "💰 *MINHAS INDICAÇÕES*\n\n📱 Informe seu telefone\ncadastrado com DDD.\n\n🔙 *0* para voltar.\n🏠 *MENU* para início.",
+  phoneInvalid:
+    "⚠️ Telefone inválido.\nDigite 11 números com DDD.",
+  phoneNotFound:
+    "⚠️ Não foi possível confirmar\nseu acesso. Confira o DDD.",
+  referrerPhoneInvalid:
+    "⚠️ Indicador inválido.\nDigite 11 números com DDD.",
+  referrerNotFound:
+    "⚠️ Não foi possível confirmar\no indicador informado.",
+  referralsPhoneInvalid:
+    "⚠️ Telefone inválido.\nDigite 11 números com DDD.",
+  referralsPhoneNotFound:
+    "⚠️ Não foi possível confirmar\no acesso às indicações.",
+  noIndicatorMessage:
+    "🔐 *INDICADOR OBRIGATÓRIO*\n\n📱 Informe o telefone\ncom DDD de um indicador\ncadastrado e autorizado.\n\n🏠 *MENU* para início.",
+  codeSent:
+    "📧 *CÓDIGO ENVIADO*\n\n🔢 Digite os 6 números\nenviados ao seu e-mail.\n⏳ Válido por 10 minutos.\n\n🔙 *0* para voltar.",
+  codePrompt:
+    "🔢 Digite o código de\n6 números do e-mail.\n\n🔙 *0* para voltar.",
+  codeInvalid:
+    "⚠️ Código inválido ou\nexpirado. Confira o e-mail.\n\n🔙 *0* para voltar.",
+  codeResendWait:
+    "⏳ Aguarde 1 minuto\npara pedir outro código.",
+  codeRateLimit:
+    "⏳ Muitas tentativas.\nTente mais tarde.",
+  codeRequestWait:
+    "⏳ Aguarde e tente novamente.",
+  codeSendFailed:
+    "⚠️ Código não enviado.\nTente novamente.",
+  customerProfileUpdate:
+    "📝 *ATUALIZE SEU CADASTRO*\n\n✅ Complete os dados pendentes:\nhttps://h2colombiano.com/login\n\n📱 Depois, volte aqui.\n🏠 *MENU* para início.",
+  customerAccessNotConfirmed:
+    "🚫 *ACESSO NÃO CONFIRMADO*\n\n📱 Confira seu telefone\ncom DDD. Se persistir,\nsolicite atendimento.",
+  referrerRateLimit:
+    "⏳ Muitas tentativas.\nAguarde e tente novamente.",
+  referralHumanHelp:
+    "👨‍💻 *ATENDIMENTO HUMANO*\n\n✅ Encaminhado à equipe.\n⏳ Espera média: 5 minutos.\n🕒 Atendimento: 11h às 23h.\n\n🏠 *MENU* para início.",
 } as const;
 
 export const H2_AUTO_CONFIRMATION_GROUPS = [
