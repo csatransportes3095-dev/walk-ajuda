@@ -121,6 +121,8 @@ export const customerUpdateRouter = router({
   status: publicProcedure
     .input(z.object({ phone: z.string().min(10).max(32) }))
     .mutation(async ({ input }) => {
+      if (isCustomerOtpModeEnabled()) throw new TRPCError({code:"FORBIDDEN",message:"Confirme o acesso com telefone e código de e-mail."});
+
       const db = await getDb() as any;
       if (!db) throw new TRPCError({ code: "INTERNAL_SERVER_ERROR", message: "Banco indisponível." });
       const phone = normalizeCustomerPhone(input.phone);

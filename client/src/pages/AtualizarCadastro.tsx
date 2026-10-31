@@ -284,14 +284,24 @@ export default function AtualizarCadastro() {
   // the OTP-only cutover. The profile editor still uses its protected API.
   if (otpMode.isPending) return <div className="min-h-screen bg-slate-950 text-white flex items-center justify-center">Verificando autenticação...</div>;
   if (otpMode.isError) return <div className="min-h-screen bg-slate-950 text-white flex items-center justify-center">Não foi possível confirmar o acesso. Tente novamente.</div>;
-  if (otpMode.data?.passwordless && !token && step!=="done" && step!=="already_done")
-    return <CustomerOtpLogin title="ATUALIZAR CADASTRO · H2 COLOMBIANO"
-      initialPhone={localStorage.getItem("customer_update_phone_hint") || ""}
-      onAuthenticated={value => {
-        acceptToken(value.token);
-        setStep("phone");
-      }}
-    />;
+  // A confirmed e-mail code authorizes the existing profile query directly.
+  // Never pass an OTP-authenticated customer through the old phone/password
+  // forms: those endpoints are disabled during the passwordless cutover.
+  if (otpMode.data?.passwordless) {
+    if (!token && step!=="done" && step!=="already_done") {
+      return <CustomerOtpLogin title="ATUALIZAR CADASTRO · H2 COLOMBIANO"
+        initialPhone={localStorage.getItem("customer_update_phone_hint") || ""}
+        onAuthenticated={value => {
+          acceptToken(value.token);
+        }}
+      />;
+    }
+    if (token && step!=="profile" && step!=="done" && step!=="already_done") {
+      return <div className="min-h-screen bg-slate-950 text-white flex items-center justify-center px-6 text-center">
+        Validando seu código e carregando o cadastro...
+      </div>;
+    }
+  }
 
   return (
     <main className="min-h-screen bg-[#060818] px-4 py-8 text-white sm:py-12">

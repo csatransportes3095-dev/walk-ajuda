@@ -39,6 +39,33 @@ describe("OTP-only shared customer route cutover",()=>{
     expect(login.indexOf("await onAuthenticated(")).toBeLessThan(login.indexOf('localStorage.setItem("cp_token", result.token)'));
     expect(login).toContain("verifyCode.mutateAsync");
   });
+  it("never sends an OTP-authenticated profile update into legacy password screens",()=>{
+    const page=file("client/src/pages/AtualizarCadastro.tsx");
+    expect(page).toContain('if (otpMode.data?.passwordless)');
+    expect(page).toContain('if (token && step!=="profile"');
+    expect(page).toContain("acceptToken(value.token)");
+    expect(page).not.toContain('otpMode.data?.passwordless && !token && step!=="done"');
+  });
+  it("closes obsolete customer password discovery endpoints in OTP-only mode",()=>{
+    const router=file("server/routers/customerPassword.ts");
+    for (const method of ["checkStatus","checkStatusMutation","adminListPending","adminGetStatus"]) {
+      const start=router.indexOf("  "+method+": ");
+      expect(start).toBeGreaterThan(0);
+      expect(router.slice(start,start+1100)).toContain("requireLegacyPasswordMode()");
+    }
+    expect(router).toContain('getMode: publicProcedure.query(async () => {\\n    requireLegacyPasswordMode();'.replace(/\\n/g,"\\n"));
+    const spreadsheet=file("server/routers/spreadsheet.ts");
+    for (const method of ["checkPhone","getPasswordMode"]) {
+      const start=spreadsheet.indexOf("  "+method+": ");
+      expect(start).toBeGreaterThan(0);
+      expect(spreadsheet.slice(start,start+900)).toContain("isCustomerOtpModeEnabled()");
+    }
+    expect(file("server/routers/customerUpdate.ts")).toContain('status: publicProcedure');
+    const update=file("server/routers/customerUpdate.ts");
+    const pos=update.indexOf("  status: publicProcedure");
+    expect(update.slice(pos,pos+600)).toContain("isCustomerOtpModeEnabled()");
+  });
+
   it("retains protected server OTP session and rejection of legacy customer password endpoints",()=>{
     const server=file("server/routers/customerPassword.ts");
     expect(server).toContain("getVerifiedCustomerOtpSession(db, cleanToken)");

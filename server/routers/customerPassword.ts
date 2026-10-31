@@ -200,6 +200,7 @@ export const customerPasswordRouter = router({
   // â”€â”€ Modo global (auto / manual) â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
 
   getMode: publicProcedure.query(async () => {
+    requireLegacyPasswordMode();
     const mode = await getPasswordMode();
     return { mode };
   }),
@@ -363,6 +364,8 @@ export const customerPasswordRouter = router({
   checkStatus: publicProcedure
     .input(z.object({ phone: z.string(), isCpf: z.boolean().optional() }))
     .query(async ({ input }) => {
+      requireLegacyPasswordMode();
+
       const found = await getCustomerByPhoneOrCpf(input.phone, input.isCpf === true);
       if (!found) return { status: "not_found" as const };
       const { customer: cust, resolvedPhone } = found;
@@ -383,6 +386,8 @@ export const customerPasswordRouter = router({
   checkStatusMutation: publicProcedure
     .input(z.object({ phone: z.string(), isCpf: z.boolean().optional() }))
     .mutation(async ({ input }) => {
+      requireLegacyPasswordMode();
+
       const found = await getCustomerByPhoneOrCpf(input.phone, input.isCpf === true);
       if (!found) return { status: "not_found" as const };
       const { customer: cust, resolvedPhone } = found;
@@ -781,6 +786,8 @@ export const customerPasswordRouter = router({
     }),
 
   adminListPending: adminProcedure.query(async () => {
+      requireLegacyPasswordMode();
+
     const db = (await getDb()) as any;
     if (!db) return [];
     const rows = await db
@@ -962,6 +969,8 @@ export const customerPasswordRouter = router({
   adminGetStatus: adminProcedure
     .input(z.object({ phone: z.string() }))
     .query(async ({ input }) => {
+      requireLegacyPasswordMode();
+
       const cleanPhone = input.phone.replace(/\D/g, "");
       const pwd = await getActivePassword(cleanPhone);
       if (!pwd) return { hasPassword: false };

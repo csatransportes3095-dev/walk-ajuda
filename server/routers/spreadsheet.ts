@@ -433,6 +433,8 @@ export const spreadsheetRouter = router({
       requestedRoute: z.enum(['site', 'gastos', 'emprestimo']).optional(),
     }))
     .mutation(async ({ input }) => {
+      if (isCustomerOtpModeEnabled()) throw new TRPCError({code:"FORBIDDEN",message:"O acesso de cliente agora utiliza telefone e código do e-mail."});
+
       try {
         const db = await getDb() as any;
         if (!db) throw new TRPCError({ code: "INTERNAL_SERVER_ERROR", message: "Banco de dados indisponível" });
@@ -1698,6 +1700,8 @@ export const spreadsheetRouter = router({
   // Retorna o modo atual: 'manual' (ADM libera) ou 'auto' (cliente cria direto)
   getPasswordMode: publicProcedure
     .query(async () => {
+      if (isCustomerOtpModeEnabled()) throw new TRPCError({code:"FORBIDDEN",message:"O acesso de cliente agora utiliza telefone e código do e-mail."});
+
       try {
         const db = await getDb() as any;
         if (!db) return { mode: 'manual' as const };
