@@ -6,7 +6,8 @@
  */
 const DB_NAME = "h2bico-face-index";
 const STORE_NAME = "embeddings";
-export const H2BICO_EMBEDDING_MODEL_VERSION = "h2-tflite-recognizer-v1";
+import { H2BICO_EMBEDDING_MODEL_VERSION } from "@shared/h2bicoFaceIndex";
+export { H2BICO_EMBEDDING_MODEL_VERSION } from "@shared/h2bicoFaceIndex";
 const VECTOR_LENGTH = 512;
 
 export type H2BicoFaceIndexRow = {
