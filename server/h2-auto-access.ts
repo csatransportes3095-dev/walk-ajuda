@@ -8,7 +8,7 @@ import { resolveReferralDeclaration } from "./referral";
 import { sendH2AutoOrderCode } from "./h2-auto-order-email";
 import { recordH2AutoPhoneFailure, clearH2AutoPhoneFailures, type PhoneStage } from "./h2-auto-validation-blocks";
 import { h2AutoPhoneFailureMessage, type H2AutoPhoneKind, type H2AutoPhoneFailure } from "./h2-auto-phone-attempt-message";
-import { invalidH2AutoPhoneStageAnswer, h2AutoNavigationCommand } from "./h2-auto-validation-policy";
+import { invalidH2AutoPhoneStageAnswer, h2AutoNavigationCommand, initialH2AutoChoiceStage, repeatedH2AutoChoice } from "./h2-auto-validation-policy";
 import { manualSilencedPhones, normalizeSilencedPhone } from "./h2-auto-silenced-contacts";
 import { h2AutoConfirmationSchema } from "../shared/h2AutoConfirmation";
 import { h2AutoCustomerNeedsProfileUpdate, selectH2AutoCustomerByPhone } from "./h2-auto-customer-profile-guidance";
@@ -219,6 +219,12 @@ export function registerH2AutoAccessRoutes(app: Express): void {
             customer_phone_hash=NULL,customer_email_hash=NULL,code_hash=NULL,code_expires=NULL,
             code_attempts=0,resend_after=0,expires_at=0,updated_at=VALUES(updated_at)`);
         await clearH2AutoPhoneFailures(deviceId,sessionId);
+        const firstStage = initialH2AutoChoiceStage(input);
+        if (firstStage) {
+          await update(sessionId, sql`stage=${firstStage},updated_at=${now}`);
+          return respond(res, 200, {state:firstStage, message:firstStage==="customer_phone" ? phoneMessage :
+            firstStage==="referrals_phone" ? confirmation.phonePrompt : referrerMessage});
+        }
         return respond(res, 200, { state: "choice", message: initialMessage });
       }
 
@@ -384,6 +390,10 @@ export function registerH2AutoAccessRoutes(app: Express): void {
       }
 
       if (s.stage === "referral_phone") {
+        // The APK may replay the same choice on transition. A repeated '2'
+        // is not an invalid indicator number and must not count as a failure.
+        if (repeatedH2AutoChoice(s.stage,input))
+          return respond(res,200,{state:"referral_phone",message:referrerMessage});
         if (normalized === "6") return respond(res, 200, { state: "human",
           message: confirmation.referralHumanHelp });
         if (normalized === "nao" || normalized === "não" ||
