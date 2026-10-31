@@ -1,4 +1,4 @@
-import { useState } from "react";
+import { useRef, useState } from "react";
 import { trpc } from "@/lib/trpc";
 import { useAdminAuth } from "@/hooks/useAdminAuth";
 import { Download, CheckCircle, Clock, Users, ExternalLink, Hash, Package, TrendingUp, AlertCircle, Trash2, MessageCircle, Mail } from "lucide-react";
@@ -79,6 +79,9 @@ export default function AdminCommissions() {
 
   const [confirmDelete, setConfirmDelete] = useState<number | null>(null);
   const [confirmPayment, setConfirmPayment] = useState<number | null>(null);
+  const [batchPayment, setBatchPayment] = useState<{ key: string; ids: number[] } | null>(null);
+  const [batchSaving, setBatchSaving] = useState(false);
+  const batchRunningRef = useRef(false);
   const [referralAction, setReferralAction] = useState<{ registrationId: number; mode: 'invalidate' | 'revalidate' } | null>(null);
   const [invalidReason, setInvalidReason] = useState('');
   const [resendingEmail, setResendingEmail] = useState<number | null>(null);
@@ -103,9 +106,9 @@ export default function AdminCommissions() {
       void commissionsQuery.refetch();
 
       if (variables.paid) {
-        toast.success("Pagamento da comissão confirmado.");
+        if (!batchRunningRef.current) toast.success("Pagamento da comissão confirmado.");
         const wa = (data as any)?.whatsapp;
-        if (wa?.phone) {
+        if (wa?.phone && !batchRunningRef.current) {
           const valueLine = wa.commissionValue > 0
             ? `\n💰 *Valor pago:* R$ ${(wa.commissionValue / 100).toFixed(2).replace('.', ',')}`
             : '';
@@ -212,6 +215,62 @@ export default function AdminCommissions() {
   const totalValuePending=values.a_liberar,totalValuePaid=values.paid;
   const totalARelease=values.a_liberar,totalReleased=values.liberado;
   const totalCommission=values.a_liberar+values.liberado+values.paid;
+
+  async function confirmBatchPayment(pedidos: typeof all, indicadorNome: string, indicadorPhone: string) {
+    if (batchSaving || batchRunningRef.current) return;
+    const eligible = pedidos.filter(p =>
+      classifyAdminCommission(p) === "liberado" && Number((p as any).commissionValue) > 0
+    );
+    if (!batchPayment || eligible.length < 2 ||
+        eligible.length !== batchPayment.ids.length ||
+        eligible.some(p => !batchPayment.ids.includes(p.registrationId))) {
+      toast.error("A lista mudou. Confira as comissões antes de confirmar.");
+      setBatchPayment(null);
+      return;
+    }
+    batchRunningRef.current = true;
+    setBatchSaving(true);
+    const completed: typeof eligible = [];
+    try {
+      // Usa a mesma validação e atualização individual existente, sem duplicar lógica no servidor.
+      // Para no primeiro erro e informa pagamentos parciais, nunca anuncia total incorreto.
+      for (const p of eligible) {
+        await toggleCommissionPaidMutation.mutateAsync({ registrationId: p.registrationId, paid: true });
+        completed.push(p);
+      }
+      const total = completed.reduce((sum, p) => sum + Number((p as any).commissionValue), 0);
+      toast.success(`${completed.length} comissões confirmadas — ${formatMoney(total)}.`);
+      const phone = indicadorPhone.replace(/\\D/g, "").replace(/^55(?=\\d{10,11}$)/, "");
+      if (phone.length === 10 || phone.length === 11) {
+        const details = completed.map((p, i) =>
+          `${i+1}️⃣ *${p.customerName || "Cliente indicado"}*\\n📋 Cadastro: ${(p as any).customerNumber || p.registrationId}\\n💰 Comissão: ${formatMoney(Number((p as any).commissionValue))}`
+        );
+        const message = [
+          "✅ *COMISSÕES PAGAS*",
+          "🇨🇴 *H2 COLOMBIANO*",
+          "",
+          `Olá, ${indicadorNome}!`,
+          `Confirmamos o pagamento de *${completed.length} indicações*:`,
+          "",
+          ...details.flatMap(detail => [detail, ""]),
+          `💰 *TOTAL PAGO: ${formatMoney(total)}*`,
+          "",
+          "Obrigado pelas indicações! 🎉",
+          "🛡️ *EQUIPE H2 COLOMBIANO* 🇨🇴",
+        ].join("\\n");
+        window.open(`https://wa.me/55${phone}?text=${encodeWhatsappMessage(repairCommissionWhatsappMessage(message))}`, "_blank", "noopener,noreferrer");
+      } else {
+        toast.warning("Pagamento registrado. Confira o telefone do indicador para notificar.");
+      }
+    } catch (error) {
+      toast.error(`Operação interrompida: ${completed.length} de ${eligible.length} comissões confirmadas. Confira as restantes antes de tentar novamente.`, { duration: 10000 });
+    } finally {
+      batchRunningRef.current = false;
+      setBatchSaving(false);
+      setBatchPayment(null);
+      void commissionsQuery.refetch();
+    }
+  }
 
   function formatMoney(cents: number) {
     if (!cents) return "—";
@@ -396,6 +455,9 @@ export default function AdminCommissions() {
             const totalIndicacoes = pedidos.length;
             const totalPendenteValor = pedidos.filter(p => classifyAdminCommission(p) === "a_liberar").reduce((s, p) => s + ((p as any).commissionValue ?? 0), 0);
             const totalPagoValor = pedidos.filter(p => classifyAdminCommission(p) === "paid").reduce((s, p) => s + ((p as any).commissionValue ?? 0), 0);
+            const readyForBatch = pedidos.filter(p => classifyAdminCommission(p) === "liberado" && Number((p as any).commissionValue) > 0);
+            const batchTotal = readyForBatch.reduce((sum, p) => sum + Number((p as any).commissionValue), 0);
+            const isBatchConfirming = batchPayment?.key === key;
 
             return (
               <div key={key} className="overflow-hidden rounded-2xl border border-cyan-400/25 bg-gradient-to-b from-[#10172a] to-[#090e1d] shadow-[0_0_26px_rgba(14,165,233,.10)] transition-all hover:border-cyan-400/45">
@@ -454,6 +516,29 @@ export default function AdminCommissions() {
                     </div>
                   </div>
                   <div className="flex items-center gap-1.5 flex-shrink-0 flex-wrap justify-end">
+                    {readyForBatch.length >= 2 && (
+                      <div className="w-full sm:w-auto rounded-xl border border-emerald-400/40 bg-emerald-500/10 p-2">
+                        <div className="text-xs font-bold text-emerald-300">
+                          {readyForBatch.length} liberadas • {formatMoney(batchTotal)}
+                        </div>
+                        {isBatchConfirming ? (
+                          <div className="mt-2 space-y-2">
+                            <p className="text-xs text-white">Confirmar {readyForBatch.length} pagamentos de {formatMoney(batchTotal)}?</p>
+                            <div className="max-h-36 overflow-y-auto text-[11px] text-slate-200">
+                              {readyForBatch.map(p => <p key={p.registrationId}>{p.customerName || "Cliente"} — {formatMoney(Number((p as any).commissionValue))}</p>)}
+                            </div>
+                            <div className="flex gap-2">
+                              <button disabled={batchSaving || toggleCommissionPaidMutation.isPending} onClick={() => void confirmBatchPayment(pedidos, indicadorNome, indicadorPhone || "")} className="rounded-lg bg-emerald-600 px-3 py-2 text-xs font-bold text-white disabled:opacity-50">
+                                {batchSaving ? "Confirmando..." : "CONFIRMAR TODAS"}
+                              </button>
+                              <button disabled={batchSaving} onClick={() => setBatchPayment(null)} className="rounded-lg border border-slate-500 px-3 py-2 text-xs text-white disabled:opacity-50">Cancelar</button>
+                            </div>
+                          </div>
+                        ) : (
+                          <button disabled={batchSaving || toggleCommissionPaidMutation.isPending} onClick={() => { setConfirmPayment(null); setBatchPayment({ key, ids: readyForBatch.map(p => p.registrationId) }); }} className="mt-1 w-full rounded-lg bg-emerald-600 px-3 py-2 text-xs font-black text-white disabled:opacity-50">💰 PAGAR TODAS</button>
+                        )}
+                      </div>
+                    )}
                     {pendentes > 0 && (
                       <span className="px-2 py-0.5 rounded-full bg-red-500/20 border border-red-500/40 text-red-400 text-xs font-bold">
                         {pendentes} pendente{pendentes > 1 ? "s" : ""}
