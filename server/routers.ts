@@ -6219,6 +6219,7 @@ export const appRouter = router({
           ) as referredBy,
           c.referredByPhone,
           rca.status as frozenCommissionStatus,
+          rca.commissionRule as frozenCommissionRule,
           rca.commissionValue as frozenCommissionValue,
           rca.invalidReason as frozenCommissionInvalidReason,
           rca.orderNumber as frozenOrderNumber,
@@ -6329,11 +6330,16 @@ export const appRouter = router({
           latestOrderStatus: r.latestStatus,
           latestOrderStatusLabel: r.latestStatusLabel,
         });
-        const manualResult = applyManualCommissionOverride({
+        const promotionNoCommission = r.frozenCommissionRule === 'promotion_no_commission';
+        const manualResult = promotionNoCommission ? {
+          commissionValue: 0, paymentState: 'nao_elegivel', paymentLabel: '🏷️ PROMOÇÃO — SEM COMISSÃO', paymentReady: false, manualStatus: null
+        } : applyManualCommissionOverride({
           commissionValue, paymentState: currentState.state,
           paymentLabel: currentState.label, paymentReady: currentState.paymentReady,
         }, manualOverrides.get(Number(r.registrationId)));
         return {
+          promotionNoCommission,
+          frozenCommissionRule: r.frozenCommissionRule ? String(r.frozenCommissionRule) : null,
           paymentReady: manualResult.paymentReady,
           paymentState: manualResult.paymentState,
           paymentLabel: manualResult.paymentLabel,
@@ -6350,7 +6356,7 @@ export const appRouter = router({
           serviceOption: (r.frozenServiceOption || r.serviceOption) as string | null,
           submittedAt: r.frozenCreatedAt ? new Date(r.frozenCreatedAt).getTime() : (r.submittedAt ? Number(r.submittedAt) : null),
           commissionPaid: r.frozenCommissionStatus ? (r.frozenCommissionStatus === 'paga' ? 1 : 0) : Number(r.commissionPaid),
-          referralInvalid: r.frozenCommissionStatus ? (r.frozenCommissionStatus === 'nao_elegivel' || r.frozenCommissionStatus === 'cancelada') : Number(r.referralInvalid || 0) === 1,
+          referralInvalid: promotionNoCommission || (r.frozenCommissionStatus ? (r.frozenCommissionStatus === 'nao_elegivel' || r.frozenCommissionStatus === 'cancelada') : Number(r.referralInvalid || 0) === 1),
           referralInvalidReason: r.frozenCommissionStatus ? (r.frozenCommissionInvalidReason ? String(r.frozenCommissionInvalidReason) : null) : (r.referralInvalidReason ? String(r.referralInvalidReason) : null),
           commissionValue: manualResult.commissionValue,
           commissionStatus: r.frozenCommissionStatus ? String(r.frozenCommissionStatus) : (Number(r.referralInvalid || 0) === 1 ? 'nao_elegivel' : (Number(r.commissionPaid) === 1 ? 'paga' : 'legado')),
