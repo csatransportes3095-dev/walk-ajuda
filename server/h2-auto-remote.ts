@@ -208,16 +208,18 @@ async function migrateH2AutoShortCopyOnce(db: any): Promise<void> {
     console.error("[H2Auto] não foi possível listar aparelhos para atualizar textos", error);
     return;
   }
+  let migrated = 0;
+  let failed = 0;
   for (const device of devices) {
     try {
-      await db.transaction(async (tx: any) => {
+      const applied = await db.transaction(async (tx: any) => {
         const fetched = await tx.execute(sql`SELECT config_json,revision FROM h2_auto_devices
           WHERE id=${String(device.id)} FOR UPDATE`);
         const row = (fetched[0] as any[])[0];
-        if (!row) return;
+        if (!row) return false;
         const previous = await tx.execute(sql`SELECT device_id FROM h2_auto_short_copy_backups
           WHERE device_id=${String(device.id)} AND campaign_key=${H2_AUTO_SHORT_COPY_CAMPAIGN} LIMIT 1`);
-        if ((previous[0] as any[]).length) return;
+        if ((previous[0] as any[]).length) return false;
         const original = decodeConfig(row.config_json);
         const compact = configSchema.parse(applyH2AutoShortCopy(original));
         const originalJson = JSON.stringify(original);
@@ -233,12 +235,16 @@ async function migrateH2AutoShortCopyOnce(db: any): Promise<void> {
             config_json=${compactJson}, revision=revision+1
             WHERE id=${String(device.id)} AND revision=${Number(row.revision)}`);
         }
+        return true;
       });
+      if (applied) migrated++;
     } catch (error) {
+      failed++;
       // Nenhum texto parcialmente aplicado: rollback é automático.
       console.error("[H2Auto] migração de texto não aplicada a aparelho", String(device.id), error);
     }
   }
+  console.info("[H2Auto] mensagens curtas:", migrated, "aparelho(s) atualizados; falhas:", failed);
 }
 
 const safeDevice = (r: any) => ({
