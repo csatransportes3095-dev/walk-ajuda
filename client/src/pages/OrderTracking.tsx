@@ -9,6 +9,7 @@ import { trpc } from "@/lib/trpc";
 import { publicSiteUrl } from "@shared/publicLinks";
 import { safeLoginLink } from "@shared/orderLoginPresentation";
 import "@/styles/order-login-layout.css";
+import { CustomerOtpLogin, type CustomerOtpResult } from "@/components/CustomerOtpLogin";
 import { findProgressStatusIndex, resolveProgressPosition } from "@shared/orderProgressSequence";
 import { Link, useSearch } from "wouter";
 import { useDevToolsDetection } from "@/hooks/useDevToolsDetection";
@@ -229,6 +230,32 @@ function renderTextWithLinks(text: string): React.ReactNode {
 }
 
 export default function OrderTracking() {
+  const mode = trpc.customerPassword.authMode.useQuery(undefined, { retry: 1, staleTime: 0 });
+  const [verifiedToken, setVerifiedToken] = useState(() => localStorage.getItem("cp_token") || "");
+  const session = trpc.customerPassword.checkSession.useQuery({ token: verifiedToken }, {
+    enabled: mode.data?.passwordless === true && !!verifiedToken, retry: 1, staleTime: 0,
+  });
+  if (mode.isPending || (mode.data?.passwordless && verifiedToken && session.isPending)) {
+    return <div className="min-h-screen bg-slate-950 text-white flex items-center justify-center">Verificando acesso...</div>;
+  }
+  if (mode.isError || (mode.data?.passwordless && session.isError)) {
+    return <div className="min-h-screen bg-slate-950 text-white flex items-center justify-center">Não foi possível verificar o acesso.</div>;
+  }
+  if (mode.data?.passwordless && (!verifiedToken || session.data?.valid !== true)) {
+    return <CustomerOtpLogin title="ACOMPANHAR PEDIDO · H2 COLOMBIANO"
+      onAuthenticated={async (value: CustomerOtpResult) => {
+        localStorage.setItem("cp_token", value.token);
+        localStorage.setItem("walk_client_phone", value.phone);
+        sessionStorage.setItem("ot_searchPhone", value.phone);
+        sessionStorage.setItem("ot_phoneInput", value.phone);
+        sessionStorage.setItem("ot_searched", "true");
+        setVerifiedToken(value.token);
+      }} />;
+  }
+  return <OrderTrackingContent />;
+}
+
+function OrderTrackingContent() {
   // Modo ADM: ativado via URL ?adm=3095 — libera acesso administrativo e desativa DevTools
   const ADM_PASSWORD = '3095';
   const searchStr = useSearch();
