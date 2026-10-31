@@ -3,7 +3,7 @@
 
 import { createHash, randomBytes, randomInt, timingSafeEqual } from "crypto";
 import { issueLoginEmailProof, assertLoginEmailProof } from "../customerLoginEmailProof";
-import { requestCustomerCode, verifyCustomerCode, redeemNewRegistrationProof } from "../customerOtpAccess";
+import { requestCustomerCode, verifyCustomerCode, redeemNewRegistrationProof, isCustomerOtpModeEnabled } from "../customerOtpAccess";
 import { canCustomerRecoverPassword, passwordRecoveryCodeHash } from "../customerPasswordRecoveryPolicy";
 import { TRPCError } from "@trpc/server";
 import { z } from "zod";
@@ -182,6 +182,7 @@ async function getCustomerByPhoneOrCpf(input: string, isCpf = false) {
 // â”€â”€â”€ router â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
 
 export const customerPasswordRouter = router({
+  authMode: publicProcedure.query(() => ({ passwordless: isCustomerOtpModeEnabled() })),
   requestCustomerCode: publicProcedure
     .input(z.object({ phone: z.string().min(10).max(32) }))
     .mutation(async ({ input, ctx }) => requestCustomerCode(input.phone, ctx.req)),
