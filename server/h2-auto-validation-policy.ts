@@ -25,6 +25,27 @@ export function invalidH2AutoPhoneStageAnswer(stage: string, answer: string): bo
     !validH2AutoPhone11(answer);
 }
 
+/** The first numbered option must be processed even when a conversation has
+ * no existing server session. Otherwise the client sees the opening menu again,
+ * and a retry of '2' is incorrectly counted as a phone validation attempt.
+ */
+export function initialH2AutoChoiceStage(input: string):
+  "customer_phone" | "referral_phone" | "referrals_phone" | null {
+  switch (input.trim()) {
+    case "1": return "customer_phone";
+    case "2": return "referral_phone";
+    case "3": return "referrals_phone";
+    default: return null;
+  }
+}
+
+/** Ignore only exact repeated selections matching the current phone stage.
+ * Never grant access or reset a security block with these duplicate inputs.
+ */
+export function repeatedH2AutoChoice(stage: string, input: string): boolean {
+  return initialH2AutoChoiceStage(input) === stage;
+}
+
 /** Navigation takes priority over phone format validation, never over a block. */
 export function h2AutoNavigationCommand(answer: string): "home" | "back" | null {
   const normalized=answer.trim().toLowerCase();
