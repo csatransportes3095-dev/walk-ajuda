@@ -8,6 +8,7 @@ import {isOwnSiteEmailAuthorized} from "./siteAccessOwnCodes";
 import {getOrderStatusVisibilityForClient} from "./orderStatusVisibility";
 import {groupVisibleH2AutoOrders} from "./h2-auto-order-history";
 import {attachScheduleToOrders} from "./h2-auto-order-schedule";
+import {isPromotionWithoutCommission,REFERRAL_PROMOTION_LABEL} from "../shared/referralPromotionPolicy";
 import {resolveReferralCommissionState} from "../shared/referralCommissionPolicy";
 import {getH2AutoVerifiedAccessCustomer} from "./h2-auto-verified-customer";
 import {getCommissionManualOverrides,applyManualCommissionOverride} from "./referralCommissionManual";
@@ -213,7 +214,7 @@ export function registerH2AutoOrdersRoutes(app:Express){
    const records=await rows(sql`
      SELECT attribution.registrationId,attribution.orderNumber,attribution.referredName,
        attribution.commissionValue,attribution.status AS commissionStatus,
-       attribution.invalidReason,
+       attribution.invalidReason,attribution.commissionRule,
        (SELECT h.status FROM orderStatusHistory h WHERE h.registrationId=attribution.registrationId
          ORDER BY h.createdAt DESC,h.id DESC LIMIT 1) AS latestOrderStatus,
        (SELECT st.label FROM orderStatusHistory h LEFT JOIN orderStatusTypes st
@@ -234,20 +235,23 @@ export function registerH2AutoOrdersRoutes(app:Express){
        latestOrderStatus:row.latestOrderStatus,
        latestOrderStatusLabel:row.latestOrderStatusLabel,
      });
+     const promotional=isPromotionWithoutCommission(row.commissionRule);
      return {
+       promotionNoCommission:promotional,
        registrationId:Number(row.registrationId),
        orderNumber:row.orderNumber||null,
        customerName:String(row.referredName||"Cliente").slice(0,90),
        orderStatus:String(row.latestOrderStatusLabel||row.latestOrderStatus||"Pedido recebido").slice(0,100),
-       commissionValue:Math.max(0,Number(row.commissionValue)||0),
-       commissionState:status.state,
-       commissionLabel:status.label,
+       commissionValue:promotional?0:Math.max(0,Number(row.commissionValue)||0),
+       commissionState:promotional?"nao_elegivel":status.state,
+       commissionLabel:promotional?REFERRAL_PROMOTION_LABEL:status.label,
      };
    });
    const legacy=await loadH2AutoLegacyReferrals(phone);
    const merged=mergeH2AutoReferralItems(commissions,legacy);
    const manual=await getCommissionManualOverrides(authDb,merged.map(row=>row.registrationId));
    const allCommissions=merged.map(item=>{
+     if(item.promotionNoCommission)return {...item,commissionValue:0,commissionState:"nao_elegivel",commissionLabel:REFERRAL_PROMOTION_LABEL};
      const adjusted=applyManualCommissionOverride({
        commissionValue:item.commissionValue,
        paymentState:item.commissionState,
@@ -261,7 +265,7 @@ export function registerH2AutoOrdersRoutes(app:Express){
    const available=allCommissions.filter(row=>row.commissionState==="liberada").reduce((acc,row)=>acc+row.commissionValue,0);
    const pending=allCommissions.filter(row=>row.commissionState==="aguardando_agendamento").reduce((acc,row)=>acc+row.commissionValue,0);
    const paid=allCommissions.filter(row=>row.commissionState==="paga").reduce((acc,row)=>acc+row.commissionValue,0);
-   return reply(res,200,{state:"verified",totalReferrals:allCommissions.length,amountTotal:total,amountPending:pending,amountReady:available,amountPaid:paid,commissions:allCommissions});
+   return reply(res,200,{state:"verified",totalReferrals:allCommissions.filter(row=>!row.promotionNoCommission).length,promotionalCount:allCommissions.filter(row=>row.promotionNoCommission).length,amountTotal:total,amountPending:pending,amountReady:available,amountPaid:paid,commissions:allCommissions});
   }catch{return reply(res,503,{error:"temporarily_unavailable"});}
  });
  app.post("/api/h2-auto/orders/logout",async(req,res)=>{
