@@ -25,41 +25,26 @@ export function h2AutoPhoneFailureMessage(
 
   if (remaining === 0) {
     return [
-      "🚨 *H2 COLOMBIANO* 🇨🇴",
       "⛔ *ATENDIMENTO SUSPENSO*",
       "",
-      "❌ *MOTIVO:*",
       ...cause,
       "",
-      "🔴 *3 DE 3 TENTATIVAS UTILIZADAS*",
-      "",
-      "🚫 Por segurança, o robô",
-      "não responderá nesta conversa",
+      "🔢 *3 DE 3 TENTATIVAS UTILIZADAS*",
+      "🔒 Por segurança, aguarde",
       "até a liberação pelo ADM.",
-      "",
-      "👨‍💻 Aguarde o atendimento",
-      "de nossa equipe.",
-      "",
-      "🛡️ *EQUIPE H2 COLOMBIANO* 🇨🇴",
+      "👨‍💻 Nossa equipe poderá ajudar.",
     ].join("\n");
   }
   return [
-    "⚠️ *H2 COLOMBIANO* 🇨🇴",
-    "🚨 *" + title + "*",
+    "⚠️ *" + title + "*",
     "",
-    "❌ *ERRO IDENTIFICADO:*",
     ...cause,
     "",
     "🔢 *TENTATIVA " + used + " DE 3*",
     (remaining === 1 ? "🟠" : "🟡") + (remaining === 1 ? " *RESTA " : " *RESTAM ") + remaining +
       (remaining === 1 ? " TENTATIVA*" : " TENTATIVAS*"),
     "",
-    "📱 Confira o número informado",
-    "antes de tentar novamente.",
-    "",
     "🔙 *0* para voltar.",
     "🏠 *MENU* para início.",
-    "",
-    "🛡️ *EQUIPE H2 COLOMBIANO* 🇨🇴",
   ].join("\n");
 }
