@@ -30,9 +30,24 @@ export function CustomerOtpLogin({ title = "Acesso H2 Colombiano", initialPhone 
   const [step, setStep] = useState<"phone" | "code">("phone");
   const [code, setCode] = useState("");
   const [busy, setBusy] = useState(false);
+  const checkCustomer = trpc.customers.checkByPhoneMutation.useMutation();
   const requestCode = trpc.customerPassword.requestCustomerCode.useMutation();
   const verifyCode = trpc.customerPassword.verifyCustomerCode.useMutation();
   const cleanPhone = normalizeOtpPhone(phone);
+
+  function startRegistration() {
+    // Reuse the existing complete H2 customer registration, not /pre-cadastro.
+    // The phone is only a draft field, never an authorization credential.
+    if (cleanPhone.length === 11) {
+      sessionStorage.setItem("h2_new_registration_phone", cleanPhone);
+      sessionStorage.setItem("reg_phone_temp", cleanPhone);
+    } else {
+      sessionStorage.removeItem("h2_new_registration_phone");
+      sessionStorage.removeItem("reg_phone_temp");
+    }
+    if (onRegister) onRegister();
+    else window.location.assign("/cadastro");
+  }
 
   async function send(event: React.FormEvent) {
     event.preventDefault();
@@ -42,6 +57,27 @@ export function CustomerOtpLogin({ title = "Acesso H2 Colombiano", initialPhone 
     }
     setBusy(true);
     try {
+      // Check before requesting an e-mail code; the current OTP endpoint
+      // intentionally returns a generic response for unknown numbers.
+      const account = await checkCustomer.mutateAsync({ phone: cleanPhone });
+      if (account.blocked || account.customerBlocked) {
+        toast.error(account.customerBlocked
+          ? "Este cadastro está bloqueado. Entre em contato com o atendimento."
+          : "Consulta temporariamente bloqueada. Entre em contato com o atendimento.");
+        return;
+      }
+      if (account.exists === false) {
+        startRegistration();
+        return;
+      }
+      if (account.exists !== true) {
+        toast.error("Não foi possível consultar este número. Tente novamente.");
+        return;
+      }
+      if (!account.customer?.email) {
+        toast.error("Seu cadastro está sem e-mail. Entre em contato com o atendimento.");
+        return;
+      }
       const result = await requestCode.mutateAsync({ phone: cleanPhone });
       setCode("");
       setStep("code");
@@ -127,7 +163,7 @@ export function CustomerOtpLogin({ title = "Acesso H2 Colombiano", initialPhone 
               {busy ? "Solicitando..." : "RECEBER CÓDIGO NO E-MAIL"}
             </button>
             {onRegister && (
-              <button type="button" className="w-full py-2 text-sm text-cyan-300" onClick={onRegister}>
+              <button type="button" className="w-full py-2 text-sm text-cyan-300" onClick={startRegistration}>
                 Ainda não tenho cadastro
               </button>
             )}
