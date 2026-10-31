@@ -103,6 +103,26 @@ export const H2_AUTO_SHORT_TREE: Record<string, string> = {
  * Para regras livres, remover apenas frases redundantes e excesso visual.
  * Não cortar textos desconhecidos: podem conter valores, instruções ou links.
  */
+function wrapH2AutoMobileLine(line: string): string {
+  const trimmed = line.trim();
+  if (trimmed.length <= 40 || /https?:\/\//.test(trimmed) || /\{\{?[^}]+\}\}?/.test(trimmed))
+    return line;
+  const words = trimmed.split(/\s+/);
+  const parts: string[] = [];
+  let current = "";
+  for (const word of words) {
+    if (!current) { current = word; continue; }
+    if (current.length + word.length + 1 <= 40) {
+      current += " " + word;
+    } else {
+      parts.push(current);
+      current = word;
+    }
+  }
+  if (current) parts.push(current);
+  return parts.join("\n");
+}
+
 export function compactH2AutoFreeform(input: string): string {
   if (!input.trim()) return input;
   let value = input.replace(/\r\n/g, "\n").trim();
@@ -122,8 +142,8 @@ export function compactH2AutoFreeform(input: string): string {
     .replace(/\n[ \t]*\n(?:[ \t]*\n)+/g, "\n\n")
     .replace(/[ \t]+$/gm, "")
     .trim();
-  // Preserva todas as URLs, variáveis, telefones, opções e informações específicas.
-  return value;
+  // Somente quebra visual de linhas extensas. Não corta frases, URLs ou valores.
+  return value.split("\n").map(wrapH2AutoMobileLine).join("\n");
 }
 
 export type H2AutoCopyConfig = {
