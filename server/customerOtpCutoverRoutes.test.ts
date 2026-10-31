@@ -23,7 +23,9 @@ describe("OTP-only shared customer route cutover",()=>{
   });
   it("uses OTP for Cadastro and never shows its legacy form in passwordless mode",()=>{
     const page=file("client/src/pages/AtualizarCadastro.tsx");
-    expect(page).toContain("otpMode.data?.passwordless && !token");
+    expect(page).toContain('if (otpMode.data?.passwordless) {');
+    expect(page).toContain('if (!token && step!=="done" && step!=="already_done") {');
+    expect(page).toContain('if (token && step!=="profile" && step!=="done" && step!=="already_done") {');
     expect(page).toContain("<CustomerOtpLogin");
     expect(page).toContain('acceptToken(value.token)');
   });
@@ -53,7 +55,9 @@ describe("OTP-only shared customer route cutover",()=>{
       expect(start).toBeGreaterThan(0);
       expect(router.slice(start,start+1100)).toContain("requireLegacyPasswordMode()");
     }
-    expect(router).toContain('getMode: publicProcedure.query(async () => {\\n    requireLegacyPasswordMode();'.replace(/\\n/g,"\\n"));
+    const getModeAt=router.indexOf("  getMode: publicProcedure.query(async () => {");
+    expect(getModeAt).toBeGreaterThan(0);
+    expect(router.slice(getModeAt,getModeAt+180)).toMatch(/getMode:\s*publicProcedure\.query\(async \(\) => \{\s*requireLegacyPasswordMode\(\);/);
     const spreadsheet=file("server/routers/spreadsheet.ts");
     for (const method of ["checkPhone","getPasswordMode"]) {
       const start=spreadsheet.indexOf("  "+method+": ");

@@ -1,9 +1,7 @@
 name: Customer OTP Migration Checks
 
+# PR checks run once per change; no redundant push + pull_request job.
 on:
-  push:
-    branches:
-      - audit/cliente-otp-sem-senha-20261030
   pull_request:
     branches:
       - recovery/organizar-salvos-2026-08-24
