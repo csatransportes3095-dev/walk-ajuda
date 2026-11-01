@@ -745,6 +745,51 @@ export async function listOptionQuestions(optionId: number): Promise<ProductQues
   return await db.select().from(productQuestions).where(eq(productQuestions.optionId, optionId)).orderBy(asc(productQuestions.sortOrder));
 }
 
+/** Atomic replacement of copied questions. Every copied question receives a new id. */
+export async function copyOptionQuestionsIndependently(fromOptionId: number, toOptionId: number, toProductId: number) {
+  const db = await getDb();
+  if (!db) throw new Error('Banco indisponível');
+  if (fromOptionId === toOptionId) throw new Error('Origem e destino devem ser diferentes');
+  return db.transaction(async tx => {
+    const [target] = await tx.select().from(productOptions).where(eq(productOptions.id, toOptionId)).limit(1);
+    const [sourceOption] = await tx.select().from(productOptions).where(eq(productOptions.id, fromOptionId)).limit(1);
+    if (!target || !sourceOption || target.productId !== toProductId)
+      throw new Error('Produto ou opção de origem/destino inválidos');
+    const source = await tx.select().from(productQuestions)
+      .where(eq(productQuestions.optionId, fromOptionId))
+      .orderBy(asc(productQuestions.sortOrder), asc(productQuestions.id));
+    if (!source.length) throw new Error('A opção de origem não possui perguntas');
+    if (source.some(q => q.productId !== sourceOption.productId))
+      throw new Error('Pergunta de origem vinculada ao produto errado');
+    const byId = new Set(source.map(q => q.id));
+    if (source.some(q => q.parentQuestionId && !byId.has(q.parentQuestionId)))
+      throw new Error('Árvore de origem contém vínculos externos');
+    const oldDest = await tx.select().from(productQuestions).where(eq(productQuestions.optionId, toOptionId));
+    const pending = [...source];
+    const idMap: Record<number, number> = {};
+    while (pending.length) {
+      const idx = pending.findIndex(q => !q.parentQuestionId || idMap[q.parentQuestionId]);
+      if (idx < 0) throw new Error('Árvore de perguntas contém ciclo');
+      const [q] = pending.splice(idx, 1);
+      const result = await tx.insert(productQuestions).values({
+        productId: toProductId, optionId: toOptionId,
+        question: q.question, fieldType: q.fieldType, options: q.options,
+        isRequired: q.isRequired, sortOrder: q.sortOrder, helpText: q.helpText,
+        audioMinDurationSeconds: q.audioMinDurationSeconds,
+        audioMaxDurationSeconds: q.audioMaxDurationSeconds,
+        allowAudioRerecord: q.allowAudioRerecord, allowAudioFileUpload: q.allowAudioFileUpload,
+        questionPresentation: 'text', questionAudioUrl: null, questionAudioStorageKey: null,
+        showQuestionTextWithAudio: q.showQuestionTextWithAudio,
+        parentQuestionId: q.parentQuestionId ? idMap[q.parentQuestionId] : null,
+        triggerOption: q.triggerOption,
+      });
+      idMap[q.id] = Number(result[0].insertId);
+    }
+    if (oldDest.length) await tx.delete(productQuestions).where(inArray(productQuestions.id, oldDest.map(q => q.id)));
+    return { count: source.length, sourceQuestions: source, questionIdMap: idMap };
+  });
+}
+
 export type ProductQuestionFieldType = 'text' | 'select' | 'textarea' | 'audio';
 export type ProductQuestionAudioSettings = {
   helpText?: string | null;
