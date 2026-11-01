@@ -39,7 +39,6 @@ import { ThemeProvider } from "./contexts/ThemeContext";
 import Home from "./pages/Home";
 import HomeRouteCards from "./pages/HomeRouteCards";
 import AdminCodes from "./pages/AdminCodes";
-import AdminAndroidLab from "./pages/AdminAndroidLab";
 import AdminSiteSecurity from "./pages/AdminSiteSecurity";
 import SiteAccess from "./pages/SiteAccess";
 import AdminGastosPage from "./pages/AdminGastosPage";
@@ -241,9 +240,6 @@ function Router() {
       <Route path={"/admin/site-security"}>
         <AdminGuard><AdminSiteSecurity /></AdminGuard>
       </Route>
-      <Route path={"/admin/android-lab"}>
-        <AdminGuard><AdminAndroidLab /></AdminGuard>
-      </Route>
       <Route path={"/admin/codes"}>
         <AdminGuard><AdminCodes /></AdminGuard>
       </Route>
@@ -443,8 +439,7 @@ function AppContent() {
   const [location] = useLocation();
   const isGeradorChassiRoute = isChassisAdminPath(location);
   const isVehicleUsageAdminRoute = location.toLowerCase() === "/adm/placa";
-  const isAndroidLabAdminRoute = location.toLowerCase() === "/adm/android-lab";
-  const isAdminRoute = location.startsWith("/admin") || isGeradorChassiRoute || isVehicleUsageAdminRoute || isAndroidLabAdminRoute;
+  const isAdminRoute = location.startsWith("/admin") || isGeradorChassiRoute || isVehicleUsageAdminRoute;
   const isH2AdsRoute = isH2AdsPath(location);
   const isSimilarityRoute = location.toLowerCase() === "/similaridade";
   const isTrackingRoute = location === "/acompanhar";
