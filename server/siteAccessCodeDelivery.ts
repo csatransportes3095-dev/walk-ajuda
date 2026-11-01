@@ -8,7 +8,7 @@ function safeFailure(error: unknown): string {
   return typeof value==='string' && /^[A-Z0-9_]{2,48}$/.test(value)?value:'DELIVERY_FAILED';
 }
 /** Generation is internal. Delivery still requires a mail server; SMTP is independent of Resend quota. */
-export async function deliverOwnSiteCode(email: string, code: string, purpose: 'site-access' | 'password-recovery' = 'site-access', preferResend = false): Promise<SiteCodeDelivery> {
+export async function deliverOwnSiteCode(email: string, code: string, purpose: 'site-access' | 'password-recovery' = 'site-access'): Promise<SiteCodeDelivery> {
   if (!validSiteCode(code)) throw new Error('INVALID_GENERATED_CODE');
   const from=process.env.SMTP_FROM || process.env.SMTP_USER || 'h2@h2colombiano.com';
   const subject=purpose === 'password-recovery' ? 'H2 Colombiano - Recuperação de senha' : 'H2 Colombiano - Código de acesso';
@@ -26,27 +26,6 @@ export async function deliverOwnSiteCode(email: string, code: string, purpose: '
     +'<p>Digite ou cole os 6 números. Uso único, válido por 10 minutos.</p>'
     +'<p>Após a confirmação, o acesso vale por até 24 horas, ou até você sair.</p>'
     +'<p>Não compartilhe. Se não solicitou o acesso, ignore esta mensagem.</p></div>';
-  // Reenvios de acesso podem tentar o provedor alternativo primeiro.
-  // A geração e a validação do código permanecem no servidor H2.
-  if (preferResend && process.env.RESEND_API_KEY) {
-    try {
-      const response = await fetch('https://api.resend.com/emails', {
-        method: 'POST', signal: AbortSignal.timeout(8000),
-        headers: { Authorization: `Bearer ${process.env.RESEND_API_KEY}`, 'Content-Type': 'application/json' },
-        body: JSON.stringify({ from, to: [email], subject, text, html }),
-      });
-      if (response.ok) {
-        const result = await response.json() as { id?: unknown };
-        if (typeof result.id === 'string' && result.id) {
-          console.info('[SiteCode] channel=resend state=accepted');
-          return { channel: 'resend', messageId: result.id.slice(0, 255) };
-        }
-      }
-      console.warn('[SiteCode] resend alternative unavailable');
-    } catch {
-      console.warn('[SiteCode] resend alternative failed');
-    }
-  }
   const pass=process.env.SMTP_PASS || process.env.ZOHO_EMAIL_PASSWORD || '';
   if (pass) {
     const port=Number(process.env.SMTP_PORT || '465');
