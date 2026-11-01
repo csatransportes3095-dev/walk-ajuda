@@ -424,7 +424,7 @@ export default function Home() {
   const [automaticScheduleLinks, setAutomaticScheduleLinks] = useState<string[]>([]);
   const [postOrderScheduleDecision, setPostOrderScheduleDecision] = useState<PostOrderScheduleDecision>('completed');
   const [submittedOrderData, setSubmittedOrderData] = useState<{
-    cartItems: Array<{ service: string; nameOption: string; price: string }>;
+    cartItems: Array<{ service: string; nameOption: string; price: string; answers?: Array<{ question: string; answer: string }> }>;
     answers: Array<{ question: string; answer: string }>;
     docs: Array<{ label: string; url: string }>;
     totalValue: string;
@@ -1784,6 +1784,13 @@ export default function Home() {
       allQs.filter(q => !q.parentQuestionId).sort((a, b) => a.sortOrder - b.sortOrder)
         .forEach(root => addWithDepth(root, 0));
       const answersArray = orderedAnswers;
+      // Answers are tied to the option being completed, never to unrelated cart items.
+      const answersForCartItem = (item: typeof cartItems[number]) => {
+        if (!item.option || !selectedOption || item.option.id !== selectedOption.id ||
+            item.product.id !== selectedProduct?.id) return [];
+        const validIds = new Set((item.option.questions || []).map(q => q.id));
+        return answersArray.filter(a => validIds.has(a.questionId));
+      };
       const optionHasAudioQuestions = allQs.some(q => q.fieldType === 'audio');
       const audioDraftIdsForSubmit = Object.values(questionAudioAnswers).map(audio => audio.id);
 
@@ -1855,7 +1862,7 @@ export default function Home() {
               paymentProof: undefined,
               paymentProofUrl: i === 0 ? paymentProofUploadedUrl : undefined,
               paymentProofMime: i === 0 ? getProofMime(paymentProof) : undefined,
-              answers: answersArray.length > 0 ? JSON.stringify(answersArray) : undefined,
+              answers: answersForCartItem(item).length > 0 ? JSON.stringify(answersForCartItem(item)) : undefined,
               productId: item.product?.id ?? selectedProduct?.id,
               optionId: item.option?.id ?? selectedOption?.id,
               autoScheduleOptionId: item.option?.id || undefined,
@@ -1903,9 +1910,10 @@ export default function Home() {
           cartItems: cartItems.map(item => ({
             service: item.product.name,
             nameOption: item.option ? `${item.option.label}${item.priceModel ? ` — ${item.priceModel.label}` : ''}` : 'N/A',
-            price: getPriceModelServiceValue(item.priceModel) || (item.tier ? globalPromotionPrice(item.tier, globalPromotion) : item.option ? globalPromotionPrice(item.option, globalPromotion) : '')
+            price: getPriceModelServiceValue(item.priceModel) || (item.tier ? globalPromotionPrice(item.tier, globalPromotion) : item.option ? globalPromotionPrice(item.option, globalPromotion) : ''),
+            answers: answersForCartItem(item),
           })),
-          answers: answersArray,
+          answers: [],
           docs: dynamicDocsArray.filter(d => d.url).map(d => ({ label: d.label, url: d.url! })),
           totalValue: `R$ ${cartTotalPago.toFixed(2).replace('.', ',')}`,
           referrerName: referrerName.trim(),
@@ -2328,6 +2336,10 @@ export default function Home() {
         msg += `\nServico: ${item.service}`;
         msg += `\nOpcao: ${item.nameOption}`;
         if (item.price) msg += `\nValor: ${item.price}`;
+        if (item.answers?.length) {
+          msg += `\nRESPOSTAS DESTE PEDIDO:`;
+          item.answers.forEach(a => { msg += `\n${a.question}: ${a.answer}`; });
+        }
       });
       if (od?.totalValue) msg += `\n\nValor Total: ${od.totalValue}`;
     } else if (items.length === 1) {
