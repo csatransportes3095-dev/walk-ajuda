@@ -1,3 +1,4 @@
+import { encodeWhatsappMessage } from "@shared/whatsappMessageText";
 import { useState } from "react";
 import { trpc } from "@/lib/trpc";
 import { toast } from "sonner";
@@ -34,6 +35,9 @@ export function CustomerOtpLogin({ title = "Acesso H2 Colombiano", initialPhone 
   const requestCode = trpc.customerPassword.requestCustomerCode.useMutation();
   const verifyCode = trpc.customerPassword.verifyCustomerCode.useMutation();
   const cleanPhone = normalizeOtpPhone(phone);
+  const { data: supportSettings } = trpc.settings.getAll.useQuery();
+  const supportNumber = String(supportSettings?.whatsapp_number || "5511978307371").replace(/\D/g, "");
+  const supportHref = `https://wa.me/${supportNumber}?text=${encodeWhatsappMessage("Olá! Sou cliente do H2 Colombiano. Estou tentando acessar o site, mas não recebi o código de confirmação por e-mail. Preciso de ajuda para continuar meu pedido.")}`;
 
   function startRegistration() {
     // Reuse the existing complete H2 customer registration, not /pre-cadastro.
@@ -185,6 +189,9 @@ export function CustomerOtpLogin({ title = "Acesso H2 Colombiano", initialPhone 
               className="flex w-full items-center justify-center gap-2 rounded-xl bg-emerald-500 p-4 font-black text-slate-950 disabled:opacity-50">
               <CheckCircle2 className="h-5 w-5" /> {busy ? "Validando..." : "CONFIRMAR E ACESSAR"}
             </button>
+            <a href={supportHref} target="_blank" rel="noopener noreferrer" className="flex min-h-12 w-full items-center justify-center gap-2 rounded-xl border border-emerald-400/50 bg-emerald-500/15 px-4 py-3 text-center text-sm font-black text-emerald-200 hover:bg-emerald-500/25">
+              💬 NÃO RECEBI O CÓDIGO — PEDIR AJUDA NO WHATSAPP
+            </a>
             <button type="button" className="w-full py-2 text-sm text-cyan-300" disabled={busy}
               onClick={() => { setStep("phone"); setCode(""); }}>
               Alterar telefone / solicitar outro código
