@@ -1785,7 +1785,7 @@ export default function Home() {
         .forEach(root => addWithDepth(root, 0));
       const answersArray = orderedAnswers;
       // Answers are tied to the option being completed, never to unrelated cart items.
-      const answersForCartItem = (item: typeof cartItems[number]) => {
+      const answersForCartItem = (item: NonNullable<typeof cartItems>[number]) => {
         if (!item.option || !selectedOption || item.option.id !== selectedOption.id ||
             item.product.id !== selectedProduct?.id) return [];
         const validIds = new Set((item.option.questions || []).map(q => q.id));
