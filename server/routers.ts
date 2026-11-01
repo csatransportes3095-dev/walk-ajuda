@@ -1227,72 +1227,23 @@ export const appRouter = router({
 
     // Copia todas as perguntas de uma opção de origem para uma opção de destino (substituindo as existentes)
     copyFromOption: adminProcedure
-      .input(z.object({ fromOptionId: z.number(), toOptionId: z.number(), toProductId: z.number() }))
+      .input(z.object({ fromOptionId: z.number().int().positive(), toOptionId: z.number().int().positive(), toProductId: z.number().int().positive() }))
       .mutation(async ({ input }) => {
-        const { fromOptionId, toOptionId, toProductId } = input;
-        // Busca todas as perguntas da opção de origem
-        const sourceQuestions = await listOptionQuestions(fromOptionId);
-        // Deleta todas as perguntas existentes na opção de destino
-        const existingQuestions = await listOptionQuestions(toOptionId);
-        await Promise.all(existingQuestions.map(q => deleteProductQuestion(q.id)));
-        // Mapa de IDs antigos para novos (para reconstruir parentQuestionId)
-        const idMap: Record<number, number> = {};
-        // Primeiro, insere perguntas raiz (sem parentQuestionId)
-        const rootQuestions = sourceQuestions.filter(q => !q.parentQuestionId);
-        for (const q of rootQuestions) {
-          const created = await createProductQuestion({
-            productId: toProductId,
-            optionId: toOptionId,
-            question: q.question,
-            fieldType: q.fieldType,
-            options: q.options ?? undefined,
-            isRequired: q.isRequired === 1,
-            sortOrder: q.sortOrder,
-            parentQuestionId: null,
-            triggerOption: null,
-            helpText: q.helpText,
-            audioMinDurationSeconds: q.audioMinDurationSeconds,
-            audioMaxDurationSeconds: q.audioMaxDurationSeconds,
-            allowAudioRerecord: q.allowAudioRerecord,
-            allowAudioFileUpload: q.allowAudioFileUpload,
-            questionPresentation: 'text',
-            questionAudioUrl: null,
-            questionAudioStorageKey: null,
-            showQuestionTextWithAudio: q.showQuestionTextWithAudio,
-          });
-          const promptAudio = await copyQuestionPromptAudio(q, created.id);
-          if (promptAudio.questionPresentation === 'audio') await updateProductQuestion(created.id, promptAudio);
-          idMap[q.id] = created.id;
+        // Atomic database replacement; no destination question is deleted on a failed copy.
+        const { copyOptionQuestionsIndependently } = await import('./db');
+        const result = await copyOptionQuestionsIndependently(input.fromOptionId, input.toOptionId, input.toProductId);
+        // Audio assets are copied to fresh keys; never share the source question audio object.
+        for (const original of result.sourceQuestions) {
+          const targetId = result.questionIdMap[original.id];
+          if (!targetId || original.questionPresentation !== 'audio') continue;
+          try {
+            const audio = await copyQuestionPromptAudio(original, targetId);
+            if (audio.questionPresentation === 'audio') await updateProductQuestion(targetId, audio);
+          } catch (error) {
+            console.error('[ProductQuestions] Áudio não copiado, pergunta permanece independente', original.id, error);
+          }
         }
-        // Depois, insere sub-perguntas com parentQuestionId mapeado
-        const subQuestions = sourceQuestions.filter(q => q.parentQuestionId);
-        for (const q of subQuestions) {
-          const newParentId = q.parentQuestionId ? (idMap[q.parentQuestionId] ?? null) : null;
-          const created = await createProductQuestion({
-            productId: toProductId,
-            optionId: toOptionId,
-            question: q.question,
-            fieldType: q.fieldType,
-            options: q.options ?? undefined,
-            isRequired: q.isRequired === 1,
-            sortOrder: q.sortOrder,
-            parentQuestionId: newParentId,
-            triggerOption: q.triggerOption ?? null,
-            helpText: q.helpText,
-            audioMinDurationSeconds: q.audioMinDurationSeconds,
-            audioMaxDurationSeconds: q.audioMaxDurationSeconds,
-            allowAudioRerecord: q.allowAudioRerecord,
-            allowAudioFileUpload: q.allowAudioFileUpload,
-            questionPresentation: 'text',
-            questionAudioUrl: null,
-            questionAudioStorageKey: null,
-            showQuestionTextWithAudio: q.showQuestionTextWithAudio,
-          });
-          const promptAudio = await copyQuestionPromptAudio(q, created.id);
-          if (promptAudio.questionPresentation === 'audio') await updateProductQuestion(created.id, promptAudio);
-          idMap[q.id] = created.id;
-        }
-        return { success: true, count: sourceQuestions.length };
+        return { success: true, count: result.count };
       }),
   }),
 
