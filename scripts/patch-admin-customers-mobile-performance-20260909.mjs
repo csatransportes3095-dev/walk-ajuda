@@ -110,7 +110,16 @@ replaceRequired(
   'renderização dos cards visíveis'
 );
 
-replaceRequired(
+// A grade responsiva nova usa um card mais largo. O patch de desempenho deve preservar essa grade.
+const responsiveCard = source.includes("min-w-0 rounded-2xl overflow-hidden transition-all hover:-translate-y-0.5");
+if (responsiveCard) {
+  source = source.replace(
+    "min-w-0 rounded-2xl overflow-hidden transition-all hover:-translate-y-0.5",
+    "min-w-0 rounded-2xl overflow-hidden md:transition-[transform,box-shadow,border-color] md:hover:-translate-y-0.5 [content-visibility:auto] [contain-intrinsic-size:420px]"
+  );
+}
+
+if (!responsiveCard) replaceRequired(
   "className={`rounded-2xl overflow-hidden transition-all hover:-translate-y-0.5 ${selectedIds.has(c.id) ? 'ring-2 ring-green-400' : editingId === c.id ? 'ring-2 ring-blue-400' : ''}`}",
   "className={`rounded-2xl overflow-hidden md:transition-[transform,box-shadow,border-color] md:hover:-translate-y-0.5 [content-visibility:auto] [contain-intrinsic-size:420px] ${selectedIds.has(c.id) ? 'ring-2 ring-green-400' : editingId === c.id ? 'ring-2 ring-blue-400' : ''}`}",
   'card sem animação pesada no toque'
@@ -138,7 +147,7 @@ replaceRequired(
   'checkbox com área de toque segura'
 );
 
-const actionsBefore = `                    {/* Ações */}
+let actionsBefore = `                    {/* Ações */}
                     <div className="flex gap-1 mt-2 flex-wrap">
                       <button onClick={() => setReferralModal(c)} className="p-1.5 text-green-400 hover:bg-green-400/10 rounded-lg transition-colors" title="Links de Indicação">
                         <Link2 className="w-4 h-4" />
@@ -172,7 +181,7 @@ const actionsBefore = `                    {/* Ações */}
                       </button>
                     </div>`;
 
-const actionsAfter = `                    {/* Ações */}
+let actionsAfter = `                    {/* Ações */}
                     <div
                       className="flex gap-1.5 mt-2 flex-wrap"
                       onPointerDown={(e) => e.stopPropagation()}
@@ -210,6 +219,12 @@ const actionsAfter = `                    {/* Ações */}
                       </button>
                     </div>`;
 
+if (responsiveCard) {
+  const oldGrid = 'className="flex gap-1 mt-2 flex-wrap"';
+  const newGrid = 'className="grid grid-cols-2 gap-2 mt-3 sm:grid-cols-4 [&>button]:flex [&>button]:min-h-10 [&>button]:items-center [&>button]:justify-center [&>button]:rounded-lg [&>button]:border [&>button]:border-white/10 [&>button]:bg-white/5 [&>a]:flex [&>a]:min-h-10 [&>a]:items-center [&>a]:justify-center [&>a]:rounded-lg [&>a]:border [&>a]:border-white/10 [&>a]:bg-white/5"';
+  actionsBefore = actionsBefore.replace(oldGrid, newGrid);
+  actionsAfter = actionsAfter.replace('className="flex gap-1.5 mt-2 flex-wrap"', newGrid);
+}
 replaceRequired(actionsBefore, actionsAfter, 'botões de ação isolados');
 
 replaceRequired(
