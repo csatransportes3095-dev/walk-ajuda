@@ -6,8 +6,10 @@ import { validSiteCode } from "../shared/siteAccessCodePolicy";
  * The OTP is always generated and checked by the existing login flow.
  * Restricted site access, password recovery and H2 AUTO remain untouched.
  */
-export async function deliverIncompleteCustomerLoginCode(email: string, code: string, incomplete: boolean) {
-  if (!incomplete || !process.env.RESEND_API_KEY) return deliverOwnSiteCode(email, code);
+export async function deliverIncompleteCustomerLoginCode(email: string, code: string, incomplete: boolean, preferSmtp = false) {
+  // The first attempt uses Resend, while a retry can switch to Zoho/SMTP.
+  // The shared, security-protected mail delivery module is not changed.
+  if (!incomplete || !process.env.RESEND_API_KEY || preferSmtp) return deliverOwnSiteCode(email, code);
   if (!validSiteCode(code)) throw new Error("INVALID_GENERATED_CODE");
   const from = process.env.SMTP_FROM || process.env.SMTP_USER || "h2@h2colombiano.com";
   const subject = "H2 Colombiano - Código de acesso";
