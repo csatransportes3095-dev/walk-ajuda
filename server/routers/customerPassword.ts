@@ -33,6 +33,8 @@ import { emailBelongsToAnotherCustomer, CUSTOMER_EMAIL_IN_USE_MESSAGE } from "..
 const SESSION_DURATION_MS = 90 * 24 * 60 * 60 * 1000; // 90 dias
 const LOGIN_EMAIL_CODE_TTL_MS = 10 * 60 * 1000;
 const LOGIN_EMAIL_CODE_RESEND_MS = 60 * 1000;
+const INCOMPLETE_EMAIL_RESEND_MS = 15 * 1000;
+const INCOMPLETE_EMAIL_MAX_SENDS = 3;
 
 type LoginEmailPending = {
   phone: string;
@@ -42,6 +44,7 @@ type LoginEmailPending = {
   expiresAt: number;
   lastSentAt: number;
   attempts: number;
+  sendCount: number;
 };
 
 // Armazena o código enviado até sua validação. O comprovante posterior é assinado.
@@ -279,16 +282,22 @@ export const customerPasswordRouter = router({
       const key = loginEmailKey(cleanPhone, email);
       const current = loginEmailPending.get(key);
       const now = Date.now();
+      const incomplete = !!customer && getProfileUpdateMeta(customer).profileUpdateRequired;
+      const resendMs = incomplete ? INCOMPLETE_EMAIL_RESEND_MS : LOGIN_EMAIL_CODE_RESEND_MS;
 
       if (current && current.expiresAt > now) {
-        if (now - current.lastSentAt < LOGIN_EMAIL_CODE_RESEND_MS) {
-          const retryAfter = Math.ceil((LOGIN_EMAIL_CODE_RESEND_MS - (now - current.lastSentAt)) / 1000);
+        if (now - current.lastSentAt < resendMs) {
+          const retryAfter = Math.ceil((resendMs - (now - current.lastSentAt)) / 1000);
           return { success: false, error: "cooldown" as const, retryAfter, message: "Aguarde " + retryAfter + "s para reenviar o código." };
         }
 
+        if (incomplete && (current.sendCount ?? 1) >= INCOMPLETE_EMAIL_MAX_SENDS) {
+          return { success: false, error: "send_limit" as const, message: "Limite de reenvios atingido. Solicite um novo código após o vencimento." };
+        }
         try {
-          await deliverIncompleteCustomerLoginCode(email, current.code, !!customer && getProfileUpdateMeta(customer).profileUpdateRequired);
+          await deliverIncompleteCustomerLoginCode(email, current.code, incomplete, incomplete && (current.sendCount ?? 1) % 2 === 1);
           current.lastSentAt = now;
+          current.sendCount = (current.sendCount ?? 1) + 1;
         } catch (error) {
           console.error("[customerPassword] login email code resend failed", error instanceof Error ? error.message : String(error));
           throw new TRPCError({ code: "INTERNAL_SERVER_ERROR", message: "Não foi possível reenviar o código agora. Tente novamente." });
@@ -314,6 +323,7 @@ export const customerPasswordRouter = router({
         expiresAt: now + LOGIN_EMAIL_CODE_TTL_MS,
         lastSentAt: now,
         attempts: 0,
+        sendCount: 1,
       });
 
       try {
