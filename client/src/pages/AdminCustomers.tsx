@@ -1260,17 +1260,17 @@ export default function AdminCustomers() {
         </div>
       )}
 
-      <div className="w-full max-w-none px-4 sm:px-6 lg:px-8 xl:px-10 2xl:px-12 py-4 space-y-4">
+      <div className="w-full max-w-none px-3 sm:px-6 lg:px-8 xl:px-10 2xl:px-12 py-5 space-y-5">
         {/* Busca + Ordenação */}
-        <div className="flex gap-2">
-        <div className="relative flex-1">
+        <div className="grid grid-cols-1 md:grid-cols-[minmax(0,1fr)_220px] gap-3 rounded-2xl border border-cyan-400/20 bg-slate-950/60 p-3 md:p-4 shadow-lg">
+        <div className="relative min-w-0">
           <Search className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-muted-foreground" />
           <input
             type="text"
             value={searchTerm}
             onChange={(e) => setSearchTerm(e.target.value)}
             placeholder="Buscar por nome, telefone, email, cidade, indicação, #nº pedido, *nº cadastro..."
-            className="w-full pl-9 pr-9 py-2.5 bg-card border border-border rounded-xl text-sm text-foreground placeholder:text-muted-foreground focus:outline-none focus:ring-2 focus:ring-primary/50"
+            className="w-full pl-10 pr-9 py-3.5 bg-slate-900/80 border border-cyan-400/20 rounded-xl text-sm text-foreground placeholder:text-muted-foreground focus:outline-none focus:ring-2 focus:ring-cyan-400/50"
           />
           {searchTerm && (
             <button onClick={() => setSearchTerm("")} className="absolute right-3 top-1/2 -translate-y-1/2 text-muted-foreground hover:text-foreground">
@@ -1281,7 +1281,7 @@ export default function AdminCustomers() {
         <select
           value={sortOrder}
           onChange={e => setSortOrder(e.target.value as "newest" | "oldest" | "name")}
-          className="px-3 py-2.5 bg-card border border-border rounded-xl text-sm text-foreground focus:outline-none focus:ring-2 focus:ring-primary/50 flex-shrink-0"
+          className="w-full min-w-0 px-3 py-3.5 bg-slate-900/80 border border-cyan-400/20 rounded-xl text-sm text-foreground focus:outline-none focus:ring-2 focus:ring-cyan-400/50"
         >
           <option value="newest">Mais recentes</option>
           <option value="oldest">Mais antigos</option>
@@ -1291,7 +1291,7 @@ export default function AdminCustomers() {
 
         {/* Barra de Seleção em Massa */}
         {(customers.some(c => c.hasOrder) || customers.some(c => !c.hasOrder) || customers.some(c => c.blocked === 1) || selectedIds.size > 0) && (
-        <div className="flex flex-wrap items-center gap-2">
+        <div className="grid grid-cols-2 lg:grid-cols-4 2xl:grid-cols-6 gap-2 rounded-2xl border border-cyan-400/20 bg-slate-950/50 p-3 md:p-4 [&>button]:min-h-[48px] [&>button]:w-full [&>button]:justify-center [&>button]:text-center [&>button]:whitespace-normal [&>button]:leading-tight [&>button]:px-2 [&>button]:py-3 [&>span]:min-w-0">
           {!showOnlyOrders && !showOnlyNoOrders && customers.some(c => c.hasOrder) && (
           <button
             onClick={selectAllWithOrders}
@@ -1383,9 +1383,9 @@ export default function AdminCustomers() {
         )}
 
         {/* Grid de Cards */}
-        <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4">
+        <div className="grid grid-cols-1 md:grid-cols-2 2xl:grid-cols-3 gap-4 lg:gap-6 items-start">
           {filtered.map((c) => (
-            <div key={c.id} className={`rounded-2xl overflow-hidden transition-all hover:-translate-y-0.5 ${selectedIds.has(c.id) ? 'ring-2 ring-green-400' : editingId === c.id ? 'ring-2 ring-blue-400' : ''}`} style={{
+            <div key={c.id} className={`min-w-0 rounded-2xl overflow-hidden transition-all hover:-translate-y-0.5 ${selectedIds.has(c.id) ? 'ring-2 ring-green-400' : editingId === c.id ? 'ring-2 ring-blue-400' : ''}`} style={{
                 background: c.blocked === 1
                   ? 'linear-gradient(135deg, #450a0a 0%, #1c0606 100%)'
                   : c.vipActive
@@ -1429,7 +1429,7 @@ export default function AdminCustomers() {
                 </div>
               )}
               {/* Topo: foto + info + ações */}
-              <div className="p-4 pb-3">
+              <div className="p-4 pb-4 lg:p-5 lg:pb-5">
                 {/* Linha 1: checkbox + foto + info + ações */}
                 <div className="flex items-start gap-2">
                   {/* Checkbox */}
@@ -1565,7 +1565,7 @@ export default function AdminCustomers() {
                       </div>
                     ) : null}
                     {/* Ações */}
-                    <div className="flex gap-1 mt-2 flex-wrap">
+                    <div className="grid grid-cols-2 gap-2 mt-3 sm:grid-cols-4 [&>button]:flex [&>button]:min-h-10 [&>button]:items-center [&>button]:justify-center [&>button]:rounded-lg [&>button]:border [&>button]:border-white/10 [&>button]:bg-white/5 [&>a]:flex [&>a]:min-h-10 [&>a]:items-center [&>a]:justify-center [&>a]:rounded-lg [&>a]:border [&>a]:border-white/10 [&>a]:bg-white/5">
                       <button onClick={() => setReferralModal(c)} className="p-1.5 text-green-400 hover:bg-green-400/10 rounded-lg transition-colors" title="Links de Indicação">
                         <Link2 className="w-4 h-4" />
                       </button>
