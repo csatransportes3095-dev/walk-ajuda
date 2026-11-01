@@ -1,3 +1,4 @@
+import { deliverIncompleteCustomerLoginCode } from "../incompleteCustomerLoginDelivery";
 // Router de senha do sistema de cadastro (h2colombiano.com/admin/customers)
 // Mesma lógica do Gestor de Gastos (spreadsheet), adaptada para a tabela customers
 
@@ -286,7 +287,7 @@ export const customerPasswordRouter = router({
         }
 
         try {
-          await deliverOwnSiteCode(email, current.code);
+          await deliverIncompleteCustomerLoginCode(email, current.code, !!customer && getProfileUpdateMeta(customer).profileUpdateRequired);
           current.lastSentAt = now;
         } catch (error) {
           console.error("[customerPassword] login email code resend failed", error instanceof Error ? error.message : String(error));
@@ -316,7 +317,7 @@ export const customerPasswordRouter = router({
       });
 
       try {
-        await deliverOwnSiteCode(email, code);
+        await deliverIncompleteCustomerLoginCode(email, code, !!customer && getProfileUpdateMeta(customer).profileUpdateRequired);
       } catch (error) {
         loginEmailPending.delete(key);
         console.error("[customerPassword] login email code delivery failed", error instanceof Error ? error.message : String(error));
