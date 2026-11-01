@@ -39,6 +39,7 @@ import { ThemeProvider } from "./contexts/ThemeContext";
 import Home from "./pages/Home";
 import HomeRouteCards from "./pages/HomeRouteCards";
 import AdminCodes from "./pages/AdminCodes";
+import AdminAndroidLab from "./pages/AdminAndroidLab";
 import AdminSiteSecurity from "./pages/AdminSiteSecurity";
 import SiteAccess from "./pages/SiteAccess";
 import AdminGastosPage from "./pages/AdminGastosPage";
@@ -239,6 +240,9 @@ function Router() {
       </Route>
       <Route path={"/admin/site-security"}>
         <AdminGuard><AdminSiteSecurity /></AdminGuard>
+      </Route>
+      <Route path={"/adm/android-lab"}>
+        <AdminGuard><AdminAndroidLab /></AdminGuard>
       </Route>
       <Route path={"/admin/codes"}>
         <AdminGuard><AdminCodes /></AdminGuard>
