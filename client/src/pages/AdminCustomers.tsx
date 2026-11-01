@@ -567,6 +567,7 @@ export default function AdminCustomers() {
   });
   const [deleteConfirmModal, setDeleteConfirmModal] = useState<{ id: number; name: string } | null>(null);
   const [deleteWithOrdersLoading, setDeleteWithOrdersLoading] = useState(false);
+  const [deletingWithoutCpf, setDeletingWithoutCpf] = useState(false);
 
   const deleteMut = trpc.customers.delete.useMutation({
     onSuccess: () => { customersQuery.refetch(); toast.success("Cliente movido para a lixeira!"); setEditingId(null); setDeleteConfirmModal(null); },
@@ -1335,6 +1336,52 @@ export default function AdminCustomers() {
             <ListChecks className="w-3.5 h-3.5" />
             {showOnlyWithoutCpf ? `Mostrando sem CPF (${filtered.length})` : `Sem CPF (${customers.filter(c => !String((c as any).cpf || '').replace(/\D/g, '')).length})`}
           </button>
+          {showOnlyWithoutCpf && (
+            <button
+              type="button"
+              onClick={() => setSelectedIds(new Set(filtered.filter(c => !String((c as any).cpf || '').replace(/\D/g, '')).map(c => c.id)))}
+              className="flex items-center gap-1.5 rounded-lg border border-cyan-400/40 bg-cyan-500/15 px-3 py-2 text-xs font-bold text-cyan-200"
+            >
+              <ListChecks className="w-3.5 h-3.5" /> Selecionar todos sem CPF ({filtered.length})
+            </button>
+          )}
+          {showOnlyWithoutCpf && selectedIds.size > 0 && (
+            <button
+              type="button"
+              disabled={deletingWithoutCpf}
+              onClick={async () => {
+                const chosen = customers.filter(c => selectedIds.has(c.id) && !String((c as any).cpf || '').replace(/\D/g, ''));
+                const protectedWithOrders = chosen.filter(c => c.hasOrder);
+                const eligible = chosen.filter(c => !c.hasOrder);
+                if (!eligible.length) {
+                  toast.error('Nenhum cadastro sem pedidos disponível para exclusão. Pedidos existentes estão protegidos.');
+                  return;
+                }
+                if (!window.confirm(`Mover ${eligible.length} cadastro(s) sem CPF e sem pedidos para a lixeira? ${protectedWithOrders.length} cadastro(s) com pedidos serão preservados.`)) return;
+                setDeletingWithoutCpf(true);
+                let removed = 0;
+                try {
+                  for (const customer of eligible) {
+                    try {
+                      await deleteMut.mutateAsync({ id: customer.id });
+                      removed++;
+                    } catch {
+                      // Guardrail: never escalate to deleteWithOrders in bulk.
+                    }
+                  }
+                  await customersQuery.refetch();
+                  setSelectedIds(new Set(protectedWithOrders.map(c => c.id)));
+                  toast.info(`${removed} cadastro(s) movido(s) para a lixeira. ${protectedWithOrders.length} com pedidos preservado(s).`);
+                } finally {
+                  setDeletingWithoutCpf(false);
+                }
+              }}
+              className="flex items-center gap-1.5 rounded-lg border border-red-400/40 bg-red-500/15 px-3 py-2 text-xs font-bold text-red-300 disabled:opacity-50"
+              title="Excluir em massa apenas cadastros sem CPF e sem pedidos; clientes com pedidos são protegidos"
+            >
+              <Trash2 className="w-3.5 h-3.5" /> {deletingWithoutCpf ? 'Excluindo...' : 'Excluir selecionados sem pedidos'}
+            </button>
+          )}
           {!showOnlyNoOrders && customers.some(c => !c.hasOrder) && (
           <button
             onClick={showCustomersWithoutOrders}
