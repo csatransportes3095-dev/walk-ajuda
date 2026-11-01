@@ -342,10 +342,10 @@ function LoginHistoryColumn({ phone, formatDate }: { phone: string; formatDate: 
   );
 
   return (
-    <div className="flex-shrink-0 w-[110px] border-r border-border/40 pr-2 mr-2">
+    <div className="w-full min-w-0 rounded-xl border border-sky-400/25 bg-slate-950/40 p-3">
       <div className="flex items-center gap-1 mb-1.5">
         <Clock className="w-3 h-3 text-blue-400 flex-shrink-0" />
-        <span className="text-[10px] font-bold text-blue-400 uppercase tracking-wide">Acessos</span>
+        <span className="text-sm font-black text-sky-300">Últimos 5 acessos</span>
       </div>
       {isLoading ? (
         <div className="space-y-1">
@@ -360,9 +360,16 @@ function LoginHistoryColumn({ phone, formatDate }: { phone: string; formatDate: 
             <span className="text-muted-foreground font-normal"> total</span>
           </div>
           {data?.recent && data.recent.length > 0 ? (
-            <div className="space-y-1">
-              {data.recent.map((ts: number, i: number) => (
-                <div key={i} className="text-[9px] text-muted-foreground leading-tight">
+            <div className="grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-5 gap-2">
+              {data.recent.slice(0, 5).map((ts: number, i: number) => (
+                <div key={i} className={`min-w-0 rounded-lg border px-2.5 py-3 text-xs font-semibold leading-snug ${[
+                  'border-cyan-400/40 bg-cyan-500/10 text-cyan-200',
+                  'border-violet-400/40 bg-violet-500/10 text-violet-200',
+                  'border-emerald-400/40 bg-emerald-500/10 text-emerald-200',
+                  'border-amber-400/40 bg-amber-500/10 text-amber-200',
+                  'border-pink-400/40 bg-pink-500/10 text-pink-200',
+                ][i]}`}>
+                  <span className="block text-[10px] opacity-75">Acesso {i + 1}</span>
                   {formatDate(ts)}
                 </div>
               ))}
@@ -1565,36 +1572,36 @@ export default function AdminCustomers() {
                       </div>
                     ) : null}
                     {/* Ações */}
-                    <div className="grid grid-cols-2 gap-2 mt-3 sm:grid-cols-4 [&>button]:flex [&>button]:min-h-10 [&>button]:items-center [&>button]:justify-center [&>button]:rounded-lg [&>button]:border [&>button]:border-white/10 [&>button]:bg-white/5 [&>a]:flex [&>a]:min-h-10 [&>a]:items-center [&>a]:justify-center [&>a]:rounded-lg [&>a]:border [&>a]:border-white/10 [&>a]:bg-white/5">
+                    <div className="grid grid-cols-2 gap-2 mt-3 sm:grid-cols-4 [&>button]:flex [&>button]:min-h-14 [&>button]:items-center [&>button]:flex-col [&>button]:gap-1 [&>button]:justify-center [&>button]:rounded-lg [&>button]:border [&>button]:border-white/10 [&>button]:bg-white/5 [&>a]:flex [&>a]:min-h-10 [&>a]:items-center [&>a]:justify-center [&>a]:rounded-lg [&>a]:border [&>a]:border-white/10 [&>a]:bg-white/5">
                       <button onClick={() => setReferralModal(c)} className="p-1.5 text-green-400 hover:bg-green-400/10 rounded-lg transition-colors" title="Links de Indicação">
-                        <Link2 className="w-4 h-4" />
+                        <Link2 className="w-4 h-4" /><span className="text-[11px] font-bold">Indicações</span>
                       </button>
                       <button onClick={() => setFilesModal(c)} className="p-1.5 text-cyan-400 hover:bg-cyan-400/10 rounded-lg transition-colors" title="Ver Documentos de Pedidos">
-                        <FolderOpen className="w-4 h-4" />
+                        <FolderOpen className="w-4 h-4" /><span className="text-[11px] font-bold">Pasta</span>
                       </button>
                       <button onClick={() => setCustomerDocumentsModal(c)} className="p-1.5 text-green-400 hover:bg-green-400/10 rounded-lg transition-colors" title="Documentos do Cliente">
-                        <FileText className="w-4 h-4" />
+                        <FileText className="w-4 h-4" /><span className="text-[11px] font-bold">Documentos</span>
                       </button>
                       <button onClick={() => setLocation(`/admin/codes?phone=${encodeURIComponent(c.phone)}`)} className="p-1.5 text-yellow-400 hover:bg-yellow-400/10 rounded-lg transition-colors" title="Gerenciar Senha de Acesso">
-                        <KeyRound className="w-4 h-4" />
+                        <KeyRound className="w-4 h-4" /><span className="text-[11px] font-bold">Acesso</span>
                       </button>
                       <button onClick={() => { navigator.clipboard.writeText(c.name).then(() => toast.success('Nome copiado!')).catch(() => toast.error('Erro ao copiar')); }} className="p-1.5 text-violet-300 hover:bg-violet-400/10 rounded-lg transition-colors" title="Copiar nome">
-                        <Copy className="w-4 h-4" />
+                        <Copy className="w-4 h-4" /><span className="text-[11px] font-bold">Copiar</span>
                       </button>
                       <button onClick={() => startEdit(c)} className="p-1.5 text-blue-400 hover:bg-blue-400/10 rounded-lg transition-colors" title="Editar">
-                        <Pencil className="w-4 h-4" />
+                        <Pencil className="w-4 h-4" /><span className="text-[11px] font-bold">Editar</span>
                       </button>
                       {c.blocked ? (
                         <button onClick={() => unblockMut.mutate({ id: c.id })} className="p-1.5 text-green-400 hover:bg-green-400/10 rounded-lg transition-colors" title="Desbloquear cadastro">
-                          <Unlock className="w-4 h-4" />
+                          <Unlock className="w-4 h-4" /><span className="text-[11px] font-bold">Desbloquear</span>
                         </button>
                       ) : (
                         <button onClick={() => { setBlockModal(c); setBlockReasonInput(""); }} className="p-1.5 text-orange-400 hover:bg-orange-400/10 rounded-lg transition-colors" title="Bloquear cadastro">
-                          <Lock className="w-4 h-4" />
+                          <Lock className="w-4 h-4" /><span className="text-[11px] font-bold">Bloquear</span>
                         </button>
                       )}
                       <button onClick={() => handleDelete(c.id, c.name)} className="p-1.5 text-red-400 hover:bg-red-400/10 rounded-lg transition-colors" title="Excluir">
-                        <Trash2 className="w-4 h-4" />
+                        <Trash2 className="w-4 h-4" /><span className="text-[11px] font-bold">Excluir</span>
                       </button>
                     </div>
                   </div>
@@ -1610,12 +1617,12 @@ export default function AdminCustomers() {
                   <button type="button" onClick={() => toggleCustomerDetails(c.id)} className="mt-2 w-full rounded-lg border border-white/10 bg-white/[0.04] px-2 py-1.5 text-[10px] font-bold text-cyan-100 transition hover:bg-cyan-500/10">
                     {expandedCustomerIds.has(c.id) ? 'Ocultar detalhes' : 'Ver dados e controles'}
                   </button>
-                  {expandedCustomerIds.has(c.id) && <div className="mt-2 flex gap-0 border-t pt-2.5" style={{ borderColor: 'rgba(255,255,255,0.07)' }}>
+                  {expandedCustomerIds.has(c.id) && <div className="mt-3 flex flex-col gap-3 border-t pt-3" style={{ borderColor: 'rgba(255,255,255,0.07)' }}>
                   {/* Coluna esquerda: histórico de logins + badge revendedor */}
-                  <div className="flex flex-col gap-2">
+                  <div className="w-full flex flex-col gap-2">
                     <LoginHistoryColumn phone={c.phone} formatDate={(ts) => formatDateBR(ts)} />
                     {(c as any).isReseller && (
-                      <div className="w-[110px] flex-shrink-0">
+                      <div className="w-full flex-shrink-0">
                         <div className="w-full px-2 py-2 bg-gradient-to-br from-amber-500/20 to-orange-500/20 border border-amber-500/50 rounded-lg flex flex-col items-center gap-1">
                           <span className="text-lg">🏷️</span>
                           <span className="text-[10px] font-extrabold text-amber-400 uppercase tracking-wide text-center leading-tight">Revendedor</span>
@@ -1631,7 +1638,7 @@ export default function AdminCustomers() {
                     )}
                   </div>
                   {/* Coluna direita: infos do cliente */}
-                  <div className="flex-1 min-w-0 space-y-1.5">
+                  <div className="flex-1 min-w-0 space-y-2 text-sm [&_p]:leading-relaxed">
                   <div className="flex items-center gap-1.5">
                     <p className="text-xs text-foreground font-medium flex items-center gap-1.5">
                       <span className="text-muted-foreground">📱</span> {c.phone}
@@ -1709,7 +1716,7 @@ export default function AdminCustomers() {
                     </p>
                   )}
                   <ReferralCountButton phone={c.phone} name={c.name} />
-                  <RouteAccessWidget phone={c.phone} />
+
                   {!c.email && (
                     <p className="text-xs text-amber-400/80 flex items-center gap-1.5">
                       <span>⚠️</span> Sem email cadastrado
@@ -1737,6 +1744,9 @@ export default function AdminCustomers() {
                     </div>
                   )}
                   </div>{/* fim coluna direita */}
+                  <div className="w-full border-t border-cyan-400/20 pt-3">
+                    <RouteAccessWidget phone={c.phone} />
+                  </div>
                 </div>}
                 </div>
               ) : (
