@@ -241,7 +241,7 @@ function Router() {
       <Route path={"/admin/site-security"}>
         <AdminGuard><AdminSiteSecurity /></AdminGuard>
       </Route>
-      <Route path={"/adm/android-lab"}>
+      <Route path={"/admin/android-lab"}>
         <AdminGuard><AdminAndroidLab /></AdminGuard>
       </Route>
       <Route path={"/admin/codes"}>
