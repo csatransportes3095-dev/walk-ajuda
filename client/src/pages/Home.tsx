@@ -2346,6 +2346,10 @@ export default function Home() {
       msg += `\n\nServico: ${items[0].service}`;
       msg += `\nOpcao: ${items[0].nameOption}`;
       if (items[0].price) msg += `\nValor: ${items[0].price}`;
+      if (items[0].answers?.length) {
+        msg += `\nRESPOSTAS DESTE PEDIDO:`;
+        items[0].answers.forEach(a => { msg += `\n${a.question}: ${a.answer}`; });
+      }
     } else {
       msg += `\n\nServico: ${selectedProduct?.name || 'N/A'}`;
       if (selectedOption?.label) msg += `\nOpcao: ${selectedOption.label}`;
