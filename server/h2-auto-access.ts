@@ -2,8 +2,8 @@ import type { Express, Request, Response } from "express";
 import { createHash, createHmac, timingSafeEqual } from "node:crypto";
 import { sql } from "drizzle-orm";
 import { getDb } from "./db";
-import { normalizeCustomerPhone } from "./customerAccess";
-import { isOwnSiteEmailAuthorized, generateOwnSiteCode } from "./siteAccessOwnCodes";
+import { normalizeCustomerPhone, normalizeCustomerEmail } from "./customerAccess";
+import { generateOwnSiteCode } from "./siteAccessOwnCodes";
 import { resolveReferralDeclaration } from "./referral";
 import { sendH2AutoOrderCode } from "./h2-auto-order-email";
 import { recordH2AutoPhoneFailure, clearH2AutoPhoneFailures, type PhoneStage } from "./h2-auto-validation-blocks";
@@ -118,10 +118,11 @@ async function activeCustomerBinding(s: Session) {
   const customers = await rows(sql`SELECT id,phone,email FROM customers WHERE id=${s.customer_id}
     AND deletedAt IS NULL AND COALESCE(blocked,0)=0 LIMIT 1`);
   const c = customers[0];
-  if (!c || digest(String(c.email).trim().toLowerCase()) !== s.customer_email_hash ||
-      digest(String(normalizeCustomerPhone(c.phone) || "")) !== s.customer_phone_hash) return false;
-  const db = await getDb();
-  return !!db && await isOwnSiteEmailAuthorized(db, String(c.email));
+  // Authorization here is the existing customer's verified phone + registered e-mail,
+  // NOT a membership in the unrelated restricted-site e-mail allowlist.
+  const email = normalizeCustomerEmail(c?.email);
+  return !!c && !!email && digest(email) === s.customer_email_hash &&
+    digest(String(normalizeCustomerPhone(c.phone) || "")) === s.customer_phone_hash;
 }
 async function activeReferralBinding(s: Session) {
   if (!s.referrer_id) return false;
@@ -338,21 +339,25 @@ export function registerH2AutoAccessRoutes(app: Express): void {
           referralEntry ? "indicacoes" : "cadastro","nao_confirmado"));
         if (h2AutoCustomerNeedsProfileUpdate(customer))
           return respond(res, 200, { state: "customer_phone", message: confirmation.customerProfileUpdate });
-        if (!(await isOwnSiteEmailAuthorized(db, customer.email)))
-          return respond(res, 200, { state: "customer_phone", message: confirmation.customerAccessNotConfirmed });
+        // H2 AUTO customers are validated against the main customer registry.
+        // The restricted-site email allowlist is unrelated to customer identity.
+        // Never bypass the registered-email OTP or the blocked/incomplete checks.
+        const registeredEmail = normalizeCustomerEmail(customer.email);
+        if (!registeredEmail)
+          return respond(res, 200, { state: "customer_phone", message: confirmation.customerProfileUpdate });
         const code = generateOwnSiteCode();
         const codeHash = otpHash(sessionId, code);
         const changed: any = await db.execute(sql`UPDATE h2_auto_access_sessions SET
           stage=${referralEntry ? "referrals_code" : "customer_code"},customer_id=${customer.id},referrer_id=NULL,
           customer_phone_hash=${digest(String(normalizeCustomerPhone(customer.phone) || ""))},
-          customer_email_hash=${digest(customer.email.trim().toLowerCase())},
+          customer_email_hash=${digest(registeredEmail)},
           code_hash=${codeHash},code_expires=${now+otpLifetime},code_attempts=0,
           resend_after=${now+minute},updated_at=${now}
           WHERE id=${sessionId} AND stage=${referralEntry ? 'referrals_phone' : 'customer_phone'} AND resend_after<=${now}`);
         if (!changed[0]?.affectedRows)
           return respond(res, 200, { state: "customer_phone", message: confirmation.codeRequestWait });
         try {
-          await sendH2AutoOrderCode(customer.email, code, 10, "access");
+          await sendH2AutoOrderCode(registeredEmail, code, 10, "access");
         } catch {
           await db.execute(sql`UPDATE h2_auto_access_sessions SET stage=${referralEntry ? 'referrals_phone' : 'customer_phone'},
             code_hash=NULL,code_expires=NULL,updated_at=${Date.now()}
