@@ -33,8 +33,8 @@ replaceRequired(
 );
 
 replaceRequired(
-  `  }, [searchTerm, sortOrder, showOnlyVip, showOnlyOrders, showOnlyNoOrders, showOnlyBlocked]);`,
-  `  }, [searchTerm, sortOrder, showOnlyVip, showOnlyOrders, showOnlyNoOrders, showOnlyBlocked, referrerFilter]);`,
+  `  }, [searchTerm, sortOrder, showOnlyVip, showOnlyWithoutCpf, showOnlyOrders, showOnlyNoOrders, showOnlyBlocked]);`,
+  `  }, [searchTerm, sortOrder, showOnlyVip, showOnlyWithoutCpf, showOnlyOrders, showOnlyNoOrders, showOnlyBlocked, referrerFilter]);`,
   'reset da lista ao mudar indicador'
 );
 

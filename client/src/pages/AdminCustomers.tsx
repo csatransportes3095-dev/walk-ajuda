@@ -433,6 +433,7 @@ export default function AdminCustomers() {
   const [showOnlyNoOrders, setShowOnlyNoOrders] = useState(false);
   const [showOnlyBlocked, setShowOnlyBlocked] = useState(false);
   const [showOnlyVip, setShowOnlyVip] = useState(false);
+  const [showOnlyWithoutCpf, setShowOnlyWithoutCpf] = useState(false);
   const [sortOrder, setSortOrder] = useState<"newest" | "oldest" | "name">("newest");
   const { fmt: formatDateBR } = useTimezone();
   const [, setLocation] = useLocation();
@@ -925,12 +926,13 @@ export default function AdminCustomers() {
         (c.referredBy || "").toLowerCase().includes(term) ||
         (c.referredByPhone || "").includes(term);
     }
+    if (showOnlyWithoutCpf) return matchSearch && !String((c as any).cpf || "").replace(/\D/g, "");
     if (showOnlyVip) return matchSearch && !!c.vipActive;
     if (showOnlyOrders) return matchSearch && !!c.hasOrder;
     if (showOnlyNoOrders) return matchSearch && !c.hasOrder;
     if (showOnlyBlocked) return matchSearch && c.blocked === 1;
     return matchSearch;
-  }), [sortedCustomers, searchTerm, showOnlyVip, showOnlyOrders, showOnlyNoOrders, showOnlyBlocked]);
+  }), [sortedCustomers, searchTerm, showOnlyVip, showOnlyWithoutCpf, showOnlyOrders, showOnlyNoOrders, showOnlyBlocked]);
 
   const startEdit = (c: Customer) => {
     if (customerSaveGate.isBusy()) { toast.info("Aguarde a confirmação do salvamento em andamento."); return; }
@@ -1117,7 +1119,7 @@ export default function AdminCustomers() {
     setSelectedIds(new Set(blocked));
   };
 
-  const clearSelection = () => { setSelectedIds(new Set()); setShowOnlyOrders(false); setShowOnlyNoOrders(false); setShowOnlyBlocked(false); setShowOnlyVip(false); };
+  const clearSelection = () => { setSelectedIds(new Set()); setShowOnlyOrders(false); setShowOnlyNoOrders(false); setShowOnlyBlocked(false); setShowOnlyVip(false); setShowOnlyWithoutCpf(false); };
 
   const toggleCustomerDetails = (id: number) => {
     setExpandedCustomerIds((previous) => {
@@ -1312,7 +1314,7 @@ export default function AdminCustomers() {
   onClick={() => {
     const next = !showOnlyVip;
     setShowOnlyVip(next);
-    if (next) { setShowOnlyOrders(false); setShowOnlyNoOrders(false); setShowOnlyBlocked(false); setSelectedIds(new Set()); }
+    if (next) { setShowOnlyOrders(false); setShowOnlyNoOrders(false); setShowOnlyBlocked(false); setShowOnlyWithoutCpf(false); setSelectedIds(new Set()); }
   }}
   className={`flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-xs font-black transition-colors border ${showOnlyVip ? 'bg-amber-400 text-amber-950 border-amber-300 shadow-[0_0_16px_rgba(251,191,36,.28)]' : 'bg-amber-500/15 border-amber-400/35 text-amber-300 hover:bg-amber-500/25'}`}
   title="Filtrar somente clientes com VIP ativo"
@@ -1320,6 +1322,19 @@ export default function AdminCustomers() {
   <Crown className="w-3.5 h-3.5 fill-current" />
   {showOnlyVip ? `Mostrando VIP (${filtered.length})` : `Clientes VIP (${customers.filter(c => c.vipActive).length})`}
 </button>
+          <button
+            type="button"
+            onClick={() => {
+              setShowOnlyWithoutCpf(prev => !prev);
+              setShowOnlyOrders(false); setShowOnlyNoOrders(false); setShowOnlyBlocked(false); setShowOnlyVip(false);
+              setSelectedIds(new Set());
+            }}
+            className={`flex items-center gap-1.5 px-3 py-2 rounded-lg text-xs font-bold border transition-colors ${showOnlyWithoutCpf ? 'bg-cyan-500 text-slate-950 border-cyan-300' : 'bg-cyan-500/10 border-cyan-400/30 text-cyan-300 hover:bg-cyan-500/20'}`}
+            title="Mostrar somente cadastros sem CPF informado"
+          >
+            <ListChecks className="w-3.5 h-3.5" />
+            {showOnlyWithoutCpf ? `Mostrando sem CPF (${filtered.length})` : `Sem CPF (${customers.filter(c => !String((c as any).cpf || '').replace(/\D/g, '')).length})`}
+          </button>
           {!showOnlyNoOrders && customers.some(c => !c.hasOrder) && (
           <button
             onClick={showCustomersWithoutOrders}
