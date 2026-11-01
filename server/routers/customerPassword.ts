@@ -286,7 +286,7 @@ export const customerPasswordRouter = router({
         }
 
         try {
-          await deliverOwnSiteCode(email, current.code);
+          await deliverOwnSiteCode(email, current.code, 'site-access', true);
           current.lastSentAt = now;
         } catch (error) {
           console.error("[customerPassword] login email code resend failed", error instanceof Error ? error.message : String(error));
