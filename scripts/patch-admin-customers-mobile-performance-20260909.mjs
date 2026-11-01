@@ -73,10 +73,10 @@ if (!source.includes('const loanCustomerLookup = useMemo(')) {
 if (source.includes('const filtered = useMemo(')) {
   // A versão otimizada já encerra a filtragem em useMemo, com dependências explícitas.
   // Inserir a paginação fora do memo sem alterar o pipeline dos filtros.
-  const before = '  }), [sortedCustomers, searchTerm, showOnlyVip, showOnlyOrders, showOnlyNoOrders, showOnlyBlocked]);\n\n  const startEdit = (c: Customer) => {';
+  const before = '  }), [sortedCustomers, searchTerm, showOnlyVip, showOnlyWithoutCpf, showOnlyOrders, showOnlyNoOrders, showOnlyBlocked]);\n\n  const startEdit = (c: Customer) => {';
   const after = before.replace(
     '\n\n  const startEdit = (c: Customer) => {',
-    '\n\n  const visibleCustomers = filtered.slice(0, visibleCustomerLimit);\n\n  useEffect(() => {\n    setVisibleCustomerLimit(24);\n  }, [searchTerm, sortOrder, showOnlyVip, showOnlyOrders, showOnlyNoOrders, showOnlyBlocked]);\n\n  const startEdit = (c: Customer) => {'
+    '\n\n  const visibleCustomers = filtered.slice(0, visibleCustomerLimit);\n\n  useEffect(() => {\n    setVisibleCustomerLimit(24);\n  }, [searchTerm, sortOrder, showOnlyVip, showOnlyWithoutCpf, showOnlyOrders, showOnlyNoOrders, showOnlyBlocked]);\n\n  const startEdit = (c: Customer) => {'
   );
   replaceRequired(before, after, 'lista visível incremental (useMemo)');
 } else {
