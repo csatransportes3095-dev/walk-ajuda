@@ -225,7 +225,10 @@ if (responsiveCard) {
   actionsBefore = actionsBefore.replace(oldGrid, newGrid);
   actionsAfter = actionsAfter.replace('className="flex gap-1.5 mt-2 flex-wrap"', newGrid);
 }
-replaceRequired(actionsBefore, actionsAfter, 'botões de ação isolados');
+// Cards novos já possuem rótulos e área de toque; não substituir pelo layout antigo sem texto.
+if (!source.includes('<span className="text-[11px] font-bold">Indicações</span>')) {
+  replaceRequired(actionsBefore, actionsAfter, 'botões de ação isolados');
+}
 
 replaceRequired(
   `                  <button type="button" onClick={() => toggleCustomerDetails(c.id)} className="mt-2 w-full rounded-lg border border-white/10 bg-white/[0.04] px-2 py-1.5 text-[10px] font-bold text-cyan-100 transition hover:bg-cyan-500/10">`,
