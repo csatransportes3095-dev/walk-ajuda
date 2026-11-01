@@ -6996,7 +6996,22 @@ export default function AdminOrders() {
                                   {fields.loginNotes && <button onClick={() => setField('loginNotes', '')} className="px-2 py-1.5 bg-red-500/10 border border-red-500/30 text-red-400 rounded-lg text-xs hover:bg-red-500/20 transition-colors" title="Limpar">✕</button>}
                                 </div>
                               </div>
-                            <details className="order-login-full rounded-xl border border-cyan-400/25 bg-cyan-500/5"><summary className="cursor-pointer px-4 py-3 text-xs font-semibold text-cyan-200">Autenticador privado do ADM <span className="text-white/40">· expandir / recolher</span></summary><div className="p-3 pt-0"><OrderLoginAuthenticatorCode
+                            <details className="order-login-full group overflow-hidden rounded-2xl border-2 border-[#ad1717] bg-[#14090b] shadow-[0_0_20px_rgba(120,0,0,0.25)]">
+                              <summary className="flex cursor-pointer list-none items-center justify-between gap-3 bg-gradient-to-r from-[#520000] via-[#790606] to-[#480000] px-4 py-3.5 text-white transition-colors hover:from-[#790000] hover:via-[#990c0c] hover:to-[#620000] focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-[-3px] focus-visible:outline-white [&::-webkit-details-marker]:hidden">
+                                <span className="flex min-w-0 items-center gap-2.5">
+                                  <span className="rounded-lg border border-red-300/35 bg-red-950/70 px-2 py-1 text-lg leading-none" aria-hidden="true">🔐</span>
+                                  <span className="min-w-0">
+                                    <span className="block text-sm font-black uppercase tracking-wide text-white sm:text-base">AUTENTICADOR DO PEDIDO</span>
+                                    <span className="block text-[10px] font-bold uppercase tracking-[0.16em] text-red-100/90">ACESSO PRIVADO DO ADM</span>
+                                  </span>
+                                </span>
+                                <span className="flex shrink-0 items-center gap-1.5 rounded-lg border border-red-200/60 bg-[#250000]/75 px-3 py-2 text-[11px] font-black uppercase tracking-wide text-white shadow-sm sm:text-xs">
+                                  <span className="group-open:hidden">ABRIR</span>
+                                  <span className="hidden group-open:inline">RECOLHER</span>
+                                  <ChevronDown className="h-4 w-4 transition-transform duration-200 group-open:rotate-180" />
+                                </span>
+                              </summary>
+                              <div className="p-3"><OrderLoginAuthenticatorCode
   registrationId={order.id}
   onSecretLinked={(linkedSecret) => {
     setField('authCode', linkedSecret);
