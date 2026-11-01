@@ -1339,7 +1339,7 @@ export default function AdminCustomers() {
           {showOnlyWithoutCpf && (
             <button
               type="button"
-              onClick={() => setSelectedIds(new Set(filtered.filter(c => !String((c as any).cpf || '').replace(/\\D/g, '')).map(c => c.id)))}
+              onClick={() => setSelectedIds(new Set(filtered.filter(c => !String((c as any).cpf || '').replace(/\D/g, '')).map(c => c.id)))}
               className="flex items-center gap-1.5 rounded-lg border border-cyan-400/40 bg-cyan-500/15 px-3 py-2 text-xs font-bold text-cyan-200"
             >
               <ListChecks className="w-3.5 h-3.5" /> Selecionar todos sem CPF ({filtered.length})
@@ -1350,7 +1350,7 @@ export default function AdminCustomers() {
               type="button"
               disabled={deletingWithoutCpf}
               onClick={async () => {
-                const chosen = customers.filter(c => selectedIds.has(c.id) && !String((c as any).cpf || '').replace(/\\D/g, ''));
+                const chosen = customers.filter(c => selectedIds.has(c.id) && !String((c as any).cpf || '').replace(/\D/g, ''));
                 const protectedWithOrders = chosen.filter(c => c.hasOrder);
                 const eligible = chosen.filter(c => !c.hasOrder);
                 if (!eligible.length) {
