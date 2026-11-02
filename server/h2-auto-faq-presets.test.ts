@@ -7,7 +7,7 @@ describe("H2 AUTO prefilled FAQ suggestions",()=>{
     expect(new Set(H2_AUTO_FAQ_SUGGESTIONS.map(x=>x.id)).size).toBe(38);
     for(const r of H2_AUTO_FAQ_SUGGESTIONS) {
       expect(r.enabled).toBe(false);
-      expect(h2AutoPersonalizationSchema.shape.faq.element.safeParse(r).success).toBe(true);
+      expect(h2AutoPersonalizationSchema.safeParse({...H2_AUTO_PERSONALIZATION_DEFAULT,faq:[r]}).success).toBe(true);
       expect(r.answer).toContain("*");
     }
   });
