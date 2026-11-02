@@ -819,6 +819,20 @@ if ($SnapshotQueueWorker) {
         continue
       }
       $instanceId = [int]$Matches[1]
+      # Erros de perfil ocupado/409 aguardam nova janela segura, sem loop a cada 20s.
+      $lastErrorPath = Join-Path $SnapshotQueueDirectory "instance-$instanceId.last-error.txt"
+      if (Test-Path -LiteralPath $lastErrorPath) {
+        try {
+          $previousFailure = (Get-Content -Raw -LiteralPath $lastErrorPath -ErrorAction Stop).Trim()
+          $lastFailureAt = (Get-Item -LiteralPath $lastErrorPath -ErrorAction Stop).LastWriteTimeUtc
+          if ($previousFailure -in @("profile_busy_local", "server_browser_open", "http_409_unclassified") -and
+              $lastFailureAt -gt (Get-Date).ToUniversalTime().AddMinutes(-5)) { continue }
+        } catch { continue }
+      }
+      $profileDirectory = Join-Path $ProfilesDirectory "instance-$instanceId"
+      try {
+        if (Test-H2AdsProfileBusy $profileDirectory) { continue }
+      } catch { continue }
       $workingPath = "$($pending.FullName).working"
       try {
         Move-Item -Path $pending.FullName -Destination $workingPath -Force
