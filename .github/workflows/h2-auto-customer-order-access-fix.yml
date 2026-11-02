@@ -1,0 +1,28 @@
+name: H2 AUTO - consulta segura e resposta a duvidas
+on:
+  pull_request:
+    paths:
+      - "server/h2-auto-access.ts"
+      - "server/h2-auto-orders.ts"
+      - "server/h2-auto-verified-customer.ts"
+      - "server/h2-auto-validation-policy.ts"
+      - "server/h2-auto-orders-verified-customer-regression.test.ts"
+      - ".github/workflows/h2-auto-customer-order-access-fix.yml"
+permissions:
+  contents: read
+jobs:
+  validar:
+    runs-on: ubuntu-latest
+    timeout-minutes: 25
+    steps:
+      - uses: actions/checkout@v4
+      - uses: pnpm/action-setup@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '22'
+          cache: pnpm
+      - run: pnpm install --frozen-lockfile
+      - name: Testar acesso, telefone e respostas H2 AUTO
+        run: pnpm exec vitest run server/h2-auto-orders-verified-customer-regression.test.ts server/h2-auto-validation-policy.test.ts server/h2-auto-phone-attempt-message.test.ts server/h2-auto-order-history.test.ts
+      - name: Compilar site e servidor
+        run: pnpm run build

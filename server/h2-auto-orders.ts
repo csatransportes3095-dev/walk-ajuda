@@ -4,7 +4,6 @@ import {sql} from "drizzle-orm";
 import {getDb} from "./db";
 import {sendH2AutoOrderCode} from "./h2-auto-order-email";
 import {normalizeCustomerPhone} from "./customerAccess";
-import {isOwnSiteEmailAuthorized} from "./siteAccessOwnCodes";
 import {getOrderStatusVisibilityForClient} from "./orderStatusVisibility";
 import {groupVisibleH2AutoOrders} from "./h2-auto-order-history";
 import {attachScheduleToOrders} from "./h2-auto-order-schedule";
@@ -108,8 +107,6 @@ export function registerH2AutoOrdersRoutes(app:Express){
    // Never reveal the customer's name, email address, or order information before OTP.
    const notFound={state:"not_found",message:"❌ Não encontramos cadastro com esse telefone. Confira o número com DDD e tente novamente."};
    if(!customer)return reply(res,200,notFound);
-   const authorizationDb=await getDb();if(!authorizationDb)throw Error("db");
-   if(!(await isOwnSiteEmailAuthorized(authorizationDb,customer.email)))return reply(res,200,notFound);
    const delivered={state:"await_code",message:"✅ Código enviado ao e-mail cadastrado. Informe os 6 números recebidos. Validade: "+settings.ttl+" minutos."};
    const code=String(randomInt(0,1000000)).padStart(6,"0"), codeHash=otpDigest(sid,code);
    const db=await getDb();if(!db)throw Error("db");
@@ -160,7 +157,6 @@ export function registerH2AutoOrdersRoutes(app:Express){
      AND s.expires_at>${now} AND c.deletedAt IS NULL AND c.blocked=0 LIMIT 1`);
    const s=sessions[0] || await getH2AutoVerifiedAccessCustomer(id,conversation,now);
    if(!s)return reply(res,403,{error:"authentication_required"});
-   const authDb=await getDb();if(!authDb || !(await isOwnSiteEmailAuthorized(authDb,String(s.current_email))))return reply(res,403,{error:"authentication_required"});
    const orders=await rows(sql`SELECT h.id,h.registrationId,h.orderNumber,h.status, st.label AS statusLabel, h.serviceName,h.serviceOption,h.createdAt
     FROM orderStatusHistory h LEFT JOIN orderStatusTypes st ON st.${sql.identifier("key")}=h.status INNER JOIN accessCodePhones a ON a.id=h.registrationId
     AND a.deletedAt IS NULL AND a.accessedAt>=${s.customer_created}
@@ -208,8 +204,7 @@ export function registerH2AutoOrdersRoutes(app:Express){
       LIMIT 1`);
    const me=sessions[0] || await getH2AutoVerifiedAccessCustomer(id,conversation,now);
    if(!me)return reply(res,403,{error:"authentication_required"});
-   const authDb=await getDb();if(!authDb||!(await isOwnSiteEmailAuthorized(authDb,String(me.email))))
-     return reply(res,403,{error:"authentication_required"});
+    const authDb=await getDb();if(!authDb)throw Error("db_unavailable");
    const phone=String(me.customer_phone).replace(/\D/g,"").slice(-11);
    const records=await rows(sql`
      SELECT attribution.registrationId,attribution.orderNumber,attribution.referredName,
