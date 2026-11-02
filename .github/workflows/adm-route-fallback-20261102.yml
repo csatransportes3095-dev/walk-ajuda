@@ -1,0 +1,24 @@
+name: ADM - rotas protegidas e fallback
+on:
+  push:
+    branches: [fix/adm-route-prefix-fallback-20261102]
+  workflow_dispatch:
+permissions:
+  contents: read
+jobs:
+  verificar:
+    runs-on: ubuntu-latest
+    timeout-minutes: 25
+    steps:
+      - uses: actions/checkout@v4
+      - uses: pnpm/action-setup@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '22'
+          cache: pnpm
+      - name: Instalar
+        run: pnpm install --frozen-lockfile
+      - name: Testes das rotas de seguranca
+        run: pnpm exec vitest run client/route-fallback-indicacoes.test.ts server/route-fallback-indicacoes.test.ts server/siteAccessPolicy.test.ts server/siteAccessGateway.http.test.ts
+      - name: Build de producao
+        run: pnpm build

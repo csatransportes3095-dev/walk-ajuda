@@ -23,10 +23,14 @@ describe("H2 public SPA route allowlist",()=>{
     expect(visit("/login")).toEqual([]);
     expect(visit("/acompanhar")).toEqual([]);
   });
+  it("permite rotas administrativas novas sem redirecionar cliente",()=>{
+    expect(visit("/adm/transportes")).toEqual([]);
+    expect(visit("/adm/modulo-futuro")).toEqual([]);
+  });
   it("continues rejecting unknown public routes",()=>{
     expect(visit("/rota-desconhecida")[0]).toContain("rota_invalida");
   });
   it("busts old guard cache for existing browsers",()=>{
-    expect(html).toContain("/route-fallback-guard-v1.js?v=20261028-indicacoes-v1");
+    expect(html).toContain("/route-fallback-guard-v1.js?v=20261102-adm-routes-v2");
   });
 });
