@@ -461,7 +461,7 @@ async function startServer() {
   // Middleware de bloqueio de IP â€” bloqueia antes de qualquer rota de negócio
   app.use(async (req, res, next) => {
     // Não bloquear rotas admin (frontend) nem qualquer chamada tRPC de admin autenticado
-    if (req.path.startsWith("/admin") || isChassisAdminPath(req.path) || req.path.startsWith("/api/trpc/admin")) {
+    if ((req.path === "/adm" || req.path.startsWith("/adm/") || req.path.startsWith("/admin")) || isChassisAdminPath(req.path) || req.path.startsWith("/api/trpc/admin")) {
       return next();
     }
     // Não bloquear chamadas tRPC se o cookie admin_token estiver presente e válido
