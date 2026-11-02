@@ -46,6 +46,7 @@ import { preCadastroQuestionsRouter } from "./routers/preCadastroQuestions";
 import { cartoesRouter } from "./routers/cartoes";
 import { mercadoRouter } from "./routers/mercado";
 import { privateTransportRouter } from "./routers/privateTransport";
+import { transportesRouter } from "./routers/transportes";
 import { locadoraRouter } from "./routers/locadora";
 import { h2AssistantRouter } from "./routers/h2Assistant";
 import { adminAuthenticatorRouter } from "./routers/adminAuthenticator";
@@ -320,6 +321,7 @@ export const appRouter = router({
   schedule: scheduleRouter,
   spreadsheet: spreadsheetRouter,
   privateTransport: privateTransportRouter,
+  transportes: transportesRouter,
   locadora: locadoraRouter,
   h2Assistant: h2AssistantRouter,
   loans: loanRouter,
