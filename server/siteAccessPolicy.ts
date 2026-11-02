@@ -3,7 +3,7 @@ export type SiteAccessMode = "public" | "restricted" | "blocked";
 export type SiteAccessDecision = "allow" | "challenge" | "deny";
 
 export function isAdministrationPath(pathname: string): boolean {
-  return pathname === "/admin" || pathname.startsWith("/admin/");
+  return pathname === "/admin" || pathname.startsWith("/admin/") || pathname === "/adm" || pathname.startsWith("/adm/");
 }
 
 /** Visitor entry is open only in Public and Restricted, never Blocked. */
