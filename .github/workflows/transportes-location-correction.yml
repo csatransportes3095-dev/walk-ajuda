@@ -1,0 +1,30 @@
+name: Transportes - validacao correcoes UF e municipio
+on:
+  pull_request:
+    paths:
+      - "client/src/lib/transportesImport.ts"
+      - "client/src/pages/AdminTransportes.tsx"
+      - "server/routers/transportes.ts"
+      - "server/transportesLocationUpdate.test.ts"
+      - "shared/transportes.ts"
+      - ".github/workflows/transportes-location-correction.yml"
+permissions:
+  contents: read
+jobs:
+  validar:
+    runs-on: ubuntu-latest
+    timeout-minutes: 25
+    steps:
+      - uses: actions/checkout@v4
+      - uses: pnpm/action-setup@v4
+        with:
+          version: "10.4.1"
+      - uses: actions/setup-node@v4
+        with:
+          node-version: "22"
+          cache: pnpm
+      - run: pnpm install --frozen-lockfile
+      - name: Testar correcao e importacao de transportes
+        run: pnpm exec vitest run server/transportesLocationUpdate.test.ts server/transportesImport.test.ts server/transportes.test.ts server/transportImportPayload.test.ts
+      - name: Compilar frontend/backend
+        run: pnpm run build
