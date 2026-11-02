@@ -1,0 +1,26 @@
+name: H2 AUTO - cliente indicado por mensagem natural
+on:
+  pull_request:
+    paths:
+      - "server/h2-auto-validation-policy.ts"
+      - "server/h2-auto-access.ts"
+      - "server/h2-auto-natural-new-client.test.ts"
+      - ".github/workflows/h2-auto-natural-new-client.yml"
+permissions:
+  contents: read
+jobs:
+  validate:
+    runs-on: ubuntu-latest
+    timeout-minutes: 25
+    steps:
+      - uses: actions/checkout@v4
+      - uses: pnpm/action-setup@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: "22"
+          cache: pnpm
+      - run: pnpm install --frozen-lockfile
+      - name: Validate natural referral, OTP, and personalization
+        run: pnpm exec vitest run server/h2-auto-natural-new-client.test.ts server/h2-auto-personalization.test.ts server/h2-auto-free-questions.test.ts server/h2-auto-faq-presets.test.ts
+      - name: Production build
+        run: pnpm run build
