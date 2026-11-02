@@ -182,3 +182,58 @@ function csvLines(text: string): string[][] {
 export function parseTransportText(text: string, fallbackUf: string, source = "Texto colado"): TransportImportReport {
   return parseTransportSheetRows(csvLines(text), fallbackUf, source);
 }
+
+/** Importação de correção geográfica: UF deve estar explicitamente na coluna UF/Estado. */
+export type TransportLocationCorrection = { cnpj: string; uf: string; city: string };
+export type TransportLocationReport = {
+  records: TransportLocationCorrection[];
+  examined: number;
+  rejected: number;
+  conflicts: number;
+};
+
+export function parseTransportLocationRows(rows: unknown[][]): TransportLocationReport {
+  const data = rows.filter(row => Array.isArray(row) && row.some(cell => cleanText(cell)));
+  let headerIndex = -1;
+  let cnpjIndex = -1;
+  let ufIndex = -1;
+  let cityIndex = -1;
+  for (let i = 0; i < Math.min(data.length, 400); i++) {
+    const normalized = data[i].map(normalizeImportHeading);
+    const ci = normalized.findIndex(h => recognizeImportHeading(h) === "cnpj");
+    const ui = normalized.findIndex(h => recognizeImportHeading(h) === "uf");
+    if (ci >= 0 && ui >= 0) {
+      headerIndex = i;
+      cnpjIndex = ci;
+      ufIndex = ui;
+      cityIndex = normalized.findIndex(h => recognizeImportHeading(h) === "city");
+      break;
+    }
+  }
+  if (headerIndex < 0) throw new Error("A planilha de atualização exige as colunas CNPJ e UF (ou Estado). Não é permitido preencher UF por padrão.");
+  const seen = new Map<string, TransportLocationCorrection>();
+  const conflicting = new Set<string>();
+  let examined = 0;
+  let rejected = 0;
+  for (const row of data.slice(headerIndex + 1)) {
+    examined++;
+    const cnpj = normalizeTransportCnpj(row[cnpjIndex]);
+    const uf = normalizeTransportUf(row[ufIndex]);
+    const city = cityIndex >= 0 ? cleanText(row[cityIndex]).slice(0, 160) : "";
+    if (!/^\d{14}$/.test(cnpj) || uf === "ND") { rejected++; continue; }
+    const record = { cnpj, uf, city };
+    const prior = seen.get(cnpj);
+    if (prior && (prior.uf !== uf || (prior.city && city && prior.city.toUpperCase() !== city.toUpperCase()))) {
+      conflicting.add(cnpj);
+      continue;
+    }
+    if (!prior) seen.set(cnpj, record);
+    else if (!prior.city && city) seen.set(cnpj, record);
+  }
+  for (const cnpj of conflicting) seen.delete(cnpj);
+  return { records: Array.from(seen.values()), examined, rejected, conflicts: conflicting.size };
+}
+
+export function parseTransportLocationText(text: string): TransportLocationReport {
+  return parseTransportLocationRows(csvLines(text));
+}
