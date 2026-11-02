@@ -4,7 +4,7 @@ import { toast } from "sonner";
 import { Building2, Upload, Search, Save, CheckCircle2, FileSpreadsheet, ClipboardPaste, Download, Copy } from "lucide-react";
 import { trpc } from "@/lib/trpc";
 import { readTransportExcel } from "@/lib/transportesExcel";
-import { parseTransportSheetRows, parseTransportText, type TransportImportReport } from "@/lib/transportesImport";
+import { parseTransportSheetRows, parseTransportText, parseTransportLocationRows, parseTransportLocationText, type TransportLocationCorrection, type TransportLocationReport, type TransportImportReport } from "@/lib/transportesImport";
 import { isValidTransportCnpj, normalizeTransportCnpj, formatTransportCnpj, writeSingleTransportCnpj, classifyTransport, TRANSPORT_TYPES, TRANSPORT_TYPE_LABELS, TRANSPORT_UFS, type TransportType } from "@shared/transportes";
 
 type Draft = { cnpj: string; name: string; uf: string; city: string; type: TransportType; cnae: string; source: string; notes: string; isUsed: boolean };
@@ -36,7 +36,7 @@ export default function AdminTransportes() {
   const [used, setUsed] = useState<"todos" | "usados" | "disponiveis">("todos");
   const [page, setPage] = useState(1);
   const [paste, setPaste] = useState("");
-  const [importUf, setImportUf] = useState("SP");
+  const [importUf, setImportUf] = useState("ND");
   const [pending, setPending] = useState<Draft[]>([]);
   const [importFeedback, setImportFeedback] = useState("");
   const [importing, setImporting] = useState(false);
@@ -48,6 +48,11 @@ export default function AdminTransportes() {
   const markUsed = trpc.transportes.markUsed.useMutation({ onSuccess: refresh, onError: e => toast.error(e.message) });
   const remove = trpc.transportes.delete.useMutation({ onSuccess: refresh, onError: e => toast.error(e.message) });
   const batch = trpc.transportes.importBatch.useMutation();
+  const updateLocations = trpc.transportes.updateLocationsBatch.useMutation();
+  const [locationRows, setLocationRows] = useState<TransportLocationCorrection[]>([]);
+  const [locationReport, setLocationReport] = useState<TransportLocationReport | null>(null);
+  const [locationText, setLocationText] = useState("");
+  const [locationUpdating, setLocationUpdating] = useState(false);
   const preview = useMemo(() => {
     const map = new Map<string, Draft>();
     let duplicates = 0, invalid = 0, malformed = 0;
@@ -88,6 +93,41 @@ export default function AdminTransportes() {
       setPending([]); setPaste(""); refresh();
     } catch (e: any) { toast.error("Falha na importação: " + (e.message || String(e))); }
     finally { setImporting(false); }
+  };
+  const prepareLocationReports = (reports: TransportLocationReport[]) => {
+    const seen = new Map<string, TransportLocationCorrection>();
+    const conflicts = new Set<string>();
+    let examined = 0, rejected = 0, conflictCount = 0;
+    for (const report of reports) {
+      examined += report.examined; rejected += report.rejected; conflictCount += report.conflicts;
+      for (const row of report.records) {
+        const prev = seen.get(row.cnpj);
+        if (prev && (prev.uf !== row.uf || (prev.city && row.city && prev.city.toUpperCase() !== row.city.toUpperCase()))) {
+          conflicts.add(row.cnpj);
+        } else if (!prev || (!prev.city && row.city)) seen.set(row.cnpj, row);
+      }
+    }
+    for (const key of conflicts) seen.delete(key);
+    setLocationRows(Array.from(seen.values()));
+    setLocationReport({ records: Array.from(seen.values()), examined, rejected, conflicts: conflictCount + conflicts.size });
+    if (conflicts.size || conflictCount) toast.error("Há CNPJs com UFs divergentes. Esses registros não serão atualizados.");
+  };
+  const submitLocationUpdates = async () => {
+    if (!locationRows.length || locationUpdating) return;
+    if (!window.confirm(`Atualizar UF e município de até ${locationRows.length} CNPJs EXISTENTES? Nenhum campo JÁ USADO será alterado.`)) return;
+    setLocationUpdating(true);
+    let updated = 0, unchanged = 0, notFound = 0;
+    try {
+      for (let i = 0; i < locationRows.length; i += 200) {
+        const res = await updateLocations.mutateAsync({ records: locationRows.slice(i, i + 200) });
+        updated += res.updated; unchanged += res.unchanged; notFound += res.notFound;
+      }
+      setLocationRows([]); setLocationReport(null); setLocationText(""); refresh();
+      toast.success(`UF/cidade: ${updated} atualizados, ${unchanged} sem mudança, ${notFound} CNPJs não encontrados.`, { duration: 12000 });
+    } catch (e: any) {
+      toast.error("Atualização interrompida: " + (e.message || String(e)) + ". Confira o histórico antes de repetir.", { duration: 12000 });
+      refresh();
+    } finally { setLocationUpdating(false); }
   };
   const inputStyle = "w-full min-w-0 rounded-xl border border-white/15 bg-slate-900 p-3 text-white outline-none focus:border-cyan-500";
   const cnpjStyle = isValidTransportCnpj(draft.cnpj) ? "text-emerald-400" : "text-amber-400";
@@ -137,11 +177,48 @@ export default function AdminTransportes() {
       <section className="rounded-2xl border border-purple-500/30 bg-slate-900/70 p-4 sm:p-6 space-y-3">
         <h2 className="font-black flex gap-2 items-center"><Upload size={20}/> IMPORTAÇÃO INTELIGENTE</h2>
         <p className="text-xs text-slate-400">Aceita Excel (.xlsx), CSV, TXT e texto colado. Cabeçalhos: Razão Social, CNPJ, Tipo, CNAE, Cidade e UF. Registros repetidos são ignorados e nenhum status JÁ USADO é apagado.</p>
-        <div className="flex flex-wrap items-center gap-3"><label className="rounded-xl border border-purple-500/40 bg-purple-500/10 px-4 py-3 cursor-pointer font-semibold flex items-center gap-2"><FileSpreadsheet size={18}/> Selecionar Excel / TXT <input type="file" accept=".xlsx,.csv,.txt,.tsv" multiple className="hidden" onChange={async e=>{const files = Array.from(e.target.files || []);try{const chunks=await Promise.all(files.map(f=>readImportedFile(f,importUf)));const found=chunks.flatMap(x=>x.records);const scanned=chunks.reduce((a,b)=>a+b.examined,0);const rejected=chunks.reduce((a,b)=>a+b.rejected,0);setPending(v=>[...v,...found]);const message=`${files.length} arquivo(s): ${scanned} linhas analisadas, ${found.length} CNPJs extraídos, ${rejected} linhas ignoradas.`;setImportFeedback(message);if(found.length)toast.success(message,{duration:9000});else toast.error("Nenhum CNPJ extraído. Verifique as colunas do arquivo.",{duration:10000})}catch(err:any){toast.error(err.message||"Erro ao ler arquivo")}e.target.value=""}}/></label><span className="text-sm">UF padrão:</span><select className={inputStyle+" !w-24"} value={importUf} onChange={e=>setImportUf(e.target.value)}>{TRANSPORT_UFS.map(u=><option key={u}>{u}</option>)}</select></div>
+        <div className="flex flex-wrap items-center gap-3"><label className="rounded-xl border border-purple-500/40 bg-purple-500/10 px-4 py-3 cursor-pointer font-semibold flex items-center gap-2"><FileSpreadsheet size={18}/> Selecionar Excel / TXT <input type="file" accept=".xlsx,.csv,.txt,.tsv" multiple className="hidden" onChange={async e=>{const files = Array.from(e.target.files || []);try{const chunks=await Promise.all(files.map(f=>readImportedFile(f,importUf)));const found=chunks.flatMap(x=>x.records);const scanned=chunks.reduce((a,b)=>a+b.examined,0);const rejected=chunks.reduce((a,b)=>a+b.rejected,0);setPending(v=>[...v,...found]);const message=`${files.length} arquivo(s): ${scanned} linhas analisadas, ${found.length} CNPJs extraídos, ${rejected} linhas ignoradas.`;setImportFeedback(message);if(found.length)toast.success(message,{duration:9000});else toast.error("Nenhum CNPJ extraído. Verifique as colunas do arquivo.",{duration:10000})}catch(err:any){toast.error(err.message||"Erro ao ler arquivo")}e.target.value=""}}/></label><span className="text-sm">UF caso a planilha não informe (evite presumir):</span><select className={inputStyle+" !w-24"} value={importUf} onChange={e=>setImportUf(e.target.value)}><option value="ND">ND</option>{TRANSPORT_UFS.map(u=><option key={u}>{u}</option>)}</select></div>
         <textarea className={inputStyle} rows={5} value={paste} onChange={e=>setPaste(e.target.value)} placeholder={"Cole aqui dados do Excel ou Bloco de Notas:\nRazão Social;CNPJ;Tipo de Serviço;CNAE;Cidade;UF\nEmpresa Exemplo;00.000.000/0001-00;Carga;4930-2/02;Jandira;SP"}/>
         <button onClick={()=>{const report=parseTransportText(paste,importUf);setPending(v=>[...v,...report.records]);const msg=`Texto: ${report.examined} linhas, ${report.records.length} CNPJs extraídos, ${report.rejected} ignoradas.`;setImportFeedback(msg);if(report.records.length)toast.success(msg);else toast.error("Nenhum CNPJ encontrado no texto")}} className="rounded-xl border border-purple-400/40 px-4 py-2 flex gap-2 items-center"><ClipboardPaste size={17}/> Extrair texto colado</button>
         {importFeedback&&<p role="status" className="rounded-lg border border-cyan-500/30 bg-cyan-950/30 px-3 py-2 text-sm font-semibold text-cyan-100">{importFeedback}</p>}
         {pending.length>0&&<div className="border border-cyan-500/25 rounded-xl p-3 space-y-2"><p className="font-bold">Prévia: {pending.length} recebidos • {preview.rows.length} CNPJs únicos • {preview.duplicates} repetidos • {preview.invalid} com dígitos inválidos • {preview.malformed} incompletos</p><p className="text-xs text-amber-300">A conferência de dígitos não equivale à confirmação cadastral na Receita Federal. Registros suspeitos ficam sinalizados.</p><div className="max-h-32 overflow-auto text-xs text-slate-300">{preview.rows.slice(0,30).map(r=><div key={r.cnpj}>{formatTransportCnpj(r.cnpj)} — {r.name} — {r.uf}/{r.city}</div>)}</div><button disabled={importing} onClick={importAll} className="rounded-xl bg-emerald-600 px-5 py-3 font-black">{importing?"Importando...":"IMPORTAR SEM DUPLICATAS"}</button><button onClick={()=>setPending([])} className="ml-2 rounded-xl border p-3">Limpar prévia</button></div>}
+      </section>
+      <section className="rounded-2xl border border-amber-500/40 bg-slate-900/80 p-4 sm:p-6 space-y-3">
+        <h2 className="text-lg font-black text-amber-200">📍 ATUALIZAR UF / MUNICÍPIO VIA EXCEL</h2>
+        <p className="text-sm text-slate-300">Corrige SOMENTE a localização dos CNPJs já cadastrados. Exige colunas CNPJ, UF (ou Estado) e opcionalmente Cidade/Município. Não presume SP e não altera o status JÁ USADO, razão social ou CNAE. Informe a UF verdadeira a partir de fonte confiável.</p>
+        <label className="inline-flex cursor-pointer items-center gap-2 rounded-xl border border-amber-400/50 bg-amber-500/15 px-4 py-3 font-bold text-amber-100">
+          <FileSpreadsheet size={18}/> SELECIONAR EXCEL / CSV / TXT PARA CORRIGIR
+          <input type="file" accept=".xlsx,.csv,.tsv,.txt" multiple className="hidden" onChange={async e => {
+            const files = Array.from(e.target.files || []);
+            try {
+              const reports: TransportLocationReport[] = [];
+              for (const file of files) {
+                if (file.name.toLowerCase().endsWith(".xlsx")) {
+                  const sheets = await readTransportExcel(file);
+                  for (const { rows } of sheets) {
+                    try { reports.push(parseTransportLocationRows(rows)); }
+                    catch (err) { if (!String(err).includes("exige as colunas")) throw err; }
+                  }
+                } else reports.push(parseTransportLocationText(await file.text()));
+              }
+              if (!reports.length) throw new Error("Não encontrei planilhas com colunas CNPJ e UF.");
+              prepareLocationReports(reports);
+            } catch(err: any) { toast.error(err.message || "Falha ao ler a planilha de correções."); }
+            e.target.value = "";
+          }}/>
+        </label>
+        <textarea value={locationText} onChange={e => setLocationText(e.target.value)} className={inputStyle} rows={3} placeholder={"Ou cole dados: CNPJ;UF;Município\n18.538.045/0001-80;PB;Bayeux"}/>
+        <button type="button" className="rounded-xl border border-amber-400/40 px-4 py-2 text-sm font-bold text-amber-100" onClick={() => {
+          try { prepareLocationReports([parseTransportLocationText(locationText)]); }
+          catch(err: any) { toast.error(err.message || "Texto inválido"); }
+        }}>PREPARAR CORREÇÃO COLADA</button>
+        {locationReport && <div className="space-y-2 rounded-xl border border-amber-400/25 bg-black/30 p-3">
+          <p className="font-bold text-amber-100">PRÉVIA: {locationRows.length} CNPJs para conferir • {locationReport.rejected} rejeitados • {locationReport.conflicts} conflitos descartados.</p>
+          <p className="text-xs text-slate-300">A prévia valida o formato, mas NÃO confirma a UF na Receita Federal. CNPJs ausentes serão ignorados; cidades vazias serão preservadas.</p>
+          <div className="max-h-40 overflow-auto text-xs text-white">{locationRows.slice(0,50).map(row => <div key={row.cnpj} className="border-b border-white/10 py-1">{formatTransportCnpj(row.cnpj)} → {row.uf}{row.city ? " / " + row.city : ""}</div>)}</div>
+          <button disabled={!locationRows.length || locationUpdating} onClick={submitLocationUpdates} className="rounded-xl bg-amber-600 px-5 py-3 font-black text-black hover:bg-amber-500 disabled:opacity-40">{locationUpdating ? "ATUALIZANDO..." : "CONFIRMAR ATUALIZAÇÃO DE UF / CIDADE"}</button>
+          <button className="ml-2 rounded-xl border border-white/30 px-4 py-3" onClick={() => {setLocationRows([]);setLocationReport(null);}}>Cancelar prévia</button>
+        </div>}
       </section>
       <section className="rounded-2xl border border-cyan-500/25 bg-slate-900/70 p-4 sm:p-6 space-y-4">
         <div className="flex justify-between gap-2 flex-wrap"><h2 className="font-black flex items-center gap-2"><Search size={20}/> PESQUISAR TRANSPORTADORAS</h2><button onClick={exportCsv} className="text-sm border border-white/20 rounded-xl p-2 flex gap-2"><Download size={16}/> Exportar página CSV</button></div>
