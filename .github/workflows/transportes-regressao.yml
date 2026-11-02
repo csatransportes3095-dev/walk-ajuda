@@ -23,7 +23,9 @@ jobs:
         run: pnpm install --no-frozen-lockfile
       - name: Testes da nova rota
         run: pnpm exec vitest run server/transportes.test.ts
+      # O tsconfig atual do projeto usa ignoreDeprecations 6.0, mas a versão
+      # fixada no package.json é TypeScript 5.9.3. Compatibilidade só na CI.
       - name: Validacao TypeScript
-        run: pnpm check
+        run: pnpm exec tsc --noEmit --ignoreDeprecations 5.0
       - name: Build de producao
         run: pnpm build
