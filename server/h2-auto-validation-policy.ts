@@ -74,6 +74,7 @@ export function h2AutoNaturalNewCustomerIntent(input: string): boolean {
     .toLowerCase().replace(/[^a-z0-9\s]/g, " ").replace(/\s+/g, " ").trim();
   if (!text || /\d{5,}/.test(text) || /^(?:menu|inicio|voltar|0|[1-9]|10|h2|h3)$/.test(text))
     return false;
+  if (/\b(?:nao sou cliente|ainda nao sou cliente|novo cliente|primeiro cadastro|primeira conta)\b/.test(text)) return true;
   // Uma pessoa ja cadastrada, um indicador e pedidos de comissao nao podem
   // cair por engano na validacao de NOVO cliente.
   if (/\b(?:ja sou cliente|sou cliente|cliente antigo|ja tenho cadastro|ja tenho conta|ja comprei|meu pedido|minhas indicacoes|indiquei|sou indicador|comissao|cadastro incompleto|conta desativada|conta bloqueada|reembolso|cancelamento|emprestimo)\b/.test(text))
@@ -90,7 +91,7 @@ export function h2AutoNaturalNewCustomerIntent(input: string): boolean {
     return true;
   // "Queria uma conta" ou "Quero criar uma conta" = novo pedido,
   // mas nunca confundir com duvidas sobre login ou recuperacao de conta.
-  if (/\b(?:login|entrar|acessar|acesso|recuperar|codigo|senha|atualizar|editar|minha conta|meu cadastro)\b/.test(text))
+  if (/\b(?:login|entrar|acessar|acesso|recuperar|codigo|senha|atualizar|editar|minha conta)\b/.test(text))
     return false;
   return /\b(?:quero|queria|gostaria|preciso|necessito)\b.{0,35}\b(?:fazer|criar|abrir|comprar|ter|uma|um)\b.{0,18}\b(?:conta|cadastro)\b/.test(text);
 }
