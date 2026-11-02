@@ -17,7 +17,9 @@ jobs:
         with:
           node-version: '22'
           cache: pnpm
-      # O package.json do projeto já diverge do lockfile (dependência @types/express).\n      # A verificação isolada não deve alterar dependências da produção.\n      - name: Instalar dependencias
+      # O package.json do projeto já diverge do lockfile (dependência @types/express).
+      # A verificação isolada não deve alterar dependências da produção.
+      - name: Instalar dependencias
         run: pnpm install --no-frozen-lockfile
       - name: Testes da nova rota
         run: pnpm exec vitest run server/transportes.test.ts
