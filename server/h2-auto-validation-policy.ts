@@ -39,6 +39,12 @@ export function invalidH2AutoPhoneStageAnswer(stage: string, answer: string): bo
     !validH2AutoPhone11(answer);
 }
 
+/** Pedido breve de orientação; nunca conta como telefone ou tentativa de OTP. */
+export function isH2AutoHelpRequest(value: string): boolean {
+  const text = String(value ?? "").trim().toLowerCase();
+  return /^\?{1,3}$/.test(text) || text === "ajuda";
+}
+
 /** The first numbered option must be processed even when a conversation has
  * no existing server session. Otherwise the client sees the opening menu again,
  * and a retry of '2' is incorrectly counted as a phone validation attempt.
