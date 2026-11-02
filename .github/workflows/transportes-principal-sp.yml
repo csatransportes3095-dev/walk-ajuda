@@ -1,0 +1,33 @@
+name: Pesquisa SP - onibus e caminhoes CNAE principal
+on:
+  push:
+    branches: [research/cnpj-onibus-sp-2026-10]
+    paths:
+      - 'scripts/exportar_transportes_principais_sp_2026_10.py'
+      - '.github/workflows/transportes-principal-sp.yml'
+  workflow_dispatch:
+permissions:
+  contents: read
+jobs:
+  extrair:
+    runs-on: ubuntu-latest
+    timeout-minutes: 35
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.11'
+      - name: Instalar ferramentas
+        run: pip install "duckdb>=1.4,<2" openpyxl
+      - name: Extrair transportes de SP, somente atividade principal
+        run: python -u scripts/exportar_transportes_principais_sp_2026_10.py
+      - name: Entregar CSV pesquisa
+        uses: actions/upload-artifact@v4
+        if: always()
+        with:
+          name: transportes-onibus-caminhoes-principal-SP-outubro-2026
+          path: |
+            resultado/CNPJS_TRANSPORTES_PRINCIPAL_SP_ATIVOS_2026-10.csv
+            resultado/METADADOS_TRANSPORTES_PRINCIPAL_SP.json
+          retention-days: 30
+          if-no-files-found: warn
