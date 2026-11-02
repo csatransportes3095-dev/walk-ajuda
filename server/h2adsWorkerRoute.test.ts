@@ -3,7 +3,7 @@ import path from "node:path";
 import { spawnSync } from "node:child_process";
 import { beforeEach, describe, expect, it, vi } from "vitest";
 
-const { authenticateH2AdsWorker, claimH2AdsWorker, claimNextH2AdsWorkerCommand, completeH2AdsWorkerBrowserCommand, completeH2AdsWorkerPreparation, decryptH2AdsProxy, getH2AdsInstance, getH2AdsProxyCredential, recordH2AdsBrowserRuntimeState, recordH2AdsWorkerHeartbeat, getDb } = vi.hoisted(() => ({
+const { authenticateH2AdsWorker, claimH2AdsWorker, claimNextH2AdsWorkerCommand, completeH2AdsWorkerBrowserCommand, completeH2AdsWorkerPreparation, decryptH2AdsProxy, getH2AdsInstance, getH2AdsPreparedObservedIp, getH2AdsProxyCredential, recordH2AdsBrowserRuntimeState, recordH2AdsWorkerHeartbeat, getDb } = vi.hoisted(() => ({
   authenticateH2AdsWorker: vi.fn(),
   claimH2AdsWorker: vi.fn(),
   claimNextH2AdsWorkerCommand: vi.fn(),
@@ -11,6 +11,7 @@ const { authenticateH2AdsWorker, claimH2AdsWorker, claimNextH2AdsWorkerCommand, 
   completeH2AdsWorkerPreparation: vi.fn(),
   decryptH2AdsProxy: vi.fn(),
   getH2AdsInstance: vi.fn(),
+  getH2AdsPreparedObservedIp: vi.fn(),
   getH2AdsProxyCredential: vi.fn(),
   recordH2AdsBrowserRuntimeState: vi.fn(),
   recordH2AdsWorkerHeartbeat: vi.fn(),
@@ -51,7 +52,7 @@ function response() {
 function workerHeader(name: string, includeVersion = true) {
   if (name === "authorization") return "Bearer h2wt_synthetic";
   if (name === "x-h2ads-worker-key") return "h2w_synthetic";
-  if (name === "x-h2ads-agent-version" && includeVersion) return "1.3.0";
+  if (name === "x-h2ads-agent-version" && includeVersion) return "1.4.3";
   return undefined;
 }
 
@@ -109,7 +110,7 @@ describe("endpoints do Browser Worker H2 Ads", () => {
     const outdated = response();
     await routes["POST /api/h2ads/worker/commands/next"]({ body: {}, header: (name: string) => workerHeader(name, false) }, outdated.res);
     expect(outdated.state.statusCode).toBe(426);
-    expect(outdated.state.body).toEqual({ error: "Atualize o agente H2 Ads para executar comandos de navegador." });
+    expect(outdated.state.body).toEqual({ error: "Atualize o agente H2 Ads para a versão 1.4.3 ou superior." });
     expect(claimNextH2AdsWorkerCommand).not.toHaveBeenCalled();
   });
 
@@ -119,6 +120,7 @@ describe("endpoints do Browser Worker H2 Ads", () => {
     getH2AdsProxyCredential.mockResolvedValue("encrypted-proxy");
     decryptH2AdsProxy.mockReturnValue({ protocol: "http", host: "127.0.0.1", port: 8080, username: "worker", password: "secret", rotationMinutes: null });
     getH2AdsInstance.mockResolvedValue({ id: 32, name: "460 LEANDRO DE MORAES DOS SANTOS" });
+    getH2AdsPreparedObservedIp.mockResolvedValue("198.51.100.42");
     const routes = setupRoutes();
     const next = response();
 
@@ -127,9 +129,10 @@ describe("endpoints do Browser Worker H2 Ads", () => {
     expect(next.state.statusCode).toBe(200);
     expect(next.state.body).toMatchObject({
       command: { id: 10, instanceId: 32, command: "launch_browser" },
-      proxy: { instanceName: "460 LEANDRO DE MORAES DOS SANTOS" },
+      proxy: { instanceName: "460 LEANDRO DE MORAES DOS SANTOS", preparedObservedIp: "198.51.100.42" },
     });
     expect(getH2AdsInstance).toHaveBeenCalledWith(32);
+    expect(getH2AdsPreparedObservedIp).toHaveBeenCalledWith(32, 7);
   });
 
   it("mantém o componente de sessão válido e identifica a instância sem instrumentar páginas externas", () => {
