@@ -44,6 +44,13 @@ describe("Seguranca do Site - regras de servidor", () => {
       expect(decision("restricted", p)).toBe("allow");
     }
   });
+  it("reconhece rotas /adm/ sem liberar APIs protegidas", () => {
+    for (const path of ["/adm/chassis", "/adm/placa", "/adm/transportes", "/adm/futuro-modulo"]) {
+      expect(decision("restricted", path)).toBe("allow");
+      expect(decision("blocked", path)).toBe("allow");
+    }
+    expect(decision("blocked", "/api/trpc/transportes.list")).toBe("deny");
+  });
   it("preserva emergencia do ADM com autenticação propria", () => {
     expect(decision("blocked", "/admin/login")).toBe("allow");
     expect(decision("blocked", "/api/trpc/adminAuth.login")).toBe("allow");
