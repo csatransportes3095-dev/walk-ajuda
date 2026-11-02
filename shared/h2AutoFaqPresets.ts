@@ -315,20 +315,20 @@ const H2_AUTO_FAQ_NEW_TOPICS: H2AutoFaqRule[] = [
 ];
 
 function normalizeFaqKey(text: string): string {
-  return text.normalize("NFD").replace(/[\\u0300-\\u036f]/g,"")
-    .toLocaleLowerCase("pt-BR").replace(/[^a-z0-9\\s]/g," ").replace(/\\s+/g," ").trim();
+  return text.normalize("NFD").replace(/[\u0300-\u036f]/g,"")
+    .toLocaleLowerCase("pt-BR").replace(/[^a-z0-9\s]/g," ").replace(/\s+/g," ").trim();
 }
 function faqPhrases(rule: H2AutoFaqRule): string[] {
-  return [rule.question,...rule.variations.split(/\\r?\\n/).map(x=>x.trim()).filter(Boolean)];
+  return [rule.question,...rule.variations.split(/\r?\n/).map(x=>x.trim()).filter(Boolean)];
 }
 function mergeFaqPhrases(original: string, candidates: string[], claimed: Set<string>): string {
-  const lines=original.split(/\\r?\\n/).map(x=>x.trim()).filter(Boolean);
+  const lines=original.split(/\r?\n/).map(x=>x.trim()).filter(Boolean);
   const local=new Set(lines.map(normalizeFaqKey));
-  let merged=lines.join("\\n");
+  let merged=lines.join("\n");
   for (const phrase of candidates) {
     const key=normalizeFaqKey(phrase);
     if (!key || local.has(key) || claimed.has(key)) continue;
-    const next=merged ? merged+"\\n"+phrase : phrase;
+    const next=merged ? merged+"\n"+phrase : phrase;
     if (next.length>600) continue;
     merged=next;
     local.add(key);
@@ -356,7 +356,7 @@ export function mergeH2AutoExpandedFaq(config: H2AutoPersonalization): {
 } {
   const seeded=prepareH2AutoCommonFaq(config);
   const list=seeded.personalization.faq.map(rule=>({...rule}));
-  const claimed=new Set(list.flatMap(faqPhrases).map(normalizeFaqKey));
+  const claimed=new Set(list.map(x=>normalizeFaqKey(x.question)));
   let added=seeded.added, augmented=0;
   if (config.faqPresetsLoaded) {
     for (const suggestion of H2_AUTO_FAQ_NEW_TOPICS) {
@@ -372,7 +372,7 @@ export function mergeH2AutoExpandedFaq(config: H2AutoPersonalization): {
     const preset=H2_AUTO_FAQ_SUGGESTIONS.find(p=>p.id===current.id);
     if (!preset) continue; // Nunca edita perguntas manuais.
     const base=H2_AUTO_FAQ_BASE_SUGGESTIONS.find(p=>p.id===current.id);
-    const variations=mergeFaqPhrases(current.variations,preset.variations.split(/\\r?\\n/).filter(Boolean),claimed);
+    const variations=mergeFaqPhrases(current.variations,preset.variations.split(/\r?\n/).filter(Boolean),claimed);
     const answer=base && current.answer===base.answer ? preset.answer : current.answer;
     if (variations!==current.variations || answer!==current.answer) {
       list[i]={...current,variations,answer};
