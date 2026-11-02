@@ -1,0 +1,27 @@
+name: Transportes - build e regressao
+on:
+  push:
+    branches:
+      - feature/transportes-cnpj-importacao
+  workflow_dispatch:
+permissions:
+  contents: read
+jobs:
+  validar-transportes:
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+    steps:
+      - uses: actions/checkout@v4
+      - uses: pnpm/action-setup@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '22'
+          cache: pnpm
+      - name: Instalar dependencias
+        run: pnpm install --frozen-lockfile
+      - name: Testes da nova rota
+        run: pnpm exec vitest run server/transportes.test.ts
+      - name: Validacao TypeScript
+        run: pnpm check
+      - name: Build de producao
+        run: pnpm build
