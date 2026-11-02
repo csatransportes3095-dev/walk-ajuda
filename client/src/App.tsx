@@ -81,6 +81,7 @@ import AdminZohoConfig from "./pages/AdminZohoConfig";
 import AdminMedia from "./pages/AdminMedia";
 import AdminFeatureCards from "./pages/AdminFeatureCards";
 import AdminHubCentral from "./pages/AdminHubCentral";
+import AdminTransportes from "./pages/AdminTransportes";
 import AdminLocadora from "./pages/AdminLocadora";
 import LocadoraPortal from "./pages/LocadoraPortal";
 import AdminConsultas from "./pages/AdminConsultas";
@@ -215,6 +216,8 @@ function Router() {
     <Switch>
       <Route path={"/site-access"} component={SiteAccess} />
       <Route path={"/admin/login"} component={AdminLogin} />
+      <Route path={"/transpostes"}><AdminGuard><AdminTransportes /></AdminGuard></Route>
+      <Route path={"/admin/transportes"}><AdminGuard><AdminTransportes /></AdminGuard></Route>
       <Route path={"/recuperarsenha"} component={RecoveryRoute} />
       <Route path={"/h2ads/mobile"}>
         <H2AdsGuard><H2AdsMobile /></H2AdsGuard>
@@ -456,6 +459,7 @@ function AppContent() {
   const isDirectPublicTokenRoute = isAgendarRoute || isPhotoConfirmationRoute;
   const isVideoRoute = location.startsWith("/video") || location === "/tutorial";
   const isGastosRoute = location.toLowerCase() === "/gastos";
+  const isTransportesRoute = location === "/transpostes";
   const isEmprestimoRoute = location.toLowerCase() === "/emprestimo";
   const isCartoesRoute = location === "/cartoes" || location.startsWith("/cartoes/") || location.startsWith("/cartoes");
   const isPreCadastroRoute = location === "/pre-cadastro";
@@ -553,7 +557,7 @@ function AppContent() {
     return <Redirect to={location.toLowerCase()} />;
   }
 
-  if (isAdminRoute || isH2AdsRoute || isSimilarityRoute) {
+  if (isAdminRoute || isH2AdsRoute || isSimilarityRoute || isTransportesRoute) {
     return (
       <>
         <div className="min-h-screen pb-24 sm:pb-0">
