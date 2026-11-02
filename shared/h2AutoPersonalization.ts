@@ -129,7 +129,7 @@ export function classifyH2AutoPersonalizedQuestion(input: string): H2AutoPersona
   return null; // Sem inventar resposta para dúvidas desconhecidas.
 }
 
-const PUBLIC_GUIDANCE: Record<H2AutoPersonalizedTopic, string> = {
+const PUBLIC_GUIDANCE: Record<Exclude<H2AutoPersonalizedTopic, "personalizada">, string> = {
   atendimento: "👨‍💻 Para falar com nossa equipe, use a opção *Falar com atendente* no menu. Não encaminhei seu atendimento automaticamente.",
   codigo: "📧 Se já solicitou um código, confira o e-mail cadastrado e a pasta de spam. Se ele não chegou, solicite outro pelo fluxo de confirmação quando o prazo permitir. Nunca envie o código no grupo ou a terceiros.",
   novo_pedido: "🆕 Para fazer um pedido, escolha *Ainda não sou cliente* no menu e informe o telefone de quem indicou você.",
