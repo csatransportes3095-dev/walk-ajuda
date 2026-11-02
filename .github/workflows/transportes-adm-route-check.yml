@@ -1,0 +1,29 @@
+name: Transportes - verificar rota ADM
+on:
+  push:
+    branches: [fix/transportes-adm-route-20261101]
+  workflow_dispatch:
+permissions:
+  contents: read
+jobs:
+  validar:
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+    steps:
+      - uses: actions/checkout@v4
+      - uses: pnpm/action-setup@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '22'
+          cache: pnpm
+      - name: Instalar
+        run: pnpm install --frozen-lockfile
+      - name: Testes transportes
+        run: pnpm exec vitest run server/transportes.test.ts
+      - name: Compilar
+        run: pnpm build
+      - name: Conferir rota e card
+        run: |
+          grep -q 'Route path={"/adm/transportes"}' client/src/App.tsx
+          grep -q 'href: "/adm/transportes"' client/src/pages/AdminCodes.tsx
+          grep -q 'AdminGuard><AdminTransportes' client/src/App.tsx
