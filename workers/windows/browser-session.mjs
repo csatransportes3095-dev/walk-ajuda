@@ -322,7 +322,7 @@ async function suspendProxyTraffic(reason = "proxy_path_unverified") {
 async function resumeProxyTraffic() {
   // A instância permanece aberta durante a queda. O novo caminho só é liberado
   // depois de validar o upstream e confirmar o mesmo IP pelo Chrome de prova.
-  if (!networkSuspended || browserExitHandled) return;
+  if (!networkSuspended || browserExitHandled || sessionIpChanged) return;
   try {
     if (!backendRelay) {
       backendRelay = createBackendRelay();
@@ -330,6 +330,23 @@ async function resumeProxyTraffic() {
     }
     // O front continua bloqueado enquanto o novo caminho é testado.
     const observedIp = await checkIpThroughPort(backendRelay.port);
+    // Uma sessao aberta jamais troca de IP automaticamente. A verificacao
+    // acontece ANTES de religar o tunel e antes de consultar o Chrome.
+    if (sessionLockedIp && normalizeIp(observedIp) !== normalizeIp(sessionLockedIp)) {
+      sessionIpChanged = true;
+      writeSession({
+        networkState: "blocked",
+        privacyGuard: "blocked",
+        sessionIpChanged: true,
+        sessionIpChangedAt: new Date().toISOString(),
+        sessionLockedIp,
+        observedIp,
+        killSwitch: "triggered",
+        killSwitchReason: "session_ip_changed",
+      });
+      await suspendProxyTraffic("session_ip_changed");
+      return;
+    }
     const executable = chromeExecutable();
     if (!executable) throw new Error("browser_not_found");
     const browserObservedIp = await verifyChromeProxyPath(executable, backendRelay.port, observedIp);

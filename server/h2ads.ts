@@ -2,10 +2,11 @@ import { beginH2AdsInstanceDeletion, assertH2AdsInstanceNotDeleting, getH2AdsDel
 import { r2DeleteH2AdsInstanceSnapshotsVerified } from "./r2Storage";
 import { deleteH2AdsIpHistory } from "./h2adsIpHistory";
 import { createHash, randomBytes, timingSafeEqual } from "node:crypto";
-import { and, asc, desc, eq, gt, isNull, sql } from "drizzle-orm";
+import { and, asc, desc, eq, gt, inArray, isNull, sql } from "drizzle-orm";
 import { h2AdsBrowserWorkers, h2AdsGroups, h2AdsInstanceBrowserRuns, h2AdsInstanceNetworkProfiles, h2AdsInstanceProxyCredentials, h2AdsInstances, h2AdsInstanceWorkerAssignments, h2AdsProxyPool, h2AdsWorkerBrowserCommands, h2AdsWorkerCommands, h2AdsWorkerPairingCodes, type H2AdsBrowserWorker, type H2AdsGroup, type H2AdsInstance, type H2AdsInstanceBrowserRun, type H2AdsInstanceNetworkProfile, type H2AdsInstanceWorkerAssignment } from "../drizzle/schema";
 import { getDb } from "./db";
 import { decryptH2AdsProxy } from "./h2adsProxySecurity";
+import { H2ADS_REPREPARABLE_STATES, canRequestH2AdsPreparation, shouldWriteH2AdsBrowserCommandState } from "./h2adsSessionStateGuards";
 
 export type H2AdsDashboard = {
   groups: H2AdsGroup[];
@@ -372,9 +373,14 @@ export async function requestH2AdsBrowserPreparation(instanceId: number): Promis
   if (!credentials[0]) throw new Error("A instância não possui uma rota protegida para validar.");
   const networkProfiles = await db.select({ healthStatus: h2AdsInstanceNetworkProfiles.healthStatus }).from(h2AdsInstanceNetworkProfiles).where(eq(h2AdsInstanceNetworkProfiles.instanceId, instanceId)).limit(1);
   if (networkProfiles[0]?.healthStatus !== "healthy") throw new Error("A rota precisa estar aprovada antes da preparação do browser.");
+  const currentRun = await db.select({ state: h2AdsInstanceBrowserRuns.state }).from(h2AdsInstanceBrowserRuns).where(eq(h2AdsInstanceBrowserRuns.instanceId, instanceId)).limit(1);
+  if (!canRequestH2AdsPreparation(currentRun[0]?.state ?? null)) throw new Error("Instância com navegador aberto ou preparação em andamento. Feche o navegador antes de preparar novamente.");
   const latestCommand = await db.select({ id: h2AdsWorkerCommands.id, status: h2AdsWorkerCommands.status }).from(h2AdsWorkerCommands).where(and(eq(h2AdsWorkerCommands.instanceId, instanceId), eq(h2AdsWorkerCommands.command, "prepare_browser"))).orderBy(desc(h2AdsWorkerCommands.id)).limit(1);
   if (latestCommand[0] && (latestCommand[0].status === "queued" || latestCommand[0].status === "claimed")) return { commandId: latestCommand[0].id, instanceId, workerId: worker.id };
-  await upsertH2AdsBrowserRun(instanceId, worker.id, { state: "queued", observedIp: null, lastErrorCategory: null, preparedAt: null });
+  if (currentRun[0]) {
+    const updated = await db.update(h2AdsInstanceBrowserRuns).set({ state: "queued", observedIp: null, lastErrorCategory: null, preparedAt: null, lastChangedAt: new Date() }).where(and(eq(h2AdsInstanceBrowserRuns.instanceId, instanceId), eq(h2AdsInstanceBrowserRuns.workerId, worker.id), inArray(h2AdsInstanceBrowserRuns.state, [...H2ADS_REPREPARABLE_STATES])));
+    if (Number(updated[0].affectedRows) !== 1) throw new Error("Estado da sessão mudou. Preparação cancelada para proteger o navegador aberto.");
+  } else await upsertH2AdsBrowserRun(instanceId, worker.id, { state: "queued", observedIp: null, lastErrorCategory: null, preparedAt: null });
   const inserted = await db.insert(h2AdsWorkerCommands).values({ workerId: worker.id, instanceId, command: "prepare_browser" });
   return { commandId: Number(inserted[0].insertId), instanceId, workerId: worker.id };
 }
@@ -387,7 +393,11 @@ export async function claimNextH2AdsWorkerCommand(workerId: number): Promise<H2A
     if (!command) return null;
     const marked = await tx.update(h2AdsWorkerCommands).set({ status: "claimed", claimedAt: new Date() }).where(and(eq(h2AdsWorkerCommands.id, command.id), eq(h2AdsWorkerCommands.status, "queued")));
     if (Number(marked[0].affectedRows) !== 1) return null;
-    await tx.update(h2AdsInstanceBrowserRuns).set({ state: "preparing", lastChangedAt: new Date() }).where(eq(h2AdsInstanceBrowserRuns.instanceId, command.instanceId));
+    const stateChange = await tx.update(h2AdsInstanceBrowserRuns).set({ state: "preparing", lastChangedAt: new Date() }).where(and(eq(h2AdsInstanceBrowserRuns.instanceId, command.instanceId), eq(h2AdsInstanceBrowserRuns.workerId, workerId), eq(h2AdsInstanceBrowserRuns.state, "queued")));
+    if (Number(stateChange[0].affectedRows) !== 1) {
+      await tx.update(h2AdsWorkerCommands).set({ status: "cancelled", completedAt: new Date(), errorCategory: "stale_preparation" }).where(eq(h2AdsWorkerCommands.id, command.id));
+      return null;
+    }
     return { ...command, command: "prepare_browser" as const };
   });
   if (preparation) return preparation;
@@ -407,7 +417,8 @@ export async function completeH2AdsWorkerPreparation(input: { workerId: number; 
   const command = commands[0];
   if (!command) return false;
   await db.update(h2AdsWorkerCommands).set({ status: input.state === "proxy_verified" ? "succeeded" : "failed", errorCategory: input.errorCategory ?? null, completedAt: new Date() }).where(eq(h2AdsWorkerCommands.id, command.id));
-  await upsertH2AdsBrowserRun(command.instanceId, input.workerId, { state: input.state, observedIp: input.observedIp ?? null, lastErrorCategory: input.errorCategory ?? null, preparedAt: input.state === "proxy_verified" ? new Date() : null });
+  const transitioned = await db.update(h2AdsInstanceBrowserRuns).set({ state: input.state, observedIp: input.observedIp ?? null, lastErrorCategory: input.errorCategory ?? null, preparedAt: input.state === "proxy_verified" ? new Date() : null, lastChangedAt: new Date() }).where(and(eq(h2AdsInstanceBrowserRuns.instanceId, command.instanceId), eq(h2AdsInstanceBrowserRuns.workerId, input.workerId), eq(h2AdsInstanceBrowserRuns.state, "preparing")));
+  if (Number(transitioned[0].affectedRows) !== 1) return true; // Resposta atrasada nao sobrescreve sessao em andamento.
   if (input.state === "proxy_verified") {
     const assignments = await db.select({
       id: h2AdsInstanceWorkerAssignments.id,
@@ -484,7 +495,10 @@ export async function completeH2AdsWorkerBrowserCommand(input: { workerId: numbe
   if (!command) return false;
   if ((input.command === "launch_browser" && input.state !== "browser_open" && input.state !== "blocked") || (input.command === "close_browser" && input.state !== "closed" && input.state !== "blocked")) return false;
   await db.update(h2AdsWorkerBrowserCommands).set({ status: input.state === "blocked" ? "failed" : "succeeded", errorCategory: input.errorCategory ?? null, completedAt: new Date() }).where(eq(h2AdsWorkerBrowserCommands.id, command.id));
-  await upsertH2AdsBrowserRun(command.instanceId, input.workerId, { state: input.state, lastErrorCategory: input.errorCategory ?? null });
+  const currentRun = await db.select({ state: h2AdsInstanceBrowserRuns.state }).from(h2AdsInstanceBrowserRuns).where(and(eq(h2AdsInstanceBrowserRuns.instanceId, command.instanceId), eq(h2AdsInstanceBrowserRuns.workerId, input.workerId))).limit(1);
+  if (shouldWriteH2AdsBrowserCommandState(input.command, input.state, currentRun[0]?.state ?? null)) {
+    await upsertH2AdsBrowserRun(command.instanceId, input.workerId, { state: input.state, lastErrorCategory: input.errorCategory ?? null });
+  }
   return true;
 }
 

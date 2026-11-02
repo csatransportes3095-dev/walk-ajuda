@@ -30,7 +30,7 @@ describe("H2 Ads entry route isolation", () => {
     expect(appSource).not.toContain('import WelcomeScreen from "./components/WelcomeScreen"');
     expect(appSource).not.toContain("<WelcomeScreen>");
     expect(appSource).toContain('if (location === "/")');
-    expect(appSource).toContain('return <Redirect to={"/login" + suffix} />');
+    expect(appSource).toContain('if (location === "/") {\n    return <Router />;\n  }');
     expect(appSource).toContain('<Route path={"/h2ads"}>');
     expect(appSource).toContain('<H2AdsGuard><H2Ads /></H2AdsGuard>');
     expect(appSource).toContain('<Route path={"/login"} component={Home} />');
@@ -76,7 +76,8 @@ describe("H2 Ads entry route isolation", () => {
     expect(pageSource).toContain("parseH2AdsProxyInput");
     expect(pageSource).toContain("SOCKS5");
     expect(pageSource).toContain("Verificar rota");
-    expect(pageSource).toContain("Uma rota por instância, sem confusão.");
+    expect(pageSource).toContain("Instâncias e rotas");
+    expect(pageSource).toContain("Fila de Proxies H2ADS");
     expect(pageSource).not.toContain("trpc.orders");
     expect(pageSource).not.toContain("trpc.customers");
     expect(pageSource).not.toContain("proxyUrl");

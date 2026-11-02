@@ -37,7 +37,7 @@ describe("fundação multi-Worker H2 Ads", () => {
     const script = read("workers/windows/H2AdsWorker.ps1");
     const runner = read("workers/windows/browser-runner.mjs");
     const session = read("workers/windows/browser-session.mjs");
-    expect(script).toContain('$AgentVersion = "1.4.1"');
+    expect(script).toContain('$AgentVersion = "1.4.3"');
     expect(script).toContain("ConvertFrom-SecureString");
     expect(script).toContain("ConvertTo-SecureString");
     expect(script).toContain("Read-Host");
@@ -207,7 +207,7 @@ describe("fundação multi-Worker H2 Ads", () => {
     expect(end).toBeGreaterThan(start);
     const events: string[] = [];
     const sandbox: Record<string, any> = {
-      networkSuspended: true, browserExitHandled: false, activeBackendPort: undefined,
+      networkSuspended: true, browserExitHandled: false, sessionIpChanged: false, activeBackendPort: undefined,
       backendRelay: undefined, frontRelay: { kind: "front_blocked" }, relayPort: 9876,
       createBackendRelay: () => ({ port: 6543, listen: async () => undefined }),
       checkIpThroughPort: async () => { throw new Error("proxy_tcp_timeout"); },
