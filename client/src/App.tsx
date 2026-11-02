@@ -216,8 +216,9 @@ function Router() {
     <Switch>
       <Route path={"/site-access"} component={SiteAccess} />
       <Route path={"/admin/login"} component={AdminLogin} />
-      <Route path={"/transpostes"}><AdminGuard><AdminTransportes /></AdminGuard></Route>
-      <Route path={"/admin/transportes"}><AdminGuard><AdminTransportes /></AdminGuard></Route>
+      <Route path={"/adm/transportes"}><AdminGuard><AdminTransportes /></AdminGuard></Route>
+      <Route path={"/transpostes"}><Redirect to="/adm/transportes" /></Route>
+      <Route path={"/admin/transportes"}><Redirect to="/adm/transportes" /></Route>
       <Route path={"/recuperarsenha"} component={RecoveryRoute} />
       <Route path={"/h2ads/mobile"}>
         <H2AdsGuard><H2AdsMobile /></H2AdsGuard>
@@ -442,7 +443,7 @@ function AppContent() {
   const [location] = useLocation();
   const isGeradorChassiRoute = isChassisAdminPath(location);
   const isVehicleUsageAdminRoute = location.toLowerCase() === "/adm/placa";
-  const isAdminRoute = location.startsWith("/admin") || isGeradorChassiRoute || isVehicleUsageAdminRoute;
+  const isAdminRoute = location.startsWith("/admin") || isGeradorChassiRoute || isVehicleUsageAdminRoute || location.toLowerCase() === "/adm/transportes" || location.toLowerCase() === "/transpostes";
   const isH2AdsRoute = isH2AdsPath(location);
   const isSimilarityRoute = location.toLowerCase() === "/similaridade";
   const isTrackingRoute = location === "/acompanhar";
@@ -459,7 +460,6 @@ function AppContent() {
   const isDirectPublicTokenRoute = isAgendarRoute || isPhotoConfirmationRoute;
   const isVideoRoute = location.startsWith("/video") || location === "/tutorial";
   const isGastosRoute = location.toLowerCase() === "/gastos";
-  const isTransportesRoute = location === "/transpostes";
   const isEmprestimoRoute = location.toLowerCase() === "/emprestimo";
   const isCartoesRoute = location === "/cartoes" || location.startsWith("/cartoes/") || location.startsWith("/cartoes");
   const isPreCadastroRoute = location === "/pre-cadastro";
@@ -557,7 +557,7 @@ function AppContent() {
     return <Redirect to={location.toLowerCase()} />;
   }
 
-  if (isAdminRoute || isH2AdsRoute || isSimilarityRoute || isTransportesRoute) {
+  if (isAdminRoute || isH2AdsRoute || isSimilarityRoute) {
     return (
       <>
         <div className="min-h-screen pb-24 sm:pb-0">
