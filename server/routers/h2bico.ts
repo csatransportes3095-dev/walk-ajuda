@@ -707,6 +707,6 @@ export const h2bicoRouter = router({
       ORDER BY id DESC
       LIMIT 100
     `);
-    return rows[0] as any[];
+    return rows[0] as unknown as any[];
   }),
 });
