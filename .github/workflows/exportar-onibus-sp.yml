@@ -1,0 +1,49 @@
+name: Extrair CNPJs onibus SP - Receita 2026-10
+on:
+  push:
+    branches: [research/cnpj-onibus-sp-2026-10]
+    paths:
+      - 'scripts/exportar_onibus_sp_receita_2026_10.py'
+      - '.github/workflows/exportar-onibus-sp.yml'
+  workflow_dispatch:
+permissions:
+  contents: read
+jobs:
+  extrair:
+    runs-on: ubuntu-latest
+    timeout-minutes: 150
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.11'
+      - name: Instalar ferramentas de processamento
+        run: |
+          python -m pip install --upgrade pip
+          pip install "duckdb>=1.4.0,<2.0" openpyxl
+      - name: Inspecionar fonte publica
+        run: |
+          python - <<'PY'
+          import duckdb
+          db=duckdb.connect()
+          db.execute("INSTALL httpfs")
+          db.execute("LOAD httpfs")
+          print("DuckDB:",duckdb.__version__)
+          url="hf://datasets/cnpjaberto/cnpj-dados-receita-brasil-2026-10/municipios/municipios.parquet"
+          print("Municipios 2026-10:",db.execute("select count(*) from read_parquet(?)",[url]).fetchone()[0])
+          PY
+      - name: Extrair base SP geral - matrizes filiais CNAEs primarios secundarios
+        env:
+          DESTINO_SP: resultado
+        run: python -u scripts/exportar_onibus_sp_receita_2026_10.py
+      - uses: actions/upload-artifact@v4
+        if: always()
+        with:
+          name: onibus-sp-geral-receita-2026-10
+          path: |
+            resultado/CNPJS_ONIBUS_SP_GERAL_2026-10.zip
+            resultado/CNPS_ONIBUS_SP_GERAL_2026-10.csv
+            resultado/CNPJS_ONIBUS_SP_GERAL_2026-10.xlsx
+            resultado/RELATORIO_EXTRAÇÃO.json
+          if-no-files-found: warn
+          retention-days: 30
