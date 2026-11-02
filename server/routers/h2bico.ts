@@ -144,6 +144,35 @@ export const h2bicoRouter = router({
     }));
   }),
 
+  // Consulta administrativa de fotos recentemente importadas (somente leitura).
+  // Permite selecionar explicitamente um lote já enviado, sem mudar registros antigos automaticamente.
+  recentPhotoImports: adminProcedure.input(z.object({
+    limit: z.number().int().min(1).max(300).optional().default(120),
+  }).strict()).query(async ({ input }) => {
+    const db=await dbOrThrow();
+    const rows=await db.execute(sql`
+      SELECT r.id,r.cpf,r.name,r.uf,r.status,r.createdAt,r.linkedOrder,r.usedAt,
+             em.earStatus,rv.reviewState
+      FROM h2bico_records r
+      LEFT JOIN h2bico_ear_marks em ON em.recordId=r.id
+      LEFT JOIN h2bico_review rv ON rv.recordId=r.id
+      WHERE r.source='importacao-lote'
+        AND r.photoUrl IS NOT NULL AND TRIM(r.photoUrl)<>''
+      ORDER BY r.id DESC
+      LIMIT ${input.limit}
+    `);
+    return (rows[0] as any[]).map(row=>({
+      id:Number(row.id),
+      cpf:String(row.cpf),
+      name:String(row.name||"SEM NOME"),
+      uf:row.uf?String(row.uf):null,
+      createdAt:row.createdAt,
+      earStatus:row.earStatus==="com_ear"||row.earStatus==="sem_ear"?row.earStatus:null,
+      reviewState:row.reviewState==="confirmed"||row.reviewState==="discarded"?row.reviewState:"pending",
+      eligible:row.status==="available"&&!row.usedAt&&!String(row.linkedOrder||"").trim()&&row.reviewState!=="discarded",
+    }));
+  }),
+
   // Consulta por lote somente CPFs com foto salva; nao depende do limite da vitrine.
   checkExtractedCpfs: adminProcedure.input(z.object({
     cpfs: z.array(z.string().regex(/^\d{11}$/)).max(300),
