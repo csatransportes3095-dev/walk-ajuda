@@ -8,7 +8,7 @@ import { resolveReferralDeclaration } from "./referral";
 import { sendH2AutoOrderCode } from "./h2-auto-order-email";
 import { recordH2AutoPhoneFailure, clearH2AutoPhoneFailures, type PhoneStage } from "./h2-auto-validation-blocks";
 import { h2AutoPhoneFailureMessage, type H2AutoPhoneKind, type H2AutoPhoneFailure } from "./h2-auto-phone-attempt-message";
-import { invalidH2AutoPhoneStageAnswer, normalizeH2AutoPhone11, h2AutoNavigationCommand, initialH2AutoChoiceStage, repeatedH2AutoChoice, isH2AutoHelpRequest } from "./h2-auto-validation-policy";
+import { invalidH2AutoPhoneStageAnswer, normalizeH2AutoPhone11, h2AutoNavigationCommand, initialH2AutoChoiceStage, repeatedH2AutoChoice, isH2AutoHelpRequest, h2AutoNaturalNewCustomerIntent } from "./h2-auto-validation-policy";
 import { manualSilencedPhones, normalizeSilencedPhone } from "./h2-auto-silenced-contacts";
 import { h2AutoConfirmationSchema } from "../shared/h2AutoConfirmation";
 import { h2AutoPersonalizationSchema, H2_AUTO_PERSONALIZATION_DEFAULT, getH2AutoPersonalizedReply } from "../shared/h2AutoPersonalization";
@@ -226,7 +226,8 @@ export function registerH2AutoAccessRoutes(app: Express): void {
             customer_phone_hash=NULL,customer_email_hash=NULL,code_hash=NULL,code_expires=NULL,
             code_attempts=0,resend_after=0,expires_at=0,updated_at=VALUES(updated_at)`);
         await clearH2AutoPhoneFailures(deviceId,sessionId);
-        const firstStage = initialH2AutoChoiceStage(input);
+        const firstStage = initialH2AutoChoiceStage(input) ??
+          (h2AutoNaturalNewCustomerIntent(input) ? "referral_phone" : null);
         if (firstStage) {
           await update(sessionId, sql`stage=${firstStage},updated_at=${now}`);
           return respond(res, 200, {state:firstStage, message:firstStage==="customer_phone" ? phoneMessage :
@@ -326,7 +327,7 @@ export function registerH2AutoAccessRoutes(app: Express): void {
           await update(sessionId, sql`stage='referrals_phone',updated_at=${now}`);
           return respond(res, 200, { state: "referrals_phone", message: confirmation.phonePrompt });
         }
-        if (normalized === "2") {
+        if (normalized === "2" || h2AutoNaturalNewCustomerIntent(input)) {
           await update(sessionId, sql`stage='referral_phone',updated_at=${now}`);
           return respond(res, 200, { state: "referral_phone", message: referrerMessage });
         }
@@ -425,7 +426,7 @@ export function registerH2AutoAccessRoutes(app: Express): void {
       if (s.stage === "referral_phone") {
         // The APK may replay the same choice on transition. A repeated '2'
         // is not an invalid indicator number and must not count as a failure.
-        if (repeatedH2AutoChoice(s.stage,input))
+        if (repeatedH2AutoChoice(s.stage,input) || h2AutoNaturalNewCustomerIntent(input))
           return respond(res,200,{state:"referral_phone",message:referrerMessage});
         if (normalized === "6") return respond(res, 200, { state: "human",
           message: confirmation.referralHumanHelp });

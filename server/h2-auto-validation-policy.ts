@@ -59,6 +59,43 @@ export function initialH2AutoChoiceStage(input: string):
   }
 }
 
+
+/**
+ * Uma frase claramente de NOVO cliente equivale a escolher 2 no menu.
+ * Nao identifica ninguem e nunca libera cadastro: o servidor ainda exige
+ * o telefone do INDICADOR e a validacao existente.
+ *
+ * Somente na etapa "choice"/primeiro contato; nao deve operar em OTP,
+ * telefones de clientes ou sessoes ja autenticadas.
+ */
+export function h2AutoNaturalNewCustomerIntent(input: string): boolean {
+  if (typeof input !== "string" || input.length > 220) return false;
+  const text = input.normalize("NFD").replace(/[\u0300-\u036f]/g, "")
+    .toLowerCase().replace(/[^a-z0-9\s]/g, " ").replace(/\s+/g, " ").trim();
+  if (!text || /\d{5,}/.test(text) || /^(?:menu|inicio|voltar|0|[1-9]|10|h2|h3)$/.test(text))
+    return false;
+  if (/\b(?:nao sou cliente|ainda nao sou cliente|novo cliente|primeiro cadastro|primeira conta)\b/.test(text)) return true;
+  // Uma pessoa ja cadastrada, um indicador e pedidos de comissao nao podem
+  // cair por engano na validacao de NOVO cliente.
+  if (/\b(?:ja sou cliente|sou cliente|cliente antigo|ja tenho cadastro|ja tenho conta|ja comprei|meu pedido|minhas indicacoes|indiquei|sou indicador|comissao|cadastro incompleto|conta desativada|conta bloqueada|reembolso|cancelamento|emprestimo)\b/.test(text))
+    return false;
+  if (/\b(?:nao fui indicado|nao fui indicada|nao me indicaram|nao me indicou|ninguem me indicou|sem indicador|nao tenho indicador)\b/.test(text))
+    return false;
+  const referred =
+    /\b(?:fui|foi|sou|estou)\s+indicad[oa]\b/.test(text) ||
+    /\bme\s+indic(?:ou|aram)\b/.test(text) ||
+    /\bindicad[oa]\s+(?:por|pelo|pela)\b/.test(text) ||
+    /\bindic(?:ou|aram)\b.{0,55}\b(?:fazer|criar|abrir|comprar|ter)\b.{0,25}\b(?:conta|cadastro)\b/.test(text);
+  if (referred) return true;
+  if (/\b(?:nao sou cliente|ainda nao sou cliente|novo cliente|primeiro cadastro|primeira conta)\b/.test(text))
+    return true;
+  // "Queria uma conta" ou "Quero criar uma conta" = novo pedido,
+  // mas nunca confundir com duvidas sobre login ou recuperacao de conta.
+  if (/\b(?:login|entrar|acessar|acesso|recuperar|codigo|senha|atualizar|editar|minha conta)\b/.test(text))
+    return false;
+  return /\b(?:quero|queria|gostaria|preciso|necessito)\b.{0,35}\b(?:fazer|criar|abrir|comprar|ter|uma|um)\b.{0,18}\b(?:conta|cadastro)\b/.test(text);
+}
+
 /** Ignore only exact repeated selections matching the current phone stage.
  * Never grant access or reset a security block with these duplicate inputs.
  */
