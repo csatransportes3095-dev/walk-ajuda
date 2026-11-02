@@ -3,7 +3,7 @@ import type { H2AutoFaqRule, H2AutoPersonalization } from "./h2AutoPersonalizati
 /** Textos sugeridos a partir dos fluxos atuais do H2. Editáveis por aparelho.
  *  Inicialmente DESLIGADOS: só enviar após revisão do ADM.
  */
-export const H2_AUTO_FAQ_SUGGESTIONS: H2AutoFaqRule[] = [
+const H2_AUTO_FAQ_BASE_SUGGESTIONS: H2AutoFaqRule[] = [
   { id: "h2_login_cliente", question: "Como faço login no site?", variations: "Quero entrar na minha conta\nComo acesso minha conta?\nNão sei como fazer login", answer: "🔐 *ACESSO AO SITE*\n\nAcesse:\nhttps://h2colombiano.com/login\n\nInforme seu telefone com DDD.\nDepois digite o código de 6 números enviado ao e-mail cadastrado.\n\n✅ O acesso do cliente não usa senha.", enabled: false },
   { id: "h2_ja_sou_cliente", question: "Já sou cliente. Como continuo?", variations: "Sou cliente e quero atendimento\nJá tenho cadastro no H2\nQuero acessar como cliente", answer: "✅ *JÁ SOU CLIENTE*\n\nEscolha *JÁ SOU CLIENTE* no início do H2 AUTO.\n\nInforme o telefone do cadastro com DDD e siga a confirmação por e-mail.\n\n🏠 Digite *MENU* para início.", enabled: false },
   { id: "h2_formato_telefone", question: "Qual telefone devo digitar no cadastro?", variations: "Como escrevo meu número de telefone?\nPosso colocar 55 e DDD?\nMeu telefone está com traços", answer: "📱 *TELEFONE*\n\nInforme seu celular com DDD.\nO sistema reconhece formatos com +55, espaços e traços.\n\nConfira se o número é o mesmo do cadastro.", enabled: false },
@@ -43,6 +43,344 @@ export const H2_AUTO_FAQ_SUGGESTIONS: H2AutoFaqRule[] = [
   { id: "h2_video_android", question: "Tem vídeo de ajuda para Android?", variations: "Onde vejo tutorial Android?\nComo acessar instruções Android?\nVídeo de preparação do Android", answer: "📱 *VÍDEO PARA ANDROID*\n\nVeja as orientações disponíveis em:\nhttps://h2colombiano.com/video/hard-android\n\nConfira os requisitos antes de começar.", enabled: false },
   { id: "h2_video_iphone", question: "Tem vídeo de ajuda para iPhone?", variations: "Onde vejo tutorial iPhone?\nComo acessar vídeo para iOS?\nVídeo de preparação do iPhone", answer: "📱 *VÍDEO PARA IPHONE*\n\nVeja as orientações disponíveis em:\nhttps://h2colombiano.com/video/prepara-iphone\n\nConfira os requisitos antes de começar.", enabled: false }
 ];
+
+
+/** Subperguntas: uma resposta por assunto, sem consumir vagas com sinônimos. */
+const H2_AUTO_FAQ_EXTRA_VARIATIONS: Record<string,string[]> = {
+  "h2_login_cliente": [
+    "Onde entro no site H2?",
+    "Como entrar sem senha?",
+    "O login é com telefone?",
+    "Tem que digitar senha?",
+    "Onde recebo o código de acesso?"
+  ],
+  "h2_ja_sou_cliente": [
+    "Já fiz pedido antes, como entro?",
+    "Tenho cadastro, qual opção escolho?",
+    "Sou cliente antigo",
+    "Como continuar meu atendimento?"
+  ],
+  "h2_formato_telefone": [
+    "Precisa colocar o DDD?",
+    "Posso escrever número com parênteses?",
+    "Aceita telefone com +55?",
+    "Como colocar meu celular corretamente?"
+  ],
+  "h2_codigo_nao_chegou": [
+    "Não recebi o e-mail com código",
+    "Já pedi código e não chega",
+    "Meu código não chegou",
+    "Não está enviando o código",
+    "Pedi código faz tempo",
+    "Código não aparece no spam",
+    "Por que não recebo código?"
+  ],
+  "h2_codigo_invalido": [
+    "Código de confirmação expirado",
+    "O código deu erro",
+    "Digitei o código e não entrou",
+    "Pedi um novo código, qual uso?"
+  ],
+  "h2_cadastro_incompleto": [
+    "Como finalizar meu cadastro?",
+    "Meu cadastro está faltando dados",
+    "Onde atualizo o cadastro incompleto?",
+    "Por que cadastro incompleto não recebe código?"
+  ],
+  "h2_telefone_nao_encontrado": [
+    "Meu telefone não foi localizado",
+    "Já tenho cadastro e não encontra",
+    "Não reconheceu meu telefone",
+    "Por que diz que não tenho cadastro?"
+  ],
+  "h2_cadastro_novo": [
+    "Como ser um novo cliente?",
+    "É minha primeira vez no H2",
+    "Quero me cadastrar agora",
+    "Sou novo, como faço pedido?"
+  ],
+  "h2_telefone_indicador": [
+    "Que telefone informar do indicador?",
+    "Preciso informar o número de quem indicou?",
+    "O número é meu ou de quem me indicou?",
+    "Onde coloco o telefone de quem indicou?",
+    "Como informo a pessoa que me indicou?"
+  ],
+  "h2_sem_indicador": [
+    "Posso comprar sem indicação?",
+    "Não conheço um indicador",
+    "Preciso mesmo ser indicado?",
+    "O que faço sem telefone do indicador?"
+  ],
+  "h2_fazer_pedido": [
+    "Como comprar um serviço?",
+    "Quero abrir outro pedido",
+    "Onde faço um pedido de Uber?",
+    "Já sou cliente e quero pedir novamente",
+    "Qual o link para pedir?"
+  ],
+  "h2_acompanhar_pedido": [
+    "Como vejo o status do meu pedido?",
+    "Quero rastrear meu pedido",
+    "Onde aparece meu pedido?",
+    "Como acompanhar pelo celular?",
+    "Cadê o acompanhamento?"
+  ],
+  "h2_pedido_demora": [
+    "Quanto tempo demora para entregar?",
+    "Quanto tempo para entregar a conta?",
+    "Qual o prazo de entrega?",
+    "Quantos dias para ficar pronto?",
+    "Quando vocês entregam?",
+    "Demora muito para liberar?",
+    "Tem previsão de entrega?",
+    "Já paguei, quando vou receber?",
+    "Quanto tempo falta para meu pedido?",
+    "Que dia meu pedido sai?"
+  ],
+  "h2_pedido_analise": [
+    "Está em análise, o que significa?",
+    "Por que meu pedido está em análise?",
+    "Quanto tempo fica em análise?",
+    "Pedido em análise já está aprovado?"
+  ],
+  "h2_pedido_entregue": [
+    "Meu pedido já está pronto?",
+    "Minha conta já foi liberada?",
+    "Como sei se a conta foi liberada?",
+    "O pedido já está ativo?",
+    "Já entregaram minha conta?",
+    "Onde está minha entrega?"
+  ],
+  "h2_agendar_foto": [
+    "Como marcar minha foto?",
+    "Tem horário para foto?",
+    "Onde consigo agendar?",
+    "Como escolher data da foto?"
+  ],
+  "h2_foto_analise": [
+    "Qual o resultado da análise da foto?",
+    "Minha foto está pendente?",
+    "Quando confirmam minha foto?",
+    "O status da foto mudou?"
+  ],
+  "h2_reagendar_foto": [
+    "Cheguei atrasado na foto",
+    "Não pude comparecer à foto",
+    "Como trocar a data agendada?",
+    "Tem como mudar o horário da foto?",
+    "Quanto tempo para reagendar?"
+  ],
+  "h2_orientacoes_foto": [
+    "Como tirar minha foto?",
+    "Quais orientações para foto?",
+    "A foto precisa ser deitada?",
+    "Onde vejo o procedimento da foto?"
+  ],
+  "h2_tabela_valores": [
+    "Tem tabela de preço?",
+    "Quanto custa fazer um pedido?",
+    "Preço do Uber Carro",
+    "Me passa a tabela de valores",
+    "Quais serviços e preços vocês têm?"
+  ],
+  "h2_valor_taxi": [
+    "Quanto custa Uber Táxi?",
+    "Tem preço do táxi com nome completo?",
+    "Qual tabela do Uber Táxi?",
+    "Valor de conta táxi"
+  ],
+  "h2_formas_pagamento": [
+    "Como posso pagar?",
+    "Vocês aceitam Pix?",
+    "Me manda o pagamento",
+    "Tem como fazer pagamento?"
+  ],
+  "h2_pagamento_pendente": [
+    "Já fiz o Pix e não consta",
+    "Paguei e ainda aparece pendente",
+    "Meu pedido não reconheceu pagamento",
+    "Quando confirmam meu pagamento?",
+    "Fiz pagamento mas o status não mudou"
+  ],
+  "h2_garantia_prazo": [
+    "Quais garantias vocês têm?",
+    "Quanto tempo dura a garantia?",
+    "Tem 15 dias ou 50 corridas?",
+    "Tem 30 dias ou 100 corridas?",
+    "Tem 90 dias ou 300 corridas?",
+    "Qual garantia é de 300 corridas?",
+    "Vale dias ou corridas primeiro?",
+    "O que acontece se completar as corridas antes?"
+  ],
+  "h2_garantia_inicio": [
+    "Quando começa a contar a garantia?",
+    "Conta da compra ou da liberação?",
+    "Garantia começa após liberar a conta?",
+    "Quando passa a valer a garantia?"
+  ],
+  "h2_minhas_indicacoes": [
+    "Como entrar em minhas indicações?",
+    "Onde consultar quem indiquei?",
+    "Como vejo minhas indicações no WhatsApp?",
+    "Quero ver minhas indicações no H2"
+  ],
+  "h2_comissao_saldo": [
+    "Quanto vou receber das indicações?",
+    "Quanto de comissão está liberado?",
+    "Quanto tenho a liberar?",
+    "Como saber se minha comissão foi paga?"
+  ],
+  "h2_comissao_promocao": [
+    "Promoção conta como indicação?",
+    "Pedido de promoção gera comissão?",
+    "Recebo comissão de promoção?"
+  ],
+  "h2_emprestimos": [
+    "Onde vejo minhas parcelas de empréstimo?",
+    "Como saber quanto devo de empréstimo?",
+    "Acompanhar empréstimos",
+    "Qual é o link de empréstimos?"
+  ],
+  "h2_parcela_pendente": [
+    "Estou devendo uma parcela",
+    "Parcela atrasada bloqueia pedido?",
+    "Como pagar parcela vencida?"
+  ],
+  "h2_gastos_corridas": [
+    "Como ver meus gastos do motorista?",
+    "Tem controle financeiro?",
+    "Quero acompanhar minhas corridas",
+    "Onde fica planilha de gastos?"
+  ],
+  "h2_atendimento_humano": [
+    "Preciso falar com atendente humano",
+    "Não quero falar com robô",
+    "Como pedir atendimento de uma pessoa?",
+    "Quero suporte humano"
+  ],
+  "h2_horario_atendimento": [
+    "Que horas o atendimento abre?",
+    "Até que horas atendem?",
+    "Vocês atendem à noite?",
+    "Qual o horário de suporte?"
+  ],
+  "h2_atualizar_dados": [
+    "Como corrigir dados cadastrais?",
+    "Troquei meu e-mail, como atualizo?",
+    "Onde altero meus dados?",
+    "Preciso atualizar meu endereço"
+  ],
+  "h2_cancelar_pedido": [
+    "Quero pedir reembolso",
+    "Como cancelo a compra?",
+    "Quero desistir do pedido",
+    "Como solicitar devolução do valor?"
+  ],
+  "h2_voltar_inicio": [
+    "Como voltar ao menu inicial?",
+    "O que digito para retornar?",
+    "Como retornar uma opção?"
+  ],
+  "h2_video_android": [
+    "Tem vídeo de hard reset Android?",
+    "Onde vejo o passo a passo Android?",
+    "Preciso do tutorial de Android"
+  ],
+  "h2_video_iphone": [
+    "Tem vídeo para preparar iPhone?",
+    "Onde está o tutorial iPhone?",
+    "Como vejo as instruções de iPhone"
+  ]
+};
+const H2_AUTO_FAQ_ANSWER_UPDATES: Record<string,string> = {
+  "h2_pedido_demora": "⏳ *PRAZO DE ENTREGA*\n\nO prazo depende do serviço e da etapa do pedido.\n\nAcompanhe a previsão e o andamento em:\nhttps://h2colombiano.com/acompanhar\n\nSe o prazo informado no pedido passou, solicite atendimento. Não confirmamos uma data sem consultar o pedido.",
+  "h2_garantia_prazo": "🛡️ *GARANTIAS H2 COLOMBIANO*\n\n🥉 *15 dias ou 50 corridas*\n🥈 *30 dias ou 100 corridas*\n🥇 *90 dias ou 300 corridas*\n\nA garantia começa após a liberação da conta e termina quando atingir os dias ou as corridas, *o que ocorrer primeiro*.\n\nConfira as condições do seu pedido."
+};
+const H2_AUTO_FAQ_NEW_TOPICS: H2AutoFaqRule[] = [
+  {
+    "id": "h2_preparar_celular",
+    "question": "Qual celular preciso usar no procedimento?",
+    "variations": "Preciso de chip novo?\nTenho que usar Android novo?\nQual iPhone é compatível?\nPreciso formatar o celular?\nDevo usar WhatsApp novo?\nComo preparar o celular de trabalho?\nQuais requisitos do aparelho?",
+    "answer": "📱 *PREPARAÇÃO DO CELULAR*\n\nConfira as orientações do seu pedido e os vídeos oficiais:\n\nAndroid:\nhttps://h2colombiano.com/video/hard-android\n\niPhone:\nhttps://h2colombiano.com/video/prepara-iphone\n\nUse o aparelho indicado para o procedimento.",
+    "enabled": false
+  },
+  {
+    "id": "h2_apos_foto_aprovada",
+    "question": "Minha foto foi aprovada. O que acontece agora?",
+    "variations": "Foto aprovada e agora?\nMinha foto foi aceita, qual o próximo passo?\nDepois de aprovar a foto, o que faço?\nQual o próximo status após foto aprovada?\nJá aprovaram minha foto, quando continua?\nA foto foi aprovada, quando entrega?",
+    "answer": "✅ *FOTO APROVADA*\n\nAcompanhe a próxima etapa pelo seu pedido:\nhttps://h2colombiano.com/acompanhar\n\nO status será atualizado conforme o andamento. A foto aprovada não confirma a entrega.",
+    "enabled": false
+  }
+];
+
+function normalizeFaqKey(text: string): string {
+  return text.normalize("NFD").replace(/[\\u0300-\\u036f]/g,"")
+    .toLocaleLowerCase("pt-BR").replace(/[^a-z0-9\\s]/g," ").replace(/\\s+/g," ").trim();
+}
+function faqPhrases(rule: H2AutoFaqRule): string[] {
+  return [rule.question,...rule.variations.split(/\\r?\\n/).map(x=>x.trim()).filter(Boolean)];
+}
+function mergeFaqPhrases(original: string, candidates: string[], claimed: Set<string>): string {
+  const lines=original.split(/\\r?\\n/).map(x=>x.trim()).filter(Boolean);
+  const local=new Set(lines.map(normalizeFaqKey));
+  let merged=lines.join("\\n");
+  for (const phrase of candidates) {
+    const key=normalizeFaqKey(phrase);
+    if (!key || local.has(key) || claimed.has(key)) continue;
+    const next=merged ? merged+"\\n"+phrase : phrase;
+    if (next.length>600) continue;
+    merged=next;
+    local.add(key);
+    claimed.add(key);
+  }
+  return merged;
+}
+
+/** Quarenta tópicos distintos; subperguntas ficam dentro de variations. */
+export const H2_AUTO_FAQ_SUGGESTIONS: H2AutoFaqRule[] = [
+  ...H2_AUTO_FAQ_BASE_SUGGESTIONS.map(rule=>({
+    ...rule,
+    variations:mergeFaqPhrases(rule.variations,H2_AUTO_FAQ_EXTRA_VARIATIONS[rule.id]??[],new Set()),
+    answer:H2_AUTO_FAQ_ANSWER_UPDATES[rule.id]??rule.answer,
+  })),
+  ...H2_AUTO_FAQ_NEW_TOPICS,
+];
+
+/** Mescla com o ADM real. Nunca reativa regras, muda respostas editadas ou recria
+ *  os tópicos antigos que o administrador excluiu após salvar.
+ *  O servidor registra a campanha por aparelho para não reimportar exclusões.
+ */
+export function mergeH2AutoExpandedFaq(config: H2AutoPersonalization): {
+  personalization:H2AutoPersonalization; added:number; augmented:number;
+} {
+  const seeded=prepareH2AutoCommonFaq(config);
+  const list=seeded.personalization.faq.map(rule=>({...rule}));
+  const claimed=new Set(list.flatMap(faqPhrases).map(normalizeFaqKey));
+  let added=seeded.added, augmented=0;
+  if (config.faqPresetsLoaded) {
+    for (const suggestion of H2_AUTO_FAQ_NEW_TOPICS) {
+      if (list.length>=40) break;
+      if (list.some(item=>item.id===suggestion.id || faqPhrases(item).some(p=>normalizeFaqKey(p)===normalizeFaqKey(suggestion.question)))) continue;
+      list.push({...suggestion});
+      faqPhrases(suggestion).forEach(p=>claimed.add(normalizeFaqKey(p)));
+      added++;
+    }
+  }
+  for (let i=0;i<list.length;i++) {
+    const current=list[i];
+    const preset=H2_AUTO_FAQ_SUGGESTIONS.find(p=>p.id===current.id);
+    if (!preset) continue; // Nunca edita perguntas manuais.
+    const base=H2_AUTO_FAQ_BASE_SUGGESTIONS.find(p=>p.id===current.id);
+    const variations=mergeFaqPhrases(current.variations,preset.variations.split(/\\r?\\n/).filter(Boolean),claimed);
+    const answer=base && current.answer===base.answer ? preset.answer : current.answer;
+    if (variations!==current.variations || answer!==current.answer) {
+      list[i]={...current,variations,answer};
+      augmented++;
+    }
+  }
+  return {personalization:{...seeded.personalization,faq:list,faqPresetsLoaded:true},added,augmented};
+}
 
 /** Completa sem apagar nada; marca revisão para não recriar itens excluídos após salvar. */
 export function prepareH2AutoCommonFaq(config: H2AutoPersonalization): {
