@@ -12,6 +12,7 @@ import { Card } from "@/components/ui/card";
 import { Input } from "@/components/ui/input";
 import { Textarea } from "@/components/ui/textarea";
 import { trpc } from "@/lib/trpc";
+import { uniqueH2BicoNewPhotos, chunkH2BicoNewPhotos, type H2BicoPhotoEarOption, type H2BicoPhotoReviewOption } from "@/lib/h2bicoPhotoBatchActions";
 import { extractCpfCandidatesFromText, extractCpfPeopleFromText, isValidCpf, H2BICO_CPF_MAX_FILES, readCpfSourceFile } from "@/lib/h2bicoCpfExtractor";
 
 const STATUS:any = {available:"Disponível",reserved:"Reservado",in_use:"Em uso",used:"Usado",archived:"Arquivado"};
@@ -122,8 +123,10 @@ export default function AdminH2Bico(){
   const [showCpf,setShowCpf]=useState(false);
   const [batch,setBatch]=useState<ParsedFile[]>([]);
   const [importing,setImporting]=useState(false);
+  const [importEarChoice,setImportEarChoice]=useState<H2BicoPhotoEarOption>("none");
+  const [importReviewChoice,setImportReviewChoice]=useState<H2BicoPhotoReviewOption>("pending");
   const [progress,setProgress]=useState({done:0,total:0,name:""});
-  const [summary,setSummary]=useState<{imported:number;repaired:number;duplicates:number;errors:number}|null>(null);
+  const [summary,setSummary]=useState<{imported:number;repaired:number;duplicates:number;errors:number;earUpdated:number;confirmed:number;markErrors:number}|null>(null);
   const [extractText,setExtractText]=useState("");
   const [cpfExtractMode,setCpfExtractMode]=useState<"cpf"|"full">("cpf");
   const [professionFilter,setProfessionFilter]=useState("");
@@ -136,6 +139,8 @@ export default function AdminH2Bico(){
   const allRecords=trpc.h2bico.list.useQuery({search:"",status:"all"});
   const stats=trpc.h2bico.stats.useQuery();
   const importer=trpc.h2bico.importPhoto.useMutation();
+  const batchEar=trpc.h2bico.bulkEarMarker.useMutation();
+  const batchReview=trpc.h2bicoReview.managePasted.useMutation();
   const replacePhoto=trpc.h2bico.replacePhoto.useMutation({
     onSuccess:async(data)=>{
       setBrokenPhotos(current=>{const next=new Set(current);next.delete(data.id);return next;});
@@ -367,7 +372,10 @@ export default function AdminH2Bico(){
     if(!readyBatch.length){toast.error("Nenhuma foto válida para importar.");return;}
     setImporting(true);
     setSummary(null);
-    let imported=0,repaired=0,duplicates=0,errors=0;
+    let imported=0,repaired=0,duplicates=0,errors=0,earUpdated=0,confirmed=0,markErrors=0;
+    const newlyImported:Array<{id:number;cpf:string}>=[];
+    const selectedEar=importEarChoice;
+    const selectedReview=importReviewChoice;
     setProgress({done:0,total:readyBatch.length,name:"Preparando..."});
     for(let i=0;i<readyBatch.length;i++){
       const item=readyBatch[i];
@@ -379,17 +387,46 @@ export default function AdminH2Bico(){
           base64,
           mimeType:(item.file.type as "image/jpeg"|"image/png"|"image/webp") || "image/jpeg",
         });
-        if(result.result==="imported") imported++;
+        if(result.result==="imported") {
+          imported++;
+          if(result.id && result.cpf) newlyImported.push({id:result.id,cpf:result.cpf});
+        }
         else if(result.result==="repaired") repaired++;
         else duplicates++;
       }catch(e){errors++;}
       setProgress({done:i+1,total:readyBatch.length,name:item.file.name});
     }
+    // Reutiliza as operacoes existentes do H2BICO sem modificar registros antigos.
+    const fresh=uniqueH2BicoNewPhotos(newlyImported);
+    if(selectedEar!=="none" && fresh.length){
+      for(const group of chunkH2BicoNewPhotos(fresh,300)){
+        try {
+          const result=await batchEar.mutateAsync({ids:group.map(row=>row.id),earStatus:selectedEar});
+          earUpdated+=result.updated;
+        }catch(error){
+          markErrors+=group.length;
+          console.error("[H2BICO][batch-ear]",error);
+        }
+      }
+    }
+    if(selectedReview==="confirmed" && fresh.length){
+      for(const group of chunkH2BicoNewPhotos(fresh,250)){
+        try {
+          const result=await batchReview.mutateAsync({cpfs:group.map(row=>row.cpf),decision:"confirm"});
+          confirmed+=result.updated+result.already;
+          markErrors+=result.skippedDiscarded+result.skippedProtected+result.missing;
+        }catch(error){
+          markErrors+=group.length;
+          console.error("[H2BICO][batch-confirm]",error);
+        }
+      }
+    }
     setImporting(false);
-    setSummary({imported,repaired,duplicates,errors});
+    setSummary({imported,repaired,duplicates,errors,earUpdated,confirmed,markErrors});
     setBatch([]);
-    await utils.h2bico.invalidate();
-    toast.success(`Concluído: ${imported} nova(s) • ${repaired} foto(s) reparada(s).`);
+    await Promise.all([utils.h2bico.invalidate(),utils.h2bicoReview.invalidate()]);
+    if(errors||markErrors) toast.warning(`Lote concluído com pendências: ${errors} foto(s) com erro e ${markErrors} marcação(ões) pendente(s). Confira o resumo.`,{duration:10000});
+    else toast.success(`Lote concluído: ${imported} nova(s), ${earUpdated} EAR e ${confirmed} confirmada(s).`,{duration:8000});
   };
 
   const markUsed=(id:number)=>{
@@ -502,6 +539,25 @@ export default function AdminH2Bico(){
             <div className="h-3 bg-white/10 rounded-full overflow-hidden"><div className="h-full bg-emerald-500 transition-all" style={{width:`${progress.total?(progress.done/progress.total)*100:0}%`}}/></div>
           </div>}
 
+          <div className="rounded-xl border border-cyan-500/30 bg-slate-950/60 p-3 space-y-3">
+            <div className="text-sm font-black text-cyan-200">OPÇÕES DO LOTE — APLICAR SOMENTE AOS NOVOS CADASTROS</div>
+            <div className="grid gap-3 sm:grid-cols-2">
+              <label className="flex flex-col gap-1.5 text-xs font-semibold text-slate-300">Marcação EAR
+                <select aria-label="EAR após importar fotos" disabled={importing} className="rounded-lg border border-slate-600 bg-slate-900 px-3 py-2.5 text-white" value={importEarChoice} onChange={e=>setImportEarChoice(e.target.value as H2BicoPhotoEarOption)}>
+                  <option value="none">NÃO ALTERAR EAR</option>
+                  <option value="com_ear">🟢 COM EAR</option>
+                  <option value="sem_ear">🔴 SEM EAR</option>
+                </select>
+              </label>
+              <label className="flex flex-col gap-1.5 text-xs font-semibold text-slate-300">Conferência após importar
+                <select aria-label="Conferência após importar fotos" disabled={importing} className="rounded-lg border border-slate-600 bg-slate-900 px-3 py-2.5 text-white" value={importReviewChoice} onChange={e=>setImportReviewChoice(e.target.value as H2BicoPhotoReviewOption)}>
+                  <option value="pending">MANTER PENDENTE</option>
+                  <option value="confirmed">✅ JÁ CONFIRMADA</option>
+                </select>
+              </label>
+            </div>
+            <p className="text-xs text-slate-400">As opções serão aplicadas depois que as novas fotos forem salvas. CPFs já cadastrados, fotos reparadas e duplicados ficam sem alterações de EAR ou conferência.</p>
+          </div>
           <div className="flex flex-wrap gap-2">
             <Button className="font-black" onClick={importAll} disabled={importing||readyBatch.length===0}>
               <UploadCloud className="w-5 h-5 mr-2"/>{importing?"IMPORTANDO...":`IMPORTAR ${readyBatch.length} FOTO(S)`}
@@ -510,7 +566,7 @@ export default function AdminH2Bico(){
           </div>
         </>}
 
-        {summary&&<div className="rounded-xl border border-emerald-400/25 bg-emerald-500/10 p-4 text-sm">
+        {summary&&<div className="rounded-xl border border-emerald-400/25 bg-emerald-500/10 p-4 text-sm"><span className="block text-cyan-200">EAR aplicado: {summary.earUpdated} • Confirmadas: {summary.confirmed} • Marcações pendentes: {summary.markErrors}</span> 
           <strong>Importação concluída.</strong> {summary.imported} adicionada(s) • {summary.repaired} foto(s) reparada(s) • {summary.duplicates} duplicada(s) mantida(s) • {summary.errors} erro(s).
         </div>}
       </Card>
