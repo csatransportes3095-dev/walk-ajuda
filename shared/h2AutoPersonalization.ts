@@ -73,7 +73,7 @@ export function classifyH2AutoPersonalizedQuestion(input: string): H2AutoPersona
     return "indicacoes";
   if (/\b(?:preco|precos|valor|valores|quanto custa|tabela)\b/.test(text))
     return "valores";
-  if (/\b(?:agendar foto|agendamento|foto de perfil|marcar foto|tirar foto)\b/.test(text))
+  if (/\b(?:agendar (?:minha |uma )?foto|agendamento|foto de perfil|marcar (?:minha |uma )?foto|tirar foto)\b/.test(text))
     return "foto";
   if (/\b(?:emprestimo|emprestimos|parcela|parcelas)\b/.test(text))
     return "emprestimos";
