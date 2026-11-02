@@ -144,7 +144,7 @@ const PUBLIC_GUIDANCE: Record<H2AutoPersonalizedTopic, string> = {
 
 export function getH2AutoPersonalizedReply(
   input: string,
-  config: H2AutoPersonalization = H2_AUTO_PERSONALIZATION_DEFAULT,
+  config: Omit<H2AutoPersonalization, "faq"> & { faq?: H2AutoFaqRule[] } = H2_AUTO_PERSONALIZATION_DEFAULT,
   context: H2AutoPersonalizedContext = {},
 ): H2AutoPersonalizedAnswer | null {
   if (!config.enabled) return null;
