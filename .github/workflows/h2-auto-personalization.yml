@@ -1,0 +1,28 @@
+name: H2 AUTO - personalizacao segura sem IA paga
+on:
+  pull_request:
+    paths:
+      - "shared/h2AutoPersonalization.ts"
+      - "server/h2-auto-remote.ts"
+      - "server/h2-auto-access.ts"
+      - "client/src/pages/AdminH2Auto.tsx"
+      - "server/h2-auto-personalization.test.ts"
+      - ".github/workflows/h2-auto-personalization.yml"
+permissions:
+  contents: read
+jobs:
+  validar:
+    runs-on: ubuntu-latest
+    timeout-minutes: 25
+    steps:
+      - uses: actions/checkout@v4
+      - uses: pnpm/action-setup@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '22'
+          cache: pnpm
+      - run: pnpm install --frozen-lockfile
+      - name: Testar respostas e seguranca
+        run: pnpm exec vitest run server/h2-auto-personalization.test.ts server/h2-auto-orders-verified-customer-regression.test.ts server/h2-auto-validation-policy.test.ts
+      - name: Compilar site e servidor
+        run: pnpm run build
