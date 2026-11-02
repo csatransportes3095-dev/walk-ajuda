@@ -1,7 +1,7 @@
 import React, { useMemo, useState } from "react";
 import { useLocation } from "wouter";
 import { toast } from "sonner";
-import { Building2, Upload, Search, Save, CheckCircle2, FileSpreadsheet, ClipboardPaste, Download } from "lucide-react";
+import { Building2, Upload, Search, Save, CheckCircle2, FileSpreadsheet, ClipboardPaste, Download, Copy } from "lucide-react";
 import { trpc } from "@/lib/trpc";
 import { readTransportExcel } from "@/lib/transportesExcel";
 import { parseTransportSheetRows, parseTransportText, type TransportImportReport } from "@/lib/transportesImport";
@@ -97,6 +97,16 @@ export default function AdminTransportes() {
     if (editId) update.mutate({ ...draft, id: editId });
     else upsert.mutate(draft);
   };
+  const copyTransportCnpj = async (cnpj: string) => {
+    const digits = normalizeTransportCnpj(cnpj);
+    if (!/^\\d{14}$/.test(digits)) { toast.error("CNPJ inválido para copiar"); return; }
+    try {
+      await navigator.clipboard.writeText(digits);
+      toast.success("CNPJ copiado: " + digits);
+    } catch {
+      toast.error("Não foi possível copiar. Verifique a permissão do navegador.");
+    }
+  };
   const exportCsv = () => {
     const rows = list.data?.rows || [];
     const escape = (v: unknown) => '"' + String(v ?? "").replace(/"/g, '""') + '"';
@@ -151,7 +161,7 @@ export default function AdminTransportes() {
             <div className="flex items-start justify-between gap-3"><div><p className="font-black">{r.name}</p><p className="text-sm text-cyan-300 font-mono">{formatTransportCnpj(r.cnpj)}</p></div><button onClick={()=>markUsed.mutate({id:r.id,used:!r.isUsed})} className={`shrink-0 text-xs font-black px-3 py-2 rounded-lg border ${r.isUsed?"bg-red-600 text-white border-red-400":"bg-slate-800 text-slate-200 border-white/20"}`}>{r.isUsed?"🔴 JÁ USADO":"□ MARCAR USADO"}</button></div>
             <p className="text-xs text-slate-300">{r.uf} • {r.city||"Município não informado"} • {TRANSPORT_TYPE_LABELS[r.type as TransportType] || r.type}</p>
             {!r.checksumOk&&<p className="text-xs font-bold text-amber-400">⚠ Dígitos do CNPJ inválidos — conferir</p>}
-            <div className="flex gap-2"><button className="border border-cyan-500/30 rounded-lg px-3 py-1 text-sm" onClick={()=>{setEditId(r.id);setDraft({cnpj:r.cnpj,name:r.name,type:r.type as TransportType,uf:r.uf,city:r.city,cnae:r.cnae,source:r.source||"",notes:r.notes||"",isUsed:Boolean(r.isUsed)});window.scrollTo({top:0,behavior:"smooth"})}}>Editar</button><button className="border border-red-500/30 rounded-lg px-3 py-1 text-sm text-red-300" onClick={()=>{if(window.confirm("Excluir definitivamente este cadastro?"))remove.mutate({id:r.id})}}>Excluir</button></div>
+            <div className="flex flex-wrap gap-2"><button type="button" className="flex items-center gap-1.5 rounded-lg border border-emerald-500/40 bg-emerald-500/10 px-3 py-1 text-sm font-bold text-emerald-300 hover:bg-emerald-500/20" aria-label={"Copiar CNPJ de " + r.name} onClick={()=>void copyTransportCnpj(r.cnpj)}><Copy size={15}/> COPIAR CNPJ</button><button className="border border-cyan-500/30 rounded-lg px-3 py-1 text-sm" onClick={()=>{setEditId(r.id);setDraft({cnpj:r.cnpj,name:r.name,type:r.type as TransportType,uf:r.uf,city:r.city,cnae:r.cnae,source:r.source||"",notes:r.notes||"",isUsed:Boolean(r.isUsed)});window.scrollTo({top:0,behavior:"smooth"})}}>Editar</button><button className="border border-red-500/30 rounded-lg px-3 py-1 text-sm text-red-300" onClick={()=>{if(window.confirm("Excluir definitivamente este cadastro?"))remove.mutate({id:r.id})}}>Excluir</button></div>
           </article>)}
         </div>
         <div className="flex items-center justify-between"><button disabled={page<=1} onClick={()=>setPage(page-1)} className="border rounded-xl p-2 disabled:opacity-30">← Anterior</button><span className="text-sm">{page} / {Math.max(1,Math.ceil((list.data?.total||0)/50))}</span><button disabled={page*50>=(list.data?.total||0)} onClick={()=>setPage(page+1)} className="border rounded-xl p-2 disabled:opacity-30">Próxima →</button></div>
