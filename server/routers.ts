@@ -63,6 +63,7 @@ import { preCadastroQuestionsRouter } from "./routers/preCadastroQuestions";
 import { cartoesRouter } from "./routers/cartoes";
 import { mercadoRouter } from "./routers/mercado";
 import { privateTransportRouter } from "./routers/privateTransport";
+import { transportesRouter } from "./routers/transportes";
 import { locadoraRouter } from "./routers/locadora";
 import { h2AssistantRouter } from "./routers/h2Assistant";
 import { h2AdsRouter } from "./routers/h2ads";
@@ -460,6 +461,7 @@ export const appRouter = router({
   photoConfirmation: photoConfirmationRouter,
   spreadsheet: spreadsheetRouter,
   privateTransport: privateTransportRouter,
+  transportes: transportesRouter,
   locadora: locadoraRouter,
   h2Assistant: h2AssistantRouter,
   h2Ads: h2AdsRouter,
