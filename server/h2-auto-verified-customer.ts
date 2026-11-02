@@ -2,7 +2,6 @@ import { createHash } from "node:crypto";
 import { sql } from "drizzle-orm";
 import { getDb } from "./db";
 import { normalizeCustomerPhone } from "./customerAccess";
-import { isOwnSiteEmailAuthorized } from "./siteAccessOwnCodes";
 
 const sha256 = (text: string) => createHash("sha256").update(text).digest("hex");
 const hour = 60 * 60 * 1000;
@@ -59,7 +58,8 @@ export async function getH2AutoVerifiedAccessCustomer(
   if (!currentPhone ||
     sha256(currentEmail.trim().toLowerCase()) !== String(found.customer_email_hash) ||
     sha256(String(currentPhone)) !== String(found.customer_phone_hash)) return null;
-  if (!(await isOwnSiteEmailAuthorized(db, currentEmail))) return null;
+  // Customer identity was already verified by the registered-email OTP.
+  // The unrelated private-site access list must not block this customer.
   return {
     customer_id: Number(found.customer_id),
     customer_phone: String(found.customer_phone),
