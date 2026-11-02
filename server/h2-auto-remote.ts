@@ -8,6 +8,7 @@ import { getDb } from "./db";
 import { listActiveValidationBlocks, releaseValidationBlock, releaseAllValidationBlocks } from "./h2-auto-validation-blocks";
 import { changeSilencedPhone, manualSilencedPhones } from "./h2-auto-silenced-contacts";
 import { h2AutoTreeSchema, H2_AUTO_TREE_DEFAULT } from "../shared/h2AutoTree";
+import { h2AutoPersonalizationSchema, H2_AUTO_PERSONALIZATION_DEFAULT, getH2AutoPersonalizedReply } from "../shared/h2AutoPersonalization";
 import { H2_AUTO_SHORT_MEDIA, H2_AUTO_SHORT_ORDER_NOT_FOUND, applyH2AutoShortCopy } from "../shared/h2AutoShortReplies";
 import { h2AutoConfirmationSchema as confirmationSchema } from "../shared/h2AutoConfirmation";
 import {
@@ -68,6 +69,7 @@ const mediaSchema = z.object({
 });
 const configSchema = z.object({
   tree: h2AutoTreeSchema.optional(),
+  personalization: h2AutoPersonalizationSchema.default(() => ({ ...H2_AUTO_PERSONALIZATION_DEFAULT })),
   media: mediaSchema.default(() => mediaSchema.parse({})),
   confirmation: confirmationSchema.default(() => confirmationSchema.parse({})),
   enabled: z.boolean(),
@@ -111,6 +113,7 @@ const configSchema = z.object({
 });
 type RemoteConfig = z.infer<typeof configSchema>;
 const initial: RemoteConfig = {
+  personalization: { ...H2_AUTO_PERSONALIZATION_DEFAULT },
   media: mediaSchema.parse({}),
   confirmation: confirmationSchema.parse({}),
   ordersEnabled: false,
@@ -283,6 +286,7 @@ function mergeWithoutDeleting(
       media: remote.media,
       manualControls: remote.manualControls,
       confirmation: remote.confirmation,
+      personalization: remote.personalization,
       identificationSessionHours: remote.identificationSessionHours,
       desktopReadOnly: remote.desktopReadOnly,
       ordersEnabled: remote.ordersEnabled,
@@ -529,6 +533,33 @@ export const h2AutoAdminRouter = router({
       });
       return { success: true, revision: input.expectedRevision + 1 };
     }),
+  /** An isolated field update: never overwrite menus, customer security or APK pauses. */
+  savePersonalization: adminProcedure
+    .input(z.object({
+      id: z.string().regex(/^[a-f0-9]{24}$/),
+      personalization: h2AutoPersonalizationSchema,
+    }))
+    .mutation(async ({ input }) => {
+      await ensure();
+      const db = await getDb();
+      if (!db) throw new TRPCError({ code: "INTERNAL_SERVER_ERROR", message: "Banco indisponível." });
+      const updated: any = await db.execute(sql`UPDATE h2_auto_devices
+        SET config_json=JSON_SET(config_json,'$.personalization',
+          CAST(${JSON.stringify(input.personalization)} AS JSON)),
+          revision=revision+1 WHERE id=${input.id}`);
+      if (!updated[0]?.affectedRows)
+        throw new TRPCError({ code: "NOT_FOUND", message: "Aparelho não encontrado." });
+      return { success: true };
+    }),
+  previewPersonalization: adminProcedure
+    .input(z.object({
+      input: z.string().trim().min(1).max(280),
+      personalization: h2AutoPersonalizationSchema,
+    }))
+    .mutation(({ input }) => ({
+      answer: getH2AutoPersonalizedReply(input.input, input.personalization),
+      note: "Prévia de orientação pública; sem consultar dados de clientes ou usar IA paga.",
+    })),
   saveConfirmation: adminProcedure
     .input(z.object({
       id: z.string().regex(/^[a-f0-9]{24}$/),
