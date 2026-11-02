@@ -1,0 +1,20 @@
+name: Transportes - copiar CNPJ
+on:
+  push:
+    branches: [fix/transportes-copiar-cnpj-20261102]
+permissions:
+  contents: read
+jobs:
+  validar:
+    runs-on: ubuntu-latest
+    timeout-minutes: 25
+    steps:
+      - uses: actions/checkout@v4
+      - uses: pnpm/action-setup@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '22'
+          cache: pnpm
+      - run: pnpm install --frozen-lockfile
+      - run: pnpm exec vitest run server/transportesCopyCnpj.test.ts server/transportes.test.ts
+      - run: pnpm build
