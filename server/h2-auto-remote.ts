@@ -9,6 +9,7 @@ import { listActiveValidationBlocks, releaseValidationBlock, releaseAllValidatio
 import { changeSilencedPhone, manualSilencedPhones } from "./h2-auto-silenced-contacts";
 import { h2AutoTreeSchema, H2_AUTO_TREE_DEFAULT } from "../shared/h2AutoTree";
 import { h2AutoPersonalizationSchema, H2_AUTO_PERSONALIZATION_DEFAULT, getH2AutoPersonalizedReply } from "../shared/h2AutoPersonalization";
+import { mergeH2AutoExpandedFaq } from "../shared/h2AutoFaqPresets";
 import { H2_AUTO_SHORT_MEDIA, H2_AUTO_SHORT_ORDER_NOT_FOUND, applyH2AutoShortCopy } from "../shared/h2AutoShortReplies";
 import { h2AutoConfirmationSchema as confirmationSchema } from "../shared/h2AutoConfirmation";
 import {
@@ -198,6 +199,34 @@ const rows = async (query: any): Promise<any[]> => {
 };
 const decodeConfig = (raw: any): RemoteConfig =>
   configSchema.parse(typeof raw === "string" ? JSON.parse(raw) : raw);
+
+
+const H2_AUTO_FAQ_EXPANSION_CAMPAIGN="faq-subperguntas-20261102-v1";
+/** Applies once per paired/admin device; stores the pre-change snapshot in the
+ * existing backup table. It only touches the personalization field, so
+ * menus, existing WhatsApp rules, pauses, access checks and APK are intact.
+ * Historical exclusions are respected after the single initial merge. */
+async function applyH2AutoFaqExpansion(db:any):Promise<void> {
+  const devices=await db.execute(sql`SELECT id FROM h2_auto_devices ORDER BY created_at ASC LIMIT 1000`);
+  for(const device of (devices[0] as any[])) {
+    await db.transaction(async(tx:any)=>{
+      const fetched=await tx.execute(sql`SELECT config_json,revision FROM h2_auto_devices WHERE id=${String(device.id)} FOR UPDATE`);
+      const row=(fetched[0] as any[])[0];
+      if(!row)return;
+      const previous=await tx.execute(sql`SELECT device_id FROM h2_auto_short_copy_backups WHERE device_id=${String(device.id)} AND campaign_key=${H2_AUTO_FAQ_EXPANSION_CAMPAIGN} LIMIT 1`);
+      if((previous[0] as any[]).length)return;
+      const original=decodeConfig(row.config_json);
+      const result=mergeH2AutoExpandedFaq(original.personalization);
+      const nextConfig=configSchema.parse({...original,personalization:result.personalization});
+      await tx.execute(sql`INSERT INTO h2_auto_short_copy_backups (device_id,campaign_key,previous_config,previous_revision)
+        VALUES (${String(device.id)},${H2_AUTO_FAQ_EXPANSION_CAMPAIGN},${JSON.stringify(original)},${Number(row.revision)})`);
+      if(JSON.stringify(original.personalization)!==JSON.stringify(nextConfig.personalization)) {
+        await tx.execute(sql`UPDATE h2_auto_devices SET config_json=JSON_SET(config_json,'$.personalization',CAST(${JSON.stringify(nextConfig.personalization)} AS JSON)),
+          revision=revision+1 WHERE id=${String(device.id)} AND revision=${Number(row.revision)}`);
+      }
+    });
+  }
+}
 
 const H2_AUTO_SHORT_COPY_CAMPAIGN = "short-whatsapp-ptbr-20261031-v1";
 async function migrateH2AutoShortCopyOnce(db: any): Promise<void> {
@@ -441,6 +470,8 @@ export const h2AutoAdminRouter = router({
     .mutation(async ({input}) => ({released:await releaseAllValidationBlocks(input.id)})),
   list: adminProcedure.query(async () => {
     await ensure();
+    const db=await getDb();
+    if(db) await applyH2AutoFaqExpansion(db);
     return (
       await rows(
         sql`SELECT d.*, s.snapshot_json, s.received_at, q.diagnostics_json, q.received_at AS diagnostics_received_at, h.history_json, h.received_at AS history_received_at FROM h2_auto_devices d LEFT JOIN h2_auto_local_snapshots s ON s.device_id=d.id LEFT JOIN h2_auto_diagnostics q ON q.device_id=d.id LEFT JOIN h2_auto_history h ON h.device_id=d.id ORDER BY d.created_at DESC LIMIT 30`
