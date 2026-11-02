@@ -110,7 +110,7 @@ export const transportesRouter = router({
       if (unique.has(cnpj)) { repeatedInFile++; continue; }
       unique.set(cnpj, record);
     }
-    const all = [...unique.entries()];
+    const all = Array.from(unique.entries());
     let created = 0, duplicated = 0;
     // INSERT IGNORE impede a duplicação concorrente por índice único. Não sobrescreve JÁ USADO.
     for (let i = 0; i < all.length; i += 80) {
