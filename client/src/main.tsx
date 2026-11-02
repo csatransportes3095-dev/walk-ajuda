@@ -109,7 +109,7 @@ function RuntimeTree() {
 function RootMaintenanceBoundary() {
   const pathname = typeof window !== "undefined" ? window.location.pathname.toLowerCase() : "/";
   const isSiteAccessEntry = pathname === "/site-access";
-  const bypassManifest = isSiteAccessEntry || pathname.startsWith("/admin") || isChassisAdminPath(pathname) || isH2AdsPath(pathname) || pathname === "/similaridade";
+  const bypassManifest = isSiteAccessEntry || (pathname === "/adm" || pathname.startsWith("/adm/") || pathname.startsWith("/admin")) || isChassisAdminPath(pathname) || isH2AdsPath(pathname) || pathname === "/similaridade";
 
   const manifestQuery = trpc.maintenanceManifest.get.useQuery(undefined, {
     enabled: !bypassManifest,
