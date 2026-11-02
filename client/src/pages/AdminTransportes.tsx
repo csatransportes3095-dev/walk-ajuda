@@ -8,11 +8,10 @@ import { isValidTransportCnpj, normalizeTransportCnpj, formatTransportCnpj, clas
 
 type Draft = { cnpj: string; name: string; uf: string; city: string; type: TransportType; cnae: string; source: string; notes: string; isUsed: boolean };
 const blank = (): Draft => ({ cnpj: "", name: "", uf: "SP", city: "", type: "carga", cnae: "", source: "Cadastro manual", notes: "", isUsed: false });
-const fields = ["name", "cnpj", "type", "cnae", "city", "uf", "isUsed"] as const;
-const normal = (s: string) => s.normalize("NFD").replace(/[\u0300-\u036f]/g, "").toLowerCase().replace(/[^a-z0-9]/g, "");
+const normal = (s: string) => s.normalize("NFD").replace(/[\\u0300-\\u036f]/g, "").toLowerCase().replace(/[^a-z0-9]/g, "");
 function recognize(header: string): keyof Draft | "" {
   const h = normal(header);
-  if (/^(razaosocial|nomeempresarial|empresa|nome|transportadora|fantasia)$/.test(h)) return "name";
+  if (/^(razaosocial|nomeempresarial|empresa|nome|transportadora|fantasia|empresatransportadora|nomefantasia)$/.test(h)) return "name";
   if (/^(cnpj|cnpjcpf|documento)$/.test(h)) return "cnpj";
   if (/^(cidade|municipio|localidade)$/.test(h)) return "city";
   if (/^(uf|estado|siglaestado)$/.test(h)) return "uf";
@@ -22,21 +21,44 @@ function recognize(header: string): keyof Draft | "" {
   return "";
 }
 function rowsToDraft(rows: unknown[][], fallbackUf: string, origin: string): Draft[] {
+  // Planilhas profissionais podem ter título, instruções e cards antes da tabela.
   const clean = rows.filter(row => row.some(x => String(x ?? "").trim()));
   if (!clean.length) return [];
-  const headers = clean[0].map(v => recognize(String(v ?? "")));
-  const hasHeader = headers.includes("cnpj");
+  let headerIndex = -1;
+  let headers: Array<keyof Draft | ""> = [];
+  for (let i = 0; i < Math.min(250, clean.length); i++) {
+    const candidate = clean[i].map(v => recognize(String(v ?? "")));
+    if (candidate.includes("cnpj") && candidate.includes("name")) {
+      headerIndex = i;
+      headers = candidate;
+      break;
+    }
+  }
   const positions: Record<string, number> = {};
-  if (hasHeader) headers.forEach((h, i) => { if (h && positions[h] === undefined) positions[h] = i; });
-  else { positions.name = 0; positions.cnpj = 1; positions.type = 2; positions.cnae = 3; positions.city = 4; positions.uf = 5; }
-  return clean.slice(hasHeader ? 1 : 0).map(row => {
+  if (headerIndex >= 0) {
+    headers.forEach((h, i) => { if (h && positions[h] === undefined) positions[h] = i; });
+  } else {
+    // Arquivos simples sem cabeçalho: Nome;CNPJ;Categoria;CNAE;Cidade;UF.
+    positions.name = 0; positions.cnpj = 1; positions.type = 2;
+    positions.cnae = 3; positions.city = 4; positions.uf = 5;
+  }
+  return clean.slice(headerIndex + 1).map(row => {
     const get = (key: string) => String(row[positions[key]] ?? "").trim();
-    const used = get("isUsed").toLowerCase();
-    return { cnpj: normalizeTransportCnpj(get("cnpj")), name: get("name") || "NOME NÃO INFORMADO",
-      uf: get("uf").toUpperCase() || fallbackUf, city: get("city"), type: classifyTransport(get("type") || get("name")),
-      cnae: get("cnae"), source: origin, notes: "", isUsed: /^(ja usado|já usado|usado|sim|true|1)$/.test(used) };
-  }).filter(row => row.cnpj.length > 0);
+    const cnpj = normalizeTransportCnpj(get("cnpj"));
+    if (!/^\\d{14}$/.test(cnpj)) return null;
+    const used = normal(get("isUsed"));
+    const name = get("name") || "NOME NÃO INFORMADO";
+    const notes = /\\b(exemplo|fictici|demonstrac|teste)\\b/i.test(name)
+      ? "ATENÇÃO: nome de exemplo/demonstração; existência da empresa não confirmada."
+      : "";
+    return {
+      cnpj, name, uf: get("uf").toUpperCase() || fallbackUf, city: get("city"),
+      type: classifyTransport(get("type") || name), cnae: get("cnae"),
+      source: origin, notes, isUsed: /^(jausado|usado|sim|true|1)$/.test(used),
+    };
+  }).filter((row): row is Draft => row !== null);
 }
+
 async function readImportedFile(file: File, fallbackUf: string): Promise<Draft[]> {
   const ext = file.name.split(".").pop()?.toLowerCase();
   if (ext === "xlsx" || ext === "xls") {
@@ -103,7 +125,22 @@ export default function AdminTransportes() {
       const key = normalizeTransportCnpj(row.cnpj);
       if (!/^\d{14}$/.test(key)) { malformed++; continue; }
       if (!isValidTransportCnpj(key)) invalid++;
-      if (map.has(key)) { duplicates++; continue; }
+      const existing = map.get(key);
+      if (existing) {
+        duplicates++;
+        // Mescla os dados complementares e nunca perde marcações JÁ USADO.
+        map.set(key, {
+          ...existing,
+          name: existing.name === "NOME NÃO INFORMADO" ? row.name : existing.name,
+          uf: existing.uf === "ND" ? row.uf : existing.uf,
+          city: existing.city || row.city,
+          cnae: existing.cnae || row.cnae,
+          type: existing.type === "outros" ? row.type : existing.type,
+          isUsed: existing.isUsed || row.isUsed,
+          notes: [existing.notes, row.notes].filter(Boolean).filter((x, i, a) => a.indexOf(x) === i).join(" | "),
+        });
+        continue;
+      }
       map.set(key, { ...row, cnpj: key });
     }
     return { rows: [...map.values()], duplicates, invalid, malformed };
@@ -161,7 +198,7 @@ export default function AdminTransportes() {
       </section>
       <section className="rounded-2xl border border-purple-500/30 bg-slate-900/70 p-4 sm:p-6 space-y-3">
         <h2 className="font-black flex gap-2 items-center"><Upload size={20}/> IMPORTAÇÃO INTELIGENTE</h2>
-        <p className="text-xs text-slate-400">Aceita Excel (.xlsx/.xls), CSV, TXT e texto colado. Cabeçalhos: Razão Social, CNPJ, Tipo, CNAE, Cidade e UF. Registros repetidos são ignorados e nenhum status JÁ USADO é apagado.</p>
+        <p className="text-xs text-slate-400">Aceita Excel (.xlsx), CSV, TXT e texto colado. Cabeçalhos: Razão Social, CNPJ, Tipo, CNAE, Cidade e UF. Registros repetidos são ignorados e nenhum status JÁ USADO é apagado.</p>
         <div className="flex flex-wrap items-center gap-3"><label className="rounded-xl border border-purple-500/40 bg-purple-500/10 px-4 py-3 cursor-pointer font-semibold flex items-center gap-2"><FileSpreadsheet size={18}/> Selecionar Excel / TXT <input type="file" accept=".xlsx,.csv,.txt,.tsv" multiple className="hidden" onChange={async e=>{const files=[...(e.target.files||[])];try{const chunks=await Promise.all(files.map(f=>readImportedFile(f,importUf)));setPending(v=>[...v,...chunks.flat()]);toast.success(files.length+" arquivo(s) lido(s)")}catch(err:any){toast.error(err.message||"Erro ao ler arquivo")}e.target.value=""}}/></label><span className="text-sm">UF padrão:</span><select className={inputStyle+" !w-24"} value={importUf} onChange={e=>setImportUf(e.target.value)}>{TRANSPORT_UFS.map(u=><option key={u}>{u}</option>)}</select></div>
         <textarea className={inputStyle} rows={5} value={paste} onChange={e=>setPaste(e.target.value)} placeholder={"Cole aqui dados do Excel ou Bloco de Notas:\nRazão Social;CNPJ;Tipo de Serviço;CNAE;Cidade;UF\nEmpresa Exemplo;00.000.000/0001-00;Carga;4930-2/02;Jandira;SP"}/>
         <button onClick={()=>{const parsed=parsePasted(paste,importUf);setPending(v=>[...v,...parsed]);toast.success(parsed.length+" linha(s) extraída(s)")}} className="rounded-xl border border-purple-400/40 px-4 py-2 flex gap-2 items-center"><ClipboardPaste size={17}/> Extrair texto colado</button>
