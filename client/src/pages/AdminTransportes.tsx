@@ -5,7 +5,7 @@ import { Building2, Upload, Search, Save, CheckCircle2, FileSpreadsheet, Clipboa
 import { trpc } from "@/lib/trpc";
 import { readTransportExcel } from "@/lib/transportesExcel";
 import { parseTransportSheetRows, parseTransportText, type TransportImportReport } from "@/lib/transportesImport";
-import { isValidTransportCnpj, normalizeTransportCnpj, formatTransportCnpj, classifyTransport, TRANSPORT_TYPES, TRANSPORT_TYPE_LABELS, TRANSPORT_UFS, type TransportType } from "@shared/transportes";
+import { isValidTransportCnpj, normalizeTransportCnpj, formatTransportCnpj, writeSingleTransportCnpj, classifyTransport, TRANSPORT_TYPES, TRANSPORT_TYPE_LABELS, TRANSPORT_UFS, type TransportType } from "@shared/transportes";
 
 type Draft = { cnpj: string; name: string; uf: string; city: string; type: TransportType; cnae: string; source: string; notes: string; isUsed: boolean };
 const blank = (): Draft => ({ cnpj: "", name: "", uf: "SP", city: "", type: "carga", cnae: "", source: "Cadastro manual", notes: "", isUsed: false });
@@ -98,13 +98,11 @@ export default function AdminTransportes() {
     else upsert.mutate(draft);
   };
   const copyTransportCnpj = async (cnpj: string) => {
-    const digits = normalizeTransportCnpj(cnpj);
-    if (!/^\\d{14}$/.test(digits)) { toast.error("CNPJ inválido para copiar"); return; }
     try {
-      await navigator.clipboard.writeText(digits);
+      const digits = await writeSingleTransportCnpj(cnpj, navigator.clipboard);
       toast.success("CNPJ copiado: " + digits);
-    } catch {
-      toast.error("Não foi possível copiar. Verifique a permissão do navegador.");
+    } catch (error) {
+      toast.error(error instanceof Error ? error.message : "Não foi possível copiar este CNPJ.");
     }
   };
   const exportCsv = () => {
