@@ -11,6 +11,7 @@ import { h2AutoPhoneFailureMessage, type H2AutoPhoneKind, type H2AutoPhoneFailur
 import { invalidH2AutoPhoneStageAnswer, normalizeH2AutoPhone11, h2AutoNavigationCommand, initialH2AutoChoiceStage, repeatedH2AutoChoice, isH2AutoHelpRequest } from "./h2-auto-validation-policy";
 import { manualSilencedPhones, normalizeSilencedPhone } from "./h2-auto-silenced-contacts";
 import { h2AutoConfirmationSchema } from "../shared/h2AutoConfirmation";
+import { h2AutoPersonalizationSchema, H2_AUTO_PERSONALIZATION_DEFAULT, getH2AutoPersonalizedReply } from "../shared/h2AutoPersonalization";
 import { h2AutoCustomerNeedsProfileUpdate, selectH2AutoCustomerByPhone } from "./h2-auto-customer-profile-guidance";
 
 /**
@@ -142,8 +143,9 @@ export function registerH2AutoAccessRoutes(app: Express): void {
       const deviceId = await deviceFor(req);
       let identificationDisabled = false;
       let confirmation = h2AutoConfirmationSchema.parse({});
+      let personalization = { ...H2_AUTO_PERSONALIZATION_DEFAULT };
       if (deviceId) {
-        const live = await rows(sql`SELECT JSON_EXTRACT(config_json,'$.confirmation') AS confirmation_json, JSON_UNQUOTE(JSON_EXTRACT(config_json,'$.enabled')) AS bot_on,
+        const live = await rows(sql`SELECT JSON_EXTRACT(config_json,'$.confirmation') AS confirmation_json, JSON_EXTRACT(config_json,'$.personalization') AS personalization_json, JSON_UNQUOTE(JSON_EXTRACT(config_json,'$.enabled')) AS bot_on,
           CAST(JSON_UNQUOTE(JSON_EXTRACT(config_json,'$.identificationSessionHours')) AS UNSIGNED) AS session_hours,
           JSON_UNQUOTE(JSON_EXTRACT(config_json,'$.identificationEnabled')) AS identity_on,
           JSON_UNQUOTE(JSON_EXTRACT(config_json,'$.blocked')) AS blocked_phones
@@ -154,6 +156,10 @@ export function registerH2AutoAccessRoutes(app: Express): void {
           const raw = live[0]?.confirmation_json;
           confirmation = h2AutoConfirmationSchema.parse(typeof raw === "string" ? JSON.parse(raw) : raw || {});
         } catch { confirmation = h2AutoConfirmationSchema.parse({}); }
+        try {
+          const rawPersonalization = live[0]?.personalization_json;
+          personalization = h2AutoPersonalizationSchema.parse(typeof rawPersonalization === "string" ? JSON.parse(rawPersonalization) : rawPersonalization || {});
+        } catch { personalization = { ...H2_AUTO_PERSONALIZATION_DEFAULT }; }
       }
       if (!deviceId) return respond(res, 401, { error: "unauthorized" });
       const initialMessage = confirmation.identificationWelcome;
@@ -281,6 +287,19 @@ export function registerH2AutoAccessRoutes(app: Express): void {
           }
           return respond(res, 200, { state: "choice", message: initialMessage });
         }
+        // Personalize only public guidance after the existing authorization checks.
+        if (personalization.enabled) {
+          let verifiedFirstName = "";
+          if (authorizedAudience === "customer" && s.customer_id && personalization.verifiedName) {
+            const names = await rows(sql`SELECT name FROM customers WHERE id=${s.customer_id}
+              AND deletedAt IS NULL AND COALESCE(blocked,0)=0 LIMIT 1`);
+            verifiedFirstName = String(names[0]?.name || "");
+          }
+          const personalized = getH2AutoPersonalizedReply(input, personalization, {
+            verified: authorizedAudience === "customer", verifiedFirstName, stage: "authorized",
+          });
+          if (personalized) return respond(res, 200, {state: "personalized", message: personalized.message, topic: personalized.topic});
+        }
         // Existing normal service navigation remains authorized.
         return respond(res, 200, verified(authorizedAudience));
       }
@@ -311,6 +330,8 @@ export function registerH2AutoAccessRoutes(app: Express): void {
           await update(sessionId, sql`stage='referral_phone',updated_at=${now}`);
           return respond(res, 200, { state: "referral_phone", message: referrerMessage });
         }
+        const personalized = getH2AutoPersonalizedReply(input, personalization, {stage: "choice"});
+        if (personalized) return respond(res, 200, {state: "personalized", message: personalized.message, topic: personalized.topic});
         return respond(res, 200, { state: "choice", message: initialMessage });
       }
 

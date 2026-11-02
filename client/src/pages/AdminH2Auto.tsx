@@ -23,6 +23,7 @@ import H2AutoTreeEditor from "@/components/H2AutoTreeEditor";
 import H2AutoWhatsAppPreview from "@/components/H2AutoWhatsAppPreview";
 import { H2_AUTO_CONFIRMATION_DEFAULTS as confirmationDefaults, H2_AUTO_CONFIRMATION_GROUPS as confirmationGroups } from "@shared/h2AutoConfirmation";
 import { H2_AUTO_SHORT_MEDIA, H2_AUTO_SHORT_ORDER_NOT_FOUND } from "@shared/h2AutoShortReplies";
+import { H2_AUTO_PERSONALIZATION_DEFAULT, H2_AUTO_PERSONALIZATION_EXAMPLES, type H2AutoPersonalization } from "@shared/h2AutoPersonalization";
 
 const Box = ({ children }: { children: React.ReactNode }) => (
   <div className="rounded-2xl border border-cyan-500/30 bg-slate-900/90 p-5 space-y-3">
@@ -94,6 +95,20 @@ export default function AdminH2Auto() {
     refetchInterval: 15000,
   });
   const [label, setLabel] = useState("Celular principal");
+  const [personalDrafts, setPersonalDrafts] = useState<Record<string, H2AutoPersonalization>>({});
+  const [personalSamples, setPersonalSamples] = useState<Record<string,string>>({});
+  const [personalPreviews, setPersonalPreviews] = useState<Record<string,string>>({});
+  const savePersonalization = trpc.h2AutoAdmin.savePersonalization.useMutation({
+    onSuccess: (_result, vars) => {
+      setPersonalDrafts(prev => { const next = {...prev}; delete next[vars.id]; return next; });
+      toast.success("Personalização salva, sem alterar menus, pausas ou autenticação.");
+      void utils.h2AutoAdmin.list.invalidate();
+    },
+    onError: e => toast.error(e.message || "Falha ao salvar personalização"),
+  });
+  const previewPersonalization = trpc.h2AutoAdmin.previewPersonalization.useMutation({
+    onError: e => toast.error(e.message || "Falha ao gerar prévia"),
+  });
   const [pair, setPair] = useState<{ id: string; code: string } | null>(null);
   const [editing, setEditing] = useState<
     Record<string, { config: any; revision: number }>
@@ -290,6 +305,11 @@ export default function AdminH2Auto() {
           const value = draft?.config || d.config;
           const expectedRevision = draft?.revision ?? d.revision;
           const media = { ...mediaDefaults, ...(value.media || {}) };
+          const personalization = personalDrafts[d.id] ?? d.config.personalization ?? H2_AUTO_PERSONALIZATION_DEFAULT;
+          const updatePersonalization = (patch: Partial<H2AutoPersonalization>) => {
+            setPersonalDrafts(prev => ({...prev, [d.id]: {...personalization,...patch}}));
+            setPersonalPreviews(prev => ({...prev, [d.id]: ""}));
+          };
           const confirmation = { ...confirmationDefaults, ...(value.confirmation || {}) };
           const mediaDirty =
             Boolean(draft) &&
@@ -499,6 +519,50 @@ export default function AdminH2Auto() {
                   <p><strong>Último evento:</strong> {dateLabel(diagnostic?.desktopLastAt)}</p>
                   <p><strong>Modo no APK:</strong> {diagnostic?.desktopReadOnly?"Ativado":diagnostic?"Desativado":"Não informado"}</p>
                 </div>
+              </section>
+
+              <section className="rounded-2xl border border-violet-400/45 bg-gradient-to-br from-violet-950/30 to-slate-950 p-4 space-y-4">
+                <h4 className="text-lg font-black text-violet-200">🧠 ATENDIMENTO PERSONALIZADO — SEM CUSTO DE IA</h4>
+                <p className="text-sm text-slate-300">Reconhece perguntas livres sobre pedidos, códigos, fotos, valores, indicações e atendimento. Responde com orientação pública e tom escolhido; só usa o primeiro nome após validação do cliente. Não consulta status sem autenticação nem faz promessas de atendimento. Nenhum serviço de IA pago será contratado.</p>
+                <p className="text-xs text-amber-200">Módulo opcional, desligado por padrão. As regras do menu, telefone, código, MENU/0, /H2, /H3, bloqueios e pausas permanecem prioritárias. O envio depende do aplicativo Android.</p>
+                <div className="grid gap-3 sm:grid-cols-2">
+                  <label className="flex items-center gap-2 rounded-xl border border-violet-400/25 bg-slate-900 p-3 font-bold text-sm">
+                    <input type="checkbox" className="h-4 w-4" checked={personalization.enabled} onChange={e => updatePersonalization({enabled:e.target.checked})}/>
+                    {personalization.enabled ? "PERSONALIZAÇÃO ATIVADA" : "ATIVAR PERSONALIZAÇÃO"}
+                  </label>
+                  <label className="flex items-center gap-2 rounded-xl border border-violet-400/25 bg-slate-900 p-3 text-sm">
+                    TOM
+                    <select className={field} value={personalization.tone} onChange={e => updatePersonalization({tone:e.target.value as H2AutoPersonalization["tone"]})}>
+                      <option value="acolhedor">Acolhedor</option>
+                      <option value="objetivo">Objetivo</option>
+                      <option value="profissional">Profissional</option>
+                    </select>
+                  </label>
+                  <label className="sm:col-span-2 flex items-center gap-2 text-sm text-slate-200">
+                    <input type="checkbox" checked={personalization.verifiedName} onChange={e => updatePersonalization({verifiedName:e.target.checked})}/>
+                    Usar primeiro nome somente após identificação por código
+                  </label>
+                </div>
+                <div className="space-y-2 rounded-xl border border-violet-400/25 bg-slate-950/65 p-3">
+                  <p className="text-sm font-bold text-violet-200">TESTAR RESPOSTA ANTES DE ATIVAR</p>
+                  <select className={field} value={personalSamples[d.id] ?? H2_AUTO_PERSONALIZATION_EXAMPLES[0]} onChange={e => setPersonalSamples(prev=>({...prev,[d.id]:e.target.value}))}>
+                    {H2_AUTO_PERSONALIZATION_EXAMPLES.map(s => <option key={s}>{s}</option>)}
+                  </select>
+                  <button type="button" className="rounded-lg border border-violet-400/50 bg-violet-800/40 px-4 py-2 text-xs font-black" disabled={previewPersonalization.isPending}
+                    onClick={async () => {
+                      try {
+                        const result = await previewPersonalization.mutateAsync({
+                          input: personalSamples[d.id] ?? H2_AUTO_PERSONALIZATION_EXAMPLES[0],
+                          personalization: {...personalization,enabled:true},
+                        });
+                        setPersonalPreviews(prev => ({...prev,[d.id]:result.answer?.message ?? "Nenhuma regra encontrou resposta para essa pergunta."}));
+                      } catch { /* onError exibe mensagem */ }
+                    }}>VISUALIZAR RESPOSTA</button>
+                  {personalPreviews[d.id] && <pre className="whitespace-pre-wrap rounded-lg bg-black/30 p-3 text-xs leading-relaxed text-white">{personalPreviews[d.id]}</pre>}
+                </div>
+                <button type="button" className="rounded-xl bg-violet-500 px-5 py-3 font-black text-slate-950 disabled:opacity-50"
+                  disabled={savePersonalization.isPending || !personalDrafts[d.id]}
+                  onClick={()=>savePersonalization.mutate({id:d.id,personalization})}>SALVAR PERSONALIZAÇÃO DESTE APARELHO</button>
               </section>
               <nav aria-label="Central de respostas" className="sticky top-1 z-20 rounded-xl border border-cyan-400/30 bg-[#071629]/95 p-3 shadow-xl">
                 <p className="mb-2 text-sm font-black text-cyan-200">💬 CENTRAL DE RESPOSTAS — ACESSO RÁPIDO</p>
