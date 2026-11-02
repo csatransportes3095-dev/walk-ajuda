@@ -23,6 +23,10 @@ describe("H2 public SPA route allowlist",()=>{
     expect(visit("/login")).toEqual([]);
     expect(visit("/acompanhar")).toEqual([]);
   });
+  it("permite novas rotas /adm sem redirecionar a /login",()=>{
+    expect(visit("/adm/transportes")).toEqual([]);
+    expect(visit("/adm/rota-nova")).toEqual([]);
+  });
   it("continues rejecting unknown public routes",()=>{
     expect(visit("/rota-desconhecida")[0]).toContain("rota_invalida");
   });
