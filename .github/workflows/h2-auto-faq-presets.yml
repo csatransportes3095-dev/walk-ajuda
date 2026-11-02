@@ -1,0 +1,27 @@
+name: H2 AUTO - FAQs prontas e editaveis
+on:
+  pull_request:
+    paths:
+      - "shared/h2AutoFaqPresets.ts"
+      - "shared/h2AutoPersonalization.ts"
+      - "client/src/pages/AdminH2Auto.tsx"
+      - "server/h2-auto-faq-presets.test.ts"
+      - ".github/workflows/h2-auto-faq-presets.yml"
+permissions:
+  contents: read
+jobs:
+  validate:
+    runs-on: ubuntu-latest
+    timeout-minutes: 25
+    steps:
+      - uses: actions/checkout@v4
+      - uses: pnpm/action-setup@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: "22"
+          cache: pnpm
+      - run: pnpm install --frozen-lockfile
+      - name: Testar sugestoes e fluxo de seguranca
+        run: pnpm exec vitest run server/h2-auto-faq-presets.test.ts server/h2-auto-free-questions.test.ts server/h2-auto-personalization.test.ts
+      - name: Compilar projeto
+        run: pnpm run build
