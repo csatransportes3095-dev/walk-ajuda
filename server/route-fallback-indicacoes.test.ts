@@ -27,6 +27,6 @@ describe("H2 public SPA route allowlist",()=>{
     expect(visit("/rota-desconhecida")[0]).toContain("rota_invalida");
   });
   it("busts old guard cache for existing browsers",()=>{
-    expect(html).toContain("/route-fallback-guard-v1.js?v=20261028-indicacoes-v1");
+    expect(html).toContain("/route-fallback-guard-v1.js?v=20261102-adm-routes-v2");
   });
 });
