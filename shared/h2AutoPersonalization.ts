@@ -19,6 +19,7 @@ export const h2AutoPersonalizationSchema = z.object({
   tone: z.enum(["acolhedor", "objetivo", "profissional"]).default("acolhedor"),
   verifiedName: z.boolean().default(true),
   faq: z.array(h2AutoFaqRuleSchema).max(40).default([]),
+  faqPresetsLoaded: z.boolean().default(false),
 }).strict();
 
 export type H2AutoPersonalization = z.infer<typeof h2AutoPersonalizationSchema>;
@@ -31,6 +32,7 @@ export const H2_AUTO_PERSONALIZATION_DEFAULT: H2AutoPersonalization = {
   tone: "acolhedor",
   verifiedName: true,
   faq: [],
+  faqPresetsLoaded: false,
 };
 
 /** Nenhuma informação do cliente é obtida a partir do nome da notificação. */
