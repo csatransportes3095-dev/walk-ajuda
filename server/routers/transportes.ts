@@ -1,7 +1,7 @@
 import { z } from "zod";
 import { transportInputItem, normalizeTransportStorageFields } from "../transportImportPayload";
 import { TRPCError } from "@trpc/server";
-import { and, eq, like, or, sql, desc } from "drizzle-orm";
+import { and, eq, like, or, sql, desc, inArray } from "drizzle-orm";
 import { adminProcedure, router } from "../_core/trpc";
 import { getDb } from "../db";
 import { transportRecords } from "../../drizzle/schema";
@@ -108,6 +108,44 @@ export const transportesRouter = router({
       duplicated += batch.length - inserted;
     }
     return { received: input.records.length, created, duplicated: duplicated + repeatedInFile, invalid };
+  }),
+  /** Altera APENAS UF e cidade de CNPJs já existentes; mantém isUsed e demais campos. */
+  updateLocationsBatch: adminProcedure.input(z.object({
+    records: z.array(z.object({
+      cnpj: z.string().max(60),
+      uf: z.string().min(2).max(40),
+      city: z.string().max(160).default(""),
+    })).min(1).max(200),
+  })).mutation(async ({ input }) => {
+    const db = await get();
+    const unique = new Map<string, { uf: string; city: string }>();
+    for (const record of input.records) {
+      const cnpj = normalizeTransportCnpj(record.cnpj);
+      const uf = normalizeTransportUf(record.uf);
+      if (!/^\d{14}$/.test(cnpj) || uf === "ND") {
+        throw new TRPCError({ code: "BAD_REQUEST", message: "CNPJ ou UF inválida. Correção cancelada." });
+      }
+      const city = record.city.trim();
+      const previous = unique.get(cnpj);
+      if (previous && (previous.uf !== uf || (previous.city && city && previous.city.toUpperCase() !== city.toUpperCase()))) {
+        throw new TRPCError({ code: "BAD_REQUEST", message: "CNPJ repetido com localizações divergentes. Corrija a planilha." });
+      }
+      if (!previous || (!previous.city && city)) unique.set(cnpj, { uf, city });
+    }
+    const existing = await db.select({
+      id: transportRecords.id, cnpj: transportRecords.cnpj,
+      uf: transportRecords.uf, city: transportRecords.city,
+    }).from(transportRecords).where(inArray(transportRecords.cnpj, Array.from(unique.keys())));
+    let updated = 0;
+    let unchanged = 0;
+    for (const row of existing) {
+      const next = unique.get(row.cnpj)!;
+      const city = next.city || row.city; // vazio nunca apaga a cidade cadastrada
+      if (row.uf === next.uf && row.city === city) { unchanged++; continue; }
+      await db.update(transportRecords).set({ uf: next.uf, city }).where(eq(transportRecords.id, row.id));
+      updated++;
+    }
+    return { updated, unchanged, notFound: unique.size - existing.length };
   }),
   update: adminProcedure.input(item.extend({ id: z.number().int().positive() })).mutation(async ({ input }) => {
     const db = await get();
