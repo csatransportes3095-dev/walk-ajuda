@@ -26,6 +26,18 @@ export function normalizeTransportCnpj(value: unknown): string {
   return digits.length >= 11 && digits.length <= 14 ? digits.padStart(14, "0") : digits;
 }
 
+/** Copia exclusivamente o CNPJ recebido, nunca dados da lista ou de outros cards. */
+export async function writeSingleTransportCnpj(
+  value: unknown,
+  clipboard: { writeText(text: string): Promise<void> },
+): Promise<string> {
+  const digits = normalizeTransportCnpj(value);
+  if (!/^\d{14}$/.test(digits)) throw new Error("CNPJ inválido para copiar");
+  if (!clipboard || typeof clipboard.writeText !== "function") throw new Error("Área de transferência indisponível");
+  await clipboard.writeText(digits);
+  return digits;
+}
+
 export function isValidTransportCnpj(value: unknown): boolean {
   const digits = normalizeTransportCnpj(value);
   if (!/^\d{14}$/.test(digits) || /^(\d)\1{13}$/.test(digits)) return false;
