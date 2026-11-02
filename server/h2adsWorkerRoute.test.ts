@@ -18,7 +18,7 @@ const { authenticateH2AdsWorker, claimH2AdsWorker, claimNextH2AdsWorkerCommand, 
   getDb: vi.fn(),
 }));
 
-vi.mock("./h2ads", () => ({ authenticateH2AdsWorker, claimH2AdsWorker, claimNextH2AdsWorkerCommand, completeH2AdsWorkerBrowserCommand, completeH2AdsWorkerPreparation, getH2AdsInstance, getH2AdsProxyCredential, recordH2AdsBrowserRuntimeState, recordH2AdsWorkerHeartbeat }));
+vi.mock("./h2ads", () => ({ authenticateH2AdsWorker, claimH2AdsWorker, claimNextH2AdsWorkerCommand, completeH2AdsWorkerBrowserCommand, completeH2AdsWorkerPreparation, getH2AdsInstance, getH2AdsPreparedObservedIp, getH2AdsProxyCredential, recordH2AdsBrowserRuntimeState, recordH2AdsWorkerHeartbeat }));
 vi.mock("./h2adsProxySecurity", () => ({ decryptH2AdsProxy }));
 vi.mock("./db", () => ({ getDb }));
 
