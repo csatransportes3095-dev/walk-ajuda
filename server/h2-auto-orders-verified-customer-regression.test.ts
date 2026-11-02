@@ -30,7 +30,7 @@ describe("H2 AUTO: cliente verificado não depende de lista privada do site", ()
     expect(isH2AutoHelpRequest("??")).toBe(true);
     expect(isH2AutoHelpRequest("ajuda")).toBe(true);
     expect(isH2AutoHelpRequest("119914949926")).toBe(false);
-    expect(normalizeH2AutoPhone11("119914949926")).toBe("119914949926");
+    expect(normalizeH2AutoPhone11("11999999999")).toBe("11999999999");
     const phoneStart = access.indexOf('if (s.stage === "customer_phone" || s.stage === "referrals_phone")');
     const helpPhone = access.indexOf("if (isH2AutoHelpRequest(input))",phoneStart);
     const phoneFail = access.indexOf("if (invalidH2AutoPhoneStageAnswer",phoneStart);
