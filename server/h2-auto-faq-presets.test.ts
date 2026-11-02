@@ -4,7 +4,7 @@ import { H2_AUTO_PERSONALIZATION_DEFAULT,h2AutoPersonalizationSchema,getH2AutoPe
 describe("H2 AUTO prefilled FAQ suggestions",()=>{
   it("provides 40 distinct complete answers, inactive by default",()=>{
     expect(H2_AUTO_FAQ_SUGGESTIONS).toHaveLength(40);
-    expect(new Set(H2_AUTO_FAQ_SUGGESTIONS.map(x=>x.id)).size).toBe(38);
+    expect(new Set(H2_AUTO_FAQ_SUGGESTIONS.map(x=>x.id)).size).toBe(40);
     for(const r of H2_AUTO_FAQ_SUGGESTIONS) {
       expect(r.enabled).toBe(false);
       expect(h2AutoPersonalizationSchema.safeParse({...H2_AUTO_PERSONALIZATION_DEFAULT,faq:[r]}).success).toBe(true);
