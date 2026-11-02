@@ -1,4 +1,5 @@
 import { z } from "zod";
+import { transportInputItem, normalizeTransportStorageFields } from "../transportImportPayload";
 import { TRPCError } from "@trpc/server";
 import { and, eq, like, or, sql, desc } from "drizzle-orm";
 import { adminProcedure, router } from "../_core/trpc";
@@ -6,17 +7,7 @@ import { getDb } from "../db";
 import { transportRecords } from "../../drizzle/schema";
 import { classifyTransport, isValidTransportCnpj, normalizeTransportCnpj, normalizeTransportUf, TRANSPORT_TYPES } from "../../shared/transportes";
 
-const item = z.object({
-  cnpj: z.string(),
-  name: z.string().trim().max(255).default(""),
-  type: z.enum(TRANSPORT_TYPES).optional(),
-  uf: z.string().max(30).optional(),
-  city: z.string().max(160).optional(),
-  cnae: z.string().max(32).optional(),
-  source: z.string().max(1500).optional(),
-  notes: z.string().max(5000).optional(),
-  isUsed: z.boolean().optional(),
-});
+const item = transportInputItem;
 // Inicialização isolada e idempotente: não modifica outras tabelas do sistema.
 // Executada apenas após autenticação do ADM, na primeira chamada ao módulo.
 let transportTableReady: Promise<void> | null = null;
@@ -89,15 +80,10 @@ export const transportesRouter = router({
     const db = await get();
     const cnpj = normalizeTransportCnpj(input.cnpj);
     if (!/^\d{14}$/.test(cnpj)) throw new TRPCError({ code: "BAD_REQUEST", message: "CNPJ precisa ter 14 dígitos. Registros inválidos devem ser revisados." });
-    const data = {
-      cnpj, name: input.name || "NOME NÃO INFORMADO",
-      type: input.type || classifyTransport(input.name), uf: normalizeTransportUf(input.uf), city: input.city?.trim() || "",
-      cnae: input.cnae?.trim() || "", source: input.source || "Cadastro manual",
-      notes: input.notes || "", checksumOk: isValidTransportCnpj(cnpj) ? 1 : 0,
-    };
+    const data = normalizeTransportStorageFields(input, "Cadastro manual");
     const existing = await db.select().from(transportRecords).where(eq(transportRecords.cnpj, cnpj)).limit(1);
     if (existing.length) throw new TRPCError({ code: "CONFLICT", message: "CNPJ já cadastrado. Edite o registro existente." });
-    await db.insert(transportRecords).values({ ...data, isUsed: input.isUsed ? 1 : 0 });
+    await db.insert(transportRecords).values(data);
     return { created: true, validCnpj: Boolean(data.checksumOk) };
   }),
   importBatch: adminProcedure.input(z.object({ records: z.array(item).min(1).max(400) })).mutation(async ({ input }) => {
@@ -115,12 +101,7 @@ export const transportesRouter = router({
     // INSERT IGNORE impede a duplicação concorrente por índice único. Não sobrescreve JÁ USADO.
     for (let i = 0; i < all.length; i += 80) {
       const batch = all.slice(i, i + 80);
-      const values = batch.map(([cnpj, x]) => ({
-        cnpj, name: x.name.trim() || "NOME NÃO INFORMADO",
-        type: x.type || classifyTransport(x.name), uf: normalizeTransportUf(x.uf), city: x.city?.trim() || "",
-        cnae: x.cnae?.trim() || "", source: x.source || "Importação",
-        notes: x.notes || "", isUsed: x.isUsed ? 1 : 0, checksumOk: isValidTransportCnpj(cnpj) ? 1 : 0,
-      }));
+      const values = batch.map(([, x]) => normalizeTransportStorageFields(x, "Importação"));
       const result: any = await db.insert(transportRecords).ignore().values(values);
       const inserted = Number(result?.[0]?.affectedRows ?? result?.affectedRows ?? 0);
       created += inserted;
@@ -134,11 +115,9 @@ export const transportesRouter = router({
     if (!/^\d{14}$/.test(cnpj)) throw new TRPCError({ code: "BAD_REQUEST", message: "CNPJ inválido" });
     const other = await db.select({ id: transportRecords.id }).from(transportRecords).where(eq(transportRecords.cnpj, cnpj)).limit(1);
     if (other[0] && other[0].id !== input.id) throw new TRPCError({ code: "CONFLICT", message: "CNPJ já existe" });
-    await db.update(transportRecords).set({
-      cnpj, name: input.name || "NOME NÃO INFORMADO", type: input.type || classifyTransport(input.name),
-      uf: normalizeTransportUf(input.uf), city: input.city || "", cnae: input.cnae || "",
-      notes: input.notes || "", source: input.source || "Atualização manual", checksumOk: isValidTransportCnpj(cnpj) ? 1 : 0,
-    }).where(eq(transportRecords.id, input.id));
+    const data = normalizeTransportStorageFields(input, "Atualização manual");
+    const { isUsed: _ignoredUsed, ...fields } = data;
+    await db.update(transportRecords).set(fields).where(eq(transportRecords.id, input.id));
     return { success: true };
   }),
   markUsed: adminProcedure.input(z.object({ id: z.number().int().positive(), used: z.boolean() })).mutation(async ({ input }) => {

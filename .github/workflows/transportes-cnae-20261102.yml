@@ -1,0 +1,21 @@
+name: Transportes - validar CNAE
+on:
+  push:
+    branches: [fix/transportes-import-cnae-limit-20261102]
+  workflow_dispatch:
+permissions:
+  contents: read
+jobs:
+  validar:
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+    steps:
+      - uses: actions/checkout@v4
+      - uses: pnpm/action-setup@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '22'
+          cache: pnpm
+      - run: pnpm install --frozen-lockfile
+      - run: pnpm exec vitest run server/transportImportPayload.test.ts server/transportes.test.ts
+      - run: pnpm build
