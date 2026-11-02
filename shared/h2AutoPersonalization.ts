@@ -4,21 +4,33 @@ import { z } from "zod";
  * H2 AUTO: camada opcional de respostas contextuais, sem IA paga e sem acesso
  * a pedidos/códigos. Não substitui a árvore, MENU/0, validação ou handoff.
  */
+export const h2AutoFaqRuleSchema = z.object({
+  id: z.string().regex(/^[a-z0-9_-]{3,48}$/),
+  question: z.string().trim().min(3).max(160),
+  variations: z.string().trim().max(600).default(""),
+  answer: z.string().trim().min(3).max(1200),
+  enabled: z.boolean().default(true),
+}).strict();
+
+export type H2AutoFaqRule = z.infer<typeof h2AutoFaqRuleSchema>;
+
 export const h2AutoPersonalizationSchema = z.object({
   enabled: z.boolean().default(false),
   tone: z.enum(["acolhedor", "objetivo", "profissional"]).default("acolhedor"),
   verifiedName: z.boolean().default(true),
+  faq: z.array(h2AutoFaqRuleSchema).max(40).default([]),
 }).strict();
 
 export type H2AutoPersonalization = z.infer<typeof h2AutoPersonalizationSchema>;
 export type H2AutoPersonalizedTopic =
   | "atendimento" | "codigo" | "novo_pedido" | "acompanhar"
-  | "indicacoes" | "valores" | "foto" | "emprestimos" | "gastos" | "ajuda";
+  | "indicacoes" | "valores" | "foto" | "emprestimos" | "gastos" | "ajuda" | "personalizada";
 
 export const H2_AUTO_PERSONALIZATION_DEFAULT: H2AutoPersonalization = {
   enabled: false,
   tone: "acolhedor",
   verifiedName: true,
+  faq: [],
 };
 
 /** Nenhuma informação do cliente é obtida a partir do nome da notificação. */
@@ -45,6 +57,39 @@ export const H2_AUTO_PERSONALIZATION_EXAMPLES = [
 function normalizeQuestion(value: string): string {
   return value.normalize("NFD").replace(/[\u0300-\u036f]/g, "")
     .toLowerCase().replace(/\s+/g, " ").trim();
+}
+
+/** Normalização conservadora para comparar perguntas sem depender de botões. */
+function normalizedFaqQuestion(value: string): string {
+  return normalizeQuestion(value).replace(/[^a-z0-9\s]/g, " ").replace(/\s+/g, " ").trim();
+}
+const FAQ_STOP_WORDS = new Set(["eu","quero","queria","preciso","gostaria","poderia","como","qual","quais","onde","que","me","meu","minha","meus","minhas","um","uma","de","do","da","dos","das","com","o","a","os","as","para","por","em","no","na","tenho","pode","faz","fazer","ver","saber","esta","estou"]);
+function faqWords(question: string): Set<string> {
+  return new Set(normalizedFaqQuestion(question).split(" ").filter(w => w.length > 2 && !FAQ_STOP_WORDS.has(w)));
+}
+function faqMatchScore(input: string, candidate: string): number {
+  const actual = normalizedFaqQuestion(input);
+  const expected = normalizedFaqQuestion(candidate);
+  if (!actual || !expected) return 0;
+  if (actual === expected) return 1;
+  const a = faqWords(actual), b = faqWords(expected);
+  if (a.size < 2 || b.size < 2) return 0;
+  let overlap=0;
+  for (const word of a) if (b.has(word)) overlap++;
+  const threshold = Math.max(2,Math.ceil(Math.max(a.size,b.size)*0.72));
+  return overlap >= threshold ? overlap/Math.max(a.size,b.size) : 0;
+}
+/** Sem correspondência segura, nenhum FAQ é escolhido: preserva fluxo existente. */
+function findCustomFaq(input: string, entries: H2AutoFaqRule[]): H2AutoFaqRule | null {
+  let best: H2AutoFaqRule | null=null, bestScore=0, second=0;
+  for (const rule of entries) {
+    if (!rule.enabled) continue;
+    const candidates=[rule.question,...rule.variations.split(/\r?\n/).map(s=>s.trim()).filter(Boolean)];
+    const score=Math.max(...candidates.map(q=>faqMatchScore(input,q)));
+    if (score>bestScore){second=bestScore;bestScore=score;best=rule;}
+    else if (score>second) second=score;
+  }
+  return best && bestScore>=0.72 && bestScore-second>0.05 ? best : null;
 }
 
 function safeVerifiedFirstName(value: string | undefined): string {
@@ -103,7 +148,12 @@ export function getH2AutoPersonalizedReply(
   context: H2AutoPersonalizedContext = {},
 ): H2AutoPersonalizedAnswer | null {
   if (!config.enabled) return null;
-  const topic = classifyH2AutoPersonalizedQuestion(input);
+  // Nunca captura comandos, códigos ou telefones; o fluxo de segurança tem prioridade.
+  if (typeof input !== "string" || input.length > 280 || !input.trim() ||
+      /\d{5,}/.test(input) || /^(?:menu|in[ií]cio|0|[1-9]|10|\/h2|\/h3)$/i.test(input.trim()) ||
+      /@|https?:\/\/|www\./i.test(input)) return null;
+  const rule = findCustomFaq(input,(config.faq ?? []));
+  const topic = rule ? "personalizada" : classifyH2AutoPersonalizedQuestion(input);
   if (!topic) return null;
   const name = config.verifiedName && context.verified
     ? safeVerifiedFirstName(context.verifiedFirstName) : "";
@@ -115,7 +165,7 @@ export function getH2AutoPersonalizedReply(
     : "";
   return {
     topic,
-    message: "⚡ *H2 COLOMBIANO* 🇨🇴\n\n" + greeting + "\n\n" + PUBLIC_GUIDANCE[topic] +
+    message: "⚡ *H2 COLOMBIANO* 🇨🇴\n\n" + greeting + "\n\n" + (rule ? rule.answer : PUBLIC_GUIDANCE[topic as Exclude<H2AutoPersonalizedTopic, "personalizada">]) +
       reminder + "\n\n🏠 *MENU* início | 🔙 *0* voltar",
   };
 }
