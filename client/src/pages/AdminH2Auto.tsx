@@ -23,7 +23,7 @@ import H2AutoTreeEditor from "@/components/H2AutoTreeEditor";
 import H2AutoWhatsAppPreview from "@/components/H2AutoWhatsAppPreview";
 import { H2_AUTO_CONFIRMATION_DEFAULTS as confirmationDefaults, H2_AUTO_CONFIRMATION_GROUPS as confirmationGroups } from "@shared/h2AutoConfirmation";
 import { H2_AUTO_SHORT_MEDIA, H2_AUTO_SHORT_ORDER_NOT_FOUND } from "@shared/h2AutoShortReplies";
-import { H2_AUTO_PERSONALIZATION_DEFAULT, H2_AUTO_PERSONALIZATION_EXAMPLES, type H2AutoPersonalization } from "@shared/h2AutoPersonalization";
+import { H2_AUTO_PERSONALIZATION_DEFAULT, type H2AutoPersonalization } from "@shared/h2AutoPersonalization";
 
 const Box = ({ children }: { children: React.ReactNode }) => (
   <div className="rounded-2xl border border-cyan-500/30 bg-slate-900/90 p-5 space-y-3">
@@ -543,16 +543,37 @@ export default function AdminH2Auto() {
                     Usar primeiro nome somente após identificação por código
                   </label>
                 </div>
+                <div className="space-y-3 rounded-xl border border-violet-400/25 bg-slate-950/65 p-3">
+                  <div className="flex items-center justify-between gap-3 flex-wrap">
+                    <div><h5 className="font-black text-violet-100">PERGUNTAS E RESPOSTAS LIVRES</h5><p className="text-xs text-slate-300">Sem botões ou números para o cliente. Até 40 respostas individuais por aparelho.</p></div>
+                    <button type="button" disabled={(personalization.faq ?? []).length>=40} className="rounded-lg bg-violet-600 px-4 py-2 font-black text-xs disabled:opacity-40"
+                      onClick={()=>updatePersonalization({faq:[...(personalization.faq??[]),{id:"faq_"+Date.now().toString(36)+"_"+Math.random().toString(36).slice(2,6),question:"",variations:"",answer:"",enabled:true}]})}>+ ADICIONAR PERGUNTA E RESPOSTA</button>
+                  </div>
+                  {(personalization.faq ?? []).map((faq,index)=><div key={faq.id} className="rounded-xl border border-violet-500/30 bg-[#080b1c] p-3 space-y-2">
+                    <div className="flex justify-between items-center gap-2">
+                      <strong className="text-sm">PERGUNTA {index+1}</strong>
+                      <div className="flex gap-3 items-center">
+                        <label className="text-xs flex gap-1 items-center"><input type="checkbox" checked={faq.enabled} onChange={e=>updatePersonalization({faq:personalization.faq.map(x=>x.id===faq.id?{...x,enabled:e.target.checked}:x)})}/> Ativa</label>
+                        <button type="button" className="text-red-300 text-xs font-bold" onClick={()=>updatePersonalization({faq:personalization.faq.filter(x=>x.id!==faq.id)})}>EXCLUIR</button>
+                      </div>
+                    </div>
+                    <input className={field} maxLength={160} placeholder="Pergunta que o cliente pode escrever" value={faq.question}
+                      onChange={e=>updatePersonalization({faq:personalization.faq.map(x=>x.id===faq.id?{...x,question:e.target.value}:x)})}/>
+                    <textarea className={field} rows={2} maxLength={600} placeholder="Outras formas de perguntar (uma por linha, opcional)" value={faq.variations}
+                      onChange={e=>updatePersonalization({faq:personalization.faq.map(x=>x.id===faq.id?{...x,variations:e.target.value}:x)})}/>
+                    <textarea className={field} rows={4} maxLength={1200} placeholder="Resposta automática em texto livre, com quebras de linha para celular" value={faq.answer}
+                      onChange={e=>updatePersonalization({faq:personalization.faq.map(x=>x.id===faq.id?{...x,answer:e.target.value}:x)})}/>
+                  </div>)}
+                  <p className="text-xs text-amber-200">Salve apenas perguntas e respostas completas. Perguntas ambíguas seguem o atendimento atual, sem inventar respostas.</p>
+                </div>
                 <div className="space-y-2 rounded-xl border border-violet-400/25 bg-slate-950/65 p-3">
                   <p className="text-sm font-bold text-violet-200">TESTAR RESPOSTA ANTES DE ATIVAR</p>
-                  <select className={field} value={personalSamples[d.id] ?? H2_AUTO_PERSONALIZATION_EXAMPLES[0]} onChange={e => setPersonalSamples(prev=>({...prev,[d.id]:e.target.value}))}>
-                    {H2_AUTO_PERSONALIZATION_EXAMPLES.map(s => <option key={s}>{s}</option>)}
-                  </select>
-                  <button type="button" className="rounded-lg border border-violet-400/50 bg-violet-800/40 px-4 py-2 text-xs font-black" disabled={previewPersonalization.isPending}
+                  <input className={field} maxLength={280} placeholder="Digite uma pergunta como o cliente escreveria..." value={personalSamples[d.id] ?? ""} onChange={e => setPersonalSamples(prev=>({...prev,[d.id]:e.target.value}))}/>
+                  <button type="button" className="rounded-lg border border-violet-400/50 bg-violet-800/40 px-4 py-2 text-xs font-black" disabled={previewPersonalization.isPending || !(personalSamples[d.id] ?? "").trim()}
                     onClick={async () => {
                       try {
                         const result = await previewPersonalization.mutateAsync({
-                          input: personalSamples[d.id] ?? H2_AUTO_PERSONALIZATION_EXAMPLES[0],
+                          input: (personalSamples[d.id] ?? "").trim(),
                           personalization: {...personalization,enabled:true},
                         });
                         setPersonalPreviews(prev => ({...prev,[d.id]:result.answer?.message ?? "Nenhuma regra encontrou resposta para essa pergunta."}));
@@ -561,7 +582,7 @@ export default function AdminH2Auto() {
                   {personalPreviews[d.id] && <pre className="whitespace-pre-wrap rounded-lg bg-black/30 p-3 text-xs leading-relaxed text-white">{personalPreviews[d.id]}</pre>}
                 </div>
                 <button type="button" className="rounded-xl bg-violet-500 px-5 py-3 font-black text-slate-950 disabled:opacity-50"
-                  disabled={savePersonalization.isPending || !personalDrafts[d.id]}
+                  disabled={savePersonalization.isPending || !personalDrafts[d.id] || (personalization.faq??[]).some(x=>x.question.trim().length<3 || x.answer.trim().length<3)}
                   onClick={()=>savePersonalization.mutate({id:d.id,personalization})}>SALVAR PERSONALIZAÇÃO DESTE APARELHO</button>
               </section>
               <nav aria-label="Central de respostas" className="sticky top-1 z-20 rounded-xl border border-cyan-400/30 bg-[#071629]/95 p-3 shadow-xl">
