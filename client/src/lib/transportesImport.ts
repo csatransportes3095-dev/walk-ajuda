@@ -37,9 +37,9 @@ export function recognizeImportHeading(value: unknown): Field | null {
   if (/^(razaosocial|razaosocialnome|razaosocialnomefantasia|nomeempresarial|nomefantasia|empresa|empresatransportadora|empresaounome|empresacnpj|nome|transportadora|fantasia|nomeempresa|empresanome)$/.test(h)
       || h.startsWith("empresatransportadora") || h.startsWith("razaosocial")) return "name";
   if (h === "cidade" || h === "municipio" || h === "localidade" || h === "cidademunicipio") return "city";
-  if (h === "uf" || h === "estado" || h === "siglaestado") return "uf";
+  if (h === "uf" || h === "estado" || h === "siglaestado" || h === "abauf") return "uf";
   if (h === "cnae" || h.startsWith("cnaeprincipal") || h.startsWith("cnaeprimario") || h === "atividadeprincipal") return "cnae";
-  if (h === "usado" || h === "usadobool" || h === "jausado" || h === "jausado" || h === "status" || h === "situacao" || h === "uso" || h === "marcaruso") return "isUsed";
+  if (h === "usado" || h === "usadobool" || h === "usadobool" || h === "jausado" || h === "jausado" || h === "status" || h === "situacao" || h === "uso" || h === "marcaruso" || h === "abrirusar" || h === "abrirmarcar") return "isUsed";
   if (h === "fonte" || h.startsWith("fontearquivo") || h.startsWith("fonteorigem") || h === "origem" || h === "arquivo") return "source";
   if (h.startsWith("anotac") || h.startsWith("observac") || h.startsWith("conferencia") || h === "nota" || h === "notas") return "notes";
   if (h === "tipo" || h.startsWith("tipodeservico") || h.startsWith("tipotransporte") || h === "categoria" || h === "modalidade" || h === "atividade" || h === "cnaetipo") return "type";
