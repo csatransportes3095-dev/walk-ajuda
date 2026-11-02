@@ -24,6 +24,7 @@ import H2AutoWhatsAppPreview from "@/components/H2AutoWhatsAppPreview";
 import { H2_AUTO_CONFIRMATION_DEFAULTS as confirmationDefaults, H2_AUTO_CONFIRMATION_GROUPS as confirmationGroups } from "@shared/h2AutoConfirmation";
 import { H2_AUTO_SHORT_MEDIA, H2_AUTO_SHORT_ORDER_NOT_FOUND } from "@shared/h2AutoShortReplies";
 import { H2_AUTO_PERSONALIZATION_DEFAULT, type H2AutoPersonalization } from "@shared/h2AutoPersonalization";
+import { prepareH2AutoCommonFaq, H2_AUTO_FAQ_SUGGESTIONS } from "@shared/h2AutoFaqPresets";
 
 const Box = ({ children }: { children: React.ReactNode }) => (
   <div className="rounded-2xl border border-cyan-500/30 bg-slate-900/90 p-5 space-y-3">
@@ -305,7 +306,8 @@ export default function AdminH2Auto() {
           const value = draft?.config || d.config;
           const expectedRevision = draft?.revision ?? d.revision;
           const media = { ...mediaDefaults, ...(value.media || {}) };
-          const personalization = personalDrafts[d.id] ?? d.config.personalization ?? H2_AUTO_PERSONALIZATION_DEFAULT;
+          const presetPreparation = prepareH2AutoCommonFaq(personalDrafts[d.id] ?? d.config.personalization ?? H2_AUTO_PERSONALIZATION_DEFAULT);
+          const personalization = presetPreparation.personalization;
           const updatePersonalization = (patch: Partial<H2AutoPersonalization>) => {
             setPersonalDrafts(prev => ({...prev, [d.id]: {...personalization,...patch}}));
             setPersonalPreviews(prev => ({...prev, [d.id]: ""}));
@@ -564,6 +566,7 @@ export default function AdminH2Auto() {
                     <textarea className={field} rows={4} maxLength={1200} placeholder="Resposta automática em texto livre, com quebras de linha para celular" value={faq.answer}
                       onChange={e=>updatePersonalization({faq:personalization.faq.map(x=>x.id===faq.id?{...x,answer:e.target.value}:x)})}/>
                   </div>)}
+                  <p className="text-xs text-emerald-200">{H2_AUTO_FAQ_SUGGESTIONS.length} perguntas sugeridas, desativadas e editáveis. Confira e salve para conservar as edições.</p>
                   <p className="text-xs text-amber-200">Salve apenas perguntas e respostas completas. Perguntas ambíguas seguem o atendimento atual, sem inventar respostas.</p>
                 </div>
                 <div className="space-y-2 rounded-xl border border-violet-400/25 bg-slate-950/65 p-3">
@@ -582,7 +585,7 @@ export default function AdminH2Auto() {
                   {personalPreviews[d.id] && <pre className="whitespace-pre-wrap rounded-lg bg-black/30 p-3 text-xs leading-relaxed text-white">{personalPreviews[d.id]}</pre>}
                 </div>
                 <button type="button" className="rounded-xl bg-violet-500 px-5 py-3 font-black text-slate-950 disabled:opacity-50"
-                  disabled={savePersonalization.isPending || !personalDrafts[d.id] || (personalization.faq??[]).some(x=>x.question.trim().length<3 || x.answer.trim().length<3)}
+                  disabled={savePersonalization.isPending || (!personalDrafts[d.id] && presetPreparation.added===0) || (personalization.faq??[]).some(x=>x.question.trim().length<3 || x.answer.trim().length<3)}
                   onClick={()=>savePersonalization.mutate({id:d.id,personalization})}>SALVAR PERSONALIZAÇÃO DESTE APARELHO</button>
               </section>
               <nav aria-label="Central de respostas" className="sticky top-1 z-20 rounded-xl border border-cyan-400/30 bg-[#071629]/95 p-3 shadow-xl">
