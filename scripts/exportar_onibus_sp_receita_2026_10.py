@@ -16,6 +16,7 @@ from zipfile import ZipFile, ZIP_DEFLATED
 
 import duckdb
 from openpyxl import Workbook
+from openpyxl.cell import WriteOnlyCell
 from openpyxl.styles import Alignment, Font, PatternFill
 from openpyxl.utils import get_column_letter
 
@@ -121,7 +122,7 @@ def buscar():
             [path],
         )
     print("BUSCANDO MUNICIPIOS", flush=True)
-    db.execute("CREATE OR REPLACE VIEW cidades AS SELECT codigo, descricao FROM read_parquet(?)", [HF + "municipios/municipios.parquet"])
+    db.execute("CREATE OR REPLACE TABLE cidades AS SELECT codigo, descricao FROM read_parquet(?)", [HF + "municipios/municipios.parquet"])
     resultado = db.execute(
         "SELECT s.cnpj_basico||s.cnpj_ordem||s.cnpj_dv AS cnpj,"
         "coalesce(e.razao_social,''),coalesce(s.nome_fantasia,''),"
@@ -179,77 +180,95 @@ def tratar(linhas):
         yield linha
 
 def criar_arquivos(linhas):
-    caminho_csv = DESTINO / "CNPS_ONIBUS_SP_GERAL_2026-10.csv"
+    caminho_csv = DESTINO / "CNPJS_ONIBUS_SP_GERAL_2026-10.csv"
     caminho_xlsx = DESTINO / "CNPJS_ONIBUS_SP_GERAL_2026-10.xlsx"
     resumo = Counter()
     cidades = Counter()
     cnaes = Counter()
-    wb = Workbook(write_only=False)
-    ws = wb.active
-    ws.title = "SP_GERAL"
-    ws.append(CAMPOS)
+    # Em Outubro/2026 são muitos estabelecimentos. Write-only impede que milhões
+    # de células fiquem em RAM ao gerar o Excel.
+    wb = Workbook(write_only=True)
+    header_bg = PatternFill("solid", fgColor="12213C")
+    header_font = Font(name="Aptos", color="FFFFFF", bold=True, size=10)
+    alert_font = Font(name="Aptos", color="B66B28", size=10)
+    ok_font = Font(name="Aptos", color="127B50", size=10)
+
+    def heading(ws, cells):
+        result = []
+        for value in cells:
+            cell = WriteOnlyCell(ws, value=valor_excel(value))
+            cell.fill = header_bg
+            cell.font = header_font
+            cell.alignment = Alignment(horizontal="center", vertical="center", wrap_text=True)
+            result.append(cell)
+        return result
+
+    def valor_excel(v):
+        return excel_seguro(v)
+
+    ws = wb.create_sheet("SP_GERAL")
+    ws.sheet_view.showGridLines = False
     ws.freeze_panes = "C2"
+    # Todos os registros têm um único CNPJ. Contagem de início serve para auto-filtro.
+    ws.auto_filter.ref = f"A1:X{len(linhas)+1}"
+    widths = [22,44,32,15,17,31,30,21,15,20,24,8,19,35,12,23,26,14,60,19,19,33,16,53]
+    for i,w in enumerate(widths,1):
+        ws.column_dimensions[get_column_letter(i)].width=w
+    ws.append(heading(ws,CAMPOS))
     total=0
     sem_razao=0
     with caminho_csv.open("w", encoding="utf-8-sig", newline="") as fo:
         writer = csv.writer(fo, delimiter=";", quoting=csv.QUOTE_MINIMAL)
         writer.writerow(CAMPOS)
         for row in tratar(linhas):
-            writer.writerow([excel_seguro(v) for v in row])
-            ws.append([excel_seguro(v) for v in row])
+            safe = [valor_excel(v) for v in row]
+            writer.writerow(safe)
+            # Apenas a situação cadastral recebe estilo; as demais células
+            # ficam como dados importados sem carregar milhões de estilos em RAM.
+            situation=WriteOnlyCell(ws, value=safe[7])
+            situation.font = ok_font if row[7] == "ATIVA" else alert_font
+            safe[7] = situation
+            ws.append(safe)
             total += 1
             resumo[row[7]] += 1
             cidades[(row[10], row[7])] += 1
             if not row[1]: sem_razao += 1
             for c in row[6].split(","): cnaes[c] += 1
-    ws.auto_filter.ref = f"A1:X{total+1}"
-    ws.sheet_view.showGridLines = False
-    ws.row_dimensions[1].height = 32
-    header_bg=PatternFill("solid", fgColor="12213C")
-    header_font=Font(name="Aptos",color="FFFFFF",bold=True,size=10)
-    for c in ws[1]:
-        c.fill=header_bg
-        c.font=header_font
-        c.alignment=Alignment(horizontal="center",vertical="center",wrap_text=True)
-    widths = [22,44,32,15,17,31,30,21,15,20,24,8,19,35,12,23,26,14,60,19,19,33,16,53]
-    for i,w in enumerate(widths,1):
-        ws.column_dimensions[get_column_letter(i)].width=w
-    for r in ws.iter_rows(min_row=2):
-        for cell in r:
-            cell.font=Font(name="Aptos",size=10,color="127B50")
-        if r[7].value != "ATIVA":
-            for cell in r[:10]:cell.font=Font(name="Aptos",size=10,color="B66B28")
+            if total % 20000 == 0:
+                print("EXPORTADOS:", total, flush=True)
+
     folha=wb.create_sheet("RESUMO")
     folha.sheet_view.showGridLines=False
-    folha.append(["CNPJs DE ÔNIBUS EM SP | DADOS ABERTOS RFB | 2026-10"])
+    folha.column_dimensions["A"].width=60
+    folha.column_dimensions["B"].width=90
+    folha.append(heading(folha,["CNPJs DE ÔNIBUS EM SP | DADOS ABERTOS RFB | 2026-10",""]))
     folha.append(["Registros (matrizes e filiais)",total])
     folha.append(["Razões sociais não encontradas",sem_razao])
     folha.append(["Fonte primária",FONTE_OFICIAL])
     folha.append(["Espelho utilizado",ORIGEM])
     folha.append(["Competência",COMPETENCIA])
     folha.append([])
-    folha.append(["Situação cadastral","Total"])
+    folha.append(heading(folha,["Situação cadastral","Total"]))
     for name,count in resumo.most_common():folha.append([name,count])
     folha.append([])
-    folha.append(["CNAE de filtro","Estabelecimentos que o possuem (contagens podem se sobrepor)"])
+    folha.append(heading(folha,["CNAE de filtro","Estabelecimentos que o possuem (contagens podem se sobrepor)"]))
     for cod in CNAES:folha.append([cod,cnaes.get(cod,0)])
-    folha.column_dimensions["A"].width=60
-    folha.column_dimensions["B"].width=90
-    for r in (1,8,16):
-        for cell in folha[r]:
-            cell.fill=header_bg
-            cell.font=header_font
+
     mun=wb.create_sheet("MUNICIPIOS")
     mun.sheet_view.showGridLines=False
-    mun.append(["Município","Situação","Total"])
+    mun.freeze_panes="A2"
+    mun.column_dimensions["A"].width=33
+    mun.column_dimensions["B"].width=25
+    mun.column_dimensions["C"].width=14
+    mun.append(heading(mun,["Município","Situação","Total"]))
     for (nome,status), n in sorted(cidades.items(),key=lambda x:(x[0][0],x[0][1])):
         mun.append([nome,status,n])
-    mun.auto_filter.ref=f"A1:C{mun.max_row}"
-    mun.freeze_panes="A2"
-    for col,width in (("A",33),("B",25),("C",14)):mun.column_dimensions[col].width=width
-    for c in mun[1]: c.fill=header_bg;c.font=header_font
+    mun.auto_filter.ref=f"A1:C{len(cidades)+1}"
+
     info=wb.create_sheet("METODOLOGIA")
     info.sheet_view.showGridLines=False
+    info.column_dimensions["A"].width=42
+    info.column_dimensions["B"].width=115
     notes=[
       ("Abrangência","Todos os estabelecimentos com UF SP, matrizes e filiais."),
       ("Filtro principal/secundário",", ".join(CNAES)),
@@ -267,11 +286,10 @@ def criar_arquivos(linhas):
       ("Cidades abrangidas","Todo o estado de São Paulo, não apenas a capital."),
       ("Data de exportação",datetime.now(timezone.utc).isoformat(timespec="seconds")),
     ]
-    for r in notes:info.append(r)
-    info.column_dimensions["A"].width=42
-    info.column_dimensions["B"].width=115
-    for row in info:
-        row[0].font=Font(name="Aptos",bold=True,color="6941C6")
+    info.append(heading(info,["Critério","Detalhes"]))
+    for row in notes:
+        info.append([valor_excel(x) for x in row])
+    print("GRAVANDO XLSX", total, "linhas",flush=True)
     wb.save(caminho_xlsx)
     metadata = {
       "competencia": COMPETENCIA,"fonte_primaria":FONTE_OFICIAL,"espelho":ORIGEM,
@@ -281,18 +299,19 @@ def criar_arquivos(linhas):
       "data_extracao_utc":datetime.now(timezone.utc).isoformat(timespec="seconds"),
       "arquivos":[caminho_csv.name,caminho_xlsx.name],
     }
-    (DESTINO/"RELATORIO_EXTRAÇÃO.json").write_text(json.dumps(metadata,ensure_ascii=False,indent=2),encoding="utf-8")
+    (DESTINO/"RELATORIO_EXTRACAO.json").write_text(json.dumps(metadata,ensure_ascii=False,indent=2),encoding="utf-8")
     return total,metadata
 
 def principal():
     print("FONTE",ORIGEM,"COMPETENCIA",COMPETENCIA,flush=True)
     linhas=buscar()
+    print("EXEMPLO DO BANCO:", [str(x)[:40] for x in linhas[0][:11]] if linhas else "VAZIO", flush=True)
     print("REGISTROS BRUTOS SP/CNAE:",len(linhas),flush=True)
     total,metadata=criar_arquivos(linhas)
     if not total:
         raise RuntimeError("NENHUM REGISTRO ENCONTRADO: não gerar lista vazia.")
     with ZipFile(DESTINO/"CNPJS_ONIBUS_SP_GERAL_2026-10.zip","w",compression=ZIP_DEFLATED,compresslevel=6) as zip:
-        for f in [DESTINO/x for x in metadata["arquivos"]]+[DESTINO/"RELATORIO_EXTRAÇÃO.json"]:
+        for f in [DESTINO/x for x in metadata["arquivos"]]+[DESTINO/"RELATORIO_EXTRACAO.json"]:
             zip.write(f, arcname=f.name)
     print("FINALIZADO",total,"CNPJs",metadata["situacoes"],flush=True)
 
