@@ -4,97 +4,26 @@ import { toast } from "sonner";
 import { Building2, Upload, Search, Save, CheckCircle2, FileSpreadsheet, ClipboardPaste, Download } from "lucide-react";
 import { trpc } from "@/lib/trpc";
 import { readTransportExcel } from "@/lib/transportesExcel";
+import { parseTransportSheetRows, parseTransportText, type TransportImportReport } from "@/lib/transportesImport";
 import { isValidTransportCnpj, normalizeTransportCnpj, formatTransportCnpj, classifyTransport, TRANSPORT_TYPES, TRANSPORT_TYPE_LABELS, TRANSPORT_UFS, type TransportType } from "@shared/transportes";
 
 type Draft = { cnpj: string; name: string; uf: string; city: string; type: TransportType; cnae: string; source: string; notes: string; isUsed: boolean };
 const blank = (): Draft => ({ cnpj: "", name: "", uf: "SP", city: "", type: "carga", cnae: "", source: "Cadastro manual", notes: "", isUsed: false });
-const normal = (s: string) => s.normalize("NFD").replace(/[\\u0300-\\u036f]/g, "").toLowerCase().replace(/[^a-z0-9]/g, "");
-function recognize(header: string): keyof Draft | "" {
-  const h = normal(header);
-  if (/^(razaosocial|nomeempresarial|empresa|nome|transportadora|fantasia|empresatransportadora|nomefantasia)$/.test(h)) return "name";
-  if (/^(cnpj|cnpjcpf|documento)$/.test(h)) return "cnpj";
-  if (/^(cidade|municipio|localidade)$/.test(h)) return "city";
-  if (/^(uf|estado|siglaestado)$/.test(h)) return "uf";
-  if (/^(tipo|tipodeservico|servico|modalidade|categoria)$/.test(h)) return "type";
-  if (/^(cnae|cnaeprincipal|cnaeprimario)$/.test(h)) return "cnae";
-  if (/^(jausado|usado|status|situacao)$/.test(h)) return "isUsed";
-  return "";
-}
-function rowsToDraft(rows: unknown[][], fallbackUf: string, origin: string): Draft[] {
-  // Planilhas profissionais podem ter título, instruções e cards antes da tabela.
-  const clean = rows.filter(row => row.some(x => String(x ?? "").trim()));
-  if (!clean.length) return [];
-  let headerIndex = -1;
-  let headers: Array<keyof Draft | ""> = [];
-  for (let i = 0; i < Math.min(250, clean.length); i++) {
-    const candidate = clean[i].map(v => recognize(String(v ?? "")));
-    if (candidate.includes("cnpj") && candidate.includes("name")) {
-      headerIndex = i;
-      headers = candidate;
-      break;
-    }
-  }
-  const positions: Record<string, number> = {};
-  if (headerIndex >= 0) {
-    headers.forEach((h, i) => { if (h && positions[h] === undefined) positions[h] = i; });
-  } else {
-    // Arquivos simples sem cabeçalho: Nome;CNPJ;Categoria;CNAE;Cidade;UF.
-    positions.name = 0; positions.cnpj = 1; positions.type = 2;
-    positions.cnae = 3; positions.city = 4; positions.uf = 5;
-  }
-  return clean.slice(headerIndex + 1).map(row => {
-    const get = (key: string) => String(row[positions[key]] ?? "").trim();
-    const cnpj = normalizeTransportCnpj(get("cnpj"));
-    if (!/^\\d{14}$/.test(cnpj)) return null;
-    const used = normal(get("isUsed"));
-    const name = get("name") || "NOME NÃO INFORMADO";
-    const notes = /\\b(exemplo|fictici|demonstrac|teste)\\b/i.test(name)
-      ? "ATENÇÃO: nome de exemplo/demonstração; existência da empresa não confirmada."
-      : "";
-    return {
-      cnpj, name, uf: get("uf").toUpperCase() || fallbackUf, city: get("city"),
-      type: classifyTransport(get("type") || name), cnae: get("cnae"),
-      source: origin, notes, isUsed: /^(jausado|usado|sim|true|1)$/.test(used),
-    };
-  }).filter((row): row is Draft => row !== null);
-}
-
-async function readImportedFile(file: File, fallbackUf: string): Promise<Draft[]> {
+async function readImportedFile(file: File, fallbackUf: string): Promise<TransportImportReport> {
   const ext = file.name.split(".").pop()?.toLowerCase();
-  if (ext === "xlsx" || ext === "xls") {
+  if (ext === "xlsx") {
     const sheets = await readTransportExcel(file);
-    return sheets.flatMap(({ sheet, rows }) => rowsToDraft(rows, fallbackUf, file.name + " / " + sheet));
+    const reports = sheets.map(({ sheet, rows }) => parseTransportSheetRows(rows, fallbackUf, file.name + " / " + sheet));
+    return {
+      records: reports.flatMap(r => r.records),
+      examined: reports.reduce((sum, r) => sum + r.examined, 0),
+      rejected: reports.reduce((sum, r) => sum + r.rejected, 0),
+      headerFound: reports.some(r => r.headerFound),
+    };
   }
-  const text = await file.text();
-  return parsePasted(text, fallbackUf, file.name);
+  if (ext === "xls") throw new Error("Salve o arquivo .xls no Excel como .xlsx para importar.");
+  return parseTransportText(await file.text(), fallbackUf, file.name);
 }
-function parsePasted(text: string, uf: string, origin = "Texto colado"): Draft[] {
-  const lines = text.replace(/^\uFEFF/, "").split(/\r?\n/).filter(x => x.trim());
-  if (!lines.length) return [];
-  let delimiter = "\t";
-  const first = lines[0] || "";
-  if (!first.includes("\t")) delimiter = first.includes(";") ? ";" : ",";
-  // CSV de texto com aspas duplas escapadas, compatível com Excel.
-  const rows: string[][] = [];
-  for (const line of lines) {
-    let current = "", quoted = false, row: string[] = [];
-    for (let i = 0; i < line.length; i++) {
-      const c = line[i];
-      if (c === '"' && line[i + 1] === '"' && quoted) { current += '"'; i++; }
-      else if (c === '"') quoted = !quoted;
-      else if (c === delimiter && !quoted) { row.push(current); current = ""; }
-      else current += c;
-    }
-    row.push(current);
-    if (row.length === 1) {
-      const match = line.match(/\b\d{2}[.]?\d{3}[.]?\d{3}[/]?\d{4}[-]?\d{2}\b/);
-      if (match) { rows.push([line.replace(match[0], "").trim(), match[0]]); continue; }
-    }
-    rows.push(row);
-  }
-  return rowsToDraft(rows, uf, origin);
-}
-
 export default function AdminTransportes() {
   const [, navigate] = useLocation();
   const utils = trpc.useUtils();
@@ -109,6 +38,7 @@ export default function AdminTransportes() {
   const [paste, setPaste] = useState("");
   const [importUf, setImportUf] = useState("SP");
   const [pending, setPending] = useState<Draft[]>([]);
+  const [importFeedback, setImportFeedback] = useState("");
   const [importing, setImporting] = useState(false);
   const list = trpc.transportes.list.useQuery({ search, uf: uf || undefined, city: city || undefined, type: (type || undefined) as TransportType | undefined, used, page, limit: 50 });
   const stats = trpc.transportes.stats.useQuery();
@@ -199,9 +129,10 @@ export default function AdminTransportes() {
       <section className="rounded-2xl border border-purple-500/30 bg-slate-900/70 p-4 sm:p-6 space-y-3">
         <h2 className="font-black flex gap-2 items-center"><Upload size={20}/> IMPORTAÇÃO INTELIGENTE</h2>
         <p className="text-xs text-slate-400">Aceita Excel (.xlsx), CSV, TXT e texto colado. Cabeçalhos: Razão Social, CNPJ, Tipo, CNAE, Cidade e UF. Registros repetidos são ignorados e nenhum status JÁ USADO é apagado.</p>
-        <div className="flex flex-wrap items-center gap-3"><label className="rounded-xl border border-purple-500/40 bg-purple-500/10 px-4 py-3 cursor-pointer font-semibold flex items-center gap-2"><FileSpreadsheet size={18}/> Selecionar Excel / TXT <input type="file" accept=".xlsx,.csv,.txt,.tsv" multiple className="hidden" onChange={async e=>{const files = Array.from(e.target.files || []);try{const chunks=await Promise.all(files.map(f=>readImportedFile(f,importUf)));setPending(v=>[...v,...chunks.flat()]);toast.success(files.length+" arquivo(s) lido(s)")}catch(err:any){toast.error(err.message||"Erro ao ler arquivo")}e.target.value=""}}/></label><span className="text-sm">UF padrão:</span><select className={inputStyle+" !w-24"} value={importUf} onChange={e=>setImportUf(e.target.value)}>{TRANSPORT_UFS.map(u=><option key={u}>{u}</option>)}</select></div>
+        <div className="flex flex-wrap items-center gap-3"><label className="rounded-xl border border-purple-500/40 bg-purple-500/10 px-4 py-3 cursor-pointer font-semibold flex items-center gap-2"><FileSpreadsheet size={18}/> Selecionar Excel / TXT <input type="file" accept=".xlsx,.csv,.txt,.tsv" multiple className="hidden" onChange={async e=>{const files = Array.from(e.target.files || []);try{const chunks=await Promise.all(files.map(f=>readImportedFile(f,importUf)));const found=chunks.flatMap(x=>x.records);const scanned=chunks.reduce((a,b)=>a+b.examined,0);const rejected=chunks.reduce((a,b)=>a+b.rejected,0);setPending(v=>[...v,...found]);const message=`${files.length} arquivo(s): ${scanned} linhas analisadas, ${found.length} CNPJs extraídos, ${rejected} linhas ignoradas.`;setImportFeedback(message);if(found.length)toast.success(message,{duration:9000});else toast.error("Nenhum CNPJ extraído. Verifique as colunas do arquivo.",{duration:10000})}catch(err:any){toast.error(err.message||"Erro ao ler arquivo")}e.target.value=""}}/></label><span className="text-sm">UF padrão:</span><select className={inputStyle+" !w-24"} value={importUf} onChange={e=>setImportUf(e.target.value)}>{TRANSPORT_UFS.map(u=><option key={u}>{u}</option>)}</select></div>
         <textarea className={inputStyle} rows={5} value={paste} onChange={e=>setPaste(e.target.value)} placeholder={"Cole aqui dados do Excel ou Bloco de Notas:\nRazão Social;CNPJ;Tipo de Serviço;CNAE;Cidade;UF\nEmpresa Exemplo;00.000.000/0001-00;Carga;4930-2/02;Jandira;SP"}/>
-        <button onClick={()=>{const parsed=parsePasted(paste,importUf);setPending(v=>[...v,...parsed]);toast.success(parsed.length+" linha(s) extraída(s)")}} className="rounded-xl border border-purple-400/40 px-4 py-2 flex gap-2 items-center"><ClipboardPaste size={17}/> Extrair texto colado</button>
+        <button onClick={()=>{const report=parseTransportText(paste,importUf);setPending(v=>[...v,...report.records]);const msg=`Texto: ${report.examined} linhas, ${report.records.length} CNPJs extraídos, ${report.rejected} ignoradas.`;setImportFeedback(msg);if(report.records.length)toast.success(msg);else toast.error("Nenhum CNPJ encontrado no texto")}} className="rounded-xl border border-purple-400/40 px-4 py-2 flex gap-2 items-center"><ClipboardPaste size={17}/> Extrair texto colado</button>
+        {importFeedback&&<p role="status" className="rounded-lg border border-cyan-500/30 bg-cyan-950/30 px-3 py-2 text-sm font-semibold text-cyan-100">{importFeedback}</p>}
         {pending.length>0&&<div className="border border-cyan-500/25 rounded-xl p-3 space-y-2"><p className="font-bold">Prévia: {pending.length} recebidos • {preview.rows.length} CNPJs únicos • {preview.duplicates} repetidos • {preview.invalid} com dígitos inválidos • {preview.malformed} incompletos</p><p className="text-xs text-amber-300">A conferência de dígitos não equivale à confirmação cadastral na Receita Federal. Registros suspeitos ficam sinalizados.</p><div className="max-h-32 overflow-auto text-xs text-slate-300">{preview.rows.slice(0,30).map(r=><div key={r.cnpj}>{formatTransportCnpj(r.cnpj)} — {r.name} — {r.uf}/{r.city}</div>)}</div><button disabled={importing} onClick={importAll} className="rounded-xl bg-emerald-600 px-5 py-3 font-black">{importing?"Importando...":"IMPORTAR SEM DUPLICATAS"}</button><button onClick={()=>setPending([])} className="ml-2 rounded-xl border p-3">Limpar prévia</button></div>}
       </section>
       <section className="rounded-2xl border border-cyan-500/25 bg-slate-900/70 p-4 sm:p-6 space-y-4">
