@@ -3,6 +3,7 @@ import { useLocation } from "wouter";
 import { toast } from "sonner";
 import { Building2, Upload, Search, Save, CheckCircle2, FileSpreadsheet, ClipboardPaste, Download } from "lucide-react";
 import { trpc } from "@/lib/trpc";
+import { readTransportExcel } from "@/lib/transportesExcel";
 import { isValidTransportCnpj, normalizeTransportCnpj, formatTransportCnpj, classifyTransport, TRANSPORT_TYPES, TRANSPORT_TYPE_LABELS, TRANSPORT_UFS, type TransportType } from "@shared/transportes";
 
 type Draft = { cnpj: string; name: string; uf: string; city: string; type: TransportType; cnae: string; source: string; notes: string; isUsed: boolean };
@@ -39,12 +40,8 @@ function rowsToDraft(rows: unknown[][], fallbackUf: string, origin: string): Dra
 async function readImportedFile(file: File, fallbackUf: string): Promise<Draft[]> {
   const ext = file.name.split(".").pop()?.toLowerCase();
   if (ext === "xlsx" || ext === "xls") {
-    const XLSX = await import("xlsx");
-    const book = XLSX.read(await file.arrayBuffer(), { type: "array", cellText: true });
-    return book.SheetNames.flatMap(name => {
-      const rows = XLSX.utils.sheet_to_json<unknown[]>(book.Sheets[name], { header: 1, defval: "", blankrows: false, raw: false });
-      return rowsToDraft(rows, fallbackUf, file.name + " / " + name);
-    });
+    const sheets = await readTransportExcel(file);
+    return sheets.flatMap(({ sheet, rows }) => rowsToDraft(rows, fallbackUf, file.name + " / " + sheet));
   }
   const text = await file.text();
   return parsePasted(text, fallbackUf, file.name);
@@ -165,7 +162,7 @@ export default function AdminTransportes() {
       <section className="rounded-2xl border border-purple-500/30 bg-slate-900/70 p-4 sm:p-6 space-y-3">
         <h2 className="font-black flex gap-2 items-center"><Upload size={20}/> IMPORTAÇÃO INTELIGENTE</h2>
         <p className="text-xs text-slate-400">Aceita Excel (.xlsx/.xls), CSV, TXT e texto colado. Cabeçalhos: Razão Social, CNPJ, Tipo, CNAE, Cidade e UF. Registros repetidos são ignorados e nenhum status JÁ USADO é apagado.</p>
-        <div className="flex flex-wrap items-center gap-3"><label className="rounded-xl border border-purple-500/40 bg-purple-500/10 px-4 py-3 cursor-pointer font-semibold flex items-center gap-2"><FileSpreadsheet size={18}/> Selecionar Excel / TXT <input type="file" accept=".xlsx,.xls,.csv,.txt,.tsv" multiple className="hidden" onChange={async e=>{const files=[...(e.target.files||[])];try{const chunks=await Promise.all(files.map(f=>readImportedFile(f,importUf)));setPending(v=>[...v,...chunks.flat()]);toast.success(files.length+" arquivo(s) lido(s)")}catch(err:any){toast.error(err.message||"Erro ao ler arquivo")}e.target.value=""}}/></label><span className="text-sm">UF padrão:</span><select className={inputStyle+" !w-24"} value={importUf} onChange={e=>setImportUf(e.target.value)}>{TRANSPORT_UFS.map(u=><option key={u}>{u}</option>)}</select></div>
+        <div className="flex flex-wrap items-center gap-3"><label className="rounded-xl border border-purple-500/40 bg-purple-500/10 px-4 py-3 cursor-pointer font-semibold flex items-center gap-2"><FileSpreadsheet size={18}/> Selecionar Excel / TXT <input type="file" accept=".xlsx,.csv,.txt,.tsv" multiple className="hidden" onChange={async e=>{const files=[...(e.target.files||[])];try{const chunks=await Promise.all(files.map(f=>readImportedFile(f,importUf)));setPending(v=>[...v,...chunks.flat()]);toast.success(files.length+" arquivo(s) lido(s)")}catch(err:any){toast.error(err.message||"Erro ao ler arquivo")}e.target.value=""}}/></label><span className="text-sm">UF padrão:</span><select className={inputStyle+" !w-24"} value={importUf} onChange={e=>setImportUf(e.target.value)}>{TRANSPORT_UFS.map(u=><option key={u}>{u}</option>)}</select></div>
         <textarea className={inputStyle} rows={5} value={paste} onChange={e=>setPaste(e.target.value)} placeholder={"Cole aqui dados do Excel ou Bloco de Notas:\nRazão Social;CNPJ;Tipo de Serviço;CNAE;Cidade;UF\nEmpresa Exemplo;00.000.000/0001-00;Carga;4930-2/02;Jandira;SP"}/>
         <button onClick={()=>{const parsed=parsePasted(paste,importUf);setPending(v=>[...v,...parsed]);toast.success(parsed.length+" linha(s) extraída(s)")}} className="rounded-xl border border-purple-400/40 px-4 py-2 flex gap-2 items-center"><ClipboardPaste size={17}/> Extrair texto colado</button>
         {pending.length>0&&<div className="border border-cyan-500/25 rounded-xl p-3 space-y-2"><p className="font-bold">Prévia: {pending.length} recebidos • {preview.rows.length} CNPJs únicos • {preview.duplicates} repetidos • {preview.invalid} com dígitos inválidos • {preview.malformed} incompletos</p><p className="text-xs text-amber-300">A conferência de dígitos não equivale à confirmação cadastral na Receita Federal. Registros suspeitos ficam sinalizados.</p><div className="max-h-32 overflow-auto text-xs text-slate-300">{preview.rows.slice(0,30).map(r=><div key={r.cnpj}>{formatTransportCnpj(r.cnpj)} — {r.name} — {r.uf}/{r.city}</div>)}</div><button disabled={importing} onClick={importAll} className="rounded-xl bg-emerald-600 px-5 py-3 font-black">{importing?"Importando...":"IMPORTAR SEM DUPLICATAS"}</button><button onClick={()=>setPending([])} className="ml-2 rounded-xl border p-3">Limpar prévia</button></div>}
