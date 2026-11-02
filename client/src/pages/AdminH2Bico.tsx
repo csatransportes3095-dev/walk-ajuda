@@ -125,6 +125,8 @@ export default function AdminH2Bico(){
   const [importing,setImporting]=useState(false);
   const [importEarChoice,setImportEarChoice]=useState<H2BicoPhotoEarOption>("none");
   const [importReviewChoice,setImportReviewChoice]=useState<H2BicoPhotoReviewOption>("pending");
+  const [recentCount,setRecentCount]=useState(40);
+  const [recentBusy,setRecentBusy]=useState(false);
   const [progress,setProgress]=useState({done:0,total:0,name:""});
   const [summary,setSummary]=useState<{imported:number;repaired:number;duplicates:number;errors:number;earUpdated:number;confirmed:number;markErrors:number}|null>(null);
   const [extractText,setExtractText]=useState("");
@@ -141,6 +143,7 @@ export default function AdminH2Bico(){
   const importer=trpc.h2bico.importPhoto.useMutation();
   const batchEar=trpc.h2bico.bulkEarMarker.useMutation();
   const batchReview=trpc.h2bicoReview.managePasted.useMutation();
+  const recentImports=trpc.h2bico.recentPhotoImports.useQuery({limit:300},{enabled:activeGroup==="fotos"});
   const replacePhoto=trpc.h2bico.replacePhoto.useMutation({
     onSuccess:async(data)=>{
       setBrokenPhotos(current=>{const next=new Set(current);next.delete(data.id);return next;});
@@ -368,6 +371,30 @@ export default function AdminH2Bico(){
     safeCardPage*H2BICO_CARD_PAGE_SIZE,(safeCardPage+1)*H2BICO_CARD_PAGE_SIZE,
   );
 
+  const applyRecentBatch=async()=>{
+    const selection=(recentImports.data||[]).filter(row=>row.eligible).slice(0,recentCount);
+    if(!selection.length){toast.error("Nenhuma foto recente elegível para marcar.");return;}
+    if(importEarChoice==="none"&&importReviewChoice==="pending"){toast.error("Selecione COM/SEM EAR ou JÁ CONFIRMADA.");return;}
+    if(!window.confirm(`Aplicar as escolhas a ${selection.length} cadastro(s) recém-importado(s)? Confira se são os CPFs corretos.`))return;
+    setRecentBusy(true);
+    let earDone=0,reviewDone=0,errors=0;
+    try{
+      if(importEarChoice!=="none"){
+        for(const rows of chunkH2BicoNewPhotos(selection,300)){
+          try{const res=await batchEar.mutateAsync({ids:rows.map(r=>r.id),earStatus:importEarChoice});earDone+=res.updated;}
+          catch{errors+=rows.length;}
+        }
+      }
+      if(importReviewChoice==="confirmed"){
+        for(const rows of chunkH2BicoNewPhotos(selection,250)){
+          try{const res=await batchReview.mutateAsync({cpfs:rows.map(r=>r.cpf),decision:"confirm"});reviewDone+=res.updated+res.already;errors+=res.skippedDiscarded+res.skippedProtected+res.missing;}
+          catch{errors+=rows.length;}
+        }
+      }
+      await Promise.all([utils.h2bico.invalidate(),utils.h2bicoReview.invalidate()]);
+      toast[errors?"warning":"success"](`Lote recente: ${earDone} EAR, ${reviewDone} confirmados, ${errors} pendências.`);
+    }finally{setRecentBusy(false);}
+  };
   const importAll=async()=>{
     if(!readyBatch.length){toast.error("Nenhuma foto válida para importar.");return;}
     setImporting(true);
@@ -512,6 +539,34 @@ export default function AdminH2Bico(){
           {batch.length>0&&<div className="mt-2 text-xs font-bold text-emerald-300">Lote atual: {batch.length} arquivo(s). Você pode adicionar mais pastas antes de importar.</div>}
         </div>
 
+        <div className="rounded-xl border border-cyan-500/30 bg-slate-950/60 p-3 space-y-3">
+          <h3 className="text-sm font-black text-cyan-200">EAR E CONFIRMAÇÃO — ANTES OU DEPOIS DE IMPORTAR</h3>
+          <div className="grid gap-3 sm:grid-cols-2">
+            <label className="text-xs font-semibold text-slate-200">EAR
+              <select aria-label="Escolher EAR do lote" value={importEarChoice} disabled={importing||recentBusy} onChange={e=>setImportEarChoice(e.target.value as H2BicoPhotoEarOption)} className="mt-1 w-full rounded-lg border border-slate-600 bg-slate-900 p-2.5 text-white">
+                <option value="none">NÃO ALTERAR EAR</option><option value="com_ear">🟢 COM EAR</option><option value="sem_ear">🔴 SEM EAR</option>
+              </select>
+            </label>
+            <label className="text-xs font-semibold text-slate-200">Conferência
+              <select aria-label="Escolher conferência do lote" value={importReviewChoice} disabled={importing||recentBusy} onChange={e=>setImportReviewChoice(e.target.value as H2BicoPhotoReviewOption)} className="mt-1 w-full rounded-lg border border-slate-600 bg-slate-900 p-2.5 text-white">
+                <option value="pending">MANTER PENDENTE</option><option value="confirmed">✅ JÁ CONFIRMADA</option>
+              </select>
+            </label>
+          </div>
+          <div className="rounded-lg border border-blue-500/30 bg-blue-950/20 p-3 space-y-2">
+            <div className="text-sm font-bold">Aplicar também a fotos já importadas</div>
+            <p className="text-xs text-slate-400">Lista as importações mais recentes. Confira os nomes e CPFs abaixo antes de aplicar. Registros usados, vinculados ou descartados são excluídos.</p>
+            <div className="flex flex-wrap items-center gap-2">
+              <label className="text-xs">Quantidade <input type="number" min={1} max={300} value={recentCount} disabled={recentBusy} onChange={e=>setRecentCount(Math.max(1,Math.min(300,Number(e.target.value)||1)))} className="ml-2 w-20 rounded border border-slate-600 bg-slate-900 p-2"/></label>
+              <Button size="sm" variant="outline" disabled={recentBusy} onClick={()=>void recentImports.refetch()}>ATUALIZAR LISTA</Button>
+              <Button size="sm" disabled={importing||recentBusy||!(recentImports.data||[]).some(r=>r.eligible)} onClick={()=>void applyRecentBatch()}>{recentBusy?"APLICANDO...":"APLICAR AO LOTE RECENTE"}</Button>
+            </div>
+            <div className="max-h-32 overflow-auto text-[11px] text-slate-300" role="status">
+              {recentImports.isLoading?"Carregando fotos recentes...":(recentImports.data||[]).filter(r=>r.eligible).slice(0,recentCount).map(r=><div key={r.id} className="border-b border-white/10 py-1">{r.name} · CPF {r.cpf} · {r.earStatus==="com_ear"?"COM EAR":r.earStatus==="sem_ear"?"SEM EAR":"Sem EAR marcado"} · {r.reviewState==="confirmed"?"CONFIRMADO":"PENDENTE"}</div>)}
+              {!recentImports.isLoading&&!recentImports.data?.length&&"Nenhuma importação recente encontrada."}
+            </div>
+          </div>
+        </div>
         {batch.length>0&&<>
           <div className="grid grid-cols-2 md:grid-cols-5 gap-2">
             <Card className="bg-black/25 border-white/10 p-3"><div className="text-xs text-gray-400">Selecionadas</div><div className="text-xl font-black">{batch.length}</div></Card>
@@ -539,25 +594,6 @@ export default function AdminH2Bico(){
             <div className="h-3 bg-white/10 rounded-full overflow-hidden"><div className="h-full bg-emerald-500 transition-all" style={{width:`${progress.total?(progress.done/progress.total)*100:0}%`}}/></div>
           </div>}
 
-          <div className="rounded-xl border border-cyan-500/30 bg-slate-950/60 p-3 space-y-3">
-            <div className="text-sm font-black text-cyan-200">OPÇÕES DO LOTE — APLICAR SOMENTE AOS NOVOS CADASTROS</div>
-            <div className="grid gap-3 sm:grid-cols-2">
-              <label className="flex flex-col gap-1.5 text-xs font-semibold text-slate-300">Marcação EAR
-                <select aria-label="EAR após importar fotos" disabled={importing} className="rounded-lg border border-slate-600 bg-slate-900 px-3 py-2.5 text-white" value={importEarChoice} onChange={e=>setImportEarChoice(e.target.value as H2BicoPhotoEarOption)}>
-                  <option value="none">NÃO ALTERAR EAR</option>
-                  <option value="com_ear">🟢 COM EAR</option>
-                  <option value="sem_ear">🔴 SEM EAR</option>
-                </select>
-              </label>
-              <label className="flex flex-col gap-1.5 text-xs font-semibold text-slate-300">Conferência após importar
-                <select aria-label="Conferência após importar fotos" disabled={importing} className="rounded-lg border border-slate-600 bg-slate-900 px-3 py-2.5 text-white" value={importReviewChoice} onChange={e=>setImportReviewChoice(e.target.value as H2BicoPhotoReviewOption)}>
-                  <option value="pending">MANTER PENDENTE</option>
-                  <option value="confirmed">✅ JÁ CONFIRMADA</option>
-                </select>
-              </label>
-            </div>
-            <p className="text-xs text-slate-400">As opções serão aplicadas depois que as novas fotos forem salvas. CPFs já cadastrados, fotos reparadas e duplicados ficam sem alterações de EAR ou conferência.</p>
-          </div>
           <div className="flex flex-wrap gap-2">
             <Button className="font-black" onClick={importAll} disabled={importing||readyBatch.length===0}>
               <UploadCloud className="w-5 h-5 mr-2"/>{importing?"IMPORTANDO...":`IMPORTAR ${readyBatch.length} FOTO(S)`}
