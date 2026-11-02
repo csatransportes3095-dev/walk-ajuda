@@ -56,8 +56,22 @@ export function formatTransportCnpj(value: unknown): string {
   return s.length === 14 ? `${s.slice(0, 2)}.${s.slice(2, 5)}.${s.slice(5, 8)}/${s.slice(8, 12)}-${s.slice(12)}` : s;
 }
 
+// Aceita a sigla ou o nome completo quando a UF vier explicitamente do cadastro.
+const TRANSPORT_UF_NAME_TO_CODE: Record<string, string> = {
+  ACRE: "AC", ALAGOAS: "AL", AMAPA: "AP", AMAZONAS: "AM", BAHIA: "BA",
+  CEARA: "CE", DISTRITO_FEDERAL: "DF", ESPIRITO_SANTO: "ES", GOIAS: "GO",
+  MARANHAO: "MA", MATO_GROSSO: "MT", MATO_GROSSO_DO_SUL: "MS",
+  MINAS_GERAIS: "MG", PARA: "PA", PARAIBA: "PB", PARANA: "PR",
+  PERNAMBUCO: "PE", PIAUI: "PI", RIO_DE_JANEIRO: "RJ",
+  RIO_GRANDE_DO_NORTE: "RN", RIO_GRANDE_DO_SUL: "RS", RONDONIA: "RO",
+  RORAIMA: "RR", SANTA_CATARINA: "SC", SAO_PAULO: "SP",
+  SERGIPE: "SE", TOCANTINS: "TO",
+};
+
 export function normalizeTransportUf(value: unknown, fallback = "ND"): string {
-  const uf = String(value ?? "").trim().toUpperCase();
+  const raw = String(value ?? "").trim().normalize("NFD")
+    .replace(/[\u0300-\u036f]/g, "").toUpperCase().replace(/\s+/g, "_");
+  const uf = TRANSPORT_UF_NAME_TO_CODE[raw] ?? raw;
   return TRANSPORT_UFS.includes(uf as (typeof TRANSPORT_UFS)[number]) ? uf : fallback;
 }
 
