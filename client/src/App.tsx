@@ -73,6 +73,7 @@ import AdminZohoConfig from "./pages/AdminZohoConfig";
 import AdminMedia from "./pages/AdminMedia";
 import AdminFeatureCards from "./pages/AdminFeatureCards";
 import AdminHubCentral from "./pages/AdminHubCentral";
+import AdminTransportes from "./pages/AdminTransportes";
 import AdminLocadora from "./pages/AdminLocadora";
 import LocadoraPortal from "./pages/LocadoraPortal";
 import AdminConsultas from "./pages/AdminConsultas";
@@ -158,6 +159,8 @@ function Router() {
   return (
     <Switch>
       <Route path={"/admin/login"} component={AdminLogin} />
+      <Route path={"/transpostes"}><AdminGuard><AdminTransportes /></AdminGuard></Route>
+      <Route path={"/admin/transportes"}><AdminGuard><AdminTransportes /></AdminGuard></Route>
       <Route path={"/admin/authenticator"}>
         <AdminGuard><AdminAuthenticator /></AdminGuard>
       </Route>
@@ -353,6 +356,7 @@ function AppContent() {
   const isAgendarRoute = location.startsWith("/agendar");
   const isVideoRoute = location.startsWith("/video") || location === "/tutorial";
   const isGastosRoute = location.toLowerCase() === "/gastos";
+  const isTransportesRoute = location === "/transpostes";
   const isEmprestimoRoute = location.toLowerCase() === "/emprestimo";
   const isCartoesRoute = location === "/cartoes" || location.startsWith("/cartoes/") || location.startsWith("/cartoes");
   const isPreCadastroRoute = location === "/pre-cadastro";
@@ -434,6 +438,9 @@ function AppContent() {
   if (showMaintenanceManifest && maintenanceManifest) {
     return <MaintenanceManifestGate config={maintenanceManifest} />;
   }
+
+  // Transportes usa autenticação de ADM, sem fluxo público de clientes.
+  if (isTransportesRoute) return <Router />;
 
   // Rota /gastos é pública — sem senha
   if (isGastosRoute) {

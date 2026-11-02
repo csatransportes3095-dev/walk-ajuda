@@ -2659,3 +2659,27 @@ export const adminAuthenticatorOrderLinks = mysqlTable("adminAuthenticatorOrderL
   orderLookup: index("adminAuthenticatorOrderLinks_registration_idx").on(table.registrationId),
 }));
 export type AdminAuthenticatorOrderLink = typeof adminAuthenticatorOrderLinks.$inferSelect;
+
+
+// Cadastros administrativos de transporte (ônibus, caminhões e demais modalidades).
+// Isolados dos cadastros de clientes, pedidos e locadora.
+export const transportRecords = mysqlTable("transport_records", {
+  id: int("id").autoincrement().primaryKey(),
+  cnpj: varchar("cnpj", { length: 14 }).notNull(),
+  name: varchar("name", { length: 255 }).notNull(),
+  type: varchar("type", { length: 24 }).notNull().default("outros"),
+  uf: varchar("uf", { length: 2 }).notNull().default("ND"),
+  city: varchar("city", { length: 160 }).notNull().default(""),
+  cnae: varchar("cnae", { length: 32 }).notNull().default(""),
+  source: text("source"),
+  notes: text("notes"),
+  isUsed: int("is_used").notNull().default(0),
+  checksumOk: int("checksum_ok").notNull().default(0),
+  createdAt: timestamp("created_at").defaultNow().notNull(),
+  updatedAt: timestamp("updated_at").defaultNow().onUpdateNow().notNull(),
+}, (table) => ({
+  uniqueCnpj: uniqueIndex("transport_records_cnpj_unique").on(table.cnpj),
+  ufCityLookup: index("transport_records_uf_city_idx").on(table.uf, table.city),
+  categoryLookup: index("transport_records_type_idx").on(table.type),
+}));
+export type TransportRecord = typeof transportRecords.$inferSelect;
