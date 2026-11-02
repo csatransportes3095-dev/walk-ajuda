@@ -443,7 +443,7 @@ function AppContent() {
   const [location] = useLocation();
   const isGeradorChassiRoute = isChassisAdminPath(location);
   const isVehicleUsageAdminRoute = location.toLowerCase() === "/adm/placa";
-  const isAdminRoute = location.startsWith("/admin") || isGeradorChassiRoute || isVehicleUsageAdminRoute || location.toLowerCase() === "/adm/transportes" || location.toLowerCase() === "/transpostes";
+  const isAdminRoute = location.startsWith("/admin") || location.toLowerCase() === "/adm" || location.toLowerCase().startsWith("/adm/") || isGeradorChassiRoute || isVehicleUsageAdminRoute || location.toLowerCase() === "/transpostes";
   const isH2AdsRoute = isH2AdsPath(location);
   const isSimilarityRoute = location.toLowerCase() === "/similaridade";
   const isTrackingRoute = location === "/acompanhar";
