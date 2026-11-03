@@ -135,7 +135,7 @@ export function CustomerOtpLogin({ title = "Acesso H2 Colombiano", initialPhone 
   }
 
   return (
-    <main className="min-h-0 bg-[#050b1b] text-white flex items-start justify-center px-4 pt-3 pb-6 sm:pt-5 sm:pb-8">
+    <main className="min-h-0 bg-[#050b1b] text-white flex flex-col items-center justify-start px-4 pt-3 pb-0 sm:pt-5">
       <div className="w-full max-w-md rounded-3xl border border-cyan-400/30 bg-slate-950 p-6 sm:p-8 shadow-[0_0_35px_rgba(6,182,212,0.12)]">
         {loginSettings?.login_show_image !== "0" && <div className="mx-auto mb-4 flex h-16 w-16 items-center justify-center overflow-hidden rounded-2xl border border-cyan-400/50 bg-cyan-400/10">
           {loginSettings?.login_image_url ? <img src={loginSettings.login_image_url} alt="Logo do H2 Colombiano" className="h-full w-full object-contain" /> : <ShieldCheck className="h-9 w-9 text-cyan-300" aria-hidden />}
@@ -209,6 +209,23 @@ export function CustomerOtpLogin({ title = "Acesso H2 Colombiano", initialPhone 
           {loginSettings?.login_footer?.trim() || "O código expira em 10 minutos. Nunca compartilhe o código recebido."}
         </p>}
       </div>
+      <footer className="mt-5 w-full flex-1 flex flex-col justify-end overflow-hidden bg-[#050b1b]" aria-label="Rodapé H2 Colombiano">
+        <div className="relative mx-auto w-full max-w-[1920px] overflow-hidden border-t border-cyan-400/30 bg-gradient-to-r from-[#07152d] via-[#11102c] to-[#07152d]">
+          {supportSettings?.login_footer_banner_url?.trim() ? (
+            <picture>
+              {supportSettings.login_footer_banner_desktop_url?.trim() && <source media="(min-width: 768px)" srcSet={supportSettings.login_footer_banner_desktop_url} />}
+              <img src={supportSettings.login_footer_banner_url} alt="Banner do rodapé H2 Colombiano" className="block w-full aspect-[3/1] md:aspect-[6/1] object-cover" />
+            </picture>
+          ) : (
+            <div className="flex min-h-36 items-center justify-center px-4 py-6 text-center sm:min-h-40">
+              <div className="space-y-1">
+                <p className="text-lg font-black tracking-widest text-cyan-100">H2 COLOMBIANO 🇨🇴</p>
+                <p className="text-xs font-semibold tracking-wide text-amber-300">Segurança, tecnologia e confiança</p>
+              </div>
+            </div>
+          )}
+        </div>
+      </footer>
     </main>
   );
 }
