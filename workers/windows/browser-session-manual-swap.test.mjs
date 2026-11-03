@@ -62,7 +62,7 @@ test("validated operator swap changes IP without closing Chrome", async () => {
   assert.equal(state.browser.exitCode, null);
   assert.equal(state.proxy.host, "new.example");
   assert.equal(state.sessionLockedIp, "198.51.100.2");
-  assert.equal(state.networkSuspended, false);
+  assert.equal(state.networkSuspended, false, JSON.stringify(state.events));
   assert.equal(state.activeBackendPort, 8001);
   assert.equal(state.sessionIpChanged, false);
   assert.ok(state.events.some((event) => event.hotSwapState === "online"));
