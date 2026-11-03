@@ -8,7 +8,7 @@ import { resolveReferralDeclaration } from "./referral";
 import { sendH2AutoOrderCode } from "./h2-auto-order-email";
 import { recordH2AutoPhoneFailure, clearH2AutoPhoneFailures, type PhoneStage } from "./h2-auto-validation-blocks";
 import { h2AutoPhoneFailureMessage, type H2AutoPhoneKind, type H2AutoPhoneFailure } from "./h2-auto-phone-attempt-message";
-import { invalidH2AutoPhoneStageAnswer, normalizeH2AutoPhone11, h2AutoNavigationCommand, initialH2AutoChoiceStage, repeatedH2AutoChoice, isH2AutoHelpRequest, h2AutoNaturalNewCustomerIntent } from "./h2-auto-validation-policy";
+import { invalidH2AutoPhoneStageAnswer, normalizeH2AutoPhone11, h2AutoNavigationCommand, initialH2AutoChoiceStage, repeatedH2AutoChoice, isH2AutoHelpRequest, h2AutoNaturalNewCustomerIntent, h2AutoNaturalExistingCustomerIntent, h2AutoNaturalReferralsIntent, h2AutoGreetingWelcome } from "./h2-auto-validation-policy";
 import { manualSilencedPhones, normalizeSilencedPhone } from "./h2-auto-silenced-contacts";
 import { h2AutoConfirmationSchema } from "../shared/h2AutoConfirmation";
 import { h2AutoPersonalizationSchema, H2_AUTO_PERSONALIZATION_DEFAULT, getH2AutoPersonalizedReply } from "../shared/h2AutoPersonalization";
@@ -227,13 +227,18 @@ export function registerH2AutoAccessRoutes(app: Express): void {
             code_attempts=0,resend_after=0,expires_at=0,updated_at=VALUES(updated_at)`);
         await clearH2AutoPhoneFailures(deviceId,sessionId);
         const firstStage = initialH2AutoChoiceStage(input) ??
-          (h2AutoNaturalNewCustomerIntent(input) ? "referral_phone" : null);
+          (h2AutoNaturalExistingCustomerIntent(input) ? "customer_phone" :
+           h2AutoNaturalReferralsIntent(input) ? "referrals_phone" :
+           h2AutoNaturalNewCustomerIntent(input) ? "referral_phone" : null);
         if (firstStage) {
           await update(sessionId, sql`stage=${firstStage},updated_at=${now}`);
           return respond(res, 200, {state:firstStage, message:firstStage==="customer_phone" ? phoneMessage :
             firstStage==="referrals_phone" ? confirmation.phonePrompt : referrerMessage});
         }
-        return respond(res, 200, { state: "choice", message: initialMessage });
+        const openingPersonalization = getH2AutoPersonalizedReply(input, personalization, {stage: "choice"});
+        if (openingPersonalization)
+          return respond(res, 200, {state:"personalized",message:openingPersonalization.message,topic:openingPersonalization.topic});
+        return respond(res, 200, { state: "choice", message: h2AutoGreetingWelcome(input,initialMessage) });
       }
 
       // Navigation commands must be handled BEFORE the strict phone validator.
@@ -319,11 +324,11 @@ export function registerH2AutoAccessRoutes(app: Express): void {
       }
 
       if (s.stage === "choice") {
-        if (normalized === "1") {
+        if (normalized === "1" || h2AutoNaturalExistingCustomerIntent(input)) {
           await update(sessionId, sql`stage='customer_phone',updated_at=${now}`);
           return respond(res, 200, { state: "customer_phone", message: phoneMessage });
         }
-        if (normalized === "3") {
+        if (normalized === "3" || h2AutoNaturalReferralsIntent(input)) {
           await update(sessionId, sql`stage='referrals_phone',updated_at=${now}`);
           return respond(res, 200, { state: "referrals_phone", message: confirmation.phonePrompt });
         }
@@ -333,7 +338,7 @@ export function registerH2AutoAccessRoutes(app: Express): void {
         }
         const personalized = getH2AutoPersonalizedReply(input, personalization, {stage: "choice"});
         if (personalized) return respond(res, 200, {state: "personalized", message: personalized.message, topic: personalized.topic});
-        return respond(res, 200, { state: "choice", message: initialMessage });
+        return respond(res, 200, { state: "choice", message: h2AutoGreetingWelcome(input,initialMessage) });
       }
 
       if (s.stage === "customer_phone" || s.stage === "referrals_phone") {

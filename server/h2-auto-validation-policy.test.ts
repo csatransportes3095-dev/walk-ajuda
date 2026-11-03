@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { validH2AutoPhone11, normalizeH2AutoPhone11, allowsH2AutoMenuReset, invalidH2AutoPhoneStageAnswer, h2AutoNavigationCommand, initialH2AutoChoiceStage, repeatedH2AutoChoice } from "./h2-auto-validation-policy";
+import { validH2AutoPhone11, normalizeH2AutoPhone11, allowsH2AutoMenuReset, invalidH2AutoPhoneStageAnswer, h2AutoNavigationCommand, initialH2AutoChoiceStage, repeatedH2AutoChoice, h2AutoNaturalExistingCustomerIntent, h2AutoNaturalReferralsIntent, h2AutoGreetingWelcome } from "./h2-auto-validation-policy";
 
 describe("H2 Auto strict 11-digit WhatsApp phone validation", () => {
   it("accepts mobile phone numbers with a two-digit DDD", () => {
@@ -76,5 +76,51 @@ describe("H2 AUTO - escolha inicial e repetição",()=> {
     expect(validH2AutoPhone11(phone)).toBe(true);
     expect(invalidH2AutoPhoneStageAnswer("referral_phone",phone)).toBe(false);
     expect(repeatedH2AutoChoice("referral_phone",phone)).toBe(false);
+  });
+});
+
+
+describe("H2 AUTO: primeiras mensagens livres sem repetir menu",()=>{
+  it.each([
+    "Quero acompanhar meu pedido",
+    "Como posso acompanhar meu pedido?",
+    "Quero consultar o meu pedido",
+    "Qual status do meu pedido?",
+    "Já sou cliente",
+    "Já tenho cadastro",
+  ])("solicita telefone do cliente antes de consultar: %s",input=>{
+    expect(h2AutoNaturalExistingCustomerIntent(input)).toBe(true);
+    expect(h2AutoNaturalReferralsIntent(input)).toBe(false);
+  });
+  it.each([
+    "Quero ver minhas indicações",
+    "Minhas indicações",
+    "Quero consultar minhas comissões",
+  ])("encaminha indicações para confirmação separada: %s",input=>{
+    expect(h2AutoNaturalReferralsIntent(input)).toBe(true);
+    expect(h2AutoNaturalExistingCustomerIntent(input)).toBe(false);
+  });
+  it.each([
+    "Ainda não sou cliente","Quero criar uma conta","Fui indicado",
+    "MENU","0","1","2","3","119978307371","123456",
+    "/H2","/H3","Quanto custa o Uber?","Qual o valor do táxi?",
+  ])("não atribui indevidamente identidade de cliente: %s",input=>{
+    expect(h2AutoNaturalExistingCustomerIntent(input)).toBe(false);
+    expect(h2AutoNaturalReferralsIntent(input)).toBe(false);
+  });
+  it("saudação usa o texto atual do ADM sem inventar outra árvore",()=>{
+    const current = "MENU DO ADM";
+    expect(h2AutoGreetingWelcome("Boa noite",current)).toContain("Boa noite!");
+    expect(h2AutoGreetingWelcome("Boa noite",current)).toContain("Como posso ajudar?");
+    expect(h2AutoGreetingWelcome("Boa noite",current)).not.toContain(current);
+    expect(h2AutoGreetingWelcome("Boa noite",current)).toContain("*MENU*");
+    expect(h2AutoGreetingWelcome("Quero acompanhar meu pedido",current)).toBe(current);
+  });
+  it("repetir pedido ao informar telefone não conta como número inválido",()=>{
+    expect(repeatedH2AutoChoice("customer_phone","Quero acompanhar meu pedido")).toBe(true);
+    expect(repeatedH2AutoChoice("referrals_phone","Quero minhas indicações")).toBe(true);
+    expect(repeatedH2AutoChoice("referral_phone","Quero acompanhar meu pedido")).toBe(false);
+    expect(repeatedH2AutoChoice("customer_code","Quero acompanhar meu pedido")).toBe(false);
+    expect(repeatedH2AutoChoice("blocked","Quero acompanhar meu pedido")).toBe(false);
   });
 });
