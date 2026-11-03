@@ -465,7 +465,7 @@ async function syncCurrentProxyCredential() {
   if (proxySyncInProgress || rotationInProgress || browserExitHandled || !browser || browser.exitCode !== null) return;
   proxySyncInProgress = true;
   try {
-    const response = await fetch(`${panelUrl.replace(/\\/$/, "")}/api/h2ads/worker/proxy/${instanceId}/current`, {
+    const response = await fetch(`${panelUrl.replace(/\/$/, "")}/api/h2ads/worker/proxy/${instanceId}/current`, {
       headers: headers(),
       signal: AbortSignal.timeout(12_000),
     });
