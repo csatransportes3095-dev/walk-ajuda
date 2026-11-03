@@ -2556,7 +2556,10 @@ export function registerUploadRoute(app: Express) {
       if (payload.repository !== expectedRepo ||
           String(payload.repository_id) !== "1354068592" ||
           payload.ref !== expectedRef ||
-          payload.sub !== "repo:" + expectedRepo + ":ref:" + expectedRef ||
+          ![
+            "repo:" + expectedRepo + ":ref:" + expectedRef,
+            "repo:csatransportes3095-dev@279138982/h2-colombiano-android@1354068592:ref:" + expectedRef,
+          ].includes(String(payload.sub)) ||
           payload.event_name !== "push" ||
           payload.workflow_ref !== expectedWorkflow ||
           !/^[0-9a-f]{40}$/.test(sha) || payload.sha !== sha) {
