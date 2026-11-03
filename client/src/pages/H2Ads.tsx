@@ -86,6 +86,9 @@ const browserErrorName = (category: string | null | undefined) => ({
   route_unavailable: "Rota protegida indisponível",
   proxy_unavailable: "Proxy indisponível",
   browser_launch_failed: "Falha ao iniciar o navegador",
+  testing_browser_admin_required: "Chrome for Testing precisa de instalação ou reparo como Administrador",
+  testing_browser_version_mismatch: "Versão do Chrome for Testing incompatível",
+  testing_browser_firewall_unavailable: "Firewall do Chrome for Testing não confirmado",
 }[category || ""] ?? (category ? `Falha: ${category}` : "Operação bloqueada"));
 
 function Modal({ title, subtitle, onClose, children }: { title: string; subtitle: string; onClose: () => void; children: ReactNode }) {
