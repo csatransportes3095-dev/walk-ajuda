@@ -5135,7 +5135,7 @@ export default function Home() {
                       : isActive
                         ? 'bg-cyan-400/15 text-cyan-200 ring-cyan-300/40'
                         : 'bg-violet-400/15 text-violet-200 ring-violet-300/30'}`}>
-                      {shortcutLogo("schedule") ? <img src={shortcutLogo("schedule")} alt="" className="h-7 w-7 object-contain" /> : <CalendarDays className="h-5 w-5" />}>
+                      {shortcutLogo("schedule") ? <img src={shortcutLogo("schedule")} alt="" className="h-7 w-7 object-contain" /> : <CalendarDays className="h-5 w-5" />}
                     </span>
                     <span className="min-w-0 flex-1">
                       <span className="block text-[10px] font-black uppercase leading-tight tracking-wide text-white sm:text-xs">{title}</span>
