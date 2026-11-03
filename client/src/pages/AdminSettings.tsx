@@ -239,7 +239,7 @@ export default function AdminSettings() {
     if (key.endsWith('_font') && value) loadGoogleFont(value);
   };
 
-  const handleHomeButtonLogoSelect = async (buttonKey: 'btn1' | 'btn2' | 'site' | 'loan' | 'gastos' | 'vip' | 'schedule', file?: File) => {
+  const handleHomeButtonLogoSelect = async (buttonKey: 'btn1' | 'btn2' | 'site' | 'registration' | 'loan' | 'gastos' | 'vip' | 'schedule', file?: File) => {
     if (!file) return;
     if (!['image/jpeg', 'image/png', 'image/webp'].includes(file.type)) {
       toast.error('Envie uma imagem JPG, PNG ou WEBP.');
@@ -258,7 +258,7 @@ export default function AdminSettings() {
       });
       const result = await uploadHomeButtonLogoMut.mutateAsync({ imageBase64, mimeType: file.type as 'image/jpeg' | 'image/png' | 'image/webp', target: buttonKey === 'btn1' || buttonKey === 'btn2' ? buttonKey : 'extra' });
       if (!result.url) throw new Error('Upload sem URL');
-      updateField(buttonKey === 'site' ? 'site_logo_url' : buttonKey === 'btn1' || buttonKey === 'btn2' ? `home_${buttonKey}_logo_url` : `home_shortcut_${buttonKey}_logo_url`, result.url);
+      updateField(buttonKey === 'site' ? 'site_logo_url' : buttonKey === 'registration' ? 'registration_logo_url' : buttonKey === 'btn1' || buttonKey === 'btn2' ? `home_${buttonKey}_logo_url` : `home_shortcut_${buttonKey}_logo_url`, result.url);
       toast.success('Logo enviada. Clique em Salvar Configurações para publicar.');
     } catch {
       toast.error('Não foi possível enviar a logo do botão.');
@@ -1102,6 +1102,23 @@ export default function AdminSettings() {
               <Field label="Subtítulo" k="login_subtitle" form={form} onChange={updateField} placeholder="Acesso Restrito" />
               <ToggleField label="Exibir Rodapé" k="login_show_footer" form={form} onToggle={toggleField} />
               <Field label="Texto do Rodapé" k="login_footer" form={form} onChange={updateField} placeholder="Solicite sua senha de acesso via WhatsApp" />
+            </Section>
+
+            <Section title="Cadastro novo — identidade independente">
+              <p className="text-xs leading-5 text-cyan-200/80">Estes campos alteram apenas a apresentação da tela /cadastro. Não modificam telefone, confirmação por e-mail nem validação do cliente.</p>
+              <Field label="Título da tela de cadastro" k="registration_title" form={form} onChange={updateField} placeholder="H2 COLOMBIANO" />
+              <Field label="Subtítulo da tela de cadastro" k="registration_subtitle" form={form} onChange={updateField} placeholder="Novo cadastro de cliente" />
+              <Field label="Título do bloco de orientação" k="registration_instruction_title" form={form} onChange={updateField} placeholder="Faça seu cadastro" />
+              <Field label="Texto de orientação" k="registration_instruction_text" form={form} onChange={updateField} textarea placeholder="Informe seu telefone com DDD para começar. Depois, confirme seu e-mail para continuar." />
+              <Field label="URL da logo do cadastro (opcional)" k="registration_logo_url" form={form} onChange={updateField} placeholder="https://..." />
+              <div className="flex flex-wrap items-center gap-3">
+                {form.registration_logo_url && <img src={form.registration_logo_url} alt="Logo do novo cadastro" className="h-16 w-16 rounded-xl bg-black/30 object-contain" />}
+                <label className="cursor-pointer rounded-xl border border-cyan-500/30 bg-cyan-500/10 px-4 py-2 text-xs font-bold text-cyan-200">
+                  Enviar logo do cadastro
+                  <input type="file" accept="image/jpeg,image/png,image/webp" className="hidden" disabled={uploadHomeButtonLogoMut.isPending} onChange={event => { void handleHomeButtonLogoSelect('registration', event.target.files?.[0]); event.currentTarget.value = ''; }} />
+                </label>
+                {form.registration_logo_url && <button type="button" className="text-xs font-bold text-red-300" onClick={() => updateField('registration_logo_url', '')}>Remover</button>}
+              </div>
             </Section>
 
             {/* Imagem */}
