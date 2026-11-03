@@ -1688,7 +1688,7 @@ export default function PasswordGate({ children, registrationOnly = false }: Pas
   }
 
   return (
-    <div className="min-h-screen bg-background flex flex-col items-center justify-center relative overflow-hidden px-0 sm:px-6">
+    <div className={`bg-background flex flex-col items-center relative overflow-hidden px-0 sm:px-6 ${registrationOnly ? "min-h-0 justify-start pt-2 sm:pt-4" : "min-h-screen justify-center"}`}>
       {/* Cronômetro no topo da tela de login */}
       {(accessType === "vip" || localStorage.getItem(SESSION_TYPE_KEY) === "vip") && timeRemaining !== null && timeRemaining > 0 && (
         <div className="w-full bg-gradient-to-r from-primary/20 to-purple-600/20 border-b border-primary/30 flex items-center justify-center gap-2 py-2 text-white absolute top-0 left-0">
@@ -1706,7 +1706,7 @@ export default function PasswordGate({ children, registrationOnly = false }: Pas
       <div className="relative z-10 w-full sm:max-w-md sm:mx-auto">
         {/* Banner PWA removido */}
 
-        <div className="bg-black/60 backdrop-blur-xl border-0 sm:border border-primary/30 rounded-none sm:rounded-2xl p-6 sm:p-8 shadow-2xl min-h-screen sm:min-h-0 flex flex-col justify-center">
+        <div className={`bg-black/60 backdrop-blur-xl border-0 sm:border border-primary/30 rounded-none sm:rounded-2xl p-6 sm:p-8 shadow-2xl flex flex-col ${registrationOnly ? "min-h-0 justify-start" : "min-h-screen sm:min-h-0 justify-center"}`}>
           {/* Cronômetro destacado */}
           {(accessType === "vip" || localStorage.getItem(SESSION_TYPE_KEY) === "vip") && timeRemaining !== null && timeRemaining > 0 && (
             <div className={`mb-6 p-4 rounded-lg border-2 flex items-center justify-center gap-3 ${
@@ -1731,9 +1731,9 @@ export default function PasswordGate({ children, registrationOnly = false }: Pas
           )}
 
           {/* Logo */}
-          <div className="flex flex-col items-center mb-8">
+          <div className={`flex flex-col items-center ${registrationOnly ? "mb-4" : "mb-8"}`}>
             {registrationOnly && registrationLogoUrl ? (
-              <img src={registrationLogoUrl} alt="Logo do cadastro" className="w-36 h-36 object-contain rounded-2xl mb-4 shadow-lg shadow-primary/30" />
+              <img src={registrationLogoUrl} alt="Logo do cadastro" className="w-28 h-28 sm:w-32 sm:h-32 object-contain rounded-2xl mb-3 shadow-lg shadow-primary/30" />
             ) : loginShowImage && loginImageUrl ? (
               <img src={loginImageUrl} alt="Logo" className="w-36 h-36 object-contain rounded-2xl mb-4 shadow-lg shadow-primary/30" />
             ) : (
@@ -1758,7 +1758,7 @@ export default function PasswordGate({ children, registrationOnly = false }: Pas
           </div>
 
           {/* Step icon */}
-          <div className="flex justify-center mb-6">
+          {!(registrationOnly && gateStep === "phone") && <div className="flex justify-center mb-6">
             <div className="w-12 h-12 bg-white/5 border border-white/10 rounded-full flex items-center justify-center">
               {gateStep === "phone" && <Phone className="w-6 h-6 text-primary" />}
               {gateStep === "email" && <Mail className="w-6 h-6 text-primary" />}
@@ -1770,7 +1770,7 @@ export default function PasswordGate({ children, registrationOnly = false }: Pas
               {gateStep === "cpwd_create" && <Lock className="w-6 h-6 text-green-400" />}
               {gateStep === "cpwd_pending" && <Lock className="w-6 h-6 text-yellow-400" />}
             </div>
-          </div>
+          </div>}
 
           {/* ===== STEP 1: TELEFONE ===== */}
           {gateStep === "phone" && (
