@@ -1,6 +1,7 @@
 import { describe, expect, it } from "vitest";
 import {
   canonicalH2AdsServiceKey,
+  describeH2AdsOrderBrowserBlock,
   resolveH2AdsOrderBrowserShortcutState,
   resolveH2AdsOrderLinkRepairCandidate,
 } from "../shared/h2adsOrderBrowserShortcut";
@@ -165,5 +166,30 @@ describe("H2ADS legacy order link repair", () => {
       orders: [{ id: 100, subOrderIndex: 0, customerNumber: 2021, orderNumber: 310000, serviceName: "UBER APP", serviceOption: "NOME ALEATÓRIO" }],
     });
     expect(result).toBeNull();
+  });
+});
+
+
+describe("H2ADS pedido - diagnostico de abertura", () => {
+  it("explica erro de proxy sem revelar credenciais", () => {
+    const issue = describeH2AdsOrderBrowserBlock({
+      state: "blocked", reason: "Instância bloqueada; revise no H2ADS.",
+      errorCategory: "proxy_auth_407", networkHealthStatus: "healthy",
+    });
+    expect(issue.message).toContain("rejeitou");
+    expect(issue.message).not.toContain("password");
+  });
+  it("protege uma sessao ja aberta", () => {
+    const issue = describeH2AdsOrderBrowserBlock({ state: "browser_open", reason: null });
+    expect(issue.guidance).toContain("Não prepare novamente");
+  });
+  it("mostra que o Worker offline impede abertura", () => {
+    const issue = describeH2AdsOrderBrowserBlock({ state: "closed", reason: "Worker offline." });
+    expect(issue.message).toBe("Worker offline.");
+  });
+  it("orienta validar a rota sem troca automatica", () => {
+    const issue = describeH2AdsOrderBrowserBlock({ state: "blocked", reason: "Instância bloqueada; revise no H2ADS.", networkHealthStatus: "failed" });
+    expect(issue.guidance).toContain("PREPARAR NOVAMENTE");
+    expect(issue.guidance).not.toContain("Troque o proxy");
   });
 });

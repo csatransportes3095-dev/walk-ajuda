@@ -2,7 +2,7 @@ import { useState, type MouseEvent, type ChangeEvent } from "react";
 import { Play, Plus, RefreshCw, Square, Trash2 } from "lucide-react";
 import { toast } from "sonner";
 import { trpc } from "@/lib/trpc";
-import { resolveH2AdsOrderBrowserShortcutState, resolveH2AdsOrderLinkRepairCandidate } from "@shared/h2adsOrderBrowserShortcut";
+import { resolveH2AdsOrderBrowserShortcutState, resolveH2AdsOrderLinkRepairCandidate, describeH2AdsOrderBrowserBlock } from "@shared/h2adsOrderBrowserShortcut";
 import { normalizeH2AdsRoutingText, resolveH2AdsAutomaticGroup } from "@shared/h2adsGroupRouting";
 
 export default function OrderH2AdsBrowserShortcut({ registrationId, subOrderIndex, customerNumber, customerName, orderNumber, latestStatus, serviceName, serviceOption }: { registrationId: number; subOrderIndex: number; customerNumber?: number | null; customerName?: string | null; orderNumber?: number | null; latestStatus?: string | null; serviceName?: string | null; serviceOption?: string | null }) {
@@ -82,6 +82,8 @@ export default function OrderH2AdsBrowserShortcut({ registrationId, subOrderInde
     runs: (dashboard?.instanceBrowserRuns ?? []) as any[],
   });
   const linkedInstance = shortcut ? (dashboard?.instances ?? []).find(instance => instance.id === shortcut.instanceId) : undefined;
+  const linkedRun = shortcut ? (dashboard?.instanceBrowserRuns ?? []).find(run => run.instanceId === shortcut.instanceId) : undefined;
+  const networkProfile = shortcut ? (dashboard?.networkProfiles ?? []).find(profile => profile.instanceId === shortcut.instanceId) : undefined;
 
   const repairCandidate = shortcut ? null : resolveH2AdsOrderLinkRepairCandidate({
     registrationId,
@@ -183,9 +185,19 @@ export default function OrderH2AdsBrowserShortcut({ registrationId, subOrderInde
   const prepareAgain = async (event: MouseEvent<HTMLButtonElement>) => {
     event.stopPropagation();
     if (!shortcut || pending) return;
+    if (shortcut.state === "browser_open") {
+      toast.error("O Chrome está registrado como aberto. Encerre a sessão antes de preparar novamente.");
+      return;
+    }
     try {
+      // Validação não substitui a confirmação de saída pelo Worker. Mantém o proxy
+      // existente: nenhuma troca automática nem abertura antes de confirmar rota.
+      if (networkProfile?.healthStatus !== "healthy") {
+        toast.info("Verificando a rota atual antes da preparação...");
+        await validateProxy.mutateAsync({ instanceId: shortcut.instanceId });
+      }
       await prepareBrowser.mutateAsync({ instanceId: shortcut.instanceId });
-      toast.success("Preparação enviada para o WALK1. O botão ABRIR será liberado quando a instância ficar pronta.");
+      toast.success("Preparação enviada ao Worker. ABRIR será liberado após validação.");
       await refresh();
     } catch (error) {
       toast.error(error instanceof Error ? error.message : "Não foi possível preparar novamente.");
@@ -447,6 +459,12 @@ export default function OrderH2AdsBrowserShortcut({ registrationId, subOrderInde
   }
 
   const statusTitle = shortcut.reason || (shortcut.state === "browser_open" ? "Browser H2ADS aberto" : "Browser H2ADS pronto");
+  const blockedDetails = shortcut.canOpen || shortcut.canClose ? null : describeH2AdsOrderBrowserBlock({
+    state: shortcut.state,
+    reason: shortcut.reason,
+    errorCategory: linkedRun?.lastErrorCategory ?? null,
+    networkHealthStatus: networkProfile?.healthStatus ?? null,
+  });
   const alreadyDelivered = Boolean(deliveredGroup && linkedInstance?.groupId === deliveredGroup.id);
   const deliveredTitle = !deliveredGroup
     ? "Crie um grupo H2ADS ativo chamado ENTREGUE para usar este atalho."
@@ -472,6 +490,10 @@ export default function OrderH2AdsBrowserShortcut({ registrationId, subOrderInde
     <span className="flex w-full flex-wrap items-center gap-1.5 border-t border-white/10 pt-1.5 sm:gap-2 sm:pt-2">
       {linkExistingPanel}
       {createPanel}
+      {blockedDetails && <div role="status" className="w-full rounded-lg border border-amber-400/30 bg-amber-500/[0.08] px-3 py-2 text-left text-[11px] leading-5 text-amber-100">
+        <strong className="block font-black">ABRIR indisponível — {blockedDetails.message}</strong>
+        <span className="block text-amber-100/80">{blockedDetails.guidance}</span>
+      </div>}
       <button
       type="button"
       onClick={openBrowser}
@@ -493,7 +515,7 @@ export default function OrderH2AdsBrowserShortcut({ registrationId, subOrderInde
     <button
       type="button"
       onClick={prepareAgain}
-      disabled={pending || shortcut.state === "queued" || shortcut.state === "preparing"}
+      disabled={pending || shortcut.state === "queued" || shortcut.state === "preparing" || shortcut.state === "browser_open"}
       className="inline-flex min-h-8 items-center justify-center gap-1.5 rounded-lg border border-sky-400/35 bg-sky-400/15 px-2.5 py-1.5 text-[10px] font-black text-sky-100 transition hover:bg-sky-400/25 disabled:cursor-not-allowed disabled:opacity-30 sm:min-h-9 sm:px-3 sm:text-[11px] lg:min-h-10 lg:px-3.5 lg:text-xs"
       title="Revalidar e restaurar a conexão sem fechar a instância"
     >
