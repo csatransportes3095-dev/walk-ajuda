@@ -99,7 +99,15 @@ const newRender = `        <div className="p-4 sm:p-6">
           {scheduleFilter === "all" && visibleGroups.map(group => <GroupSection key={group.id} group={group} instances={visibleInstancesByGroup.get(group.id) ?? []} profileByInstance={profileByInstance} credentialByInstance={credentialByInstance} workerById={workerById} assignmentByInstance={assignmentByInstance} browserRunByInstance={browserRunByInstance} workers={browserWorkers} groups={activeGroups} busy={saving} visualColors={visualColors} onVisualColor={setVisualColor} onEditGroup={() => setGroupForm({ id: group.id, name: group.name, description: group.description ?? "", status: group.status, cardColor: group.cardColor || INSTANCE_DEFAULT_COLOR })} onNewInstance={() => newInstance(group.id)} onEditInstance={instance => setInstanceForm({ id: instance.id, groupId: String(instance.groupId), name: instance.name, notes: instance.notes ?? "", status: instance.status })} onEditRoute={openRouteEditor} onAssignWorker={updateInstanceWorker} onPrepareBrowser={requestBrowserPreparation} onLaunchBrowser={requestBrowserLaunch} onCloseBrowser={requestBrowserClose} onMoveInstanceGroup={moveInstanceToGroup} onDeleteInstance={removeInstance} instanceAction={instanceAction} expanded={instanceSearchKey ? true : expandedGroups.has(group.id)} onToggle={() => toggleGroup(group.id)} ordering={orderingGroups && !instanceSearchKey} canMoveUp={groups.indexOf(group) > 0} canMoveDown={groups.indexOf(group) < groups.length - 1} onMoveUp={() => void moveGroup(group.id, -1)} onMoveDown={() => void moveGroup(group.id, 1)} onDeleteGroup={() => void removeGroup(group.id, group.name)} />)}
         </div>
 `;
-replaceOnce(oldRender, newRender, 'render principal com filtro de agenda');
+// New H2ADS instances have an independently validated live-proxy action.
+// Preserve that action in both schedule views while applying legacy layout patches.
+const liveProxyAction = 'onPrepareBrowser={requestBrowserPreparation} onRotateProxy={requestLiveProxySwap} onLaunchBrowser={requestBrowserLaunch}';
+const legacyProxyAction = 'onPrepareBrowser={requestBrowserPreparation} onLaunchBrowser={requestBrowserLaunch}';
+replaceOnce(
+  oldRender.replace(legacyProxyAction, liveProxyAction),
+  newRender.replaceAll(legacyProxyAction, liveProxyAction),
+  'render principal com filtro de agenda',
+);
 
 replaceOnce(
   '  return <section className="mb-4 overflow-hidden rounded-2xl border border-white/10 bg-black/20">\n    <header className={`flex flex-col gap-3 p-4 sm:flex-row sm:items-start sm:justify-between ${expanded ? "border-b border-white/8" : ""}`}>\n',
