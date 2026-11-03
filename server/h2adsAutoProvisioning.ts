@@ -18,6 +18,7 @@ import { decryptH2AdsProxy } from "./h2adsProxySecurity";
 import { classifyH2AdsRouteFailure, getH2AdsRouteMismatches, validateH2AdsProxyRoute } from "./h2adsProxyValidation";
 import {
   markH2AdsProxyFailed,
+  markH2AdsOtherAssignedProxiesUsed,
   reserveH2AdsProxyForInstance,
 } from "./h2adsProxyPool";
 
@@ -95,71 +96,42 @@ async function resetPreparationState(instanceId: number) {
 }
 
 async function attachAndValidateReservedProxy(instanceId: number, reserved: { id: number; encryptedPayload: string }) {
-  await saveH2AdsProxyCredential(instanceId, reserved.encryptedPayload);
-  await saveH2AdsNetworkProfile(instanceId, {
-    providerName: "Fila H2ADS",
-    routeLabel: `POOL-${reserved.id}`,
-    setupStatus: "metadata_ready",
-    healthStatus: "not_checked",
-    observedIp: null,
-    observedCountryCode: null,
-    observedCity: null,
-    observedIsp: null,
-    observedAsn: null,
-    latencyMs: null,
-    lastCheckedAt: null,
-    lastCheckMessage: "Proxy reservado da fila; aguardando validação.",
-  });
-
+  // The current browser route and network metadata remain unchanged until
+  // the replacement proxy passes independent network validation.
   const profile = await getH2AdsNetworkProfile(instanceId);
-
+  let observed;
   try {
-    const observed = await validateH2AdsProxyRoute(decryptH2AdsProxy(reserved.encryptedPayload));
+    observed = await validateH2AdsProxyRoute(decryptH2AdsProxy(reserved.encryptedPayload));
     const mismatches = getH2AdsRouteMismatches(observed, {
       expectedIsp: profile?.expectedIsp ?? null,
       expectedAsn: profile?.expectedAsn ?? null,
     });
     if (mismatches.length) {
-      await recordH2AdsNetworkValidation(instanceId, {
-        healthStatus: "blocked",
-        observedIp: observed.ip,
-        observedCountryCode: observed.countryCode,
-        observedCity: observed.city,
-        observedIsp: observed.isp,
-        observedAsn: observed.asn,
-        latencyMs: observed.latencyMs,
-        lastCheckMessage: `Divergência em ${mismatches.join(", ")}.`,
-      });
       await markH2AdsProxyFailed(reserved.id, "route_mismatch");
       return { ok: false as const, error: "O novo proxy divergiu da rota esperada." };
     }
-
-    await recordH2AdsNetworkValidation(instanceId, {
-      healthStatus: "healthy",
-      observedIp: observed.ip,
-      observedCountryCode: observed.countryCode,
-      observedCity: observed.city,
-      observedIsp: observed.isp,
-      observedAsn: observed.asn,
-      latencyMs: observed.latencyMs,
-      lastCheckMessage: "Validação automática concluída.",
-    });
-    return { ok: true as const };
   } catch (error) {
     const failure = classifyH2AdsRouteFailure(error);
-    await recordH2AdsNetworkValidation(instanceId, {
-      healthStatus: "failed",
-      observedIp: null,
-      observedCountryCode: null,
-      observedCity: null,
-      observedIsp: null,
-      observedAsn: null,
-      latencyMs: null,
-      lastCheckMessage: failure.message,
-    });
     await markH2AdsProxyFailed(reserved.id, failure.code || "proxy_unavailable");
     return { ok: false as const, error: failure.message };
   }
+  await saveH2AdsProxyCredential(instanceId, reserved.encryptedPayload);
+  await saveH2AdsNetworkProfile(instanceId, {
+    providerName: "Fila H2ADS",
+    routeLabel: `POOL-${reserved.id}`,
+    setupStatus: "metadata_ready",
+  });
+  await recordH2AdsNetworkValidation(instanceId, {
+    healthStatus: "healthy",
+    observedIp: observed.ip,
+    observedCountryCode: observed.countryCode,
+    observedCity: observed.city,
+    observedIsp: observed.isp,
+    observedAsn: observed.asn,
+    latencyMs: observed.latencyMs,
+    lastCheckMessage: "Novo proxy validado. Sincronizando com o Worker.",
+  });
+  return { ok: true as const };
 }
 
 export async function autoProvisionH2AdsInstance(instanceId: number): Promise<H2AdsAutoProvisionResult> {
@@ -215,7 +187,7 @@ export async function rotateH2AdsInstanceProxy(instanceId: number): Promise<H2Ad
     .limit(1);
   const browserAlreadyOpen = runRows[0]?.state === "browser_open";
 
-  const reserved = await reserveH2AdsProxyForInstance(instanceId);
+  const reserved = await reserveH2AdsProxyForInstance(instanceId, true);
   if (!reserved) {
     return {
       status: "awaiting_proxy",
@@ -223,8 +195,6 @@ export async function rotateH2AdsInstanceProxy(instanceId: number): Promise<H2Ad
       message: "Nenhum proxy disponível. O proxy atual foi mantido.",
     };
   }
-
-  if (!browserAlreadyOpen) await resetPreparationState(instanceId);
 
   const checked = await attachAndValidateReservedProxy(instanceId, reserved);
   if (!checked.ok) {
@@ -235,6 +205,9 @@ export async function rotateH2AdsInstanceProxy(instanceId: number): Promise<H2Ad
       message: checked.error,
     };
   }
+
+  await markH2AdsOtherAssignedProxiesUsed(instanceId, reserved.id);
+  if (!browserAlreadyOpen) await resetPreparationState(instanceId);
 
   const worker = await resolveWalk1Worker();
   if (!worker || !worker.online) {
