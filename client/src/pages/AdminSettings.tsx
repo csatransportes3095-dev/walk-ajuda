@@ -307,6 +307,32 @@ export default function AdminSettings() {
     }
   };
 
+  const handleFooterBannerSelect = async (e: React.ChangeEvent<HTMLInputElement>, key: 'login_footer_banner_url' | 'login_footer_banner_desktop_url') => {
+    const file = e.target.files?.[0];
+    if (!file) return;
+    if (!['image/jpeg', 'image/png', 'image/webp'].includes(file.type) || file.size > 5 * 1024 * 1024) {
+      toast.error('Envie JPG, PNG ou WEBP de até 5 MB.');
+      return;
+    }
+    setUploadingLoginImage(true);
+    try {
+      const base64 = await new Promise<string>((resolve, reject) => {
+        const reader = new FileReader();
+        reader.onload = () => resolve((reader.result as string).split(',')[1]);
+        reader.onerror = reject;
+        reader.readAsDataURL(file);
+      });
+      const result = await uploadLoginImageMut.mutateAsync({ imageBase64: base64, mimeType: file.type });
+      if (!result.url) throw new Error('URL ausente');
+      updateField(key, result.url);
+      toast.success('Banner enviado. Clique em Salvar Tudo.');
+    } catch {
+      toast.error('Erro ao enviar banner.');
+    } finally {
+      setUploadingLoginImage(false);
+    }
+  };
+
   const removeLoginImage = () => {
     setLoginImageFile(null);
     setLoginImagePreview(null);
@@ -1102,6 +1128,25 @@ export default function AdminSettings() {
               <Field label="Subtítulo" k="login_subtitle" form={form} onChange={updateField} placeholder="Acesso Restrito" />
               <ToggleField label="Exibir Rodapé" k="login_show_footer" form={form} onToggle={toggleField} />
               <Field label="Texto do Rodapé" k="login_footer" form={form} onChange={updateField} placeholder="Solicite sua senha de acesso via WhatsApp" />
+            </Section>
+
+            <Section title="Banner do rodapé — somente /login">
+              <p className="text-xs text-cyan-200/80 leading-5">As medidas ficam fixas no site: celular 1080 × 360 px (3:1) e computador 1920 × 320 px (6:1). O banner se adapta automaticamente sem alterar o formulário ou /cadastro.</p>
+              <Field label="Imagem para celular (1080 × 360 px)" k="login_footer_banner_url" form={form} onChange={updateField} placeholder="https://..." />
+              <Field label="Imagem para computador (1920 × 320 px, opcional)" k="login_footer_banner_desktop_url" form={form} onChange={updateField} placeholder="https://..." />
+              <div className="flex flex-wrap items-center gap-2">
+                <label className="cursor-pointer rounded-lg bg-cyan-500/15 border border-cyan-400/40 px-3 py-2 text-xs font-bold text-cyan-200">
+                  {uploadingLoginImage ? 'Enviando...' : 'Enviar banner celular'}
+                  <input type="file" accept="image/jpeg,image/png,image/webp" className="hidden" disabled={uploadingLoginImage} onChange={event => { void handleFooterBannerSelect(event, 'login_footer_banner_url'); event.currentTarget.value = ''; }} />
+                </label>
+                <label className="cursor-pointer rounded-lg bg-cyan-500/15 border border-cyan-400/40 px-3 py-2 text-xs font-bold text-cyan-200">
+                  {uploadingLoginImage ? 'Enviando...' : 'Enviar banner computador'}
+                  <input type="file" accept="image/jpeg,image/png,image/webp" className="hidden" disabled={uploadingLoginImage} onChange={event => { void handleFooterBannerSelect(event, 'login_footer_banner_desktop_url'); event.currentTarget.value = ''; }} />
+                </label>
+              </div>
+              {form.login_footer_banner_url && <img src={form.login_footer_banner_url} alt="Prévia do rodapé celular" className="w-full aspect-[3/1] rounded-lg object-cover border border-cyan-400/30" />}
+              {form.login_footer_banner_desktop_url && <img src={form.login_footer_banner_desktop_url} alt="Prévia do rodapé computador" className="w-full aspect-[6/1] rounded-lg object-cover border border-cyan-400/30" />}
+              <p className="text-xs text-amber-200/80">Após enviar, clique em Salvar Tudo. Para remover uma imagem, apague sua URL e salve. Sem imagem, aparece o rodapé padrão H2.</p>
             </Section>
 
             <Section title="Cadastro novo — identidade independente">
