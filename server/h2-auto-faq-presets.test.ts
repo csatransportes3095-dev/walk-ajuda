@@ -28,6 +28,35 @@ describe("H2 AUTO prefilled FAQ suggestions",()=>{
     expect(prepareH2AutoCommonFaq(removed).added).toBe(0);
     expect(prepareH2AutoCommonFaq(removed).personalization.faq.some(x=>x.id==="h2_login_cliente")).toBe(false);
   });
+  it("permite mais de 40 perguntas sem truncar, modificar ou reativar respostas",()=>{
+    const originalFaq=Array.from({length:65},(_,i)=>({
+      id:`minha_faq_${i}`,
+      question:`Minha pergunta personalizada ${i + 1}`,
+      variations:"",
+      answer:`Minha resposta personalizada ${i + 1}`,
+      enabled:i % 2 === 0,
+    }));
+    const config={...H2_AUTO_PERSONALIZATION_DEFAULT,enabled:true,faqPresetsLoaded:true,faq:originalFaq};
+    expect(h2AutoPersonalizationSchema.safeParse(config).success).toBe(true);
+    const prepared=prepareH2AutoCommonFaq(config);
+    expect(prepared.personalization.faq).toEqual(originalFaq);
+    expect(prepared.added).toBe(0);
+    const merged=mergeH2AutoExpandedFaq(config);
+    expect(merged.personalization.faq.slice(0,65)).toEqual(originalFaq);
+    expect(merged.personalization.faq.length).toBeGreaterThan(40);
+    expect(h2AutoPersonalizationSchema.safeParse(merged.personalization).success).toBe(true);
+  });
+  it("preserva entradas existentes mesmo ao adicionar sugestões acima de 40",()=>{
+    const rules=Array.from({length:45},(_,i)=>({
+      id:`custom_${i}`,question:`Pergunta exclusiva ${i + 1}`,variations:"",
+      answer:`Resposta exclusiva ${i + 1}`,enabled:false,
+    }));
+    const source={...H2_AUTO_PERSONALIZATION_DEFAULT,faq:rules};
+    const prepared=prepareH2AutoCommonFaq(source);
+    expect(prepared.personalization.faq.length).toBe(85);
+    expect(prepared.personalization.faq.slice(0,45)).toEqual(rules);
+    expect(h2AutoPersonalizationSchema.safeParse(prepared.personalization).success).toBe(true);
+  });
   it("never answers a suggested FAQ before explicit individual activation",()=>{
     const p=prepareH2AutoCommonFaq({...H2_AUTO_PERSONALIZATION_DEFAULT,enabled:true}).personalization;
     expect(getH2AutoPersonalizedReply("Como faço login no site?",p)?.topic).not.toBe("personalizada");
