@@ -1,7 +1,7 @@
 import { type FormEvent, type ReactNode, useMemo, useState } from "react";
 import { Link, useLocation } from "wouter";
 import { toast } from "sonner";
-import { Activity, ArrowDown, ArrowLeft, ArrowUp, ArrowUpDown, CheckCircle2, ChevronDown, ChevronRight, Copy, Eye, EyeOff, FolderPlus, KeyRound, Layers3, LockKeyhole, Monitor, Network, Pencil, Play, Plus, Search, ShieldCheck, Square, Trash2, Wifi, WifiOff, X } from "lucide-react";
+import { Activity, ArrowDown, ArrowLeft, ArrowUp, ArrowUpDown, CheckCircle2, ChevronDown, ChevronRight, Copy, Eye, EyeOff, FolderPlus, KeyRound, Layers3, LockKeyhole, Monitor, Network, Pencil, Play, Plus, RefreshCw, Search, ShieldCheck, Square, Trash2, Wifi, WifiOff, X } from "lucide-react";
 import { trpc } from "@/lib/trpc";
 import H2AdsOrderLinkControl from "@/components/H2AdsOrderLinkControl";
 import H2AdsNewInstanceOrderPicker, { suggestedH2AdsInstanceName, type H2AdsPendingOrderLink } from "@/components/H2AdsNewInstanceOrderPicker";
