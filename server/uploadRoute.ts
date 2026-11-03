@@ -17,6 +17,7 @@ import express from "express";
 import multer from "multer";
 import sharp from "sharp";
 import jwt from "jsonwebtoken";
+import { createHash } from "node:crypto";
 import { parse as parseCookieHeader } from "cookie";
 import { r2PutObject, r2GetObjectBuffer, r2DeleteObjects } from "./r2Storage";
 import { addOrderFile, createCustomer, getCustomerByPhone, getDb, updateCustomer, addOrderStatus, generateOrderNumber } from "./db";
@@ -2527,6 +2528,60 @@ export function registerUploadRoute(app: Express) {
     } catch (err: any) {
       console.error('[UploadRoute] apk error:', err);
       res.status(500).json({ error: err?.message ?? 'Upload failed' });
+    }
+  });
+
+
+  // H2 AUTO: upload isolated from Colombiano and Driver Pro. The official
+  // v1.61 SHA-256 was verified against the signed CI release artifact.
+  app.post("/api/upload/h2-auto", uploadApkMw.single("file"), async (req: Request, res: Response) => {
+    try {
+      if (!isAdminRequest(req)) { res.status(401).json({ error: "Acesso administrativo necessário." }); return; }
+      const file = req.file;
+      const versionName = String(req.body?.versionName || "").trim();
+      const versionCode = Number(req.body?.versionCode);
+      const expectedSha256 = String(req.body?.sha256 || "").trim().toLowerCase();
+      const officialV161 = "8368a87e6fb22241ff4e97c1e174d4907a96aefbe4f54ad67a3d60329d51f882";
+      if (!file || !file.originalname.toLowerCase().endsWith(".apk") ||
+          file.size < 32768 || file.buffer.subarray(0, 4).toString("hex") !== "504b0304") {
+        res.status(400).json({ error: "Selecione um arquivo APK íntegro (.apk)." }); return;
+      }
+      if (!/^1\.[0-9]{1,3}$/.test(versionName) ||
+          !Number.isInteger(versionCode) || versionCode < 61 ||
+          !/^[a-f0-9]{64}$/.test(expectedSha256)) {
+        res.status(400).json({ error: "Informe versão, código e SHA-256 oficial válidos." }); return;
+      }
+      const actualSha256 = createHash("sha256").update(file.buffer).digest("hex");
+      if (actualSha256 !== expectedSha256 ||
+          (versionName === "1.61" && (versionCode !== 61 || actualSha256 !== officialV161))) {
+        res.status(400).json({ error: "O arquivo não corresponde ao APK assinado da versão informada (SHA-256 divergente)." }); return;
+      }
+      const { getH2AutoApkRelease, saveH2AutoApkRelease } = await import("./routers/apk");
+      const existing = await getH2AutoApkRelease();
+      if (existing && versionCode < existing.versionCode) {
+        res.status(409).json({ error: "Não é permitido substituir a versão atual por uma mais antiga." }); return;
+      }
+      const r2Key = `app/h2-auto/${Date.now()}-${actualSha256}.apk`;
+      await r2PutObject(r2Key, file.buffer, "application/vnd.android.package-archive");
+      await saveH2AutoApkRelease({
+        r2Key,
+        sha256: actualSha256,
+        fileSize: file.size,
+        versionName,
+        versionCode,
+        uploadedAt: Date.now(),
+      });
+      res.json({
+        success: true,
+        versionName,
+        versionCode,
+        fileSize: file.size,
+        sha256: actualSha256,
+        downloadUrl: "/baixar-h2-auto",
+      });
+    } catch (error) {
+      console.error("[H2 AUTO APK] Falha no upload:", error);
+      res.status(500).json({ error: "Não foi possível publicar o APK H2 AUTO." });
     }
   });
 
