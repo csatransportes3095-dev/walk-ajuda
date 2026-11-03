@@ -337,7 +337,7 @@ function mergeFaqPhrases(original: string, candidates: string[], claimed: Set<st
   return merged;
 }
 
-/** Quarenta tópicos distintos; subperguntas ficam dentro de variations. */
+/** Tópicos distintos; subperguntas ficam dentro de variations. */
 export const H2_AUTO_FAQ_SUGGESTIONS: H2AutoFaqRule[] = [
   ...H2_AUTO_FAQ_BASE_SUGGESTIONS.map(rule=>({
     ...rule,
@@ -360,7 +360,6 @@ export function mergeH2AutoExpandedFaq(config: H2AutoPersonalization): {
   let added=seeded.added, augmented=0;
   if (config.faqPresetsLoaded) {
     for (const suggestion of H2_AUTO_FAQ_NEW_TOPICS) {
-      if (list.length>=40) break;
       if (list.some(item=>item.id===suggestion.id || faqPhrases(item).some(p=>normalizeFaqKey(p)===normalizeFaqKey(suggestion.question)))) continue;
       list.push({...suggestion});
       faqPhrases(suggestion).forEach(p=>claimed.add(normalizeFaqKey(p)));
@@ -392,7 +391,6 @@ export function prepareH2AutoCommonFaq(config: H2AutoPersonalization): {
   const questions=new Set(current.map(f=>f.question.trim().toLocaleLowerCase("pt-BR")));
   let added=0;
   for (const suggestion of H2_AUTO_FAQ_SUGGESTIONS) {
-    if (current.length>=40) break;
     if (ids.has(suggestion.id) || questions.has(suggestion.question.trim().toLocaleLowerCase("pt-BR"))) continue;
     current.push({...suggestion});
     ids.add(suggestion.id);
