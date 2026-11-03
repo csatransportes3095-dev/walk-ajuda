@@ -100,6 +100,20 @@ describe("fundação multi-Worker H2 Ads", () => {
     }
   });
 
+  it("permite usar Chrome for Testing ja instalado e protegido sem elevar o Worker", () => {
+    const script = read("workers/windows/H2AdsWorker.ps1");
+    const start = script.indexOf("function Install-H2AdsTestingBrowser {");
+    const end = script.indexOf("function Test-H2AdsBrowserFirewall {", start);
+    const method = script.slice(start, end);
+    expect(start).toBeGreaterThan(0);
+    expect(end).toBeGreaterThan(start);
+    expect(method.indexOf("if (Test-Path $TestingChromePath)")).toBeLessThan(method.indexOf('if (!(Test-IsAdministrator))'));
+    expect(method).toContain("if (Test-H2AdsTestingFirewall) { return }");
+    expect(method).toContain("Ensure-H2AdsTestingFirewall");
+    expect(method).toContain("Assert-H2AdsTestingExecutable");
+    expect(method).toContain("Execute -EnableExtensionBrowser como Administrador");
+  });
+
   it("bloqueia saída direta do Chrome dedicado antes da sessão", () => {
     const script = read("workers/windows/H2AdsWorker.ps1");
     const session = read("workers/windows/browser-session.mjs");
