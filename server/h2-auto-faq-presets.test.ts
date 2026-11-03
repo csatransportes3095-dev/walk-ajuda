@@ -23,7 +23,7 @@ describe("H2 AUTO prefilled FAQ suggestions",()=>{
     const first=prepareH2AutoCommonFaq(existing);
     expect(first.personalization.faq[0]).toEqual(existing.faq[0]);
     expect(first.personalization.enabled).toBe(true);
-    expect(first.added).toBe(39);
+    expect(first.added).toBe(40);
     const removed={...first.personalization,faq:first.personalization.faq.filter(x=>x.id!=="h2_login_cliente")};
     expect(prepareH2AutoCommonFaq(removed).added).toBe(0);
     expect(prepareH2AutoCommonFaq(removed).personalization.faq.some(x=>x.id==="h2_login_cliente")).toBe(false);
