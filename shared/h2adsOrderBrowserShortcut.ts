@@ -168,3 +168,79 @@ export function resolveH2AdsOrderLinkRepairCandidate(input: {
   // quando existe exatamente um candidato compatível.
   return candidates.size === 1 ? [...candidates.values()][0] : null;
 }
+
+
+/**
+ * Texto operacional seguro para o ADM. As categorias vêm do Worker, nunca
+ * de detalhes sensíveis do proxy; não libera o botão ABRIR nem ignora verificações.
+ */
+export function describeH2AdsOrderBrowserBlock(input: {
+  state: string;
+  reason: string | null;
+  errorCategory?: string | null;
+  networkHealthStatus?: string | null;
+}): { message: string; guidance: string } {
+  const { state, reason, errorCategory, networkHealthStatus } = input;
+  if (reason === "Worker offline.") return {
+    message: "Worker offline.",
+    guidance: "Confira o Worker no Windows e o status ONLINE no H2ADS. Não crie outra instância.",
+  };
+  if (reason === "Worker ainda não atribuído.") return {
+    message: "Instância sem Worker atribuído.",
+    guidance: "Atribua o Worker desta instância no painel H2ADS.",
+  };
+  if (reason === "Instância H2ADS arquivada.") return {
+    message: "Instância arquivada.",
+    guidance: "Confira o status da instância no painel H2ADS antes de tentar abrir.",
+  };
+  if (state === "queued" || state === "preparing") return {
+    message: "Preparação do navegador em andamento.",
+    guidance: "Aguarde a confirmação do Worker. A tela atualiza automaticamente.",
+  };
+  if (state === "browser_open") return {
+    message: "Chrome já registrado como aberto.",
+    guidance: "Confira a janela no Windows. Não prepare novamente enquanto estiver aberto.",
+  };
+  if (networkHealthStatus && networkHealthStatus !== "healthy") return {
+    message: "Rota do proxy não aprovada (" + networkHealthStatus + ").",
+    guidance: "Use PREPARAR NOVAMENTE: o sistema verificará a rota antes de preparar. Não troque o proxy sem confirmar a falha.",
+  };
+  const categoryHints: Record<string, string> = {
+    proxy_dns_timeout: "o endereço do proxy demorou a responder",
+    proxy_dns_failed: "o endereço do proxy não foi encontrado (DNS)",
+    proxy_dns_temporary_failure: "a resolução de DNS do proxy falhou temporariamente",
+    proxy_tcp_timeout: "o proxy não respondeu à conexão TCP",
+    proxy_tcp_refused: "o proxy recusou a conexão",
+    proxy_tcp_failed: "a conexão TCP com o proxy falhou",
+    proxy_auth_407: "o proxy rejeitou o usuário ou a senha",
+    proxy_tls_failed: "falha no TLS do proxy",
+    proxy_request_timeout: "a requisição através do proxy expirou",
+    proxy_https_failed: "a conexão HTTPS através do proxy falhou",
+    proxy_unavailable: "o proxy está indisponível",
+    proxy_input_invalid_json: "a configuração do proxy é inválida",
+    route_unavailable: "a rota protegida da instância está indisponível",
+    relay_setup_failed: "o relay local do Worker não foi preparado",
+    hard_kill_switch_unavailable: "o firewall obrigatório do H2ADS não foi validado",
+    dedicated_browser_unavailable: "o navegador dedicado H2ADS não foi encontrado",
+    node_missing: "o Node.js está ausente do Worker",
+    npm_missing: "o npm está ausente do Worker",
+    profile_missing: "o perfil local não foi preparado",
+    profile_snapshot_failed: "o snapshot do perfil falhou",
+    leak_protection_failed: "a proteção contra vazamento de rede falhou",
+    worker_execution_failed: "a execução do comando no Worker falhou",
+  };
+  if (state === "blocked") return {
+    message: errorCategory && Object.hasOwn(categoryHints, errorCategory)
+      ? "Preparação bloqueada: " + categoryHints[errorCategory] + "."
+      : "A preparação foi bloqueada pelo Worker" + (errorCategory && /^[a-z0-9_]{1,64}$/i.test(errorCategory) ? " (" + errorCategory + ")" : "") + ".",
+    guidance: "Use PREPARAR NOVAMENTE para revalidar a rota. Se continuar bloqueado, consulte o proxy e o Worker no H2ADS.",
+  };
+  if (state === "not_prepared") return {
+    message: "Instância ainda não preparada.",
+    guidance: "Clique PREPARAR NOVAMENTE. O botão ABRIR será liberado quando o Worker aprovar a rota.",
+  };
+  return {
+    message: reason || "O navegador ainda não foi liberado.",
+    guidance: "Confira o status da instância no H2ADS. Não crie um perfil novo para tentar corrigir.",
+  };
+}
