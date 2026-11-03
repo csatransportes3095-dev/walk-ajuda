@@ -37,13 +37,15 @@ describe("fundação multi-Worker H2 Ads", () => {
     const script = read("workers/windows/H2AdsWorker.ps1");
     const runner = read("workers/windows/browser-runner.mjs");
     const session = read("workers/windows/browser-session.mjs");
-    expect(script).toContain('$AgentVersion = "1.4.3"');
+    expect(script).toContain('$AgentVersion = "1.4.4"');
     expect(script).toContain("ConvertFrom-SecureString");
     expect(script).toContain("ConvertTo-SecureString");
     expect(script).toContain("Read-Host");
     expect(script).toContain("AsSecureString");
     expect(script).toContain("Código de pareamento inválido");
     expect(script).toContain("Register-ScheduledTask");
+    expect(script).toContain("if (Test-H2AdsTestingFirewall) { return }");
+    expect(script).toContain('Execute -EnableExtensionBrowser como Administrador.');
     expect(script).toContain("New-ScheduledTaskSettingsSet");
     expect(script).toContain("RestartCount 999");
     expect(script).toContain("RestartInterval (New-TimeSpan -Minutes 1)");
