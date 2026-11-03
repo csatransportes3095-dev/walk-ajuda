@@ -37,13 +37,15 @@ describe("fundação multi-Worker H2 Ads", () => {
     const script = read("workers/windows/H2AdsWorker.ps1");
     const runner = read("workers/windows/browser-runner.mjs");
     const session = read("workers/windows/browser-session.mjs");
-    expect(script).toContain('$AgentVersion = "1.4.3"');
+    expect(script).toContain('$AgentVersion = "1.4.4"');
     expect(script).toContain("ConvertFrom-SecureString");
     expect(script).toContain("ConvertTo-SecureString");
     expect(script).toContain("Read-Host");
     expect(script).toContain("AsSecureString");
     expect(script).toContain("Código de pareamento inválido");
     expect(script).toContain("Register-ScheduledTask");
+    expect(script).toContain("if (Test-H2AdsTestingFirewall) { return }");
+    expect(script).toContain('Execute -EnableExtensionBrowser como Administrador.');
     expect(script).toContain("New-ScheduledTaskSettingsSet");
     expect(script).toContain("RestartCount 999");
     expect(script).toContain("RestartInterval (New-TimeSpan -Minutes 1)");
@@ -96,6 +98,20 @@ describe("fundação multi-Worker H2 Ads", () => {
       expect(runner.toLowerCase()).not.toContain(prohibited.toLowerCase());
       expect(session.toLowerCase()).not.toContain(prohibited.toLowerCase());
     }
+  });
+
+  it("permite usar Chrome for Testing ja instalado e protegido sem elevar o Worker", () => {
+    const script = read("workers/windows/H2AdsWorker.ps1");
+    const start = script.indexOf("function Install-H2AdsTestingBrowser {");
+    const end = script.indexOf("function Test-H2AdsBrowserFirewall {", start);
+    const method = script.slice(start, end);
+    expect(start).toBeGreaterThan(0);
+    expect(end).toBeGreaterThan(start);
+    expect(method.indexOf("if (Test-Path $TestingChromePath)")).toBeLessThan(method.indexOf('if (!(Test-IsAdministrator))'));
+    expect(method).toContain("if (Test-H2AdsTestingFirewall) { return }");
+    expect(method).toContain("Ensure-H2AdsTestingFirewall");
+    expect(method).toContain("Assert-H2AdsTestingExecutable");
+    expect(method).toContain("Execute -EnableExtensionBrowser como Administrador");
   });
 
   it("bloqueia saída direta do Chrome dedicado antes da sessão", () => {

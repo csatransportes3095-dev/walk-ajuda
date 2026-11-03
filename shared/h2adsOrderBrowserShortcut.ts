@@ -228,6 +228,9 @@ export function describeH2AdsOrderBrowserBlock(input: {
     profile_snapshot_failed: "o snapshot do perfil falhou",
     leak_protection_failed: "a proteção contra vazamento de rede falhou",
     worker_execution_failed: "a execução do comando no Worker falhou",
+    testing_browser_admin_required: "Chrome for Testing precisa de instalação ou reparo administrativo",
+    testing_browser_version_mismatch: "a versão do Chrome for Testing está incompatível",
+    testing_browser_firewall_unavailable: "o firewall do Chrome for Testing não foi confirmado",
   };
   if (state === "blocked") return {
     message: errorCategory && Object.hasOwn(categoryHints, errorCategory)

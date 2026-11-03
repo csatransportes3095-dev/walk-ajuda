@@ -10,7 +10,7 @@ param(
 
 $ErrorActionPreference = "Stop"
 $ProgressPreference = "SilentlyContinue"
-$AgentVersion = "1.4.3"
+$AgentVersion = "1.4.4"
 $WorkerDirectory = Join-Path $env:LOCALAPPDATA "H2AdsWorker"
 $ConfigPath = Join-Path $WorkerDirectory "worker.json"
 $InstalledScriptPath = Join-Path $WorkerDirectory "H2AdsWorker.ps1"
@@ -112,11 +112,20 @@ function Assert-H2AdsTestingExecutable {
 }
 
 function Install-H2AdsTestingBrowser {
-  if (!(Test-IsAdministrator)) { throw "Execute como Administrador para instalar o Chrome for Testing isolado." }
+  # O Worker executa via tarefa agendada sem elevacao. Abrir um Chrome for
+  # Testing JA instalado e protegido nao deve exigir permissao administrativa.
+  # Instalar ou reparar o firewall continua obrigatoriamente elevado.
   if (Test-Path $TestingChromePath) {
     Assert-H2AdsTestingExecutable | Out-Null
+    if (Test-H2AdsTestingFirewall) { return }
+    if (!(Test-IsAdministrator)) {
+      throw "Firewall do Chrome for Testing nao confirmado. Execute -EnableExtensionBrowser como Administrador."
+    }
     Ensure-H2AdsTestingFirewall
     return
+  }
+  if (!(Test-IsAdministrator)) {
+    throw "Chrome for Testing nao instalado. Execute -EnableExtensionBrowser como Administrador."
   }
   $running = @(Get-CimInstance Win32_Process -Filter "Name = 'chrome.exe'" -ErrorAction Stop | Where-Object {
     [string]$_.ExecutablePath -like "$WorkerDirectory*"
@@ -579,6 +588,9 @@ function Get-WorkerErrorCategory([object]$ErrorRecord) {
   if ($message -like "*Perfil local*") { return "profile_missing" }
   if ($message -like "*snapshot H2ADS*" -or $message -like "*Snapshot H2ADS*") { return "profile_snapshot_failed" }
   if ($message -like "*relay local*") { return "relay_setup_failed" }
+  if ($message -like "*Chrome for Testing*" -and $message -like "*Administrador*") { return "testing_browser_admin_required" }
+  if ($message -like "*Versao inesperada do Chrome for Testing*") { return "testing_browser_version_mismatch" }
+  if ($message -like "*Firewall do Chrome for Testing*" -or $message -like "*Kill switch do Chrome for Testing*") { return "testing_browser_firewall_unavailable" }
   if ($message -like "*Firewall H2ADS*" -or $message -like "*kill switch rígido*") { return "hard_kill_switch_unavailable" }
   if ($message -like "*Chrome dedicado*" -or $message -like "*Google Chrome*") { return "dedicated_browser_unavailable" }
   if ($message -like "*Protecao de vazamento H2ADS*") { return "leak_protection_failed" }

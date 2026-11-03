@@ -68,5 +68,5 @@ jobs:
 
       - name: Verify packaged worker version
         run: |
-          grep -Fq '$AgentVersion = "1.4.3"' workers/windows/H2AdsWorker.ps1
-          echo "Packaged worker 1.4.3 confirmed"
+          grep -Fq '$AgentVersion = "1.4.4"' workers/windows/H2AdsWorker.ps1
+          echo "Packaged worker 1.4.4 confirmed"
