@@ -96,6 +96,43 @@ export default function AdminH2Auto() {
     refetchInterval: 15000,
   });
   const [label, setLabel] = useState("Celular principal");
+  const { data: h2AutoApk, refetch: refreshH2AutoApk, isLoading: loadingH2AutoApk } =
+    trpc.apk.getH2AutoRelease.useQuery(undefined, { refetchOnWindowFocus: true });
+  const [h2AutoFile, setH2AutoFile] = useState<File | null>(null);
+  const [h2AutoVersion, setH2AutoVersion] = useState("1.61");
+  const [h2AutoVersionCode, setH2AutoVersionCode] = useState("61");
+  const [h2AutoChecksum, setH2AutoChecksum] = useState(
+    "8368a87e6fb22241ff4e97c1e174d4907a96aefbe4f54ad67a3d60329d51f882"
+  );
+  const [h2AutoUploading, setH2AutoUploading] = useState(false);
+  const h2AutoDownloadUrl = "https://h2colombiano.com/baixar-h2-auto";
+  const uploadH2AutoApk = async () => {
+    if (!h2AutoFile || h2AutoUploading) return;
+    setH2AutoUploading(true);
+    try {
+      const payload = new FormData();
+      payload.append("file", h2AutoFile);
+      payload.append("versionName", h2AutoVersion);
+      payload.append("versionCode", h2AutoVersionCode);
+      payload.append("sha256", h2AutoChecksum);
+      const result = await fetch("/api/upload/h2-auto", {
+        method: "POST",
+        credentials: "same-origin",
+        body: payload,
+      });
+      const response = await result.json();
+      if (!result.ok || !response.success)
+        throw new Error(response.error || "Não foi possível publicar o APK.");
+      setH2AutoFile(null);
+      await refreshH2AutoApk();
+      toast.success("H2 AUTO publicado! O link direto já aponta para esta versão.");
+    } catch (error) {
+      toast.error(error instanceof Error ? error.message : "Erro no upload do APK.");
+    } finally {
+      setH2AutoUploading(false);
+    }
+  };
+
   const [personalDrafts, setPersonalDrafts] = useState<Record<string, H2AutoPersonalization>>({});
   const [personalSamples, setPersonalSamples] = useState<Record<string,string>>({});
   const [personalPreviews, setPersonalPreviews] = useState<Record<string,string>>({});
@@ -249,23 +286,93 @@ export default function AdminH2Auto() {
           diagnóstico seguro sincronizados com o APK; o aparelho continua
           responsável por responder.
         </div>
-        <div className="flex flex-wrap items-center justify-between gap-3 rounded-2xl border border-cyan-400/30 bg-cyan-950/25 p-4">
-          <div>
-            <p className="font-black text-cyan-200">
-              APK H2 AUTO 1.17 — histórico neon
-            </p>
+        <div className="space-y-4 rounded-2xl border border-cyan-400/30 bg-cyan-950/25 p-4">
+          <div className="flex flex-wrap items-center justify-between gap-3">
+            <div>
+              <p className="font-black text-cyan-200">
+                APK H2 AUTO {h2AutoApk?.versionName || "— não publicado"}
+              </p>
+              <p className="text-xs text-slate-300">
+                Download direto pelo H2 Colombiano, sem GitHub e sem alterar o robô.
+              </p>
+              {h2AutoApk ? (
+                <p className="mt-1 text-xs text-emerald-300">
+                  Versão {h2AutoApk.versionName} · código {h2AutoApk.versionCode} ·
+                  {" "}{(h2AutoApk.fileSize / 1024).toFixed(1)} KB ·
+                  publicado em {dateLabel(h2AutoApk.uploadedAt)}
+                </p>
+              ) : (
+                <p className="mt-1 text-xs text-amber-300">
+                  {loadingH2AutoApk ? "Consultando publicação..." : "Nenhum APK carregado no ADM H2 AUTO."}
+                </p>
+              )}
+            </div>
+            {h2AutoApk ? (
+              <a href="/baixar-h2-auto"
+                className="inline-flex items-center gap-2 rounded-xl bg-cyan-400 px-4 py-2 text-sm font-black text-slate-950 hover:bg-cyan-300">
+                <ExternalLink className="h-4 w-4" />
+                BAIXAR APK {h2AutoApk.versionName}
+              </a>
+            ) : (
+              <span className="rounded-xl border border-amber-400/30 px-4 py-2 text-xs font-bold text-amber-200">
+                DOWNLOAD INDISPONÍVEL
+              </span>
+            )}
+          </div>
+          <div className="rounded-xl border border-cyan-400/20 bg-[#081223] p-3 space-y-3">
+            <p className="text-sm font-black text-cyan-300">PUBLICAR / ATUALIZAR APK H2 AUTO</p>
             <p className="text-xs text-slate-300">
-              Instalador oficial e manifesto versionado. A permissão do Android
-              continua sendo local.
+              Selecione o APK assinado da compilação aprovada. A versão 1.61 é
+              validada pelo SHA-256 oficial. O sistema não altera configurações,
+              mensagens ou outros aplicativos.
+            </p>
+            <div className="grid grid-cols-1 gap-2 sm:grid-cols-2">
+              <label className="text-xs text-slate-300">
+                Versão
+                <input className={field} value={h2AutoVersion}
+                  onChange={event => {
+                    const value=event.target.value;
+                    setH2AutoVersion(value);
+                    if(value !== "1.61") setH2AutoChecksum("");
+                  }} placeholder="1.61" />
+              </label>
+              <label className="text-xs text-slate-300">
+                Código da versão Android
+                <input className={field} type="number" min={61} step={1}
+                  value={h2AutoVersionCode}
+                  onChange={event => setH2AutoVersionCode(event.target.value)} />
+              </label>
+            </div>
+            <label className="block text-xs text-slate-300">
+              SHA-256 do APK assinado
+              <input className={field} value={h2AutoChecksum}
+                onChange={event => setH2AutoChecksum(event.target.value)}
+                maxLength={64} spellCheck={false} placeholder="64 caracteres hexadecimais" />
+            </label>
+            <input type="file" accept=".apk,application/vnd.android.package-archive"
+              className="block w-full text-xs text-slate-200 file:mr-3 file:rounded-lg file:border-0 file:bg-cyan-700 file:px-3 file:py-2 file:text-white"
+              onChange={event => setH2AutoFile(event.target.files?.[0] || null)} />
+            {h2AutoFile && <p className="text-xs text-slate-300">
+              {h2AutoFile.name} · {(h2AutoFile.size / 1024).toFixed(1)} KB
+            </p>}
+            <div className="flex flex-wrap gap-2">
+              <button type="button" onClick={() => void uploadH2AutoApk()}
+                disabled={!h2AutoFile || h2AutoUploading || !/^[a-f0-9]{64}$/i.test(h2AutoChecksum)}
+                className="rounded-xl bg-cyan-500 px-4 py-2 text-sm font-black text-slate-950 disabled:cursor-not-allowed disabled:opacity-40">
+                {h2AutoUploading ? "VALIDANDO E ENVIANDO..." : "PUBLICAR APK H2 AUTO"}
+              </button>
+              <button type="button"
+                onClick={() => { void navigator.clipboard.writeText(h2AutoDownloadUrl); toast.success("Link direto copiado."); }}
+                disabled={!h2AutoApk}
+                className="rounded-xl border border-cyan-400/40 px-4 py-2 text-sm font-semibold text-cyan-200 disabled:opacity-40">
+                COPIAR LINK DIRETO
+              </button>
+            </div>
+            <p className="break-all text-xs text-cyan-300">{h2AutoDownloadUrl}</p>
+            <p className="text-xs text-amber-200">
+              O link só é liberado após upload validado; preserve o H2 AUTO instalado e atualize por cima.
             </p>
           </div>
-          <a
-            href="/baixar-h2-auto"
-            className="inline-flex items-center gap-2 rounded-xl bg-cyan-400 px-4 py-2 text-sm font-black text-slate-950 hover:bg-cyan-300"
-          >
-            <ExternalLink className="h-4 w-4" />
-            BAIXAR APK 1.17
-          </a>
         </div>
         <Box>
           <h2 className="font-black text-cyan-300 flex gap-2">
