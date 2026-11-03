@@ -145,7 +145,7 @@ export function h2AutoGreetingWelcome(input: string, menu: string): string {
     "opa": "👋 *Olá!* 😊",
   };
   const greeting = prefix[text];
-  return greeting ? greeting + "\n\nPode escrever sua dúvida ou escolher uma opção:\n\n" + menu : menu;
+  return greeting ? greeting + "\n\nComo posso ajudar?\n\n✍️ Escreva sua dúvida ou digite *MENU* para opções." : menu;
 }
 
 /** Ignore only exact repeated selections matching the current phone stage.
