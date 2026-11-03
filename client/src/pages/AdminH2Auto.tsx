@@ -319,12 +319,23 @@ export default function AdminH2Auto() {
               </span>
             )}
           </div>
-          <div className="rounded-xl border border-cyan-400/20 bg-[#081223] p-3 space-y-3">
-            <p className="text-sm font-black text-cyan-300">PUBLICAR / ATUALIZAR APK H2 AUTO</p>
+          <div className="rounded-xl border border-emerald-400/25 bg-emerald-950/20 p-3 space-y-2">
+            <p className="text-sm font-black text-emerald-300">PUBLICAÇÃO AUTOMÁTICA ATIVADA NO PROCESSO DE COMPILAÇÃO</p>
             <p className="text-xs text-slate-300">
-              Selecione o APK assinado da compilação aprovada. A versão 1.61 é
-              validada pelo SHA-256 oficial. O sistema não altera configurações,
-              mensagens ou outros aplicativos.
+              Após a compilação e validação da assinatura no GitHub Actions, o
+              H2 AUTO é enviado diretamente para o armazenamento do site.
+              Nenhum download ou upload manual é necessário.
+            </p>
+            <p className="text-xs text-slate-300">
+              {h2AutoApk ? `Versão disponibilizada: ${h2AutoApk.versionName} (código ${h2AutoApk.versionCode}).`
+                : "A publicação inicial ainda não foi recebida do processo oficial."}
+            </p>
+          </div>
+          <details className="rounded-xl border border-cyan-400/20 bg-[#081223] p-3 space-y-3">
+            <summary className="cursor-pointer text-sm font-bold text-cyan-300">Envio manual de emergência (opcional)</summary>
+            <p className="pt-2 text-xs text-slate-300">
+              Utilize apenas se a publicação automática falhar. O arquivo precisa
+              ser assinado e validado; o atendimento e as configurações não são alterados.
             </p>
             <div className="grid grid-cols-1 gap-2 sm:grid-cols-2">
               <label className="text-xs text-slate-300">
@@ -372,7 +383,7 @@ export default function AdminH2Auto() {
             <p className="text-xs text-amber-200">
               O link só é liberado após upload validado; preserve o H2 AUTO instalado e atualize por cima.
             </p>
-          </div>
+          </details>
         </div>
         <Box>
           <h2 className="font-black text-cyan-300 flex gap-2">
