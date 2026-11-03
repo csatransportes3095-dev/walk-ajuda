@@ -96,11 +96,65 @@ export function h2AutoNaturalNewCustomerIntent(input: string): boolean {
   return /\b(?:quero|queria|gostaria|preciso|necessito)\b.{0,35}\b(?:fazer|criar|abrir|comprar|ter|uma|um)\b.{0,18}\b(?:conta|cadastro)\b/.test(text);
 }
 
+
+/** Natural language may select a secure entry flow, never grant access.
+ * Only runs on first contact / audience choice (and duplicate phone prompts).
+ */
+function normalizeH2AutoIntent(input: string): string {
+  if (typeof input !== "string" || input.length > 220) return "";
+  const text = input.normalize("NFD").replace(/[\u0300-\u036f]/g, "")
+    .toLowerCase().replace(/[^a-z0-9\s]/g, " ").replace(/\s+/g, " ").trim();
+  if (!text || /\d{5,}/.test(text) ||
+      /^(?:menu|inicio|voltar|0|[1-9]|10|h2|h3)$/.test(text) ||
+      /(?:https?:\/\/|www\.|@)/i.test(input)) return "";
+  return text;
+}
+
+/** "Quero acompanhar meu pedido" -> prompt for REGISTERED CUSTOMER phone + e-mail OTP.
+ * The returned intent never discloses any personal order data.
+ */
+export function h2AutoNaturalExistingCustomerIntent(input: string): boolean {
+  const text = normalizeH2AutoIntent(input);
+  if (!text || /\b(?:nao sou cliente|ainda nao sou cliente|novo cliente|nao tenho cadastro|nao tenho conta)\b/.test(text) ||
+      /\b(?:minhas indicacoes|meus indicados|quem indiquei|comissoes|comissao|indicador|indicacao)\b/.test(text)) return false;
+  if (/^(?:ja sou cliente|sou cliente|ja tenho cadastro|tenho cadastro|ja tenho conta|sou cliente antigo)$/.test(text))
+    return true;
+  return /\b(?:acompanhar|consultar|ver|rastrear|checar|saber)\b.{0,60}\b(?:meu|meus|o)\s+pedidos?\b/.test(text) ||
+    /\b(?:status|andamento|situacao)\b.{0,42}\b(?:do|dos|de)\s+(?:meu|meus)?\s*pedidos?\b/.test(text) ||
+    /\b(?:meu|meus)\s+pedidos?\b.{0,35}\b(?:status|andamento|situacao)\b/.test(text);
+}
+
+/** Existing registered referrers use the separate indications phone/OTP flow. */
+export function h2AutoNaturalReferralsIntent(input: string): boolean {
+  const text = normalizeH2AutoIntent(input);
+  if (!text || /\b(?:indicador|fui indicado|nao sou cliente|novo cliente|me indicou)\b/.test(text))
+    return false;
+  return /\b(?:minhas indicacoes|meus indicados|quem indiquei|minhas comissoes|minha comissao|consultar comissao|ver comissao|ver indicacoes)\b/.test(text) ||
+    /\b(?:consultar|ver|acompanhar)\b.{0,40}\b(?:minhas|as)\s+indicacoes\b/.test(text);
+}
+
+/** Greeting only at audience choice: preserve the full ADM-defined menu. */
+export function h2AutoGreetingWelcome(input: string, menu: string): string {
+  const text = normalizeH2AutoIntent(input);
+  const prefix: Record<string,string> = {
+    "bom dia": "☀️ *Bom dia!* 😊",
+    "boa tarde": "🌤️ *Boa tarde!* 😊",
+    "boa noite": "🌙 *Boa noite!* 😊",
+    "oi": "👋 *Olá!* 😊",
+    "ola": "👋 *Olá!* 😊",
+    "opa": "👋 *Olá!* 😊",
+  };
+  const greeting = prefix[text];
+  return greeting ? greeting + "\n\nPode escrever sua dúvida ou escolher uma opção:\n\n" + menu : menu;
+}
+
 /** Ignore only exact repeated selections matching the current phone stage.
  * Never grant access or reset a security block with these duplicate inputs.
  */
 export function repeatedH2AutoChoice(stage: string, input: string): boolean {
-  return initialH2AutoChoiceStage(input) === stage;
+  return initialH2AutoChoiceStage(input) === stage ||
+    (stage === "customer_phone" && h2AutoNaturalExistingCustomerIntent(input)) ||
+    (stage === "referrals_phone" && h2AutoNaturalReferralsIntent(input));
 }
 
 /** Navigation takes priority over phone format validation, never over a block. */
