@@ -181,11 +181,23 @@ export async function rotateH2AdsInstanceProxy(instanceId: number): Promise<H2Ad
   await assertProxySwapAllowed(instanceId);
   const db = await requireDb();
   const runRows = await db
-    .select({ state: h2AdsInstanceBrowserRuns.state })
+    .select({ state: h2AdsInstanceBrowserRuns.state, workerId: h2AdsInstanceBrowserRuns.workerId })
     .from(h2AdsInstanceBrowserRuns)
     .where(eq(h2AdsInstanceBrowserRuns.instanceId, instanceId))
     .limit(1);
   const browserAlreadyOpen = runRows[0]?.state === "browser_open";
+  // For live swaps, don't consume a proxy or migrate the local profile
+  // unless the very same running Worker is online.
+  if (browserAlreadyOpen) {
+    const activeWorker = await resolveWalk1Worker();
+    if (!activeWorker?.online || activeWorker.id !== runRows[0]?.workerId) {
+      return {
+        status: "worker_unavailable",
+        instanceId,
+        message: "O Worker desta sessão não está disponível. A rota atual foi preservada.",
+      };
+    }
+  }
 
   const reserved = await reserveH2AdsProxyForInstance(instanceId, true);
   if (!reserved) {
