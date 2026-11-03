@@ -2569,7 +2569,7 @@ export function registerUploadRoute(app: Express) {
       const expectedHash = String(req.body?.sha256 || "").trim().toLowerCase();
       if (!file || !file.originalname.toLowerCase().endsWith(".apk") ||
           file.size < 32768 || file.buffer.subarray(0, 4).toString("hex") !== "504b0304" ||
-          !/^1\\.[0-9]{1,3}$/.test(versionName) ||
+          !/^1\.[0-9]{1,3}$/.test(versionName) ||
           !Number.isInteger(versionCode) || versionCode < 61 ||
           !/^[0-9a-f]{64}$/.test(expectedHash)) {
         res.status(400).json({ error: "Arquivo ou metadados de APK inválidos." });
