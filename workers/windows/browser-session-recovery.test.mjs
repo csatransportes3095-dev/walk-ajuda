@@ -20,6 +20,8 @@ function harness({ ip = "198.51.100.1", latched = false, probeError = false, rou
     checkIp: async () => ip,
     writeSession: (value) => records.push(value),
     syncPanelOpening: async () => {},
+    post: async () => {},
+    panelFailure: () => {},
     suspendProxyTraffic: async (reason) => { state.networkSuspended = true; state.activeBackendPort = undefined; records.push({ reason }); },
   };
   vm.createContext(state);

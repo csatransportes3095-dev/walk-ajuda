@@ -61,13 +61,16 @@ let browserProbeInProgress = false;
 let stopMobileRemote = null;
 const mobileRemoteRequested = process.env.H2ADS_REMOTE_DEBUG === "1";
 
-function upstreamUrl() {
-  const protocol = proxy.protocol === "socks5" ? "socks5" : proxy.protocol === "https" ? "https" : "http";
-  return `${protocol}://${encodeURIComponent(proxy.username)}:${encodeURIComponent(proxy.password)}@${proxy.host}:${proxy.port}`;
+function upstreamUrl(route = proxy) {
+  const protocol = route.protocol === "socks5" ? "socks5" : route.protocol === "https" ? "https" : "http";
+  return `${protocol}://${encodeURIComponent(route.username)}:${encodeURIComponent(route.password)}@${route.host}:${route.port}`;
 }
 
-function createBackendRelay(port = 0) {
-  return new Server({ host: "127.0.0.1", port, verbose: false, prepareRequestFunction: () => ({ upstreamProxyUrl: upstreamUrl() }) });
+function createBackendRelay(port = 0, route = proxy) {
+  // Pin the upstream to the relay when it is created; only an explicitly
+  // validated manual switch may replace the active backend.
+  const target = upstreamUrl(route);
+  return new Server({ host: "127.0.0.1", port, verbose: false, prepareRequestFunction: () => ({ upstreamProxyUrl: target }) });
 }
 
 function createFrontRelay(port = 0) {
@@ -403,8 +406,63 @@ async function resumeProxyTraffic() {
   }
 }
 
+// An explicit operator proxy replacement is different from an unexpected
+// exit-IP change. Verify the candidate through its own loopback relay and
+// an independent Chrome probe before changing the live browser route.
+async function applyVerifiedManualProxySwap(next) {
+  if (rotationInProgress || browserExitHandled || !browser || browser.exitCode !== null) return;
+  rotationInProgress = true;
+  let candidateBackend;
+  let committed = false;
+  try {
+    candidateBackend = createBackendRelay(0, next);
+    await candidateBackend.listen();
+    const candidateIp = await checkIpThroughPort(candidateBackend.port);
+    const executable = chromeExecutable();
+    if (!executable) throw new Error("browser_not_found");
+    const browserObservedIp = await verifyChromeProxyPath(executable, candidateBackend.port, candidateIp);
+    if (normalizeIp(candidateIp) !== normalizeIp(browserObservedIp)) throw new Error("exit_ip_mismatch");
+
+    // Disconnect old tunnels, never the Chrome window or its profile.
+    await suspendProxyTraffic("authorized_proxy_swap");
+    proxy = { ...proxy, ...next };
+    backendRelay = candidateBackend;
+    activeBackendPort = candidateBackend.port;
+    networkSuspended = false;
+    committed = true;
+    const frontIp = await checkIp();
+    if (normalizeIp(frontIp) !== normalizeIp(candidateIp)) throw new Error("exit_ip_mismatch");
+    const previousIp = sessionLockedIp;
+    sessionLockedIp = candidateIp;
+    sessionIpChanged = false; // only after both candidate and front relay verified
+    lastReportedIp = candidateIp;
+    writeSession({
+      networkState: "online", privacyGuard: "protected", killSwitch: "armed",
+      sessionLockedIp, sessionIpChanged: false, previousSessionLockedIp: previousIp,
+      browserProxyVerified: true, browserProxyVerification: "verified",
+      observedIp: frontIp, browserObservedIp,
+      proxyHotSwapDetectedAt: new Date().toISOString(), hotSwapState: "online",
+      hotSwapCompletedAt: new Date().toISOString(), networkFailureCategory: null,
+    });
+    await post("/api/h2ads/worker/runs/" + instanceId + "/state", { state: "browser_open", observedIp: frontIp }).catch(panelFailure);
+    void syncPanelOpening(frontIp);
+  } catch (error) {
+    // Failed preflight leaves the previously working browser path unchanged;
+    // any post-switch failure stays fail-closed, never falling back to direct IP.
+    if (committed) await suspendProxyTraffic(error instanceof Error ? error.message : "proxy_path_unverified");
+    else if (candidateBackend) await closeRelay(candidateBackend);
+    writeSession({
+      hotSwapState: "failed", hotSwapFailure: classifyNetworkError(error),
+      hotSwapFailureAt: new Date().toISOString(),
+      networkState: networkSuspended ? "suspended" : "online",
+    });
+  } finally {
+    rotationInProgress = false;
+  }
+}
+
 async function syncCurrentProxyCredential() {
-  if (proxySyncInProgress || browserExitHandled || !browser || browser.exitCode !== null) return;
+  if (proxySyncInProgress || rotationInProgress || browserExitHandled || !browser || browser.exitCode !== null) return;
   proxySyncInProgress = true;
   try {
     const response = await fetch(`${panelUrl.replace(/\/$/, "")}/api/h2ads/worker/proxy/${instanceId}/current`, {
@@ -418,19 +476,7 @@ async function syncCurrentProxyCredential() {
     const currentFingerprint = JSON.stringify([proxy.protocol, proxy.host, proxy.port, proxy.username, proxy.password]);
     const nextFingerprint = JSON.stringify([next.protocol, next.host, next.port, next.username, next.password]);
     if (currentFingerprint === nextFingerprint) return;
-
-    proxy = { ...proxy, ...next };
-    writeSession({
-      proxyHotSwapDetectedAt: new Date().toISOString(),
-      networkState: "suspended",
-      hotSwapState: "applying",
-    });
-    await suspendProxyTraffic("proxy_hot_swap");
-    await resumeProxyTraffic();
-    writeSession({
-      hotSwapState: networkSuspended ? "waiting_proxy" : "online",
-      hotSwapCompletedAt: networkSuspended ? null : new Date().toISOString(),
-    });
+    await applyVerifiedManualProxySwap(next);
   } catch (error) {
     panelFailure(error);
   } finally {

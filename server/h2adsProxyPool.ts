@@ -115,7 +115,7 @@ export async function listH2AdsProxyPool() {
   };
 }
 
-export async function reserveH2AdsProxyForInstance(instanceId: number): Promise<H2AdsReservedProxy | null> {
+export async function reserveH2AdsProxyForInstance(instanceId: number, retainPrevious = false): Promise<H2AdsReservedProxy | null> {
   const db = await requireDb();
 
   for (let attempt = 0; attempt < 8; attempt += 1) {
@@ -147,19 +147,27 @@ export async function reserveH2AdsProxyForInstance(instanceId: number): Promise<
 
     if (Number(updated[0].affectedRows) !== 1) continue;
 
-    await db
-      .update(h2AdsProxyPool)
-      .set({ status: "used", consumedAt: now })
-      .where(and(
-        eq(h2AdsProxyPool.assignedInstanceId, instanceId),
-        eq(h2AdsProxyPool.status, "assigned"),
-        ne(h2AdsProxyPool.id, candidate.id),
-      ));
+    // During live route swaps keep the previously assigned proxy available
+    // until the candidate has passed validation and been committed.
+    if (!retainPrevious) {
+      await markH2AdsOtherAssignedProxiesUsed(instanceId, candidate.id);
+    }
 
     return candidate;
   }
 
   throw new Error("A fila de proxies recebeu outra reserva ao mesmo tempo. Tente novamente.");
+}
+
+export async function markH2AdsOtherAssignedProxiesUsed(instanceId: number, keepId: number) {
+  const db = await requireDb();
+  await db.update(h2AdsProxyPool)
+    .set({ status: "used", consumedAt: new Date() })
+    .where(and(
+      eq(h2AdsProxyPool.assignedInstanceId, instanceId),
+      eq(h2AdsProxyPool.status, "assigned"),
+      ne(h2AdsProxyPool.id, keepId),
+    ));
 }
 
 export async function markH2AdsProxyFailed(poolId: number, errorCategory: string) {
