@@ -18,6 +18,7 @@ import multer from "multer";
 import sharp from "sharp";
 import jwt from "jsonwebtoken";
 import { createHash } from "node:crypto";
+import { createRemoteJWKSet, jwtVerify } from "jose";
 import { parse as parseCookieHeader } from "cookie";
 import { r2PutObject, r2GetObjectBuffer, r2DeleteObjects } from "./r2Storage";
 import { addOrderFile, createCustomer, getCustomerByPhone, getDb, updateCustomer, addOrderStatus, generateOrderNumber } from "./db";
@@ -2531,6 +2532,83 @@ export function registerUploadRoute(app: Express) {
     }
   });
 
+
+  // Automatic APK publication from the official signed Android release workflow.
+  // OIDC binds each upload to GitHub's authenticated repository, workflow,
+  // branch, push event and commit; no reusable secret or manual intervention.
+  const h2AutoGithubKeys = createRemoteJWKSet(
+    new URL("https://token.actions.githubusercontent.com/.well-known/jwks")
+  );
+  app.post("/api/h2-auto/ci-publish", uploadApkMw.single("file"), async (req: Request, res: Response) => {
+    try {
+      const authHeader = req.headers.authorization || "";
+      const token = authHeader.startsWith("Bearer ") ? authHeader.slice(7).trim() : "";
+      if (!token) { res.status(401).json({ error: "Identidade da compilação ausente." }); return; }
+      const expectedRepo = "csatransportes3095-dev/h2-colombiano-android";
+      const expectedRef = "refs/heads/main";
+      const expectedWorkflow = expectedRepo + "/.github/workflows/build-apk.yml@" + expectedRef;
+      const { payload } = await jwtVerify(token, h2AutoGithubKeys, {
+        issuer: "https://token.actions.githubusercontent.com",
+        audience: "https://h2colombiano.com/api/h2-auto/ci-publish",
+        clockTolerance: 30,
+      });
+      const sha = String(req.body?.commitSha || "").trim().toLowerCase();
+      if (payload.repository !== expectedRepo ||
+          String(payload.repository_id) !== "1354068592" ||
+          payload.ref !== expectedRef ||
+          payload.sub !== "repo:" + expectedRepo + ":ref:" + expectedRef ||
+          payload.event_name !== "push" ||
+          payload.workflow_ref !== expectedWorkflow ||
+          !/^[0-9a-f]{40}$/.test(sha) || payload.sha !== sha) {
+        res.status(403).json({ error: "Compilação não autorizada para publicação H2 AUTO." });
+        return;
+      }
+      const file = req.file;
+      const versionName = String(req.body?.versionName || "").trim();
+      const versionCode = Number(req.body?.versionCode);
+      const expectedHash = String(req.body?.sha256 || "").trim().toLowerCase();
+      if (!file || !file.originalname.toLowerCase().endsWith(".apk") ||
+          file.size < 32768 || file.buffer.subarray(0, 4).toString("hex") !== "504b0304" ||
+          !/^1\.[0-9]{1,3}$/.test(versionName) ||
+          !Number.isInteger(versionCode) || versionCode < 61 ||
+          !/^[0-9a-f]{64}$/.test(expectedHash)) {
+        res.status(400).json({ error: "Arquivo ou metadados de APK inválidos." });
+        return;
+      }
+      const hash = createHash("sha256").update(file.buffer).digest("hex");
+      if (hash !== expectedHash) {
+        res.status(400).json({ error: "SHA-256 não corresponde ao arquivo." });
+        return;
+      }
+      const { getH2AutoApkRelease, saveH2AutoApkRelease } = await import("./routers/apk");
+      const current = await getH2AutoApkRelease();
+      if (current && versionCode < current.versionCode) {
+        res.status(409).json({ error: "Publicação bloqueada: versão inferior à atual." }); return;
+      }
+      if (current && versionCode === current.versionCode && current.sha256 === hash) {
+        res.json({ success: true, unchanged: true, downloadUrl: "/baixar-h2-auto", versionName });
+        return;
+      }
+      if (current && versionCode === current.versionCode && current.sha256 !== hash) {
+        res.status(409).json({ error: "A versão já publicada possui arquivo diferente. Aumente o versionCode." });
+        return;
+      }
+      const key = `app/h2-auto/${Date.now()}-${hash}.apk`;
+      await r2PutObject(key, file.buffer, "application/vnd.android.package-archive");
+      await saveH2AutoApkRelease({
+        r2Key: key, sha256: hash, fileSize: file.size,
+        versionName, versionCode, uploadedAt: Date.now(),
+      });
+      res.setHeader("Cache-Control", "no-store");
+      res.json({ success: true, published: true, downloadUrl: "/baixar-h2-auto", versionName, versionCode, sha256: hash });
+    } catch (error) {
+      if (error instanceof Error && ["JWTExpired", "JWSSignatureVerificationFailed", "JWTClaimValidationFailed", "JOSEError"].some(name => error.name.includes(name))) {
+        res.status(401).json({ error: "Assinatura de identidade inválida." }); return;
+      }
+      console.error("[H2 AUTO] Falha na publicação automática:", error);
+      res.status(500).json({ error: "Falha ao publicar APK do processo oficial." });
+    }
+  });
 
   // H2 AUTO: upload isolated from Colombiano and Driver Pro. The official
   // v1.61 SHA-256 was verified against the signed CI release artifact.
