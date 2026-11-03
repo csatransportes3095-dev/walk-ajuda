@@ -47,6 +47,7 @@ function makeHarness({ candidateIp = "198.51.100.2", failCandidate = false, fail
     },
     writeSession: (record) => events.push(record),
     post: async () => events.push("state-posted"),
+    panelFailure: () => {},
     syncPanelOpening: async () => {},
     closeRelay: async () => events.push("closed-candidate"),
     classifyNetworkError: (e) => e.message,
