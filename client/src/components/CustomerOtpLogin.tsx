@@ -135,7 +135,7 @@ export function CustomerOtpLogin({ title = "Acesso H2 Colombiano", initialPhone 
   }
 
   return (
-    <main className="min-h-screen bg-[#050b1b] text-white flex items-center justify-center px-4 py-8">
+    <main className="min-h-0 bg-[#050b1b] text-white flex items-start justify-center px-4 pt-3 pb-6 sm:pt-5 sm:pb-8">
       <div className="w-full max-w-md rounded-3xl border border-cyan-400/30 bg-slate-950 p-6 sm:p-8 shadow-[0_0_35px_rgba(6,182,212,0.12)]">
         {loginSettings?.login_show_image !== "0" && <div className="mx-auto mb-4 flex h-16 w-16 items-center justify-center overflow-hidden rounded-2xl border border-cyan-400/50 bg-cyan-400/10">
           {loginSettings?.login_image_url ? <img src={loginSettings.login_image_url} alt="Logo do H2 Colombiano" className="h-full w-full object-contain" /> : <ShieldCheck className="h-9 w-9 text-cyan-300" aria-hidden />}
