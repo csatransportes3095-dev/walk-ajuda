@@ -111,7 +111,9 @@ describe("H2 AUTO: primeiras mensagens livres sem repetir menu",()=>{
   it("saudação usa o texto atual do ADM sem inventar outra árvore",()=>{
     const current = "MENU DO ADM";
     expect(h2AutoGreetingWelcome("Boa noite",current)).toContain("Boa noite!");
-    expect(h2AutoGreetingWelcome("Boa noite",current)).toContain(current);
+    expect(h2AutoGreetingWelcome("Boa noite",current)).toContain("Como posso ajudar?");
+    expect(h2AutoGreetingWelcome("Boa noite",current)).not.toContain(current);
+    expect(h2AutoGreetingWelcome("Boa noite",current)).toContain("*MENU*");
     expect(h2AutoGreetingWelcome("Quero acompanhar meu pedido",current)).toBe(current);
   });
   it("repetir pedido ao informar telefone não conta como número inválido",()=>{
