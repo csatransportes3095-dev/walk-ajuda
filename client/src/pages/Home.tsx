@@ -1131,6 +1131,14 @@ export default function Home() {
   const SERVICES_SUBTITLE = settings?.services_subtitle || "";
   const FOOTER_TEXT = settings?.footer_text || "";
   const SITE_NAME = settings?.site_name || "WALK AJUDA";
+  const SITE_LOGO_URL = settings?.site_logo_url || "";
+  const shortcutLabel = (key: string, fallback: string) => settings?.[`home_shortcut_${key}_title`]?.trim() || fallback;
+  const shortcutSubtitle = (key: string, fallback: string) => settings?.[`home_shortcut_${key}_subtitle`]?.trim() || fallback;
+  const shortcutLogo = (key: string) => settings?.[`home_shortcut_${key}_logo_url`]?.trim() || "";
+  const shortcutUrl = (key: string, fallback: string) => {
+    const configured = settings?.[`home_shortcut_${key}_url`]?.trim();
+    return configured && /^\/[a-z0-9/_?#=&%-]*$/i.test(configured) && !configured.startsWith("//") ? configured : fallback;
+  };
   const VIDEO_URL = settings?.video_url || "";
   const [videoError, setVideoError] = useState(false);
   const [videoLoaded, setVideoLoaded] = useState(false);
@@ -5026,7 +5034,7 @@ export default function Home() {
         <div className="container flex flex-col gap-3 py-4 sm:flex-row sm:items-center sm:justify-between">
           <div className="flex items-center gap-2">
             <div className="w-10 h-10 bg-gradient-to-br from-primary to-purple-600 rounded-lg flex items-center justify-center">
-              <Zap className="w-6 h-6 text-white" />
+              {SITE_LOGO_URL ? <img src={SITE_LOGO_URL} alt={SITE_NAME} className="h-full w-full rounded-lg object-contain" /> : <Zap className="w-6 h-6 text-white" />}
             </div>
             <h1 className="text-xl font-bold text-white">{SITE_NAME}</h1>
           </div>
@@ -5081,17 +5089,17 @@ export default function Home() {
 
         <div className="container pb-4">
           <div className="grid grid-cols-2 gap-2 sm:gap-3">
-            <button onClick={() => { window.location.href = '/acompanhar'; }} className="group flex min-h-[78px] items-center gap-2 rounded-2xl border border-cyan-400/35 bg-gradient-to-br from-cyan-500/15 to-blue-500/10 px-3 py-3 text-left shadow-[0_0_18px_rgba(34,211,238,0.08)] transition-all hover:border-cyan-300/60 hover:bg-cyan-500/20 active:scale-[0.98] sm:min-h-[86px] sm:gap-3 sm:px-4" aria-label="Acompanhar pedido" title="Acompanhar pedido">
-              <span className="flex h-9 w-9 shrink-0 items-center justify-center rounded-xl bg-cyan-400/15 text-cyan-200 ring-1 ring-cyan-300/25 sm:h-10 sm:w-10"><Clock className="h-5 w-5" /></span>
-              <span className="min-w-0"><span className="block text-[10px] font-black uppercase leading-tight tracking-wide text-white sm:text-xs">Acompanhar pedido</span><span className="mt-1 hidden text-[10px] leading-tight text-cyan-100/60 sm:block">Ver andamento</span></span>
+            <button onClick={() => { window.location.href = settings?.home_btn2_url?.startsWith('/') && !settings.home_btn2_url.startsWith('//') ? settings.home_btn2_url : '/acompanhar'; }} className="group flex min-h-[78px] items-center gap-2 rounded-2xl border border-cyan-400/35 bg-gradient-to-br from-cyan-500/15 to-blue-500/10 px-3 py-3 text-left shadow-[0_0_18px_rgba(34,211,238,0.08)] transition-all hover:border-cyan-300/60 hover:bg-cyan-500/20 active:scale-[0.98] sm:min-h-[86px] sm:gap-3 sm:px-4" aria-label={settings?.home_btn2_text || "Acompanhar pedido"} title={settings?.home_btn2_text || "Acompanhar pedido"}>
+              <span className="flex h-9 w-9 shrink-0 items-center justify-center rounded-xl bg-cyan-400/15 text-cyan-200 ring-1 ring-cyan-300/25 sm:h-10 sm:w-10">{settings?.home_btn2_logo_url ? <img src={settings.home_btn2_logo_url} alt="" className="h-7 w-7 object-contain" /> : <Clock className="h-5 w-5" />}</span>
+              <span className="min-w-0"><span className="block text-[10px] font-black uppercase leading-tight tracking-wide text-white sm:text-xs">{settings?.home_btn2_text || "Acompanhar pedido"}</span><span className="mt-1 hidden whitespace-pre-line text-[10px] leading-tight text-cyan-100/60 sm:block">{settings?.home_btn2_subtitle || "Ver andamento"}</span></span>
             </button>
-            <button onClick={() => { window.location.href = '/emprestimo'; }} className="group flex min-h-[78px] items-center gap-2 rounded-2xl border border-amber-400/35 bg-gradient-to-br from-amber-500/15 to-orange-500/10 px-3 py-3 text-left shadow-[0_0_18px_rgba(251,191,36,0.08)] transition-all hover:border-amber-300/60 hover:bg-amber-500/20 active:scale-[0.98] sm:min-h-[86px] sm:gap-3 sm:px-4" aria-label="Empréstimo" title="Empréstimo">
-              <span className="flex h-9 w-9 shrink-0 items-center justify-center rounded-xl bg-amber-400/15 text-amber-200 ring-1 ring-amber-300/25 sm:h-10 sm:w-10"><Ticket className="h-5 w-5" /></span>
-              <span className="min-w-0"><span className="block text-[10px] font-black uppercase leading-tight tracking-wide text-white sm:text-xs">Empréstimo</span><span className="mt-1 hidden text-[10px] leading-tight text-amber-100/60 sm:block">Consultar e solicitar</span></span>
+            <button onClick={() => { window.location.href = shortcutUrl('loan', '/emprestimo'); }} className="group flex min-h-[78px] items-center gap-2 rounded-2xl border border-amber-400/35 bg-gradient-to-br from-amber-500/15 to-orange-500/10 px-3 py-3 text-left shadow-[0_0_18px_rgba(251,191,36,0.08)] transition-all hover:border-amber-300/60 hover:bg-amber-500/20 active:scale-[0.98] sm:min-h-[86px] sm:gap-3 sm:px-4" aria-label={shortcutLabel("loan", "Empréstimo")} title={shortcutLabel("loan", "Empréstimo")}>
+              <span className="flex h-9 w-9 shrink-0 items-center justify-center rounded-xl bg-amber-400/15 text-amber-200 ring-1 ring-amber-300/25 sm:h-10 sm:w-10">{shortcutLogo("loan") ? <img src={shortcutLogo("loan")} alt="" className="h-7 w-7 object-contain" /> : <Ticket className="h-5 w-5" />}</span>
+              <span className="min-w-0"><span className="block text-[10px] font-black uppercase leading-tight tracking-wide text-white sm:text-xs">{shortcutLabel("loan", "Empréstimo")}</span><span className="mt-1 hidden whitespace-pre-line text-[10px] leading-tight text-amber-100/60 sm:block">{shortcutSubtitle("loan", "Consultar e solicitar")}</span></span>
             </button>
-            <button onClick={() => { window.location.href = '/gastos'; }} className="group col-span-2 flex min-h-[78px] items-center gap-2 rounded-2xl border border-emerald-400/35 bg-gradient-to-br from-emerald-500/15 to-green-500/10 px-3 py-3 text-left shadow-[0_0_18px_rgba(52,211,153,0.08)] transition-all hover:border-emerald-300/60 hover:bg-emerald-500/20 active:scale-[0.98] sm:min-h-[86px] sm:gap-3 sm:px-4" aria-label="Planilha de gastos" title="Planilha de gastos">
-              <span className="flex h-9 w-9 shrink-0 items-center justify-center rounded-xl bg-emerald-400/15 text-emerald-200 ring-1 ring-emerald-300/25 sm:h-10 sm:w-10"><FileUp className="h-5 w-5" /></span>
-              <span className="min-w-0"><span className="block text-[10px] font-black uppercase leading-tight tracking-wide text-white sm:text-xs">Planilha de gastos</span><span className="mt-1 hidden text-[10px] leading-tight text-emerald-100/60 sm:block">Controle diário</span></span>
+            <button onClick={() => { window.location.href = shortcutUrl('gastos', '/gastos'); }} className="group col-span-2 flex min-h-[78px] items-center gap-2 rounded-2xl border border-emerald-400/35 bg-gradient-to-br from-emerald-500/15 to-green-500/10 px-3 py-3 text-left shadow-[0_0_18px_rgba(52,211,153,0.08)] transition-all hover:border-emerald-300/60 hover:bg-emerald-500/20 active:scale-[0.98] sm:min-h-[86px] sm:gap-3 sm:px-4" aria-label={shortcutLabel("gastos", "Planilha de gastos")} title={shortcutLabel("gastos", "Planilha de gastos")}>
+              <span className="flex h-9 w-9 shrink-0 items-center justify-center rounded-xl bg-emerald-400/15 text-emerald-200 ring-1 ring-emerald-300/25 sm:h-10 sm:w-10">{shortcutLogo("gastos") ? <img src={shortcutLogo("gastos")} alt="" className="h-7 w-7 object-contain" /> : <FileUp className="h-5 w-5" />}</span>
+              <span className="min-w-0"><span className="block text-[10px] font-black uppercase leading-tight tracking-wide text-white sm:text-xs">{shortcutLabel("gastos", "Planilha de gastos")}</span><span className="mt-1 hidden whitespace-pre-line text-[10px] leading-tight text-emerald-100/60 sm:block">{shortcutSubtitle("gastos", "Controle diário")}</span></span>
             </button>
             {(() => {
               const schedule = myActiveScheduleQuery.data;
@@ -5102,10 +5110,10 @@ export default function Home() {
                 : '';
               const title = isConfirmed
                 ? 'Agendamento confirmado'
-                : isActive ? 'Agendamento disponível' : 'Agendamento para foto';
+                : isActive ? 'Agendamento disponível' : shortcutLabel('schedule', 'Agendamento para foto');
               const subtitle = isConfirmed
                 ? `Confirmado: ${confirmedDate}${schedule.slotTime ? ` às ${schedule.slotTime}` : ''}`
-                : isActive ? 'Clique para agendar agora' : 'Aguardando liberação do ADM';
+                : isActive ? 'Clique para agendar agora' : shortcutSubtitle('schedule', 'Aguardando liberação do ADM');
 
               return (
                 <div className="col-span-2 grid grid-cols-2 gap-2">
@@ -5127,7 +5135,7 @@ export default function Home() {
                       : isActive
                         ? 'bg-cyan-400/15 text-cyan-200 ring-cyan-300/40'
                         : 'bg-violet-400/15 text-violet-200 ring-violet-300/30'}`}>
-                      <CalendarDays className="h-5 w-5" />
+                      {shortcutLogo("schedule") ? <img src={shortcutLogo("schedule")} alt="" className="h-7 w-7 object-contain" /> : <CalendarDays className="h-5 w-5" />}
                     </span>
                     <span className="min-w-0 flex-1">
                       <span className="block text-[10px] font-black uppercase leading-tight tracking-wide text-white sm:text-xs">{title}</span>
@@ -5137,17 +5145,17 @@ export default function Home() {
 
                   <button
                     type="button"
-                    onClick={() => { window.location.href = '/parcelas-vip'; }}
+                    onClick={() => { window.location.href = shortcutUrl('vip', '/parcelas-vip'); }}
                     className="group flex min-h-[82px] w-full items-center gap-2 rounded-2xl border border-amber-300/55 bg-gradient-to-br from-amber-500/22 to-orange-500/10 px-3 py-3 text-left shadow-[0_0_24px_rgba(251,191,36,0.16)] transition-all hover:border-amber-200/80 hover:bg-amber-500/28 active:scale-[0.99] sm:min-h-[90px] sm:gap-3 sm:px-4"
-                    aria-label="Pague suas parcelas"
-                    title="Pague suas parcelas"
+                    aria-label={shortcutLabel("vip", "Pague suas parcelas")}
+                    title={shortcutLabel("vip", "Pague suas parcelas")}
                   >
                     <span className="flex h-10 w-10 shrink-0 items-center justify-center rounded-xl bg-amber-400/15 text-amber-200 ring-1 ring-amber-300/35">
-                      <CreditCard className="h-5 w-5" />
+                      {shortcutLogo("vip") ? <img src={shortcutLogo("vip")} alt="" className="h-7 w-7 object-contain" /> : <CreditCard className="h-5 w-5" />}
                     </span>
                     <span className="min-w-0 flex-1">
-                      <span className="block text-[10px] font-black uppercase leading-tight tracking-wide text-white sm:text-xs">PAGUE SUAS PARCELAS</span>
-                      <span className="mt-1 hidden text-[10px] leading-tight text-amber-100/75 sm:block">Acesse suas parcelas VIP e faça o pagamento</span>
+                      <span className="block text-[10px] font-black uppercase leading-tight tracking-wide text-white sm:text-xs">{shortcutLabel("vip", "PAGUE SUAS PARCELAS")}</span>
+                      <span className="mt-1 hidden text-[10px] leading-tight text-amber-100/75 sm:block">{shortcutSubtitle("vip", "Acesse suas parcelas VIP e faça o pagamento")}</span>
                     </span>
                   </button>
                 </div>

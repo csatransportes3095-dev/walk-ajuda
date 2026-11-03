@@ -239,7 +239,7 @@ export default function AdminSettings() {
     if (key.endsWith('_font') && value) loadGoogleFont(value);
   };
 
-  const handleHomeButtonLogoSelect = async (buttonKey: 'btn1' | 'btn2', file?: File) => {
+  const handleHomeButtonLogoSelect = async (buttonKey: 'btn1' | 'btn2' | 'site' | 'registration' | 'loan' | 'gastos' | 'vip' | 'schedule', file?: File) => {
     if (!file) return;
     if (!['image/jpeg', 'image/png', 'image/webp'].includes(file.type)) {
       toast.error('Envie uma imagem JPG, PNG ou WEBP.');
@@ -256,9 +256,9 @@ export default function AdminSettings() {
         reader.onerror = reject;
         reader.readAsDataURL(file);
       });
-      const result = await uploadHomeButtonLogoMut.mutateAsync({ imageBase64, mimeType: file.type as 'image/jpeg' | 'image/png' | 'image/webp', target: buttonKey });
+      const result = await uploadHomeButtonLogoMut.mutateAsync({ imageBase64, mimeType: file.type as 'image/jpeg' | 'image/png' | 'image/webp', target: buttonKey === 'btn1' || buttonKey === 'btn2' ? buttonKey : 'extra' });
       if (!result.url) throw new Error('Upload sem URL');
-      updateField(`home_${buttonKey}_logo_url`, result.url);
+      updateField(buttonKey === 'site' ? 'site_logo_url' : buttonKey === 'registration' ? 'registration_logo_url' : buttonKey === 'btn1' || buttonKey === 'btn2' ? `home_${buttonKey}_logo_url` : `home_shortcut_${buttonKey}_logo_url`, result.url);
       toast.success('Logo enviada. Clique em Salvar Configurações para publicar.');
     } catch {
       toast.error('Não foi possível enviar a logo do botão.');
@@ -432,6 +432,18 @@ export default function AdminSettings() {
           <div className="space-y-6">
             <Section title="Nome do Site">
               <Field label="Nome" k="site_name" form={form} onChange={updateField} />
+            </Section>
+            <Section title="Identidade visual da nova tela inicial">
+              <p className="text-xs text-cyan-200/80">Nome e logo exibidos no cabeçalho principal. As alterações são publicadas ao clicar em Salvar Tudo.</p>
+              <Field label="URL da logo do cabeçalho (opcional)" k="site_logo_url" form={form} onChange={updateField} placeholder="https://..." />
+              <div className="flex flex-wrap items-center gap-3">
+                {form.site_logo_url && <img src={form.site_logo_url} alt="Prévia da logo do site" className="h-16 w-16 rounded-xl border border-cyan-500/30 bg-black/30 object-contain" />}
+                <label className="cursor-pointer rounded-lg border border-cyan-500/30 bg-cyan-500/10 px-4 py-2 text-xs font-bold text-cyan-200">
+                  Enviar logo (JPG, PNG ou WEBP)
+                  <input type="file" accept="image/jpeg,image/png,image/webp" className="hidden" disabled={uploadHomeButtonLogoMut.isPending} onChange={event => { void handleHomeButtonLogoSelect('site', event.target.files?.[0]); event.currentTarget.value = ''; }} />
+                </label>
+                {form.site_logo_url && <button type="button" onClick={() => updateField('site_logo_url', '')} className="rounded-lg border border-red-500/30 px-3 py-2 text-xs font-bold text-red-300">Remover logo</button>}
+              </div>
             </Section>
             <Section title="Seção Hero (Topo)">
               <Field label="Título Principal (HTML permitido)" k="hero_title" form={form} onChange={updateField} />
@@ -659,6 +671,33 @@ export default function AdminSettings() {
                   </div>
                 </div>
               </div>
+            </Section>
+
+            <Section title="Atalhos da nova tela inicial">
+              <p className="mb-3 text-sm text-cyan-200/80">Personalize textos, destinos e logos dos cartões do novo topo. Os dois botões principais já existentes continuam editáveis acima. Se deixar um campo vazio, o site mantém o texto e o destino padrão.</p>
+              {([
+                ['loan', 'Empréstimos', 'Empréstimo', 'Consultar e solicitar', '/emprestimo'],
+                ['gastos', 'Planilha de gastos', 'Planilha de gastos', 'Controle diário', '/gastos'],
+                ['schedule', 'Agendamento para foto', 'Agendamento para foto', 'Aguardando liberação do ADM', ''],
+                ['vip', 'Parcelas VIP', 'PAGUE SUAS PARCELAS', 'Acesse suas parcelas VIP e faça o pagamento', '/parcelas-vip'],
+              ] as const).map(([key, heading, defaultTitle, defaultSubtitle, defaultUrl]) => (
+                <div key={key} className="mb-4 space-y-3 rounded-xl border border-cyan-500/20 bg-[#0d0d2b] p-4">
+                  <h4 className="text-sm font-black text-cyan-200">{heading}</h4>
+                  <Field label="Título do cartão" k={`home_shortcut_${key}_title`} form={form} onChange={updateField} placeholder={defaultTitle} />
+                  <Field label="Descrição do cartão" k={`home_shortcut_${key}_subtitle`} form={form} onChange={updateField} placeholder={defaultSubtitle} />
+                  {key !== 'schedule' && <Field label="Destino do botão" k={`home_shortcut_${key}_url`} form={form} onChange={updateField} placeholder={defaultUrl} />}
+                  {key === 'schedule' && <p className="text-xs text-amber-200/80">O destino do agendamento continua gerado automaticamente por pedido; somente texto e logo são personalizáveis. Quando há agendamento confirmado, a data e o status reais têm prioridade.</p>}
+                  <Field label="URL da logo (opcional)" k={`home_shortcut_${key}_logo_url`} form={form} onChange={updateField} placeholder="https://..." />
+                  <div className="flex flex-wrap items-center gap-3">
+                    {form[`home_shortcut_${key}_logo_url`] && <img src={form[`home_shortcut_${key}_logo_url`]} alt={`Logo de ${heading}`} className="h-14 w-14 rounded-xl bg-black/30 object-contain" />}
+                    <label className="cursor-pointer rounded-lg border border-cyan-500/30 px-3 py-2 text-xs font-bold text-cyan-200">
+                      Enviar logo
+                      <input type="file" accept="image/jpeg,image/png,image/webp" className="hidden" disabled={uploadHomeButtonLogoMut.isPending} onChange={event => { void handleHomeButtonLogoSelect(key, event.target.files?.[0]); event.currentTarget.value = ''; }} />
+                    </label>
+                    {form[`home_shortcut_${key}_logo_url`] && <button type="button" onClick={() => updateField(`home_shortcut_${key}_logo_url`, '')} className="text-xs font-bold text-red-300">Remover</button>}
+                  </div>
+                </div>
+              ))}
             </Section>
 
             <Section title="📌 Botões Rápidos — Hub Central de Acesso">
@@ -1063,6 +1102,23 @@ export default function AdminSettings() {
               <Field label="Subtítulo" k="login_subtitle" form={form} onChange={updateField} placeholder="Acesso Restrito" />
               <ToggleField label="Exibir Rodapé" k="login_show_footer" form={form} onToggle={toggleField} />
               <Field label="Texto do Rodapé" k="login_footer" form={form} onChange={updateField} placeholder="Solicite sua senha de acesso via WhatsApp" />
+            </Section>
+
+            <Section title="Cadastro novo — identidade independente">
+              <p className="text-xs leading-5 text-cyan-200/80">Estes campos alteram apenas a apresentação da tela /cadastro. Não modificam telefone, confirmação por e-mail nem validação do cliente.</p>
+              <Field label="Título da tela de cadastro" k="registration_title" form={form} onChange={updateField} placeholder="H2 COLOMBIANO" />
+              <Field label="Subtítulo da tela de cadastro" k="registration_subtitle" form={form} onChange={updateField} placeholder="Novo cadastro de cliente" />
+              <Field label="Título do bloco de orientação" k="registration_instruction_title" form={form} onChange={updateField} placeholder="Faça seu cadastro" />
+              <Field label="Texto de orientação" k="registration_instruction_text" form={form} onChange={updateField} textarea placeholder="Informe seu telefone com DDD para começar. Depois, confirme seu e-mail para continuar." />
+              <Field label="URL da logo do cadastro (opcional)" k="registration_logo_url" form={form} onChange={updateField} placeholder="https://..." />
+              <div className="flex flex-wrap items-center gap-3">
+                {form.registration_logo_url && <img src={form.registration_logo_url} alt="Logo do novo cadastro" className="h-16 w-16 rounded-xl bg-black/30 object-contain" />}
+                <label className="cursor-pointer rounded-xl border border-cyan-500/30 bg-cyan-500/10 px-4 py-2 text-xs font-bold text-cyan-200">
+                  Enviar logo do cadastro
+                  <input type="file" accept="image/jpeg,image/png,image/webp" className="hidden" disabled={uploadHomeButtonLogoMut.isPending} onChange={event => { void handleHomeButtonLogoSelect('registration', event.target.files?.[0]); event.currentTarget.value = ''; }} />
+                </label>
+                {form.registration_logo_url && <button type="button" className="text-xs font-bold text-red-300" onClick={() => updateField('registration_logo_url', '')}>Remover</button>}
+              </div>
             </Section>
 
             {/* Imagem */}

@@ -36,6 +36,7 @@ export function CustomerOtpLogin({ title = "Acesso H2 Colombiano", initialPhone 
   const verifyCode = trpc.customerPassword.verifyCustomerCode.useMutation();
   const cleanPhone = normalizeOtpPhone(phone);
   const { data: supportSettings } = trpc.settings.getAll.useQuery();
+  const loginSettings = supportSettings;
   const supportNumber = String(supportSettings?.whatsapp_number || "5511978307371").replace(/\D/g, "");
   const supportHref = `https://wa.me/${supportNumber}?text=${encodeWhatsappMessage("Olá! Sou cliente do H2 Colombiano. Estou tentando acessar o site, mas não recebi o código de confirmação por e-mail. Preciso de ajuda para continuar meu pedido.")}`;
 
@@ -136,13 +137,13 @@ export function CustomerOtpLogin({ title = "Acesso H2 Colombiano", initialPhone 
   return (
     <main className="min-h-screen bg-[#050b1b] text-white flex items-center justify-center px-4 py-8">
       <div className="w-full max-w-md rounded-3xl border border-cyan-400/30 bg-slate-950 p-6 sm:p-8 shadow-[0_0_35px_rgba(6,182,212,0.12)]">
-        <div className="mx-auto mb-4 flex h-16 w-16 items-center justify-center rounded-2xl border border-cyan-400/50 bg-cyan-400/10">
-          <ShieldCheck className="h-9 w-9 text-cyan-300" aria-hidden />
-        </div>
-        <h1 className="text-center text-2xl font-black">{title}</h1>
-        <p className="mt-2 text-center text-sm text-slate-300">
-          Acesso seguro com telefone e código do e-mail cadastrado. Nenhuma senha é necessária.
-        </p>
+        {loginSettings?.login_show_image !== "0" && <div className="mx-auto mb-4 flex h-16 w-16 items-center justify-center overflow-hidden rounded-2xl border border-cyan-400/50 bg-cyan-400/10">
+          {loginSettings?.login_image_url ? <img src={loginSettings.login_image_url} alt="Logo do H2 Colombiano" className="h-full w-full object-contain" /> : <ShieldCheck className="h-9 w-9 text-cyan-300" aria-hidden />}
+        </div>}
+        {loginSettings?.login_show_title !== "0" && <h1 className="text-center text-2xl font-black">{loginSettings?.login_title?.trim() || title}</h1>}
+        {loginSettings?.login_show_subtitle !== "0" && <p className="mt-2 whitespace-pre-line text-center text-sm text-slate-300">
+          {loginSettings?.login_subtitle?.trim() || "Acesso seguro com telefone e código do e-mail cadastrado. Nenhuma senha é necessária."}
+        </p>}
 
         {step === "phone" ? (
           <form onSubmit={send} className="mt-7 space-y-4">
@@ -204,9 +205,9 @@ export function CustomerOtpLogin({ title = "Acesso H2 Colombiano", initialPhone 
         >
           ← VOLTAR AO SITE
         </a>
-        <p className="mt-4 text-center text-xs text-slate-400">
-          O código expira em 10 minutos. Nunca compartilhe o código recebido.
-        </p>
+        {loginSettings?.login_show_footer !== "0" && <p className="mt-4 whitespace-pre-line text-center text-xs text-slate-400">
+          {loginSettings?.login_footer?.trim() || "O código expira em 10 minutos. Nunca compartilhe o código recebido."}
+        </p>}
       </div>
     </main>
   );

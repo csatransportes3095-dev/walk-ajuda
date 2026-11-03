@@ -254,6 +254,11 @@ export default function PasswordGate({ children, registrationOnly = false }: Pas
   const loginFooter = settings?.login_footer || 'Solicite sua senha de acesso via WhatsApp';
   const loginImageUrl = settings?.login_image_url || '';
   const loginShowImage = settings?.login_show_image !== '0';
+  const registrationTitle = settings?.registration_title?.trim() || 'H2 COLOMBIANO';
+  const registrationSubtitle = settings?.registration_subtitle?.trim() || 'Novo cadastro de cliente';
+  const registrationInstructionTitle = settings?.registration_instruction_title?.trim() || 'Faça seu cadastro';
+  const registrationInstructionText = settings?.registration_instruction_text?.trim() || 'Informe seu telefone com DDD para começar. Depois, confirme seu e-mail para continuar.';
+  const registrationLogoUrl = settings?.registration_logo_url?.trim() || '';
   const loginShowTitle = settings?.login_show_title !== '0';
   const loginShowSubtitle = settings?.login_show_subtitle !== '0';
   const loginShowFooter = settings?.login_show_footer !== '0';
@@ -1727,18 +1732,20 @@ export default function PasswordGate({ children, registrationOnly = false }: Pas
 
           {/* Logo */}
           <div className="flex flex-col items-center mb-8">
-            {loginShowImage && loginImageUrl ? (
-              <img src={loginImageUrl} alt="Logo" className="w-36 h-36 object-cover rounded-2xl mb-4 shadow-lg shadow-primary/30" />
+            {registrationOnly && registrationLogoUrl ? (
+              <img src={registrationLogoUrl} alt="Logo do cadastro" className="w-36 h-36 object-contain rounded-2xl mb-4 shadow-lg shadow-primary/30" />
+            ) : loginShowImage && loginImageUrl ? (
+              <img src={loginImageUrl} alt="Logo" className="w-36 h-36 object-contain rounded-2xl mb-4 shadow-lg shadow-primary/30" />
             ) : (
               <div className="w-20 h-20 bg-gradient-to-br from-primary to-purple-600 rounded-xl flex items-center justify-center mb-4 shadow-lg shadow-primary/30">
                 <Zap className="w-10 h-10 text-white" />
               </div>
             )}
-            {loginShowTitle && (
-              <h1 className="text-3xl font-bold text-white">{loginTitle}</h1>
+            {(registrationOnly || loginShowTitle) && (
+              <h1 className="text-center text-3xl font-bold text-white">{registrationOnly ? registrationTitle : loginTitle}</h1>
             )}
             <p className="text-white/60 text-sm mt-1">
-              {gateStep === "phone" && (registrationOnly ? "Novo cadastro de cliente" : loginShowSubtitle && loginSubtitle)}
+              {gateStep === "phone" && (registrationOnly ? registrationSubtitle : loginShowSubtitle && loginSubtitle)}
               {gateStep === "email" && (registrationOnly ? "Confirme seu e-mail de cadastro" : "Confirme seu e-mail")}
               {gateStep === "emailCode" && (registrationOnly ? "Confirmação do e-mail" : "Digite o código recebido")}
               {gateStep === "registration" && (registrationOnly ? "Complete seu cadastro" : "Cadastre-se")}
@@ -1771,8 +1778,8 @@ export default function PasswordGate({ children, registrationOnly = false }: Pas
 
               {/* Instrução de acesso */}
               <div className="bg-white/5 border border-white/10 rounded-xl px-4 py-3 text-center">
-                <p className="text-white/90 text-sm font-semibold">{registrationOnly ? "Faça seu cadastro" : "Identifique-se para acessar"}</p>
-                <p className="text-white/50 text-xs mt-0.5">{registrationOnly ? "Informe seu telefone com DDD para começar. Depois, confirme seu e-mail para continuar." : "Digite seu telefone com DDD para continuar"}</p>
+                <p className="text-white/90 text-sm font-semibold">{registrationOnly ? registrationInstructionTitle : "Identifique-se para acessar"}</p>
+                <p className="text-white/50 text-xs mt-0.5">{registrationOnly ? registrationInstructionText : "Digite seu telefone com DDD para continuar"}</p>
               </div>
 
               {/* Campo Telefone */}
