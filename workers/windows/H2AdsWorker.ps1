@@ -500,7 +500,10 @@ function Invoke-BrowserSession([object]$Config, [object]$Payload) {
   $env:H2ADS_PROFILE_DIRECTORY = $profileDirectory
   if (!(Test-H2AdsBrowserFirewall)) { throw "Chrome H2ADS sem kill switch verificado. Nao abrir instancia." }
   $env:H2ADS_BROWSER_EXECUTABLE = $DedicatedChromePath
-  $env:H2ADS_REMOTE_DEBUG = $(if ($Payload.mobileRemoteEnabled -eq $true) { "1" } else { "0" })
+  # Sessões normais não expõem CDP/remote debugging: esse sinal pode marcar
+  # navigator.webdriver e provocar desafios em sites que não são da Uber.
+  # O modo remoto deverá ser iniciado por uma sessão separada e explícita.
+  $env:H2ADS_REMOTE_DEBUG = "0"
   try {
     Start-Process -FilePath "node.exe" -ArgumentList "`"$SessionRunnerPath`"" -WindowStyle Hidden | Out-Null
   } finally {

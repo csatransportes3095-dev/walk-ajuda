@@ -126,6 +126,7 @@ describe("fundação multi-Worker H2 Ads", () => {
     expect(method).toContain("Ensure-DedicatedBrowser");
     expect(method).toContain("Ensure-H2AdsBrowserFirewall");
     expect(method).toContain("$env:H2ADS_BROWSER_EXECUTABLE = $DedicatedChromePath");
+    expect(method).toContain('$env:H2ADS_REMOTE_DEBUG = "0"');
     expect(method).not.toContain("$env:H2ADS_BROWSER_EXECUTABLE = $TestingChromePath");
     expect(method).not.toContain("Install-H2AdsTestingBrowser");
     expect(method).not.toContain("Ensure-H2AdsTestingFirewall");
