@@ -750,22 +750,30 @@ async function finalizeBrowserExit(reason, code = null, signal = null) {
 
 async function startNativePhoneVisual(pid) {
   if (!Number.isInteger(pid) || pid < 1 || browserExitHandled) return;
-  // Fallback ensures older installed Workers also receive the new appearance
-  // through the browser-session.mjs they already download before every launch.
-  const script = join(profileDirectory, "..", "..", "h2ads-phone-window.ps1");
+  // Never trust an old visual cache: older Workers still download this session
+  // runner on launch, so it can refresh only the cosmetic script independently.
+  const cachedScript = join(profileDirectory, "..", "..", "h2ads-phone-window.ps1");
+  const currentVisualScript = join(profileDirectory, "..", "..", `h2ads-phone-window-${instanceId}.ps1`);
+  let script = existsSync(currentVisualScript) ? currentVisualScript : cachedScript;
   try {
-    if (!existsSync(script)) {
-      const response = await fetch(
-        (panelUrl.endsWith("/") ? panelUrl.slice(0, -1) : panelUrl) + "/api/h2ads/worker/windows-phone-window.ps1",
-        { headers: headers(), signal: AbortSignal.timeout(6500) },
-      );
-      if (!response.ok) return;
+    const response = await fetch(
+      (panelUrl.endsWith("/") ? panelUrl.slice(0, -1) : panelUrl) + "/api/h2ads/worker/windows-phone-window.ps1",
+      { headers: headers(), signal: AbortSignal.timeout(6500), cache: "no-store" },
+    );
+    if (response.ok) {
       const contents = await response.text();
-      if (contents.length < 2000 || contents.length > 30000 ||
-          !contents.includes("H2PhoneWindowNative")) return;
-      writeFileSync(script, contents, { encoding: "utf8", mode: 0o600 });
+      if (contents.length >= 2000 && contents.length <= 30000 &&
+          contents.includes("H2PhoneWindowNative")) {
+        // Isolated per instance: do not overwrite a script used by another Chrome.
+        writeFileSync(currentVisualScript, contents, { encoding: "utf8", mode: 0o600 });
+        script = currentVisualScript;
+      }
     }
-    if (browserExitHandled || !browser || browser.exitCode !== null) return;
+  } catch {
+    // A failed visual-only refresh must never affect Chrome, proxy or sessions.
+  }
+  if (!existsSync(script) || browserExitHandled || !browser || browser.exitCode !== null) return;
+  try {
     phoneWindowProcess = spawn("powershell.exe", [
       "-NoProfile", "-NonInteractive", "-ExecutionPolicy", "Bypass",
       "-WindowStyle", "Hidden", "-File", script,
@@ -773,7 +781,7 @@ async function startNativePhoneVisual(pid) {
     ], { windowsHide: true, stdio: "ignore" });
     phoneWindowProcess.on("error", () => { phoneWindowProcess = null; });
   } catch {
-    // The companion may fail, but Chrome, proxy and all instance actions survive.
+    // Companion failure is cosmetic and never changes real browser behavior.
   }
 }
 
