@@ -1,0 +1,38 @@
+name: H2ADS Windows phone visual syntax
+on:
+  pull_request:
+    paths:
+      - "workers/windows/h2ads-phone-window.ps1"
+      - "workers/windows/browser-session.mjs"
+      - "workers/windows/H2AdsWorker.ps1"
+      - ".github/workflows/h2ads-phone-native-check.yml"
+  push:
+    paths:
+      - "workers/windows/h2ads-phone-window.ps1"
+      - ".github/workflows/h2ads-phone-native-check.yml"
+jobs:
+  native-visual-check:
+    runs-on: windows-latest
+    steps:
+      - uses: actions/checkout@v4
+      - name: Validate Windows PowerShell 5.1 syntax and GUI types
+        shell: powershell
+        run: |
+          $ErrorActionPreference = "Stop"
+          $tokens = $null
+          $errorsFound = $null
+          [System.Management.Automation.Language.Parser]::ParseFile(
+            (Resolve-Path "workers/windows/h2ads-phone-window.ps1"),
+            [ref]$tokens, [ref]$errorsFound
+          ) | Out-Null
+          if ($errorsFound.Count -gt 0) {
+            $errorsFound | ForEach-Object { Write-Error $_.Message }
+            exit 1
+          }
+          Add-Type -AssemblyName System.Windows.Forms
+          Add-Type -AssemblyName System.Drawing
+          $script = Get-Content -Raw "workers/windows/h2ads-phone-window.ps1"
+          if ($script -match 'Invoke-WebRequest|--proxy-server|Start-Process') {
+            throw "Native visual must never control browser/network"
+          }
+          Write-Host "Windows PowerShell syntax and GUI dependencies validated."
