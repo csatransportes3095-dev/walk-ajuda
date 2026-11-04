@@ -116,11 +116,10 @@ public sealed class H2PhoneDisplayForm : System.Windows.Forms.Form {
       System.Windows.Forms.ControlStyles.OptimizedDoubleBuffer |
       System.Windows.Forms.ControlStyles.ResizeRedraw,true);
   }
-  protected override bool ShowWithoutActivation { get { return true; } }
   protected override System.Windows.Forms.CreateParams CreateParams {
     get {
       var props=base.CreateParams;
-      props.ExStyle |= 0x08000000 | 0x00000080; // NOACTIVATE | TOOLWINDOW
+      props.ExStyle |= 0x00000080; // TOOLWINDOW; the hosted Chrome must receive focus.
       return props;
     }
   }
