@@ -1,5 +1,5 @@
 import { type FormEvent, type ReactNode, useMemo, useState } from "react";
-import { Link, useLocation } from "wouter";
+import { useLocation } from "wouter";
 import { toast } from "sonner";
 import { Activity, ArrowDown, ArrowLeft, ArrowUp, ArrowUpDown, CheckCircle2, ChevronDown, ChevronRight, Copy, Eye, EyeOff, FolderPlus, KeyRound, Layers3, LockKeyhole, Monitor, Network, Pencil, Play, Plus, RefreshCw, Search, ShieldCheck, Square, Trash2, Wifi, WifiOff, X } from "lucide-react";
 import { trpc } from "@/lib/trpc";
@@ -522,7 +522,6 @@ Isso encerra somente os browsers abertos. Grupos, clientes vinculados, proxies e
           <div className="inline-flex items-center gap-2 rounded-full border border-[#148CFF]/25 bg-[#148CFF]/10 px-2.5 py-1 text-[10px] font-bold text-[#8CC8FF]"><Activity className="h-3 w-3" />H2ADS ADMIN</div>
           <h2 className="mt-2 text-xl font-black tracking-tight text-white sm:text-2xl">Instâncias e rotas</h2>
         </div>
-        <Link href="/h2ads/mobile" className="inline-flex min-h-10 items-center justify-center gap-2 rounded-xl bg-[#148CFF] px-4 text-xs font-black text-white"><Monitor className="h-4 w-4" /> Painel Mobile</Link>
       </section>
       <section className="mt-3 grid grid-cols-2 gap-2 sm:grid-cols-4"><Metric icon={Layers3} value={groups.length} label="grupos" text="" tone="gold" /><Metric icon={Monitor} value={instances.length} label="instâncias" text="" tone="blue" /><Metric icon={WifiOff} value={credentialStatuses.length} label="rotas vinculadas" text="" tone="red" /><Metric icon={Wifi} value={browserWorkers.filter(worker => worker.connectionStatus === "online").length} label="Workers online" text="" tone="blue" /></section>
 <details className="mt-3 overflow-hidden rounded-2xl border border-white/10 bg-[#0D1016]/90">
