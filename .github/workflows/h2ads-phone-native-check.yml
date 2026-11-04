@@ -35,6 +35,15 @@ jobs:
           if ($script -match 'Invoke-WebRequest|--proxy-server|Start-Process') {
             throw "Native visual must never control browser/network"
           }
+          if ($script -match 'CreateRoundRectRgn|DeleteObject') {
+            throw "Hard clipping the Chrome HWND can truncate content at 175 percent display scaling."
+          }
+          if ($script -match 'function Set-PhoneCorners') {
+            throw "Conflicting phone region algorithms make corners inconsistent."
+          }
+          if (-not $script.Contains('SetWindowRgn(hwnd,IntPtr.Zero,true)')) {
+            throw "Phone companion must clear previous Chrome clipping before DWM."
+          }
           Write-Host "Windows PowerShell syntax and GUI dependencies validated."
           # Exercise Add-Type P/Invoke compilation without creating a Chrome window.
           & powershell.exe -NoProfile -NonInteractive -ExecutionPolicy Bypass -File "workers/windows/h2ads-phone-window.ps1" -BrowserPid 2147483646 -InstanceName "Smoke"
