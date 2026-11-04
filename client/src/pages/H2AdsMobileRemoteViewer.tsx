@@ -2,6 +2,7 @@ import { useEffect, useRef, useState } from "react";
 import { toast } from "sonner";
 import { ArrowDown, ArrowUp, Loader2, Minus, Plus, Send, X } from "lucide-react";
 import { trpc } from "@/lib/trpc";
+import H2AdsPhoneFrame from "@/components/H2AdsPhoneFrame";
 
 type Action = { kind: "tap"; x: number; y: number } | { kind: "scroll"; deltaY: number; x?: number; y?: number } |
   { kind: "text"; text: string } | { kind: "key"; key: "Enter" | "Backspace" | "Tab" | "Escape" };
@@ -147,7 +148,9 @@ export default function H2AdsMobileRemoteViewer({ instanceId, instanceName, sess
           className="rounded-lg border border-white/20 p-2"><Plus className="h-4 w-4" /></button>
       </div>
 
-      <main className="relative min-h-0 flex-1 overflow-hidden bg-black">
+      <div className="min-h-0 flex-1 overflow-y-auto bg-[#06070A] px-3 py-4">
+        <H2AdsPhoneFrame title={instanceName} mode="remote">
+          <main className="relative h-full min-h-0 overflow-hidden bg-black">
         {frameData?.image ? (
           <img
             src={frameData.image} alt="Chrome remoto em tela cheia"
@@ -163,7 +166,9 @@ export default function H2AdsMobileRemoteViewer({ instanceId, instanceName, sess
               <div className="flex flex-col items-center gap-3"><Loader2 className="h-6 w-6 animate-spin" />Aguardando imagem...</div>}
           </div>
         )}
-      </main>
+          </main>
+        </H2AdsPhoneFrame>
+      </div>
 
       <div className="shrink-0 border-t border-white/10 bg-[#10151E] px-2 pb-[max(8px,env(safe-area-inset-bottom))] pt-2">
         <div className="grid grid-cols-2 gap-2">
