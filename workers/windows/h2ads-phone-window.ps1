@@ -27,21 +27,25 @@ public static class H2PhoneWindowNative {
   [DllImport("user32.dll")] public static extern bool ShowWindow(IntPtr hwnd,int command);
   [DllImport("user32.dll")] public static extern bool IsZoomed(IntPtr hwnd);
   [DllImport("user32.dll")] public static extern int SetWindowRgn(IntPtr hwnd,IntPtr region,bool redraw);
-  [DllImport("gdi32.dll")] public static extern IntPtr CreateRoundRectRgn(int left,int top,int right,int bottom,int ellipseW,int ellipseH);
-  [DllImport("gdi32.dll")] public static extern bool DeleteObject(IntPtr region);
   [DllImport("dwmapi.dll")] public static extern int DwmSetWindowAttribute(IntPtr hwnd,int attribute,ref int value,int size);
   public static bool RoundChromeWindow(IntPtr hwnd,int w,int h) {
     if(hwnd==IntPtr.Zero || w<120 || h<160 || IsZoomed(hwnd)) return false;
-    try {int round=2;DwmSetWindowAttribute(hwnd,33,ref round,4);}catch{}
-    // Clip only the browser HWND corners; no Chrome process or page changes.
-    IntPtr region=CreateRoundRectRgn(0,0,w+1,h+1,44,44);
-    if(region==IntPtr.Zero) return false;
-    if(SetWindowRgn(hwnd,region,true)==0) { DeleteObject(region);return false; }
-    // Windows owns the region from this point.
-    return true;
+    // IMPORTANT: The Chrome process and PowerShell can use DIFFERENT DPI units.
+    // A Win32 region sized from this companion truncated Chrome at 175% scaling.
+    // Remove any old hard clip; DWM draws corners without hiding browser pixels.
+    SetWindowRgn(hwnd,IntPtr.Zero,true);
+    try {
+      int preference=2; // DWMWCP_ROUND: ask Windows 11 for native corners.
+      return DwmSetWindowAttribute(hwnd,33,ref preference,4)==0;
+    } catch {
+      // Older Windows: keep Chrome rectangular and FULLY visible.
+      return false;
+    }
   }
   public static void RestoreChromeWindow(IntPtr hwnd) {
-    if(hwnd!=IntPtr.Zero) SetWindowRgn(hwnd,IntPtr.Zero,true);
+    if(hwnd==IntPtr.Zero)return;
+    SetWindowRgn(hwnd,IntPtr.Zero,true);
+    try {int preference=0;DwmSetWindowAttribute(hwnd,33,ref preference,4);}catch{}
   }
   [StructLayout(LayoutKind.Sequential)] public struct Rectangle {
     public int Left, Top, Right, Bottom;
@@ -107,7 +111,8 @@ public sealed class H2PhoneDisplayForm : System.Windows.Forms.Form {
     var g=e.Graphics;
     g.SmoothingMode=System.Drawing.Drawing2D.SmoothingMode.AntiAlias;
     float w=ClientSize.Width,h=ClientSize.Height;
-    // Solid metallic body with three concentric, soft glass edge highlights.
+    // One continuous phone chassis: coherent corner radii on every layer.
+    // The browser's pixels are never painted over or masked by this form.
     using(var body=Rounded(0.7f,0.7f,w-1.4f,h-1.4f,45f))
     using(var metal=new System.Drawing.Drawing2D.LinearGradientBrush(
       new System.Drawing.RectangleF(0,0,w,h),
@@ -130,7 +135,7 @@ public sealed class H2PhoneDisplayForm : System.Windows.Forms.Form {
     using(var shine=new System.Drawing.Pen(System.Drawing.Color.FromArgb(64,90,118),1f)) {
       g.DrawPath(shine,inside);
     }
-    // Black curved recess underneath the real, corner-clipped Chrome window.
+    // Dark glass recess UNDER the real Chrome window, never on top of it.
     using(var screen=Rounded(15f,67f,w-30f,h-133f,25f))
     using(var back=new System.Drawing.SolidBrush(System.Drawing.Color.FromArgb(1,5,12)))
     using(var outline=new System.Drawing.Pen(System.Drawing.Color.FromArgb(100,122,151),1.3f)) {
@@ -156,21 +161,6 @@ public sealed class H2PhoneDisplayForm : System.Windows.Forms.Form {
 # Cosmetic phone shell. Only the visible HWND position is adjusted;
 # the real Chrome instance, cookies, proxy, profiles and browser commands stay intact.
 function RGB([int]$r,[int]$g,[int]$b) { [System.Drawing.Color]::FromArgb($r,$g,$b) }
-function Set-PhoneCorners([System.Windows.Forms.Form]$target) {
-  $w=$target.Width; $h=$target.Height
-  if($w -lt 100 -or $h -lt 100){return}
-  $d=60
-  $path=New-Object System.Drawing.Drawing2D.GraphicsPath
-  $path.AddArc(0,0,$d,$d,180,90)
-  $path.AddArc(($w-$d-1),0,$d,$d,270,90)
-  $path.AddArc(($w-$d-1),($h-$d-1),$d,$d,0,90)
-  $path.AddArc(0,($h-$d-1),$d,$d,90,90)
-  $path.CloseFigure()
-  $old=$target.Region
-  $target.Region=New-Object System.Drawing.Region -ArgumentList $path
-  if($old){$old.Dispose()}
-  $path.Dispose()
-}
 # Visual self-test used only by the Windows CI, never by normal instances.
 if($VisualSelfTest) {
   $preview=New-Object H2PhoneDisplayForm
@@ -220,8 +210,8 @@ $frame.Width=$width+2*$bezel
 $frame.Height=$height+$topPad+$bottomPad
 $frame.Text="H2ADS - Phone visual"
 $frame.Location=New-Object System.Drawing.Point(($targetX-$bezel),($targetY-$topPad))
-$frame.add_SizeChanged({Set-PhoneCorners $frame})
-Set-PhoneCorners $frame
+# One single radius comes from H2PhoneDisplayForm.OnResize.
+# Do not reapply a competing PowerShell region (previously radius 30 vs 46).
 $frame.add_Shown({
   [H2PhoneWindowNative]::SetWindowPos($frame.Handle,$chrome,0,0,0,0,
     [H2PhoneWindowNative]::SWP_NOACTIVATE -bor 0x0001 -bor 0x0002)|Out-Null
@@ -235,7 +225,7 @@ $status=New-Object System.Windows.Forms.Panel
 $status.Height=56
 $status.Width=$frame.Width-38
 $status.Location=New-Object System.Drawing.Point(19,7)
-$status.BackColor=RGB 13 18 33
+$status.BackColor=RGB 16 23 39
 $status.Cursor=[System.Windows.Forms.Cursors]::Hand
 $status.add_Paint({
   param($sender,$e)
@@ -293,7 +283,7 @@ $footer=New-Object System.Windows.Forms.Panel
 $footer.Height=56
 $footer.Width=$frame.Width-38
 $footer.Location=New-Object System.Drawing.Point(19,($frame.Height-64))
-$footer.BackColor=RGB 13 18 33
+$footer.BackColor=RGB 10 15 27
 $footer.add_Paint({
   param($sender,$e)
   $g=$e.Graphics
