@@ -504,26 +504,29 @@ $status.add_Paint({
     $g.FillEllipse($ring,($w/2-9),16,18,18)
     $g.FillEllipse($lens,($w/2-5),20,10,10)
     $ring.Dispose();$lens.Dispose()
+    # All first-row indicators share one optical baseline. In particular,
+    # 5G and battery percentage must NOT spill into the stopwatch buttons.
+    $indicatorTextY=8
     # Signal bars.
-    for($i=0;$i -lt 4;$i++){ $sh=4+3*$i; $g.FillRectangle($fg,($w-181+5*$i),(33-$sh),3,$sh) }
-    $g.DrawString("5G",$small,$fg,($w-157),21)
+    for($i=0;$i -lt 4;$i++){ $sh=4+3*$i; $g.FillRectangle($fg,($w-181+5*$i),(29-$sh),3,$sh) }
+    $g.DrawString("5G",$small,$fg,($w-157),$indicatorTextY)
     # WiFi arcs (grey when switched off).
     if(-not $script:wifiOn){$pen.Color=RGB 101 115 140}
-    $g.DrawArc($pen,($w-124),19,24,17,205,130)
-    $g.DrawArc($pen,($w-119),25,14,10,205,130)
+    $g.DrawArc($pen,($w-124),14,24,17,205,130)
+    $g.DrawArc($pen,($w-119),20,14,10,205,130)
     $dot=New-Object System.Drawing.SolidBrush -ArgumentList $pen.Color
-    $g.FillEllipse($dot,($w-114),34,4,4)
+    $g.FillEllipse($dot,($w-114),29,4,4)
     $dot.Dispose()
     $pen.Color=RGB 242 247 255
     # Battery icon plus readable percentage.
     $bx=$w-84
-    $g.DrawRectangle($pen,$bx,19,26,13)
-    $g.FillRectangle($fg,($bx+27),23,3,5)
+    $g.DrawRectangle($pen,$bx,14,26,13)
+    $g.FillRectangle($fg,($bx+27),18,3,5)
     $bc=if($script:battery -le 20){RGB 255 166 102}else{RGB 120 238 175}
     $fill=New-Object System.Drawing.SolidBrush -ArgumentList $bc
-    $g.FillRectangle($fill,($bx+2),21,(22*$script:battery/100),9)
+    $g.FillRectangle($fill,($bx+2),16,(22*$script:battery/100),9)
     $fill.Dispose()
-    $g.DrawString(("$($script:battery)%"),$small,$fg,($w-49),19)
+    $g.DrawString(("$($script:battery)%"),$small,$fg,($w-49),$indicatorTextY)
   } finally { $small.Dispose();$font.Dispose();$pen.Dispose();$fg.Dispose() }
 })
 # Drag the WHOLE smartphone by its top bar. Keep the far-right

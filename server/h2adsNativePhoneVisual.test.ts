@@ -153,6 +153,21 @@ describe("H2ADS: native phone appearance on real Chrome window", () => {
     expect(runner).toContain('"--proxy-server=http://127.0.0.1:" + relayPort');
   });
 
+  it("keeps 5G, Wi-Fi and battery on a single first-row baseline above stopwatch buttons", () => {
+    expect(native).toContain("$status.Height=88");
+    expect(native).toContain("$topPad=104");
+    expect(native).toContain("$indicatorTextY=8");
+    expect(native).toContain('$g.DrawString("5G",$small,$fg,($w-157),$indicatorTextY)');
+    expect(native).toContain('$g.DrawString(("$($script:battery)%"),$small,$fg,($w-49),$indicatorTextY)');
+    expect(native).toContain("($w-181+5*$i),(29-$sh)");
+    expect(native).toContain("$g.DrawArc($pen,($w-124),14,24,17,205,130)");
+    expect(native).toContain("$g.DrawRectangle($pen,$bx,14,26,13)");
+    expect(native).toContain("buttonY=42; buttonH=24; hitTop=40; hitBottom=68");
+    expect(native).not.toContain('$g.DrawString("5G",$small,$fg,($w-157),21)');
+    expect(native).not.toContain('$g.DrawString(("$($script:battery)%"),$small,$fg,($w-49),19)');
+    expect(native).not.toContain("SetParent(");
+  });
+
   it("shows three clear stopwatch action labels on a second row and saves resiliently", () => {
     expect(native).toContain("$status.Height=88");
     expect(native).toContain("$topPad=104");
