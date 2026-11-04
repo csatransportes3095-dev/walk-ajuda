@@ -88,7 +88,7 @@ describe("H2ADS: native phone appearance on real Chrome window", () => {
   it("renders smartphone chassis and native corners without clipping real Chrome pixels", () => {
     expect(native).toContain("public sealed class H2PhoneDisplayForm");
     expect(native).toContain("Rounded(20f,84f,w-40f,h-146f,28f)");
-    expect(native).toContain("$status.Location=New-Object System.Drawing.Point(22,14)");
+    expect(native).toContain("$status.Location=New-Object System.Drawing.Point(22,8)");
     expect(native).toContain("$status.Width=$frame.Width-44");
     expect(native).not.toContain("$status.Location=New-Object System.Drawing.Point(19,7)");
     expect(native).toContain("Color.FromArgb(3,4,7)");
@@ -152,22 +152,24 @@ describe("H2ADS: native phone appearance on real Chrome window", () => {
     expect(runner).toContain('"--proxy-server=http://127.0.0.1:" + relayPort');
   });
 
-  it("keeps three separate stopwatch controls aligned with measured clock width", () => {
-    expect(native).toContain('MeasureText("23:59",$clockFont).Width');
-    expect(native).toContain('MeasureText("00:00:00",$watchFont).Width');
-    expect(native).toContain("$toggleX=20+$clockWidth+10");
-    expect(native).toContain("$pauseX=$toggleX+22");
-    expect(native).toContain("$resetX=$textX+$watchWidth+8");
-    expect(native).toContain("$cameraLeft=[int][Math]::Floor($width/2)-20");
+  it("shows three clear stopwatch action labels on a second row and saves resiliently", () => {
+    expect(native).toContain("$status.Height=70");
+    expect(native).toContain("$status.Location=New-Object System.Drawing.Point(22,8)");
+    expect(native).toContain("New-H2AdsWatchButtonPath");
+    expect(native).toContain('label="INICIAR"');
+    expect(native).toContain('label="PAUSAR"');
+    expect(native).toContain('label="ZERAR"');
     expect(native).toContain('Change-H2AdsWatch "start"');
     expect(native).toContain('Change-H2AdsWatch "pause"');
     expect(native).toContain('Change-H2AdsWatch "reset"');
-    expect(native).toContain("$watchStart=$e.X");
-    expect(native).toContain("$watchPause=$e.X");
-    expect(native).toContain("$watchReset=$e.X");
-    expect(native).not.toContain('Change-H2AdsWatch "toggle"');
-    expect(native).not.toContain("return @{toggleX=74; textX=92;");
-    expect(native).toContain("Save-H2AdsWatchState");
+    expect(native).toContain("$layout.startX");
+    expect(native).toContain("$layout.pauseX");
+    expect(native).toContain("$layout.resetX");
+    expect(native).toContain("[System.IO.File]::Replace(");
+    expect(native).toContain("[System.IO.File]::Copy($temporary,$script:watchFile,$true)");
+    expect(native).toContain("$saveFailure=$_.Exception.Message");
+    expect(native).not.toContain("SetParent(");
+    expect(native).toContain("GWLP_HWNDPARENT");
   });
 
   it("never changes the browser arguments, proxy chain or profile backend", () => {
