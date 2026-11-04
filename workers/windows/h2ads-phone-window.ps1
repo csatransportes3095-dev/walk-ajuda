@@ -28,6 +28,8 @@ public static class H2PhoneWindowNative {
   [DllImport("user32.dll", SetLastError=true)] public static extern IntPtr GetParent(IntPtr child);
   [DllImport("user32.dll", EntryPoint="GetWindowLongPtrW", SetLastError=true)] public static extern IntPtr GetWindowLongPtr(IntPtr hwnd,int index);
   [DllImport("user32.dll", EntryPoint="SetWindowLongPtrW", SetLastError=true)] public static extern IntPtr SetWindowLongPtr(IntPtr hwnd,int index,IntPtr value);
+  [DllImport("user32.dll")] public static extern IntPtr SendMessage(IntPtr hwnd,uint message,IntPtr wParam,IntPtr lParam);
+  [DllImport("user32.dll")] public static extern bool InvalidateRect(IntPtr hwnd,IntPtr rect,bool erase);
   [DllImport("user32.dll")] public static extern bool ShowWindow(IntPtr hwnd,int command);
   [DllImport("user32.dll")] public static extern bool IsZoomed(IntPtr hwnd);
   [DllImport("user32.dll")] public static extern int SetWindowRgn(IntPtr hwnd,IntPtr region,bool redraw);
@@ -42,8 +44,17 @@ public static class H2PhoneWindowNative {
   }
   public static void SetPhoneGroup(IntPtr chrome,IntPtr frame,int chromeX,int chromeY,int chromeW,int chromeH,int frameX,int frameY,int frameW,int frameH) {
     if(chrome==IntPtr.Zero || frame==IntPtr.Zero)return;
-    SetWindowPos(chrome,IntPtr.Zero,chromeX,chromeY,chromeW,chromeH,SWP_NOACTIVATE|SWP_NOOWNERZORDER|SWP_NOSENDCHANGING);
+    ResizeHostedChrome(chrome,chromeX,chromeY,chromeW,chromeH);
     MoveWindow(frame,frameX,frameY,frameW,frameH,true);
+  }
+  public static void ResizeHostedChrome(IntPtr chrome,int x,int y,int w,int h) {
+    if(chrome==IntPtr.Zero)return;
+    SetWindowPos(chrome,IntPtr.Zero,x,y,w,h,SWP_NOACTIVATE|SWP_NOOWNERZORDER|SWP_NOSENDCHANGING|SWP_FRAMECHANGED|SWP_SHOWWINDOW);
+    // Chromium may retain the old top-level client metrics after SetParent.
+    // Explicitly deliver WM_SIZE so its tab strip and compositor use the child size.
+    long packed=((long)(h & 0xffff)<<16) | (long)(w & 0xffff);
+    SendMessage(chrome,WM_SIZE,IntPtr.Zero,new IntPtr(packed));
+    InvalidateRect(chrome,IntPtr.Zero,true);
   }
   public static bool RoundChromeWindow(IntPtr hwnd,int w,int h) {
     if(hwnd==IntPtr.Zero || w<120 || h<160 || IsZoomed(hwnd)) return false;
@@ -84,6 +95,9 @@ public static class H2PhoneWindowNative {
   public const uint SWP_NOACTIVATE=0x0010;
   public const uint SWP_NOOWNERZORDER=0x0200;
   public const uint SWP_NOSENDCHANGING=0x0400;
+  public const uint SWP_FRAMECHANGED=0x0020;
+  public const uint SWP_SHOWWINDOW=0x0040;
+  public const uint WM_SIZE=0x0005;
   public const int GWL_STYLE=-16;
   public const long WS_CHILD=0x40000000L;
   public const long WS_POPUP=0x80000000L;
