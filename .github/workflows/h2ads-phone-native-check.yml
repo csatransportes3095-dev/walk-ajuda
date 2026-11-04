@@ -36,3 +36,6 @@ jobs:
             throw "Native visual must never control browser/network"
           }
           Write-Host "Windows PowerShell syntax and GUI dependencies validated."
+          # Exercise Add-Type P/Invoke compilation without creating a Chrome window.
+          & powershell.exe -NoProfile -NonInteractive -ExecutionPolicy Bypass -File "workers/windows/h2ads-phone-window.ps1" -BrowserPid 2147483646 -InstanceName "Smoke"
+          if ($LASTEXITCODE -ne 0) { throw "Native phone script failed to compile on Windows PowerShell 5.1." }
