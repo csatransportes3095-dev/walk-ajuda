@@ -3,6 +3,7 @@ import path from "node:path";
 import { describe, expect, it } from "vitest";
 
 const source = fs.readFileSync(path.resolve(process.cwd(), "server/h2adsWorkerRoute.ts"), "utf8");
+const browserSessionSource = fs.readFileSync(path.resolve(process.cwd(), "workers/windows/browser-session.mjs"), "utf8");
 
 describe("H2ADS stale close guard", () => {
   it("reenvia somente launch_browser claimed obsoleto", () => {
@@ -25,6 +26,12 @@ describe("H2ADS stale close guard", () => {
     expect(source).toContain('eq(h2AdsWorkerCommands.status, "queued")');
     expect(source).toContain('lt(h2AdsWorkerCommands.createdAt, new Date(now - STALE_PREPARATION_COMMAND_MS))');
     expect(source).toContain('eq(h2AdsWorkerCommands.status, "claimed")');
+  });
+
+  it("carrega a extensao de privacy guard do Google sorry quando abre o Chrome", () => {
+    expect(browserSessionSource).toContain("createGoogleSorryPrivacyGuard");
+    expect(browserSessionSource).toContain("--load-extension=");
+    expect(browserSessionSource).toContain("googleSorryPrivacyGuard: \"enabled\"");
   });
 
   it("nao altera browser-session, firewall ou privacy guard nesta correcao", () => {

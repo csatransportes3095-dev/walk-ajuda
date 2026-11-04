@@ -779,13 +779,15 @@ async function run() {
       console.error("[H2ADS] sites iniciais indisponiveis:", String(error?.message || error));
     }
     clearPreviousBrowserTabs();
+    const privacyGuardExtensionPath = createGoogleSorryPrivacyGuard();
+    const chromeExtensionPaths = [...globalExtensionPaths, privacyGuardExtensionPath].filter(Boolean);
     const labelPageUrl = createInstanceLabelPage();
     browser = spawn(executable, [
       // Um pipe local entre Node e Chrome: nenhuma porta TCP de depuracao e aberta.
       ...(mobileRemoteRequested ? ["--remote-debugging-pipe"] : []),
       "--user-data-dir=" + profileDirectory, "--proxy-server=http://127.0.0.1:" + relayPort, "--proxy-bypass-list=<-loopback>",
       "--disable-quic", "--dns-prefetch-disable", "--force-webrtc-ip-handling-policy=disable_non_proxied_udp",
-      ...(globalExtensionPaths.length ? ["--load-extension=" + globalExtensionPaths.join(",")] : []), "--no-first-run", "--no-default-browser-check", labelPageUrl, ...startupSites,
+      ...(chromeExtensionPaths.length ? ["--load-extension=" + chromeExtensionPaths.join(",")] : []), "--no-first-run", "--no-default-browser-check", labelPageUrl, ...startupSites,
     ], { detached: false, stdio: mobileRemoteRequested ? ["ignore", "ignore", "ignore", "pipe", "pipe"] : "ignore", windowsHide: false });
 
     // Register before any network request to the panel: early exit is never lost.
@@ -819,7 +821,7 @@ async function run() {
         startedAt: new Date().toISOString(), lastClosedAt: null, browserExitReason: null,
         instanceLabelState: "static_tab", observedIp: initial.observedIp,
         browserProxyVerified: false, browserProxyVerification: "pending",
-        privacyGuard: "protected", googleSorryPrivacyGuard: "disabled",
+        privacyGuard: "protected", googleSorryPrivacyGuard: "enabled",
         killSwitch: "armed", networkState: "online", panelConnection: "pending",
         directBrowserEgress: "blocked_by_windows_firewall",
         proxyRotationPolicy: "provider_managed_between_sessions",
