@@ -136,7 +136,7 @@ public sealed class H2PhoneDisplayForm : System.Windows.Forms.Form {
       g.DrawPath(shine,inside);
     }
     // Dark glass recess UNDER the real Chrome window, never on top of it.
-    using(var screen=Rounded(15f,67f,w-30f,h-133f,25f))
+    using(var screen=Rounded(15f,82f,w-30f,h-148f,26f))
     using(var back=new System.Drawing.SolidBrush(System.Drawing.Color.FromArgb(1,5,12)))
     using(var outline=new System.Drawing.Pen(System.Drawing.Color.FromArgb(100,122,151),1.3f)) {
       g.FillPath(back,screen);
@@ -186,9 +186,9 @@ if($chrome -eq [IntPtr]::Zero){exit 0}
 $rect=New-Object H2PhoneWindowNative+Rectangle
 if(-not [H2PhoneWindowNative]::GetWindowRect($chrome,[ref]$rect)){exit 0}
 $desktop=[System.Windows.Forms.Screen]::FromHandle($chrome).WorkingArea
-$bezel=18
-$topPad=69
-$bottomPad=66
+$bezel=20
+$topPad=84
+$bottomPad=62
 $width=[Math]::Min(392,[Math]::Max(310,$desktop.Width-2*$bezel-12))
 $height=[Math]::Min(780,[Math]::Max(400,$desktop.Height-$topPad-$bottomPad-12))
 $targetX=[Math]::Max($desktop.Left+$bezel+6,[Math]::Min($rect.Left,$desktop.Right-$width-$bezel-6))
