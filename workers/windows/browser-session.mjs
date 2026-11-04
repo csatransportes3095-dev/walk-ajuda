@@ -300,27 +300,48 @@ async function syncPanelOpening(observedIp = initialObservedIp) {
 
 // Close CONNECT tunnels, not the Chrome process. The front relay remains bound on
 // the same localhost port, so Chrome keeps its tabs and can resume on verification.
+// Serialize concurrent watchdog failures so the protected local front
+// port cannot be closed/rebound by two overlapping suspension attempts.
+let suspendingProxyTraffic = null;
 async function suspendProxyTraffic(reason = "proxy_path_unverified") {
   if (browserExitHandled) return;
   const category = classifyNetworkError({ message: String(reason) }, "proxy_path_unverified");
   networkSuspended = true;
   activeBackendPort = undefined;
-  // proxy-chain close(true) destroys existing CONNECT and HTTP sockets.
-  // Keep Chrome open, and restore a local front relay bound to the same port.
-  await closeRelay(frontRelay);
-  frontRelay = undefined;
-  await closeRelay(backendRelay);
-  backendRelay = undefined;
-  try {
-    frontRelay = createFrontRelay(relayPort);
-    await frontRelay.listen();
-  } catch { }
-  try {
-    writeSession({
-      networkState: "suspended", privacyGuard: "blocked", killSwitch: "armed",
-      networkFailureCategory: category, networkSuspendedAt: new Date().toISOString(),
-    });
-  } catch { }
+  if (suspendingProxyTraffic) {
+    await suspendingProxyTraffic;
+    return;
+  }
+  const transition = (async () => {
+    const previousFront = frontRelay;
+    const previousBackend = backendRelay;
+    frontRelay = undefined;
+    backendRelay = undefined;
+    await closeRelay(previousFront);
+    await closeRelay(previousBackend);
+    if (relayPort) {
+      let replacement;
+      try {
+        replacement = createFrontRelay(relayPort);
+        await replacement.listen();
+        frontRelay = replacement;
+      } catch {
+        if (replacement) await closeRelay(replacement);
+        frontRelay = undefined;
+      }
+    }
+    try {
+      writeSession({
+        networkState: "suspended", privacyGuard: "blocked", killSwitch: "armed",
+        networkFailureCategory: category, networkSuspendedAt: new Date().toISOString(),
+      });
+    } catch { }
+  })();
+  suspendingProxyTraffic = transition;
+  try { await transition; }
+  finally {
+    if (suspendingProxyTraffic === transition) suspendingProxyTraffic = null;
+  }
 }
 
 async function resumeProxyTraffic() {
@@ -331,6 +352,8 @@ async function resumeProxyTraffic() {
   // through the upstream and the independent Chrome verification. A changed
   // IP is never accepted automatically and Chrome remains fail-closed.
   if (!networkSuspended || browserExitHandled || browserProbeInProgress) return;
+  if (suspendingProxyTraffic) await suspendingProxyTraffic;
+  if (!networkSuspended || browserExitHandled) return;
   try {
     if (!backendRelay) {
       backendRelay = createBackendRelay();
@@ -360,8 +383,9 @@ async function resumeProxyTraffic() {
     const browserObservedIp = await verifyChromeProxyPath(executable, backendRelay.port, observedIp);
 
     if (!frontRelay) {
-      frontRelay = createFrontRelay(relayPort);
-      await frontRelay.listen();
+      const replacement = createFrontRelay(relayPort);
+      await replacement.listen();
+      frontRelay = replacement;
     }
 
     // Se o provedor voltou com outro IP, adotar somente depois da validação dupla.

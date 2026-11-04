@@ -11,6 +11,7 @@ function harness({ ip = "198.51.100.1", latched = false, probeError = false, rou
     networkSuspended: true, browserExitHandled: false, browserProbeInProgress: false, sessionIpChanged: latched,
     sessionLockedIp: "198.51.100.1", backendRelay: null, frontRelay: { port: 9000 },
     relayPort: 9000, activeBackendPort: undefined, probes: 0, records,
+    suspendingProxyTraffic: null, browserProbeInProgress: false,
     createBackendRelay: () => ({ port: 9001, listen: async () => {} }),
     checkIpThroughPort: async () => { if (routeError) throw new Error("proxy_path_unverified"); return ip; },
     normalizeIp: (value) => value.trim().toLowerCase(),
@@ -90,4 +91,40 @@ test("new session can accept its own newly locked IP", async () => {
   await state.resume();
   assert.equal(state.networkSuspended, false);
   assert.equal(state.activeBackendPort, 9001);
+});
+
+const suspensionSource = source.slice(source.indexOf("let suspendingProxyTraffic = null;"), source.indexOf("async function resumeProxyTraffic()"));
+function suspensionHarness({ failBind = false } = {}) {
+  const records = [];
+  const calls = { closes: 0, binds: 0 };
+  const state = {
+    browserExitHandled: false, networkSuspended: false,
+    activeBackendPort: 9001, frontRelay: { port: 9000 }, backendRelay: { port: 9001 },
+    relayPort: 9000, suspendingProxyTraffic: null,
+    classifyNetworkError: () => "proxy_path_unverified",
+    closeRelay: async () => { calls.closes++; await Promise.resolve(); },
+    createFrontRelay: () => ({ port: 9000, listen: async () => { calls.binds++; if (failBind) throw new Error("EADDRINUSE"); } }),
+    writeSession: (row) => records.push(row),
+  };
+  vm.createContext(state);
+  vm.runInContext(suspensionSource + "\nthis.suspend = suspendProxyTraffic;", state);
+  return { state, calls, records };
+}
+test("concurrent tunnel failures rebind the local front only once", async () => {
+  const { state, calls, records } = suspensionHarness();
+  await Promise.all([state.suspend("proxy_path_unverified"), state.suspend("proxy_path_unverified")]);
+  assert.equal(calls.closes, 2);
+  assert.equal(calls.binds, 1);
+  assert.equal(state.frontRelay.port, 9000);
+  assert.equal(state.networkSuspended, true);
+  assert.equal(state.activeBackendPort, undefined);
+  assert.equal(records.at(-1).privacyGuard, "blocked");
+});
+test("failed local front bind never reports an active relay", async () => {
+  const { state, calls } = suspensionHarness({ failBind: true });
+  await state.suspend("local_relay_down");
+  assert.equal(calls.binds, 1);
+  assert.equal(state.frontRelay, undefined);
+  assert.equal(state.networkSuspended, true);
+  assert.equal(state.activeBackendPort, undefined);
 });
