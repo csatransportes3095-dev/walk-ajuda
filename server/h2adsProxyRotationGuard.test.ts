@@ -7,7 +7,7 @@ const source = fs.readFileSync(path.resolve(process.cwd(), "workers/windows/brow
 describe("H2ADS proxy rotation guard", () => {
   it("suspende trafego para IP alterado e somente revalida IP original", () => {
     expect(source).toContain("browserExitHandled || browserProbeInProgress");
-    expect(source).toContain("normalizeIp(frontIp) !== normalizeIp(sessionLockedIp)");
+    expect(source).toContain("normalizeIp(observedIp) !== normalizeIp(sessionLockedIp)");
     expect(source).toContain('killSwitchReason: "session_ip_changed"');
   });
 
