@@ -367,7 +367,14 @@ function Save-H2AdsWatchState {
   try {
     [System.IO.File]::WriteAllText($temporary,$payload,([System.Text.UTF8Encoding]::new($false)))
     if(Test-Path -LiteralPath $script:watchFile) {
-      [System.IO.File]::Replace($temporary,$script:watchFile,$null)
+      # The atomic replace API fails on some Windows filesystem/ACL setups.
+      # Overwrite fallback preserves the running timer's durable state.
+      try {
+        [System.IO.File]::Replace($temporary,$script:watchFile,$null)
+      } catch {
+        [System.IO.File]::Copy($temporary,$script:watchFile,$true)
+        [System.IO.File]::Delete($temporary)
+      }
     } else {
       [System.IO.File]::Move($temporary,$script:watchFile)
     }
@@ -396,11 +403,12 @@ function Change-H2AdsWatch([string]$action) {
     } else {throw "invalid_stopwatch_action"}
     Save-H2AdsWatchState
   } catch {
+    $saveFailure=$_.Exception.Message
     $script:watchRunning=$wasRunning
     $script:watchElapsedMs=$oldElapsed
     $script:watchStartedAtMs=$oldStart
     [System.Windows.Forms.MessageBox]::Show(
-      "Nao foi possivel salvar o cronometro desta instancia.",
+      ("Nao foi possivel salvar o cronometro desta instancia." + [Environment]::NewLine + $saveFailure),
       "H2ADS - Cronometro",
       [System.Windows.Forms.MessageBoxButtons]::OK,
       [System.Windows.Forms.MessageBoxIcon]::Warning
@@ -408,34 +416,28 @@ function Change-H2AdsWatch([string]$action) {
   }
 }
 function Get-H2AdsWatchLayout([int]$width) {
-  # Dynamic measurements keep the clock, stopwatch and THREE independent
-  # controls inside the header with no collision at 175% Windows scaling.
-  $clockFont=New-Object System.Drawing.Font -ArgumentList "Segoe UI",11,([System.Drawing.FontStyle]::Bold)
-  $watchFont=New-Object System.Drawing.Font -ArgumentList "Segoe UI",9,([System.Drawing.FontStyle]::Bold)
-  try {
-    $clockWidth=[int][Math]::Ceiling([System.Windows.Forms.TextRenderer]::MeasureText("23:59",$clockFont).Width)
-    $watchWidth=[int][Math]::Ceiling([System.Windows.Forms.TextRenderer]::MeasureText("00:00:00",$watchFont).Width)
-  } finally { $clockFont.Dispose();$watchFont.Dispose() }
-  $toggleX=20+$clockWidth+10
-  $pauseX=$toggleX+22
-  $textX=$pauseX+22
-  $resetX=$textX+$watchWidth+8
-  $cameraLeft=[int][Math]::Floor($width/2)-20
-  if($resetX+18 -lt $cameraLeft) {
-    return @{toggleX=$toggleX; pauseX=$pauseX; textX=$textX; resetX=$resetX; y=17; textY=16; clockY=16; fontSize=9; hitTop=11; hitBottom=43}
+  # Two legible rows. Three explicit, independent actions with large hitboxes.
+  $resetW=48; $pauseW=52; $startW=54; $gap=5
+  $resetX=$width-12-$resetW
+  $pauseX=$resetX-$gap-$pauseW
+  $startX=$pauseX-$gap-$startW
+  return @{
+    clockY=6; textX=18; textY=43
+    startX=$startX; startW=$startW
+    pauseX=$pauseX; pauseW=$pauseW
+    resetX=$resetX; resetW=$resetW
+    buttonY=42; buttonH=24; hitTop=40; hitBottom=68
   }
-  # Small screens: the stopwatch fits on a second row below the clock,
-  # preserving the camera, keyboard focus and original 52px status panel.
-  $watchSize=if($width -lt 330){7.5}else{9}
-  if($watchSize -lt 9) {
-    $compactFont=New-Object System.Drawing.Font -ArgumentList "Segoe UI",$watchSize,([System.Drawing.FontStyle]::Bold)
-    try {$watchWidth=[int][Math]::Ceiling([System.Windows.Forms.TextRenderer]::MeasureText("00:00:00",$compactFont).Width)}
-    finally {$compactFont.Dispose()}
-  }
-  $toggleX=20+$watchWidth+7
-  $pauseX=$toggleX+20
-  $resetX=$pauseX+20
-  return @{toggleX=$toggleX; pauseX=$pauseX; textX=20; resetX=$resetX; y=29; textY=27; clockY=1; fontSize=$watchSize; hitTop=24; hitBottom=51}
+}
+function New-H2AdsWatchButtonPath([single]$x,[single]$y,[single]$w,[single]$h) {
+  $d=[single]14
+  $path=New-Object System.Drawing.Drawing2D.GraphicsPath
+  $path.AddArc($x,$y,$d,$d,180,90)
+  $path.AddArc(($x+$w-$d),$y,$d,$d,270,90)
+  $path.AddArc(($x+$w-$d),($y+$h-$d),$d,$d,0,90)
+  $path.AddArc($x,($y+$h-$d),$d,$d,90,90)
+  $path.CloseFigure()
+  return $path
 }
 
 # Windows PowerShell 5.1 reads UTF-8 without BOM incorrectly.
@@ -443,9 +445,9 @@ function Get-H2AdsWatchLayout([int]$width) {
 $script:battery=95
 $script:wifiOn=$true
 $status=New-Object System.Windows.Forms.Panel
-$status.Height=52
+$status.Height=70
 $status.Width=$frame.Width-44
-$status.Location=New-Object System.Drawing.Point(22,14)
+$status.Location=New-Object System.Drawing.Point(22,8)
 $status.BackColor=RGB 7 8 11
 $status.Cursor=[System.Windows.Forms.Cursors]::Hand
 Set-RoundedPanelRegion $status 24
@@ -461,25 +463,41 @@ $status.add_Paint({
   try {
     $watchLayout=Get-H2AdsWatchLayout ([int]$w)
     $g.DrawString([DateTime]::Now.ToString("HH:mm"),$font,$fg,20,$watchLayout.clockY)
-    # Three distinct painted controls: PLAY, PAUSE, RESET. None are
-    # focusable widgets and none overlap Chrome or its keyboard input.
-    $sx=[int]$watchLayout.toggleX
-    $px=[int]$watchLayout.pauseX
-    $sy=[int]$watchLayout.y
-    $g.DrawLine($pen,$sx,($sy+1),($sx+11),($sy+7))
-    $g.DrawLine($pen,($sx+11),($sy+7),$sx,($sy+13))
-    $g.DrawLine($pen,$sx,($sy+13),$sx,($sy+1))
-    $g.FillRectangle($fg,$px,($sy+1),4,12)
-    $g.FillRectangle($fg,($px+7),($sy+1),4,12)
+    # The first row is reserved for time, camera and phone indicators.
+    # The second row shows stopwatch time and three LABELED buttons.
+    $divider=New-Object System.Drawing.Pen -ArgumentList (RGB 45 52 64),1
+    try { $g.DrawLine($divider,16,39,($w-16),39) } finally { $divider.Dispose() }
     $watchText=Format-H2AdsWatchElapsed
-    $watchFont=New-Object System.Drawing.Font -ArgumentList "Segoe UI",([float]$watchLayout.fontSize),([System.Drawing.FontStyle]::Bold)
+    $maxTextWidth=[single][Math]::Max(35,$watchLayout.startX-$watchLayout.textX-6)
+    $watchFont=$font
+    $measured=$g.MeasureString($watchText,$font).Width
+    if($measured -gt $maxTextWidth) {
+      $watchSize=[single][Math]::Max(7,11*$maxTextWidth/$measured)
+      $watchFont=New-Object System.Drawing.Font -ArgumentList "Segoe UI",$watchSize,([System.Drawing.FontStyle]::Bold)
+    }
+    try { $g.DrawString($watchText,$watchFont,$fg,$watchLayout.textX,$watchLayout.textY) }
+    finally { if($watchFont -ne $font){$watchFont.Dispose()} }
+
+    $actionFont=New-Object System.Drawing.Font -ArgumentList "Segoe UI",7.5,([System.Drawing.FontStyle]::Bold)
+    $align=New-Object System.Drawing.StringFormat
+    $align.Alignment=[System.Drawing.StringAlignment]::Center
+    $align.LineAlignment=[System.Drawing.StringAlignment]::Center
+    $actions=@(
+      @{x=$watchLayout.startX;w=$watchLayout.startW;label="INICIAR";active=(-not $script:watchRunning);color=(RGB 31 92 67)}
+      @{x=$watchLayout.pauseX;w=$watchLayout.pauseW;label="PAUSAR";active=$script:watchRunning;color=(RGB 45 76 118)}
+      @{x=$watchLayout.resetX;w=$watchLayout.resetW;label="ZERAR";active=$true;color=(RGB 46 52 65)}
+    )
     try {
-      $g.DrawString($watchText,$watchFont,$fg,$watchLayout.textX,$watchLayout.textY)
-    } finally {$watchFont.Dispose()}
-    $rx=[int]$watchLayout.resetX
-    $g.DrawArc($pen,$rx,($sy+1),13,13,40,285)
-    $g.DrawLine($pen,($rx+11),($sy+1),($rx+14),($sy+5))
-    $g.DrawLine($pen,($rx+11),($sy+1),($rx+8),($sy+5))
+      foreach($item in $actions) {
+        $fill=New-Object System.Drawing.SolidBrush -ArgumentList $item.color
+        $path=New-H2AdsWatchButtonPath $item.x $watchLayout.buttonY $item.w $watchLayout.buttonH
+        $rect=New-Object System.Drawing.RectangleF -ArgumentList $item.x,$watchLayout.buttonY,$item.w,$watchLayout.buttonH
+        try {
+          $g.FillPath($fill,$path)
+          $g.DrawString($item.label,$actionFont,$fg,$rect,$align)
+        } finally {$fill.Dispose();$path.Dispose()}
+      }
+    } finally {$actionFont.Dispose();$align.Dispose()}
     # Discreet punch-hole camera.
     $ring=New-Object System.Drawing.SolidBrush -ArgumentList (RGB 43 53 73)
     $lens=New-Object System.Drawing.SolidBrush -ArgumentList (RGB 2 6 14)
@@ -514,12 +532,9 @@ $status.add_Paint({
 $status.add_MouseDown({
   param($sender,$e)
   if($e.Button -ne [System.Windows.Forms.MouseButtons]::Left){return}
-  $watchLayout=Get-H2AdsWatchLayout $status.ClientSize.Width
-  $watchRow=$e.Y -ge $watchLayout.hitTop -and $e.Y -le $watchLayout.hitBottom
-  $watchStart=$e.X -ge ($watchLayout.toggleX-5) -and $e.X -le ($watchLayout.toggleX+15)
-  $watchPause=$e.X -ge ($watchLayout.pauseX-5) -and $e.X -le ($watchLayout.pauseX+15)
-  $watchReset=$e.X -ge ($watchLayout.resetX-4) -and $e.X -le ($watchLayout.resetX+18)
-  if($watchRow -and ($watchStart -or $watchPause -or $watchReset)){return}
+  $layout=Get-H2AdsWatchLayout $status.ClientSize.Width
+  if($e.Y -ge $layout.hitTop -and $e.Y -le $layout.hitBottom -and
+     $e.X -ge $layout.startX -and $e.X -le ($layout.resetX+$layout.resetW)){return}
   if($e.X -ge ($status.ClientSize.Width-135)){return}
   [H2PhoneWindowNative]::ReleaseCapture()|Out-Null
   [H2PhoneWindowNative]::SendMessage($frame.Handle,
@@ -529,16 +544,20 @@ $status.add_MouseDown({
 $status.add_MouseClick({
   param($sender,$e)
   if($e.Button -ne [System.Windows.Forms.MouseButtons]::Left){return}
-  $watchLayout=Get-H2AdsWatchLayout $status.ClientSize.Width
-  $watchRow=$e.Y -ge $watchLayout.hitTop -and $e.Y -le $watchLayout.hitBottom
-  $watchStart=$e.X -ge ($watchLayout.toggleX-5) -and $e.X -le ($watchLayout.toggleX+15)
-  $watchPause=$e.X -ge ($watchLayout.pauseX-5) -and $e.X -le ($watchLayout.pauseX+15)
-  $watchReset=$e.X -ge ($watchLayout.resetX-4) -and $e.X -le ($watchLayout.resetX+18)
-  if($watchRow -and $watchReset){Change-H2AdsWatch "reset";$status.Invalidate();return}
-  if($watchRow -and $watchPause){Change-H2AdsWatch "pause";$status.Invalidate();return}
-  if($watchRow -and $watchStart){Change-H2AdsWatch "start";$status.Invalidate();return}
-  if($e.X -ge ($status.Width-90)){ $script:battery=if($script:battery -ge 100){0}else{[Math]::Min(100,$script:battery+5)} }
-  elseif($e.X -ge ($status.Width-130)){ $script:wifiOn=-not $script:wifiOn }
+  $layout=Get-H2AdsWatchLayout $status.ClientSize.Width
+  if($e.Y -ge $layout.hitTop -and $e.Y -le $layout.hitBottom) {
+    if($e.X -ge $layout.resetX -and $e.X -le ($layout.resetX+$layout.resetW)){
+      Change-H2AdsWatch "reset";$status.Invalidate();return
+    }
+    if($e.X -ge $layout.pauseX -and $e.X -le ($layout.pauseX+$layout.pauseW)){
+      Change-H2AdsWatch "pause";$status.Invalidate();return
+    }
+    if($e.X -ge $layout.startX -and $e.X -le ($layout.startX+$layout.startW)){
+      Change-H2AdsWatch "start";$status.Invalidate();return
+    }
+  }
+  if($e.Y -lt 40 -and $e.X -ge ($status.Width-90)){ $script:battery=if($script:battery -ge 100){0}else{[Math]::Min(100,$script:battery+5)} }
+  elseif($e.Y -lt 40 -and $e.X -ge ($status.Width-130)){ $script:wifiOn=-not $script:wifiOn }
   $status.Invalidate()
 })
 $status.add_MouseWheel({
@@ -614,7 +633,7 @@ function Set-PhoneChromeSize([int]$requestedWidth,[int]$requestedHeight) {
   $frame.Location=New-Object System.Drawing.Point($newFrameX,$newFrameY)
   $frame.Size=New-Object System.Drawing.Size(($newWidth+2*$bezel),($newHeight+$topPad+$bottomPad))
   $status.Width=$frame.Width-44
-  $status.Location=New-Object System.Drawing.Point(22,14)
+  $status.Location=New-Object System.Drawing.Point(22,8)
   Set-RoundedPanelRegion $status 24
   $footer.Width=$frame.Width-44
   $footer.Left=22
