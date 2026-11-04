@@ -51,6 +51,11 @@ describe("H2ADS: native phone appearance on real Chrome window", () => {
     expect(native).toContain("wifiOn");
     expect(native).toContain('DrawString("5G"');
     expect(native).toContain("Set-RoundedPanelRegion");
+    expect(native).toContain("Set-PhoneChromeSize");
+    expect(native).toContain("add_MouseDown");
+    expect(native).toContain("add_MouseMove");
+    expect(native).toContain("add_MouseUp");
+    expect(native).not.toContain("New-Object System.Windows.Forms.Button");
     expect(native).toContain("footer");
     expect(native).not.toContain("Invoke-WebRequest");
     expect(native).not.toContain("proxy-server");
@@ -65,6 +70,10 @@ describe("H2ADS: native phone appearance on real Chrome window", () => {
     expect(native).toContain("$status.Location=New-Object System.Drawing.Point(22,14)");
     expect(native).toContain("$status.Width=$frame.Width-44");
     expect(native).not.toContain("$status.Location=New-Object System.Drawing.Point(19,7)");
+    expect(native).toContain("Color.FromArgb(3,4,7)");
+    expect(native).toContain("Color.FromArgb(13,15,21)");
+    expect(native).toContain("$right=$e.X -ge ($frame.ClientSize.Width-28)");
+    expect(native).toContain("$bottom=$e.Y -ge ($frame.ClientSize.Height-28)");
     // Avoid DPI-virtualized hard region truncation at 175 percent scaling.
     expect(native).not.toContain("CreateRoundRectRgn");
     expect(native).toContain("DwmSetWindowAttribute");

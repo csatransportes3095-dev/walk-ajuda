@@ -116,40 +116,40 @@ public sealed class H2PhoneDisplayForm : System.Windows.Forms.Form {
     using(var body=Rounded(0.7f,0.7f,w-1.4f,h-1.4f,45f))
     using(var metal=new System.Drawing.Drawing2D.LinearGradientBrush(
       new System.Drawing.RectangleF(0,0,w,h),
-      System.Drawing.Color.FromArgb(86,107,132),
-      System.Drawing.Color.FromArgb(14,21,37),0f)) {
+      System.Drawing.Color.FromArgb(48,51,58),
+      System.Drawing.Color.FromArgb(3,4,7),0f)) {
       g.FillPath(metal,body);
     }
     using(var rim=Rounded(2f,2f,w-4f,h-4f,43f))
-    using(var edge=new System.Drawing.Pen(System.Drawing.Color.FromArgb(133,158,187),1.5f)) {
+    using(var edge=new System.Drawing.Pen(System.Drawing.Color.FromArgb(32,35,42),1.7f)) {
       g.DrawPath(edge,rim);
     }
     using(var glass=Rounded(5f,5f,w-10f,h-10f,41f))
     using(var dark=new System.Drawing.Drawing2D.LinearGradientBrush(
       new System.Drawing.RectangleF(5,5,w-10,h-10),
-      System.Drawing.Color.FromArgb(19,26,43),
-      System.Drawing.Color.FromArgb(4,9,18),90f)) {
+      System.Drawing.Color.FromArgb(13,15,21),
+      System.Drawing.Color.FromArgb(1,2,4),90f)) {
       g.FillPath(dark,glass);
     }
     using(var inside=Rounded(8f,8f,w-16f,h-16f,38f))
-    using(var shine=new System.Drawing.Pen(System.Drawing.Color.FromArgb(64,90,118),1f)) {
+    using(var shine=new System.Drawing.Pen(System.Drawing.Color.FromArgb(78,82,92),1f)) {
       g.DrawPath(shine,inside);
     }
     // Internal screen recess exactly aligned with the real Chrome HWND.
     // The status bar and Chrome remain inside this phone-safe rounded area.
     using(var screen=Rounded(20f,84f,w-40f,h-146f,28f))
     using(var back=new System.Drawing.SolidBrush(System.Drawing.Color.FromArgb(1,5,12)))
-    using(var outline=new System.Drawing.Pen(System.Drawing.Color.FromArgb(100,122,151),1.3f)) {
+    using(var outline=new System.Drawing.Pen(System.Drawing.Color.FromArgb(52,56,66),1.3f)) {
       g.FillPath(back,screen);
       g.DrawPath(outline,screen);
     }
     // Refined satin side edges and simulated volume/power hardware keys.
-    using(var side=new System.Drawing.Pen(System.Drawing.Color.FromArgb(63,114,142),1f)) {
+    using(var side=new System.Drawing.Pen(System.Drawing.Color.FromArgb(31,34,40),1f)) {
       g.DrawLine(side,9f,135f,9f,h-141f);
       g.DrawLine(side,w-9f,141f,w-9f,h-151f);
     }
     using(var shadow=new System.Drawing.SolidBrush(System.Drawing.Color.FromArgb(28,37,58)))
-    using(var hardware=new System.Drawing.SolidBrush(System.Drawing.Color.FromArgb(120,145,173))) {
+    using(var hardware=new System.Drawing.SolidBrush(System.Drawing.Color.FromArgb(70,74,84))) {
       g.FillRectangle(shadow,w-9f,173f,5f,82f);
       g.FillRectangle(hardware,w-7f,178f,2.5f,72f);
       g.FillRectangle(shadow,w-9f,289f,5f,61f);
@@ -239,7 +239,7 @@ $status=New-Object System.Windows.Forms.Panel
 $status.Height=52
 $status.Width=$frame.Width-44
 $status.Location=New-Object System.Drawing.Point(22,14)
-$status.BackColor=RGB 16 23 39
+$status.BackColor=RGB 7 8 11
 $status.Cursor=[System.Windows.Forms.Cursors]::Hand
 Set-RoundedPanelRegion $status 24
 $status.add_Paint({
@@ -299,7 +299,7 @@ $footer=New-Object System.Windows.Forms.Panel
 $footer.Height=52
 $footer.Width=$frame.Width-44
 $footer.Location=New-Object System.Drawing.Point(22,($frame.Height-60))
-$footer.BackColor=RGB 10 15 27
+$footer.BackColor=RGB 6 7 10
 Set-RoundedPanelRegion $footer 24
 $footer.add_Paint({
   param($sender,$e)
@@ -319,6 +319,72 @@ $footer.add_Paint({
   } finally {$pill.Dispose();$pen.Dispose()}
 })
 $frame.Controls.Add($footer)
+
+# The exposed bezel is the resize handle. Chrome stays the only browser window;
+# this companion resizes it without cropping its content or changing its profile.
+function Set-PhoneChromeSize([int]$requestedWidth,[int]$requestedHeight) {
+  $maxWidth=[Math]::Max(310,$desktop.Width-2*$bezel-12)
+  $maxHeight=[Math]::Max(400,$desktop.Height-$topPad-$bottomPad-12)
+  $newWidth=[Math]::Max(310,[Math]::Min($maxWidth,$requestedWidth))
+  $newHeight=[Math]::Max(400,[Math]::Min($maxHeight,$requestedHeight))
+  $current=New-Object H2PhoneWindowNative+Rectangle
+  if(-not [H2PhoneWindowNative]::GetWindowRect($chrome,[ref]$current)){return}
+  [H2PhoneWindowNative]::MoveWindow($chrome,$current.Left,$current.Top,$newWidth,$newHeight,$true)|Out-Null
+  [H2PhoneWindowNative]::RoundChromeWindow($chrome,$newWidth,$newHeight)|Out-Null
+  $script:roundedW=$newWidth
+  $script:roundedH=$newHeight
+  $frame.Location=New-Object System.Drawing.Point(($current.Left-$bezel),($current.Top-$topPad))
+  $frame.Size=New-Object System.Drawing.Size(($newWidth+2*$bezel),($newHeight+$topPad+$bottomPad))
+  $status.Width=$frame.Width-44
+  $status.Location=New-Object System.Drawing.Point(22,14)
+  Set-RoundedPanelRegion $status 24
+  $footer.Width=$frame.Width-44
+  $footer.Left=22
+  $footer.Top=$frame.Height-60
+  Set-RoundedPanelRegion $footer 24
+  $status.Invalidate();$footer.Invalidate();$frame.Invalidate()
+  [H2PhoneWindowNative]::SetWindowPos($frame.Handle,$chrome,0,0,0,0,
+    [H2PhoneWindowNative]::SWP_NOACTIVATE -bor 0x0001 -bor 0x0002)|Out-Null
+}
+
+$script:resizeMode=$null
+$script:resizeStartX=0
+$script:resizeStartY=0
+$script:resizeStartW=0
+$script:resizeStartH=0
+$frame.add_MouseDown({
+  param($sender,$e)
+  if($e.Button -ne [System.Windows.Forms.MouseButtons]::Left){return}
+  $right=$e.X -ge ($frame.ClientSize.Width-28)
+  $bottom=$e.Y -ge ($frame.ClientSize.Height-28)
+  if(-not $right -and -not $bottom){return}
+  $script:resizeMode=if($right -and $bottom){"both"}elseif($right){"horizontal"}else{"vertical"}
+  $script:resizeStartX=$e.X
+  $script:resizeStartY=$e.Y
+  $script:resizeStartW=$frame.Width
+  $script:resizeStartH=$frame.Height
+  $frame.Capture=$true
+})
+$frame.add_MouseMove({
+  param($sender,$e)
+  if($script:resizeMode -eq $null){
+    $right=$e.X -ge ($frame.ClientSize.Width-28)
+    $bottom=$e.Y -ge ($frame.ClientSize.Height-28)
+    $frame.Cursor=if($right -and $bottom){[System.Windows.Forms.Cursors]::SizeNWSE}elseif($right){[System.Windows.Forms.Cursors]::SizeWE}elseif($bottom){[System.Windows.Forms.Cursors]::SizeNS}else{[System.Windows.Forms.Cursors]::Default}
+    return
+  }
+  $frame.Cursor=if($script:resizeMode -eq "both"){[System.Windows.Forms.Cursors]::SizeNWSE}elseif($script:resizeMode -eq "horizontal"){[System.Windows.Forms.Cursors]::SizeWE}else{[System.Windows.Forms.Cursors]::SizeNS}
+  $newW=$script:resizeStartW
+  $newH=$script:resizeStartH
+  if($script:resizeMode -eq "horizontal" -or $script:resizeMode -eq "both"){$newW=$script:resizeStartW+($e.X-$script:resizeStartX)}
+  if($script:resizeMode -eq "vertical" -or $script:resizeMode -eq "both"){$newH=$script:resizeStartH+($e.Y-$script:resizeStartY)}
+  Set-PhoneChromeSize ($newW-(2*$bezel)) ($newH-$topPad-$bottomPad)
+})
+$frame.add_MouseUp({
+  param($sender,$e)
+  $script:resizeMode=$null
+  $frame.Capture=$false
+})
 
 $timer=New-Object System.Windows.Forms.Timer
 $timer.Interval=500
