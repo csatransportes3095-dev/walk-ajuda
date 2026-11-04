@@ -900,12 +900,19 @@ async function run() {
         startedAt: new Date().toISOString(), lastClosedAt: null, browserExitReason: null,
         instanceLabelState: "static_tab", observedIp: initial.observedIp,
         browserProxyVerified: false, browserProxyVerification: "pending",
+        browserProxyFailureAt: null,
         privacyGuard: "protected", googleSorryPrivacyGuard: "enabled",
-        killSwitch: "armed", networkState: "online", panelConnection: "pending",
+        killSwitch: "armed", killSwitchReason: null,
+        networkState: "online", networkFailureCategory: null, networkSuspendedAt: null,
+        panelConnection: "pending", panelLastErrorCategory: null, panelLastFailureAt: null,
         directBrowserEgress: "blocked_by_windows_firewall",
         proxyRotationPolicy: "provider_managed_between_sessions",
         configuredRotationMinutes: rotationMinutes,
-        sessionLockedIp,
+        // A freshly validated relay starts a new run; never inherit a closed
+        // run's proxy/IP alarms from the merged session JSON.
+        sessionLockedIp, sessionIpChanged: false, sessionIpChangedAt: null,
+        previousSessionLockedIp: null,
+        hotSwapState: null, hotSwapFailure: null, hotSwapFailureAt: null,
       });
     } catch { }
     // Communication failure never reaches the launch catch or terminates Chrome.
