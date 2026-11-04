@@ -21,6 +21,29 @@ describe("H2 Loans - client email in payment confirmation", () => {
     expect(loans).toContain("resolveLoanClientEmail(db, inst.clientEmail, inst.clientPhone)");
   });
 
+  it("does not report a saved payment as failed when optional email lookup fails", () => {
+    const start = loans.indexOf("async function resolveLoanClientEmail");
+    const end = loans.indexOf("function brazilDateTime", start);
+    const emailResolver = loans.slice(start, end);
+    expect(emailResolver).toContain("try {");
+    expect(emailResolver).toContain("catch (error: any)");
+    expect(emailResolver).toContain("return null;");
+    expect(emailResolver).toContain("Optional customer email lookup failed");
+    expect(loans).toContain("clientEmailNotified = true");
+    expect(loans).toContain("clientEmailNotified };");
+  });
+
+  it("prevents a duplicate proof, score or paid date on retries of paid installments", () => {
+    const standard = loans.slice(loans.indexOf("confirmInstallmentPayment: adminProcedure"), loans.indexOf("refuseInstallmentPayment: adminProcedure"));
+    const manual = loans.slice(loans.indexOf("confirmInstallmentPaymentWithProof: adminProcedure"), loans.indexOf("getProofsByLoan:", loans.indexOf("confirmInstallmentPaymentWithProof: adminProcedure")));
+    expect(standard).toContain("if (wasAlreadyPaid)");
+    expect(manual).toContain("if (wasAlreadyPaid)");
+    expect(standard.indexOf("if (wasAlreadyPaid)")).toBeLessThan(standard.indexOf("UPDATE loanInstallments SET status='pago'"));
+    expect(manual.indexOf("if (wasAlreadyPaid)")).toBeLessThan(manual.indexOf("INSERT INTO installmentProofs"));
+    expect(standard).toContain("alreadyPaid: true");
+    expect(manual).toContain("alreadyPaid: true");
+  });
+
   it("does not change manual payment values or paid date logic", () => {
     const start = loans.indexOf("confirmInstallmentPaymentWithProof: ");
     const end = loans.indexOf("getProofsByLoan:", start);
