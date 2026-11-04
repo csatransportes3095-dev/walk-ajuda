@@ -57,10 +57,16 @@ describe("H2ADS: native phone appearance on real Chrome window", () => {
     expect(native).not.toContain("Start-Process");
   });
 
-  it("renders full native smartphone body and clips only visible Chrome corners", () => {
+  it("renders smartphone chassis and native corners without clipping real Chrome pixels", () => {
     expect(native).toContain("public sealed class H2PhoneDisplayForm");
     expect(native).toContain("Rounded(15f,67f");
-    expect(native).toContain("CreateRoundRectRgn");
+    // Avoid DPI-virtualized hard region truncation at 175 percent scaling.
+    expect(native).not.toContain("CreateRoundRectRgn");
+    expect(native).toContain("DwmSetWindowAttribute");
+    expect(native).toContain("SetWindowRgn(hwnd,IntPtr.Zero,true)");
+    expect(native).not.toContain("function Set-PhoneCorners");
+    expect(native).not.toContain("$frame.add_SizeChanged({Set-PhoneCorners");
+    expect(native).toContain("H2PhoneDisplayForm.OnResize");
     expect(native).toContain("SetWindowRgn");
     expect(native).toContain("RoundChromeWindow");
     expect(native).toContain("IsZoomed");
