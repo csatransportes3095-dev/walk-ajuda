@@ -3,7 +3,7 @@ import { selectLoanInstallmentFocus } from "@shared/loanInstallmentFocus";
 import { TRPCError } from "@trpc/server";
 import { z } from "zod";
 import { publicProcedure, adminProcedure, router } from "../_core/trpc";
-import { getDb, createFinancialSale } from "../db";
+import { getDb, createFinancialSale, getSetting } from "../db";
 import { syncUnifiedCustomerRegistry, requireCompleteMainCustomerProfile } from "../customerIdentity";
 import { CUSTOMER_ROUTES, findMainCustomerByIdentity, getRouteAccess, getRouteReleaseMode, reconcileLegacyLoanPermissions, setCustomerRoutePermissions } from "../customerAccess";
 import { storagePut } from "../storage";
@@ -295,6 +295,49 @@ async function sendReceiptEmail(to: string, clientName: string, receiptNumber: s
     subject: `Recibo de Pagamento ââ‚¬â€ Parcela #${installmentNumber} | ${receiptNumber}`,
     html: `<div style="font-family:Arial,sans-serif;max-width:500px;margin:0 auto;"><div style="background:#0f172a;padding:24px;border-radius:8px 8px 0 0;"><h2 style="color:#22c55e;margin:0;">H2 COLOMBIANO</h2><p style="color:#94a3b8;margin:4px 0 0;">Recibo de Pagamento</p></div><div style="background:#f8fafc;padding:24px;border-radius:0 0 8px 8px;border:1px solid #e2e8f0;"><p style="color:#0f172a;">Olá, <strong>${clientName}</strong>!</p><p style="color:#374151;">Segue em anexo o recibo da <strong>Parcela #${installmentNumber}</strong>.</p><p style="color:#374151;">Número do recibo: <strong>${receiptNumber}</strong></p><hr style="border:none;border-top:1px solid #e2e8f0;margin:16px 0;"><p style="color:#6b7280;font-size:12px;">Guarde este recibo para sua segurança.</p></div></div>`,
     attachments: [{ filename: `recibo-${receiptNumber}.pdf`, content: pdfBuffer, contentType: 'application/pdf' }],
+  });
+}
+
+async function resolveLoanClientEmail(db: any, email: unknown, phone: unknown): Promise<string | null> {
+  const direct = String(email || '').trim();
+  if (direct) return direct;
+  const normalizedPhone = onlyDigits(phone);
+  if (!normalizedPhone) return null;
+  const rows = await qRows(db, drizzleSql`SELECT email FROM customers WHERE REPLACE(REPLACE(REPLACE(REPLACE(phone, '(', ''), ')', ''), '-', ''), ' ', '') LIKE ${'%' + normalizedPhone.slice(-10)}%} AND deletedAt IS NULL LIMIT 1`);
+  return String(rows[0]?.email || '').trim() || null;
+}
+
+function brazilDateTime(value: Date): string {
+  return new Intl.DateTimeFormat('pt-BR', {
+    timeZone: 'America/Sao_Paulo', dateStyle: 'short', timeStyle: 'medium',
+  }).format(value);
+}
+
+async function notifyAdminProofReceived(opts: {
+  clientName: string; clientPhone: string; clientEmail?: string | null;
+  loanId: number; installmentId: number; installmentNumber: number; amount: number;
+  proofUrl: string; fileName: string; fileBuffer: Buffer; mimeType: string; submittedAt: Date;
+}): Promise<void> {
+  const to = (await getSetting('contact_email')) || (await getSetting('email_to')) || 'h2@h2colombiano.com';
+  const amount = Number(opts.amount || 0).toLocaleString('pt-BR', { style: 'currency', currency: 'BRL' });
+  const submittedAt = brazilDateTime(opts.submittedAt);
+  await sendMailDirect({
+    from: '"H2 COLOMBIANO" <h2@h2colombiano.com>', to,
+    subject: `Comprovante recebido para conferência — ${opts.clientName} — Parcela #${opts.installmentNumber}`,
+    html: `<div style="font-family:Arial,sans-serif;max-width:620px;margin:0 auto;color:#172033;"><h2 style="background:#0f172a;color:#22c55e;padding:20px;margin:0;">Comprovante recebido para conferência</h2><div style="padding:22px;border:1px solid #e2e8f0;"><p>O cliente <strong>${opts.clientName}</strong> enviou um comprovante para conferência.</p><p><strong>Empréstimo:</strong> #${opts.loanId}<br><strong>Parcela:</strong> #${opts.installmentNumber}<br><strong>Identificação da parcela:</strong> #${opts.installmentId}<br><strong>Valor:</strong> ${amount}<br><strong>Enviado em:</strong> ${submittedAt}<br><strong>Telefone:</strong> ${opts.clientPhone || 'não informado'}<br><strong>E-mail:</strong> ${opts.clientEmail || 'não informado'}</p><p><a href="${opts.proofUrl}">Abrir comprovante recebido</a></p><p style="font-size:12px;color:#64748b;">Confira o comprovante no ADM e aprove ou recuse o pagamento.</p></div></div>`,
+    attachments: [{ filename: opts.fileName || `comprovante-parcela-${opts.installmentNumber}`, content: opts.fileBuffer, contentType: opts.mimeType || 'application/octet-stream' }],
+  });
+}
+
+async function notifyClientPaymentApproved(opts: {
+  to: string; clientName: string; loanId: number; installmentNumber: number;
+  amount: number; paidAt: Date;
+}): Promise<void> {
+  const amount = Number(opts.amount || 0).toLocaleString('pt-BR', { style: 'currency', currency: 'BRL' });
+  await sendMailDirect({
+    from: '"H2 COLOMBIANO" <h2@h2colombiano.com>', to: opts.to,
+    subject: `Pagamento aprovado — Parcela #${opts.installmentNumber}`,
+    html: `<div style="font-family:Arial,sans-serif;max-width:560px;margin:0 auto;color:#172033;"><h2 style="background:#0f172a;color:#22c55e;padding:20px;margin:0;">Pagamento aprovado</h2><div style="padding:22px;border:1px solid #e2e8f0;"><p>Olá, <strong>${opts.clientName || 'Cliente'}</strong>!</p><p>Seu pagamento foi <strong style="color:#16a34a;">aprovado</strong> pela nossa equipe.</p><p><strong>Empréstimo:</strong> #${opts.loanId}<br><strong>Parcela paga:</strong> #${opts.installmentNumber}<br><strong>Valor pago:</strong> ${amount}<br><strong>Data e hora da aprovação:</strong> ${brazilDateTime(opts.paidAt)}</p><p>Obrigado. Guarde este e-mail para seu controle.</p></div></div>`,
   });
 }
 
@@ -1798,7 +1841,8 @@ export const loanRouter = router({
     await ensureLateFeeAdminOverrideColumns(db);
     const paidBy = ctx.user?.name || "admin";
     const paymentRows = await qRows(db, drizzleSql`
-      SELECT li.*, l.paymentType AS loanPaymentType, lc.late_fee_disabled AS clientLateFeeDisabled
+      SELECT li.*, l.paymentType AS loanPaymentType, lc.late_fee_disabled AS clientLateFeeDisabled,
+        lc.name AS clientName, lc.phone AS clientPhone, lc.email AS clientEmail
       FROM loanInstallments li
       JOIN loans l ON l.id=li.loanId
       JOIN loanClients lc ON lc.id=l.clientId
@@ -1807,6 +1851,7 @@ export const loanRouter = router({
     `);
     if (!paymentRows.length) throw new TRPCError({ code: 'NOT_FOUND', message: 'Parcela não encontrada' });
     const paymentRow = paymentRows[0];
+    const wasAlreadyPaid = paymentRow.status === 'pago';
     if (String(paymentRow.loanPaymentType || '') === 'diario' && Number(paymentRow.clientLateFeeDisabled || 0) !== 1) {
       const cfgRows = await qRows(db, drizzleSql`SELECT * FROM loan_late_fee_config WHERE id=1 LIMIT 1`);
       const baseAmount = paymentRow.originalAmount != null ? Number(paymentRow.originalAmount || 0) : Number(paymentRow.amount || 0);
@@ -1848,7 +1893,22 @@ export const loanRouter = router({
         }
       }
     }
-    return { ok: true, h2ScoreApproval, permanentH2Score };
+    const clientEmail = await resolveLoanClientEmail(db, paymentRow.clientEmail, paymentRow.clientPhone);
+    if (clientEmail && !wasAlreadyPaid) {
+      try {
+        await notifyClientPaymentApproved({
+          to: clientEmail,
+          clientName: String(paymentRow.clientName || 'Cliente'),
+          loanId: Number(paymentRow.loanId),
+          installmentNumber: Number(paymentRow.installmentNumber || 0),
+          amount: Number(paymentRow.amount || 0),
+          paidAt: new Date(),
+        });
+      } catch (error: any) {
+        console.error('[confirmInstallmentPayment] Falha ao notificar cliente:', error?.message || error);
+      }
+    }
+    return { ok: true, h2ScoreApproval, permanentH2Score, clientEmailNotified: !!clientEmail };
   }),
 
   refuseInstallmentPayment: adminProcedure.input(z.object({
@@ -2515,6 +2575,25 @@ export const loanRouter = router({
       proofUrl: url,
       submittedAt: receivedAt,
     });
+    try {
+      await notifyAdminProofReceived({
+        clientName: String(client.name || 'Cliente'),
+        clientPhone: String(client.phone || ''),
+        clientEmail: String(client.email || ''),
+        loanId: Number(row.loanId),
+        installmentId: input.installmentId,
+        installmentNumber: Number(row.installmentNumber || 0),
+        amount: Number(row.amount || 0),
+        proofUrl: url,
+        fileName: input.fileName,
+        fileBuffer: buffer,
+        mimeType: input.mimeType,
+        submittedAt: receivedAt,
+      });
+    } catch (error: any) {
+      // O comprovante já está salvo; uma falha de e-mail não pode desfazer o envio do cliente.
+      console.error('[submitInstallmentProof] Falha ao notificar ADM:', error?.message || error);
+    }
     return { ok: true, url, appliedFee: effectiveFee, h2ScoreSubmission };
   }),
 
@@ -3264,12 +3343,14 @@ export const loanRouter = router({
     const db = await getDb() as any;
     const paidBy = ctx.user?.name || "admin";
     const instRows = await qRows(db, drizzleSql`
-      SELECT li.*, l.clientId FROM loanInstallments li
+      SELECT li.*, l.clientId, lc.name AS clientName, lc.phone AS clientPhone, lc.email AS clientEmail FROM loanInstallments li
       JOIN loans l ON l.id = li.loanId
+      JOIN loanClients lc ON lc.id = l.clientId
       WHERE li.id=${input.installmentId}
     `);
     if (!instRows.length) throw new TRPCError({ code: 'NOT_FOUND' });
     const inst = instRows[0];
+    const wasAlreadyPaid = inst.status === 'pago';
     let fileKey: string | null = null;
     let fileUrl: string | null = null;
     let hasProof = 0;
@@ -3317,7 +3398,22 @@ export const loanRouter = router({
         await db.execute(drizzleSql`UPDATE loans SET status='aprovado' WHERE id=${loanId} AND status='aguardando_pagamento'`);
       }
     }
-    return { ok: true, hasProof: !!hasProof, fileUrl, h2ScoreApproval, permanentH2Score };
+    const clientEmail = await resolveLoanClientEmail(db, inst.clientEmail, inst.clientPhone);
+    if (clientEmail && !wasAlreadyPaid) {
+      try {
+        await notifyClientPaymentApproved({
+          to: clientEmail,
+          clientName: String(inst.clientName || 'Cliente'),
+          loanId: Number(inst.loanId),
+          installmentNumber: Number(inst.installmentNumber || 0),
+          amount: Number(input.amountPaid || 0),
+          paidAt: paidAtDate,
+        });
+      } catch (error: any) {
+        console.error('[confirmInstallmentPaymentWithProof] Falha ao notificar cliente:', error?.message || error);
+      }
+    }
+    return { ok: true, hasProof: !!hasProof, fileUrl, h2ScoreApproval, permanentH2Score, clientEmailNotified: !!clientEmail };
   }),
 
   // Buscar comprovantes de um empréstimo (batch por loanId)
