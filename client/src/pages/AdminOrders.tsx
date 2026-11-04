@@ -3036,7 +3036,8 @@ export default function AdminOrders() {
         </div>
       )}
 
-      <div className="sticky top-[57px] z-30 bg-background/95 backdrop-blur-sm border-b border-border">
+      {/* Filtros no fluxo normal da página: rolam junto com os cards e nunca os sobrepõem. */}
+      <div className="relative z-10 bg-background border-b border-border">
 
         {/* Busca */}
         <div className="px-4 pb-2 space-y-2">

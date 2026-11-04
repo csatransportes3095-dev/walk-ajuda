@@ -27,4 +27,9 @@ describe("filtro operacional Em Análise", () => {
     expect(pendingIndex).toBeGreaterThanOrEqual(0);
     expect(analysisIndex).toBeGreaterThan(pendingIndex);
   });
+
+  it("mantém os filtros no fluxo normal para rolarem com os cards", () => {
+    expect(source).toContain('className="relative z-10 bg-background border-b border-border"');
+    expect(source).not.toContain('className="sticky top-[57px] z-30 bg-background/95 backdrop-blur-sm border-b border-border"');
+  });
 });
