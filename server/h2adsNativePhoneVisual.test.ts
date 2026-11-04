@@ -25,7 +25,11 @@ describe("H2ADS: native phone appearance on real Chrome window", () => {
     expect(runner).toContain('"BrowserPid", String(browser.pid)');
     expect(runner).toContain('phoneWindowProcess = spawn("powershell.exe"');
     expect(runner).toContain("phoneWindowProcess?.kill()");
-    expect(runner).toContain("if (existsSync(script)");
+    expect(runner).toContain('const cachedScript = join(profileDirectory, "..", "..", "h2ads-phone-window.ps1")');
+    expect(runner).toContain('h2ads-phone-window-${instanceId}.ps1');
+    expect(runner).toContain('cache: "no-store"');
+    expect(runner).not.toContain("if (!existsSync(script))");
+    expect(runner).toContain("writeFileSync(currentVisualScript, contents");
     expect(runner).toContain("mobileRemoteRequested");
   });
 
