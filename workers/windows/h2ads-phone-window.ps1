@@ -32,6 +32,10 @@ public static class H2PhoneWindowNative {
   [DllImport("user32.dll", EntryPoint="SetWindowLongPtrW", SetLastError=true)] public static extern IntPtr SetWindowLongPtr(IntPtr hwnd,int index,IntPtr value);
   [DllImport("user32.dll")] public static extern bool ShowWindow(IntPtr hwnd,int command);
   [DllImport("user32.dll")] public static extern bool ReleaseCapture();
+  [DllImport("user32.dll")] public static extern IntPtr GetForegroundWindow();
+  [DllImport("user32.dll")] public static extern IntPtr GetFocus();
+  [DllImport("user32.dll")] public static extern IntPtr SetFocus(IntPtr hwnd);
+  [DllImport("user32.dll", SetLastError=true)] public static extern bool AttachThreadInput(uint attach,uint attachTo,bool active);
   [DllImport("user32.dll", CharSet=CharSet.Auto)] public static extern IntPtr SendMessage(IntPtr hwnd,int message,IntPtr wParam,IntPtr lParam);
   public const int WM_NCLBUTTONDOWN=0x00A1;
   public const int HTCAPTION=2;
@@ -46,6 +50,7 @@ public static class H2PhoneWindowNative {
     SetParent(chrome,frame);
     return GetParent(chrome)==frame;
   }
+  private static readonly Dictionary<IntPtr,string> LastHostedLayout = new Dictionary<IntPtr,string>();
   public static bool FitHostedChrome(IntPtr chrome,IntPtr frame,int insetX,int insetTop,int insetBottom) {
     if(chrome==IntPtr.Zero || frame==IntPtr.Zero || GetParent(chrome)!=frame)return false;
     // Always measure the PARENT CLIENT RECT in this Win32 DPI context.
@@ -56,8 +61,37 @@ public static class H2PhoneWindowNative {
     int availableW=rc.Right-rc.Left-2*insetX;
     int availableH=rc.Bottom-rc.Top-insetTop-insetBottom;
     if(availableW<120 || availableH<160)return false;
-    return SetWindowPos(chrome,IntPtr.Zero,insetX,insetTop,availableW,availableH,
-      SWP_NOACTIVATE|SWP_NOOWNERZORDER|SWP_NOSENDCHANGING|SWP_FRAMECHANGED);
+    string geometry=insetX+":"+insetTop+":"+availableW+":"+availableH;
+    string last;
+    if(LastHostedLayout.TryGetValue(chrome,out last) && last==geometry)return true;
+    // Do NOT send SWP_FRAMECHANGED on the 500ms visual timer. It rebuilds
+    // Chrome's native frame repeatedly and can interrupt text/omnibox focus.
+    bool initial=!LastHostedLayout.ContainsKey(chrome);
+    uint flags=SWP_NOACTIVATE|SWP_NOOWNERZORDER|SWP_NOSENDCHANGING;
+    if(initial)flags|=SWP_FRAMECHANGED;
+    bool fitted=SetWindowPos(chrome,IntPtr.Zero,insetX,insetTop,availableW,availableH,flags);
+    if(fitted)LastHostedLayout[chrome]=geometry;
+    return fitted;
+  }
+  public static bool FocusHostedChrome(IntPtr chrome,IntPtr frame) {
+    if(chrome==IntPtr.Zero || frame==IntPtr.Zero || GetParent(chrome)!=frame)return false;
+    // Only restore keyboard focus while THIS phone is already foreground.
+    // Never steal focus from another app or an unrelated H2ADS instance.
+    if(GetForegroundWindow()!=frame)return false;
+    uint ignored;
+    uint frameThread=GetWindowThreadProcessId(frame,out ignored);
+    uint chromeThread=GetWindowThreadProcessId(chrome,out ignored);
+    if(frameThread==0 || chromeThread==0)return false;
+    bool linked=frameThread==chromeThread || AttachThreadInput(frameThread,chromeThread,true);
+    if(!linked)return false;
+    try {
+      // Cross-process WS_CHILD needs input queues attached for SetFocus to work.
+      // Let Chrome manage its own omnibox and webpage fields after activation.
+      SetFocus(chrome);
+      return GetFocus()==chrome;
+    } finally {
+      if(frameThread!=chromeThread)AttachThreadInput(frameThread,chromeThread,false);
+    }
   }
   public static void SetPhoneGroup(IntPtr chrome,IntPtr frame,int chromeX,int chromeY,int chromeW,int chromeH,int frameX,int frameY,int frameW,int frameH) {
     if(chrome==IntPtr.Zero || frame==IntPtr.Zero)return;
@@ -385,6 +419,14 @@ $frame.Controls.Add($footer)
 $frame.CreateControl()
 if(-not [H2PhoneWindowNative]::HostChrome($chrome,$frame.Handle)){ throw "H2ADS: failed to host Chrome HWND inside phone" }
 [H2PhoneWindowNative]::SetPhoneGroup($chrome,$frame.Handle,$bezel,$topPad,$width,$height,($targetX-$bezel),($targetY-$topPad),($width+2*$bezel),($height+$topPad+$bottomPad))
+# Preserve the embedded browser. Restore native Chrome keyboard focus on
+# genuine phone activation, never continuously while the user is typing.
+$frame.add_Activated({
+  [H2PhoneWindowNative]::FocusHostedChrome($chrome,$frame.Handle)|Out-Null
+})
+$frame.add_Shown({
+  [H2PhoneWindowNative]::FocusHostedChrome($chrome,$frame.Handle)|Out-Null
+})
 
 # The exposed bezel is the resize handle. Chrome stays the only browser window;
 # the host resizes its child HWND without changing its profile.
