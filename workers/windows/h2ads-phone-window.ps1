@@ -406,10 +406,24 @@ function Change-H2AdsWatch([string]$action) {
   }
 }
 function Get-H2AdsWatchLayout([int]$width) {
-  if($width -ge 370) {
-    return @{toggleX=74; textX=92; resetX=([int]($width/2)-28); y=17; textY=16; clockY=16; hitTop=11; hitBottom=43}
+  # The clock is drawn at X=20 with Segoe UI 11pt. Measure its actual
+  # glyph width instead of using a fixed X that overlaps HH:mm at 175% DPI.
+  $clockFont=New-Object System.Drawing.Font -ArgumentList "Segoe UI",11,([System.Drawing.FontStyle]::Bold)
+  try {
+    $clockWidth=[int][Math]::Ceiling(
+      [System.Windows.Forms.TextRenderer]::MeasureText("23:59",$clockFont).Width
+    )
+  } finally { $clockFont.Dispose() }
+  $toggleX=20+$clockWidth+10
+  $textX=$toggleX+17
+  # Leave room for the existing camera punch-hole and reset icon.
+  $resetX=[int][Math]::Floor($width/2)-29
+  if(($resetX-$textX) -ge 47) {
+    return @{toggleX=$toggleX; textX=$textX; resetX=$resetX; y=17; textY=16; clockY=16; hitTop=11; hitBottom=43}
   }
-  return @{toggleX=20; textX=40; resetX=125; y=29; textY=28; clockY=3; hitTop=25; hitBottom=52}
+  # On narrow phones, put the stopwatch below the clock rather than
+  # overlapping the clock or camera. The top bar remains 52px tall.
+  return @{toggleX=20; textX=37; resetX=([int][Math]::Floor($width/2)-29); y=29; textY=28; clockY=3; hitTop=25; hitBottom=51}
 }
 
 # Windows PowerShell 5.1 reads UTF-8 without BOM incorrectly.
@@ -448,7 +462,7 @@ $status.add_Paint({
       $g.DrawLine($pen,$sx,($sy+13),$sx,($sy+1))
     }
     $watchText=Format-H2AdsWatchElapsed
-    $available=[float][Math]::Max(30,($watchLayout.resetX-$watchLayout.textX-4))
+    $available=[float][Math]::Max(30,($watchLayout.resetX-$watchLayout.textX-7))
     $watchFont=$font
     $measured=$g.MeasureString($watchText,$font).Width
     if($measured -gt $available) {
@@ -496,8 +510,10 @@ $status.add_MouseDown({
   param($sender,$e)
   if($e.Button -ne [System.Windows.Forms.MouseButtons]::Left){return}
   $watchLayout=Get-H2AdsWatchLayout $status.ClientSize.Width
-  if($e.Y -ge $watchLayout.hitTop -and $e.Y -le $watchLayout.hitBottom -and
-     $e.X -ge ($watchLayout.toggleX-3) -and $e.X -le ($watchLayout.resetX+17)){return}
+  $watchRow=$e.Y -ge $watchLayout.hitTop -and $e.Y -le $watchLayout.hitBottom
+  $watchPlay=$e.X -ge ($watchLayout.toggleX-5) -and $e.X -le ($watchLayout.toggleX+15)
+  $watchReset=$e.X -ge ($watchLayout.resetX-4) -and $e.X -le ($watchLayout.resetX+18)
+  if($watchRow -and ($watchPlay -or $watchReset)){return}
   if($e.X -ge ($status.ClientSize.Width-135)){return}
   [H2PhoneWindowNative]::ReleaseCapture()|Out-Null
   [H2PhoneWindowNative]::SendMessage($frame.Handle,
@@ -508,10 +524,16 @@ $status.add_MouseClick({
   param($sender,$e)
   if($e.Button -ne [System.Windows.Forms.MouseButtons]::Left){return}
   $watchLayout=Get-H2AdsWatchLayout $status.ClientSize.Width
-  if($e.Y -ge $watchLayout.hitTop -and $e.Y -le $watchLayout.hitBottom -and
-     $e.X -ge ($watchLayout.toggleX-3) -and $e.X -le ($watchLayout.resetX+17)){
-    if($e.X -ge ($watchLayout.resetX-3)){Change-H2AdsWatch "reset"}
-    else {Change-H2AdsWatch "toggle"}
+  $watchRow=$e.Y -ge $watchLayout.hitTop -and $e.Y -le $watchLayout.hitBottom
+  $watchPlay=$e.X -ge ($watchLayout.toggleX-5) -and $e.X -le ($watchLayout.toggleX+15)
+  $watchReset=$e.X -ge ($watchLayout.resetX-4) -and $e.X -le ($watchLayout.resetX+18)
+  if($watchRow -and $watchReset){
+    Change-H2AdsWatch "reset"
+    $status.Invalidate()
+    return
+  }
+  if($watchRow -and $watchPlay){
+    Change-H2AdsWatch "toggle"
     $status.Invalidate()
     return
   }

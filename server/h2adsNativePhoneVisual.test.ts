@@ -151,6 +151,19 @@ describe("H2ADS: native phone appearance on real Chrome window", () => {
     expect(runner).toContain('"--proxy-server=http://127.0.0.1:" + relayPort');
   });
 
+  it("places the stopwatch after the measured clock, with responsive controls and camera clearance", () => {
+    expect(native).toContain('MeasureText("23:59",$clockFont).Width');
+    expect(native).toContain("$toggleX=20+$clockWidth+10");
+    expect(native).toContain("$textX=$toggleX+17");
+    expect(native).toContain("$resetX=[int][Math]::Floor($width/2)-29");
+    expect(native).toContain("if(($resetX-$textX) -ge 47)");
+    expect(native).toContain("$watchPlay=$e.X -ge ($watchLayout.toggleX-5)");
+    expect(native).toContain("$watchReset=$e.X -ge ($watchLayout.resetX-4)");
+    expect(native).not.toContain("return @{toggleX=74; textX=92;");
+    expect(native).toContain("Change-H2AdsWatch");
+    expect(native).toContain("Save-H2AdsWatchState");
+  });
+
   it("never changes the browser arguments, proxy chain or profile backend", () => {
     expect(runner).toContain('"--user-data-dir=" + profileDirectory');
     expect(runner).toContain('"--proxy-server=http://127.0.0.1:" + relayPort');
