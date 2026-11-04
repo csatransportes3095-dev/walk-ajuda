@@ -38,6 +38,7 @@ let backendRelay;
 let relayPort;
 let activeBackendPort;
 let browser;
+let phoneWindowProcess = null; // cosmetic WinForms process, never part of the Chrome engine
 let rotationTimer;
 let ipTimer;
 let killSwitchTimer;
@@ -721,6 +722,9 @@ async function finalizeBrowserExit(reason, code = null, signal = null) {
     const manifest = existsSync(manifestPath) ? JSON.parse(readFileSync(manifestPath, "utf8")) : { instanceId, profileVersion: 1 };
     writeFileSync(manifestPath, JSON.stringify({ ...manifest, lastClosedAt: closedAt }), "utf8");
   } catch { }
+  // Stop only the optional visual frame. The Chrome lifecycle remains unchanged.
+  try { phoneWindowProcess?.kill(); } catch { }
+  phoneWindowProcess = null;
   // Queue the profile backup locally, but never keep the session lock while
   // compressing/uploading it. The independent Worker snapshot queue handles it.
   let pendingPath = null;
@@ -741,6 +745,35 @@ async function finalizeBrowserExit(reason, code = null, signal = null) {
     await post("/api/h2ads/worker/runs/" + instanceId + "/state", { state: "closed" });
   } catch (error) {
     panelFailure(error);
+  }
+}
+
+async function startNativePhoneVisual(pid) {
+  if (!Number.isInteger(pid) || pid < 1 || browserExitHandled) return;
+  // Fallback ensures older installed Workers also receive the new appearance
+  // through the browser-session.mjs they already download before every launch.
+  const script = join(profileDirectory, "..", "..", "h2ads-phone-window.ps1");
+  try {
+    if (!existsSync(script)) {
+      const response = await fetch(
+        (panelUrl.endsWith("/") ? panelUrl.slice(0, -1) : panelUrl) + "/api/h2ads/worker/windows-phone-window.ps1",
+        { headers: headers(), signal: AbortSignal.timeout(6500) },
+      );
+      if (!response.ok) return;
+      const contents = await response.text();
+      if (contents.length < 2000 || contents.length > 30000 ||
+          !contents.includes("H2PhoneWindowNative")) return;
+      writeFileSync(script, contents, { encoding: "utf8", mode: 0o600 });
+    }
+    if (browserExitHandled || !browser || browser.exitCode !== null) return;
+    phoneWindowProcess = spawn("powershell.exe", [
+      "-NoProfile", "-NonInteractive", "-ExecutionPolicy", "Bypass",
+      "-WindowStyle", "Hidden", "-File", script,
+      "-BrowserPid", String(pid), "-InstanceName", instanceName,
+    ], { windowsHide: true, stdio: "ignore" });
+    phoneWindowProcess.on("error", () => { phoneWindowProcess = null; });
+  } catch {
+    // The companion may fail, but Chrome, proxy and all instance actions survive.
   }
 }
 
@@ -800,6 +833,9 @@ async function run() {
     // Register before any network request to the panel: early exit is never lost.
     browser.once("error", (error) => { void finalizeBrowserExit("spawn_error", null, error?.code || null); });
     browser.once("exit", (code, signal) => { void finalizeBrowserExit("browser_exit", code, signal); });
+    // The same local launch runs for the ADM and for orders.
+    // Never wait for the decorative companion before opening the real browser.
+    void startNativePhoneVisual(browser.pid).catch(() => undefined);
     // Do not make the user wait for a second headless Chrome before seeing the real window.
     // Direct egress remains blocked by Windows Firewall; verification runs asynchronously.
     void verifyChromeProxyAfterLaunch(executable, initial.observedIp);

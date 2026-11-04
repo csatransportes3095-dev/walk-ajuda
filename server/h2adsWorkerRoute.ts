@@ -170,6 +170,15 @@ export function registerH2AdsWorkerRoute(app: Express): void {
     });
   });
 
+  // Optional decorative Windows shell for the actual Chrome instance.
+  // Never controls profiles, worker commands, proxy routes or browser sessions.
+  app.get("/api/h2ads/worker/windows-phone-window.ps1", (_req: Request, res: Response) => {
+    noStore(res);
+    res.download(path.resolve(process.cwd(), "workers", "windows", "h2ads-phone-window.ps1"), "h2ads-phone-window.ps1", error => {
+      if (error && !res.headersSent) res.status(404).json({ error: "Visual do aparelho indisponivel." });
+    });
+  });
+
   app.get("/api/h2ads/worker/windows-browser-session.mjs", (_req: Request, res: Response) => {
     noStore(res);
     const sessionPath = path.resolve(process.cwd(), "workers", "windows", "browser-session.mjs");

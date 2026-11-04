@@ -1,10 +1,9 @@
 import { type FormEvent, type ReactNode, useMemo, useState } from "react";
-import { useLocation } from "wouter";
+import { Link, useLocation } from "wouter";
 import { toast } from "sonner";
 import { Activity, ArrowDown, ArrowLeft, ArrowUp, ArrowUpDown, CheckCircle2, ChevronDown, ChevronRight, Copy, Eye, EyeOff, FolderPlus, KeyRound, Layers3, LockKeyhole, Monitor, Network, Pencil, Play, Plus, RefreshCw, Search, ShieldCheck, Square, Trash2, Wifi, WifiOff, X } from "lucide-react";
 import { trpc } from "@/lib/trpc";
 import H2AdsOrderLinkControl from "@/components/H2AdsOrderLinkControl";
-import H2AdsPhoneFrame from "@/components/H2AdsPhoneFrame";
 import H2AdsNewInstanceOrderPicker, { suggestedH2AdsInstanceName, type H2AdsPendingOrderLink } from "@/components/H2AdsNewInstanceOrderPicker";
 import { H2ADS_NAME_MIN_LENGTH, validateH2AdsName } from "@shared/h2adsValidation";
 import { parseH2AdsProxyInput, type H2AdsProxyProtocol } from "@shared/h2adsProxyInput";
@@ -154,7 +153,6 @@ export default function H2Ads() {
   const [orderingGroups, setOrderingGroups] = useState(false);
   const [instanceSearch, setInstanceSearch] = useState("");
   const [closingAllBrowsers, setClosingAllBrowsers] = useState(false);
-  const [phonePreviewInstanceId, setPhonePreviewInstanceId] = useState<number | null>(null);
   const [proxyPoolText, setProxyPoolText] = useState("");
   const [proxyPoolProtocol, setProxyPoolProtocol] = useState<H2AdsProxyProtocol>("http");
 
@@ -451,8 +449,6 @@ export default function H2Ads() {
       await launchBrowser.mutateAsync({ instanceId });
       toast.success("Comando de abertura enviado.");
       refreshCommandState(instanceId);
-      // Visual only: after the existing launch request, display a decorative phone shell.
-      setPhonePreviewInstanceId(instanceId);
     } catch (error) { setAction(instanceId, null); toast.error(errorText(error, "Não foi possível solicitar a abertura do browser.")); }
   };
 
@@ -526,6 +522,7 @@ Isso encerra somente os browsers abertos. Grupos, clientes vinculados, proxies e
           <div className="inline-flex items-center gap-2 rounded-full border border-[#148CFF]/25 bg-[#148CFF]/10 px-2.5 py-1 text-[10px] font-bold text-[#8CC8FF]"><Activity className="h-3 w-3" />H2ADS ADMIN</div>
           <h2 className="mt-2 text-xl font-black tracking-tight text-white sm:text-2xl">Instâncias e rotas</h2>
         </div>
+        <Link href="/h2ads/mobile" className="inline-flex min-h-10 items-center justify-center gap-2 rounded-xl bg-[#148CFF] px-4 text-xs font-black text-white"><Monitor className="h-4 w-4" /> Painel Mobile</Link>
       </section>
       <section className="mt-3 grid grid-cols-2 gap-2 sm:grid-cols-4"><Metric icon={Layers3} value={groups.length} label="grupos" text="" tone="gold" /><Metric icon={Monitor} value={instances.length} label="instâncias" text="" tone="blue" /><Metric icon={WifiOff} value={credentialStatuses.length} label="rotas vinculadas" text="" tone="red" /><Metric icon={Wifi} value={browserWorkers.filter(worker => worker.connectionStatus === "online").length} label="Workers online" text="" tone="blue" /></section>
 <details className="mt-3 overflow-hidden rounded-2xl border border-white/10 bg-[#0D1016]/90">
@@ -642,20 +639,6 @@ Isso encerra somente os browsers abertos. Grupos, clientes vinculados, proxies e
           <WorkerPanel workers={browserWorkers} onCreate={() => { setPairingCode(null); setWorkerForm({ ...emptyWorker }); }} onRevoke={disableWorker} busy={saving} />
         </div>
       </details>
-      {activeBrowserInstanceIds.length > 0 && (
-        <section className="mt-3 flex flex-wrap items-center gap-2 rounded-2xl border border-[#148CFF]/20 bg-[#148CFF]/[0.05] px-4 py-3">
-          <span className="text-xs font-bold text-[#8CC8FF]">Aparência de celular:</span>
-          {activeBrowserInstanceIds.map(id => {
-            const instance = instances.find(item => item.id === id);
-            return instance ? (
-              <button type="button" key={id} onClick={() => setPhonePreviewInstanceId(id)}
-                className="rounded-lg border border-[#148CFF]/40 bg-[#148CFF]/10 px-3 py-1.5 text-xs font-semibold text-white">
-                📱 {instance.name}
-              </button>
-            ) : null;
-          })}
-        </section>
-      )}
       <section className="mt-4 overflow-hidden rounded-2xl border border-white/10 bg-[#0D1016]/90 shadow-[0_18px_50px_rgba(0,0,0,0.25)]"><header className="flex flex-col gap-3 border-b border-white/10 px-4 py-3 sm:flex-row sm:items-center sm:justify-between"><div><p className="text-xs font-black uppercase tracking-[0.18em] text-[#FFE37A]">GRUPOS E INSTÂNCIAS</p></div><div className="flex flex-wrap gap-2"><button type="button" onClick={() => void requestCloseAllBrowsers()} disabled={closingAllBrowsers || activeBrowserInstanceIds.length === 0} title={activeBrowserInstanceIds.length ? "Fecha somente os browsers atualmente abertos; grupos, vínculos, proxies e configurações permanecem." : "Nenhuma instância com browser aberto"} className="inline-flex items-center gap-2 rounded-xl border border-rose-400/40 bg-rose-500/15 px-4 py-2.5 text-sm font-black text-rose-100 transition hover:border-rose-300/70 hover:bg-rose-500/25 disabled:cursor-not-allowed disabled:opacity-40"><Square className="h-4 w-4 fill-current" />{closingAllBrowsers ? "FECHANDO..." : `FECHAR TODAS ATIVAS${activeBrowserInstanceIds.length ? ` (${activeBrowserInstanceIds.length})` : ""}`}</button><button type="button" onClick={() => setOrderingGroups(value => !value)} disabled={Boolean(instanceSearchKey)} title={instanceSearchKey ? "Limpe a pesquisa para ordenar os grupos" : undefined} className={`inline-flex items-center gap-2 rounded-xl border px-4 py-2.5 text-sm font-black disabled:cursor-not-allowed disabled:opacity-40 ${orderingGroups ? "border-[#148CFF]/40 bg-[#148CFF]/15 text-[#8CC8FF]" : "border-white/10 bg-white/[0.03] text-slate-300"}`}><ArrowUpDown className="h-4 w-4" />{orderingGroups ? "Concluir ordem" : "Ordenar grupos"}</button><button type="button" onClick={() => setGroupForm({ ...emptyGroup })} className="inline-flex items-center gap-2 rounded-xl border border-[#F5B800]/30 bg-[#F5B800]/10 px-4 py-2.5 text-sm font-black text-[#FFE37A]"><FolderPlus className="h-4 w-4" />Novo grupo</button><button type="button" onClick={() => newInstance()} className="inline-flex items-center gap-2 rounded-xl bg-[#F5B800] px-4 py-2.5 text-sm font-black text-[#171003]"><Plus className="h-4 w-4" />Nova instância</button></div></header>
         <div className="border-b border-white/10 bg-black/20 px-4 py-4 sm:px-6">
           <div className="flex flex-col gap-3 lg:flex-row lg:items-center">
@@ -672,35 +655,6 @@ Isso encerra somente os browsers abertos. Grupos, clientes vinculados, proxies e
         <div className="p-4 sm:p-6">{dashboard.isLoading && <div className="grid min-h-48 place-items-center text-sm text-slate-400">Carregando instâncias H2 Ads...</div>}{!dashboard.isLoading && groups.length === 0 && <EmptyState />}{!dashboard.isLoading && groups.length > 0 && instanceSearchKey && masterSearchMatchCount === 0 && <div className="mb-4 rounded-2xl border border-dashed border-[#F5B800]/30 bg-[#F5B800]/[0.06] p-5 text-center"><p className="font-black text-[#FFE37A]">Nenhuma instância encontrada.</p><p className="mt-1 text-xs text-slate-400">Tente outro nome. A pesquisa verifica todos os grupos.</p></div>}{visibleGroups.map(group => <GroupSection key={group.id} group={group} instances={visibleInstancesByGroup.get(group.id) ?? []} profileByInstance={profileByInstance} credentialByInstance={credentialByInstance} workerById={workerById} assignmentByInstance={assignmentByInstance} browserRunByInstance={browserRunByInstance} workers={browserWorkers} groups={activeGroups} busy={saving} visualColors={visualColors} onVisualColor={setVisualColor} onEditGroup={() => setGroupForm({ id: group.id, name: group.name, description: group.description ?? "", status: group.status, cardColor: group.cardColor || INSTANCE_DEFAULT_COLOR })} onNewInstance={() => newInstance(group.id)} onEditInstance={instance => setInstanceForm({ id: instance.id, groupId: String(instance.groupId), name: instance.name, notes: instance.notes ?? "", status: instance.status })} onEditRoute={openRouteEditor} onAssignWorker={updateInstanceWorker} onPrepareBrowser={requestBrowserPreparation} onRotateProxy={requestLiveProxySwap} onLaunchBrowser={requestBrowserLaunch} onCloseBrowser={requestBrowserClose} onMoveInstanceGroup={moveInstanceToGroup} onDeleteInstance={removeInstance} instanceAction={instanceAction} expanded={instanceSearchKey ? true : expandedGroups.has(group.id)} onToggle={() => toggleGroup(group.id)} ordering={orderingGroups && !instanceSearchKey} canMoveUp={groups.indexOf(group) > 0} canMoveDown={groups.indexOf(group) < groups.length - 1} onMoveUp={() => void moveGroup(group.id, -1)} onMoveDown={() => void moveGroup(group.id, 1)} onDeleteGroup={() => void removeGroup(group.id, group.name)} />)}</div>
       </section>
     </main>
-    {phonePreviewInstanceId !== null && (() => {
-      const instance = instances.find(item => item.id === phonePreviewInstanceId);
-      if (!instance) return null;
-      const run = browserRunByInstance.get(instance.id);
-      return <Modal title={`Aparência de celular · ${instance.name}`}
-        subtitle="Somente visual. O Chrome continua no computador Windows; nenhuma função é alterada."
-        onClose={() => setPhonePreviewInstanceId(null)}>
-        <H2AdsPhoneFrame title={instance.name}>
-          <div className="flex h-full flex-col items-center justify-center gap-5 px-5 py-8 text-center text-white">
-            <div className="grid h-20 w-20 place-items-center rounded-[22px] border border-blue-300/30 bg-[#1c3454] shadow-[0_0_30px_#1974ee33]">
-              <Monitor className="h-10 w-10 text-blue-200" />
-            </div>
-            <div className="space-y-2">
-              <strong className="block text-lg font-black">Chrome H2ADS</strong>
-              <p className="break-words text-sm font-semibold text-slate-200">{instance.name}</p>
-              <span className="inline-block rounded-full border border-emerald-400/30 bg-emerald-400/10 px-3 py-1.5 text-xs font-bold text-emerald-200">
-                {run?.state === "browser_open" ? "Navegador aberto no Windows" :
-                  run?.state === "queued" || run?.state === "preparing" ? "Preparando navegador" :
-                  "Comando de abertura enviado"}
-              </span>
-            </div>
-            <p className="max-w-[245px] text-xs leading-5 text-slate-400">
-              Aparência ilustrativa do celular. O navegador real permanece na sessão Windows.
-              Os botões e indicadores do aparelho não enviam comandos.
-            </p>
-          </div>
-        </H2AdsPhoneFrame>
-      </Modal>;
-    })()}
     {groupForm && <Modal title={groupForm.id ? "Editar grupo" : "Novo grupo"} subtitle="Organização interna do H2 Ads." onClose={() => setGroupForm(null)}><form onSubmit={saveGroup} className="grid gap-4"><Field label="Nome do grupo"><input required minLength={H2ADS_NAME_MIN_LENGTH} value={groupForm.name} onChange={event => setGroupForm({ ...groupForm, name: event.target.value })} placeholder="Ex.: Operação São Paulo" /></Field><Field label="Descrição"><textarea value={groupForm.description} onChange={event => setGroupForm({ ...groupForm, description: event.target.value })} placeholder="Opcional" /></Field><Field label="Cor dos cards das instâncias"><div className="flex items-center gap-3"><input type="color" value={groupForm.cardColor} onChange={event => setGroupForm({ ...groupForm, cardColor: event.target.value.toUpperCase() })} className="h-11 w-16 cursor-pointer rounded-lg border border-white/10 bg-black/20 p-1" /><div className="flex-1 rounded-lg border border-white/10 px-3 py-2 text-xs font-bold text-slate-300" style={{ backgroundColor: colorBackground(groupForm.cardColor), borderColor: groupForm.cardColor }}>{groupForm.cardColor} · todas as instâncias deste grupo</div></div></Field><Field label="Estado"><select value={groupForm.status} onChange={event => setGroupForm({ ...groupForm, status: event.target.value as GroupForm["status"] })}><option value="active">Ativo</option><option value="archived">Arquivado</option></select></Field><ActionBar saving={saving} label="Salvar grupo" onCancel={() => setGroupForm(null)} /></form></Modal>}
     {workerForm && !pairingCode && <Modal title="Adicionar Browser Worker" subtitle="Crie um código temporário para parear um computador Windows autorizado." onClose={() => setWorkerForm(null)}><form onSubmit={createPairing} className="grid gap-4"><Field label="Nome do computador"><input required value={workerForm.name} onChange={event => setWorkerForm({ ...workerForm, name: event.target.value })} placeholder="Ex.: Computador principal" /></Field><Field label="Capacidade de instâncias"><input required type="number" min="1" max="20" value={workerForm.capacity} onChange={event => setWorkerForm({ ...workerForm, capacity: event.target.value })} /></Field><p className="-mt-2 text-xs leading-5 text-slate-500">Defina quantas instâncias este computador poderá manter abertas no futuro. Nesta entrega, nenhum browser será iniciado.</p><ActionBar saving={saving} label="Criar código de pareamento" onCancel={() => setWorkerForm(null)} /></form></Modal>}
     {pairingCode && <Modal title="Código temporário do Worker" subtitle="Use este código apenas no seu computador Windows. Ele expira em 15 minutos e não será mostrado novamente depois de fechar." onClose={() => { setPairingCode(null); setWorkerForm(null); }}><div className="space-y-4"><div className="rounded-2xl border border-[#F5B800]/30 bg-[#F5B800]/[0.08] p-4"><p className="text-xs font-black uppercase tracking-[0.14em] text-[#FFE37A]">Código de pareamento</p><code className="mt-3 block break-all rounded-xl bg-black/40 p-3 text-sm font-bold text-white">{pairingCode.code}</code><p className="mt-3 text-xs text-slate-400">Expira às {new Date(pairingCode.expiresAt).toLocaleTimeString("pt-BR", { hour: "2-digit", minute: "2-digit" })}.</p></div><div className="flex flex-wrap gap-2"><button type="button" onClick={copyPairingCode} className="inline-flex items-center gap-2 rounded-xl border border-[#148CFF]/35 bg-[#148CFF]/10 px-4 py-2.5 text-sm font-black text-[#8CC8FF]"><Copy className="h-4 w-4" />Copiar código</button><a href="/api/h2ads/worker/windows-agent.ps1" className="inline-flex items-center gap-2 rounded-xl border border-white/15 bg-white/[0.04] px-4 py-2.5 text-sm font-black text-slate-200"><Monitor className="h-4 w-4" />Baixar agente Windows</a></div><div className="rounded-xl border border-white/10 bg-black/20 p-3"><p className="text-xs font-bold text-slate-200">No PowerShell, execute apenas:</p><code className="mt-2 block break-all text-xs text-[#8CC8FF]">powershell -NoProfile -ExecutionPolicy Bypass -File "$env:USERPROFILE\Downloads\H2AdsWorker.ps1" -Install</code><p className="mt-2 text-[11px] leading-4 text-slate-500">O próprio agente solicitará o código uma única vez; cole somente o código copiado acima. Ele não aparecerá no terminal.</p></div></div></Modal>}
