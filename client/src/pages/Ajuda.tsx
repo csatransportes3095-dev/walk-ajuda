@@ -1,15 +1,20 @@
 import { encodeWhatsappMessage } from "@shared/whatsappMessageText";
-import { useState } from "react";
+import { useMemo, useState } from "react";
 import { trpc } from "@/lib/trpc";
-import { ChevronDown, MessageCircle, HelpCircle } from "lucide-react";
+import { ChevronDown, MessageCircle, HelpCircle, Search, X, FolderOpen } from "lucide-react";
+import { groupHelpQuestions } from "@/lib/helpFaqSearch";
 
 export default function Ajuda() {
-  const [openIndex, setOpenIndex] = useState<number | null>(null);
+  const [openQuestionId, setOpenQuestionId] = useState<string | null>(null);
+  const [openGroups, setOpenGroups] = useState<string[]>([]);
+  const [search, setSearch] = useState("");
 
   const { data: faqData, isLoading } = trpc.faq.getPublic.useQuery();
 
   const config = faqData?.config;
   const items = faqData?.items ?? [];
+  const searchResult = useMemo(() => groupHelpQuestions(items, search), [items, search]);
+  const isSearching = search.trim().length > 0;
 
   const accentColor = config?.accentColor ?? "#8b5cf6";
   const buttonColor = config?.buttonColor ?? "#ef4444";
@@ -38,8 +43,33 @@ export default function Ajuda() {
         </div>
       </div>
 
-      {/* FAQ List */}
+      {/* FAQ search and grouped tree; powered by public questions + answers */}
       <div className="max-w-2xl mx-auto px-4 pb-10 pt-4">
+        <label htmlFor="help-search" className="block text-sm font-bold text-gray-200 mb-2">
+          Pesquise sua dúvida
+        </label>
+        <div className="flex items-center gap-3 rounded-xl border border-violet-500/50 bg-gray-900 px-4 py-3 focus-within:border-violet-400">
+          <Search size={20} className="shrink-0 text-violet-300" aria-hidden="true" />
+          <input
+            id="help-search"
+            type="search"
+            value={search}
+            onChange={event => { setSearch(event.target.value); setOpenQuestionId(null); }}
+            placeholder="Ex.: chip, nome, foto ou chip nome"
+            aria-describedby="help-search-hint"
+            className="min-w-0 flex-1 bg-transparent text-sm text-white placeholder:text-gray-400 outline-none"
+          />
+          {search && (
+            <button type="button" onClick={() => { setSearch(""); setOpenQuestionId(null); }}
+              aria-label="Limpar pesquisa" className="rounded-lg p-1 text-gray-300 hover:text-white">
+              <X size={18} />
+            </button>
+          )}
+        </div>
+        <p id="help-search-hint" className="mt-2 text-xs text-gray-400">
+          Buscamos todas as palavras nas perguntas e nas respostas. Escreva uma ou mais palavras.
+        </p>
+
         {isLoading ? (
           <div className="flex justify-center py-12">
             <div className="w-8 h-8 border-2 border-purple-500 border-t-transparent rounded-full animate-spin" />
@@ -50,37 +80,72 @@ export default function Ajuda() {
             <p>Nenhuma pergunta cadastrada ainda.</p>
           </div>
         ) : (
-          <div className="space-y-3">
-            {items.map((item, idx) => (
-              <div
-                key={item.id}
-                className="rounded-xl overflow-hidden border"
-                style={{ borderColor: openIndex === idx ? accentColor + "66" : "#ffffff15" }}
-              >
-                <button
-                  className="w-full flex items-center justify-between gap-3 px-4 py-4 text-left transition-colors"
-                  style={{
-                    backgroundColor: openIndex === idx ? accentColor + "18" : "#1f2937",
-                  }}
-                  onClick={() => setOpenIndex(openIndex === idx ? null : idx)}
-                >
-                  <span className="flex items-center gap-2 font-semibold text-sm text-white">
-                    <span style={{ color: accentColor }}>❓</span>
-                    {item.question}
-                  </span>
-                  <ChevronDown
-                    size={16}
-                    className="shrink-0 text-gray-400 transition-transform duration-200"
-                    style={{ transform: openIndex === idx ? "rotate(180deg)" : "rotate(0deg)" }}
-                  />
-                </button>
-                {openIndex === idx && (
-                  <div className="px-5 pb-4 pt-2 bg-gray-900">
-                    <p className="text-sm text-gray-300 leading-relaxed whitespace-pre-wrap">{item.answer}</p>
-                  </div>
-                )}
+          <div className="mt-5 space-y-3">
+            <p className="text-xs text-gray-400" role="status" aria-live="polite">
+              {isSearching
+                ? `${searchResult.totalMatches} ${searchResult.totalMatches === 1 ? "pergunta encontrada" : "perguntas encontradas"} em ${searchResult.groups.length} ${searchResult.groups.length === 1 ? "grupo" : "grupos"}`
+                : `${items.length} perguntas organizadas em ${searchResult.groups.length} grupos por assunto`}
+            </p>
+            {searchResult.groups.length === 0 ? (
+              <div className="rounded-xl border border-gray-700 bg-gray-900 px-4 py-8 text-center">
+                <HelpCircle className="mx-auto mb-3 h-8 w-8 text-gray-400" />
+                <p className="text-sm font-semibold text-white">Nenhuma pergunta encontrada</p>
+                <p className="mt-2 text-xs text-gray-400">Tente outra palavra, como chip, nome ou celular.</p>
               </div>
-            ))}
+            ) : (
+              searchResult.groups.map(group => {
+                const expanded = isSearching || openGroups.includes(group.id);
+                return (
+                  <section key={group.id} className="overflow-hidden rounded-xl border border-gray-700/80 bg-gray-900/60">
+                    <button type="button" aria-expanded={expanded}
+                      onClick={() => {
+                        if (isSearching) return;
+                        setOpenGroups(current => current.includes(group.id)
+                          ? current.filter(id => id !== group.id) : [...current, group.id]);
+                      }}
+                      className="flex w-full items-center justify-between gap-3 px-4 py-4 text-left"
+                      style={{ backgroundColor: expanded ? accentColor + "20" : "#192334" }}>
+                      <span className="flex min-w-0 items-center gap-2 font-bold text-sm text-white">
+                        <FolderOpen size={18} className="shrink-0" style={{ color: accentColor }} />
+                        <span>{group.title}</span>
+                        <span className="rounded-full bg-white/10 px-2 py-0.5 text-xs font-normal text-gray-200">{group.items.length}</span>
+                      </span>
+                      <ChevronDown size={17} className="shrink-0 text-gray-400 transition-transform duration-200"
+                        style={{ transform: expanded ? "rotate(180deg)" : "rotate(0deg)" }} />
+                    </button>
+                    {expanded && (
+                      <div className="space-y-2 border-t border-white/10 px-3 py-3">
+                        {group.items.map(item => {
+                          const key = String(item.id);
+                          const questionOpen = openQuestionId === key;
+                          return (
+                            <div key={key} className="overflow-hidden rounded-lg border"
+                              style={{ borderColor: questionOpen ? accentColor + "66" : "#ffffff15" }}>
+                              <button type="button" aria-expanded={questionOpen}
+                                onClick={() => setOpenQuestionId(questionOpen ? null : key)}
+                                className="flex w-full items-center justify-between gap-3 px-3 py-3 text-left"
+                                style={{ backgroundColor: questionOpen ? accentColor + "18" : "#1f2937" }}>
+                                <span className="flex items-start gap-2 text-sm font-semibold text-white">
+                                  <span className="shrink-0" style={{ color: accentColor }}>❓</span>
+                                  {item.question}
+                                </span>
+                                <ChevronDown size={16} className="shrink-0 text-gray-400 transition-transform duration-200"
+                                  style={{ transform: questionOpen ? "rotate(180deg)" : "rotate(0deg)" }} />
+                              </button>
+                              {questionOpen && (
+                                <div className="bg-gray-900 px-4 pb-4 pt-2">
+                                  <p className="whitespace-pre-wrap text-sm leading-relaxed text-gray-300">{item.answer}</p>
+                                </div>
+                              )}
+                            </div>
+                          );
+                        })}
+                      </div>
+                    )}
+                  </section>
+                );
+              })
+            )}
           </div>
         )}
 
