@@ -20,6 +20,13 @@ describe("H2ADS stale close guard", () => {
     expect(source).toContain('lt(h2AdsWorkerBrowserCommands.createdAt, staleBrowserCutoff)');
   });
 
+  it("reenvia prepare_browser em fila ou claimed obsoleto antes de bloquear a proxima validacao", () => {
+    expect(source).toContain('eq(h2AdsWorkerCommands.command, "prepare_browser")');
+    expect(source).toContain('eq(h2AdsWorkerCommands.status, "queued")');
+    expect(source).toContain('lt(h2AdsWorkerCommands.createdAt, new Date(now - STALE_PREPARATION_COMMAND_MS))');
+    expect(source).toContain('eq(h2AdsWorkerCommands.status, "claimed")');
+  });
+
   it("nao altera browser-session, firewall ou privacy guard nesta correcao", () => {
     expect(source).not.toContain("H2ADS_BROWSER_EXECUTABLE");
     expect(source).not.toContain("New-NetFirewallRule");

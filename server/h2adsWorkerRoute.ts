@@ -95,6 +95,16 @@ async function requeueStaleWorkerCommands(workerId: number): Promise<void> {
     .set({ status: "queued", claimedAt: null })
     .where(and(
       eq(h2AdsWorkerCommands.workerId, workerId),
+      eq(h2AdsWorkerCommands.command, "prepare_browser"),
+      eq(h2AdsWorkerCommands.status, "queued"),
+      lt(h2AdsWorkerCommands.createdAt, new Date(now - STALE_PREPARATION_COMMAND_MS)),
+    ));
+
+  await db.update(h2AdsWorkerCommands)
+    .set({ status: "queued", claimedAt: null })
+    .where(and(
+      eq(h2AdsWorkerCommands.workerId, workerId),
+      eq(h2AdsWorkerCommands.command, "prepare_browser"),
       eq(h2AdsWorkerCommands.status, "claimed"),
       lt(h2AdsWorkerCommands.claimedAt, new Date(now - STALE_PREPARATION_COMMAND_MS)),
     ));
