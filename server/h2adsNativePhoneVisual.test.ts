@@ -87,7 +87,8 @@ describe("H2ADS: native phone appearance on real Chrome window", () => {
 
   it("renders smartphone chassis and native corners without clipping real Chrome pixels", () => {
     expect(native).toContain("public sealed class H2PhoneDisplayForm");
-    expect(native).toContain("Rounded(20f,84f,w-40f,h-146f,28f)");
+    expect(native).toContain("Rounded(20f,104f,w-40f,h-166f,28f)");
+    expect(native).toContain("outline.AddRectangle(new System.Drawing.RectangleF(20f,104f,Width-40f,Height-166f))");
     expect(native).toContain("$status.Location=New-Object System.Drawing.Point(22,8)");
     expect(native).toContain("$status.Width=$frame.Width-44");
     expect(native).not.toContain("$status.Location=New-Object System.Drawing.Point(19,7)");
@@ -153,9 +154,12 @@ describe("H2ADS: native phone appearance on real Chrome window", () => {
   });
 
   it("shows three clear stopwatch action labels on a second row and saves resiliently", () => {
-    expect(native).toContain("$status.Height=70");
+    expect(native).toContain("$status.Height=88");
+    expect(native).toContain("$topPad=104");
     expect(native).toContain("$status.Location=New-Object System.Drawing.Point(22,8)");
     expect(native).toContain("New-H2AdsWatchButtonPath");
+    // Stopwatch data/controls stay unchanged while the vertical band grows.
+    expect(native).toContain("buttonY=42; buttonH=24; hitTop=40; hitBottom=68");
     expect(native).toContain('label="INICIAR"');
     expect(native).toContain('label="PAUSAR"');
     expect(native).toContain('label="ZERAR"');

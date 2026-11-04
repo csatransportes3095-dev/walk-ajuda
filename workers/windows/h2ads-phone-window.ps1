@@ -183,7 +183,7 @@ public sealed class H2PhoneDisplayForm : System.Windows.Forms.Form {
       // A real Win32 hole, not an invisible control over Chrome. Clicks and
       // typing in the screen go directly to the top-level Chrome window.
       outline.FillMode=System.Drawing.Drawing2D.FillMode.Alternate;
-      outline.AddRectangle(new System.Drawing.RectangleF(20f,84f,Width-40f,Height-146f));
+      outline.AddRectangle(new System.Drawing.RectangleF(20f,104f,Width-40f,Height-166f));
       var old=Region;
       Region=new System.Drawing.Region(outline);
       if(old!=null)old.Dispose();
@@ -222,7 +222,7 @@ public sealed class H2PhoneDisplayForm : System.Windows.Forms.Form {
     }
     // Internal screen recess exactly aligned with the real Chrome HWND.
     // The status bar and Chrome remain inside this phone-safe rounded area.
-    using(var screen=Rounded(20f,84f,w-40f,h-146f,28f))
+    using(var screen=Rounded(20f,104f,w-40f,h-166f,28f))
     using(var back=new System.Drawing.SolidBrush(System.Drawing.Color.FromArgb(1,5,12)))
     using(var outline=new System.Drawing.Pen(System.Drawing.Color.FromArgb(52,56,66),1.3f)) {
       g.FillPath(back,screen);
@@ -290,7 +290,7 @@ $rect=New-Object H2PhoneWindowNative+Rectangle
 if(-not [H2PhoneWindowNative]::GetWindowRect($chrome,[ref]$rect)){exit 0}
 $desktop=[System.Windows.Forms.Screen]::FromHandle($chrome).WorkingArea
 $bezel=20
-$topPad=84
+$topPad=104
 $bottomPad=62
 $width=[Math]::Min(392,[Math]::Max(310,$desktop.Width-2*$bezel-12))
 $height=[Math]::Min(780,[Math]::Max(400,$desktop.Height-$topPad-$bottomPad-12))
@@ -445,7 +445,7 @@ function New-H2AdsWatchButtonPath([single]$x,[single]$y,[single]$w,[single]$h) {
 $script:battery=95
 $script:wifiOn=$true
 $status=New-Object System.Windows.Forms.Panel
-$status.Height=70
+$status.Height=88
 $status.Width=$frame.Width-44
 $status.Location=New-Object System.Drawing.Point(22,8)
 $status.BackColor=RGB 7 8 11
