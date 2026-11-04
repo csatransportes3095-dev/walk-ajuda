@@ -487,8 +487,10 @@ function Restore-H2AdsProfileSnapshot([object]$Config, [int]$InstanceId) {
 function Invoke-BrowserSession([object]$Config, [object]$Payload) {
   $profileDirectory = Join-Path $ProfilesDirectory "instance-$($Payload.command.instanceId)"
   if (!(Test-Path (Join-Path $profileDirectory "h2ads-profile.json"))) { throw "Perfil local não preparado." }
-  Install-H2AdsTestingBrowser
-  Ensure-H2AdsTestingFirewall
+  # A sessão interativa usa o Chrome normal assinado. O Chrome for Testing fica
+  # separado para validações técnicas e não deve marcar a navegação como teste.
+  Ensure-DedicatedBrowser
+  Ensure-H2AdsBrowserFirewall
   $env:H2ADS_PANEL_URL = $Config.panelUrl
   $env:H2ADS_WORKER_KEY = $Config.workerKey
   $env:H2ADS_WORKER_TOKEN = Get-WorkerToken $Config
@@ -496,9 +498,8 @@ function Invoke-BrowserSession([object]$Config, [object]$Payload) {
   $env:H2ADS_COMMAND_ID = [string]$Payload.command.id
   $env:H2ADS_PROXY_JSON = ($Payload.proxy | ConvertTo-Json -Compress)
   $env:H2ADS_PROFILE_DIRECTORY = $profileDirectory
-  Assert-H2AdsTestingExecutable | Out-Null
-  if (!(Test-H2AdsTestingFirewall)) { throw "Chrome H2ADS de extensoes sem kill switch verificado. Nao abrir instancia." }
-  $env:H2ADS_BROWSER_EXECUTABLE = $TestingChromePath
+  if (!(Test-H2AdsBrowserFirewall)) { throw "Chrome H2ADS sem kill switch verificado. Nao abrir instancia." }
+  $env:H2ADS_BROWSER_EXECUTABLE = $DedicatedChromePath
   $env:H2ADS_REMOTE_DEBUG = $(if ($Payload.mobileRemoteEnabled -eq $true) { "1" } else { "0" })
   try {
     Start-Process -FilePath "node.exe" -ArgumentList "`"$SessionRunnerPath`"" -WindowStyle Hidden | Out-Null

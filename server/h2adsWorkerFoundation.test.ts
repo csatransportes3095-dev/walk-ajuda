@@ -118,6 +118,19 @@ describe("fundação multi-Worker H2 Ads", () => {
     expect(script).toContain("-File $InstalledScriptPath -EnableExtensionBrowser");
   });
 
+  it("usa Chrome normal assinado na sessão interativa, sem expor o IP", () => {
+    const script = read("workers/windows/H2AdsWorker.ps1");
+    const start = script.indexOf("function Invoke-BrowserSession");
+    const end = script.indexOf("function Get-H2AdsProfileLastSnapshotAt", start);
+    const method = script.slice(start, end);
+    expect(method).toContain("Ensure-DedicatedBrowser");
+    expect(method).toContain("Ensure-H2AdsBrowserFirewall");
+    expect(method).toContain("$env:H2ADS_BROWSER_EXECUTABLE = $DedicatedChromePath");
+    expect(method).not.toContain("$env:H2ADS_BROWSER_EXECUTABLE = $TestingChromePath");
+    expect(method).not.toContain("Install-H2AdsTestingBrowser");
+    expect(method).not.toContain("Ensure-H2AdsTestingFirewall");
+  });
+
   it("bloqueia saída direta do Chrome dedicado antes da sessão", () => {
     const script = read("workers/windows/H2AdsWorker.ps1");
     const session = read("workers/windows/browser-session.mjs");
