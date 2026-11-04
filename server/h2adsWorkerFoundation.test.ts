@@ -241,7 +241,7 @@ describe("fundação multi-Worker H2 Ads", () => {
     expect(end).toBeGreaterThan(start);
     const events: string[] = [];
     const sandbox: Record<string, any> = {
-      networkSuspended: true, browserExitHandled: false, sessionIpChanged: false, activeBackendPort: undefined,
+      networkSuspended: true, browserExitHandled: false, browserProbeInProgress: false, sessionIpChanged: false, activeBackendPort: undefined,
       backendRelay: undefined, frontRelay: { kind: "front_blocked" }, relayPort: 9876,
       createBackendRelay: () => ({ port: 6543, listen: async () => undefined }),
       checkIpThroughPort: async () => { throw new Error("proxy_tcp_timeout"); },

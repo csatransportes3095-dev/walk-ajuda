@@ -8,7 +8,7 @@ const recovery = source.slice(source.indexOf("async function resumeProxyTraffic(
 function harness({ ip = "198.51.100.1", latched = false, probeError = false, routeError = false } = {}) {
   const records = [];
   const state = {
-    networkSuspended: true, browserExitHandled: false, sessionIpChanged: latched,
+    networkSuspended: true, browserExitHandled: false, browserProbeInProgress: false, sessionIpChanged: latched,
     sessionLockedIp: "198.51.100.1", backendRelay: null, frontRelay: { port: 9000 },
     relayPort: 9000, activeBackendPort: undefined, probes: 0, records,
     createBackendRelay: () => ({ port: 9001, listen: async () => {} }),
