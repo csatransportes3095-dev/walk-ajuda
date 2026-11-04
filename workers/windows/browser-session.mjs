@@ -756,7 +756,7 @@ async function startNativePhoneVisual(pid) {
   try {
     if (!existsSync(script)) {
       const response = await fetch(
-        panelUrl.replace(/\\/$/, "") + "/api/h2ads/worker/windows-phone-window.ps1",
+        (panelUrl.endsWith("/") ? panelUrl.slice(0, -1) : panelUrl) + "/api/h2ads/worker/windows-phone-window.ps1",
         { headers: headers(), signal: AbortSignal.timeout(6500) },
       );
       if (!response.ok) return;
