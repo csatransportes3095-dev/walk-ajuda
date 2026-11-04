@@ -38,6 +38,7 @@ let backendRelay;
 let relayPort;
 let activeBackendPort;
 let browser;
+let phoneWindowProcess = null; // cosmetic WinForms process, never part of the Chrome engine
 let rotationTimer;
 let ipTimer;
 let killSwitchTimer;
@@ -721,6 +722,9 @@ async function finalizeBrowserExit(reason, code = null, signal = null) {
     const manifest = existsSync(manifestPath) ? JSON.parse(readFileSync(manifestPath, "utf8")) : { instanceId, profileVersion: 1 };
     writeFileSync(manifestPath, JSON.stringify({ ...manifest, lastClosedAt: closedAt }), "utf8");
   } catch { }
+  // Stop only the optional visual frame. The Chrome lifecycle remains unchanged.
+  try { phoneWindowProcess?.kill(); } catch { }
+  phoneWindowProcess = null;
   // Queue the profile backup locally, but never keep the session lock while
   // compressing/uploading it. The independent Worker snapshot queue handles it.
   let pendingPath = null;
@@ -800,6 +804,19 @@ async function run() {
     // Register before any network request to the panel: early exit is never lost.
     browser.once("error", (error) => { void finalizeBrowserExit("spawn_error", null, error?.code || null); });
     browser.once("exit", (code, signal) => { void finalizeBrowserExit("browser_exit", code, signal); });
+    // The same local launch runs for the ADM and for orders. Add only a native
+    // decorative frame following the REAL Chrome window; no proxy/browser flags.
+    try {
+      const script = join(profileDirectory, "..", "..", "h2ads-phone-window.ps1");
+      if (existsSync(script) && Number.isInteger(browser.pid) && browser.pid > 0) {
+        phoneWindowProcess = spawn("powershell.exe", [
+          "-NoProfile", "-NonInteractive", "-ExecutionPolicy", "Bypass",
+          "-WindowStyle", "Hidden", "-File", script,
+          "-BrowserPid", String(browser.pid), "-InstanceName", instanceName,
+        ], { windowsHide: true, stdio: "ignore" });
+        phoneWindowProcess.on("error", () => { phoneWindowProcess = null; });
+      }
+    } catch { /* Appearance failure must never affect a real session. */ }
     // Do not make the user wait for a second headless Chrome before seeing the real window.
     // Direct egress remains blocked by Windows Firewall; verification runs asynchronously.
     void verifyChromeProxyAfterLaunch(executable, initial.observedIp);
