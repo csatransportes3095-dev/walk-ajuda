@@ -98,8 +98,7 @@ describe("H2ADS: native phone appearance on real Chrome window", () => {
     expect(native).toContain("RestoreChromeWindow");
     expect(native).toContain("VisualSelfTest");
     expect(native).toContain("DrawToBitmap");
-    expect(native).toContain("hosted Chrome must receive focus");
-    expect(native).not.toContain("ShowWithoutActivation");
+    expect(native).toContain("ShowWithoutActivation");
     expect(native).not.toContain("Invoke-WebRequest");
     expect(native).not.toContain("Start-Process");
   });

@@ -326,7 +326,11 @@ async function suspendProxyTraffic(reason = "proxy_path_unverified") {
 async function resumeProxyTraffic() {
   // A instância permanece aberta durante a queda. O novo caminho só é liberado
   // depois de validar o upstream e confirmar o mesmo IP pelo Chrome de prova.
-  if (!networkSuspended || browserExitHandled || sessionIpChanged) return;
+  // Recheck even if a previous exit-IP change latched the guard. A live
+  // session can resume ONLY after the original locked IP is observed again
+  // through the upstream and the independent Chrome verification. A changed
+  // IP is never accepted automatically and Chrome remains fail-closed.
+  if (!networkSuspended || browserExitHandled || browserProbeInProgress) return;
   try {
     if (!backendRelay) {
       backendRelay = createBackendRelay();

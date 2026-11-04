@@ -47,11 +47,29 @@ test("changed IP after outage stays blocked before any Chrome probe", async () =
   assert.equal(state.probes, 0);
   assert.equal(state.activeBackendPort, undefined);
 });
-test("already latched session never recovers automatically", async () => {
+test("latched session resumes only when the originally locked IP returns", async () => {
   const state = harness({ latched: true });
   await state.resume();
-  assert.equal(state.backendRelay, null);
+  assert.equal(state.networkSuspended, false);
+  assert.equal(state.activeBackendPort, 9001);
+  assert.equal(state.sessionIpChanged, false);
+  assert.equal(state.probes, 1);
+});
+test("latched session refuses a different exit IP before Chrome verification", async () => {
+  const state = harness({ latched: true, ip: "198.51.100.2" });
+  await state.resume();
+  assert.equal(state.networkSuspended, true);
+  assert.equal(state.sessionIpChanged, true);
   assert.equal(state.activeBackendPort, undefined);
+  assert.equal(state.probes, 0);
+});
+test("recovery waits for an already running Chrome probe", async () => {
+  const state = harness();
+  state.browserProbeInProgress = true;
+  await state.resume();
+  assert.equal(state.networkSuspended, true);
+  assert.equal(state.activeBackendPort, undefined);
+  assert.equal(state.probes, 0);
 });
 test("unreachable proxy keeps traffic suspended", async () => {
   const state = harness({ routeError: true });
