@@ -359,7 +359,14 @@ $frame.Controls.Add($footer)
 # window. It is a child HWND of the phone host, so moving the host moves Chrome
 # automatically and Windows clips Chrome to the host client area.
 $frame.CreateControl()
-if(-not [H2PhoneWindowNative]::HostChrome($chrome,$frame.Handle)){ throw "H2ADS: failed to host Chrome HWND inside phone" }
+$frame.Show()
+[System.Windows.Forms.Application]::DoEvents()
+$hosted=$false
+for($attempt=0;$attempt -lt 5 -and -not $hosted;$attempt++) {
+  $hosted=[H2PhoneWindowNative]::HostChrome($chrome,$frame.Handle)
+  if(-not $hosted){Start-Sleep -Milliseconds 120;[System.Windows.Forms.Application]::DoEvents()}
+}
+if(-not $hosted){ throw "H2ADS: failed to host Chrome HWND inside phone" }
 [H2PhoneWindowNative]::SetPhoneGroup($chrome,$frame.Handle,$bezel,$topPad,$width,$height,($targetX-$bezel),($targetY-$topPad),($width+2*$bezel),($height+$topPad+$bottomPad))
 
 # The exposed bezel is the resize handle. Chrome stays the only browser window;
