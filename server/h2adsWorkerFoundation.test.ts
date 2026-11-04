@@ -37,7 +37,8 @@ describe("fundação multi-Worker H2 Ads", () => {
     const script = read("workers/windows/H2AdsWorker.ps1");
     const runner = read("workers/windows/browser-runner.mjs");
     const session = read("workers/windows/browser-session.mjs");
-    expect(script).toContain('$AgentVersion = "1.4.4"');
+    expect(script).toContain('$AgentVersion = "1.4.5"');
+    expect(script).toContain('$TestingRelease = "156.0.8078.80"');
     expect(script).toContain("ConvertFrom-SecureString");
     expect(script).toContain("ConvertTo-SecureString");
     expect(script).toContain("Read-Host");
@@ -107,11 +108,14 @@ describe("fundação multi-Worker H2 Ads", () => {
     const method = script.slice(start, end);
     expect(start).toBeGreaterThan(0);
     expect(end).toBeGreaterThan(start);
-    expect(method.indexOf("if (Test-Path $TestingChromePath)")).toBeLessThan(method.indexOf('if (!(Test-IsAdministrator))'));
+    expect(method.indexOf("$needsInstall = !(Test-Path $TestingChromePath)")).toBeLessThan(method.indexOf('if (!(Test-IsAdministrator))'));
     expect(method).toContain("if (Test-H2AdsTestingFirewall) { return }");
     expect(method).toContain("Ensure-H2AdsTestingFirewall");
     expect(method).toContain("Assert-H2AdsTestingExecutable");
+    expect(method).toContain("$TestingDirectory.previous-");
+    expect(method).toContain("Move-Item -LiteralPath $backup -Destination $TestingDirectory -Force");
     expect(method).toContain("Execute -EnableExtensionBrowser como Administrador");
+    expect(script).toContain("-File $InstalledScriptPath -EnableExtensionBrowser");
   });
 
   it("bloqueia saída direta do Chrome dedicado antes da sessão", () => {

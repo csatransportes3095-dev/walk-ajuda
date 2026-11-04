@@ -71,5 +71,7 @@ jobs:
 
       - name: Verify packaged worker version
         run: |
-          grep -Fq '$AgentVersion = "1.4.4"' workers/windows/H2AdsWorker.ps1
-          echo "Packaged worker 1.4.4 confirmed"
+          grep -Fq '$AgentVersion = "1.4.5"' workers/windows/H2AdsWorker.ps1
+          grep -Fq '$TestingRelease = "156.0.8078.80"' workers/windows/H2AdsWorker.ps1
+          grep -Fq 'prodversion: "156.0.8078.80"' workers/windows/h2ads-extension-sync.mjs
+          echo "Packaged worker 1.4.5 and Chrome for Testing 156.0.8078.80 confirmed"

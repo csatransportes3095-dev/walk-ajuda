@@ -77,7 +77,7 @@ export async function syncH2AdsExtensions({ panelUrl, headers, proxyPort, root }
     try {
       const crxPath = join(temp, "extension.crx"), zipPath = join(temp, "extension.zip");
       const params = new URLSearchParams({
-        response: "redirect", prodversion: "156.0.8078.12", acceptformat: "crx3",
+        response: "redirect", prodversion: "156.0.8078.80", acceptformat: "crx3",
         os: "win", arch: "x64", prod: "chromecrx", x: "id=" + id + "&uc",
       });
       const upstream = "https://clients2.google.com/service/update2/crx?" + params.toString();

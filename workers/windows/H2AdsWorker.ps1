@@ -10,7 +10,7 @@ param(
 
 $ErrorActionPreference = "Stop"
 $ProgressPreference = "SilentlyContinue"
-$AgentVersion = "1.4.4"
+$AgentVersion = "1.4.5"
 $WorkerDirectory = Join-Path $env:LOCALAPPDATA "H2AdsWorker"
 $ConfigPath = Join-Path $WorkerDirectory "worker.json"
 $InstalledScriptPath = Join-Path $WorkerDirectory "H2AdsWorker.ps1"
@@ -28,7 +28,7 @@ $TestingDirectory = Join-Path $WorkerDirectory "browser\chrome-for-testing"
 $TestingChromePath = Join-Path $TestingDirectory "chrome-win64\chrome.exe"
 $TestingV4Rule = "H2ADS Testing Chrome - Block Direct IPv4"
 $TestingV6Rule = "H2ADS Testing Chrome - Block Direct IPv6"
-$TestingRelease = "156.0.8078.12"
+$TestingRelease = "156.0.8078.80"
 $FirewallRuleV4Name = "H2ADS Dedicated Chrome - Block Direct IPv4"
 $FirewallRuleV6Name = "H2ADS Dedicated Chrome - Block Direct IPv6"
 $TaskName = "H2 Ads Browser Worker"
@@ -115,7 +115,12 @@ function Install-H2AdsTestingBrowser {
   # O Worker executa via tarefa agendada sem elevacao. Abrir um Chrome for
   # Testing JA instalado e protegido nao deve exigir permissao administrativa.
   # Instalar ou reparar o firewall continua obrigatoriamente elevado.
-  if (Test-Path $TestingChromePath) {
+  $needsInstall = !(Test-Path $TestingChromePath)
+  if (!$needsInstall) {
+    $actual = (Get-Item $TestingChromePath).VersionInfo.ProductVersion
+    $needsInstall = $actual -ne $TestingRelease
+  }
+  if (!$needsInstall) {
     Assert-H2AdsTestingExecutable | Out-Null
     if (Test-H2AdsTestingFirewall) { return }
     if (!(Test-IsAdministrator)) {
@@ -125,7 +130,7 @@ function Install-H2AdsTestingBrowser {
     return
   }
   if (!(Test-IsAdministrator)) {
-    throw "Chrome for Testing nao instalado. Execute -EnableExtensionBrowser como Administrador."
+    throw "Chrome for Testing ausente ou desatualizado. Execute -EnableExtensionBrowser como Administrador."
   }
   $running = @(Get-CimInstance Win32_Process -Filter "Name = 'chrome.exe'" -ErrorAction Stop | Where-Object {
     [string]$_.ExecutablePath -like "$WorkerDirectory*"
@@ -145,10 +150,21 @@ function Install-H2AdsTestingBrowser {
     if ((Get-Item $stagedExecutable).VersionInfo.ProductVersion -ne $TestingRelease) { throw "Versao do navegador nao corresponde ao pacote solicitado." }
     # Never overwrite the signed Chrome installation. The testing binary stays in a separate directory.
     New-Item -ItemType Directory -Force -Path (Split-Path $TestingDirectory -Parent) | Out-Null
-    if (Test-Path $TestingDirectory) { throw "Pasta de teste existente: revise antes de instalar." }
-    Move-Item -LiteralPath $staging -Destination $TestingDirectory
-    Ensure-H2AdsTestingFirewall
-    Assert-H2AdsTestingExecutable | Out-Null
+    $backup = $null
+    if (Test-Path $TestingDirectory) {
+      $backup = "$TestingDirectory.previous-$([guid]::NewGuid().ToString('N'))"
+      Move-Item -LiteralPath $TestingDirectory -Destination $backup
+    }
+    try {
+      Move-Item -LiteralPath $staging -Destination $TestingDirectory
+      Ensure-H2AdsTestingFirewall
+      Assert-H2AdsTestingExecutable | Out-Null
+      if ($backup) { Remove-Item -LiteralPath $backup -Recurse -Force -ErrorAction SilentlyContinue }
+    } catch {
+      Remove-Item -LiteralPath $TestingDirectory -Recurse -Force -ErrorAction SilentlyContinue
+      if ($backup -and (Test-Path $backup)) { Move-Item -LiteralPath $backup -Destination $TestingDirectory -Force }
+      throw
+    }
   } finally {
     Remove-Item -LiteralPath $temp -Recurse -Force -ErrorAction SilentlyContinue
   }
@@ -924,14 +940,27 @@ if ($Update) {
   $downloadPath = Join-Path $WorkerDirectory "H2AdsWorker.ps1.download"
   Invoke-WebRequest -UseBasicParsing -Uri "$($config.panelUrl)/api/h2ads/worker/windows-agent.ps1" -OutFile $downloadPath
   if (!(Test-Path $downloadPath) -or (Get-Item $downloadPath).Length -lt 1000) { throw "O agente atualizado não foi baixado corretamente." }
+  $previousScriptPath = "$InstalledScriptPath.previous"
+  Copy-Item -Path $InstalledScriptPath -Destination $previousScriptPath -Force
   Stop-ExistingWorkerProcesses
   Copy-Item -Path $downloadPath -Destination $InstalledScriptPath -Force
   Remove-Item -Force $downloadPath -ErrorAction SilentlyContinue
-  Ensure-DedicatedBrowser
-  Ensure-H2AdsBrowserFirewall
-  Start-InstalledWorker
-  Write-Output "Agente H2 Ads atualizado com isolamento rígido e iniciado."
-  exit 0
+  try {
+    # Executa o script recém-baixado para aplicar a versão nova do CFT.
+    & powershell.exe -NoProfile -NonInteractive -ExecutionPolicy Bypass -File $InstalledScriptPath -EnableExtensionBrowser
+    if ($LASTEXITCODE -ne 0) { throw "A atualização do Chrome for Testing terminou com código $LASTEXITCODE." }
+    Ensure-DedicatedBrowser
+    Ensure-H2AdsBrowserFirewall
+    Remove-Item -Force $previousScriptPath -ErrorAction SilentlyContinue
+    Start-InstalledWorker
+    Write-Output "Agente H2 Ads e Chrome for Testing atualizados com rollback disponível."
+    exit 0
+  } catch {
+    Copy-Item -Path $previousScriptPath -Destination $InstalledScriptPath -Force -ErrorAction SilentlyContinue
+    Remove-Item -Force $previousScriptPath -ErrorAction SilentlyContinue
+    Start-InstalledWorker
+    throw
+  }
 }
 
 if ($Run) {
