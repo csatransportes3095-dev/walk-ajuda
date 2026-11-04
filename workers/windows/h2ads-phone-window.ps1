@@ -28,6 +28,12 @@ public static class H2PhoneWindowNative {
   [DllImport("user32.dll")] public static extern bool IsZoomed(IntPtr hwnd);
   [DllImport("user32.dll")] public static extern int SetWindowRgn(IntPtr hwnd,IntPtr region,bool redraw);
   [DllImport("dwmapi.dll")] public static extern int DwmSetWindowAttribute(IntPtr hwnd,int attribute,ref int value,int size);
+  public static void SetPhoneGroup(IntPtr chrome,IntPtr frame,int chromeX,int chromeY,int chromeW,int chromeH,int frameX,int frameY,int frameW,int frameH) {
+    if(chrome==IntPtr.Zero || frame==IntPtr.Zero)return;
+    MoveWindow(chrome,chromeX,chromeY,chromeW,chromeH,true);
+    MoveWindow(frame,frameX,frameY,frameW,frameH,true);
+    SetWindowPos(frame,chrome,frameX,frameY,frameW,frameH,SWP_NOACTIVATE|SWP_NOOWNERZORDER|SWP_NOSENDCHANGING);
+  }
   public static bool RoundChromeWindow(IntPtr hwnd,int w,int h) {
     if(hwnd==IntPtr.Zero || w<120 || h<160 || IsZoomed(hwnd)) return false;
     // IMPORTANT: The Chrome process and PowerShell can use DIFFERENT DPI units.
@@ -329,7 +335,11 @@ function Set-PhoneChromeSize([int]$requestedWidth,[int]$requestedHeight) {
   $newHeight=[Math]::Max(400,[Math]::Min($maxHeight,$requestedHeight))
   $current=New-Object H2PhoneWindowNative+Rectangle
   if(-not [H2PhoneWindowNative]::GetWindowRect($chrome,[ref]$current)){return}
-  [H2PhoneWindowNative]::MoveWindow($chrome,$current.Left,$current.Top,$newWidth,$newHeight,$true)|Out-Null
+  $newFrameX=$current.Left-$bezel
+  $newFrameY=$current.Top-$topPad
+  $newFrameW=$newWidth+(2*$bezel)
+  $newFrameH=$newHeight+$topPad+$bottomPad
+  [H2PhoneWindowNative]::SetPhoneGroup($chrome,$frame.Handle,$current.Left,$current.Top,$newWidth,$newHeight,$newFrameX,$newFrameY,$newFrameW,$newFrameH)
   [H2PhoneWindowNative]::RoundChromeWindow($chrome,$newWidth,$newHeight)|Out-Null
   $script:roundedW=$newWidth
   $script:roundedH=$newHeight
@@ -343,8 +353,8 @@ function Set-PhoneChromeSize([int]$requestedWidth,[int]$requestedHeight) {
   $footer.Top=$frame.Height-60
   Set-RoundedPanelRegion $footer 24
   $status.Invalidate();$footer.Invalidate();$frame.Invalidate()
-  [H2PhoneWindowNative]::SetWindowPos($frame.Handle,$chrome,0,0,0,0,
-    [H2PhoneWindowNative]::SWP_NOACTIVATE -bor 0x0001 -bor 0x0002)|Out-Null
+  [H2PhoneWindowNative]::SetWindowPos($frame.Handle,$chrome,$newFrameX,$newFrameY,$newFrameW,$newFrameH,
+    [H2PhoneWindowNative]::SWP_NOACTIVATE -bor [H2PhoneWindowNative]::SWP_NOOWNERZORDER -bor [H2PhoneWindowNative]::SWP_NOSENDCHANGING)|Out-Null
 }
 
 $script:resizeMode=$null
@@ -414,8 +424,13 @@ $timer.add_Tick({
         $script:roundedW=$cw;$script:roundedH=$ch
       }
     }
-    $frame.Location=New-Object System.Drawing.Point(($r.Left-$bezel),($r.Top-$topPad))
-    $frame.Size=New-Object System.Drawing.Size(($cw+2*$bezel),($ch+$topPad+$bottomPad))
+    $syncFrameX=$r.Left-$bezel
+    $syncFrameY=$r.Top-$topPad
+    $syncFrameW=$cw+2*$bezel
+    $syncFrameH=$ch+$topPad+$bottomPad
+    [H2PhoneWindowNative]::SetPhoneGroup($chrome,$frame.Handle,$r.Left,$r.Top,$cw,$ch,$syncFrameX,$syncFrameY,$syncFrameW,$syncFrameH)
+    $frame.Location=New-Object System.Drawing.Point($syncFrameX,$syncFrameY)
+    $frame.Size=New-Object System.Drawing.Size($syncFrameW,$syncFrameH)
     $status.Width=$frame.Width-44
     $status.Location=New-Object System.Drawing.Point(22,14)
     Set-RoundedPanelRegion $status 24
@@ -424,8 +439,8 @@ $timer.add_Tick({
     $footer.Top=$frame.Height-60
     Set-RoundedPanelRegion $footer 24
     if(-not $frame.Visible){$frame.Show()}
-    [H2PhoneWindowNative]::SetWindowPos($frame.Handle,$chrome,0,0,0,0,
-      [H2PhoneWindowNative]::SWP_NOACTIVATE -bor 0x0001 -bor 0x0002)|Out-Null
+    [H2PhoneWindowNative]::SetWindowPos($frame.Handle,$chrome,$syncFrameX,$syncFrameY,$syncFrameW,$syncFrameH,
+      [H2PhoneWindowNative]::SWP_NOACTIVATE -bor [H2PhoneWindowNative]::SWP_NOOWNERZORDER -bor [H2PhoneWindowNative]::SWP_NOSENDCHANGING)|Out-Null
     $status.Invalidate()
     $frame.Invalidate()
   } catch {}
