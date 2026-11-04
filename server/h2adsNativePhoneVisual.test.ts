@@ -46,15 +46,18 @@ describe("H2ADS: native phone appearance on real Chrome window", () => {
     expect(native).toContain("SetWindowPos");
     expect(native).toContain("SetPhoneGroup");
     expect(native).toContain("FitHostedChrome");
-    expect(native).toContain("GetClientRect(frame,out rc)");
+    expect(native).toContain("GetWindowRect(frame,out frameRect)");
     expect(native).toContain("SetThreadDpiAwarenessContext");
     expect(native).toContain("SWP_FRAMECHANGED");
     expect(native).toContain("$newFrameX=$frame.Left");
     expect(native).not.toContain("$syncFrameX=$r.Left-$bezel");
     expect(native).not.toContain("$newFrameX=$current.Left-$bezel");
-    expect(native).toContain("SetParent");
-    expect(native).toContain("GetParent");
     expect(native).toContain("HostChrome");
+    expect(native).toContain("GWLP_HWNDPARENT");
+    expect(native).toContain("WS_POPUP");
+    expect(native).not.toContain("SetParent(");
+    expect(native).not.toContain("AttachThreadInput(");
+    expect(native).toContain("DetachChromeVisual");
     expect(native).toContain("WS_CHILD");
     expect(native).toContain("$frame.CreateControl()");
     expect(native).toContain("failed to host Chrome HWND inside phone");
@@ -99,21 +102,22 @@ describe("H2ADS: native phone appearance on real Chrome window", () => {
     expect(native).toContain("H2PhoneDisplayForm.OnResize");
     expect(native).toContain("SetWindowRgn");
     expect(native).toContain("RoundChromeWindow");
-    expect(native).toContain("$syncFrameW=$cw+2*$bezel");
-    expect(native).toContain("$syncFrameH=$ch+$topPad+$bottomPad");
+    expect(native).toContain("$frame.add_Move({");
+    expect(native).toContain("$frame.add_SizeChanged({");
+    expect(native).toContain("outline.FillMode=System.Drawing.Drawing2D.FillMode.Alternate");
     expect(native).toContain("IsZoomed");
     expect(native).toContain("RestoreChromeWindow");
     expect(native).toContain("VisualSelfTest");
     expect(native).toContain("DrawToBitmap");
-    expect(native).not.toContain("ShowWithoutActivation");
+    expect(native).toContain("ShowWithoutActivation");
     expect(native).not.toContain("Invoke-WebRequest");
     expect(native).not.toContain("Start-Process");
   });
 
-  it("keeps real Chrome keyboard focus and allows native top-bezel dragging", () => {
+  it("keeps native Chrome keyboard focus by using a click-through phone overlay and native top drag", () => {
     expect(native).toContain("props.ExStyle |= 0x00000080");
     expect(native).not.toContain("0x08000000 | 0x00000080");
-    expect(native).not.toContain("protected override bool ShowWithoutActivation");
+    expect(native).toContain("protected override bool ShowWithoutActivation");
     expect(native).toContain("ReleaseCapture()");
     expect(native).toContain("SendMessage(");
     expect(native).toContain("WM_NCLBUTTONDOWN");
@@ -121,7 +125,7 @@ describe("H2ADS: native phone appearance on real Chrome window", () => {
     expect(native).toContain("$status.add_MouseDown");
     expect(native).toContain("if($e.Y -lt $topPad");
     expect(native).toContain("if($e.X -ge ($status.ClientSize.Width-135)){return}");
-    expect(native).toContain("GetParent(chrome)");
+    expect(native).toContain("GetWindowLongPtr(frame,GWLP_HWNDPARENT)");
   });
 
   it("never changes the browser arguments, proxy chain or profile backend", () => {

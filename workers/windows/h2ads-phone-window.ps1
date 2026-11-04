@@ -3,9 +3,9 @@ param(
   [string]$InstanceName = "H2ADS",
   [switch]$VisualSelfTest
 )
-# Native WinForms host for the REAL Chrome HWND.
-# Never injects browser code, traffic, network settings, profile or proxy.
-# The existing Chrome HWND is reparented as a child of this host.
+# Native WinForms smartphone appearance around the REAL Chrome window.
+# Keep Chromium top-level for native keyboard focus; phone is an owned overlay.
+# Never inject browser code, traffic, network settings, profile or proxy.
 $ErrorActionPreference = "Stop"
 Add-Type -AssemblyName System.Windows.Forms
 Add-Type -AssemblyName System.Drawing
@@ -26,77 +26,72 @@ public static class H2PhoneWindowNative {
   [DllImport("user32.dll", SetLastError=true)] public static extern IntPtr SetThreadDpiAwarenessContext(IntPtr context);
   [DllImport("user32.dll")] public static extern bool MoveWindow(IntPtr hwnd,int x,int y,int w,int h,bool repaint);
   [DllImport("user32.dll")] public static extern bool SetWindowPos(IntPtr hwnd,IntPtr after,int x,int y,int w,int h,uint flags);
-  [DllImport("user32.dll", SetLastError=true)] public static extern IntPtr SetParent(IntPtr child,IntPtr parent);
   [DllImport("user32.dll", SetLastError=true)] public static extern IntPtr GetParent(IntPtr child);
   [DllImport("user32.dll", EntryPoint="GetWindowLongPtrW", SetLastError=true)] public static extern IntPtr GetWindowLongPtr(IntPtr hwnd,int index);
   [DllImport("user32.dll", EntryPoint="SetWindowLongPtrW", SetLastError=true)] public static extern IntPtr SetWindowLongPtr(IntPtr hwnd,int index,IntPtr value);
   [DllImport("user32.dll")] public static extern bool ShowWindow(IntPtr hwnd,int command);
   [DllImport("user32.dll")] public static extern bool ReleaseCapture();
-  [DllImport("user32.dll")] public static extern IntPtr GetForegroundWindow();
-  [DllImport("user32.dll")] public static extern IntPtr GetFocus();
-  [DllImport("user32.dll")] public static extern IntPtr SetFocus(IntPtr hwnd);
-  [DllImport("user32.dll", SetLastError=true)] public static extern bool AttachThreadInput(uint attach,uint attachTo,bool active);
   [DllImport("user32.dll", CharSet=CharSet.Auto)] public static extern IntPtr SendMessage(IntPtr hwnd,int message,IntPtr wParam,IntPtr lParam);
   public const int WM_NCLBUTTONDOWN=0x00A1;
   public const int HTCAPTION=2;
   [DllImport("user32.dll")] public static extern bool IsZoomed(IntPtr hwnd);
   [DllImport("user32.dll")] public static extern int SetWindowRgn(IntPtr hwnd,IntPtr region,bool redraw);
   [DllImport("dwmapi.dll")] public static extern int DwmSetWindowAttribute(IntPtr hwnd,int attribute,ref int value,int size);
+  // Keep Chrome as the REAL top-level HWND so Chromium receives WM_ACTIVATE
+  // and routes keyboard input to its omnibox and editable webpage controls.
+  // The phone is an OWNED overlay (above Chrome), with a transparent screen hole.
+  // No SetParent, thread input injection, browser engine or profile changes.
+  private static readonly Dictionary<IntPtr,long> ChromeOriginalStyles = new Dictionary<IntPtr,long>();
   public static bool HostChrome(IntPtr chrome,IntPtr frame) {
-    if(chrome==IntPtr.Zero || frame==IntPtr.Zero)return false;
+    if(chrome==IntPtr.Zero || frame==IntPtr.Zero || GetParent(chrome)==frame)return false;
     long style=GetWindowLongPtr(chrome,GWL_STYLE).ToInt64();
-    style=(style & ~(WS_POPUP|WS_CAPTION|WS_THICKFRAME|WS_SYSMENU|WS_MINIMIZEBOX|WS_MAXIMIZEBOX)) | WS_CHILD;
-    SetWindowLongPtr(chrome,GWL_STYLE,new IntPtr(style));
-    SetParent(chrome,frame);
-    return GetParent(chrome)==frame;
-  }
-  private static readonly Dictionary<IntPtr,string> LastHostedLayout = new Dictionary<IntPtr,string>();
-  public static bool FitHostedChrome(IntPtr chrome,IntPtr frame,int insetX,int insetTop,int insetBottom) {
-    if(chrome==IntPtr.Zero || frame==IntPtr.Zero || GetParent(chrome)!=frame)return false;
-    // Always measure the PARENT CLIENT RECT in this Win32 DPI context.
-    // Never derive the phone frame from GetWindowRect(child): the child's
-    // DPI awareness can be different from Windows PowerShell at 175% scaling.
-    Rectangle rc;
-    if(!GetClientRect(frame,out rc))return false;
-    int availableW=rc.Right-rc.Left-2*insetX;
-    int availableH=rc.Bottom-rc.Top-insetTop-insetBottom;
-    if(availableW<120 || availableH<160)return false;
-    string geometry=insetX+":"+insetTop+":"+availableW+":"+availableH;
-    string last;
-    if(LastHostedLayout.TryGetValue(chrome,out last) && last==geometry)return true;
-    // Do NOT send SWP_FRAMECHANGED on the 500ms visual timer. It rebuilds
-    // Chrome's native frame repeatedly and can interrupt text/omnibox focus.
-    bool initial=!LastHostedLayout.ContainsKey(chrome);
-    uint flags=SWP_NOACTIVATE|SWP_NOOWNERZORDER|SWP_NOSENDCHANGING;
-    if(initial)flags|=SWP_FRAMECHANGED;
-    bool fitted=SetWindowPos(chrome,IntPtr.Zero,insetX,insetTop,availableW,availableH,flags);
-    if(fitted)LastHostedLayout[chrome]=geometry;
-    return fitted;
-  }
-  public static bool FocusHostedChrome(IntPtr chrome,IntPtr frame) {
-    if(chrome==IntPtr.Zero || frame==IntPtr.Zero || GetParent(chrome)!=frame)return false;
-    // Only restore keyboard focus while THIS phone is already foreground.
-    // Never steal focus from another app or an unrelated H2ADS instance.
-    if(GetForegroundWindow()!=frame)return false;
-    uint ignored;
-    uint frameThread=GetWindowThreadProcessId(frame,out ignored);
-    uint chromeThread=GetWindowThreadProcessId(chrome,out ignored);
-    if(frameThread==0 || chromeThread==0)return false;
-    bool linked=frameThread==chromeThread || AttachThreadInput(frameThread,chromeThread,true);
-    if(!linked)return false;
-    try {
-      // Cross-process WS_CHILD needs input queues attached for SetFocus to work.
-      // Let Chrome manage its own omnibox and webpage fields after activation.
-      SetFocus(chrome);
-      return GetFocus()==chrome;
-    } finally {
-      if(frameThread!=chromeThread)AttachThreadInput(frameThread,chromeThread,false);
+    if((style & WS_CHILD)!=0)return false;
+    long borderless=(style & ~(WS_CHILD|WS_CAPTION|WS_THICKFRAME|WS_SYSMENU|WS_MINIMIZEBOX|WS_MAXIMIZEBOX)) | WS_POPUP;
+    SetWindowLongPtr(chrome,GWL_STYLE,new IntPtr(borderless));
+    // GWLP_HWNDPARENT on a top-level popup sets its OWNER, not its parent.
+    // The PHONE is owned by Chrome: if the optional phone exits, Chrome
+    // survives. An owned phone stays above Chrome without taking its focus.
+    SetWindowLongPtr(frame,GWLP_HWNDPARENT,chrome);
+    if(GetWindowLongPtr(frame,GWLP_HWNDPARENT)!=chrome) {
+      SetWindowLongPtr(chrome,GWL_STYLE,new IntPtr(style));
+      return false;
     }
+    ChromeOriginalStyles[chrome]=style;
+    return true;
+  }
+  public static bool FitHostedChrome(IntPtr chrome,IntPtr frame,int insetX,int insetTop,int insetBottom) {
+    if(chrome==IntPtr.Zero || frame==IntPtr.Zero || GetWindowLongPtr(frame,GWLP_HWNDPARENT)!=chrome)return false;
+    // Both windows stay in the same physical desktop coordinates. Do not
+    // reparent cross-process Chromium or mutate its internal keyboard focus.
+    Rectangle frameRect,chromeRect;
+    if(!GetWindowRect(frame,out frameRect) || !GetWindowRect(chrome,out chromeRect))return false;
+    int screenX=frameRect.Left+insetX,screenY=frameRect.Top+insetTop;
+    int screenW=frameRect.Right-frameRect.Left-2*insetX;
+    int screenH=frameRect.Bottom-frameRect.Top-insetTop-insetBottom;
+    if(screenW<120 || screenH<160)return false;
+    // The timer must NEVER send a Win32 frame reset while the user types.
+    if(chromeRect.Left==screenX && chromeRect.Top==screenY &&
+       chromeRect.Right-chromeRect.Left==screenW &&
+       chromeRect.Bottom-chromeRect.Top==screenH)return true;
+    return SetWindowPos(chrome,IntPtr.Zero,screenX,screenY,screenW,screenH,
+      SWP_NOACTIVATE|SWP_NOZORDER|SWP_NOOWNERZORDER|SWP_NOSENDCHANGING);
   }
   public static void SetPhoneGroup(IntPtr chrome,IntPtr frame,int chromeX,int chromeY,int chromeW,int chromeH,int frameX,int frameY,int frameW,int frameH) {
     if(chrome==IntPtr.Zero || frame==IntPtr.Zero)return;
     MoveWindow(frame,frameX,frameY,frameW,frameH,true);
     FitHostedChrome(chrome,frame,chromeX,chromeY,Math.Max(0,frameH-chromeY-chromeH));
+  }
+  public static void DetachChromeVisual(IntPtr chrome,IntPtr frame) {
+    if(chrome==IntPtr.Zero)return;
+    if(frame!=IntPtr.Zero && GetWindowLongPtr(frame,GWLP_HWNDPARENT)==chrome)
+      SetWindowLongPtr(frame,GWLP_HWNDPARENT,IntPtr.Zero);
+    long original;
+    if(ChromeOriginalStyles.TryGetValue(chrome,out original)) {
+      SetWindowLongPtr(chrome,GWL_STYLE,new IntPtr(original));
+      SetWindowPos(chrome,IntPtr.Zero,0,0,0,0,
+        SWP_NOACTIVATE|SWP_NOZORDER|SWP_NOMOVE|SWP_NOSIZE|SWP_FRAMECHANGED);
+      ChromeOriginalStyles.Remove(chrome);
+    }
   }
   public static bool RoundChromeWindow(IntPtr hwnd,int w,int h) {
     if(hwnd==IntPtr.Zero || w<120 || h<160 || IsZoomed(hwnd)) return false;
@@ -135,10 +130,14 @@ public static class H2PhoneWindowNative {
     return found;
   }
   public const uint SWP_NOACTIVATE=0x0010;
+  public const uint SWP_NOZORDER=0x0004;
+  public const uint SWP_NOMOVE=0x0002;
+  public const uint SWP_NOSIZE=0x0001;
   public const uint SWP_NOOWNERZORDER=0x0200;
   public const uint SWP_NOSENDCHANGING=0x0400;
   public const uint SWP_FRAMECHANGED=0x0020;
   public const int GWL_STYLE=-16;
+  public const int GWLP_HWNDPARENT=-8;
   public const long WS_CHILD=0x40000000L;
   public const long WS_POPUP=0x80000000L;
   public const long WS_CAPTION=0x00C00000L;
@@ -147,7 +146,7 @@ public static class H2PhoneWindowNative {
   public const long WS_MINIMIZEBOX=0x00020000L;
   public const long WS_MAXIMIZEBOX=0x00010000L;
 }
-// WinForms native phone chassis. The real Chrome HWND remains fully interactive as a child.
+// WinForms native phone chassis. Its screen cutout exposes the real Chrome window.
 public sealed class H2PhoneDisplayForm : System.Windows.Forms.Form {
   public H2PhoneDisplayForm() {
     DoubleBuffered=true;
@@ -156,8 +155,9 @@ public sealed class H2PhoneDisplayForm : System.Windows.Forms.Form {
       System.Windows.Forms.ControlStyles.OptimizedDoubleBuffer |
       System.Windows.Forms.ControlStyles.ResizeRedraw,true);
   }
-  // This frame is the parent of the real Chrome HWND. It MUST be activatable,
-  // or Chrome's address bar can receive clicks but not keyboard input.
+  // This is only a cosmetic overlay. Showing it must not take keyboard focus
+  // from the real top-level Chrome browser.
+  protected override bool ShowWithoutActivation { get { return true; } }
   protected override System.Windows.Forms.CreateParams CreateParams {
     get {
       var props=base.CreateParams;
@@ -179,6 +179,10 @@ public sealed class H2PhoneDisplayForm : System.Windows.Forms.Form {
     base.OnResize(e);
     if(Width<120 || Height<200)return;
     using(var outline=Rounded(0,0,Width-1,Height-1,46f)) {
+      // A real Win32 hole, not an invisible control over Chrome. Clicks and
+      // typing in the screen go directly to the top-level Chrome window.
+      outline.FillMode=System.Drawing.Drawing2D.FillMode.Alternate;
+      outline.AddRectangle(new System.Drawing.RectangleF(20f,84f,Width-40f,Height-146f));
       var old=Region;
       Region=new System.Drawing.Region(outline);
       if(old!=null)old.Dispose();
@@ -239,9 +243,8 @@ public sealed class H2PhoneDisplayForm : System.Windows.Forms.Form {
 }
 '@ -ReferencedAssemblies "System.Drawing","System.Windows.Forms"
 
-# Phone host. The existing Chrome process, profile, cookies and proxy remain untouched;
-# only its native HWND parent and client geometry change.
-# the real Chrome instance, cookies, proxy, profiles and browser commands stay intact.
+# Phone appearance: no cross-process parent change; Chrome owns the cosmetic frame.
+# Chrome process, cookies, proxy, profiles and browser commands stay intact.
 function RGB([int]$r,[int]$g,[int]$b) { [System.Drawing.Color]::FromArgb($r,$g,$b) }
 function Set-RoundedPanelRegion($control,[int]$radius) {
   $diameter=$radius*2
@@ -413,23 +416,28 @@ $footer.add_Paint({
 })
 $frame.Controls.Add($footer)
 
-# This is the architectural boundary: Chrome is no longer a second top-level
-# window. It is a child HWND of the phone host, so moving the host moves Chrome
-# automatically and Windows clips Chrome to the host client area.
+# The phone stays visually attached with a click-through screen. Chromium
+# remains top-level for native typing, while the phone is an owned overlay.
+# Only geometry and window chrome change: never proxy, profile or browser PID.
 $frame.CreateControl()
 if(-not [H2PhoneWindowNative]::HostChrome($chrome,$frame.Handle)){ throw "H2ADS: failed to host Chrome HWND inside phone" }
+$script:phoneChromeCoupled=$true
 [H2PhoneWindowNative]::SetPhoneGroup($chrome,$frame.Handle,$bezel,$topPad,$width,$height,($targetX-$bezel),($targetY-$topPad),($width+2*$bezel),($height+$topPad+$bottomPad))
-# Preserve the embedded browser. Restore native Chrome keyboard focus on
-# genuine phone activation, never continuously while the user is typing.
-$frame.add_Activated({
-  [H2PhoneWindowNative]::FocusHostedChrome($chrome,$frame.Handle)|Out-Null
+# Keep browser and chassis as ONE visible moving/resizing phone, even during
+# native caption dragging; do not steal input focus from Chrome.
+$frame.add_Move({
+  if($script:phoneChromeCoupled){
+    [H2PhoneWindowNative]::FitHostedChrome($chrome,$frame.Handle,$bezel,$topPad,$bottomPad)|Out-Null
+  }
 })
-$frame.add_Shown({
-  [H2PhoneWindowNative]::FocusHostedChrome($chrome,$frame.Handle)|Out-Null
+$frame.add_SizeChanged({
+  if($script:phoneChromeCoupled){
+    [H2PhoneWindowNative]::FitHostedChrome($chrome,$frame.Handle,$bezel,$topPad,$bottomPad)|Out-Null
+  }
 })
 
-# The exposed bezel is the resize handle. Chrome stays the only browser window;
-# the host resizes its child HWND without changing its profile.
+# The exposed bezel is the resize handle. The phone follows and resizes
+# the same real Chrome window without changing its profile or focus.
 function Set-PhoneChromeSize([int]$requestedWidth,[int]$requestedHeight) {
   $maxWidth=[Math]::Max(310,$desktop.Width-2*$bezel-12)
   $maxHeight=[Math]::Max(400,$desktop.Height-$topPad-$bottomPad-12)
@@ -526,14 +534,18 @@ $timer.add_Tick({
       }
       $frame.Hide();return
     }
-    # Parent-first layout: never resize the phone frame from the Chrome child.
-    # This prevents the 175%-DPI feedback loop that leaves gray space at right/bottom.
+    # Phone geometry is authoritative: no cross-process parenting and no
+    # 175%-DPI feedback loop. Only move Chrome when geometry actually changes.
     [H2PhoneWindowNative]::FitHostedChrome($chrome,$frame.Handle,$bezel,$topPad,$bottomPad)|Out-Null
     if(-not $frame.Visible){$frame.Show()}
     $status.Invalidate()
     $frame.Invalidate()
   } catch {}
 })
-$frame.add_FormClosed({$timer.Stop();$timer.Dispose()})
+$frame.add_FormClosed({
+  $script:phoneChromeCoupled=$false
+  $timer.Stop();$timer.Dispose()
+  try { [H2PhoneWindowNative]::DetachChromeVisual($chrome,$frame.Handle) } catch {}
+})
 $timer.Start()
 [System.Windows.Forms.Application]::Run($frame)
