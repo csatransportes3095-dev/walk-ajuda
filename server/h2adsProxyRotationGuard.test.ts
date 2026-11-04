@@ -5,8 +5,9 @@ import { describe, expect, it } from "vitest";
 const source = fs.readFileSync(path.resolve(process.cwd(), "workers/windows/browser-session.mjs"), "utf8");
 
 describe("H2ADS proxy rotation guard", () => {
-  it("trava a recuperacao quando o IP muda durante a sessao", () => {
-    expect(source).toContain("browserExitHandled || sessionIpChanged");
+  it("suspende trafego para IP alterado e somente revalida IP original", () => {
+    expect(source).toContain("browserExitHandled || browserProbeInProgress");
+    expect(source).toContain("normalizeIp(frontIp) !== normalizeIp(sessionLockedIp)");
     expect(source).toContain('killSwitchReason: "session_ip_changed"');
   });
 
