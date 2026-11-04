@@ -31,10 +31,10 @@ describe("H2ADS stale close guard", () => {
   it("carrega a extensao de privacy guard para Google, Bing, Uber e outras paginas de challenge quando abre o Chrome", () => {
     expect(browserSessionSource).toContain("createGoogleSorryPrivacyGuard");
     expect(browserSessionSource).toContain("--load-extension=");
-    expect(browserSessionSource).toContain("*://bing.com/*");
-    expect(browserSessionSource).toContain("*://*.bing.com/*");
-    expect(browserSessionSource).toContain("*://uber.com/*");
-    expect(browserSessionSource).toContain("challenge|captcha|verify");
+    expect(browserSessionSource).toContain("*://*/*");
+    expect(browserSessionSource).toContain("not-a-bot");
+    expect(browserSessionSource).toContain("confirm");
+    expect(browserSessionSource).toContain("captcha|challenge|verify|verification");
     expect(browserSessionSource).toContain("googleSorryPrivacyGuard: \"enabled\"");
   });
 

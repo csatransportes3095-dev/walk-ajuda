@@ -584,14 +584,10 @@ function createInstanceLabelPage() {
 
 function createGoogleSorryPrivacyGuard() {
   mkdirSync(privacyExtensionDirectory, { recursive: true });
-  const challengeDomains = [
-    "*://google.com/*", "*://*.google.com/*", "*://google.com.br/*", "*://*.google.com.br/*",
-    "*://bing.com/*", "*://*.bing.com/*", "*://www.bing.com/*",
-    "*://uber.com/*", "*://*.uber.com/*", "*://uber.com.br/*", "*://*.uber.com.br/*",
-  ];
+  const challengeDomains = ["*://*/*"];
   const challengeRegexes = [
-    "^https?://([^/]+\\.)?(google|bing|uber)\\.[^/]+/(?:.*(?:[/?#](?:search|sorry|challenge|captcha|verify|security|check|robot|human|blocked|denied)|(?:search|sorry|challenge|captcha|verify|security|check|robot|human|blocked|denied)(?:[/?#]|$)))$",
-    "^https?://([^/]+\\.)?(google|bing|uber)\\.[^/]+/.*(?:search|sorry|challenge|captcha|verify|security|check|robot|human|blocked|denied|not-a-bot).*$",
+    "^https?://[^/]+/.*(?:captcha|challenge|verify|verification|security|check|robot|human|blocked|denied|sorry|not-a-bot|notabot|confirm|confirmation|i-am-not-a-robot|notrobot).*$",
+    "^https?://[^/]+/.*(?:\\?|&)(?:captcha|challenge|verify|verification|security|check|robot|human|blocked|denied|not-a-bot|notabot|confirm|confirmation|i-am-not-a-robot|notrobot)=[^#]*$",
   ];
   const manifest = {
     manifest_version: 3, name: "H2ADS Privacy Guard", version: "1.2.0", description: "Oculta paginas de bloqueio e validacao humana que expõem dados de rede.",
