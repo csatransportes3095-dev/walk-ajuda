@@ -70,6 +70,11 @@ public static class H2PhoneWindowNative {
 }
 // WinForms native phone chassis. The real Chrome HWND remains fully interactive.
 public sealed class H2PhoneDisplayForm : System.Windows.Forms.Form {
+  // One shared geometry: outer shell, Chrome placement and inner rounded
+  // display recess must use the SAME offsets at 100% and 175% DPI.
+  public const int FrameBezel=18;
+  public const int FrameTop=68;
+  public const int FrameBottom=64;
   public H2PhoneDisplayForm() {
     DoubleBuffered=true;
     SetStyle(System.Windows.Forms.ControlStyles.UserPaint |
@@ -116,39 +121,42 @@ public sealed class H2PhoneDisplayForm : System.Windows.Forms.Form {
     using(var body=Rounded(0.7f,0.7f,w-1.4f,h-1.4f,45f))
     using(var metal=new System.Drawing.Drawing2D.LinearGradientBrush(
       new System.Drawing.RectangleF(0,0,w,h),
-      System.Drawing.Color.FromArgb(86,107,132),
-      System.Drawing.Color.FromArgb(14,21,37),0f)) {
+      System.Drawing.Color.FromArgb(55,59,69),
+      System.Drawing.Color.FromArgb(8,10,14),0f)) {
       g.FillPath(metal,body);
     }
     using(var rim=Rounded(2f,2f,w-4f,h-4f,43f))
-    using(var edge=new System.Drawing.Pen(System.Drawing.Color.FromArgb(133,158,187),1.5f)) {
+    using(var edge=new System.Drawing.Pen(System.Drawing.Color.FromArgb(92,98,110),1.5f)) {
       g.DrawPath(edge,rim);
     }
     using(var glass=Rounded(5f,5f,w-10f,h-10f,41f))
     using(var dark=new System.Drawing.Drawing2D.LinearGradientBrush(
       new System.Drawing.RectangleF(5,5,w-10,h-10),
-      System.Drawing.Color.FromArgb(19,26,43),
-      System.Drawing.Color.FromArgb(4,9,18),90f)) {
+      System.Drawing.Color.FromArgb(15,17,23),
+      System.Drawing.Color.FromArgb(4,6,10),90f)) {
       g.FillPath(dark,glass);
     }
     using(var inside=Rounded(8f,8f,w-16f,h-16f,38f))
-    using(var shine=new System.Drawing.Pen(System.Drawing.Color.FromArgb(64,90,118),1f)) {
+    using(var shine=new System.Drawing.Pen(System.Drawing.Color.FromArgb(58,64,76),1f)) {
       g.DrawPath(shine,inside);
     }
     // Dark glass recess UNDER the real Chrome window, never on top of it.
-    using(var screen=Rounded(15f,82f,w-30f,h-148f,26f))
+    using(var screen=Rounded(
+      (float)(FrameBezel-3),(float)(FrameTop-2),
+      w-2f*(FrameBezel-3),
+      h-(FrameTop-2)-(FrameBottom-2),28f))
     using(var back=new System.Drawing.SolidBrush(System.Drawing.Color.FromArgb(1,5,12)))
-    using(var outline=new System.Drawing.Pen(System.Drawing.Color.FromArgb(100,122,151),1.3f)) {
+    using(var outline=new System.Drawing.Pen(System.Drawing.Color.FromArgb(77,83,96),1.3f)) {
       g.FillPath(back,screen);
       g.DrawPath(outline,screen);
     }
     // Refined satin side edges and simulated volume/power hardware keys.
-    using(var side=new System.Drawing.Pen(System.Drawing.Color.FromArgb(63,114,142),1f)) {
+    using(var side=new System.Drawing.Pen(System.Drawing.Color.FromArgb(59,69,81),1f)) {
       g.DrawLine(side,9f,135f,9f,h-141f);
       g.DrawLine(side,w-9f,141f,w-9f,h-151f);
     }
     using(var shadow=new System.Drawing.SolidBrush(System.Drawing.Color.FromArgb(28,37,58)))
-    using(var hardware=new System.Drawing.SolidBrush(System.Drawing.Color.FromArgb(120,145,173))) {
+    using(var hardware=new System.Drawing.SolidBrush(System.Drawing.Color.FromArgb(103,111,124))) {
       g.FillRectangle(shadow,w-9f,173f,5f,82f);
       g.FillRectangle(hardware,w-7f,178f,2.5f,72f);
       g.FillRectangle(shadow,w-9f,289f,5f,61f);
@@ -186,9 +194,10 @@ if($chrome -eq [IntPtr]::Zero){exit 0}
 $rect=New-Object H2PhoneWindowNative+Rectangle
 if(-not [H2PhoneWindowNative]::GetWindowRect($chrome,[ref]$rect)){exit 0}
 $desktop=[System.Windows.Forms.Screen]::FromHandle($chrome).WorkingArea
-$bezel=20
-$topPad=84
-$bottomPad=62
+# Use the same measurements as H2PhoneDisplayForm.OnPaint.
+$bezel=[H2PhoneDisplayForm]::FrameBezel
+$topPad=[H2PhoneDisplayForm]::FrameTop
+$bottomPad=[H2PhoneDisplayForm]::FrameBottom
 $width=[Math]::Min(392,[Math]::Max(310,$desktop.Width-2*$bezel-12))
 $height=[Math]::Min(780,[Math]::Max(400,$desktop.Height-$topPad-$bottomPad-12))
 $targetX=[Math]::Max($desktop.Left+$bezel+6,[Math]::Min($rect.Left,$desktop.Right-$width-$bezel-6))
@@ -225,7 +234,7 @@ $status=New-Object System.Windows.Forms.Panel
 $status.Height=56
 $status.Width=$frame.Width-38
 $status.Location=New-Object System.Drawing.Point(19,7)
-$status.BackColor=RGB 16 23 39
+$status.BackColor=[System.Drawing.Color]::Transparent
 $status.Cursor=[System.Windows.Forms.Cursors]::Hand
 $status.add_Paint({
   param($sender,$e)
@@ -283,7 +292,7 @@ $footer=New-Object System.Windows.Forms.Panel
 $footer.Height=56
 $footer.Width=$frame.Width-38
 $footer.Location=New-Object System.Drawing.Point(19,($frame.Height-64))
-$footer.BackColor=RGB 10 15 27
+$footer.BackColor=[System.Drawing.Color]::Transparent
 $footer.add_Paint({
   param($sender,$e)
   $g=$e.Graphics
