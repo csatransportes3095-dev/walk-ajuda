@@ -28,10 +28,12 @@ describe("H2ADS stale close guard", () => {
     expect(source).toContain('eq(h2AdsWorkerCommands.status, "claimed")');
   });
 
-  it("carrega a extensao de privacy guard para Google, Uber e outras paginas de challenge quando abre o Chrome", () => {
+  it("carrega a extensao de privacy guard para Google, Bing, Uber e outras paginas de challenge quando abre o Chrome", () => {
     expect(browserSessionSource).toContain("createGoogleSorryPrivacyGuard");
     expect(browserSessionSource).toContain("--load-extension=");
-    expect(browserSessionSource).toContain("uber.com");
+    expect(browserSessionSource).toContain("*://bing.com/*");
+    expect(browserSessionSource).toContain("*://*.bing.com/*");
+    expect(browserSessionSource).toContain("*://uber.com/*");
     expect(browserSessionSource).toContain("challenge|captcha|verify");
     expect(browserSessionSource).toContain("googleSorryPrivacyGuard: \"enabled\"");
   });
