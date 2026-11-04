@@ -1,6 +1,7 @@
 param(
   [Parameter(Mandatory=$true)][int]$BrowserPid,
-  [string]$InstanceName = "H2ADS"
+  [string]$InstanceName = "H2ADS",
+  [switch]$VisualSelfTest
 )
 # Cosmetic WinForms companion for the REAL Chrome HWND.
 # Never injects browser code, traffic, network settings, profile or proxy.
@@ -24,6 +25,24 @@ public static class H2PhoneWindowNative {
   [DllImport("user32.dll")] public static extern bool MoveWindow(IntPtr hwnd,int x,int y,int w,int h,bool repaint);
   [DllImport("user32.dll")] public static extern bool SetWindowPos(IntPtr hwnd,IntPtr after,int x,int y,int w,int h,uint flags);
   [DllImport("user32.dll")] public static extern bool ShowWindow(IntPtr hwnd,int command);
+  [DllImport("user32.dll")] public static extern bool IsZoomed(IntPtr hwnd);
+  [DllImport("user32.dll")] public static extern int SetWindowRgn(IntPtr hwnd,IntPtr region,bool redraw);
+  [DllImport("gdi32.dll")] public static extern IntPtr CreateRoundRectRgn(int left,int top,int right,int bottom,int ellipseW,int ellipseH);
+  [DllImport("gdi32.dll")] public static extern bool DeleteObject(IntPtr region);
+  [DllImport("dwmapi.dll")] public static extern int DwmSetWindowAttribute(IntPtr hwnd,int attribute,ref int value,int size);
+  public static bool RoundChromeWindow(IntPtr hwnd,int w,int h) {
+    if(hwnd==IntPtr.Zero || w<120 || h<160 || IsZoomed(hwnd)) return false;
+    try {int round=2;DwmSetWindowAttribute(hwnd,33,ref round,4);}catch{}
+    // Clip only the browser HWND corners; no Chrome process or page changes.
+    IntPtr region=CreateRoundRectRgn(0,0,w+1,h+1,44,44);
+    if(region==IntPtr.Zero) return false;
+    if(SetWindowRgn(hwnd,region,true)==0) { DeleteObject(region);return false; }
+    // Windows owns the region from this point.
+    return true;
+  }
+  public static void RestoreChromeWindow(IntPtr hwnd) {
+    if(hwnd!=IntPtr.Zero) SetWindowRgn(hwnd,IntPtr.Zero,true);
+  }
   [StructLayout(LayoutKind.Sequential)] public struct Rectangle {
     public int Left, Top, Right, Bottom;
   }
@@ -45,14 +64,90 @@ public static class H2PhoneWindowNative {
   public const uint SWP_NOOWNERZORDER=0x0200;
   public const uint SWP_NOSENDCHANGING=0x0400;
 }
-// A visible companion must never steal focus from the real Chrome window.
+// WinForms native phone chassis. The real Chrome HWND remains fully interactive.
 public sealed class H2PhoneDisplayForm : System.Windows.Forms.Form {
+  public H2PhoneDisplayForm() {
+    DoubleBuffered=true;
+    SetStyle(System.Windows.Forms.ControlStyles.UserPaint |
+      System.Windows.Forms.ControlStyles.AllPaintingInWmPaint |
+      System.Windows.Forms.ControlStyles.OptimizedDoubleBuffer |
+      System.Windows.Forms.ControlStyles.ResizeRedraw,true);
+  }
   protected override bool ShowWithoutActivation { get { return true; } }
   protected override System.Windows.Forms.CreateParams CreateParams {
     get {
       var props=base.CreateParams;
       props.ExStyle |= 0x08000000 | 0x00000080; // NOACTIVATE | TOOLWINDOW
       return props;
+    }
+  }
+  private static System.Drawing.Drawing2D.GraphicsPath Rounded(float x,float y,float w,float h,float radius) {
+    float d=radius*2f;
+    var p=new System.Drawing.Drawing2D.GraphicsPath();
+    p.AddArc(x,y,d,d,180f,90f);
+    p.AddArc(x+w-d,y,d,d,270f,90f);
+    p.AddArc(x+w-d,y+h-d,d,d,0f,90f);
+    p.AddArc(x,y+h-d,d,d,90f,90f);
+    p.CloseFigure();
+    return p;
+  }
+  protected override void OnResize(System.EventArgs e) {
+    base.OnResize(e);
+    if(Width<120 || Height<200)return;
+    using(var outline=Rounded(0,0,Width-1,Height-1,46f)) {
+      var old=Region;
+      Region=new System.Drawing.Region(outline);
+      if(old!=null)old.Dispose();
+    }
+    Invalidate();
+  }
+  protected override void OnPaint(System.Windows.Forms.PaintEventArgs e) {
+    base.OnPaint(e);
+    if(Width<120 || Height<200)return;
+    var g=e.Graphics;
+    g.SmoothingMode=System.Drawing.Drawing2D.SmoothingMode.AntiAlias;
+    float w=ClientSize.Width,h=ClientSize.Height;
+    // Solid metallic body with three concentric, soft glass edge highlights.
+    using(var body=Rounded(0.7f,0.7f,w-1.4f,h-1.4f,45f))
+    using(var metal=new System.Drawing.Drawing2D.LinearGradientBrush(
+      new System.Drawing.RectangleF(0,0,w,h),
+      System.Drawing.Color.FromArgb(86,107,132),
+      System.Drawing.Color.FromArgb(14,21,37),0f)) {
+      g.FillPath(metal,body);
+    }
+    using(var rim=Rounded(2f,2f,w-4f,h-4f,43f))
+    using(var edge=new System.Drawing.Pen(System.Drawing.Color.FromArgb(133,158,187),1.5f)) {
+      g.DrawPath(edge,rim);
+    }
+    using(var glass=Rounded(5f,5f,w-10f,h-10f,41f))
+    using(var dark=new System.Drawing.Drawing2D.LinearGradientBrush(
+      new System.Drawing.RectangleF(5,5,w-10,h-10),
+      System.Drawing.Color.FromArgb(19,26,43),
+      System.Drawing.Color.FromArgb(4,9,18),90f)) {
+      g.FillPath(dark,glass);
+    }
+    using(var inside=Rounded(8f,8f,w-16f,h-16f,38f))
+    using(var shine=new System.Drawing.Pen(System.Drawing.Color.FromArgb(64,90,118),1f)) {
+      g.DrawPath(shine,inside);
+    }
+    // Black curved recess underneath the real, corner-clipped Chrome window.
+    using(var screen=Rounded(15f,67f,w-30f,h-133f,25f))
+    using(var back=new System.Drawing.SolidBrush(System.Drawing.Color.FromArgb(1,5,12)))
+    using(var outline=new System.Drawing.Pen(System.Drawing.Color.FromArgb(100,122,151),1.3f)) {
+      g.FillPath(back,screen);
+      g.DrawPath(outline,screen);
+    }
+    // Refined satin side edges and simulated volume/power hardware keys.
+    using(var side=new System.Drawing.Pen(System.Drawing.Color.FromArgb(63,114,142),1f)) {
+      g.DrawLine(side,9f,135f,9f,h-141f);
+      g.DrawLine(side,w-9f,141f,w-9f,h-151f);
+    }
+    using(var shadow=new System.Drawing.SolidBrush(System.Drawing.Color.FromArgb(28,37,58)))
+    using(var hardware=new System.Drawing.SolidBrush(System.Drawing.Color.FromArgb(120,145,173))) {
+      g.FillRectangle(shadow,w-9f,173f,5f,82f);
+      g.FillRectangle(hardware,w-7f,178f,2.5f,72f);
+      g.FillRectangle(shadow,w-9f,289f,5f,61f);
+      g.FillRectangle(hardware,w-7f,294f,2.5f,51f);
     }
   }
 }
@@ -76,6 +171,20 @@ function Set-PhoneCorners([System.Windows.Forms.Form]$target) {
   if($old){$old.Dispose()}
   $path.Dispose()
 }
+# Visual self-test used only by the Windows CI, never by normal instances.
+if($VisualSelfTest) {
+  $preview=New-Object H2PhoneDisplayForm
+  $bitmap=New-Object System.Drawing.Bitmap -ArgumentList 428,915
+  try {
+    $preview.Size=New-Object System.Drawing.Size -ArgumentList 428,915
+    $preview.CreateControl()
+    $preview.DrawToBitmap($bitmap,(New-Object System.Drawing.Rectangle -ArgumentList 0,0,428,915))
+    if($bitmap.Width -ne 428 -or $bitmap.Height -ne 915){throw "Phone geometry invalid"}
+    Write-Output "H2ADS: smartphone body painted in Windows PowerShell 5.1"
+  } finally { $bitmap.Dispose();$preview.Dispose() }
+  exit 0
+}
+
 $chrome=[IntPtr]::Zero
 $deadline=[DateTime]::UtcNow.AddSeconds(22)
 while($chrome -eq [IntPtr]::Zero -and [DateTime]::UtcNow -lt $deadline) {
@@ -87,11 +196,17 @@ if($chrome -eq [IntPtr]::Zero){exit 0}
 $rect=New-Object H2PhoneWindowNative+Rectangle
 if(-not [H2PhoneWindowNative]::GetWindowRect($chrome,[ref]$rect)){exit 0}
 $desktop=[System.Windows.Forms.Screen]::FromHandle($chrome).WorkingArea
-$width=[Math]::Min(390,[Math]::Max(310,$desktop.Width-48))
-$height=[Math]::Min(790,[Math]::Max(400,$desktop.Height-154))
-$targetX=[Math]::Max($desktop.Left+12,[Math]::Min($rect.Left,$desktop.Right-$width-12))
-$targetY=[Math]::Max($desktop.Top+66,[Math]::Min($rect.Top,$desktop.Bottom-$height-66))
+$bezel=18
+$topPad=69
+$bottomPad=66
+$width=[Math]::Min(392,[Math]::Max(310,$desktop.Width-2*$bezel-12))
+$height=[Math]::Min(780,[Math]::Max(400,$desktop.Height-$topPad-$bottomPad-12))
+$targetX=[Math]::Max($desktop.Left+$bezel+6,[Math]::Min($rect.Left,$desktop.Right-$width-$bezel-6))
+$targetY=[Math]::Max($desktop.Top+$topPad+6,[Math]::Min($rect.Top,$desktop.Bottom-$height-$bottomPad-6))
 [H2PhoneWindowNative]::MoveWindow($chrome,$targetX,$targetY,$width,$height,$true)|Out-Null
+[H2PhoneWindowNative]::RoundChromeWindow($chrome,$width,$height)|Out-Null
+$script:roundedW=$width
+$script:roundedH=$height
 
 $frame=New-Object H2PhoneDisplayForm
 $frame.FormBorderStyle=[System.Windows.Forms.FormBorderStyle]::None
@@ -101,10 +216,10 @@ $frame.BackColor=RGB 10 14 25
 $frame.ForeColor=RGB 243 248 255
 $frame.TopMost=$false
 $frame.AutoScaleMode=[System.Windows.Forms.AutoScaleMode]::None
-$frame.Width=$width+24
-$frame.Height=$height+126
+$frame.Width=$width+2*$bezel
+$frame.Height=$height+$topPad+$bottomPad
 $frame.Text="H2ADS - Phone visual"
-$frame.Location=New-Object System.Drawing.Point(($targetX-12),($targetY-62))
+$frame.Location=New-Object System.Drawing.Point(($targetX-$bezel),($targetY-$topPad))
 $frame.add_SizeChanged({Set-PhoneCorners $frame})
 Set-PhoneCorners $frame
 $frame.add_Shown({
@@ -117,8 +232,9 @@ $frame.add_Shown({
 $script:battery=95
 $script:wifiOn=$true
 $status=New-Object System.Windows.Forms.Panel
-$status.Dock="Top"
-$status.Height=62
+$status.Height=56
+$status.Width=$frame.Width-38
+$status.Location=New-Object System.Drawing.Point(19,7)
 $status.BackColor=RGB 13 18 33
 $status.Cursor=[System.Windows.Forms.Cursors]::Hand
 $status.add_Paint({
@@ -174,8 +290,9 @@ $status.add_MouseWheel({
 $frame.Controls.Add($status)
 
 $footer=New-Object System.Windows.Forms.Panel
-$footer.Dock="Bottom"
-$footer.Height=64
+$footer.Height=56
+$footer.Width=$frame.Width-38
+$footer.Location=New-Object System.Drawing.Point(19,($frame.Height-64))
 $footer.BackColor=RGB 13 18 33
 $footer.add_Paint({
   param($sender,$e)
@@ -207,14 +324,33 @@ $timer.add_Tick({
        [H2PhoneWindowNative]::IsIconic($chrome)){
       $frame.Hide();return
     }
+    # When maximized, return Chrome to its normal square native window.
+    if([H2PhoneWindowNative]::IsZoomed($chrome)){
+      if($script:roundedW -gt 0){
+        [H2PhoneWindowNative]::RestoreChromeWindow($chrome)
+        $script:roundedW=0;$script:roundedH=0
+      }
+      $frame.Hide();return
+    }
     $r=New-Object H2PhoneWindowNative+Rectangle
     if(-not [H2PhoneWindowNative]::GetWindowRect($chrome,[ref]$r)){return}
-    $frame.Location=New-Object System.Drawing.Point(($r.Left-12),($r.Top-62))
-    $frame.Size=New-Object System.Drawing.Size(($r.Right-$r.Left+24),($r.Bottom-$r.Top+126))
+    $cw=$r.Right-$r.Left
+    $ch=$r.Bottom-$r.Top
+    if($cw -ne $script:roundedW -or $ch -ne $script:roundedH){
+      if([H2PhoneWindowNative]::RoundChromeWindow($chrome,$cw,$ch)){
+        $script:roundedW=$cw;$script:roundedH=$ch
+      }
+    }
+    $frame.Location=New-Object System.Drawing.Point(($r.Left-$bezel),($r.Top-$topPad))
+    $frame.Size=New-Object System.Drawing.Size(($cw+2*$bezel),($ch+$topPad+$bottomPad))
+    $status.Width=$frame.Width-38
+    $footer.Width=$frame.Width-38
+    $footer.Top=$frame.Height-64
     if(-not $frame.Visible){$frame.Show()}
     [H2PhoneWindowNative]::SetWindowPos($frame.Handle,$chrome,0,0,0,0,
       [H2PhoneWindowNative]::SWP_NOACTIVATE -bor 0x0001 -bor 0x0002)|Out-Null
     $status.Invalidate()
+    $frame.Invalidate()
   } catch {}
 })
 $frame.add_FormClosed({$timer.Stop();$timer.Dispose()})
