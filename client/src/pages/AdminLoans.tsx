@@ -636,12 +636,12 @@ function LoansTab() {
     onError: (e) => toast.error(e.message),
   });
   const confirmPayment = trpc.loans.confirmInstallmentPayment.useMutation({
-    onSuccess: () => { toast.success("Pagamento confirmado!"); utils.loans.listLoans.invalidate(); utils.loans.getDashboard.invalidate(); utils.loans.getLoan.invalidate({ id: expandedLoan! }); utils.loans.getProofsByLoan.invalidate({ loanId: expandedLoan! }); },
+    onSuccess: (data) => { toast.success(data.alreadyPaid ? "Parcela ja estava paga. Nenhuma nova baixa foi feita." : "Pagamento confirmado!"); utils.loans.listLoans.invalidate(); utils.loans.getDashboard.invalidate(); utils.loans.getLoan.invalidate({ id: expandedLoan! }); utils.loans.getProofsByLoan.invalidate({ loanId: expandedLoan! }); },
     onError: (e) => toast.error(e.message),
   });
   const confirmPaymentWithProof = trpc.loans.confirmInstallmentPaymentWithProof.useMutation({
     onSuccess: (data) => {
-      toast.success(data.hasProof ? "Pagamento confirmado com comprovante!" : "Pagamento confirmado sem comprovante.");
+      toast.success(data.alreadyPaid ? "Parcela ja estava paga. Nenhuma nova baixa foi feita." : (data.hasProof ? "Pagamento confirmado com comprovante!" : "Pagamento confirmado sem comprovante."));
       setPaymentModal(null); setPmAmountPaid(""); setPmObservation(""); setPmFile(null); setPmFilePreview(null);
       utils.loans.listLoans.invalidate(); utils.loans.getDashboard.invalidate();
       utils.loans.getLoan.invalidate({ id: expandedLoan! });
