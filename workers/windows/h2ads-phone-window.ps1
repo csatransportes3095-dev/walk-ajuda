@@ -3,9 +3,9 @@ param(
   [string]$InstanceName = "H2ADS",
   [switch]$VisualSelfTest
 )
-# Cosmetic WinForms companion for the REAL Chrome HWND.
+# Native WinForms host for the REAL Chrome HWND.
 # Never injects browser code, traffic, network settings, profile or proxy.
-# Runs as a separate, non-activating window behind the Chrome window.
+# The existing Chrome HWND is reparented as a child of this host.
 $ErrorActionPreference = "Stop"
 Add-Type -AssemblyName System.Windows.Forms
 Add-Type -AssemblyName System.Drawing
@@ -24,15 +24,26 @@ public static class H2PhoneWindowNative {
   [DllImport("user32.dll")] public static extern bool GetWindowRect(IntPtr hwnd, out Rectangle rect);
   [DllImport("user32.dll")] public static extern bool MoveWindow(IntPtr hwnd,int x,int y,int w,int h,bool repaint);
   [DllImport("user32.dll")] public static extern bool SetWindowPos(IntPtr hwnd,IntPtr after,int x,int y,int w,int h,uint flags);
+  [DllImport("user32.dll", SetLastError=true)] public static extern IntPtr SetParent(IntPtr child,IntPtr parent);
+  [DllImport("user32.dll", SetLastError=true)] public static extern IntPtr GetParent(IntPtr child);
+  [DllImport("user32.dll", EntryPoint="GetWindowLongPtrW", SetLastError=true)] public static extern IntPtr GetWindowLongPtr(IntPtr hwnd,int index);
+  [DllImport("user32.dll", EntryPoint="SetWindowLongPtrW", SetLastError=true)] public static extern IntPtr SetWindowLongPtr(IntPtr hwnd,int index,IntPtr value);
   [DllImport("user32.dll")] public static extern bool ShowWindow(IntPtr hwnd,int command);
   [DllImport("user32.dll")] public static extern bool IsZoomed(IntPtr hwnd);
   [DllImport("user32.dll")] public static extern int SetWindowRgn(IntPtr hwnd,IntPtr region,bool redraw);
   [DllImport("dwmapi.dll")] public static extern int DwmSetWindowAttribute(IntPtr hwnd,int attribute,ref int value,int size);
+  public static bool HostChrome(IntPtr chrome,IntPtr frame) {
+    if(chrome==IntPtr.Zero || frame==IntPtr.Zero)return false;
+    long style=GetWindowLongPtr(chrome,GWL_STYLE).ToInt64();
+    style=(style & ~(WS_POPUP|WS_CAPTION|WS_THICKFRAME|WS_SYSMENU|WS_MINIMIZEBOX|WS_MAXIMIZEBOX)) | WS_CHILD;
+    SetWindowLongPtr(chrome,GWL_STYLE,new IntPtr(style));
+    SetParent(chrome,frame);
+    return GetParent(chrome)==frame;
+  }
   public static void SetPhoneGroup(IntPtr chrome,IntPtr frame,int chromeX,int chromeY,int chromeW,int chromeH,int frameX,int frameY,int frameW,int frameH) {
     if(chrome==IntPtr.Zero || frame==IntPtr.Zero)return;
-    MoveWindow(chrome,chromeX,chromeY,chromeW,chromeH,true);
+    SetWindowPos(chrome,IntPtr.Zero,chromeX,chromeY,chromeW,chromeH,SWP_NOACTIVATE|SWP_NOOWNERZORDER|SWP_NOSENDCHANGING);
     MoveWindow(frame,frameX,frameY,frameW,frameH,true);
-    SetWindowPos(frame,chrome,frameX,frameY,frameW,frameH,SWP_NOACTIVATE|SWP_NOOWNERZORDER|SWP_NOSENDCHANGING);
   }
   public static bool RoundChromeWindow(IntPtr hwnd,int w,int h) {
     if(hwnd==IntPtr.Zero || w<120 || h<160 || IsZoomed(hwnd)) return false;
@@ -73,8 +84,16 @@ public static class H2PhoneWindowNative {
   public const uint SWP_NOACTIVATE=0x0010;
   public const uint SWP_NOOWNERZORDER=0x0200;
   public const uint SWP_NOSENDCHANGING=0x0400;
+  public const int GWL_STYLE=-16;
+  public const long WS_CHILD=0x40000000L;
+  public const long WS_POPUP=0x80000000L;
+  public const long WS_CAPTION=0x00C00000L;
+  public const long WS_THICKFRAME=0x00040000L;
+  public const long WS_SYSMENU=0x00080000L;
+  public const long WS_MINIMIZEBOX=0x00020000L;
+  public const long WS_MAXIMIZEBOX=0x00010000L;
 }
-// WinForms native phone chassis. The real Chrome HWND remains fully interactive.
+// WinForms native phone chassis. The real Chrome HWND remains fully interactive as a child.
 public sealed class H2PhoneDisplayForm : System.Windows.Forms.Form {
   public H2PhoneDisplayForm() {
     DoubleBuffered=true;
@@ -165,7 +184,8 @@ public sealed class H2PhoneDisplayForm : System.Windows.Forms.Form {
 }
 '@ -ReferencedAssemblies "System.Drawing","System.Windows.Forms"
 
-# Cosmetic phone shell. Only the visible HWND position is adjusted;
+# Phone host. The existing Chrome process, profile, cookies and proxy remain untouched;
+# only its native HWND parent and client geometry change.
 # the real Chrome instance, cookies, proxy, profiles and browser commands stay intact.
 function RGB([int]$r,[int]$g,[int]$b) { [System.Drawing.Color]::FromArgb($r,$g,$b) }
 function Set-RoundedPanelRegion($control,[int]$radius) {
@@ -232,10 +252,6 @@ $frame.Text="H2ADS - Phone visual"
 $frame.Location=New-Object System.Drawing.Point(($targetX-$bezel),($targetY-$topPad))
 # One single radius comes from H2PhoneDisplayForm.OnResize.
 # Do not reapply a competing PowerShell region (previously radius 30 vs 46).
-$frame.add_Shown({
-  [H2PhoneWindowNative]::SetWindowPos($frame.Handle,$chrome,0,0,0,0,
-    [H2PhoneWindowNative]::SWP_NOACTIVATE -bor 0x0001 -bor 0x0002)|Out-Null
-})
 
 # Windows PowerShell 5.1 reads UTF-8 without BOM incorrectly.
 # All icons are drawn as vector geometry, never font glyphs.
@@ -326,8 +342,15 @@ $footer.add_Paint({
 })
 $frame.Controls.Add($footer)
 
+# This is the architectural boundary: Chrome is no longer a second top-level
+# window. It is a child HWND of the phone host, so moving the host moves Chrome
+# automatically and Windows clips Chrome to the host client area.
+$frame.CreateControl()
+if(-not [H2PhoneWindowNative]::HostChrome($chrome,$frame.Handle)){ throw "H2ADS: failed to host Chrome HWND inside phone" }
+[H2PhoneWindowNative]::SetPhoneGroup($chrome,$frame.Handle,$bezel,$topPad,$width,$height,($targetX-$bezel),($targetY-$topPad),($width+2*$bezel),($height+$topPad+$bottomPad))
+
 # The exposed bezel is the resize handle. Chrome stays the only browser window;
-# this companion resizes it without cropping its content or changing its profile.
+# the host resizes its child HWND without changing its profile.
 function Set-PhoneChromeSize([int]$requestedWidth,[int]$requestedHeight) {
   $maxWidth=[Math]::Max(310,$desktop.Width-2*$bezel-12)
   $maxHeight=[Math]::Max(400,$desktop.Height-$topPad-$bottomPad-12)
@@ -339,7 +362,7 @@ function Set-PhoneChromeSize([int]$requestedWidth,[int]$requestedHeight) {
   $newFrameY=$current.Top-$topPad
   $newFrameW=$newWidth+(2*$bezel)
   $newFrameH=$newHeight+$topPad+$bottomPad
-  [H2PhoneWindowNative]::SetPhoneGroup($chrome,$frame.Handle,$current.Left,$current.Top,$newWidth,$newHeight,$newFrameX,$newFrameY,$newFrameW,$newFrameH)
+  [H2PhoneWindowNative]::SetPhoneGroup($chrome,$frame.Handle,$bezel,$topPad,$newWidth,$newHeight,$newFrameX,$newFrameY,$newFrameW,$newFrameH)
   [H2PhoneWindowNative]::RoundChromeWindow($chrome,$newWidth,$newHeight)|Out-Null
   $script:roundedW=$newWidth
   $script:roundedH=$newHeight
@@ -428,7 +451,7 @@ $timer.add_Tick({
     $syncFrameY=$r.Top-$topPad
     $syncFrameW=$cw+2*$bezel
     $syncFrameH=$ch+$topPad+$bottomPad
-    [H2PhoneWindowNative]::SetPhoneGroup($chrome,$frame.Handle,$r.Left,$r.Top,$cw,$ch,$syncFrameX,$syncFrameY,$syncFrameW,$syncFrameH)
+    [H2PhoneWindowNative]::SetPhoneGroup($chrome,$frame.Handle,$bezel,$topPad,$cw,$ch,$syncFrameX,$syncFrameY,$syncFrameW,$syncFrameH)
     $frame.Location=New-Object System.Drawing.Point($syncFrameX,$syncFrameY)
     $frame.Size=New-Object System.Drawing.Size($syncFrameW,$syncFrameH)
     $status.Width=$frame.Width-44
@@ -439,8 +462,6 @@ $timer.add_Tick({
     $footer.Top=$frame.Height-60
     Set-RoundedPanelRegion $footer 24
     if(-not $frame.Visible){$frame.Show()}
-    [H2PhoneWindowNative]::SetWindowPos($frame.Handle,$chrome,$syncFrameX,$syncFrameY,$syncFrameW,$syncFrameH,
-      [H2PhoneWindowNative]::SWP_NOACTIVATE -bor [H2PhoneWindowNative]::SWP_NOOWNERZORDER -bor [H2PhoneWindowNative]::SWP_NOSENDCHANGING)|Out-Null
     $status.Invalidate()
     $frame.Invalidate()
   } catch {}

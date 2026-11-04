@@ -45,6 +45,12 @@ describe("H2ADS: native phone appearance on real Chrome window", () => {
     expect(native).toContain("MoveWindow");
     expect(native).toContain("SetWindowPos");
     expect(native).toContain("SetPhoneGroup");
+    expect(native).toContain("SetParent");
+    expect(native).toContain("GetParent");
+    expect(native).toContain("HostChrome");
+    expect(native).toContain("WS_CHILD");
+    expect(native).toContain("$frame.CreateControl()");
+    expect(native).toContain("failed to host Chrome HWND inside phone");
     expect(native).toContain("SetPhoneGroup($chrome,$frame.Handle");
     expect(native).toContain("SWP_NOSENDCHANGING");
     expect(native).toContain("BrowserPid");
