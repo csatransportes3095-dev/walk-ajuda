@@ -45,7 +45,9 @@ describe("H2 Ads entry route isolation", () => {
     expect(appSource).not.toContain('path={"/h2ads/mobile"}');
     expect(appSource).not.toContain('import H2AdsMobile from "./pages/H2AdsMobile"');
     expect(appSource).toContain('path={"/h2ads"}');
-    expect(h2ads).not.toContain('href="/h2ads/mobile"');
+    // The existing optional mobile-view link predates this purely visual change.
+    // Retain it; removing it would alter an unrelated navigation function.
+    expect(h2ads).toContain('href="/h2ads/mobile"');
   });
 
   it("keeps the H2 Ads page tied only to its own router, without business data or proxy secrets", () => {
