@@ -303,8 +303,16 @@ async function resolveLoanClientEmail(db: any, email: unknown, phone: unknown): 
   if (direct) return direct;
   const normalizedPhone = onlyDigits(phone);
   if (!normalizedPhone) return null;
-  const rows = await qRows(db, drizzleSql`SELECT email FROM customers WHERE REPLACE(REPLACE(REPLACE(REPLACE(phone, '(', ''), ')', ''), '-', ''), ' ', '') LIKE ${'%' + normalizedPhone.slice(-10)}%} AND deletedAt IS NULL LIMIT 1`);
-  return String(rows[0]?.email || '').trim() || null;
+  // Optional email lookup must never turn a successfully registered payment
+  // into an API failure. A customer database mismatch can be logged safely.
+  try {
+    const rows = await qRows(db, drizzleSql`SELECT email FROM customers WHERE REPLACE(REPLACE(REPLACE(REPLACE(phone, '(', ''), ')', ''), '-', ''), ' ', '') LIKE ${'%' + normalizedPhone.slice(-10)}%} AND deletedAt IS NULL LIMIT 1`);
+    return String(rows[0]?.email || '').trim() || null;
+  } catch (error: any) {
+    const code = error?.cause?.code || error?.code || 'email_lookup_failed';
+    console.warn('[loans] Optional customer email lookup failed; payment is preserved:', code);
+    return null;
+  }
 }
 
 function brazilDateTime(value: Date): string {
@@ -1852,6 +1860,11 @@ export const loanRouter = router({
     if (!paymentRows.length) throw new TRPCError({ code: 'NOT_FOUND', message: 'Parcela não encontrada' });
     const paymentRow = paymentRows[0];
     const wasAlreadyPaid = paymentRow.status === 'pago';
+    // Idempotent retry after network/email failures: never change paidAt,
+    // loan score, late fees or paidBy again for an already settled installment.
+    if (wasAlreadyPaid) {
+      return { ok: true, alreadyPaid: true, h2ScoreApproval: null, permanentH2Score: null, clientEmailNotified: false };
+    }
     if (String(paymentRow.loanPaymentType || '') === 'diario' && Number(paymentRow.clientLateFeeDisabled || 0) !== 1) {
       const cfgRows = await qRows(db, drizzleSql`SELECT * FROM loan_late_fee_config WHERE id=1 LIMIT 1`);
       const baseAmount = paymentRow.originalAmount != null ? Number(paymentRow.originalAmount || 0) : Number(paymentRow.amount || 0);
@@ -1894,7 +1907,8 @@ export const loanRouter = router({
       }
     }
     const clientEmail = await resolveLoanClientEmail(db, paymentRow.clientEmail, paymentRow.clientPhone);
-    if (clientEmail && !wasAlreadyPaid) {
+    let clientEmailNotified = false;
+    if (clientEmail) {
       try {
         await notifyClientPaymentApproved({
           to: clientEmail,
@@ -1904,11 +1918,12 @@ export const loanRouter = router({
           amount: Number(paymentRow.amount || 0),
           paidAt: new Date(),
         });
+        clientEmailNotified = true;
       } catch (error: any) {
         console.error('[confirmInstallmentPayment] Falha ao notificar cliente:', error?.message || error);
       }
     }
-    return { ok: true, h2ScoreApproval, permanentH2Score, clientEmailNotified: !!clientEmail };
+    return { ok: true, alreadyPaid: false, h2ScoreApproval, permanentH2Score, clientEmailNotified };
   }),
 
   refuseInstallmentPayment: adminProcedure.input(z.object({
@@ -3351,6 +3366,11 @@ export const loanRouter = router({
     if (!instRows.length) throw new TRPCError({ code: 'NOT_FOUND' });
     const inst = instRows[0];
     const wasAlreadyPaid = inst.status === 'pago';
+    // A previous request may have saved the payment before optional email failed.
+    // Do not insert a second installmentProofs record or apply H2 Score twice.
+    if (wasAlreadyPaid) {
+      return { ok: true, alreadyPaid: true, hasProof: false, fileUrl: null, h2ScoreApproval: null, permanentH2Score: null, clientEmailNotified: false };
+    }
     let fileKey: string | null = null;
     let fileUrl: string | null = null;
     let hasProof = 0;
@@ -3399,7 +3419,8 @@ export const loanRouter = router({
       }
     }
     const clientEmail = await resolveLoanClientEmail(db, inst.clientEmail, inst.clientPhone);
-    if (clientEmail && !wasAlreadyPaid) {
+    let clientEmailNotified = false;
+    if (clientEmail) {
       try {
         await notifyClientPaymentApproved({
           to: clientEmail,
@@ -3409,11 +3430,12 @@ export const loanRouter = router({
           amount: Number(input.amountPaid || 0),
           paidAt: paidAtDate,
         });
+        clientEmailNotified = true;
       } catch (error: any) {
         console.error('[confirmInstallmentPaymentWithProof] Falha ao notificar cliente:', error?.message || error);
       }
     }
-    return { ok: true, hasProof: !!hasProof, fileUrl, h2ScoreApproval, permanentH2Score, clientEmailNotified: !!clientEmail };
+    return { ok: true, alreadyPaid: false, hasProof: !!hasProof, fileUrl, h2ScoreApproval, permanentH2Score, clientEmailNotified };
   }),
 
   // Buscar comprovantes de um empréstimo (batch por loanId)
