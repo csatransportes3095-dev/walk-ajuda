@@ -1,5 +1,6 @@
 param(
   [Parameter(Mandatory=$true)][int]$BrowserPid,
+  [int]$InstanceId = 0,
   [string]$InstanceName = "H2ADS",
   [switch]$VisualSelfTest
 )
@@ -315,6 +316,102 @@ $frame.Location=New-Object System.Drawing.Point(($targetX-$bezel),($targetY-$top
 # One single radius comes from H2PhoneDisplayForm.OnResize.
 # Do not reapply a competing PowerShell region (previously radius 30 vs 46).
 
+# Manual stopwatch is independent of browser lifetime: store a UTC anchor,
+# not a running process. Every instance has its OWN durable local state.
+if($InstanceId -lt 1){throw "H2ADS: InstanceId ausente no cronometro."}
+$script:watchFile=Join-Path (Join-Path $env:LOCALAPPDATA "H2AdsWorker\stopwatches") ("instance-{0}.json" -f $InstanceId)
+$script:watchRunning=$false
+$script:watchElapsedMs=[long]0
+$script:watchStartedAtMs=[long]0
+if(Test-Path -LiteralPath $script:watchFile) {
+  try {
+    $saved=Get-Content -LiteralPath $script:watchFile -Raw | ConvertFrom-Json
+    $loadedElapsed=[long]$saved.elapsedMs
+    $loadedStart=[long]$saved.startedAtMs
+    if($loadedElapsed -lt 0 -or $loadedStart -lt 0){throw "invalid_stopwatch_state"}
+    $script:watchElapsedMs=$loadedElapsed
+    $script:watchStartedAtMs=$loadedStart
+    $script:watchRunning=($saved.running -eq $true -and $loadedStart -gt 0)
+  } catch {
+    $script:watchRunning=$false
+    $script:watchElapsedMs=[long]0
+    $script:watchStartedAtMs=[long]0
+  }
+}
+function Get-H2AdsWatchNowMs { return [long]([DateTimeOffset]::UtcNow.ToUnixTimeMilliseconds()) }
+function Get-H2AdsWatchElapsedMs {
+  $base=[long]$script:watchElapsedMs
+  if(-not $script:watchRunning){return $base}
+  $delta=[long]((Get-H2AdsWatchNowMs)-$script:watchStartedAtMs)
+  if($delta -lt 0){$delta=0}
+  return [long]($base+$delta)
+}
+function Format-H2AdsWatchElapsed {
+  $seconds=[long][Math]::Floor((Get-H2AdsWatchElapsedMs)/1000)
+  $hours=[long][Math]::Floor($seconds/3600)
+  $minutes=[int][Math]::Floor(($seconds%3600)/60)
+  $remainder=[int]($seconds%60)
+  return ('{0:00}:{1:00}:{2:00}' -f $hours,$minutes,$remainder)
+}
+function Save-H2AdsWatchState {
+  $directory=[System.IO.Path]::GetDirectoryName($script:watchFile)
+  if(-not (Test-Path -LiteralPath $directory)) {
+    New-Item -ItemType Directory -Path $directory -Force | Out-Null
+  }
+  $payload=[ordered]@{
+    running=[bool]$script:watchRunning
+    elapsedMs=[long]$script:watchElapsedMs
+    startedAtMs=[long]$script:watchStartedAtMs
+  } | ConvertTo-Json -Compress
+  $temporary="$($script:watchFile).$PID.tmp"
+  try {
+    [System.IO.File]::WriteAllText($temporary,$payload,([System.Text.UTF8Encoding]::new($false)))
+    if(Test-Path -LiteralPath $script:watchFile) {
+      [System.IO.File]::Replace($temporary,$script:watchFile,$null)
+    } else {
+      [System.IO.File]::Move($temporary,$script:watchFile)
+    }
+  } finally {
+    if(Test-Path -LiteralPath $temporary){Remove-Item -LiteralPath $temporary -Force -ErrorAction SilentlyContinue}
+  }
+}
+function Change-H2AdsWatch([string]$action) {
+  $wasRunning=$script:watchRunning
+  $oldElapsed=$script:watchElapsedMs
+  $oldStart=$script:watchStartedAtMs
+  try {
+    if($action -eq "reset") {
+      $script:watchRunning=$false
+      $script:watchElapsedMs=[long]0
+      $script:watchStartedAtMs=[long]0
+    } elseif($script:watchRunning) {
+      $script:watchElapsedMs=Get-H2AdsWatchElapsedMs
+      $script:watchRunning=$false
+      $script:watchStartedAtMs=[long]0
+    } else {
+      $script:watchStartedAtMs=Get-H2AdsWatchNowMs
+      $script:watchRunning=$true
+    }
+    Save-H2AdsWatchState
+  } catch {
+    $script:watchRunning=$wasRunning
+    $script:watchElapsedMs=$oldElapsed
+    $script:watchStartedAtMs=$oldStart
+    [System.Windows.Forms.MessageBox]::Show(
+      "Nao foi possivel salvar o cronometro desta instancia.",
+      "H2ADS - Cronometro",
+      [System.Windows.Forms.MessageBoxButtons]::OK,
+      [System.Windows.Forms.MessageBoxIcon]::Warning
+    )|Out-Null
+  }
+}
+function Get-H2AdsWatchLayout([int]$width) {
+  if($width -ge 370) {
+    return @{toggleX=74; textX=92; resetX=([int]($width/2)-28); y=17; textY=16; clockY=16; hitTop=11; hitBottom=43}
+  }
+  return @{toggleX=20; textX=40; resetX=125; y=29; textY=28; clockY=3; hitTop=25; hitBottom=52}
+}
+
 # Windows PowerShell 5.1 reads UTF-8 without BOM incorrectly.
 # All icons are drawn as vector geometry, never font glyphs.
 $script:battery=95
@@ -336,7 +433,34 @@ $status.add_Paint({
   $font=New-Object System.Drawing.Font -ArgumentList "Segoe UI",11,([System.Drawing.FontStyle]::Bold)
   $small=New-Object System.Drawing.Font -ArgumentList "Segoe UI",9,([System.Drawing.FontStyle]::Bold)
   try {
-    $g.DrawString([DateTime]::Now.ToString("HH:mm"),$font,$fg,20,16)
+    $watchLayout=Get-H2AdsWatchLayout ([int]$w)
+    $g.DrawString([DateTime]::Now.ToString("HH:mm"),$font,$fg,20,$watchLayout.clockY)
+    # Stopwatch controls are PAINTED into the existing status bar, not focusable
+    # WinForms buttons. They never intercept the Chrome content or keyboard.
+    $sx=[int]$watchLayout.toggleX
+    $sy=[int]$watchLayout.y
+    if($script:watchRunning) {
+      $g.FillRectangle($fg,$sx,($sy+1),4,12)
+      $g.FillRectangle($fg,($sx+7),($sy+1),4,12)
+    } else {
+      $g.DrawLine($pen,$sx,($sy+1),($sx+11),($sy+7))
+      $g.DrawLine($pen,($sx+11),($sy+7),$sx,($sy+13))
+      $g.DrawLine($pen,$sx,($sy+13),$sx,($sy+1))
+    }
+    $watchText=Format-H2AdsWatchElapsed
+    $available=[float][Math]::Max(30,($watchLayout.resetX-$watchLayout.textX-4))
+    $watchFont=$font
+    $measured=$g.MeasureString($watchText,$font).Width
+    if($measured -gt $available) {
+      $watchSize=[float][Math]::Max(7,11*$available/$measured)
+      $watchFont=New-Object System.Drawing.Font -ArgumentList "Segoe UI",$watchSize,([System.Drawing.FontStyle]::Bold)
+    }
+    try { $g.DrawString($watchText,$watchFont,$fg,$watchLayout.textX,$watchLayout.textY) }
+    finally { if($watchFont -ne $font){$watchFont.Dispose()} }
+    $rx=[int]$watchLayout.resetX
+    $g.DrawArc($pen,$rx,($sy+1),13,13,40,285)
+    $g.DrawLine($pen,($rx+11),($sy+1),($rx+14),($sy+5))
+    $g.DrawLine($pen,($rx+11),($sy+1),($rx+8),($sy+5))
     # Discreet punch-hole camera.
     $ring=New-Object System.Drawing.SolidBrush -ArgumentList (RGB 43 53 73)
     $lens=New-Object System.Drawing.SolidBrush -ArgumentList (RGB 2 6 14)
@@ -371,6 +495,9 @@ $status.add_Paint({
 $status.add_MouseDown({
   param($sender,$e)
   if($e.Button -ne [System.Windows.Forms.MouseButtons]::Left){return}
+  $watchLayout=Get-H2AdsWatchLayout $status.ClientSize.Width
+  if($e.Y -ge $watchLayout.hitTop -and $e.Y -le $watchLayout.hitBottom -and
+     $e.X -ge ($watchLayout.toggleX-3) -and $e.X -le ($watchLayout.resetX+17)){return}
   if($e.X -ge ($status.ClientSize.Width-135)){return}
   [H2PhoneWindowNative]::ReleaseCapture()|Out-Null
   [H2PhoneWindowNative]::SendMessage($frame.Handle,
@@ -379,6 +506,15 @@ $status.add_MouseDown({
 })
 $status.add_MouseClick({
   param($sender,$e)
+  if($e.Button -ne [System.Windows.Forms.MouseButtons]::Left){return}
+  $watchLayout=Get-H2AdsWatchLayout $status.ClientSize.Width
+  if($e.Y -ge $watchLayout.hitTop -and $e.Y -le $watchLayout.hitBottom -and
+     $e.X -ge ($watchLayout.toggleX-3) -and $e.X -le ($watchLayout.resetX+17)){
+    if($e.X -ge ($watchLayout.resetX-3)){Change-H2AdsWatch "reset"}
+    else {Change-H2AdsWatch "toggle"}
+    $status.Invalidate()
+    return
+  }
   if($e.X -ge ($status.Width-90)){ $script:battery=if($script:battery -ge 100){0}else{[Math]::Min(100,$script:battery+5)} }
   elseif($e.X -ge ($status.Width-130)){ $script:wifiOn=-not $script:wifiOn }
   $status.Invalidate()

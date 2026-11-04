@@ -790,7 +790,7 @@ async function startNativePhoneVisual(pid) {
     );
     if (response.ok) {
       const contents = await response.text();
-      if (contents.length >= 2000 && contents.length <= 30000 &&
+      if (contents.length >= 2000 && contents.length <= 45000 &&
           contents.includes("H2PhoneWindowNative")) {
         // Isolated per instance: do not overwrite a script used by another Chrome.
         writeFileSync(currentVisualScript, contents, { encoding: "utf8", mode: 0o600 });
@@ -805,7 +805,7 @@ async function startNativePhoneVisual(pid) {
     phoneWindowProcess = spawn("powershell.exe", [
       "-NoProfile", "-NonInteractive", "-ExecutionPolicy", "Bypass",
       "-WindowStyle", "Hidden", "-File", script,
-      "-BrowserPid", String(pid), "-InstanceName", instanceName,
+      "-BrowserPid", String(pid), "-InstanceId", String(instanceId), "-InstanceName", instanceName,
     ], { windowsHide: true, stdio: "ignore" });
     phoneWindowProcess.on("error", () => { phoneWindowProcess = null; });
   } catch {

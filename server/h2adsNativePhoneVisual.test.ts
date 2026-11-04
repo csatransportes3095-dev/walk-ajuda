@@ -23,6 +23,8 @@ describe("H2ADS: native phone appearance on real Chrome window", () => {
     expect(runner).toContain("browser = spawn(executable");
     expect(runner).toContain('join(profileDirectory, "..", "..", "h2ads-phone-window.ps1")');
     expect(runner).toContain('"-BrowserPid", String(pid)');
+    expect(runner).toContain('"-InstanceId", String(instanceId)');
+    expect(runner).toContain("contents.length <= 45000");
     expect(runner).toContain('phoneWindowProcess = spawn("powershell.exe"');
     expect(runner).toContain("phoneWindowProcess?.kill()");
     expect(runner).toContain('const cachedScript = join(profileDirectory, "..", "..", "h2ads-phone-window.ps1")');
@@ -126,6 +128,27 @@ describe("H2ADS: native phone appearance on real Chrome window", () => {
     expect(native).toContain("if($e.Y -lt $topPad");
     expect(native).toContain("if($e.X -ge ($status.ClientSize.Width-135)){return}");
     expect(native).toContain("GetWindowLongPtr(frame,GWLP_HWNDPARENT)");
+  });
+
+
+  it("persists a manually controlled stopwatch by instance without touching Chrome focus", () => {
+    expect(native).toContain("[int]$InstanceId = 0");
+    expect(native).toContain('"H2AdsWorker\\stopwatches"');
+    expect(native).toContain('("instance-{0}.json" -f $InstanceId)');
+    expect(native).toContain("[DateTimeOffset]::UtcNow.ToUnixTimeMilliseconds()");
+    expect(native).toContain("function Get-H2AdsWatchElapsedMs");
+    expect(native).toContain("function Save-H2AdsWatchState");
+    expect(native).toContain("function Change-H2AdsWatch");
+    expect(native).toContain('Change-H2AdsWatch "reset"');
+    expect(native).toContain('Change-H2AdsWatch "toggle"');
+    expect(native).toContain("Get-H2AdsWatchLayout");
+    expect(native).toContain("$status.add_MouseClick");
+    expect(native).not.toContain("New-Object System.Windows.Forms.Button");
+    // Closing the optional cosmetic phone must NEVER pause or reset the clock.
+    const closeHandler = native.slice(native.indexOf("$frame.add_FormClosed({"));
+    expect(closeHandler).not.toContain("Change-H2AdsWatch");
+    expect(closeHandler).not.toContain("watchRunning=$false");
+    expect(runner).toContain('"--proxy-server=http://127.0.0.1:" + relayPort');
   });
 
   it("never changes the browser arguments, proxy chain or profile backend", () => {
