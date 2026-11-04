@@ -1842,7 +1842,7 @@ export const loanRouter = router({
     const paidBy = ctx.user?.name || "admin";
     const paymentRows = await qRows(db, drizzleSql`
       SELECT li.*, l.paymentType AS loanPaymentType, lc.late_fee_disabled AS clientLateFeeDisabled,
-        lc.name AS clientName, lc.phone AS clientPhone, lc.email AS clientEmail
+        lc.name AS clientName, lc.phone AS clientPhone, NULL AS clientEmail
       FROM loanInstallments li
       JOIN loans l ON l.id=li.loanId
       JOIN loanClients lc ON lc.id=l.clientId
@@ -3343,7 +3343,7 @@ export const loanRouter = router({
     const db = await getDb() as any;
     const paidBy = ctx.user?.name || "admin";
     const instRows = await qRows(db, drizzleSql`
-      SELECT li.*, l.clientId, lc.name AS clientName, lc.phone AS clientPhone, lc.email AS clientEmail FROM loanInstallments li
+      SELECT li.*, l.clientId, lc.name AS clientName, lc.phone AS clientPhone, NULL AS clientEmail FROM loanInstallments li
       JOIN loans l ON l.id = li.loanId
       JOIN loanClients lc ON lc.id = l.clientId
       WHERE li.id=${input.installmentId}
