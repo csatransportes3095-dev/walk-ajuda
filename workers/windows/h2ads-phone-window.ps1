@@ -22,6 +22,8 @@ public static class H2PhoneWindowNative {
   [DllImport("user32.dll")] public static extern uint GetWindowThreadProcessId(IntPtr hwnd, out uint pid);
   [DllImport("user32.dll")] public static extern int GetClassName(IntPtr hwnd, StringBuilder text, int capacity);
   [DllImport("user32.dll")] public static extern bool GetWindowRect(IntPtr hwnd, out Rectangle rect);
+  [DllImport("user32.dll")] public static extern bool GetClientRect(IntPtr hwnd, out Rectangle rect);
+  [DllImport("user32.dll", SetLastError=true)] public static extern IntPtr SetThreadDpiAwarenessContext(IntPtr context);
   [DllImport("user32.dll")] public static extern bool MoveWindow(IntPtr hwnd,int x,int y,int w,int h,bool repaint);
   [DllImport("user32.dll")] public static extern bool SetWindowPos(IntPtr hwnd,IntPtr after,int x,int y,int w,int h,uint flags);
   [DllImport("user32.dll", SetLastError=true)] public static extern IntPtr SetParent(IntPtr child,IntPtr parent);
@@ -40,10 +42,23 @@ public static class H2PhoneWindowNative {
     SetParent(chrome,frame);
     return GetParent(chrome)==frame;
   }
+  public static bool FitHostedChrome(IntPtr chrome,IntPtr frame,int insetX,int insetTop,int insetBottom) {
+    if(chrome==IntPtr.Zero || frame==IntPtr.Zero || GetParent(chrome)!=frame)return false;
+    // Always measure the PARENT CLIENT RECT in this Win32 DPI context.
+    // Never derive the phone frame from GetWindowRect(child): the child's
+    // DPI awareness can be different from Windows PowerShell at 175% scaling.
+    Rectangle rc;
+    if(!GetClientRect(frame,out rc))return false;
+    int availableW=rc.Right-rc.Left-2*insetX;
+    int availableH=rc.Bottom-rc.Top-insetTop-insetBottom;
+    if(availableW<120 || availableH<160)return false;
+    return SetWindowPos(chrome,IntPtr.Zero,insetX,insetTop,availableW,availableH,
+      SWP_NOACTIVATE|SWP_NOOWNERZORDER|SWP_NOSENDCHANGING|SWP_FRAMECHANGED);
+  }
   public static void SetPhoneGroup(IntPtr chrome,IntPtr frame,int chromeX,int chromeY,int chromeW,int chromeH,int frameX,int frameY,int frameW,int frameH) {
     if(chrome==IntPtr.Zero || frame==IntPtr.Zero)return;
-    SetWindowPos(chrome,IntPtr.Zero,chromeX,chromeY,chromeW,chromeH,SWP_NOACTIVATE|SWP_NOOWNERZORDER|SWP_NOSENDCHANGING);
     MoveWindow(frame,frameX,frameY,frameW,frameH,true);
+    FitHostedChrome(chrome,frame,chromeX,chromeY,Math.Max(0,frameH-chromeY-chromeH));
   }
   public static bool RoundChromeWindow(IntPtr hwnd,int w,int h) {
     if(hwnd==IntPtr.Zero || w<120 || h<160 || IsZoomed(hwnd)) return false;
@@ -84,6 +99,7 @@ public static class H2PhoneWindowNative {
   public const uint SWP_NOACTIVATE=0x0010;
   public const uint SWP_NOOWNERZORDER=0x0200;
   public const uint SWP_NOSENDCHANGING=0x0400;
+  public const uint SWP_FRAMECHANGED=0x0020;
   public const int GWL_STYLE=-16;
   public const long WS_CHILD=0x40000000L;
   public const long WS_POPUP=0x80000000L;
@@ -201,6 +217,10 @@ function Set-RoundedPanelRegion($control,[int]$radius) {
   if($old -ne $null){$old.Dispose()}
   $path.Dispose()
 }
+# Chrome is per-monitor DPI-aware. Match its DPI context before creating the
+# WinForms host, so parent and hosted child report compatible client geometry.
+# If Windows disallows the change, FitHostedChrome still uses host client bounds.
+try { [H2PhoneWindowNative]::SetThreadDpiAwarenessContext([IntPtr](-4)) | Out-Null } catch {}
 # Visual self-test used only by the Windows CI, never by normal instances.
 if($VisualSelfTest) {
   $preview=New-Object H2PhoneDisplayForm
@@ -356,17 +376,17 @@ function Set-PhoneChromeSize([int]$requestedWidth,[int]$requestedHeight) {
   $maxHeight=[Math]::Max(400,$desktop.Height-$topPad-$bottomPad-12)
   $newWidth=[Math]::Max(310,[Math]::Min($maxWidth,$requestedWidth))
   $newHeight=[Math]::Max(400,[Math]::Min($maxHeight,$requestedHeight))
-  $current=New-Object H2PhoneWindowNative+Rectangle
-  if(-not [H2PhoneWindowNative]::GetWindowRect($chrome,[ref]$current)){return}
-  $newFrameX=$current.Left-$bezel
-  $newFrameY=$current.Top-$topPad
+  # Once Chrome is hosted, its window rect is in child/DPI coordinates.
+  # The frame itself is the ONLY coordinate source for resizing.
+  $newFrameX=$frame.Left
+  $newFrameY=$frame.Top
   $newFrameW=$newWidth+(2*$bezel)
   $newFrameH=$newHeight+$topPad+$bottomPad
   [H2PhoneWindowNative]::SetPhoneGroup($chrome,$frame.Handle,$bezel,$topPad,$newWidth,$newHeight,$newFrameX,$newFrameY,$newFrameW,$newFrameH)
   [H2PhoneWindowNative]::RoundChromeWindow($chrome,$newWidth,$newHeight)|Out-Null
   $script:roundedW=$newWidth
   $script:roundedH=$newHeight
-  $frame.Location=New-Object System.Drawing.Point(($current.Left-$bezel),($current.Top-$topPad))
+  $frame.Location=New-Object System.Drawing.Point($newFrameX,$newFrameY)
   $frame.Size=New-Object System.Drawing.Size(($newWidth+2*$bezel),($newHeight+$topPad+$bottomPad))
   $status.Width=$frame.Width-44
   $status.Location=New-Object System.Drawing.Point(22,14)
@@ -438,29 +458,9 @@ $timer.add_Tick({
       }
       $frame.Hide();return
     }
-    $r=New-Object H2PhoneWindowNative+Rectangle
-    if(-not [H2PhoneWindowNative]::GetWindowRect($chrome,[ref]$r)){return}
-    $cw=$r.Right-$r.Left
-    $ch=$r.Bottom-$r.Top
-    if($cw -ne $script:roundedW -or $ch -ne $script:roundedH){
-      if([H2PhoneWindowNative]::RoundChromeWindow($chrome,$cw,$ch)){
-        $script:roundedW=$cw;$script:roundedH=$ch
-      }
-    }
-    $syncFrameX=$r.Left-$bezel
-    $syncFrameY=$r.Top-$topPad
-    $syncFrameW=$cw+2*$bezel
-    $syncFrameH=$ch+$topPad+$bottomPad
-    [H2PhoneWindowNative]::SetPhoneGroup($chrome,$frame.Handle,$bezel,$topPad,$cw,$ch,$syncFrameX,$syncFrameY,$syncFrameW,$syncFrameH)
-    $frame.Location=New-Object System.Drawing.Point($syncFrameX,$syncFrameY)
-    $frame.Size=New-Object System.Drawing.Size($syncFrameW,$syncFrameH)
-    $status.Width=$frame.Width-44
-    $status.Location=New-Object System.Drawing.Point(22,14)
-    Set-RoundedPanelRegion $status 24
-    $footer.Width=$frame.Width-44
-    $footer.Left=22
-    $footer.Top=$frame.Height-60
-    Set-RoundedPanelRegion $footer 24
+    # Parent-first layout: never resize the phone frame from the Chrome child.
+    # This prevents the 175%-DPI feedback loop that leaves gray space at right/bottom.
+    [H2PhoneWindowNative]::FitHostedChrome($chrome,$frame.Handle,$bezel,$topPad,$bottomPad)|Out-Null
     if(-not $frame.Visible){$frame.Show()}
     $status.Invalidate()
     $frame.Invalidate()
