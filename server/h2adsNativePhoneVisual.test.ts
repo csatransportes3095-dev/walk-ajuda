@@ -105,9 +105,23 @@ describe("H2ADS: native phone appearance on real Chrome window", () => {
     expect(native).toContain("RestoreChromeWindow");
     expect(native).toContain("VisualSelfTest");
     expect(native).toContain("DrawToBitmap");
-    expect(native).toContain("ShowWithoutActivation");
+    expect(native).not.toContain("ShowWithoutActivation");
     expect(native).not.toContain("Invoke-WebRequest");
     expect(native).not.toContain("Start-Process");
+  });
+
+  it("keeps real Chrome keyboard focus and allows native top-bezel dragging", () => {
+    expect(native).toContain("props.ExStyle |= 0x00000080");
+    expect(native).not.toContain("0x08000000 | 0x00000080");
+    expect(native).not.toContain("protected override bool ShowWithoutActivation");
+    expect(native).toContain("ReleaseCapture()");
+    expect(native).toContain("SendMessage(");
+    expect(native).toContain("WM_NCLBUTTONDOWN");
+    expect(native).toContain("HTCAPTION");
+    expect(native).toContain("$status.add_MouseDown");
+    expect(native).toContain("if($e.Y -lt $topPad");
+    expect(native).toContain("if($e.X -ge ($status.ClientSize.Width-135)){return}");
+    expect(native).toContain("GetParent(chrome)");
   });
 
   it("never changes the browser arguments, proxy chain or profile backend", () => {
