@@ -140,7 +140,8 @@ describe("H2ADS: native phone appearance on real Chrome window", () => {
     expect(native).toContain("function Save-H2AdsWatchState");
     expect(native).toContain("function Change-H2AdsWatch");
     expect(native).toContain('Change-H2AdsWatch "reset"');
-    expect(native).toContain('Change-H2AdsWatch "toggle"');
+    expect(native).toContain('Change-H2AdsWatch "start"');
+    expect(native).toContain('Change-H2AdsWatch "pause"');
     expect(native).toContain("Get-H2AdsWatchLayout");
     expect(native).toContain("$status.add_MouseClick");
     expect(native).not.toContain("New-Object System.Windows.Forms.Button");
@@ -151,16 +152,21 @@ describe("H2ADS: native phone appearance on real Chrome window", () => {
     expect(runner).toContain('"--proxy-server=http://127.0.0.1:" + relayPort');
   });
 
-  it("places the stopwatch after the measured clock, with responsive controls and camera clearance", () => {
+  it("keeps three separate stopwatch controls aligned with measured clock width", () => {
     expect(native).toContain('MeasureText("23:59",$clockFont).Width');
+    expect(native).toContain('MeasureText("00:00:00",$watchFont).Width');
     expect(native).toContain("$toggleX=20+$clockWidth+10");
-    expect(native).toContain("$textX=$toggleX+17");
-    expect(native).toContain("$resetX=[int][Math]::Floor($width/2)-29");
-    expect(native).toContain("if(($resetX-$textX) -ge 47)");
-    expect(native).toContain("$watchPlay=$e.X -ge ($watchLayout.toggleX-5)");
-    expect(native).toContain("$watchReset=$e.X -ge ($watchLayout.resetX-4)");
+    expect(native).toContain("$pauseX=$toggleX+22");
+    expect(native).toContain("$resetX=$textX+$watchWidth+8");
+    expect(native).toContain("$cameraLeft=[int][Math]::Floor($width/2)-20");
+    expect(native).toContain('Change-H2AdsWatch "start"');
+    expect(native).toContain('Change-H2AdsWatch "pause"');
+    expect(native).toContain('Change-H2AdsWatch "reset"');
+    expect(native).toContain("$watchStart=$e.X");
+    expect(native).toContain("$watchPause=$e.X");
+    expect(native).toContain("$watchReset=$e.X");
+    expect(native).not.toContain('Change-H2AdsWatch "toggle"');
     expect(native).not.toContain("return @{toggleX=74; textX=92;");
-    expect(native).toContain("Change-H2AdsWatch");
     expect(native).toContain("Save-H2AdsWatchState");
   });
 
