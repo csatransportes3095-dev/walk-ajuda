@@ -22,7 +22,7 @@ describe("H2ADS: native phone appearance on real Chrome window", () => {
   it("starts the native frame from the single existing Chrome launch used by panel and orders", () => {
     expect(runner).toContain("browser = spawn(executable");
     expect(runner).toContain('join(profileDirectory, "..", "..", "h2ads-phone-window.ps1")');
-    expect(runner).toContain('"BrowserPid", String(browser.pid)');
+    expect(runner).toContain('"-BrowserPid", String(pid)');
     expect(runner).toContain('phoneWindowProcess = spawn("powershell.exe"');
     expect(runner).toContain("phoneWindowProcess?.kill()");
     expect(runner).toContain('const cachedScript = join(profileDirectory, "..", "..", "h2ads-phone-window.ps1")');
@@ -49,6 +49,8 @@ describe("H2ADS: native phone appearance on real Chrome window", () => {
     expect(native).toContain("phone");
     expect(native).toContain("battery");
     expect(native).toContain("wifiOn");
+    expect(native).toContain('DrawString("5G"');
+    expect(native).toContain("Set-RoundedPanelRegion");
     expect(native).toContain("footer");
     expect(native).not.toContain("Invoke-WebRequest");
     expect(native).not.toContain("proxy-server");
@@ -59,7 +61,10 @@ describe("H2ADS: native phone appearance on real Chrome window", () => {
 
   it("renders smartphone chassis and native corners without clipping real Chrome pixels", () => {
     expect(native).toContain("public sealed class H2PhoneDisplayForm");
-    expect(native).toContain("Rounded(15f,67f");
+    expect(native).toContain("Rounded(20f,84f,w-40f,h-146f,28f)");
+    expect(native).toContain("$status.Location=New-Object System.Drawing.Point(22,14)");
+    expect(native).toContain("$status.Width=$frame.Width-44");
+    expect(native).not.toContain("$status.Location=New-Object System.Drawing.Point(19,7)");
     // Avoid DPI-virtualized hard region truncation at 175 percent scaling.
     expect(native).not.toContain("CreateRoundRectRgn");
     expect(native).toContain("DwmSetWindowAttribute");

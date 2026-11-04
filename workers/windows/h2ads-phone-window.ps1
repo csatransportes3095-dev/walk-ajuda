@@ -135,8 +135,9 @@ public sealed class H2PhoneDisplayForm : System.Windows.Forms.Form {
     using(var shine=new System.Drawing.Pen(System.Drawing.Color.FromArgb(64,90,118),1f)) {
       g.DrawPath(shine,inside);
     }
-    // Dark glass recess UNDER the real Chrome window, never on top of it.
-    using(var screen=Rounded(15f,82f,w-30f,h-148f,26f))
+    // Internal screen recess exactly aligned with the real Chrome HWND.
+    // The status bar and Chrome remain inside this phone-safe rounded area.
+    using(var screen=Rounded(20f,84f,w-40f,h-146f,28f))
     using(var back=new System.Drawing.SolidBrush(System.Drawing.Color.FromArgb(1,5,12)))
     using(var outline=new System.Drawing.Pen(System.Drawing.Color.FromArgb(100,122,151),1.3f)) {
       g.FillPath(back,screen);
@@ -161,6 +162,19 @@ public sealed class H2PhoneDisplayForm : System.Windows.Forms.Form {
 # Cosmetic phone shell. Only the visible HWND position is adjusted;
 # the real Chrome instance, cookies, proxy, profiles and browser commands stay intact.
 function RGB([int]$r,[int]$g,[int]$b) { [System.Drawing.Color]::FromArgb($r,$g,$b) }
+function Set-RoundedPanelRegion($control,[int]$radius) {
+  $diameter=$radius*2
+  $path=New-Object System.Drawing.Drawing2D.GraphicsPath
+  $path.AddArc(0,0,$diameter,$diameter,180,90)
+  $path.AddArc(($control.Width-$diameter),0,$diameter,$diameter,270,90)
+  $path.AddArc(($control.Width-$diameter),($control.Height-$diameter),$diameter,$diameter,0,90)
+  $path.AddArc(0,($control.Height-$diameter),$diameter,$diameter,90,90)
+  $path.CloseFigure()
+  $old=$control.Region
+  $control.Region=New-Object System.Drawing.Region($path)
+  if($old -ne $null){$old.Dispose()}
+  $path.Dispose()
+}
 # Visual self-test used only by the Windows CI, never by normal instances.
 if($VisualSelfTest) {
   $preview=New-Object H2PhoneDisplayForm
@@ -222,11 +236,12 @@ $frame.add_Shown({
 $script:battery=95
 $script:wifiOn=$true
 $status=New-Object System.Windows.Forms.Panel
-$status.Height=56
-$status.Width=$frame.Width-38
-$status.Location=New-Object System.Drawing.Point(19,7)
+$status.Height=52
+$status.Width=$frame.Width-44
+$status.Location=New-Object System.Drawing.Point(22,14)
 $status.BackColor=RGB 16 23 39
 $status.Cursor=[System.Windows.Forms.Cursors]::Hand
+Set-RoundedPanelRegion $status 24
 $status.add_Paint({
   param($sender,$e)
   $g=$e.Graphics
@@ -237,32 +252,33 @@ $status.add_Paint({
   $font=New-Object System.Drawing.Font -ArgumentList "Segoe UI",11,([System.Drawing.FontStyle]::Bold)
   $small=New-Object System.Drawing.Font -ArgumentList "Segoe UI",9,([System.Drawing.FontStyle]::Bold)
   try {
-    $g.DrawString([DateTime]::Now.ToString("HH:mm"),$font,$fg,23,19)
+    $g.DrawString([DateTime]::Now.ToString("HH:mm"),$font,$fg,20,16)
     # Discreet punch-hole camera.
     $ring=New-Object System.Drawing.SolidBrush -ArgumentList (RGB 43 53 73)
     $lens=New-Object System.Drawing.SolidBrush -ArgumentList (RGB 2 6 14)
-    $g.FillEllipse($ring,($w/2-9),19,18,18)
-    $g.FillEllipse($lens,($w/2-5),23,10,10)
+    $g.FillEllipse($ring,($w/2-9),16,18,18)
+    $g.FillEllipse($lens,($w/2-5),20,10,10)
     $ring.Dispose();$lens.Dispose()
     # Signal bars.
-    for($i=0;$i -lt 4;$i++){ $sh=4+3*$i; $g.FillRectangle($fg,($w-151+5*$i),(36-$sh),3,$sh) }
+    for($i=0;$i -lt 4;$i++){ $sh=4+3*$i; $g.FillRectangle($fg,($w-181+5*$i),(33-$sh),3,$sh) }
+    $g.DrawString("5G",$small,$fg,($w-157),21)
     # WiFi arcs (grey when switched off).
     if(-not $script:wifiOn){$pen.Color=RGB 101 115 140}
-    $g.DrawArc($pen,($w-117),22,24,17,205,130)
-    $g.DrawArc($pen,($w-112),28,14,10,205,130)
+    $g.DrawArc($pen,($w-124),19,24,17,205,130)
+    $g.DrawArc($pen,($w-119),25,14,10,205,130)
     $dot=New-Object System.Drawing.SolidBrush -ArgumentList $pen.Color
-    $g.FillEllipse($dot,($w-107),37,4,4)
+    $g.FillEllipse($dot,($w-114),34,4,4)
     $dot.Dispose()
     $pen.Color=RGB 242 247 255
     # Battery icon plus readable percentage.
     $bx=$w-84
-    $g.DrawRectangle($pen,$bx,22,26,13)
-    $g.FillRectangle($fg,($bx+27),26,3,5)
+    $g.DrawRectangle($pen,$bx,19,26,13)
+    $g.FillRectangle($fg,($bx+27),23,3,5)
     $bc=if($script:battery -le 20){RGB 255 166 102}else{RGB 120 238 175}
     $fill=New-Object System.Drawing.SolidBrush -ArgumentList $bc
-    $g.FillRectangle($fill,($bx+2),24,(22*$script:battery/100),9)
+    $g.FillRectangle($fill,($bx+2),21,(22*$script:battery/100),9)
     $fill.Dispose()
-    $g.DrawString(("$($script:battery)%"),$small,$fg,($w-49),22)
+    $g.DrawString(("$($script:battery)%"),$small,$fg,($w-49),19)
   } finally { $small.Dispose();$font.Dispose();$pen.Dispose();$fg.Dispose() }
 })
 $status.add_MouseClick({
@@ -280,10 +296,11 @@ $status.add_MouseWheel({
 $frame.Controls.Add($status)
 
 $footer=New-Object System.Windows.Forms.Panel
-$footer.Height=56
-$footer.Width=$frame.Width-38
-$footer.Location=New-Object System.Drawing.Point(19,($frame.Height-64))
+$footer.Height=52
+$footer.Width=$frame.Width-44
+$footer.Location=New-Object System.Drawing.Point(22,($frame.Height-60))
 $footer.BackColor=RGB 10 15 27
+Set-RoundedPanelRegion $footer 24
 $footer.add_Paint({
   param($sender,$e)
   $g=$e.Graphics
@@ -293,12 +310,12 @@ $footer.add_Paint({
   $pill=New-Object System.Drawing.SolidBrush -ArgumentList (RGB 222 235 252)
   try {
     # Back, home gesture bar and recent-apps icons: decorative only.
-    $x=[int]($w*0.24);$y=30
+    $x=[int]($w*0.24);$y=27
     $g.DrawLine($pen,($x+6),($y-9),($x-3),$y)
     $g.DrawLine($pen,($x-3),$y,($x+6),($y+9))
-    $g.FillRectangle($pill,([int]($w/2)-28),28,56,4)
+    $g.FillRectangle($pill,([int]($w/2)-28),25,56,4)
     $rx=[int]($w*0.76)-9
-    $g.DrawRectangle($pen,$rx,21,18,18)
+    $g.DrawRectangle($pen,$rx,18,18,18)
   } finally {$pill.Dispose();$pen.Dispose()}
 })
 $frame.Controls.Add($footer)
@@ -333,9 +350,13 @@ $timer.add_Tick({
     }
     $frame.Location=New-Object System.Drawing.Point(($r.Left-$bezel),($r.Top-$topPad))
     $frame.Size=New-Object System.Drawing.Size(($cw+2*$bezel),($ch+$topPad+$bottomPad))
-    $status.Width=$frame.Width-38
-    $footer.Width=$frame.Width-38
-    $footer.Top=$frame.Height-64
+    $status.Width=$frame.Width-44
+    $status.Location=New-Object System.Drawing.Point(22,14)
+    Set-RoundedPanelRegion $status 24
+    $footer.Width=$frame.Width-44
+    $footer.Left=22
+    $footer.Top=$frame.Height-60
+    Set-RoundedPanelRegion $footer 24
     if(-not $frame.Visible){$frame.Show()}
     [H2PhoneWindowNative]::SetWindowPos($frame.Handle,$chrome,0,0,0,0,
       [H2PhoneWindowNative]::SWP_NOACTIVATE -bor 0x0001 -bor 0x0002)|Out-Null
