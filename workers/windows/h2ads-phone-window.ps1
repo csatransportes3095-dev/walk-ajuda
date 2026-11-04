@@ -45,7 +45,18 @@ public static class H2PhoneWindowNative {
   public const uint SWP_NOOWNERZORDER=0x0200;
   public const uint SWP_NOSENDCHANGING=0x0400;
 }
-'@ -ReferencedAssemblies "System.Drawing"
+// A visible companion must never steal focus from the real Chrome window.
+public sealed class H2PhoneDisplayForm : System.Windows.Forms.Form {
+  protected override bool ShowWithoutActivation { get { return true; } }
+  protected override System.Windows.Forms.CreateParams CreateParams {
+    get {
+      var props=base.CreateParams;
+      props.ExStyle |= 0x08000000 | 0x00000080; // NOACTIVATE | TOOLWINDOW
+      return props;
+    }
+  }
+}
+'@ -ReferencedAssemblies "System.Drawing","System.Windows.Forms"
 
 function RGB([int]$r,[int]$g,[int]$b) {
   return [System.Drawing.Color]::FromArgb($r,$g,$b)
@@ -68,7 +79,7 @@ $targetX=[Math]::Max($desktop.Left+24,[Math]::Min($rect.Left,$desktop.Right-$wid
 $targetY=[Math]::Max($desktop.Top+52,[Math]::Min($rect.Top,$desktop.Bottom-$height-46))
 [H2PhoneWindowNative]::MoveWindow($chrome,$targetX,$targetY,$width,$height,$true)|Out-Null
 
-$frame=New-Object System.Windows.Forms.Form
+$frame=New-Object H2PhoneDisplayForm
 $frame.FormBorderStyle=[System.Windows.Forms.FormBorderStyle]::None
 $frame.ShowInTaskbar=$false
 $frame.StartPosition=[System.Windows.Forms.FormStartPosition]::Manual
