@@ -66,11 +66,15 @@ replaceOnce(
 );
 
 // Protecao extra: os cards devem sempre esticar dentro da celula do grid.
-replaceOnce(
-  'return <article className="min-w-0 rounded-2xl border p-4 xl:p-4"',
-  'return <article className="w-full min-w-0 rounded-2xl border p-4 xl:p-4"',
-  'largura dos cards de instancia',
-);
+const legacyCardStart = 'return <article className="min-w-0 rounded-2xl border p-4 xl:p-4"';
+const blackFrameCardStart = 'return <article className="min-w-0 rounded-[22px] border-2 border-black';
+if (source.includes(legacyCardStart)) {
+  source = source.replace(legacyCardStart, 'return <article className="w-full min-w-0 rounded-2xl border p-4 xl:p-4"');
+} else if (source.includes(blackFrameCardStart)) {
+  console.log('[h2ads-desktop-layout] largura dos cards ja esta coberta pela moldura preta atual; etapa ignorada.');
+} else {
+  throw new Error('[h2ads-desktop-layout] largura dos cards de instancia: bloco desconhecido; abortando para evitar alteracao incorreta.');
+}
 
 fs.writeFileSync(file, source, 'utf8');
 console.log('[h2ads-desktop-layout] OK: painel em largura total e 4 cards por linha no desktop.');
