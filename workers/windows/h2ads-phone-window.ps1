@@ -58,10 +58,24 @@ public sealed class H2PhoneDisplayForm : System.Windows.Forms.Form {
 }
 '@ -ReferencedAssemblies "System.Drawing","System.Windows.Forms"
 
-function RGB([int]$r,[int]$g,[int]$b) {
-  return [System.Drawing.Color]::FromArgb($r,$g,$b)
+# Cosmetic phone shell. Only the visible HWND position is adjusted;
+# the real Chrome instance, cookies, proxy, profiles and browser commands stay intact.
+function RGB([int]$r,[int]$g,[int]$b) { [System.Drawing.Color]::FromArgb($r,$g,$b) }
+function Set-PhoneCorners([System.Windows.Forms.Form]$target) {
+  $w=$target.Width; $h=$target.Height
+  if($w -lt 100 -or $h -lt 100){return}
+  $d=60
+  $path=New-Object System.Drawing.Drawing2D.GraphicsPath
+  $path.AddArc(0,0,$d,$d,180,90)
+  $path.AddArc(($w-$d-1),0,$d,$d,270,90)
+  $path.AddArc(($w-$d-1),($h-$d-1),$d,$d,0,90)
+  $path.AddArc(0,($h-$d-1),$d,$d,90,90)
+  $path.CloseFigure()
+  $old=$target.Region
+  $target.Region=New-Object System.Drawing.Region -ArgumentList $path
+  if($old){$old.Dispose()}
+  $path.Dispose()
 }
-$desktop=[System.Windows.Forms.Screen]::PrimaryScreen.WorkingArea
 $chrome=[IntPtr]::Zero
 $deadline=[DateTime]::UtcNow.AddSeconds(22)
 while($chrome -eq [IntPtr]::Zero -and [DateTime]::UtcNow -lt $deadline) {
@@ -72,84 +86,121 @@ while($chrome -eq [IntPtr]::Zero -and [DateTime]::UtcNow -lt $deadline) {
 if($chrome -eq [IntPtr]::Zero){exit 0}
 $rect=New-Object H2PhoneWindowNative+Rectangle
 if(-not [H2PhoneWindowNative]::GetWindowRect($chrome,[ref]$rect)){exit 0}
-# Resize only the visible HWND. Browser process, tabs, profiles and network untouched.
-$width=[Math]::Min(422,[Math]::Max(310,$desktop.Width-76))
-$height=[Math]::Min(760,[Math]::Max(475,$desktop.Height-134))
-$targetX=[Math]::Max($desktop.Left+24,[Math]::Min($rect.Left,$desktop.Right-$width-26))
-$targetY=[Math]::Max($desktop.Top+52,[Math]::Min($rect.Top,$desktop.Bottom-$height-46))
+$desktop=[System.Windows.Forms.Screen]::FromHandle($chrome).WorkingArea
+$width=[Math]::Min(390,[Math]::Max(310,$desktop.Width-48))
+$height=[Math]::Min(790,[Math]::Max(400,$desktop.Height-154))
+$targetX=[Math]::Max($desktop.Left+12,[Math]::Min($rect.Left,$desktop.Right-$width-12))
+$targetY=[Math]::Max($desktop.Top+66,[Math]::Min($rect.Top,$desktop.Bottom-$height-66))
 [H2PhoneWindowNative]::MoveWindow($chrome,$targetX,$targetY,$width,$height,$true)|Out-Null
 
 $frame=New-Object H2PhoneDisplayForm
 $frame.FormBorderStyle=[System.Windows.Forms.FormBorderStyle]::None
 $frame.ShowInTaskbar=$false
 $frame.StartPosition=[System.Windows.Forms.FormStartPosition]::Manual
-$frame.BackColor=RGB 11 17 29
-$frame.ForeColor=RGB 240 247 255
+$frame.BackColor=RGB 10 14 25
+$frame.ForeColor=RGB 243 248 255
 $frame.TopMost=$false
 $frame.AutoScaleMode=[System.Windows.Forms.AutoScaleMode]::None
-$frame.Width=$width+18
-$frame.Height=$height+99
-$frame.Opacity=1.0
-$frame.Text="H2ADS - Aparencia de celular"
+$frame.Width=$width+24
+$frame.Height=$height+126
+$frame.Text="H2ADS - Phone visual"
+$frame.Location=New-Object System.Drawing.Point(($targetX-12),($targetY-62))
+$frame.add_SizeChanged({Set-PhoneCorners $frame})
+Set-PhoneCorners $frame
 $frame.add_Shown({
-  # The frame always lives directly BEHIND Chrome; never takes browser focus.
   [H2PhoneWindowNative]::SetWindowPos($frame.Handle,$chrome,0,0,0,0,
     [H2PhoneWindowNative]::SWP_NOACTIVATE -bor 0x0001 -bor 0x0002)|Out-Null
 })
-$frame.Location=New-Object System.Drawing.Point(($targetX-9),($targetY-47))
 
+# Windows PowerShell 5.1 reads UTF-8 without BOM incorrectly.
+# All icons are drawn as vector geometry, never font glyphs.
+$script:battery=95
+$script:wifiOn=$true
 $status=New-Object System.Windows.Forms.Panel
-$status.Dock="Top";$status.Height=47;$status.BackColor=RGB 13 19 33
+$status.Dock="Top"
+$status.Height=62
+$status.BackColor=RGB 13 18 33
+$status.Cursor=[System.Windows.Forms.Cursors]::Hand
+$status.add_Paint({
+  param($sender,$e)
+  $g=$e.Graphics
+  $g.SmoothingMode=[System.Drawing.Drawing2D.SmoothingMode]::AntiAlias
+  $w=$sender.ClientSize.Width
+  $fg=New-Object System.Drawing.SolidBrush -ArgumentList (RGB 242 247 255)
+  $pen=New-Object System.Drawing.Pen -ArgumentList (RGB 242 247 255),2
+  $font=New-Object System.Drawing.Font -ArgumentList "Segoe UI",11,([System.Drawing.FontStyle]::Bold)
+  $small=New-Object System.Drawing.Font -ArgumentList "Segoe UI",9,([System.Drawing.FontStyle]::Bold)
+  try {
+    $g.DrawString([DateTime]::Now.ToString("HH:mm"),$font,$fg,23,19)
+    # Discreet punch-hole camera.
+    $ring=New-Object System.Drawing.SolidBrush -ArgumentList (RGB 43 53 73)
+    $lens=New-Object System.Drawing.SolidBrush -ArgumentList (RGB 2 6 14)
+    $g.FillEllipse($ring,($w/2-9),19,18,18)
+    $g.FillEllipse($lens,($w/2-5),23,10,10)
+    $ring.Dispose();$lens.Dispose()
+    # Signal bars.
+    for($i=0;$i -lt 4;$i++){ $sh=4+3*$i; $g.FillRectangle($fg,($w-151+5*$i),(36-$sh),3,$sh) }
+    # WiFi arcs (grey when switched off).
+    if(-not $script:wifiOn){$pen.Color=RGB 101 115 140}
+    $g.DrawArc($pen,($w-117),22,24,17,205,130)
+    $g.DrawArc($pen,($w-112),28,14,10,205,130)
+    $dot=New-Object System.Drawing.SolidBrush -ArgumentList $pen.Color
+    $g.FillEllipse($dot,($w-107),37,4,4)
+    $dot.Dispose()
+    $pen.Color=RGB 242 247 255
+    # Battery icon plus readable percentage.
+    $bx=$w-84
+    $g.DrawRectangle($pen,$bx,22,26,13)
+    $g.FillRectangle($fg,($bx+27),26,3,5)
+    $bc=if($script:battery -le 20){RGB 255 166 102}else{RGB 120 238 175}
+    $fill=New-Object System.Drawing.SolidBrush -ArgumentList $bc
+    $g.FillRectangle($fill,($bx+2),24,(22*$script:battery/100),9)
+    $fill.Dispose()
+    $g.DrawString(("$($script:battery)%"),$small,$fg,($w-49),22)
+  } finally { $small.Dispose();$font.Dispose();$pen.Dispose();$fg.Dispose() }
+})
+$status.add_MouseClick({
+  param($sender,$e)
+  if($e.X -ge ($status.Width-90)){ $script:battery=if($script:battery -ge 100){0}else{[Math]::Min(100,$script:battery+5)} }
+  elseif($e.X -ge ($status.Width-130)){ $script:wifiOn=-not $script:wifiOn }
+  $status.Invalidate()
+})
+$status.add_MouseWheel({
+  param($sender,$e)
+  $change=if($e.Delta -gt 0){5}else{-5}
+  $script:battery=[Math]::Max(0,[Math]::Min(100,$script:battery+$change))
+  $status.Invalidate()
+})
 $frame.Controls.Add($status)
-$time=New-Object System.Windows.Forms.Label
-$time.Text="09:41";$time.AutoSize=$true;$time.Location=New-Object System.Drawing.Point(23,13)
-$time.Font=New-Object System.Drawing.Font("Segoe UI",10,[System.Drawing.FontStyle]::Bold)
-$time.ForeColor=RGB 247 249 252
-$status.Controls.Add($time)
-$notch=New-Object System.Windows.Forms.Label
-$notch.Text="";$notch.Width=80;$notch.Height=13;$notch.BackColor=RGB 0 0 0
-$notch.Location=New-Object System.Drawing.Point(([int](($frame.Width-80)/2)),4)
-$status.Controls.Add($notch)
-$battery=95
-$wifiOn=$true
-$right=New-Object System.Windows.Forms.Label
-$right.Width=139;$right.Height=23;$right.TextAlign="MiddleRight"
-$right.Location=New-Object System.Drawing.Point(($frame.Width-148),9)
-$right.ForeColor=RGB 244 250 255
-$right.Font=New-Object System.Drawing.Font("Segoe UI",9,[System.Drawing.FontStyle]::Bold)
-$right.Cursor=[System.Windows.Forms.Cursors]::Hand
-$status.Controls.Add($right)
-function Update-PhoneIndicators {
-  $w=if($wifiOn){"WiFi"}else{"WiFi off"}
-  $right.Text="|||  $w   $battery%"
-}
-Update-PhoneIndicators
-$right.add_Click({
-  $script:battery=($script:battery+10)%110
-  Update-PhoneIndicators
-})
-$right.add_MouseWheel({
-  if($_.Delta -gt 0){$script:battery=[Math]::Min(100,$script:battery+5)}
-  else{$script:battery=[Math]::Max(0,$script:battery-5)}
-  Update-PhoneIndicators
-})
-$right.add_DoubleClick({$script:wifiOn=-not $script:wifiOn;Update-PhoneIndicators})
+
 $footer=New-Object System.Windows.Forms.Panel
-$footer.Dock="Bottom";$footer.Height=52;$footer.BackColor=RGB 13 19 33
+$footer.Dock="Bottom"
+$footer.Height=64
+$footer.BackColor=RGB 13 18 33
+$footer.add_Paint({
+  param($sender,$e)
+  $g=$e.Graphics
+  $g.SmoothingMode=[System.Drawing.Drawing2D.SmoothingMode]::AntiAlias
+  $w=$sender.ClientSize.Width
+  $pen=New-Object System.Drawing.Pen -ArgumentList (RGB 222 235 252),2.5
+  $pill=New-Object System.Drawing.SolidBrush -ArgumentList (RGB 222 235 252)
+  try {
+    # Back, home gesture bar and recent-apps icons: decorative only.
+    $x=[int]($w*0.24);$y=30
+    $g.DrawLine($pen,($x+6),($y-9),($x-3),$y)
+    $g.DrawLine($pen,($x-3),$y,($x+6),($y+9))
+    $g.FillRectangle($pill,([int]($w/2)-28),28,56,4)
+    $rx=[int]($w*0.76)-9
+    $g.DrawRectangle($pen,$rx,21,18,18)
+  } finally {$pill.Dispose();$pen.Dispose()}
+})
 $frame.Controls.Add($footer)
-$nav=New-Object System.Windows.Forms.Label
-$nav.Text="  ‹                       ○                       □  "
-$nav.TextAlign="MiddleCenter";$nav.Dock="Fill"
-$nav.ForeColor=RGB 218 235 251
-$nav.Font=New-Object System.Drawing.Font("Segoe UI Symbol",15,[System.Drawing.FontStyle]::Regular)
-$nav.Cursor=[System.Windows.Forms.Cursors]::Default
-$footer.Controls.Add($nav)
-# Thin side borders remain visible; the entire middle belongs to real Chrome.
+
 $timer=New-Object System.Windows.Forms.Timer
-$timer.Interval=450
+$timer.Interval=500
 $timer.add_Tick({
   try {
-    if(-not (Get-Process -Id $BrowserPid -ErrorAction SilentlyContinue)){
+    if(-not (Get-Process -Id $BrowserPid -ErrorAction SilentlyContinue)) {
       $timer.Stop();$frame.Close();return
     }
     if(-not [H2PhoneWindowNative]::IsWindowVisible($chrome) -or
@@ -158,15 +209,12 @@ $timer.add_Tick({
     }
     $r=New-Object H2PhoneWindowNative+Rectangle
     if(-not [H2PhoneWindowNative]::GetWindowRect($chrome,[ref]$r)){return}
-    $newPoint=New-Object System.Drawing.Point(($r.Left-9),($r.Top-47))
-    $frame.Location=$newPoint
-    $frame.Size=New-Object System.Drawing.Size(($r.Right-$r.Left+18),($r.Bottom-$r.Top+99))
-    $right.Left=$frame.Width-148
-    $notch.Left=[int](($frame.Width-80)/2)
+    $frame.Location=New-Object System.Drawing.Point(($r.Left-12),($r.Top-62))
+    $frame.Size=New-Object System.Drawing.Size(($r.Right-$r.Left+24),($r.Bottom-$r.Top+126))
     if(-not $frame.Visible){$frame.Show()}
     [H2PhoneWindowNative]::SetWindowPos($frame.Handle,$chrome,0,0,0,0,
       [H2PhoneWindowNative]::SWP_NOACTIVATE -bor 0x0001 -bor 0x0002)|Out-Null
-    $time.Text=[DateTime]::Now.ToString("HH:mm")
+    $status.Invalidate()
   } catch {}
 })
 $frame.add_FormClosed({$timer.Stop();$timer.Dispose()})
