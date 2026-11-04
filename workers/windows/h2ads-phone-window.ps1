@@ -31,6 +31,10 @@ public static class H2PhoneWindowNative {
   [DllImport("user32.dll", EntryPoint="GetWindowLongPtrW", SetLastError=true)] public static extern IntPtr GetWindowLongPtr(IntPtr hwnd,int index);
   [DllImport("user32.dll", EntryPoint="SetWindowLongPtrW", SetLastError=true)] public static extern IntPtr SetWindowLongPtr(IntPtr hwnd,int index,IntPtr value);
   [DllImport("user32.dll")] public static extern bool ShowWindow(IntPtr hwnd,int command);
+  [DllImport("user32.dll")] public static extern bool ReleaseCapture();
+  [DllImport("user32.dll", CharSet=CharSet.Auto)] public static extern IntPtr SendMessage(IntPtr hwnd,int message,IntPtr wParam,IntPtr lParam);
+  public const int WM_NCLBUTTONDOWN=0x00A1;
+  public const int HTCAPTION=2;
   [DllImport("user32.dll")] public static extern bool IsZoomed(IntPtr hwnd);
   [DllImport("user32.dll")] public static extern int SetWindowRgn(IntPtr hwnd,IntPtr region,bool redraw);
   [DllImport("dwmapi.dll")] public static extern int DwmSetWindowAttribute(IntPtr hwnd,int attribute,ref int value,int size);
@@ -118,11 +122,12 @@ public sealed class H2PhoneDisplayForm : System.Windows.Forms.Form {
       System.Windows.Forms.ControlStyles.OptimizedDoubleBuffer |
       System.Windows.Forms.ControlStyles.ResizeRedraw,true);
   }
-  protected override bool ShowWithoutActivation { get { return true; } }
+  // This frame is the parent of the real Chrome HWND. It MUST be activatable,
+  // or Chrome's address bar can receive clicks but not keyboard input.
   protected override System.Windows.Forms.CreateParams CreateParams {
     get {
       var props=base.CreateParams;
-      props.ExStyle |= 0x08000000 | 0x00000080; // NOACTIVATE | TOOLWINDOW
+      props.ExStyle |= 0x00000080; // TOOLWINDOW only; never WS_EX_NOACTIVATE
       return props;
     }
   }
@@ -323,6 +328,18 @@ $status.add_Paint({
     $g.DrawString(("$($script:battery)%"),$small,$fg,($w-49),19)
   } finally { $small.Dispose();$font.Dispose();$pen.Dispose();$fg.Dispose() }
 })
+# Drag the WHOLE smartphone by its top bar. Keep the far-right
+# Wi-Fi and battery indicators clickable. Native caption drag moves Chrome
+# with its WinForms parent and does not forward input to the browser.
+$status.add_MouseDown({
+  param($sender,$e)
+  if($e.Button -ne [System.Windows.Forms.MouseButtons]::Left){return}
+  if($e.X -ge ($status.ClientSize.Width-135)){return}
+  [H2PhoneWindowNative]::ReleaseCapture()|Out-Null
+  [H2PhoneWindowNative]::SendMessage($frame.Handle,
+    [H2PhoneWindowNative]::WM_NCLBUTTONDOWN,
+    [IntPtr]([H2PhoneWindowNative]::HTCAPTION),[IntPtr]::Zero)|Out-Null
+})
 $status.add_MouseClick({
   param($sender,$e)
   if($e.X -ge ($status.Width-90)){ $script:battery=if($script:battery -ge 100){0}else{[Math]::Min(100,$script:battery+5)} }
@@ -408,6 +425,15 @@ $script:resizeStartH=0
 $frame.add_MouseDown({
   param($sender,$e)
   if($e.Button -ne [System.Windows.Forms.MouseButtons]::Left){return}
+  # The exposed upper bezel is also a drag handle; leave the resize
+  # grip at the extreme right untouched.
+  if($e.Y -lt $topPad -and $e.X -ge 10 -and $e.X -lt ($frame.ClientSize.Width-28)){
+    [H2PhoneWindowNative]::ReleaseCapture()|Out-Null
+    [H2PhoneWindowNative]::SendMessage($frame.Handle,
+      [H2PhoneWindowNative]::WM_NCLBUTTONDOWN,
+      [IntPtr]([H2PhoneWindowNative]::HTCAPTION),[IntPtr]::Zero)|Out-Null
+    return
+  }
   $right=$e.X -ge ($frame.ClientSize.Width-28)
   $bottom=$e.Y -ge ($frame.ClientSize.Height-28)
   if(-not $right -and -not $bottom){return}
