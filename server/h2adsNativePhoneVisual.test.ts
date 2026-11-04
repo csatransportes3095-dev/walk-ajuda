@@ -57,6 +57,21 @@ describe("H2ADS: native phone appearance on real Chrome window", () => {
     expect(native).not.toContain("Start-Process");
   });
 
+  it("renders full native smartphone body and clips only visible Chrome corners", () => {
+    expect(native).toContain("public sealed class H2PhoneDisplayForm");
+    expect(native).toContain("Rounded(15f,67f");
+    expect(native).toContain("CreateRoundRectRgn");
+    expect(native).toContain("SetWindowRgn");
+    expect(native).toContain("RoundChromeWindow");
+    expect(native).toContain("IsZoomed");
+    expect(native).toContain("RestoreChromeWindow");
+    expect(native).toContain("VisualSelfTest");
+    expect(native).toContain("DrawToBitmap");
+    expect(native).toContain("ShowWithoutActivation");
+    expect(native).not.toContain("Invoke-WebRequest");
+    expect(native).not.toContain("Start-Process");
+  });
+
   it("never changes the browser arguments, proxy chain or profile backend", () => {
     expect(runner).toContain('"--user-data-dir=" + profileDirectory');
     expect(runner).toContain('"--proxy-server=http://127.0.0.1:" + relayPort');

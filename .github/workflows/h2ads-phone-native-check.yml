@@ -39,6 +39,8 @@ jobs:
           # Exercise Add-Type P/Invoke compilation without creating a Chrome window.
           & powershell.exe -NoProfile -NonInteractive -ExecutionPolicy Bypass -File "workers/windows/h2ads-phone-window.ps1" -BrowserPid 2147483646 -InstanceName "Smoke"
           if ($LASTEXITCODE -ne 0) { throw "Native phone script failed to compile on Windows PowerShell 5.1." }
+          & powershell.exe -NoProfile -NonInteractive -ExecutionPolicy Bypass -File "workers/windows/h2ads-phone-window.ps1" -BrowserPid 2147483646 -InstanceName "PaintSmoke" -VisualSelfTest
+          if ($LASTEXITCODE -ne 0) { throw "Phone body failed to paint on Windows PowerShell 5.1." }
       - name: Ensure browser session refreshes phone visual even if locally cached
         shell: powershell
         run: |
