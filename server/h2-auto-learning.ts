@@ -38,7 +38,7 @@ const STOP = new Set([
 export function safeH2AutoUnknownQuestion(input: unknown): { question: string; hash: string } | null {
   if (typeof input !== "string") return null;
   const question = input.replace(/\s+/g, " ").trim();
-  if (question.length < 6 || question.length > 160) return null;
+  if (question.length > 160 || (question.length < 8 && !/\b99\b/.test(question))) return null;
   // Permitir apenas "99" como identificador público de serviço.
   // Nenhum outro número, sequência de telefone, código, CPF ou contato entra na fila.
   const withoutPublicService99 = question.replace(/\b99\b/g, "");
