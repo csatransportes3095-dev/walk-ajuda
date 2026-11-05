@@ -169,7 +169,8 @@ export function registerH2AutoAccessRoutes(app: Express): void {
         questionCollectionEnabled = live[0]?.collection_on === "true";
       }
       if (!deviceId) return respond(res, 401, { error: "unauthorized" });
-      const initialMessage = "⚡ *H2 COLOMBIANO* 🇨🇴\n\nOlá! Escreva como podemos ajudar.\n\n✅ *Já sou cliente* — confirme seu acesso.\n🆕 *Não sou cliente* — informe seu indicador.\n💰 *Minhas indicações* — consulte seus valores.\n\n🛡️ O atendimento protege seus dados.";
+      const initialMessage = /1️⃣|2️⃣|3️⃣|Digite \*1, 2 ou 3/.test(confirmation.identificationWelcome)
+        ? h2AutoConfirmationSchema.parse({}).identificationWelcome : confirmation.identificationWelcome;
       const phoneMessage = confirmation.existingCustomerPrompt;
       const referrerMessage = confirmation.newCustomerPrompt;
       const noReferral = confirmation.noIndicatorMessage;
