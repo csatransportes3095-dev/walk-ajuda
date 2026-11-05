@@ -145,7 +145,7 @@ export function registerH2AutoAccessRoutes(app: Express): void {
       let identificationDisabled = false;
       // A árvore tem uma chave própria. Desligá-la não pode desligar as
       // respostas personalizadas, que são independentes e opcionais.
-      let treeEnabled = true;
+      // A árvore foi desativada definitivamente nesta reformulação.\n      const treeEnabled = false;
       let questionCollectionEnabled = false;
       let confirmation = h2AutoConfirmationSchema.parse({});
       let personalization = { ...H2_AUTO_PERSONALIZATION_DEFAULT };
@@ -165,11 +165,10 @@ export function registerH2AutoAccessRoutes(app: Express): void {
           const rawPersonalization = live[0]?.personalization_json;
           personalization = h2AutoPersonalizationSchema.parse(typeof rawPersonalization === "string" ? JSON.parse(rawPersonalization) : rawPersonalization || {});
         } catch { personalization = { ...H2_AUTO_PERSONALIZATION_DEFAULT }; }
-        treeEnabled = live[0]?.tree_on !== "false";
         questionCollectionEnabled = live[0]?.collection_on === "true";
       }
       if (!deviceId) return respond(res, 401, { error: "unauthorized" });
-      const initialMessage = confirmation.identificationWelcome;
+      const initialMessage = "⚡ *H2 COLOMBIANO* 🇨🇴\n\nOlá! Escreva como podemos ajudar.\n\n✅ *Já sou cliente* — confirme seu acesso.\n🆕 *Não sou cliente* — informe seu indicador.\n💰 *Minhas indicações* — consulte seus valores.\n\n🛡️ O atendimento protege seus dados.";
       const phoneMessage = confirmation.existingCustomerPrompt;
       const referrerMessage = confirmation.newCustomerPrompt;
       const noReferral = confirmation.noIndicatorMessage;
@@ -233,10 +232,9 @@ export function registerH2AutoAccessRoutes(app: Express): void {
             customer_phone_hash=NULL,customer_email_hash=NULL,code_hash=NULL,code_expires=NULL,
             code_attempts=0,resend_after=0,expires_at=0,updated_at=VALUES(updated_at)`);
         await clearH2AutoPhoneFailures(deviceId,sessionId);
-        const firstStage = treeEnabled ? (initialH2AutoChoiceStage(input) ??
-          (h2AutoNaturalExistingCustomerIntent(input) ? "customer_phone" :
-           h2AutoNaturalReferralsIntent(input) ? "referrals_phone" :
-           h2AutoNaturalNewCustomerIntent(input) ? "referral_phone" : null)) : null;
+        const firstStage = h2AutoNaturalExistingCustomerIntent(input) ? "customer_phone" :
+          h2AutoNaturalReferralsIntent(input) ? "referrals_phone" :
+          h2AutoNaturalNewCustomerIntent(input) ? "referral_phone" : null;
         if (firstStage) {
           await update(sessionId, sql`stage=${firstStage},updated_at=${now}`);
           return respond(res, 200, {state:firstStage, message:firstStage==="customer_phone" ? phoneMessage :
@@ -251,8 +249,7 @@ export function registerH2AutoAccessRoutes(app: Express): void {
           if(questionCollectionEnabled) try {await recordH2AutoUnknownQuestion(deviceId,input);} catch(error){console.error("[H2Auto] coleta indisponível",error);}
           return respond(res, 200, {state:"tree_disabled",audience:"new_open",message:""});
         }
-        if(questionCollectionEnabled) try {await recordH2AutoUnknownQuestion(deviceId,input);} catch(error){console.error("[H2Auto] coleta indisponível",error);}
-        return respond(res, 200, { state: "choice", message: h2AutoGreetingWelcome(input,initialMessage) });
+        return respond(res, 200, { state: "choice", message: initialMessage });
       }
 
       const collectUnknown = async () => {
@@ -263,10 +260,6 @@ export function registerH2AutoAccessRoutes(app: Express): void {
       const navigation = h2AutoNavigationCommand(input);
       const isMenu = navigation === "home";
       const isBack = navigation === "back";
-      if (isMenu && !treeEnabled)
-        // MENU is a tree command. With the tree disabled it must not revive
-        // the opening menu; keep the gate neutral for personalized handling.
-        return respond(res, 200, {state:"tree_disabled",audience:"new_open",message:""});
       // MENU returns to the first question without extending a verified session.
       const authorizedAudience: "customer" | "new" | null =
         s.stage === "customer" || s.stage === "customer_menu" ? "customer" :
@@ -346,15 +339,15 @@ export function registerH2AutoAccessRoutes(app: Express): void {
       }
 
       if (s.stage === "choice") {
-        if (treeEnabled && (normalized === "1" || h2AutoNaturalExistingCustomerIntent(input))) {
+        if (h2AutoNaturalExistingCustomerIntent(input)) {
           await update(sessionId, sql`stage='customer_phone',updated_at=${now}`);
           return respond(res, 200, { state: "customer_phone", message: phoneMessage });
         }
-        if (treeEnabled && (normalized === "3" || h2AutoNaturalReferralsIntent(input))) {
+        if (h2AutoNaturalReferralsIntent(input)) {
           await update(sessionId, sql`stage='referrals_phone',updated_at=${now}`);
           return respond(res, 200, { state: "referrals_phone", message: confirmation.phonePrompt });
         }
-        if (treeEnabled && (normalized === "2" || h2AutoNaturalNewCustomerIntent(input))) {
+        if (h2AutoNaturalNewCustomerIntent(input)) {
           await update(sessionId, sql`stage='referral_phone',updated_at=${now}`);
           return respond(res, 200, { state: "referral_phone", message: referrerMessage });
         }
@@ -364,8 +357,7 @@ export function registerH2AutoAccessRoutes(app: Express): void {
           await collectUnknown();
           return respond(res, 200, {state:"tree_disabled",audience:"new_open",message:""});
         }
-        await collectUnknown();
-        return respond(res, 200, { state: "choice", message: h2AutoGreetingWelcome(input,initialMessage) });
+        return respond(res, 200, { state: "choice", message: initialMessage });
       }
 
       if (s.stage === "customer_phone" || s.stage === "referrals_phone") {
