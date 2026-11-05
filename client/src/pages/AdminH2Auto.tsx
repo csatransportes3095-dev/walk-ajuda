@@ -899,7 +899,7 @@ export default function AdminH2Auto() {
               <nav aria-label="Central de respostas" className="sticky top-1 z-20 rounded-xl border border-cyan-400/30 bg-[#071629]/95 p-3 shadow-xl">
                 <p className="mb-2 text-sm font-black text-cyan-200">💬 RESPOSTAS E CONFIRMAÇÕES</p>
                 <div className="flex flex-wrap gap-2">
-                  <a href={`#h2-confirm-${d.id}`} className="rounded-lg border border-violet-400/30 px-3 py-2 text-xs font-bold text-violet-100">Confirmações</a>
+                  <button type="button" onClick={() => setSection("fixed")} className="rounded-lg border border-amber-300/40 px-3 py-2 text-xs font-bold text-amber-200">Editar mensagens fixas</button>
                   <a href={`#h2-media-${d.id}`} className="rounded-lg border border-sky-400/30 px-3 py-2 text-xs font-bold text-sky-100">Mídias</a>
                 </div>
               </nav>
@@ -1041,16 +1041,16 @@ export default function AdminH2Auto() {
                 <p className="col-span-full text-xs text-emerald-200/80">A consulta de pedidos pode ser ativada e desativada no card “ACOMPANHAR PEDIDO — STATUS PELO WHATSAPP” acima.</p>
               </div>
               </div>
-              <div className={section==="responses"?"space-y-4":"hidden"}>
+              <div className={section==="fixed"?"space-y-4":"hidden"}>
                 <div id={`h2-confirm-${d.id}`} className="col-span-full scroll-mt-32 rounded-2xl border border-violet-400/40 bg-violet-950/20 p-3 sm:p-5 space-y-4">
                   <div className="flex flex-wrap items-center justify-between gap-3">
                     <div>
                       <h4 className="text-base font-black text-violet-200">
-                        📝 TODOS OS TEXTOS DE CONFIRMAÇÃO — H2 AUTO
+                        🔐 MENSAGENS FIXAS DO ATENDIMENTO — H2 AUTO
                       </h4>
                       <p className="mt-1 text-xs text-slate-300">
-                        Edite cada mensagem separadamente. O conteúdo salvo passa a ser usado pelo atendimento automático deste aparelho.
-                        Os limites de tentativas, os bloqueios e a verificação de e-mail continuam obrigatórios.
+                        Edite apenas os textos de início, opções 1, 2 e 3, telefone, código e avisos.
+                        Chaves, validação por e-mail, tentativas e bloqueios continuam obrigatórios. Os números e as frases são atalhos de autenticação, não a árvore antiga.
                       </p>
                     </div>
                     <span className="rounded-lg border border-violet-400/30 px-3 py-2 text-xs font-bold text-violet-200">
@@ -1071,7 +1071,7 @@ export default function AdminH2Auto() {
                                 {label}
                               </label>
                               <button type="button" className="rounded-lg border border-slate-500/40 px-2 py-1 text-[11px] font-bold text-slate-300 hover:bg-slate-800"
-                                onClick={() => change("confirmation", { ...confirmation, [key]: confirmationDefaults[key] })}>
+                                onClick={() => changeConfirmation(key, confirmationDefaults[key])}>
                                 Restaurar padrão
                               </button>
                             </div>
@@ -1081,7 +1081,7 @@ export default function AdminH2Auto() {
                               maxLength={2000}
                               className={field + " min-h-24 resize-y whitespace-pre-wrap"}
                               value={confirmation[key]}
-                              onChange={e => change("confirmation", { ...confirmation, [key]: e.target.value })}
+                              onChange={e => changeConfirmation(key, e.target.value)}
                             />
                             <div className="text-right text-[11px] text-slate-400">{confirmation[key].length}/2000 caracteres</div>
                             <details className="rounded-lg border border-cyan-500/20 bg-cyan-950/20 px-3 py-2">
@@ -1093,17 +1093,25 @@ export default function AdminH2Auto() {
                       </div>
                     </details>
                   ))}
-                  {needsRefresh && <p role="alert" className="text-xs font-bold text-amber-200">Configuração alterada em outro lugar. Atualize os dados antes de salvar.</p>}
-                  <button type="button" disabled={saveConfirmation.isPending || needsRefresh}
+                  {fixedNeedsRefresh && (
+                    <div role="alert" className="flex flex-wrap items-center justify-between gap-3 rounded-xl border border-amber-400/50 bg-amber-950/30 p-3 text-xs font-bold text-amber-100">
+                      <span>O aparelho teve uma nova revisão. Recarregue as mensagens para evitar conflitos.</span>
+                      <button type="button" onClick={() => {
+                        setFixedDrafts(previous => { const next = { ...previous }; delete next[d.id]; return next; });
+                        void utils.h2AutoAdmin.list.invalidate();
+                      }} className="rounded-lg bg-amber-300 px-3 py-2 text-slate-950">RECARREGAR MENSAGENS</button>
+                    </div>
+                  )}
+                  <button type="button" disabled={saveConfirmation.isPending || fixedNeedsRefresh || !fixedDraft}
                     onClick={() => {
                       const invalid = Object.entries(confirmation).find(([, message]) => !String(message).trim());
                       if (invalid) { toast.error("Preencha todos os textos de confirmação antes de salvar."); return; }
-                      saveConfirmation.mutate({ id: d.id, confirmation, expectedRevision });
+                      saveConfirmation.mutate({ id: d.id, confirmation, expectedRevision: fixedDraft.revision });
                     }}
                     className="w-full rounded-xl border border-emerald-400/60 bg-emerald-700 px-4 py-3 text-sm font-black text-white transition hover:bg-emerald-600 disabled:opacity-50">
-                    {saveConfirmation.isPending ? "SALVANDO..." : "💾 SALVAR TODOS OS TEXTOS DE CONFIRMAÇÃO"}
+                    {saveConfirmation.isPending ? "SALVANDO..." : "💾 SALVAR MENSAGENS FIXAS DESTE APARELHO"}
                   </button>
-                  <p className="text-xs text-slate-400">O salvamento atualiza somente os textos deste aparelho, sem sobrescrever outras configurações.</p>
+                  <p className="text-xs text-slate-400">O salvamento muda somente os textos: chaves, autenticação, regras, perguntas personalizadas e pausas permanecem intactas.</p>
                 </div>
               </div>
               <div className={section==="operations"?"space-y-4":"hidden"}>
