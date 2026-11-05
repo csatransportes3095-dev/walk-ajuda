@@ -69,6 +69,7 @@ const mediaSchema = z.object({
   cooldownSeconds: z.number().int().min(15).max(3600).default(120),
   maxAudioSeconds: z.number().int().min(5).max(120).default(30),
 });
+const H2_AUTO_TREE_RETIRED = { ...H2_AUTO_TREE_DEFAULT, enabled: false };
 const configSchema = z.object({
   tree: h2AutoTreeSchema.optional(),
   personalization: h2AutoPersonalizationSchema.default(() => ({ ...H2_AUTO_PERSONALIZATION_DEFAULT })),
@@ -116,6 +117,7 @@ const configSchema = z.object({
 });
 type RemoteConfig = z.infer<typeof configSchema>;
 const initial: RemoteConfig = {
+  tree: H2_AUTO_TREE_RETIRED,
   personalization: { ...H2_AUTO_PERSONALIZATION_DEFAULT },
   questionCollectionEnabled: false,
   media: mediaSchema.parse({}),
@@ -183,6 +185,13 @@ function ensure() {
         applied_at TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP,
         PRIMARY KEY (device_id, campaign_key)
       )`);
+      // A árvore foi substituída por perguntas personalizadas e aprendizado.
+      // Atualização idempotente para aparelhos já vinculados.
+      await db.execute(sql`UPDATE h2_auto_devices
+        SET config_json=JSON_SET(config_json,'$.tree',CAST(${JSON.stringify(H2_AUTO_TREE_RETIRED)} AS JSON)),
+        revision=revision+1
+        WHERE JSON_UNQUOTE(JSON_EXTRACT(config_json,'$.tree.enabled')) IS NULL
+           OR JSON_UNQUOTE(JSON_EXTRACT(config_json,'$.tree.enabled')) <> 'false'`);
       // Uma migração idempotente, apenas de textos. Cada aparelho tem backup.
       // A importação inicial de um APK novo (revision=0) permanece intacta.
       void migrateH2AutoShortCopyOnce(db).catch(error => {
@@ -200,8 +209,10 @@ const rows = async (query: any): Promise<any[]> => {
   const result: any = await db.execute(query);
   return result[0] || [];
 };
-const decodeConfig = (raw: any): RemoteConfig =>
-  configSchema.parse(typeof raw === "string" ? JSON.parse(raw) : raw);
+const decodeConfig = (raw: any): RemoteConfig => {
+  const parsed=configSchema.parse(typeof raw === "string" ? JSON.parse(raw) : raw);
+  return {...parsed,tree:H2_AUTO_TREE_RETIRED};
+};
 
 
 const H2_AUTO_FAQ_EXPANSION_CAMPAIGN="faq-subperguntas-20261102-v1";
@@ -532,6 +543,7 @@ export const h2AutoAdminRouter = router({
       const saved = decodeConfig(current.config_json);
       const preserved: RemoteConfig = {
         ...input.config,
+        tree: H2_AUTO_TREE_RETIRED,
         welcome: saved.welcome,
         menu: saved.menu,
         rules: saved.rules,
@@ -711,53 +723,13 @@ export const h2AutoAdminRouter = router({
     }),
   saveTree: adminProcedure
     .input(z.object({
-      id: z.string().regex(/^[a-f0-9]{24}$/),
-      tree: h2AutoTreeSchema,
-      // Snapshot used to reject concurrent changes to the actual question tree.
-      // Legacy clients may omit this and continue using the global revision.
-      baseTree: h2AutoTreeSchema.optional(),
-      expectedRevision: z.number().int().min(0),
+      id:z.string().regex(/^[a-f0-9]{24}$/),
+      tree:h2AutoTreeSchema,
+      baseTree:h2AutoTreeSchema.optional(),
+      expectedRevision:z.number().int().min(0),
     }))
-    .mutation(async ({ input }) => {
-      await ensure();
-      const db = await getDb();
-      if (!db) throw new Error("DB unavailable");
-
-      // ADM switches, media configuration, and validity settings update the
-      // same device revision. Do not discard a user's edited questions just
-      // because one of those unrelated controls changed during editing.
-      for (let attempt = 0; attempt < 3; attempt++) {
-        const row = (await rows(sql`SELECT config_json,revision FROM h2_auto_devices
-          WHERE id=${input.id} LIMIT 1`))[0];
-        if (!row) throw new TRPCError({ code: "NOT_FOUND", message: "Aparelho não encontrado." });
-        const currentRevision = Number(row.revision);
-        const currentConfig = decodeConfig(row.config_json);
-        if (input.baseTree) {
-          const actualTree = currentConfig.tree ?? H2_AUTO_TREE_DEFAULT;
-          if (JSON.stringify(actualTree) !== JSON.stringify(input.baseTree))
-            throw new TRPCError({
-              code: "CONFLICT",
-              message: "As perguntas foram modificadas em outra sessão. Suas edições continuam na tela. Faça uma cópia antes de recarregar.",
-            });
-        } else if (currentRevision !== input.expectedRevision) {
-          throw new TRPCError({
-            code: "CONFLICT",
-            message: "A configuração mudou. Suas perguntas não foram apagadas. Atualize a revisão antes de salvar.",
-          });
-        }
-
-        const next: RemoteConfig = { ...currentConfig, tree: input.tree };
-        const result: any = await db.execute(sql`
-          UPDATE h2_auto_devices
-          SET config_json=${JSON.stringify(next)}, revision=revision+1
-          WHERE id=${input.id} AND revision=${currentRevision}`);
-        if (result[0]?.affectedRows)
-          return { success: true, revision: currentRevision + 1 };
-      }
-      throw new TRPCError({
-        code: "CONFLICT",
-        message: "O ADM recebeu outras alterações durante o salvamento. Tente salvar novamente; suas perguntas permanecem na tela.",
-      });
+    .mutation(async () => {
+      throw new TRPCError({code:"FORBIDDEN",message:"A árvore de atendimento foi substituída por perguntas personalizadas."});
     }),
   saveMedia: adminProcedure
     .input(

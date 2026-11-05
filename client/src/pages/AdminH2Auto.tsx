@@ -19,7 +19,6 @@ import { toast } from "sonner";
 import H2AutoHistoryPanel from "@/components/H2AutoHistoryPanel";
 import H2AutoValidationBlocks from "@/components/H2AutoValidationBlocks";
 import H2AutoSilencedContacts from "@/components/H2AutoSilencedContacts";
-import H2AutoTreeEditor from "@/components/H2AutoTreeEditor";
 import H2AutoWhatsAppPreview from "@/components/H2AutoWhatsAppPreview";
 import { H2_AUTO_CONFIRMATION_DEFAULTS as confirmationDefaults, H2_AUTO_CONFIRMATION_GROUPS as confirmationGroups } from "@shared/h2AutoConfirmation";
 import { H2_AUTO_SHORT_MEDIA, H2_AUTO_SHORT_ORDER_NOT_FOUND } from "@shared/h2AutoShortReplies";
@@ -741,8 +740,8 @@ export default function AdminH2Auto() {
               </section>
               <section className="rounded-2xl border border-emerald-400/50 bg-emerald-950/25 p-4 space-y-3">
                 <h4 className="text-lg font-black text-emerald-200">📦 ACOMPANHAR PEDIDO — STATUS PELO WHATSAPP</h4>
-                <p className="text-sm text-slate-200">Ao escolher a opção <strong>2 — Acompanhar pedido</strong> no menu do cliente, o H2 Auto consulta os pedidos do cadastro e responde com o número, produto e status atual de cada pedido. Ao selecionar um pedido, mostra os detalhes e o agendamento, quando houver.</p>
-                <p className="text-xs text-slate-300">A numeração do botão é controlada pela árvore de atendimento. A consulta só funciona para clientes autenticados; a sessão já confirmada deve ser reutilizada, sem solicitar outro código enquanto estiver válida.</p>
+                <p className="text-sm text-slate-200">Após a identificação do cliente, o H2 AUTO permite consultar pedidos sem árvore de atendimento, usando os recursos de consulta já autorizados.</p>
+                <p className="text-xs text-slate-300">A consulta só funciona para clientes autenticados e com sessão válida. As perguntas personalizadas substituem a antiga árvore de atendimento.</p>
                 <div className="flex flex-wrap items-center justify-between gap-3 rounded-xl border border-emerald-500/30 bg-slate-950/55 p-3">
                   <div>
                     <p className="text-sm font-black">{d.config.ordersEnabled ? "✅ CONSULTA DE STATUS ATIVADA" : "⛔ CONSULTA DE STATUS DESATIVADA"}</p>
@@ -785,7 +784,7 @@ export default function AdminH2Auto() {
               <section className="rounded-2xl border border-violet-400/45 bg-gradient-to-br from-violet-950/30 to-slate-950 p-4 space-y-4">
                 <h4 className="text-lg font-black text-violet-200">🧠 ATENDIMENTO PERSONALIZADO — SEM CUSTO DE IA</h4>
                 <p className="text-sm text-slate-300">Reconhece perguntas livres sobre pedidos, códigos, fotos, valores, indicações e atendimento. Responde com orientação pública e tom escolhido; só usa o primeiro nome após validação do cliente. Não consulta status sem autenticação nem faz promessas de atendimento. Nenhum serviço de IA pago será contratado.</p>
-                <p className="text-xs text-amber-200">Módulo opcional, desligado por padrão. As regras do menu, telefone, código, MENU/0, /H2, /H3, bloqueios e pausas permanecem prioritárias. O envio depende do aplicativo Android.</p>
+                <p className="text-xs text-amber-200">Respostas personalizadas substituem a árvore. A identificação, código de e-mail, /H2, /H3, bloqueios e pausas continuam obrigatórios. O envio depende do aplicativo Android.</p>
                 <div className="grid gap-3 sm:grid-cols-2">
                   <label className="flex items-center gap-2 rounded-xl border border-violet-400/25 bg-slate-900 p-3 font-bold text-sm">
                     <input type="checkbox" className="h-4 w-4" checked={personalization.enabled} onChange={e => updatePersonalization({enabled:e.target.checked})}/>
@@ -850,17 +849,12 @@ export default function AdminH2Auto() {
               </div>
               <div className={section==="responses"?"space-y-4":"hidden"}>
               <nav aria-label="Central de respostas" className="sticky top-1 z-20 rounded-xl border border-cyan-400/30 bg-[#071629]/95 p-3 shadow-xl">
-                <p className="mb-2 text-sm font-black text-cyan-200">💬 CENTRAL DE RESPOSTAS — ACESSO RÁPIDO</p>
+                <p className="mb-2 text-sm font-black text-cyan-200">💬 RESPOSTAS E CONFIRMAÇÕES</p>
                 <div className="flex flex-wrap gap-2">
-                  <a href={`#h2-tree-${d.id}`} className="rounded-lg border border-cyan-400/30 px-3 py-2 text-xs font-bold text-cyan-100">Menus</a>
                   <a href={`#h2-confirm-${d.id}`} className="rounded-lg border border-violet-400/30 px-3 py-2 text-xs font-bold text-violet-100">Confirmações</a>
-                  <a href={`#h2-rules-${d.id}`} className="rounded-lg border border-fuchsia-400/30 px-3 py-2 text-xs font-bold text-fuchsia-100">Respostas</a>
                   <a href={`#h2-media-${d.id}`} className="rounded-lg border border-sky-400/30 px-3 py-2 text-xs font-bold text-sky-100">Mídias</a>
                 </div>
               </nav>
-              <div id={`h2-tree-${d.id}`} className="scroll-mt-32">
-              <H2AutoTreeEditor id={d.id} revision={d.revision} appliedRevision={d.appliedRevision} initial={d.config.tree} />
-              </div>
               </div>
               <div className={section==="diagnostics"?"space-y-4":"hidden"}>
               <H2AutoValidationBlocks deviceId={d.id} deviceLabel={d.label} />
@@ -1008,7 +1002,7 @@ export default function AdminH2Auto() {
                       </h4>
                       <p className="mt-1 text-xs text-slate-300">
                         Edite cada mensagem separadamente. O conteúdo salvo passa a ser usado pelo atendimento automático deste aparelho.
-                        Os números do menu, os limites de tentativas, os bloqueios e a verificação de e-mail continuam obrigatórios.
+                        Os limites de tentativas, os bloqueios e a verificação de e-mail continuam obrigatórios.
                       </p>
                     </div>
                     <span className="rounded-lg border border-violet-400/30 px-3 py-2 text-xs font-bold text-violet-200">
@@ -1181,80 +1175,6 @@ export default function AdminH2Auto() {
               </div>
               </div>
               <div className={section==="responses"?"space-y-4":"hidden"}>
-              <section id={`h2-rules-${d.id}`} className="scroll-mt-32 rounded-2xl border border-fuchsia-400/40 bg-fuchsia-950/20 p-4 space-y-4">
-                <div>
-                  <h4 className="text-lg font-black text-fuchsia-200">💬 RESPOSTAS DO WHATSAPP — H2 AUTO</h4>
-                  <p className="mt-1 text-xs text-slate-300">Área recuperada das configurações existentes do robô. Exibe as mensagens previamente salvas, inclusive regras relacionadas a status, quando houver. Não altera o fluxo de pedidos nem ativa envio automático de notificações.</p>
-                  <p className="mt-2 text-sm font-semibold text-fuchsia-200">{(value.rules || []).length} resposta(s) no servidor · {(d.snapshotConfig?.rules || []).length} na cópia original do celular</p>
-                </div>
-                {(!value.rules || value.rules.length === 0) && <p className="rounded-lg border border-amber-500/30 bg-amber-950/20 p-3 text-xs text-amber-200">Não há respostas antigas na configuração atual do aparelho. Confira a cópia local abaixo antes de cadastrar uma nova.</p>}
-                {(value.rules || []).map((rule: any, i: number) => (
-                  <div key={i} className="grid gap-3 rounded-xl border border-fuchsia-400/20 bg-slate-950/65 p-3">
-                    <div className="flex flex-wrap items-center justify-between gap-2">
-                      <label className="text-xs font-bold text-white">
-                        <input type="checkbox" className="mr-2" checked={rule.enabled}
-                          onChange={e => change("rules", value.rules.map((x: any, j: number) => j === i ? { ...x, enabled: e.target.checked } : x))}/>
-                        Resposta {i + 1} habilitada
-                      </label>
-                      <button type="button" className="rounded-lg border border-red-500/30 px-3 py-1 text-xs text-red-200"
-                        onClick={() => { if (window.confirm("Excluir esta resposta? Só será removida ao clicar em SALVAR RESPOSTAS.")) change("rules", value.rules.filter((_x: any, j: number) => i !== j)); }}>
-                        Remover
-                      </button>
-                    </div>
-                    <label className="text-xs text-fuchsia-100">Palavra-chave / gatilho
-                      <input className={field} maxLength={120} value={rule.trigger}
-                        onChange={e => change("rules", value.rules.map((x: any, j: number) => j === i ? { ...x, trigger: e.target.value } : x))}/>
-                    </label>
-                    <label className="text-xs text-fuchsia-100">Tipo de correspondência
-                      <select className={field} value={rule.mode}
-                        onChange={e => change("rules", value.rules.map((x: any, j: number) => j === i ? { ...x, mode: e.target.value } : x))}>
-                        <option value="exact">Mensagem exata</option>
-                        <option value="contains">Contém palavras</option>
-                      </select>
-                    </label>
-                    <label className="text-xs text-fuchsia-100">Resposta enviada no WhatsApp
-                      <textarea className={field} rows={4} maxLength={6000} value={rule.reply}
-                        onChange={e => change("rules", value.rules.map((x: any, j: number) => j === i ? { ...x, reply: e.target.value } : x))}/>
-                    </label>
-                  </div>
-                ))}
-                <button type="button" className="w-full rounded-xl border border-fuchsia-400/45 bg-fuchsia-500/15 px-3 py-3 text-sm font-black text-fuchsia-100"
-                  onClick={() => change("rules", [...(value.rules || []), { trigger: "", reply: "", mode: "exact", enabled: false }])}>
-                  + ADICIONAR RESPOSTA (DESATIVADA)
-                </button>
-                {d.snapshotConfig?.rules?.length > 0 && (
-                  <details className="rounded-xl border border-amber-400/35 bg-amber-950/20 p-3">
-                    <summary className="cursor-pointer text-sm font-bold text-amber-200">📦 Ver cópia de segurança anterior do celular ({d.snapshotConfig.rules.length})</summary>
-                    <p className="my-2 text-xs text-slate-300">A cópia é apenas para consulta. A recuperação importa somente regras ausentes, sem substituir as já salvas.</p>
-                    {d.snapshotConfig.rules.map((rule: any, i: number) => (
-                      <div key={i} className="mt-2 rounded-lg border border-white/10 p-2 text-xs">
-                        <p className="font-bold text-white">Gatilho: {rule.trigger || "(vazio)"}</p>
-                        <p className="mt-1 whitespace-pre-wrap break-words text-slate-300">{rule.reply}</p>
-                      </div>
-                    ))}
-                    <button type="button" className="mt-3 w-full rounded-lg bg-amber-400 px-3 py-2 text-xs font-black text-slate-950"
-                      onClick={() => {
-                        const current = value.rules || [];
-                        const keys = new Set(current.map((x: any) => x.trigger.trim().toLowerCase() + "|" + x.mode));
-                        const missing = d.snapshotConfig.rules.filter((x: any) => x.trigger && !keys.has(x.trigger.trim().toLowerCase() + "|" + x.mode));
-                        if (!missing.length) { toast.info("Todas as respostas da cópia já estão listadas."); return; }
-                        if (!window.confirm(`Recuperar ${missing.length} resposta(s) ausente(s) sem substituir as existentes? Elas só serão aplicadas depois de SALVAR RESPOSTAS.`)) return;
-                        change("rules", [...current, ...missing].slice(0, 100));
-                        toast.success("Respostas recuperadas no formulário. Revise antes de salvar.");
-                      }}
-                    >RECUPERAR SOMENTE RESPOSTAS AUSENTES</button>
-                  </details>
-                )}
-                <button type="button" className="w-full rounded-xl bg-emerald-400 px-4 py-3 text-sm font-black text-slate-950 disabled:opacity-50"
-                  disabled={needsRefresh || saveReplyRules.isPending}
-                  onClick={() => {
-                    const rules = value.rules || [];
-                    if (rules.some((x: any) => !x.trigger?.trim() || !x.reply?.trim())) { toast.error("Preencha o gatilho e a resposta de todas as regras."); return; }
-                    saveReplyRules.mutate({ id: d.id, rules, expectedRevision });
-                  }}>
-                  <Save className="mr-1 inline h-4 w-4"/> {saveReplyRules.isPending ? "SALVANDO..." : "SALVAR SOMENTE RESPOSTAS WHATSAPP"}
-                </button>
-              </section>
               <section id={`h2-media-${d.id}`} className="scroll-mt-32 rounded-2xl border border-sky-400/35 bg-sky-950/25 p-4 space-y-3">
                 <h4 className="font-black text-sky-300 flex items-center gap-2">
                   <Mic className="h-5 w-5" /> CENTRAL DE ÁUDIOS E MÍDIAS

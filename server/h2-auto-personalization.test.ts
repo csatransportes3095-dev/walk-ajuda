@@ -40,15 +40,15 @@ describe("H2 AUTO: respostas personalizadas com segurança", () => {
     expect(after?.message).toContain("exige a confirmação");
     expect(after?.message).not.toContain("Pedido entregue");
   });
-  it("preserva a árvore, OTP, MENU/0, bloqueios e isolamento da configuração", () => {
+  it("substitui a arvore e preserva OTP, MENU/0 e bloqueios", () => {
     expect(access).toContain("if (blockedPhones.length");
     expect(access).toContain("if (s?.stage === \"blocked\")");
-    expect(access).toContain("let treeEnabled = true");
-    expect(access).toContain("treeEnabled = live[0]?.tree_on !== \"false\"");
+    expect(access).toContain("const treeEnabled = false");
+    expect(access).not.toContain("treeEnabled = live[0]?.tree_on !== \"false\"");
     expect(access).toContain('state:"tree_disabled",audience:"new_open",message:""');
     expect(access).not.toContain('state:"tree_disabled",audience:"new_open",message:initialMessage');
-    expect(access).toContain('if (isMenu && !treeEnabled)');
-    expect(access).toContain("if (treeEnabled && (normalized === \"1\"");
+    expect(access).not.toContain('if (isMenu && !treeEnabled)');
+    expect(access).toContain("if (h2AutoNaturalExistingCustomerIntent(input))");
     expect(access).toContain("const openingPersonalization = getH2AutoPersonalizedReply");
     expect(access).not.toContain('state:"personalized"');
     expect(access).not.toContain('state: "personalized"');
