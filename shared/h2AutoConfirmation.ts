@@ -3,7 +3,7 @@ import { z } from "zod";
 /** All editable H2 AUTO confirmation copy. Navigation and security rules stay server-controlled. */
 export const H2_AUTO_CONFIRMATION_DEFAULTS = {
   identificationWelcome:
-    "⚡ *H2 COLOMBIANO* 🇨🇴\n📋 *COMO DESEJA CONTINUAR?*\n\n1️⃣ *JÁ SOU CLIENTE*\n2️⃣ *AINDA NÃO SOU CLIENTE*\n3️⃣ *MINHAS INDICAÇÕES*\n\n⌨️ Digite *1, 2 ou 3*.\n🏠 *MENU* para início.",
+    "⚡ *H2 COLOMBIANO* 🇨🇴\\n\\n💬 *COMO PODEMOS AJUDAR?*\\n\\nEscreva sua dúvida normalmente.\\n\\n🔐 Para confirmar seu acesso, escreva:\\n*Já sou cliente*\\n*Não sou cliente*\\n*Minhas indicações*\\n\\n🏠 *MENU* para início.",
   existingCustomerPrompt:
     "✅ *JÁ SOU CLIENTE*\n\n📱 Digite seu telefone\ncom DDD (11 números).\n\n🔙 *0* para voltar.\n🏠 *MENU* para início.",
   newCustomerPrompt:
