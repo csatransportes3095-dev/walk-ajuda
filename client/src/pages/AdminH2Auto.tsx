@@ -168,6 +168,8 @@ export default function AdminH2Auto() {
     refetchInterval: 15000,
   });
   const [label, setLabel] = useState("Celular principal");
+  const [section, setSection] = useState<"intelligence" | "responses" | "operations" | "diagnostics" | "devices">("intelligence");
+  const [selectedDeviceId, setSelectedDeviceId] = useState<string>("");
   const { data: h2AutoApk, refetch: refreshH2AutoApk, isLoading: loadingH2AutoApk } =
     trpc.apk.getH2AutoRelease.useQuery(undefined, { refetchOnWindowFocus: true });
   const [h2AutoFile, setH2AutoFile] = useState<File | null>(null);
@@ -346,12 +348,68 @@ export default function AdminH2Auto() {
     onError: e => toast.error(e.message),
   });
   return (
-    <div className="min-h-screen bg-[#050c18] text-white">
-      <AdminHeader
-        title="H2 AUTO — CONTROLE REMOTO"
-        icon={<Bot className="h-5 w-5" />}
-      />
-      <main className="mx-auto max-w-[1600px] p-4 space-y-5">
+    <div className="min-h-screen bg-[#040814] text-white">
+      <AdminHeader title="H2 AUTO — CENTRAL DE COMANDO" icon={<Bot className="h-5 w-5" />} stackOnMobile />
+      <main className="mx-auto max-w-[1540px] space-y-5 px-3 pb-16 pt-5 sm:px-6">
+        <section className="relative overflow-hidden rounded-[28px] border border-cyan-400/30 bg-gradient-to-br from-[#103253] via-[#0d1837] to-[#170c36] p-5 shadow-2xl shadow-cyan-950/40 sm:p-8">
+          <div aria-hidden="true" className="pointer-events-none absolute -right-16 -top-20 h-56 w-56 rounded-full bg-fuchsia-500/20 blur-3xl" />
+          <div aria-hidden="true" className="pointer-events-none absolute -bottom-24 left-1/3 h-52 w-52 rounded-full bg-cyan-400/15 blur-3xl" />
+          <div className="relative flex flex-wrap items-start justify-between gap-5">
+            <div className="max-w-2xl space-y-3">
+              <span className="inline-flex rounded-full border border-cyan-400/40 bg-cyan-400/10 px-3 py-1.5 text-[11px] font-black tracking-[0.16em] text-cyan-200">H2 COLOMBIANO · ADM 2.0</span>
+              <h1 className="text-3xl font-black tracking-tight text-white sm:text-5xl">Central de <span className="text-cyan-300">Atendimento</span></h1>
+              <p className="max-w-xl text-sm leading-relaxed text-slate-300 sm:text-base">Perguntas, respostas, controles e aparelhos em áreas independentes. A inteligência agora abre primeiro.</p>
+              <div className="flex flex-wrap gap-2">
+                <span className="rounded-lg border border-emerald-400/30 bg-emerald-400/10 px-3 py-2 text-xs font-bold text-emerald-200">SEM IA PAGA</span>
+                <span className="rounded-lg border border-violet-400/30 bg-violet-400/10 px-3 py-2 text-xs font-bold text-violet-200">COMANDO PELO ADM</span>
+              </div>
+            </div>
+            <button type="button" onClick={() => {setSection("intelligence"); void utils.h2AutoAdmin.list.invalidate();}}
+              className="inline-flex min-h-11 items-center justify-center gap-2 rounded-xl bg-cyan-300 px-5 py-3 text-sm font-black text-slate-950 transition hover:bg-white">
+              <RefreshCw className="h-4 w-4" /> ABRIR INTELIGÊNCIA
+            </button>
+          </div>
+        </section>
+        <div className="grid grid-cols-2 gap-3 xl:grid-cols-4">
+          {[
+            {title:"APARELHOS",value:data.length,note:"cadastrados",color:"text-cyan-300"},
+            {title:"VINCULADOS",value:data.filter((item:any)=>item.paired).length,note:"conectados ao ADM",color:"text-violet-300"},
+            {title:"ROBÔ ATIVO",value:data.filter((item:any)=>item.config?.enabled).length,note:"respostas habilitadas",color:"text-emerald-300"},
+            {title:"COLETA ATIVA",value:data.filter((item:any)=>item.config?.questionCollectionEnabled).length,note:"aprendizado controlado",color:"text-amber-300"},
+          ].map(card=><div key={card.title} className="rounded-2xl border border-white/10 bg-[#0b1629] p-4 shadow-lg">
+            <p className="text-[11px] font-bold tracking-widest text-slate-400">{card.title}</p>
+            <p className={"mt-2 text-3xl font-black "+card.color}>{card.value}</p>
+            <p className="mt-1 text-xs text-slate-400">{card.note}</p>
+          </div>)}
+        </div>
+        <nav aria-label="Áreas do H2 AUTO" className="sticky top-[56px] z-40 -mx-1 flex gap-2 overflow-x-auto rounded-2xl border border-white/10 bg-[#081427]/95 p-2 shadow-xl backdrop-blur-md sm:mx-0">
+          {([
+            ["intelligence","🧠 INTELIGÊNCIA"],
+            ["responses","💬 RESPOSTAS"],
+            ["operations","⚡ OPERAÇÃO"],
+            ["diagnostics","📊 DIAGNÓSTICO"],
+            ["devices","📱 APARELHOS"],
+          ] as const).map(([id,name])=><button key={id} type="button" onClick={()=>setSection(id)}
+            aria-current={section===id?"page":undefined}
+            className={"shrink-0 rounded-xl px-4 py-3 text-xs font-black tracking-wide transition sm:text-sm "+(section===id?"bg-cyan-400 text-slate-950 shadow-lg shadow-cyan-500/20":"border border-white/10 text-slate-300 hover:bg-white/10 hover:text-white")}>
+            {name}
+          </button>)}
+        </nav>
+        {data.length>0 && <div className="rounded-2xl border border-white/10 bg-[#09152a] p-3">
+          <p className="mb-3 text-xs font-bold uppercase tracking-[0.18em] text-cyan-200">Selecionar aparelho</p>
+          <div className="flex flex-wrap gap-2">
+            {data.map((item:any)=><button key={item.id} type="button" onClick={()=>setSelectedDeviceId(item.id)}
+              className={"inline-flex min-h-12 items-center gap-2 rounded-xl border px-4 py-3 text-left text-sm font-bold transition "+(item.id===(selectedDeviceId&&data.some((x:any)=>x.id===selectedDeviceId)?selectedDeviceId:data[0]?.id)?"border-cyan-300 bg-cyan-500/20 text-white ring-1 ring-cyan-400/40":"border-slate-700 bg-slate-900 text-slate-300 hover:border-cyan-700")}>
+              <Smartphone className="h-4 w-4" />
+              <span>{item.label}</span>
+              <span className={"ml-1 h-2 w-2 rounded-full "+(item.paired&&!isStale(item.lastSeen)?"bg-emerald-400":"bg-slate-500")} />
+            </button>)}
+          </div>
+        </div>}
+        {!isLoading && data.length===0 && section!=="devices" && <div className="rounded-2xl border border-amber-400/30 bg-amber-950/20 p-6 text-sm text-amber-100">
+          Nenhum aparelho vinculado. Abra <button type="button" className="font-black underline" onClick={()=>setSection("devices")}>APARELHOS</button> para cadastrar um.
+        </div>}
+        <div className={section==="devices"?"space-y-4":"hidden"}>
         <div className="rounded-2xl border border-emerald-400/30 bg-emerald-950/30 p-4 text-sm text-emerald-200">
           <ShieldCheck className="inline h-4 w-4 mr-2" />
           Sem API do WhatsApp e sem áudio no servidor. Apenas configurações e
@@ -490,8 +548,9 @@ export default function AdminH2Auto() {
             </div>
           )}
         </Box>
+        </div>
         {isLoading && <p>Carregando aparelhos...</p>}
-        {data.map((d: any) => {
+        {data.filter((item:any)=>item.id===(selectedDeviceId&&data.some((x:any)=>x.id===selectedDeviceId)?selectedDeviceId:data[0]?.id)).map((d: any) => {
           const draft = editing[d.id];
           const value = draft?.config || d.config;
           const expectedRevision = draft?.revision ?? d.revision;
@@ -556,7 +615,7 @@ export default function AdminH2Auto() {
                       : "Nunca sincronizado"}
                   </p>
                 </div>
-                <div className="flex flex-wrap gap-2">
+                {section==="devices" && <div className="flex flex-wrap gap-2">
                   <button
                     className="rounded-lg border border-cyan-500/40 px-3 py-2 text-xs"
                     onClick={() => pairCode.mutate({ id: d.id })}
@@ -595,7 +654,7 @@ export default function AdminH2Auto() {
                   >
                     REMOVER APARELHO
                   </button>
-                </div>
+                </div>}
               </div>
               {needsRefresh && (
                 <div className="flex flex-wrap items-center justify-between gap-3 rounded-xl border border-amber-400/50 bg-amber-950/30 p-3 text-sm text-amber-100">
@@ -614,6 +673,7 @@ export default function AdminH2Auto() {
                   </button>
                 </div>
               )}
+              <div className={section==="devices"?"space-y-4":"hidden"}>
               {d.snapshotConfig && (
                 <div className="rounded-xl border border-amber-400/30 bg-amber-950/20 p-3 space-y-2">
                   <div className="font-bold text-amber-200">
@@ -647,6 +707,8 @@ export default function AdminH2Auto() {
                   </button>
                 </div>
               )}
+              </div>
+              <div className={section==="operations"?"space-y-4":"hidden"}>
               <section className="rounded-2xl border border-rose-400/40 bg-rose-950/25 p-4 space-y-3">
                 <h4 className="font-black text-rose-200 flex items-center gap-2"><Power className="h-5 w-5"/> CONTROLES IMEDIATOS DO ROBÔ</h4>
                 <p className="text-xs text-slate-300">A atualização é aplicada no servidor sem aguardar a sincronização do celular. Se não houver internet, o APK deve bloquear envios por segurança.</p>
@@ -713,6 +775,12 @@ export default function AdminH2Auto() {
                 </div>
               </section>
 
+              </div>
+              <div className={section==="intelligence"?"space-y-4":"hidden"}>
+                <div className="rounded-2xl border border-cyan-400/30 bg-gradient-to-r from-cyan-950/50 to-indigo-950/40 p-4 sm:p-5">
+                  <h2 className="text-xl font-black text-white sm:text-2xl">🧠 Inteligência de Atendimento</h2>
+                  <p className="mt-1 text-sm text-slate-300">Colete dúvidas reais, aprove respostas e expanda o conhecimento do H2 AUTO sem mensalidade de IA.</p>
+                </div>
               <H2AutoLearningPanel deviceId={d.id} enabled={Boolean(d.config.questionCollectionEnabled)} />
               <section className="rounded-2xl border border-violet-400/45 bg-gradient-to-br from-violet-950/30 to-slate-950 p-4 space-y-4">
                 <h4 className="text-lg font-black text-violet-200">🧠 ATENDIMENTO PERSONALIZADO — SEM CUSTO DE IA</h4>
@@ -779,6 +847,8 @@ export default function AdminH2Auto() {
                   disabled={savePersonalization.isPending || (!personalDrafts[d.id] && presetPreparation.added===0) || (personalization.faq??[]).some(x=>x.question.trim().length<3 || x.answer.trim().length<3)}
                   onClick={()=>savePersonalization.mutate({id:d.id,personalization})}>SALVAR PERSONALIZAÇÃO DESTE APARELHO</button>
               </section>
+              </div>
+              <div className={section==="responses"?"space-y-4":"hidden"}>
               <nav aria-label="Central de respostas" className="sticky top-1 z-20 rounded-xl border border-cyan-400/30 bg-[#071629]/95 p-3 shadow-xl">
                 <p className="mb-2 text-sm font-black text-cyan-200">💬 CENTRAL DE RESPOSTAS — ACESSO RÁPIDO</p>
                 <div className="flex flex-wrap gap-2">
@@ -791,6 +861,8 @@ export default function AdminH2Auto() {
               <div id={`h2-tree-${d.id}`} className="scroll-mt-32">
               <H2AutoTreeEditor id={d.id} revision={d.revision} appliedRevision={d.appliedRevision} initial={d.config.tree} />
               </div>
+              </div>
+              <div className={section==="diagnostics"?"space-y-4":"hidden"}>
               <H2AutoValidationBlocks deviceId={d.id} deviceLabel={d.label} />
               <H2AutoSilencedContacts deviceId={d.id} deviceLabel={d.label} />
               <H2AutoHistoryPanel
@@ -899,6 +971,8 @@ export default function AdminH2Auto() {
                   automaticamente.
                 </p>
               </section>
+              </div>
+              <div className={section==="operations"?"space-y-4":"hidden"}>
               <div className="grid gap-3 md:grid-cols-2">
                 <label className="text-xs flex flex-col gap-2">
                   APLICATIVO WHATSAPP
@@ -923,6 +997,9 @@ export default function AdminH2Auto() {
                   <Power className="h-4 w-4" /> Robô habilitado remotamente
                 </label>
                 <p className="col-span-full text-xs text-emerald-200/80">A consulta de pedidos pode ser ativada e desativada no card “ACOMPANHAR PEDIDO — STATUS PELO WHATSAPP” acima.</p>
+              </div>
+              </div>
+              <div className={section==="responses"?"space-y-4":"hidden"}>
                 <div id={`h2-confirm-${d.id}`} className="col-span-full scroll-mt-32 rounded-2xl border border-violet-400/40 bg-violet-950/20 p-3 sm:p-5 space-y-4">
                   <div className="flex flex-wrap items-center justify-between gap-3">
                     <div>
@@ -986,6 +1063,9 @@ export default function AdminH2Auto() {
                   </button>
                   <p className="text-xs text-slate-400">O salvamento atualiza somente os textos deste aparelho, sem sobrescrever outras configurações.</p>
                 </div>
+              </div>
+              <div className={section==="operations"?"space-y-4":"hidden"}>
+              <div className="grid gap-3 md:grid-cols-2">
                 <div className="col-span-full rounded-xl border border-cyan-400/30 bg-cyan-950/20 p-3 space-y-3">
                   <h4 className="font-black text-cyan-300">
                     INTEGRAÇÃO COM PEDIDOS DO SITE
@@ -1099,6 +1179,8 @@ export default function AdminH2Auto() {
                   />
                 </div>
               </div>
+              </div>
+              <div className={section==="responses"?"space-y-4":"hidden"}>
               <section id={`h2-rules-${d.id}`} className="scroll-mt-32 rounded-2xl border border-fuchsia-400/40 bg-fuchsia-950/20 p-4 space-y-4">
                 <div>
                   <h4 className="text-lg font-black text-fuchsia-200">💬 RESPOSTAS DO WHATSAPP — H2 AUTO</h4>
@@ -1261,6 +1343,8 @@ export default function AdminH2Auto() {
                   SALVAR SOMENTE ÁUDIOS E MÍDIAS
                 </button>
               </section>
+              </div>
+              <div className={section==="operations"?"space-y-4":"hidden"}>
               <label className="block text-xs">
                 CONTATOS BLOQUEADOS (um por linha)
                 <textarea
@@ -1278,6 +1362,7 @@ export default function AdminH2Auto() {
                 <Save className="inline h-4 w-4 mr-1" />
                 SALVAR CONFIGURAÇÃO GERAL
               </button>
+              </div>
             </Box>
           );
         })}
