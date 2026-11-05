@@ -4,10 +4,24 @@ import { z } from "zod";
  * H2 AUTO: camada opcional de respostas contextuais, sem IA paga e sem acesso
  * a pedidos/códigos. Não substitui a árvore, MENU/0, validação ou handoff.
  */
+/** Cada pergunta principal pode ter até 1.000 linhas de subperguntas.
+ * O limite de caracteres comporta 1.000 frases de até 280 caracteres
+ * (limite da entrada do atendimento), sem truncar texto salvo.
+ */
+export const H2_AUTO_FAQ_MAX_VARIATION_LINES = 1000;
+export const H2_AUTO_FAQ_MAX_VARIATION_CHARS = 300000;
+export function h2AutoFaqVariationLineCount(value: string): number {
+  return value.length === 0 ? 0 : value.split(/\r\n|\r|\n/).length;
+}
+export const h2AutoFaqVariationsSchema = z.string().trim()
+  .max(H2_AUTO_FAQ_MAX_VARIATION_CHARS, "Limite de caracteres das subperguntas excedido.")
+  .refine(value => h2AutoFaqVariationLineCount(value) <= H2_AUTO_FAQ_MAX_VARIATION_LINES,
+    "No máximo 1.000 linhas de subperguntas por pergunta principal.");
+
 export const h2AutoFaqRuleSchema = z.object({
   id: z.string().regex(/^[a-z0-9_-]{3,48}$/),
   question: z.string().trim().min(3).max(160),
-  variations: z.string().trim().max(600).default(""),
+  variations: h2AutoFaqVariationsSchema.default(""),
   answer: z.string().trim().min(3).max(1200),
   enabled: z.boolean().default(true),
 }).strict();
