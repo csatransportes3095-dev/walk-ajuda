@@ -55,6 +55,16 @@ describe("H2 AUTO: respostas personalizadas com segurança", () => {
     expect(access).toContain("const navigation = h2AutoNavigationCommand(input)");
     expect(access).toContain("if (s.stage === \"customer_code\"");
     expect(access).toContain("await sendH2AutoOrderCode");
+    expect(access).toContain('const fallback = await unansweredResponse()');
+    expect(access).toContain('state:"choice",message:personalized.message');
+    expect(access).toContain('recordH2AutoUnknownQuestion(deviceId, input)');
+    expect(access).toContain('await enableLearningOnce(deviceId)');
+    expect(access).toContain("h2_auto_learning_optin_20261105");
+    expect(access).toContain('if (s?.stage === "blocked")');
+    expect(access).toContain('const selectedInitialStage = initialH2AutoChoiceStage(input)');
+    const personalizedSource=readFileSync("shared/h2AutoPersonalization.ts","utf8");
+    expect(personalizedSource).toContain("Pode enviar outra pergunta. Continuamos por aqui.");
+    expect(personalizedSource).not.toContain("🏠 *MENU* início | 🔙 *0* voltar");
     expect(remote).toContain("savePersonalization: adminProcedure");
     expect(remote).toContain("'$.personalization'");
     expect(remote).toContain("personalization: h2AutoPersonalizationSchema.default(");
