@@ -77,7 +77,7 @@ const configSchema = z.object({
   media: mediaSchema.default(() => mediaSchema.parse({})),
   confirmation: confirmationSchema.default(() => confirmationSchema.parse({})),
   enabled: z.boolean(),
-  desktopReadOnly: z.boolean().default(false),
+  desktopReadOnly: z.boolean().default(true),
   identificationEnabled: z.boolean().default(true),
   identificationSessionHours: z.number().int().min(1).max(720).default(24),
   ordersEnabled: z.boolean().default(false),
@@ -129,7 +129,7 @@ const initial: RemoteConfig = {
   orderNoOrdersMessage:
     H2_AUTO_SHORT_ORDER_NOT_FOUND,
   enabled: false,
-  desktopReadOnly: false,
+  desktopReadOnly: true,
   identificationEnabled: true,
   identificationSessionHours: 24,
   welcome: "",
@@ -192,6 +192,10 @@ function ensure() {
         revision=revision+1
         WHERE JSON_UNQUOTE(JSON_EXTRACT(config_json,'$.tree.enabled')) IS NULL
            OR JSON_UNQUOTE(JSON_EXTRACT(config_json,'$.tree.enabled')) <> 'false'`);
+      // Restauração única do modo Desktop, preservando desligamentos futuros.
+      await restoreH2AutoDesktopReadingOnce(db).catch(error => {
+        console.error("[H2Auto] falha ao restaurar modo Desktop", error);
+      });
       // Uma migração idempotente, apenas de textos. Cada aparelho tem backup.
       // A importação inicial de um APK novo (revision=0) permanece intacta.
       void migrateH2AutoShortCopyOnce(db).catch(error => {
@@ -214,6 +218,35 @@ const decodeConfig = (raw: any): RemoteConfig => {
   return {...parsed,tree:H2_AUTO_TREE_RETIRED};
 };
 
+
+const H2_AUTO_DESKTOP_RESTORE_CAMPAIGN = "desktop-reading-auto-replies-20261105-v1";
+/** Ativa uma só vez o modo Desktop, com backup por aparelho.
+ * Um desligamento posterior feito pelo ADM nunca será sobrescrito. */
+async function restoreH2AutoDesktopReadingOnce(db: any): Promise<void> {
+  const found = await db.execute(sql`SELECT id FROM h2_auto_devices ORDER BY created_at ASC LIMIT 1000`);
+  for (const device of (found[0] as any[])) {
+    const deviceId = String(device.id);
+    await db.transaction(async (tx: any) => {
+      const state = await tx.execute(sql`SELECT config_json,revision FROM h2_auto_devices
+        WHERE id=${deviceId} LIMIT 1 FOR UPDATE`);
+      const row = (state[0] as any[])[0];
+      if (!row) return;
+      const already = await tx.execute(sql`SELECT device_id FROM h2_auto_short_copy_backups
+        WHERE device_id=${deviceId} AND campaign_key=${H2_AUTO_DESKTOP_RESTORE_CAMPAIGN} LIMIT 1`);
+      if ((already[0] as any[]).length) return;
+      const original = decodeConfig(row.config_json);
+      await tx.execute(sql`INSERT INTO h2_auto_short_copy_backups
+        (device_id,campaign_key,previous_config,previous_revision)
+        VALUES (${deviceId},${H2_AUTO_DESKTOP_RESTORE_CAMPAIGN},
+                ${JSON.stringify(original)},${Number(row.revision)})`);
+      if (!original.desktopReadOnly) {
+        await tx.execute(sql`UPDATE h2_auto_devices SET
+          config_json=JSON_SET(config_json,'$.desktopReadOnly',CAST('true' AS JSON)),
+          revision=revision+1 WHERE id=${deviceId} AND revision=${Number(row.revision)}`);
+      }
+    });
+  }
+}
 
 const H2_AUTO_FAQ_EXPANSION_CAMPAIGN="faq-subperguntas-20261102-v1";
 /** Applies once per paired/admin device; stores the pre-change snapshot in the
