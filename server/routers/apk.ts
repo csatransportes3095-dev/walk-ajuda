@@ -96,31 +96,8 @@ export async function ensureH2AutoReleaseTable() {
 }
 
 export async function getH2AutoApkRelease(): Promise<H2AutoApkRelease | null> {
-  // Rollback controlado: enquanto o ADM estiver promovendo a 1.66, a cópia
-  // assinada versionada no repositório é a fonte de verdade, não o registro
-  // automático mais recente (que ainda pode apontar para a 1.69).
-  const publicDownloads = path.resolve(process.cwd(), "dist", "public", "downloads");
-  const rollbackManifest = path.join(publicDownloads, "h2-auto-release.json");
-  const rollbackApk = path.join(publicDownloads, "H2-AUTO-1.66.apk");
-  if (fs.existsSync(rollbackManifest) && fs.existsSync(rollbackApk)) {
-    try {
-      const manifest = JSON.parse(fs.readFileSync(rollbackManifest, "utf8"));
-      const buffer = fs.readFileSync(rollbackApk);
-      const sha256 = createHash("sha256").update(buffer).digest("hex");
-      if (manifest.versionCode === 66 && manifest.sha256 === sha256) {
-        return {
-          r2Key: `__local__:${rollbackApk}`,
-          sha256,
-          fileSize: buffer.length,
-          versionName: "1.66",
-          versionCode: 66,
-          uploadedAt: Date.parse(manifest.publishedAt) || Date.now(),
-        };
-      }
-    } catch {
-      // Se a cópia local não passar na validação, mantém o caminho normal do DB.
-    }
-  }
+  // Release ativa do banco / R2 é a fonte de verdade.
+  // O fallback local fixo em 1.66 impedia servir APKs 1.70+ já publicados.
   await ensureH2AutoReleaseTable();
   const db = await getDb() as any;
   const result = await db.execute(sql.raw(
