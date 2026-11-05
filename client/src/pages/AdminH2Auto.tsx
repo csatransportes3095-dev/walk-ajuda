@@ -412,6 +412,16 @@ export default function AdminH2Auto() {
             {name}
           </button>)}
         </nav>
+        {data.length>0 && (
+          <button type="button" onClick={() => setSection("operations")}
+            className="flex w-full flex-wrap items-center justify-between gap-3 rounded-2xl border border-cyan-400/40 bg-cyan-950/30 p-4 text-left transition hover:bg-cyan-900/35">
+            <span>
+              <strong className="block text-sm font-black text-cyan-100">🖥️ WHATSAPP DESKTOP — LER SEM PAUSAR O ROBÔ</strong>
+              <span className="mt-1 block text-xs text-slate-300">Controle restaurado. Acompanhe mensagens no PC enquanto o APK responde pelo celular, quando houver notificação disponível.</span>
+            </span>
+            <span className="rounded-lg border border-cyan-400/50 px-3 py-2 text-xs font-black text-cyan-100">ABRIR EM OPERAÇÃO</span>
+          </button>
+        )}
         {data.length>0 && <div className="rounded-2xl border border-white/10 bg-[#09152a] p-3">
           <p className="mb-3 text-xs font-bold uppercase tracking-[0.18em] text-cyan-200">Selecionar aparelho</p>
           <div className="flex flex-wrap gap-2">
@@ -792,8 +802,8 @@ export default function AdminH2Auto() {
                 <p className="text-xs text-amber-200">Requer APK H2 Auto 1.45 instalado e sincronizado para corrigir o encaminhamento do menu.</p>
               </section>
               <section className="rounded-2xl border border-cyan-400/40 bg-gradient-to-br from-cyan-950/40 to-slate-950 p-4 space-y-3">
-                <h4 className="text-lg font-black text-cyan-200">🖥️ MODO WHATSAPP DESKTOP — SOMENTE LEITURA</h4>
-                <p className="text-sm text-slate-300">Deixe o WhatsApp aberto no PC para acompanhar mensagens. O robô tenta usar somente notificações Android ainda ativas; leitura no computador não cancela a pausa manual nem os contatos silenciados.</p>
+                <h4 className="text-lg font-black text-cyan-200">🖥️ DESKTOP — LEITURA SEM PAUSAR O H2 AUTO</h4>
+                <p className="text-sm text-slate-300">Você pode acompanhar e ler conversas no WhatsApp Desktop sem iniciar pausa automática. O H2 AUTO continua respondendo pelo celular enquanto houver notificação utilizável. Pausas manuais, contatos silenciados e comandos seguem funcionando.</p>
                 <p className="text-xs text-amber-200">Não garante respostas quando o WhatsApp remove a notificação antes do Android receber a mensagem. A resposta pelo PC não é identificada como atendimento manual; pause o contato no ADM antes de responder.</p>
                 <button type="button" disabled={safety.isPending}
                   onClick={() => safety.mutate({id:d.id,key:"desktopReadOnly",value:d.config.desktopReadOnly!==true})}
