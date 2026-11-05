@@ -168,6 +168,6 @@ export function getH2AutoPersonalizedReply(
   return {
     topic,
     message: "⚡ *H2 COLOMBIANO* 🇨🇴\n\n" + greeting + "\n\n" + (rule ? rule.answer : PUBLIC_GUIDANCE[topic as Exclude<H2AutoPersonalizedTopic, "personalizada">]) +
-      reminder + "\n\n🏠 *MENU* início | 🔙 *0* voltar",
+      reminder + "\n\n💬 Pode enviar outra pergunta. Continuamos por aqui.",
   };
 }
