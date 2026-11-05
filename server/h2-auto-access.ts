@@ -251,6 +251,7 @@ export function registerH2AutoAccessRoutes(app: Express): void {
           if(questionCollectionEnabled) try {await recordH2AutoUnknownQuestion(deviceId,input);} catch(error){console.error("[H2Auto] coleta indisponível",error);}
           return respond(res, 200, {state:"tree_disabled",audience:"new_open",message:""});
         }
+        if(questionCollectionEnabled) try {await recordH2AutoUnknownQuestion(deviceId,input);} catch(error){console.error("[H2Auto] coleta indisponível",error);}
         return respond(res, 200, { state: "choice", message: h2AutoGreetingWelcome(input,initialMessage) });
       }
 
@@ -363,6 +364,7 @@ export function registerH2AutoAccessRoutes(app: Express): void {
           await collectUnknown();
           return respond(res, 200, {state:"tree_disabled",audience:"new_open",message:""});
         }
+        await collectUnknown();
         return respond(res, 200, { state: "choice", message: h2AutoGreetingWelcome(input,initialMessage) });
       }
 
