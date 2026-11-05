@@ -768,21 +768,7 @@ export default function AdminH2Auto() {
                     {d.config.identificationEnabled===false?"ATIVAR IDENTIFICAÇÃO INICIAL":"DESATIVAR IDENTIFICAÇÃO INICIAL"}
                   </button>
                 </div>
-                <div className="rounded-xl border border-cyan-400/40 bg-slate-950/50 p-4 space-y-2">
-                  <label className="flex flex-wrap items-center gap-2 text-sm font-bold text-cyan-200">
-                    <Clock className="h-4 w-4"/> RECONFIRMAR IDENTIDADE APÓS (HORAS)
-                  </label>
-                  <div className="flex flex-wrap gap-2 items-center">
-                    <input type="number" min={1} max={720} step={1}
-                      className="w-28 rounded-lg bg-slate-900 border border-cyan-500/40 p-2 text-white"
-                      value={validityDraft[d.id] ?? String(d.config.identificationSessionHours ?? 24)}
-                      onChange={e => setValidityDraft(old => ({...old,[d.id]:e.target.value}))}/>
-                    <button type="button" disabled={validity.isPending || !Number.isInteger(Number(validityDraft[d.id] ?? d.config.identificationSessionHours ?? 24)) || Number(validityDraft[d.id] ?? d.config.identificationSessionHours ?? 24)<1 || Number(validityDraft[d.id] ?? d.config.identificationSessionHours ?? 24)>720}
-                      onClick={() => validity.mutate({id:d.id,hours:Number(validityDraft[d.id] ?? d.config.identificationSessionHours ?? 24)})}
-                      className="rounded-lg bg-cyan-600 px-4 py-2 text-sm font-black text-white disabled:opacity-40">SALVAR VALIDADE</button>
-                  </div>
-                  <p className="text-xs text-slate-300">Padrão: 24 horas. De 1 a 720 horas (30 dias). Mudar de opção, digitar MENU ou 0 não exige um novo código durante a validade. Bloqueio de cadastro revoga o acesso.</p>
-                </div>
+
               </section>
               <section className="rounded-2xl border border-emerald-400/50 bg-emerald-950/25 p-4 space-y-3">
                 <h4 className="text-lg font-black text-emerald-200">📦 ACOMPANHAR PEDIDO — STATUS PELO WHATSAPP</h4>
@@ -802,7 +788,7 @@ export default function AdminH2Auto() {
                 <p className="text-xs text-amber-200">Requer APK H2 Auto 1.45 instalado e sincronizado para corrigir o encaminhamento do menu.</p>
               </section>
               <section className="rounded-2xl border border-cyan-400/40 bg-gradient-to-br from-cyan-950/40 to-slate-950 p-4 space-y-3">
-                <h4 className="text-lg font-black text-cyan-200">🖥️ DESKTOP — LEITURA SEM PAUSAR O H2 AUTO</h4>
+                <h4 className="text-lg font-black text-cyan-200">🖥️ DESKTOP + PRAZO DE AUTENTICAÇÃO</h4>
                 <p className="text-sm text-slate-300">Você pode acompanhar e ler conversas no WhatsApp Desktop sem iniciar pausa automática. O H2 AUTO continua respondendo pelo celular enquanto houver notificação utilizável. Pausas manuais, contatos silenciados e comandos seguem funcionando.</p>
                 <p className="text-xs text-amber-200">Não garante respostas quando o WhatsApp remove a notificação antes do Android receber a mensagem. A resposta pelo PC não é identificada como atendimento manual; pause o contato no ADM antes de responder.</p>
                 <button type="button" disabled={safety.isPending}
@@ -813,6 +799,39 @@ export default function AdminH2Auto() {
                 <p className={d.paired && d.appliedRevision===d.revision?"text-emerald-300 text-xs":"text-amber-200 text-xs"}>
                   {d.paired && d.appliedRevision===d.revision?"Configuração sincronizada com o APK":"Após ativar, sincronize o H2 AUTO no celular para aplicar."}
                 </p>
+                <div className="rounded-xl border border-cyan-400/40 bg-slate-950/60 p-4 space-y-3">
+                  <div className="flex flex-wrap items-center justify-between gap-2">
+                    <h5 className="flex items-center gap-2 text-sm font-black text-cyan-100">
+                      <Clock className="h-4 w-4"/> AUTENTICAÇÃO — QUANDO PEDIR NOVAMENTE
+                    </h5>
+                    <span className="rounded-lg bg-cyan-950 px-3 py-1 text-xs font-bold text-cyan-200">
+                      Atual: {d.config.identificationSessionHours ?? 24} horas
+                    </span>
+                  </div>
+                  <p className="text-xs text-slate-300">Depois da confirmação do telefone e código por e-mail, o acesso continua válido pelo prazo escolhido. O cliente só precisa se identificar novamente quando vencer ou se o acesso for revogado.</p>
+                  <div className="flex flex-wrap gap-2" aria-label="Prazos rápidos de autenticação">
+                    {([{hours:1,label:"1 hora"},{hours:6,label:"6 horas"},{hours:12,label:"12 horas"},{hours:24,label:"24 horas"},{hours:72,label:"3 dias"},{hours:168,label:"7 dias"},{hours:720,label:"30 dias"}] as const).map(item => {
+                      const chosen = Number(validityDraft[d.id] ?? d.config.identificationSessionHours ?? 24) === item.hours;
+                      return <button type="button" key={item.hours} onClick={() => setValidityDraft(old => ({...old,[d.id]:String(item.hours)}))}
+                        aria-pressed={chosen} className={"rounded-lg border px-3 py-2 text-xs font-bold transition "+(chosen?"border-cyan-300 bg-cyan-600 text-white":"border-slate-600 bg-slate-900 text-slate-300 hover:border-cyan-400")}>
+                        {item.label}
+                      </button>;
+                    })}
+                  </div>
+                  <label className="flex flex-wrap items-center gap-2 text-xs font-bold text-slate-200">
+                    Ou defina o prazo em horas (1 a 720):
+                    <input type="number" min={1} max={720} step={1}
+                      className="w-28 rounded-lg border border-cyan-500/40 bg-slate-900 p-2 text-white"
+                      value={validityDraft[d.id] ?? String(d.config.identificationSessionHours ?? 24)}
+                      onChange={e => setValidityDraft(old => ({...old,[d.id]:e.target.value}))}/>
+                  </label>
+                  <button type="button" disabled={validity.isPending || !Number.isInteger(Number(validityDraft[d.id] ?? d.config.identificationSessionHours ?? 24)) || Number(validityDraft[d.id] ?? d.config.identificationSessionHours ?? 24)<1 || Number(validityDraft[d.id] ?? d.config.identificationSessionHours ?? 24)>720 || Number(validityDraft[d.id] ?? d.config.identificationSessionHours ?? 24)===Number(d.config.identificationSessionHours ?? 24)}
+                    onClick={() => validity.mutate({id:d.id,hours:Number(validityDraft[d.id] ?? d.config.identificationSessionHours ?? 24)})}
+                    className="w-full rounded-xl bg-cyan-500 px-4 py-3 text-sm font-black text-slate-950 disabled:opacity-40">
+                    {validity.isPending?"SALVANDO...":"SALVAR TEMPO DE AUTENTICAÇÃO"}
+                  </button>
+                  <p className="text-xs text-amber-200">Não elimina autenticação, verificação de e-mail ou bloqueio. A alteração vale no servidor sem recompilar o APK; diminuir o prazo também pode antecipar uma nova confirmação.</p>
+                </div>
                 <div className="rounded-lg border border-white/10 bg-black/25 p-3 space-y-1 text-xs text-slate-300">
                   <p><strong>Diagnóstico Android:</strong> {diagnostic?.desktopLastCode ?? "Sem registro"}</p>
                   <p><strong>Último evento:</strong> {dateLabel(diagnostic?.desktopLastAt)}</p>
