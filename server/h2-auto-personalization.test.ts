@@ -87,6 +87,19 @@ describe("H2 AUTO: respostas personalizadas com segurança", () => {
     expect(remote).toContain("'$.personalization'");
     expect(remote).toContain("personalization: h2AutoPersonalizationSchema.default(");
   });
+  it("mantém o modo Desktop de leitura sem pausar respostas nem mudar outros controles", () => {
+    const admin = readFileSync("client/src/pages/AdminH2Auto.tsx", "utf8");
+    const remote = readFileSync("server/h2-auto-remote.ts", "utf8");
+    expect(admin).toContain("WHATSAPP DESKTOP — LER SEM PAUSAR O ROBÔ");
+    expect(admin).toContain('key:"desktopReadOnly"');
+    expect(remote).toContain("desktopReadOnly: z.boolean().default(true)");
+    expect(remote).toContain("desktopReadOnly: true,");
+    expect(remote).toContain("restoreH2AutoDesktopReadingOnce(db)");
+    expect(remote).toContain("H2_AUTO_DESKTOP_RESTORE_CAMPAIGN");
+    expect(remote).toContain("saveSafetySwitch: adminProcedure");
+    expect(remote).toContain("config_json=JSON_SET(config_json,'$.desktopReadOnly'");
+    expect(remote).toContain("JSON_UNQUOTE(JSON_EXTRACT(config_json,'$.tree.enabled'))");
+  });
   it("limita conteúdo e aceita somente configurações conhecidas", () => {
     expect(classifyH2AutoPersonalizedQuestion("a".repeat(300))).toBeNull();
     expect(h2AutoPersonalizationSchema.safeParse({enabled:true,tone:"livre",verifiedName:true}).success).toBe(false);
