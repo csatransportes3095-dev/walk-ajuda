@@ -359,9 +359,10 @@ export function registerH2AutoAccessRoutes(app: Express): void {
         }
         const personalized = getH2AutoPersonalizedReply(input, personalization, {stage: "choice"});
         if (personalized) return respond(res, 200, {state: "choice", message: personalized.message, topic: personalized.topic});
-        if (!treeEnabled)
-          // Never repeat the tree welcome/menu while disabled.
+        if (!treeEnabled) {
+          await collectUnknown();
           return respond(res, 200, {state:"tree_disabled",audience:"new_open",message:""});
+        }
         return respond(res, 200, { state: "choice", message: h2AutoGreetingWelcome(input,initialMessage) });
       }
 
