@@ -84,8 +84,8 @@ export async function listH2AutoUnknownQuestions(deviceId: string, limit = 50) {
     db.execute(sql`SELECT COUNT(*) AS pending, COALESCE(SUM(occurrences),0) AS received
       FROM h2_auto_unanswered_questions WHERE device_id=${deviceId}`),
   ]);
-  const itemRows = (items[0] as any[]) || [];
-  const totals = ((summary[0] as any[]) || [])[0] || {};
+  const itemRows = (items[0] as unknown as any[]) || [];
+  const totals = ((summary[0] as unknown as any[]) || [])[0] || {};
   return {
     questions: itemRows.map(row => ({
       questionHash: String(row.questionHash),
