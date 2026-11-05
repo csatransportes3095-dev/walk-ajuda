@@ -45,6 +45,8 @@ describe("H2 AUTO: respostas personalizadas com segurança", () => {
     expect(access).toContain("if (s?.stage === \"blocked\")");
     expect(access).toContain("let treeEnabled = true");
     expect(access).toContain("treeEnabled = live[0]?.tree_on !== \"false\"");
+    expect(access).toContain('state:"tree_disabled",audience:"new_open",message:""');
+    expect(access).not.toContain('state:"tree_disabled",audience:"new_open",message:initialMessage');
     expect(access).toContain("if (treeEnabled && (normalized === \"1\"");
     expect(access).toContain("const openingPersonalization = getH2AutoPersonalizedReply");
     expect(access).not.toContain('state:"personalized"');

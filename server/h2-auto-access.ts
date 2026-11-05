@@ -244,6 +244,10 @@ export function registerH2AutoAccessRoutes(app: Express): void {
           // APKs antigos exibem message nos estados conhecidos, mas podem
           // descartar silenciosamente o estado novo "personalized".
           return respond(res, 200, {state:"choice",message:openingPersonalization.message,topic:openingPersonalization.topic});
+        if (!treeEnabled)
+          // The tree is off: do not manufacture its welcome/menu as a fallback.
+          // Keep the gate open only for a personalized rule or media handling.
+          return respond(res, 200, {state:"tree_disabled",audience:"new_open",message:""});
         return respond(res, 200, { state: "choice", message: h2AutoGreetingWelcome(input,initialMessage) });
       }
 
@@ -344,6 +348,9 @@ export function registerH2AutoAccessRoutes(app: Express): void {
         }
         const personalized = getH2AutoPersonalizedReply(input, personalization, {stage: "choice"});
         if (personalized) return respond(res, 200, {state: "choice", message: personalized.message, topic: personalized.topic});
+        if (!treeEnabled)
+          // Never repeat the tree welcome/menu while disabled.
+          return respond(res, 200, {state:"tree_disabled",audience:"new_open",message:""});
         return respond(res, 200, { state: "choice", message: h2AutoGreetingWelcome(input,initialMessage) });
       }
 
