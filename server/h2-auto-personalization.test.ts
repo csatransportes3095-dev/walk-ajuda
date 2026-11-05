@@ -32,13 +32,31 @@ describe("H2 AUTO: respostas personalizadas com segurança", () => {
       expect(classifyH2AutoPersonalizedQuestion(text)).toBeNull();
   });
   it("não usa nome antes de identidade confirmada e não inventa status", () => {
-    const cfg={enabled:true,tone:"acolhedor" as const,verifiedName:true};
+    const cfg=h2AutoPersonalizationSchema.parse({
+      enabled:true,tone:"acolhedor",verifiedName:true,
+      faq:[{id:"faq_pedido",question:"Onde está meu pedido?",variations:"",
+        answer:"A consulta de um pedido exige a confirmação do cadastro.",enabled:true}],
+    });
     const before=getH2AutoPersonalizedReply("Onde está meu pedido?",cfg,{verified:false,verifiedFirstName:"EMERSON"});
     const after=getH2AutoPersonalizedReply("Onde está meu pedido?",cfg,{verified:true,verifiedFirstName:"EMERSON APARECIDO"});
     expect(before?.message).not.toContain("EMERSON");
     expect(after?.message).toContain("EMERSON");
     expect(after?.message).toContain("exige a confirmação");
     expect(after?.message).not.toContain("Pedido entregue");
+  });
+  it.each([
+    "Quero saber os valores", "Quanto custa Uber carro?", "Qual a garantia?",
+    "Tem cocô?", "Quero falar com atendente",
+  ])("sem FAQ aprovada não cria resposta fixa para: %s", (question) => {
+    const config=h2AutoPersonalizationSchema.parse({enabled:true,faq:[]});
+    expect(getH2AutoPersonalizedReply(question,config)).toBeNull();
+  });
+  it("não sugere menu de preços inexistente", () => {
+    const source=readFileSync("shared/h2AutoPersonalization.ts","utf8");
+    expect(source).not.toContain("PUBLIC_GUIDANCE");
+    expect(source).not.toContain("escolha *Tabela de preço*");
+    expect(access).toContain("const fallback = await unansweredResponse()");
+    expect(access).toContain("recordH2AutoUnknownQuestion(deviceId, input)");
   });
   it("substitui a arvore e preserva OTP, MENU/0 e bloqueios", () => {
     expect(access).toContain("if (blockedPhones.length");
