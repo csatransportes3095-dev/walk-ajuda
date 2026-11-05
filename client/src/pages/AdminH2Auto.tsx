@@ -363,10 +363,18 @@ export default function AdminH2Auto() {
                 <span className="rounded-lg border border-violet-400/30 bg-violet-400/10 px-3 py-2 text-xs font-bold text-violet-200">COMANDO PELO ADM</span>
               </div>
             </div>
-            <button type="button" onClick={() => {setSection("intelligence"); void utils.h2AutoAdmin.list.invalidate();}}
-              className="inline-flex min-h-11 items-center justify-center gap-2 rounded-xl bg-cyan-300 px-5 py-3 text-sm font-black text-slate-950 transition hover:bg-white">
-              <RefreshCw className="h-4 w-4" /> ABRIR INTELIGÊNCIA
-            </button>
+            <div className="flex w-full flex-wrap items-center gap-3 sm:w-auto">
+              <a href="/baixar-h2-auto"
+                aria-label="Baixar o APK H2 AUTO atualizado"
+                className="inline-flex min-h-12 w-full items-center justify-center gap-2 rounded-xl border border-emerald-200/50 bg-emerald-400 px-5 py-3 text-sm font-black text-[#04241e] shadow-lg shadow-emerald-500/30 transition hover:bg-emerald-300 sm:w-auto">
+                <ExternalLink className="h-5 w-5" />
+                BAIXAR APK H2 AUTO {h2AutoApk?.versionName || ""}
+              </a>
+              <button type="button" onClick={() => {setSection("intelligence"); void utils.h2AutoAdmin.list.invalidate();}}
+                className="inline-flex min-h-12 w-full items-center justify-center gap-2 rounded-xl border border-cyan-400/50 bg-cyan-300/15 px-5 py-3 text-sm font-black text-cyan-100 transition hover:bg-cyan-400/20 sm:w-auto">
+                <RefreshCw className="h-4 w-4" /> ABRIR INTELIGÊNCIA
+              </button>
+            </div>
           </div>
         </section>
         <div className="grid grid-cols-2 gap-3 xl:grid-cols-4">
