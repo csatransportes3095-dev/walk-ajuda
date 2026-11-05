@@ -131,18 +131,9 @@ export function classifyH2AutoPersonalizedQuestion(input: string): H2AutoPersona
   return null; // Sem inventar resposta para dúvidas desconhecidas.
 }
 
-const PUBLIC_GUIDANCE: Record<Exclude<H2AutoPersonalizedTopic, "personalizada">, string> = {
-  atendimento: "👨‍💻 Para falar com nossa equipe, use a opção *Falar com atendente* no menu. Não encaminhei seu atendimento automaticamente.",
-  codigo: "📧 Se já solicitou um código, confira o e-mail cadastrado e a pasta de spam. Se ele não chegou, solicite outro pelo fluxo de confirmação quando o prazo permitir. Nunca envie o código no grupo ou a terceiros.",
-  novo_pedido: "🆕 Para fazer um pedido, escolha *Ainda não sou cliente* no menu e informe o telefone de quem indicou você.",
-  acompanhar: "📦 Para conferir o status real do seu pedido, escolha *Já sou cliente* → *Acompanhar pedido*. A consulta exige a confirmação do seu cadastro.",
-  indicacoes: "💰 Para ver suas indicações e comissões, selecione *Minhas indicações* no menu e confirme seu acesso.",
-  valores: "💵 Para consultar os valores atuais, escolha *Tabela de preço* no menu do H2 AUTO. Assim você vê as opções atualizadas.",
-  foto: "📸 Para agendar sua foto, selecione *Agendar foto* no menu do cliente. Confira seu pedido antes de escolher o horário.",
-  emprestimos: "💳 Para consultar empréstimos e parcelas, acesse *Empréstimos* pelo menu. Os dados individuais exigem acesso confirmado.",
-  gastos: "📊 Para acompanhar gastos e lucros, escolha *Calcule seus lucros* no menu ou acesse https://h2colombiano.com/gastos.",
-  ajuda: "💬 Posso orientar sobre pedidos, preços, fotos, comissões, código de acesso, empréstimos e atendimento. Diga o assunto que procura.",
-};
+// Respostas automáticas são exclusivamente as perguntas personalizadas
+// e variações aprovadas no ADM. Não criar respostas genéricas por assunto:
+// sem regra correspondente, o servidor registra a pergunta na fila de aprendizado.
 
 export function getH2AutoPersonalizedReply(
   input: string,
@@ -155,8 +146,7 @@ export function getH2AutoPersonalizedReply(
       /\d{5,}/.test(input) || /^(?:menu|in[ií]cio|0|[1-9]|10|\/h2|\/h3)$/i.test(input.trim()) ||
       /@|https?:\/\/|www\./i.test(input)) return null;
   const rule = findCustomFaq(input,(config.faq ?? []));
-  const topic = rule ? "personalizada" : classifyH2AutoPersonalizedQuestion(input);
-  if (!topic) return null;
+  if (!rule) return null; // Não inventar resposta nem indicar menus que não existem.
   const name = config.verifiedName && context.verified
     ? safeVerifiedFirstName(context.verifiedFirstName) : "";
   const greeting = config.tone === "acolhedor" ? (name ? "Oi, " + name + "! 😊" : "Entendi! 😊")
@@ -166,8 +156,8 @@ export function getH2AutoPersonalizedReply(
     ? "\n\n📱 Para continuar a confirmação, informe seu telefone com DDD."
     : "";
   return {
-    topic,
-    message: "⚡ *H2 COLOMBIANO* 🇨🇴\n\n" + greeting + "\n\n" + (rule ? rule.answer : PUBLIC_GUIDANCE[topic as Exclude<H2AutoPersonalizedTopic, "personalizada">]) +
+    topic: "personalizada",
+    message: "⚡ *H2 COLOMBIANO* 🇨🇴\n\n" + greeting + "\n\n" + rule.answer +
       reminder + "\n\n💬 Pode enviar outra pergunta. Continuamos por aqui.",
   };
 }
