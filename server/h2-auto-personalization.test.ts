@@ -100,6 +100,22 @@ describe("H2 AUTO: respostas personalizadas com segurança", () => {
     expect(remote).toContain("config_json=JSON_SET(config_json,'$.desktopReadOnly'");
     expect(remote).toContain("JSON_UNQUOTE(JSON_EXTRACT(config_json,'$.tree.enabled'))");
   });
+  it("Desktop e autenticação ficam juntos com prazos rápidos e vencimento real", () => {
+    const admin = readFileSync("client/src/pages/AdminH2Auto.tsx", "utf8");
+    const access = readFileSync("server/h2-auto-access.ts", "utf8");
+    const remote = readFileSync("server/h2-auto-remote.ts", "utf8");
+    expect(admin).toContain("DESKTOP + PRAZO DE AUTENTICAÇÃO");
+    expect(admin).toContain("AUTENTICAÇÃO — QUANDO PEDIR NOVAMENTE");
+    for (const hours of [1,6,12,24,72,168,720]) {
+      expect(admin).toContain("hours:"+hours+",label:");
+    }
+    expect(admin).toContain("SALVAR TEMPO DE AUTENTICAÇÃO");
+    expect(remote).toContain('hours:z.number().int().min(1).max(720)');
+    expect(remote).toContain("'$.identificationSessionHours'");
+    expect(access).toContain("Number(s.expires_at) > now");
+    expect(access).toContain("configuredHours*hour");
+    expect(access).toContain("expires_at=\u0024{now+accessLifetime}");
+  });
   it("limita conteúdo e aceita somente configurações conhecidas", () => {
     expect(classifyH2AutoPersonalizedQuestion("a".repeat(300))).toBeNull();
     expect(h2AutoPersonalizationSchema.safeParse({enabled:true,tone:"livre",verifiedName:true}).success).toBe(false);
