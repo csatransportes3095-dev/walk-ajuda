@@ -329,7 +329,7 @@ function mergeFaqPhrases(original: string, candidates: string[], claimed: Set<st
     const key=normalizeFaqKey(phrase);
     if (!key || local.has(key) || claimed.has(key)) continue;
     const next=merged ? merged+"\n"+phrase : phrase;
-    if (next.length>600) continue;
+    if (next.length>300000 || next.split(/\r?\n/).length>1000) continue;
     merged=next;
     local.add(key);
     claimed.add(key);
