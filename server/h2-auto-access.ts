@@ -145,7 +145,8 @@ export function registerH2AutoAccessRoutes(app: Express): void {
       let identificationDisabled = false;
       // A árvore tem uma chave própria. Desligá-la não pode desligar as
       // respostas personalizadas, que são independentes e opcionais.
-      // A árvore foi desativada definitivamente nesta reformulação.\n      const treeEnabled = false;
+      // A árvore foi desativada definitivamente nesta reformulação.
+      const treeEnabled = false;
       let questionCollectionEnabled = false;
       let confirmation = h2AutoConfirmationSchema.parse({});
       let personalization = { ...H2_AUTO_PERSONALIZATION_DEFAULT };
