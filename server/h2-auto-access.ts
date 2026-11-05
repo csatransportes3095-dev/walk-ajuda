@@ -247,6 +247,8 @@ export function registerH2AutoAccessRoutes(app: Express): void {
           // APKs antigos exibem message nos estados conhecidos, mas podem
           // descartar silenciosamente o estado novo "personalized".
           return respond(res, 200, {state:"choice",message:openingPersonalization.message,topic:openingPersonalization.topic});
+        if (["oi","ola","olá","menu","inicio","início"].includes(normalized))
+          return respond(res, 200, {state:"choice",message:initialMessage});
         if (!treeEnabled) {
           if(questionCollectionEnabled) try {await recordH2AutoUnknownQuestion(deviceId,input);} catch(error){console.error("[H2Auto] coleta indisponível",error);}
           return respond(res, 200, {state:"tree_disabled",audience:"new_open",message:""});
@@ -355,6 +357,8 @@ export function registerH2AutoAccessRoutes(app: Express): void {
         }
         const personalized = getH2AutoPersonalizedReply(input, personalization, {stage: "choice"});
         if (personalized) return respond(res, 200, {state: "choice", message: personalized.message, topic: personalized.topic});
+        if (["oi","ola","olá","menu","inicio","início"].includes(normalized))
+          return respond(res, 200, {state:"choice",message:initialMessage});
         if (!treeEnabled) {
           await collectUnknown();
           return respond(res, 200, {state:"tree_disabled",audience:"new_open",message:""});
