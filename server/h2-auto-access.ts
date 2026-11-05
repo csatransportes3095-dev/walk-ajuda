@@ -241,7 +241,9 @@ export function registerH2AutoAccessRoutes(app: Express): void {
         }
         const openingPersonalization = getH2AutoPersonalizedReply(input, personalization, {stage: "choice"});
         if (openingPersonalization)
-          return respond(res, 200, {state:"personalized",message:openingPersonalization.message,topic:openingPersonalization.topic});
+          // APKs antigos exibem message nos estados conhecidos, mas podem
+          // descartar silenciosamente o estado novo "personalized".
+          return respond(res, 200, {state:"choice",message:openingPersonalization.message,topic:openingPersonalization.topic});
         return respond(res, 200, { state: "choice", message: h2AutoGreetingWelcome(input,initialMessage) });
       }
 
@@ -308,7 +310,7 @@ export function registerH2AutoAccessRoutes(app: Express): void {
           const personalized = getH2AutoPersonalizedReply(input, personalization, {
             verified: authorizedAudience === "customer", verifiedFirstName, stage: "authorized",
           });
-          if (personalized) return respond(res, 200, {state: "personalized", message: personalized.message, topic: personalized.topic});
+          if (personalized) return respond(res, 200, {state: "authorized", message: personalized.message, topic: personalized.topic});
         }
         // Existing normal service navigation remains authorized.
         return respond(res, 200, verified(authorizedAudience));
@@ -341,7 +343,7 @@ export function registerH2AutoAccessRoutes(app: Express): void {
           return respond(res, 200, { state: "referral_phone", message: referrerMessage });
         }
         const personalized = getH2AutoPersonalizedReply(input, personalization, {stage: "choice"});
-        if (personalized) return respond(res, 200, {state: "personalized", message: personalized.message, topic: personalized.topic});
+        if (personalized) return respond(res, 200, {state: "choice", message: personalized.message, topic: personalized.topic});
         return respond(res, 200, { state: "choice", message: h2AutoGreetingWelcome(input,initialMessage) });
       }
 

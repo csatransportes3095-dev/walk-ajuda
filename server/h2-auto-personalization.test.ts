@@ -47,6 +47,8 @@ describe("H2 AUTO: respostas personalizadas com segurança", () => {
     expect(access).toContain("treeEnabled = live[0]?.tree_on !== \"false\"");
     expect(access).toContain("if (treeEnabled && (normalized === \"1\"");
     expect(access).toContain("const openingPersonalization = getH2AutoPersonalizedReply");
+    expect(access).not.toContain('state:"personalized"');
+    expect(access).not.toContain('state: "personalized"');
     expect(access).toContain("const navigation = h2AutoNavigationCommand(input)");
     expect(access).toContain("if (s.stage === \"customer_code\"");
     expect(access).toContain("await sendH2AutoOrderCode");
