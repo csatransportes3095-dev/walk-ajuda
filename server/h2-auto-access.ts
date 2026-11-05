@@ -256,6 +256,10 @@ export function registerH2AutoAccessRoutes(app: Express): void {
       const navigation = h2AutoNavigationCommand(input);
       const isMenu = navigation === "home";
       const isBack = navigation === "back";
+      if (isMenu && !treeEnabled)
+        // MENU is a tree command. With the tree disabled it must not revive
+        // the opening menu; keep the gate neutral for personalized handling.
+        return respond(res, 200, {state:"tree_disabled",audience:"new_open",message:""});
       // MENU returns to the first question without extending a verified session.
       const authorizedAudience: "customer" | "new" | null =
         s.stage === "customer" || s.stage === "customer_menu" ? "customer" :
