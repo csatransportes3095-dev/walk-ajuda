@@ -169,8 +169,9 @@ export function registerH2AutoAccessRoutes(app: Express): void {
         questionCollectionEnabled = live[0]?.collection_on === "true";
       }
       if (!deviceId) return respond(res, 401, { error: "unauthorized" });
-      const initialMessage = /1️⃣|2️⃣|3️⃣|Digite \*1, 2 ou 3/.test(confirmation.identificationWelcome)
-        ? h2AutoConfirmationSchema.parse({}).identificationWelcome : confirmation.identificationWelcome;
+      // O texto de boas-vindas pertence ao ADM: números, emojis e frases
+      // editados pelo operador não podem ser substituídos pelo texto padrão.
+      const initialMessage = confirmation.identificationWelcome;
       const phoneMessage = confirmation.existingCustomerPrompt;
       const referrerMessage = confirmation.newCustomerPrompt;
       const noReferral = confirmation.noIndicatorMessage;
@@ -234,9 +235,12 @@ export function registerH2AutoAccessRoutes(app: Express): void {
             customer_phone_hash=NULL,customer_email_hash=NULL,code_hash=NULL,code_expires=NULL,
             code_attempts=0,resend_after=0,expires_at=0,updated_at=VALUES(updated_at)`);
         await clearH2AutoPhoneFailures(deviceId,sessionId);
-        const firstStage = h2AutoNaturalExistingCustomerIntent(input) ? "customer_phone" :
+        // 1/2/3 são atalhos de autenticação, não a árvore antiga.
+        // A escolha deve funcionar também na primeira mensagem, sem sessão.
+        const firstStage = initialH2AutoChoiceStage(input) ||
+          (h2AutoNaturalExistingCustomerIntent(input) ? "customer_phone" :
           h2AutoNaturalReferralsIntent(input) ? "referrals_phone" :
-          h2AutoNaturalNewCustomerIntent(input) ? "referral_phone" : null;
+          h2AutoNaturalNewCustomerIntent(input) ? "referral_phone" : null);
         if (firstStage) {
           await update(sessionId, sql`stage=${firstStage},updated_at=${now}`);
           return respond(res, 200, {state:firstStage, message:firstStage==="customer_phone" ? phoneMessage :
@@ -288,26 +292,33 @@ export function registerH2AutoAccessRoutes(app: Express): void {
         }
         if (s.stage === "customer_menu" || s.stage === "new_menu") {
           if (isBack) return respond(res, 200, {state: "choice", message: initialMessage});
-          // Selecting the already verified audience restores service access
-          // without another code or indicator check.
-          if (authorizedAudience === "customer" && normalized === "3") {
+          // Não repetir as boas-vindas quando a pessoa escolhe por texto.
+          // A escolha é um destino de autenticação; jamais libera outra conta.
+          const selectedMenuStage = initialH2AutoChoiceStage(input) ||
+            (h2AutoNaturalExistingCustomerIntent(input) ? "customer_phone" :
+             h2AutoNaturalReferralsIntent(input) ? "referrals_phone" :
+             h2AutoNaturalNewCustomerIntent(input) ? "referral_phone" : null);
+          // Quem já validou o próprio telefone e e-mail pode consultar indicações
+          // sem repetir o OTP durante a validade da sessão autorizada.
+          if (authorizedAudience === "customer" && selectedMenuStage === "referrals_phone") {
             await update(sessionId, sql`stage='customer'`);
             return respond(res, 200, grant("referrals"));
           }
-          if ((authorizedAudience === "customer" && normalized === "1") ||
-              (authorizedAudience === "new" && normalized === "2")) {
+          if ((authorizedAudience === "customer" && selectedMenuStage === "customer_phone") ||
+              (authorizedAudience === "new" && selectedMenuStage === "referral_phone")) {
             await update(sessionId, sql`stage=${authorizedAudience}`);
             return respond(res, 200, grant(authorizedAudience));
           }
-          // Switching audiences requires validating the other audience.
-          if (normalized === "1" || normalized === "2") {
-            const destination = normalized === "1" ? "customer_phone" : "referral_phone";
+          // Trocar de público exige a validação correspondente no servidor.
+          if (selectedMenuStage) {
+            const destination = selectedMenuStage;
             await update(sessionId, sql`stage=${destination},
               customer_id=NULL,referrer_id=NULL,customer_phone_hash=NULL,
               customer_email_hash=NULL,code_hash=NULL,code_expires=NULL,
               code_attempts=0,resend_after=0,expires_at=0,updated_at=${now}`);
             return respond(res, 200, { state: destination,
-              message: destination === "customer_phone" ? phoneMessage : referrerMessage });
+              message: destination === "customer_phone" ? phoneMessage :
+                destination === "referrals_phone" ? confirmation.phonePrompt : referrerMessage });
           }
           return respond(res, 200, { state: "choice", message: initialMessage });
         }
@@ -343,6 +354,14 @@ export function registerH2AutoAccessRoutes(app: Express): void {
       }
 
       if (s.stage === "choice") {
+        // Numeric choice is separate from the retired question tree.
+        const selectedInitialStage = initialH2AutoChoiceStage(input);
+        if (selectedInitialStage) {
+          await update(sessionId, sql`stage=${selectedInitialStage},updated_at=${now}`);
+          return respond(res, 200, { state: selectedInitialStage,
+            message: selectedInitialStage === "customer_phone" ? phoneMessage :
+              selectedInitialStage === "referrals_phone" ? confirmation.phonePrompt : referrerMessage });
+        }
         if (h2AutoNaturalExistingCustomerIntent(input)) {
           await update(sessionId, sql`stage='customer_phone',updated_at=${now}`);
           return respond(res, 200, { state: "customer_phone", message: phoneMessage });
