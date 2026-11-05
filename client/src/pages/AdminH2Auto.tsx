@@ -22,7 +22,7 @@ import H2AutoSilencedContacts from "@/components/H2AutoSilencedContacts";
 import H2AutoWhatsAppPreview from "@/components/H2AutoWhatsAppPreview";
 import { H2_AUTO_CONFIRMATION_DEFAULTS as confirmationDefaults, H2_AUTO_CONFIRMATION_GROUPS as confirmationGroups } from "@shared/h2AutoConfirmation";
 import { H2_AUTO_SHORT_MEDIA, H2_AUTO_SHORT_ORDER_NOT_FOUND } from "@shared/h2AutoShortReplies";
-import { H2_AUTO_PERSONALIZATION_DEFAULT, type H2AutoPersonalization } from "@shared/h2AutoPersonalization";
+import { H2_AUTO_PERSONALIZATION_DEFAULT, H2_AUTO_FAQ_MAX_VARIATION_CHARS, H2_AUTO_FAQ_MAX_VARIATION_LINES, h2AutoFaqVariationLineCount, type H2AutoPersonalization } from "@shared/h2AutoPersonalization";
 import { prepareH2AutoCommonFaq, H2_AUTO_FAQ_SUGGESTIONS } from "@shared/h2AutoFaqPresets";
 
 const Box = ({ children }: { children: React.ReactNode }) => (
@@ -147,10 +147,12 @@ function H2AutoLearningPanel({deviceId, enabled}:{deviceId:string,enabled:boolea
           </div>
           <textarea className={field} rows={3} maxLength={1200} placeholder="Escreva a resposta que o cliente receberá"
             value={answers[q.questionHash]??""} onChange={e=>setAnswers(old=>({...old,[q.questionHash]:e.target.value}))}/>
-          <textarea className={field} rows={2} maxLength={600} placeholder="Variações da pergunta (uma por linha)"
+          <label className="block text-xs font-bold text-emerald-200">SUBPERGUNTAS — até 1.000 linhas por pergunta</label>
+          <textarea className={field+" min-h-40 resize-y"} rows={6} maxLength={H2_AUTO_FAQ_MAX_VARIATION_CHARS} placeholder="Uma forma de perguntar por linha (até 1.000 linhas)" 
             value={variations[q.questionHash]??""} onChange={e=>setVariations(old=>({...old,[q.questionHash]:e.target.value}))}/>
+          <p className={"text-right text-xs "+(h2AutoFaqVariationLineCount(variations[q.questionHash]??"")>H2_AUTO_FAQ_MAX_VARIATION_LINES?"text-red-300":"text-emerald-300")}>{h2AutoFaqVariationLineCount(variations[q.questionHash]??"")} / {H2_AUTO_FAQ_MAX_VARIATION_LINES} linhas</p>
           <div className="flex flex-wrap gap-2">
-            <button type="button" disabled={approve.isPending||(answers[q.questionHash]??"").trim().length<3}
+            <button type="button" disabled={approve.isPending||(answers[q.questionHash]??"").trim().length<3||h2AutoFaqVariationLineCount(variations[q.questionHash]??"")>H2_AUTO_FAQ_MAX_VARIATION_LINES}
               onClick={()=>approve.mutate({id:deviceId,questionHash:q.questionHash,answer:answers[q.questionHash].trim(),variations:variations[q.questionHash]??""})}
               className="rounded-lg bg-emerald-600 text-slate-950 font-black px-3 py-2 text-xs disabled:opacity-40">APROVAR RESPOSTA</button>
             <button type="button" disabled={remove.isPending} onClick={()=>remove.mutate({id:deviceId,questionHash:q.questionHash})}
@@ -827,8 +829,12 @@ export default function AdminH2Auto() {
                     </div>
                     <input className={field} maxLength={160} placeholder="Pergunta que o cliente pode escrever" value={faq.question}
                       onChange={e=>updatePersonalization({faq:personalization.faq.map(x=>x.id===faq.id?{...x,question:e.target.value}:x)})}/>
-                    <textarea className={field} rows={2} maxLength={600} placeholder="Outras formas de perguntar (uma por linha, opcional)" value={faq.variations}
+                    <label className="block text-xs font-black text-violet-200">SUBPERGUNTAS — outras formas de perguntar</label>
+                    <textarea className={field+" min-h-44 resize-y"} rows={7} maxLength={H2_AUTO_FAQ_MAX_VARIATION_CHARS} placeholder="Digite ou cole até 1.000 linhas, uma subpergunta por linha" value={faq.variations}
                       onChange={e=>updatePersonalization({faq:personalization.faq.map(x=>x.id===faq.id?{...x,variations:e.target.value}:x)})}/>
+                    <p className={"text-right text-xs font-bold "+(h2AutoFaqVariationLineCount(faq.variations)>H2_AUTO_FAQ_MAX_VARIATION_LINES?"text-red-300":"text-emerald-300")}>
+                      {h2AutoFaqVariationLineCount(faq.variations)} / {H2_AUTO_FAQ_MAX_VARIATION_LINES} linhas de subperguntas
+                    </p>
                     <textarea className={field} rows={4} maxLength={1200} placeholder="Resposta automática em texto livre, com quebras de linha para celular" value={faq.answer}
                       onChange={e=>updatePersonalization({faq:personalization.faq.map(x=>x.id===faq.id?{...x,answer:e.target.value}:x)})}/>
                   </div>)}
@@ -851,7 +857,7 @@ export default function AdminH2Auto() {
                   {personalPreviews[d.id] && <pre className="whitespace-pre-wrap rounded-lg bg-black/30 p-3 text-xs leading-relaxed text-white">{personalPreviews[d.id]}</pre>}
                 </div>
                 <button type="button" className="rounded-xl bg-violet-500 px-5 py-3 font-black text-slate-950 disabled:opacity-50"
-                  disabled={savePersonalization.isPending || (!personalDrafts[d.id] && presetPreparation.added===0) || (personalization.faq??[]).some(x=>x.question.trim().length<3 || x.answer.trim().length<3)}
+                  disabled={savePersonalization.isPending || (!personalDrafts[d.id] && presetPreparation.added===0) || (personalization.faq??[]).some(x=>x.question.trim().length<3 || x.answer.trim().length<3 || h2AutoFaqVariationLineCount(x.variations)>H2_AUTO_FAQ_MAX_VARIATION_LINES)}
                   onClick={()=>savePersonalization.mutate({id:d.id,personalization})}>SALVAR PERSONALIZAÇÃO DESTE APARELHO</button>
               </section>
               </div>
