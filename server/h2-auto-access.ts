@@ -324,7 +324,10 @@ export function registerH2AutoAccessRoutes(app: Express): void {
       if (authorizedAudience) {
         const allowed = authorizedAudience === "customer"
           ? await activeCustomerBinding(s) : await activeReferralBinding(s);
-        const valid = allowed && Number(s.expires_at) > 0 &&
+        // Validar o prazo definido no ADM também contra o vencimento
+        // gravado na autenticação. Nunca estender a sessão ao ler MENU,
+        // receber mensagens ou visualizar uma conversa no Desktop.
+        const valid = allowed && Number(s.expires_at) > now &&
           Number(s.updated_at) <= now && now - Number(s.updated_at) < accessLifetime;
         if (!valid) {
           await update(sessionId, sql`stage='choice',customer_id=NULL,referrer_id=NULL,
