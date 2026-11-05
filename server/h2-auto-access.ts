@@ -13,6 +13,7 @@ import { manualSilencedPhones, normalizeSilencedPhone } from "./h2-auto-silenced
 import { h2AutoConfirmationSchema } from "../shared/h2AutoConfirmation";
 import { h2AutoPersonalizationSchema, H2_AUTO_PERSONALIZATION_DEFAULT, getH2AutoPersonalizedReply } from "../shared/h2AutoPersonalization";
 import { h2AutoCustomerNeedsProfileUpdate, selectH2AutoCustomerByPhone } from "./h2-auto-customer-profile-guidance";
+import { recordH2AutoUnknownQuestion } from "./h2-auto-learning";
 
 /**
  * WhatsApp first-contact gate. State is server-side and bound to a paired device
@@ -145,10 +146,11 @@ export function registerH2AutoAccessRoutes(app: Express): void {
       // A árvore tem uma chave própria. Desligá-la não pode desligar as
       // respostas personalizadas, que são independentes e opcionais.
       let treeEnabled = true;
+      let questionCollectionEnabled = false;
       let confirmation = h2AutoConfirmationSchema.parse({});
       let personalization = { ...H2_AUTO_PERSONALIZATION_DEFAULT };
       if (deviceId) {
-        const live = await rows(sql`SELECT JSON_EXTRACT(config_json,'$.confirmation') AS confirmation_json, JSON_EXTRACT(config_json,'$.personalization') AS personalization_json, JSON_UNQUOTE(JSON_EXTRACT(config_json,'$.tree.enabled')) AS tree_on, JSON_UNQUOTE(JSON_EXTRACT(config_json,'$.enabled')) AS bot_on,
+        const live = await rows(sql`SELECT JSON_EXTRACT(config_json,'$.confirmation') AS confirmation_json, JSON_EXTRACT(config_json,'$.personalization') AS personalization_json, JSON_UNQUOTE(JSON_EXTRACT(config_json,'$.tree.enabled')) AS tree_on, JSON_UNQUOTE(JSON_EXTRACT(config_json,'$.questionCollectionEnabled')) AS collection_on, JSON_UNQUOTE(JSON_EXTRACT(config_json,'$.enabled')) AS bot_on,
           CAST(JSON_UNQUOTE(JSON_EXTRACT(config_json,'$.identificationSessionHours')) AS UNSIGNED) AS session_hours,
           JSON_UNQUOTE(JSON_EXTRACT(config_json,'$.identificationEnabled')) AS identity_on,
           JSON_UNQUOTE(JSON_EXTRACT(config_json,'$.blocked')) AS blocked_phones
@@ -164,6 +166,7 @@ export function registerH2AutoAccessRoutes(app: Express): void {
           personalization = h2AutoPersonalizationSchema.parse(typeof rawPersonalization === "string" ? JSON.parse(rawPersonalization) : rawPersonalization || {});
         } catch { personalization = { ...H2_AUTO_PERSONALIZATION_DEFAULT }; }
         treeEnabled = live[0]?.tree_on !== "false";
+        questionCollectionEnabled = live[0]?.collection_on === "true";
       }
       if (!deviceId) return respond(res, 401, { error: "unauthorized" });
       const initialMessage = confirmation.identificationWelcome;
@@ -244,13 +247,17 @@ export function registerH2AutoAccessRoutes(app: Express): void {
           // APKs antigos exibem message nos estados conhecidos, mas podem
           // descartar silenciosamente o estado novo "personalized".
           return respond(res, 200, {state:"choice",message:openingPersonalization.message,topic:openingPersonalization.topic});
-        if (!treeEnabled)
-          // The tree is off: do not manufacture its welcome/menu as a fallback.
-          // Keep the gate open only for a personalized rule or media handling.
+        if (!treeEnabled) {
+          if(questionCollectionEnabled) try {await recordH2AutoUnknownQuestion(deviceId,input);} catch(error){console.error("[H2Auto] coleta indisponível",error);}
           return respond(res, 200, {state:"tree_disabled",audience:"new_open",message:""});
+        }
+        if(questionCollectionEnabled) try {await recordH2AutoUnknownQuestion(deviceId,input);} catch(error){console.error("[H2Auto] coleta indisponível",error);}
         return respond(res, 200, { state: "choice", message: h2AutoGreetingWelcome(input,initialMessage) });
       }
 
+      const collectUnknown = async () => {
+        if(questionCollectionEnabled) try {await recordH2AutoUnknownQuestion(deviceId,input);} catch(error){console.error("[H2Auto] coleta indisponível",error);}
+      };
       // Navigation commands must be handled BEFORE the strict phone validator.
       // Persistent validation blocks and ADM contact silencing already took precedence.
       const navigation = h2AutoNavigationCommand(input);
@@ -321,6 +328,7 @@ export function registerH2AutoAccessRoutes(app: Express): void {
           if (personalized) return respond(res, 200, {state: "authorized", message: personalized.message, topic: personalized.topic});
         }
         // Existing normal service navigation remains authorized.
+        if (!treeEnabled) await collectUnknown();
         return respond(res, 200, verified(authorizedAudience));
       }
 
@@ -352,9 +360,11 @@ export function registerH2AutoAccessRoutes(app: Express): void {
         }
         const personalized = getH2AutoPersonalizedReply(input, personalization, {stage: "choice"});
         if (personalized) return respond(res, 200, {state: "choice", message: personalized.message, topic: personalized.topic});
-        if (!treeEnabled)
-          // Never repeat the tree welcome/menu while disabled.
+        if (!treeEnabled) {
+          await collectUnknown();
           return respond(res, 200, {state:"tree_disabled",audience:"new_open",message:""});
+        }
+        await collectUnknown();
         return respond(res, 200, { state: "choice", message: h2AutoGreetingWelcome(input,initialMessage) });
       }
 
