@@ -18,9 +18,9 @@ describe("H2 AUTO: perguntas livres sem opções",()=>{
     expect(getH2AutoPersonalizedReply("Qual é o prazo para agendar foto?",{...cfg,enabled:false})).toBeNull();
     expect(getH2AutoPersonalizedReply("zzzz qqqq xxxx",cfg)).toBeNull();
   });
-  it("rejeita respostas grandes e preserva limites por aparelho",()=>{
+  it("rejeita respostas invalidas e permite crescimento da base por aparelho",()=>{
     expect(h2AutoPersonalizationSchema.safeParse({...cfg,faq:[{id:"faq_a",question:"Oi",answer:"Resposta"}]}).success).toBe(false);
-    expect(h2AutoPersonalizationSchema.safeParse({...cfg,faq:Array.from({length:41},(_,i)=>({id:"faq_"+i,question:"Pergunta de teste",answer:"Resposta de teste",enabled:true}))}).success).toBe(false);
+    expect(h2AutoPersonalizationSchema.safeParse({...cfg,faq:Array.from({length:41},(_,i)=>({id:"faq_"+i,question:"Pergunta de teste",answer:"Resposta de teste",enabled:true}))}).success).toBe(true);
   });
   it("o ADM usa perguntas digitadas e permite adicionar e excluir",()=>{
     const ui=readFileSync("client/src/pages/AdminH2Auto.tsx","utf8");
