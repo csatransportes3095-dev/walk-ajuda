@@ -422,16 +422,21 @@ function Change-H2AdsWatch([string]$action) {
 }
 function Get-H2AdsWatchLayout([int]$width) {
   # Two legible rows. Three explicit, independent actions with large hitboxes.
-  $resetW=48; $pauseW=52; $startW=54; $gap=5
+  # Dedicated, equal-sized action slots. Keep the 00:00:00 readout at left.
+  # Even at the minimum supported instance width (310px Chrome), every label
+  # stays on a SINGLE line and each button has its own click target.
+  $gap=7
+  $actionW=[Math]::Max(54,[Math]::Min(68,[Math]::Floor(($width-112-2*$gap)/3)))
+  $resetW=$actionW; $pauseW=$actionW; $startW=$actionW
   $resetX=$width-12-$resetW
   $pauseX=$resetX-$gap-$pauseW
   $startX=$pauseX-$gap-$startW
   return @{
-    clockY=6; textX=18; textY=43
+    clockY=6; textX=16; textY=46
     startX=$startX; startW=$startW
     pauseX=$pauseX; pauseW=$pauseW
     resetX=$resetX; resetW=$resetW
-    buttonY=42; buttonH=24; hitTop=40; hitBottom=68
+    buttonY=43; buttonH=28; hitTop=42; hitBottom=73
   }
 }
 function New-H2AdsWatchButtonPath([single]$x,[single]$y,[single]$w,[single]$h) {
@@ -486,10 +491,12 @@ $status.add_Paint({
     try { $g.DrawString($watchText,$watchFont,$fg,$watchLayout.textX,$watchLayout.textY) }
     finally { if($watchFont -ne $font){$watchFont.Dispose()} }
 
-    $actionFont=New-Object System.Drawing.Font -ArgumentList "Segoe UI",7.5,([System.Drawing.FontStyle]::Bold)
+    $actionFont=New-Object System.Drawing.Font -ArgumentList "Segoe UI",8,([System.Drawing.FontStyle]::Bold)
     $align=New-Object System.Drawing.StringFormat
     $align.Alignment=[System.Drawing.StringAlignment]::Center
     $align.LineAlignment=[System.Drawing.StringAlignment]::Center
+    $align.FormatFlags=[System.Drawing.StringFormatFlags]::NoWrap
+    $align.Trimming=[System.Drawing.StringTrimming]::None
     $actions=@(
       @{x=$watchLayout.startX;w=$watchLayout.startW;label="INICIAR";active=(-not $script:watchRunning);color=(RGB 31 92 67)}
       @{x=$watchLayout.pauseX;w=$watchLayout.pauseW;label="PAUSAR";active=$script:watchRunning;color=(RGB 45 76 118)}
@@ -502,7 +509,17 @@ $status.add_Paint({
         $rect=New-Object System.Drawing.RectangleF -ArgumentList $item.x,$watchLayout.buttonY,$item.w,$watchLayout.buttonH
         try {
           $g.FillPath($fill,$path)
-          $g.DrawString($item.label,$actionFont,$fg,$rect,$align)
+          # GDI+ text scales with monitor DPI even if the phone panel uses
+          # native pixels. Fit text to its own button so PAUSAR never wraps.
+          $measuredLabel=$g.MeasureString($item.label,$actionFont).Width
+          $labelFont=$actionFont
+          $usableW=[single]($item.w-8)
+          if($measuredLabel -gt $usableW){
+            $scaledSize=[single][Math]::Max(5.5,8*$usableW/$measuredLabel)
+            $labelFont=New-Object System.Drawing.Font -ArgumentList "Segoe UI",$scaledSize,([System.Drawing.FontStyle]::Bold)
+          }
+          try { $g.DrawString($item.label,$labelFont,$fg,$rect,$align) }
+          finally { if($labelFont -ne $actionFont){$labelFont.Dispose()} }
         } finally {$fill.Dispose();$path.Dispose()}
       }
     } finally {$actionFont.Dispose();$align.Dispose()}
