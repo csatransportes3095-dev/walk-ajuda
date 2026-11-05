@@ -56,22 +56,22 @@ export const H2_AUTO_CONFIRMATION_GROUPS = [
     "fields": [
       {
         "key": "identificationWelcome",
-        "label": "Mensagem inicial (1 SIM / 2 NÃO / 3 indicações)",
-        "help": "Não altere os números 1, 2 e 3; eles fazem parte do fluxo."
+        "label": "Mensagem inicial por conversa",
+        "help": "Identificação automática por intenção: cliente, novo cliente ou indicações."
       },
       {
         "key": "existingCustomerPrompt",
-        "label": "1 — Já sou cliente: solicitar telefone",
+        "label": "Já sou cliente: solicitar telefone",
         "help": ""
       },
       {
         "key": "newCustomerPrompt",
-        "label": "2 — Não sou cliente: solicitar indicador",
+        "label": "Não sou cliente: solicitar indicador",
         "help": ""
       },
       {
         "key": "phonePrompt",
-        "label": "3 — Minhas indicações: solicitar telefone",
+        "label": "Minhas indicações: solicitar telefone",
         "help": ""
       }
     ]
