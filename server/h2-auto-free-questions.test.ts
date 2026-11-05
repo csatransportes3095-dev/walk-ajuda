@@ -24,15 +24,15 @@ describe("H2 AUTO: perguntas livres sem opções",()=>{
   });
   it("aceita e preserva as 1.000 subperguntas por pergunta principal",()=>{
     const lines=Array.from({length:1000},(_,i)=>"Como acesso minha conta na opcao "+i+"?");
-    const variations=lines.join("\\n");
+    const variations=lines.join("\n");
     const config=h2AutoPersonalizationSchema.parse({
       enabled:true,
       faq:[{id:"login_site",question:"Como faço login no site?",variations,
         answer:"Informe seu telefone e confirme pelo e-mail.",enabled:true}],
     });
-    expect(config.faq[0].variations.split(/\\r?\\n/)).toHaveLength(1000);
+    expect(config.faq[0].variations.split(/\r?\n/)).toHaveLength(1000);
     expect(getH2AutoPersonalizedReply(lines[999],config)?.message).toContain("Informe seu telefone");
-    const excess=[...lines,"A pergunta 1001 deve ser rejeitada"].join("\\n");
+    const excess=[...lines,"A pergunta 1001 deve ser rejeitada"].join("\n");
     expect(h2AutoPersonalizationSchema.safeParse({...config,faq:[{...config.faq[0],variations:excess}]}).success).toBe(false);
   });
   it("o ADM usa contador e limite de 1000 linhas, sem corte em 600 caracteres",()=>{
