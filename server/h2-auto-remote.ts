@@ -8,7 +8,7 @@ import { getDb } from "./db";
 import { listActiveValidationBlocks, releaseValidationBlock, releaseAllValidationBlocks } from "./h2-auto-validation-blocks";
 import { changeSilencedPhone, manualSilencedPhones } from "./h2-auto-silenced-contacts";
 import { h2AutoTreeSchema, H2_AUTO_TREE_DEFAULT } from "../shared/h2AutoTree";
-import { h2AutoPersonalizationSchema, H2_AUTO_PERSONALIZATION_DEFAULT, getH2AutoPersonalizedReply } from "../shared/h2AutoPersonalization";
+import { h2AutoPersonalizationSchema, h2AutoFaqVariationsSchema, H2_AUTO_PERSONALIZATION_DEFAULT, getH2AutoPersonalizedReply } from "../shared/h2AutoPersonalization";
 import { mergeH2AutoExpandedFaq } from "../shared/h2AutoFaqPresets";
 import { listH2AutoUnknownQuestions, deleteH2AutoUnknownQuestion, ensureH2AutoLearningTable } from "./h2-auto-learning";
 import { H2_AUTO_SHORT_MEDIA, H2_AUTO_SHORT_ORDER_NOT_FOUND, applyH2AutoShortCopy } from "../shared/h2AutoShortReplies";
@@ -617,7 +617,7 @@ export const h2AutoAdminRouter = router({
       id:z.string().regex(/^[a-f0-9]{24}$/),
       questionHash:z.string().regex(/^[a-f0-9]{64}$/),
       answer:z.string().trim().min(3).max(1200),
-      variations:z.string().trim().max(600).default(""),
+      variations:h2AutoFaqVariationsSchema.default(""),
     }))
     .mutation(async ({input}) => {
       await ensure();
