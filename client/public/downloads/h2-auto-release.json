@@ -1,11 +1,11 @@
 {
   "packageName": "com.h2colombiano.auto",
-  "apkFile": "H2_AUTO_1_17_INSTALAR.apk",
-  "versionName": "1.17-history-neon",
-  "versionCode": 17,
-  "sha256": "ae933c15ba0ec5676bed1f3fc076ac607b70be28a00a886e0a646c87c80eef6a",
+  "apkFile": "H2_AUTO_1_68_INSTALAR.apk",
+  "versionName": "1.68-tree-off-personalized",
+  "versionCode": 68,
+  "sha256": "590acce8cbb484813f2bb2d0de6753d55e14e8093e5669fd0c07fcf10d24efb3",
   "certificateSha256": "3215b6d6b643ae6b57ffaf6e4854a40be267d4816166255872410c696384b393",
-  "commit": "de3d7027572b20058f898174c119095be88fa9ff",
-  "workflowRun": 40395047732,
-  "publishedAt": "2026-10-26T20:23:48.685735+00:00"
+  "commit": "3a08a5bee0dd241f15fdd1bd6c298aec5a3e4bff",
+  "workflowRun": 42048713944,
+  "publishedAt": "2026-11-05T14:50:44Z"
 }
