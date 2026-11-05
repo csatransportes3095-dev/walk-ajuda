@@ -49,7 +49,18 @@ export function safeH2AutoUnknownQuestion(input: unknown): { question: string; h
   const isQuestion = question.includes("?") ||
     /^(?:como|quando|onde|qual|quais|porque|por que|quanto|quantos|posso|pode|tem|preciso|quero|queria|gostaria|nao consigo|não consigo|tenho uma duvida|tenho uma dúvida|me explica|me ajuda)\b/i.test(question);
   if (!isQuestion) return null;
-  const keywords = [...new Set(normalized.split(" ").filter(word => word.length > 2 && !STOP.has(word)))];
+  // Normalização local para agrupar variações comuns sem serviço externo.
+  // Não confundir intenções distintas (cancelamento, suporte, pagamento).
+  const synonyms: Record<string,string> = {
+    valor:"preco", valores:"preco", precos:"preco", custo:"preco",
+    custa:"preco", custam:"preco", custaria:"preco",
+    agendamento:"agendar", marcar:"agendar", agendamentos:"agendar",
+    atrasou:"atraso", atrasado:"atraso", atrasada:"atraso",
+    cadastrado:"cadastro", cadastrada:"cadastro", cadastrar:"cadastro",
+  };
+  const keywords = [...new Set(normalized.split(" ")
+    .filter(word => word.length > 2 && !STOP.has(word))
+    .map(word => synonyms[word] ?? word))];
   const canonical = keywords.length >= 2 ? keywords.sort().join(" ") : normalized;
   const hash = createHash("sha256").update(canonical).digest("hex");
   return { question, hash };
@@ -109,4 +120,29 @@ export async function deleteH2AutoUnknownQuestion(deviceId: string, questionHash
   } else {
     await db.execute(sql`DELETE FROM h2_auto_unanswered_questions WHERE device_id=${deviceId}`);
   }
+}
+
+/**
+ * Indicador global da caixa de entrada no ADM. Conta somente aparelhos atuais:
+ * uma instância excluída não pode deixar alertas eternos no painel.
+ */
+export async function getH2AutoLearningInboxSummary() {
+  await ensureH2AutoLearningTable();
+  const db = await getDb();
+  if (!db) throw new Error("h2_auto_learning_database_unavailable");
+  const result = await db.execute(sql`SELECT q.device_id AS deviceId,
+    COUNT(*) AS pending, COALESCE(SUM(q.occurrences),0) AS received
+    FROM h2_auto_unanswered_questions q
+    INNER JOIN h2_auto_devices d ON d.id=q.device_id
+    GROUP BY q.device_id ORDER BY pending DESC LIMIT 30`);
+  const items = ((result[0] as unknown as any[]) || []).map(row => ({
+    deviceId: String(row.deviceId),
+    pending: Number(row.pending || 0),
+    received: Number(row.received || 0),
+  }));
+  return {
+    pending: items.reduce((n, item) => n + item.pending, 0),
+    received: items.reduce((n, item) => n + item.received, 0),
+    devices: items,
+  };
 }
