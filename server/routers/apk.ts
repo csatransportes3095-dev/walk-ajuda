@@ -12,6 +12,8 @@ import { z } from "zod";
 import { buildR2PublicUrl } from "../r2Storage";
 import type { Express, Request, Response } from "express";
 import { createHash } from "node:crypto";
+import fs from "node:fs";
+import path from "node:path";
 
 // ─── Migração automática ──────────────────────────────────────────────────────
 let _migrated = false;
@@ -94,6 +96,31 @@ export async function ensureH2AutoReleaseTable() {
 }
 
 export async function getH2AutoApkRelease(): Promise<H2AutoApkRelease | null> {
+  // Rollback controlado: enquanto o ADM estiver promovendo a 1.66, a cópia
+  // assinada versionada no repositório é a fonte de verdade, não o registro
+  // automático mais recente (que ainda pode apontar para a 1.69).
+  const publicDownloads = path.resolve(process.cwd(), "dist", "public", "downloads");
+  const rollbackManifest = path.join(publicDownloads, "h2-auto-release.json");
+  const rollbackApk = path.join(publicDownloads, "H2-AUTO-1.66.apk");
+  if (fs.existsSync(rollbackManifest) && fs.existsSync(rollbackApk)) {
+    try {
+      const manifest = JSON.parse(fs.readFileSync(rollbackManifest, "utf8"));
+      const buffer = fs.readFileSync(rollbackApk);
+      const sha256 = createHash("sha256").update(buffer).digest("hex");
+      if (manifest.versionCode === 66 && manifest.sha256 === sha256) {
+        return {
+          r2Key: `__local__:${rollbackApk}`,
+          sha256,
+          fileSize: buffer.length,
+          versionName: "1.66",
+          versionCode: 66,
+          uploadedAt: Date.parse(manifest.publishedAt) || Date.now(),
+        };
+      }
+    } catch {
+      // Se a cópia local não passar na validação, mantém o caminho normal do DB.
+    }
+  }
   await ensureH2AutoReleaseTable();
   const db = await getDb() as any;
   const result = await db.execute(sql.raw(
@@ -142,8 +169,9 @@ export function registerApkDownloadRoute(app: Express) {
         res.status(404).json({ error: "H2 AUTO ainda não publicado no ADM." });
         return;
       }
-      const { r2GetObjectBuffer } = await import("../r2Storage");
-      const buffer = await r2GetObjectBuffer(release.r2Key);
+      const buffer = release.r2Key.startsWith("__local__:")
+        ? fs.readFileSync(release.r2Key.slice("__local__:".length))
+        : await (await import("../r2Storage")).r2GetObjectBuffer(release.r2Key);
       const actualSha256 = createHash("sha256").update(buffer).digest("hex");
       if (buffer.length !== release.fileSize || actualSha256 !== release.sha256) {
         res.status(503).json({ error: "Integridade do APK não confirmada. Download bloqueado." });

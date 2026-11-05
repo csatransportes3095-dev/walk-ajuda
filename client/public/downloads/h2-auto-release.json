@@ -1,7 +1,7 @@
 {
   "packageName": "com.h2colombiano.auto",
   "apkFile": "H2-AUTO-1.66.apk",
-  "versionName": "1.66-media-before-tree",
+  "versionName": "1.66",
   "versionCode": 66,
   "sha256": "e425524e2d31240c788c73fb99ac5ea95d2e658f787c96967ee33a3cca80da64",
   "certificateSha256": "3215b6d6b643ae6b57ffaf6e4854a40be267d4816166255872410c696384b393",
