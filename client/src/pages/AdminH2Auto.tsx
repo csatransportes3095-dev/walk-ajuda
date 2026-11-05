@@ -615,7 +615,7 @@ export default function AdminH2Auto() {
                       : "Nunca sincronizado"}
                   </p>
                 </div>
-                <div className="flex flex-wrap gap-2">
+                {section==="devices" && <div className="flex flex-wrap gap-2">
                   <button
                     className="rounded-lg border border-cyan-500/40 px-3 py-2 text-xs"
                     onClick={() => pairCode.mutate({ id: d.id })}
@@ -654,7 +654,7 @@ export default function AdminH2Auto() {
                   >
                     REMOVER APARELHO
                   </button>
-                </div>
+                </div>}
               </div>
               {needsRefresh && (
                 <div className="flex flex-wrap items-center justify-between gap-3 rounded-xl border border-amber-400/50 bg-amber-950/30 p-3 text-sm text-amber-100">
@@ -673,6 +673,7 @@ export default function AdminH2Auto() {
                   </button>
                 </div>
               )}
+              <div className={section==="devices"?"space-y-4":"hidden"}>
               {d.snapshotConfig && (
                 <div className="rounded-xl border border-amber-400/30 bg-amber-950/20 p-3 space-y-2">
                   <div className="font-bold text-amber-200">
@@ -706,6 +707,8 @@ export default function AdminH2Auto() {
                   </button>
                 </div>
               )}
+              </div>
+              <div className={section==="operations"?"space-y-4":"hidden"}>
               <section className="rounded-2xl border border-rose-400/40 bg-rose-950/25 p-4 space-y-3">
                 <h4 className="font-black text-rose-200 flex items-center gap-2"><Power className="h-5 w-5"/> CONTROLES IMEDIATOS DO ROBÔ</h4>
                 <p className="text-xs text-slate-300">A atualização é aplicada no servidor sem aguardar a sincronização do celular. Se não houver internet, o APK deve bloquear envios por segurança.</p>
@@ -772,6 +775,12 @@ export default function AdminH2Auto() {
                 </div>
               </section>
 
+              </div>
+              <div className={section==="intelligence"?"space-y-4":"hidden"}>
+                <div className="rounded-2xl border border-cyan-400/30 bg-gradient-to-r from-cyan-950/50 to-indigo-950/40 p-4 sm:p-5">
+                  <h2 className="text-xl font-black text-white sm:text-2xl">🧠 Inteligência de Atendimento</h2>
+                  <p className="mt-1 text-sm text-slate-300">Colete dúvidas reais, aprove respostas e expanda o conhecimento do H2 AUTO sem mensalidade de IA.</p>
+                </div>
               <H2AutoLearningPanel deviceId={d.id} enabled={Boolean(d.config.questionCollectionEnabled)} />
               <section className="rounded-2xl border border-violet-400/45 bg-gradient-to-br from-violet-950/30 to-slate-950 p-4 space-y-4">
                 <h4 className="text-lg font-black text-violet-200">🧠 ATENDIMENTO PERSONALIZADO — SEM CUSTO DE IA</h4>
@@ -838,6 +847,8 @@ export default function AdminH2Auto() {
                   disabled={savePersonalization.isPending || (!personalDrafts[d.id] && presetPreparation.added===0) || (personalization.faq??[]).some(x=>x.question.trim().length<3 || x.answer.trim().length<3)}
                   onClick={()=>savePersonalization.mutate({id:d.id,personalization})}>SALVAR PERSONALIZAÇÃO DESTE APARELHO</button>
               </section>
+              </div>
+              <div className={section==="responses"?"space-y-4":"hidden"}>
               <nav aria-label="Central de respostas" className="sticky top-1 z-20 rounded-xl border border-cyan-400/30 bg-[#071629]/95 p-3 shadow-xl">
                 <p className="mb-2 text-sm font-black text-cyan-200">💬 CENTRAL DE RESPOSTAS — ACESSO RÁPIDO</p>
                 <div className="flex flex-wrap gap-2">
@@ -850,6 +861,8 @@ export default function AdminH2Auto() {
               <div id={`h2-tree-${d.id}`} className="scroll-mt-32">
               <H2AutoTreeEditor id={d.id} revision={d.revision} appliedRevision={d.appliedRevision} initial={d.config.tree} />
               </div>
+              </div>
+              <div className={section==="diagnostics"?"space-y-4":"hidden"}>
               <H2AutoValidationBlocks deviceId={d.id} deviceLabel={d.label} />
               <H2AutoSilencedContacts deviceId={d.id} deviceLabel={d.label} />
               <H2AutoHistoryPanel
@@ -958,6 +971,8 @@ export default function AdminH2Auto() {
                   automaticamente.
                 </p>
               </section>
+              </div>
+              <div className={section==="operations"?"space-y-4":"hidden"}>
               <div className="grid gap-3 md:grid-cols-2">
                 <label className="text-xs flex flex-col gap-2">
                   APLICATIVO WHATSAPP
@@ -982,6 +997,9 @@ export default function AdminH2Auto() {
                   <Power className="h-4 w-4" /> Robô habilitado remotamente
                 </label>
                 <p className="col-span-full text-xs text-emerald-200/80">A consulta de pedidos pode ser ativada e desativada no card “ACOMPANHAR PEDIDO — STATUS PELO WHATSAPP” acima.</p>
+              </div>
+              </div>
+              <div className={section==="responses"?"space-y-4":"hidden"}>
                 <div id={`h2-confirm-${d.id}`} className="col-span-full scroll-mt-32 rounded-2xl border border-violet-400/40 bg-violet-950/20 p-3 sm:p-5 space-y-4">
                   <div className="flex flex-wrap items-center justify-between gap-3">
                     <div>
@@ -1045,6 +1063,9 @@ export default function AdminH2Auto() {
                   </button>
                   <p className="text-xs text-slate-400">O salvamento atualiza somente os textos deste aparelho, sem sobrescrever outras configurações.</p>
                 </div>
+              </div>
+              <div className={section==="operations"?"space-y-4":"hidden"}>
+              <div className="grid gap-3 md:grid-cols-2">
                 <div className="col-span-full rounded-xl border border-cyan-400/30 bg-cyan-950/20 p-3 space-y-3">
                   <h4 className="font-black text-cyan-300">
                     INTEGRAÇÃO COM PEDIDOS DO SITE
@@ -1158,6 +1179,8 @@ export default function AdminH2Auto() {
                   />
                 </div>
               </div>
+              </div>
+              <div className={section==="responses"?"space-y-4":"hidden"}>
               <section id={`h2-rules-${d.id}`} className="scroll-mt-32 rounded-2xl border border-fuchsia-400/40 bg-fuchsia-950/20 p-4 space-y-4">
                 <div>
                   <h4 className="text-lg font-black text-fuchsia-200">💬 RESPOSTAS DO WHATSAPP — H2 AUTO</h4>
@@ -1320,6 +1343,8 @@ export default function AdminH2Auto() {
                   SALVAR SOMENTE ÁUDIOS E MÍDIAS
                 </button>
               </section>
+              </div>
+              <div className={section==="operations"?"space-y-4":"hidden"}>
               <label className="block text-xs">
                 CONTATOS BLOQUEADOS (um por linha)
                 <textarea
@@ -1337,6 +1362,7 @@ export default function AdminH2Auto() {
                 <Save className="inline h-4 w-4 mr-1" />
                 SALVAR CONFIGURAÇÃO GERAL
               </button>
+              </div>
             </Box>
           );
         })}
