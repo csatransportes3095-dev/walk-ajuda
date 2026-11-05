@@ -665,8 +665,8 @@ export default function AdminH2Auto() {
                 </div>
                 <div className="space-y-3 rounded-xl border border-violet-400/25 bg-slate-950/65 p-3">
                   <div className="flex items-center justify-between gap-3 flex-wrap">
-                    <div><h5 className="font-black text-violet-100">PERGUNTAS E RESPOSTAS LIVRES</h5><p className="text-xs text-slate-300">Sem botões ou números para o cliente. Até 40 respostas individuais por aparelho.</p></div>
-                    <button type="button" disabled={(personalization.faq ?? []).length>=40} className="rounded-lg bg-violet-600 px-4 py-2 font-black text-xs disabled:opacity-40"
+                    <div><h5 className="font-black text-violet-100">PERGUNTAS E RESPOSTAS LIVRES</h5><p className="text-xs text-slate-300">Sem botões ou números para o cliente. Quantidade livre de perguntas e respostas por aparelho.</p></div>
+                    <button type="button" className="rounded-lg bg-violet-600 px-4 py-2 font-black text-xs"
                       onClick={()=>updatePersonalization({faq:[...(personalization.faq??[]),{id:"faq_"+Date.now().toString(36)+"_"+Math.random().toString(36).slice(2,6),question:"",variations:"",answer:"",enabled:true}]})}>+ ADICIONAR PERGUNTA E RESPOSTA</button>
                   </div>
                   {(personalization.faq ?? []).map((faq,index)=><div key={faq.id} className="rounded-xl border border-violet-500/30 bg-[#080b1c] p-3 space-y-2">

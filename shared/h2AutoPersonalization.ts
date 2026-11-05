@@ -18,7 +18,7 @@ export const h2AutoPersonalizationSchema = z.object({
   enabled: z.boolean().default(false),
   tone: z.enum(["acolhedor", "objetivo", "profissional"]).default("acolhedor"),
   verifiedName: z.boolean().default(true),
-  faq: z.array(h2AutoFaqRuleSchema).max(40).default([]),
+  faq: z.array(h2AutoFaqRuleSchema).default([]),
   faqPresetsLoaded: z.boolean().default(false),
 }).strict();
 
