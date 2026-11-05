@@ -20,7 +20,7 @@ import H2AutoHistoryPanel from "@/components/H2AutoHistoryPanel";
 import H2AutoValidationBlocks from "@/components/H2AutoValidationBlocks";
 import H2AutoSilencedContacts from "@/components/H2AutoSilencedContacts";
 import H2AutoWhatsAppPreview from "@/components/H2AutoWhatsAppPreview";
-import { H2_AUTO_CONFIRMATION_DEFAULTS as confirmationDefaults, H2_AUTO_CONFIRMATION_GROUPS as confirmationGroups } from "@shared/h2AutoConfirmation";
+import { H2_AUTO_CONFIRMATION_DEFAULTS as confirmationDefaults, H2_AUTO_CONFIRMATION_GROUPS as confirmationGroups, type H2AutoConfirmation } from "@shared/h2AutoConfirmation";
 import { H2_AUTO_SHORT_MEDIA, H2_AUTO_SHORT_ORDER_NOT_FOUND } from "@shared/h2AutoShortReplies";
 import { H2_AUTO_PERSONALIZATION_DEFAULT, H2_AUTO_FAQ_MAX_VARIATION_CHARS, H2_AUTO_FAQ_MAX_VARIATION_LINES, h2AutoFaqVariationLineCount, type H2AutoPersonalization } from "@shared/h2AutoPersonalization";
 import { prepareH2AutoCommonFaq, H2_AUTO_FAQ_SUGGESTIONS } from "@shared/h2AutoFaqPresets";
@@ -169,7 +169,7 @@ export default function AdminH2Auto() {
     refetchInterval: 15000,
   });
   const [label, setLabel] = useState("Celular principal");
-  const [section, setSection] = useState<"intelligence" | "responses" | "operations" | "diagnostics" | "devices">("intelligence");
+  const [section, setSection] = useState<"intelligence" | "fixed" | "responses" | "operations" | "diagnostics" | "devices">("intelligence");
   const [selectedDeviceId, setSelectedDeviceId] = useState<string>("");
   const { data: h2AutoApk, refetch: refreshH2AutoApk, isLoading: loadingH2AutoApk } =
     trpc.apk.getH2AutoRelease.useQuery(undefined, { refetchOnWindowFocus: true });
@@ -226,6 +226,10 @@ export default function AdminH2Auto() {
   const [editing, setEditing] = useState<
     Record<string, { config: any; revision: number }>
   >({});
+  // Isolado: não apaga rascunhos de regras, mídia ou comandos.
+  const [fixedDrafts, setFixedDrafts] = useState<Record<string, {
+    confirmation: H2AutoConfirmation; revision: number;
+  }>>({});
   const [conflicts, setConflicts] = useState<Record<string, boolean>>({});
   const clearDraft = (id: string) =>
     setEditing(previous => {
@@ -282,16 +286,15 @@ export default function AdminH2Auto() {
   });
   const saveConfirmation = trpc.h2AutoAdmin.saveConfirmation.useMutation({
     onSuccess: (_result, variables) => {
-      clearDraft(variables.id);
-      setConflicts(previous => ({ ...previous, [variables.id]: false }));
-      toast.success("Textos de confirmação salvos no servidor. O H2 Auto receberá a atualização na sincronização.");
+      setFixedDrafts(previous => {
+        const current = previous[variables.id];
+        if (!current || current.revision !== variables.expectedRevision) return previous;
+        const next = { ...previous }; delete next[variables.id]; return next;
+      });
+      toast.success("Mensagens fixas salvas sem alterar autenticação, chaves ou regras do APK.");
       void utils.h2AutoAdmin.list.invalidate();
     },
-    onError: (error, variables) => {
-      if (error.data?.code === "CONFLICT")
-        setConflicts(previous => ({ ...previous, [variables.id]: true }));
-      toast.error(error.message || "Falha ao salvar textos de confirmação.");
-    },
+    onError: error => toast.error(error.message || "Falha ao salvar mensagens fixas."),
   });
   const [validityDraft, setValidityDraft] = useState<Record<string,string>>({});
   const validity = trpc.h2AutoAdmin.saveIdentificationValidity.useMutation({
@@ -372,6 +375,10 @@ export default function AdminH2Auto() {
                 <ExternalLink className="h-5 w-5" />
                 BAIXAR APK H2 AUTO {h2AutoApk?.versionName || ""}
               </a>
+              <button type="button" onClick={() => {setSection("fixed"); void utils.h2AutoAdmin.list.invalidate();}}
+                className="inline-flex min-h-12 w-full items-center justify-center gap-2 rounded-xl border border-amber-300/50 bg-amber-300 px-5 py-3 text-sm font-black text-slate-950 transition hover:bg-amber-200 sm:w-auto">
+                <Save className="h-4 w-4" /> EDITAR MENSAGENS FIXAS
+              </button>
               <button type="button" onClick={() => {setSection("intelligence"); void utils.h2AutoAdmin.list.invalidate();}}
                 className="inline-flex min-h-12 w-full items-center justify-center gap-2 rounded-xl border border-cyan-400/50 bg-cyan-300/15 px-5 py-3 text-sm font-black text-cyan-100 transition hover:bg-cyan-400/20 sm:w-auto">
                 <RefreshCw className="h-4 w-4" /> ABRIR INTELIGÊNCIA
@@ -394,6 +401,7 @@ export default function AdminH2Auto() {
         <nav aria-label="Áreas do H2 AUTO" className="sticky top-[56px] z-40 -mx-1 flex gap-2 overflow-x-auto rounded-2xl border border-white/10 bg-[#081427]/95 p-2 shadow-xl backdrop-blur-md sm:mx-0">
           {([
             ["intelligence","🧠 INTELIGÊNCIA"],
+            ["fixed","🔐 MENSAGENS FIXAS"],
             ["responses","💬 RESPOSTAS"],
             ["operations","⚡ OPERAÇÃO"],
             ["diagnostics","📊 DIAGNÓSTICO"],
@@ -570,7 +578,25 @@ export default function AdminH2Auto() {
             setPersonalDrafts(prev => ({...prev, [d.id]: {...personalization,...patch}}));
             setPersonalPreviews(prev => ({...prev, [d.id]: ""}));
           };
-          const confirmation = { ...confirmationDefaults, ...(value.confirmation || {}) };
+          const fixedDraft = fixedDrafts[d.id];
+          const confirmation: H2AutoConfirmation = {
+            ...confirmationDefaults,
+            ...(fixedDraft?.confirmation ?? d.config.confirmation ?? {}),
+          };
+          const fixedNeedsRefresh = Boolean(fixedDraft && fixedDraft.revision !== d.revision);
+          const changeConfirmation = (key: keyof H2AutoConfirmation, text: string) =>
+            setFixedDrafts(previous => {
+              const current = previous[d.id];
+              const base = current?.confirmation ??
+                ({ ...confirmationDefaults, ...(d.config.confirmation || {}) } as H2AutoConfirmation);
+              return {
+                ...previous,
+                [d.id]: {
+                  confirmation: { ...base, [key]: text },
+                  revision: current?.revision ?? d.revision,
+                },
+              };
+            });
           const mediaDirty =
             Boolean(draft) &&
             JSON.stringify(media) !==
@@ -789,6 +815,14 @@ export default function AdminH2Auto() {
                 <div className="rounded-2xl border border-cyan-400/30 bg-gradient-to-r from-cyan-950/50 to-indigo-950/40 p-4 sm:p-5">
                   <h2 className="text-xl font-black text-white sm:text-2xl">🧠 Inteligência de Atendimento</h2>
                   <p className="mt-1 text-sm text-slate-300">Colete dúvidas reais, aprove respostas e expanda o conhecimento do H2 AUTO sem mensalidade de IA.</p>
+                </div>
+                <div className="flex flex-wrap items-center justify-between gap-3 rounded-xl border border-amber-400/40 bg-amber-950/20 p-4">
+                  <div>
+                    <h3 className="font-black text-amber-200">🔐 MENSAGENS FIXAS — IDENTIFICAÇÃO</h3>
+                    <p className="mt-1 text-xs text-slate-300">Edite início, opções 1, 2 e 3, pedidos de telefone, código e confirmações. As regras permanecem protegidas.</p>
+                  </div>
+                  <button type="button" onClick={() => setSection("fixed")}
+                    className="rounded-xl bg-amber-300 px-4 py-3 text-xs font-black text-slate-950">ABRIR FORMULÁRIO DE MENSAGENS FIXAS</button>
                 </div>
               <H2AutoLearningPanel deviceId={d.id} enabled={Boolean(d.config.questionCollectionEnabled)} />
               <section className="rounded-2xl border border-violet-400/45 bg-gradient-to-br from-violet-950/30 to-slate-950 p-4 space-y-4">
