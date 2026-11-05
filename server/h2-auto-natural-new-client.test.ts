@@ -28,7 +28,10 @@ describe("H2 AUTO: cliente indicado falando naturalmente",()=>{
   });
   it("preserva menu, telefone, codigo e indicador sem ativar atendimento automaticamente",()=>{
     const access=readFileSync("server/h2-auto-access.ts","utf8");
-    expect(access).not.toContain('initialH2AutoChoiceStage(input) ??');
+    expect(access).toContain('const firstStage = initialH2AutoChoiceStage(input) ||');
+    expect(access).toContain('const selectedInitialStage = initialH2AutoChoiceStage(input);');
+    expect(access).toContain('const selectedMenuStage = initialH2AutoChoiceStage(input) ||');
+    expect(access).toContain('const initialMessage = confirmation.identificationWelcome;');
     expect(access).toContain('h2AutoNaturalNewCustomerIntent(input) ? "referral_phone" : null');
     expect(access).toContain('if (h2AutoNaturalNewCustomerIntent(input))');
     expect(access).toContain('repeatedH2AutoChoice(s.stage,input) || h2AutoNaturalNewCustomerIntent(input)');
