@@ -10,6 +10,7 @@ import { changeSilencedPhone, manualSilencedPhones } from "./h2-auto-silenced-co
 import { h2AutoTreeSchema, H2_AUTO_TREE_DEFAULT } from "../shared/h2AutoTree";
 import { h2AutoPersonalizationSchema, H2_AUTO_PERSONALIZATION_DEFAULT, getH2AutoPersonalizedReply } from "../shared/h2AutoPersonalization";
 import { mergeH2AutoExpandedFaq } from "../shared/h2AutoFaqPresets";
+import { listH2AutoUnknownQuestions, deleteH2AutoUnknownQuestion, ensureH2AutoLearningTable } from "./h2-auto-learning";
 import { H2_AUTO_SHORT_MEDIA, H2_AUTO_SHORT_ORDER_NOT_FOUND, applyH2AutoShortCopy } from "../shared/h2AutoShortReplies";
 import { h2AutoConfirmationSchema as confirmationSchema } from "../shared/h2AutoConfirmation";
 import {
@@ -71,6 +72,7 @@ const mediaSchema = z.object({
 const configSchema = z.object({
   tree: h2AutoTreeSchema.optional(),
   personalization: h2AutoPersonalizationSchema.default(() => ({ ...H2_AUTO_PERSONALIZATION_DEFAULT })),
+  questionCollectionEnabled: z.boolean().default(false),
   media: mediaSchema.default(() => mediaSchema.parse({})),
   confirmation: confirmationSchema.default(() => confirmationSchema.parse({})),
   enabled: z.boolean(),
@@ -115,6 +117,7 @@ const configSchema = z.object({
 type RemoteConfig = z.infer<typeof configSchema>;
 const initial: RemoteConfig = {
   personalization: { ...H2_AUTO_PERSONALIZATION_DEFAULT },
+  questionCollectionEnabled: false,
   media: mediaSchema.parse({}),
   confirmation: confirmationSchema.parse({}),
   ordersEnabled: false,
@@ -563,6 +566,79 @@ export const h2AutoAdminRouter = router({
         code: "CONFLICT", message: "As respostas mudaram no servidor. Atualize antes de salvar para não sobrescrever mensagens.",
       });
       return { success: true, revision: input.expectedRevision + 1 };
+    }),
+
+  // Nova fila de aprendizado: pode ser desligada sem apagar respostas cadastradas.
+  learningQuestions: adminProcedure
+    .input(z.object({id:z.string().regex(/^[a-f0-9]{24}$/),limit:z.number().int().min(10).max(500).default(50)}))
+    .query(async ({input}) => {
+      await ensure();
+      return listH2AutoUnknownQuestions(input.id,input.limit);
+    }),
+  setQuestionCollection: adminProcedure
+    .input(z.object({id:z.string().regex(/^[a-f0-9]{24}$/),enabled:z.boolean()}))
+    .mutation(async ({input}) => {
+      await ensure();
+      const db=await getDb();
+      if(!db) throw new TRPCError({code:"INTERNAL_SERVER_ERROR",message:"Banco indisponível."});
+      const result:any=await db.execute(sql`UPDATE h2_auto_devices SET
+        config_json=JSON_SET(config_json,'$.questionCollectionEnabled',CAST(${JSON.stringify(input.enabled)} AS JSON)),
+        revision=revision+1 WHERE id=${input.id}`);
+      if(!result[0]?.affectedRows)
+        throw new TRPCError({code:"NOT_FOUND",message:"Aparelho não encontrado."});
+      return {success:true,enabled:input.enabled};
+    }),
+  deleteLearningQuestion: adminProcedure
+    .input(z.object({id:z.string().regex(/^[a-f0-9]{24}$/),questionHash:z.string().regex(/^[a-f0-9]{64}$/)}))
+    .mutation(async ({input}) => {
+      await deleteH2AutoUnknownQuestion(input.id,input.questionHash);
+      return {success:true};
+    }),
+  clearLearningQuestions: adminProcedure
+    .input(z.object({id:z.string().regex(/^[a-f0-9]{24}$/),confirmed:z.literal(true)}))
+    .mutation(async ({input}) => {
+      await deleteH2AutoUnknownQuestion(input.id);
+      return {success:true};
+    }),
+  answerLearningQuestion: adminProcedure
+    .input(z.object({
+      id:z.string().regex(/^[a-f0-9]{24}$/),
+      questionHash:z.string().regex(/^[a-f0-9]{64}$/),
+      answer:z.string().trim().min(3).max(1200),
+      variations:z.string().trim().max(600).default(""),
+    }))
+    .mutation(async ({input}) => {
+      await ensure();
+      await ensureH2AutoLearningTable();
+      const db=await getDb();
+      if(!db) throw new TRPCError({code:"INTERNAL_SERVER_ERROR",message:"Banco indisponível."});
+      const questions=await rows(sql`SELECT question FROM h2_auto_unanswered_questions
+        WHERE device_id=${input.id} AND question_hash=${input.questionHash} LIMIT 1`);
+      if(!questions.length)
+        throw new TRPCError({code:"NOT_FOUND",message:"Pergunta não encontrada ou já excluída."});
+      const current=(await rows(sql`SELECT config_json,revision FROM h2_auto_devices
+        WHERE id=${input.id} LIMIT 1`))[0];
+      if(!current) throw new TRPCError({code:"NOT_FOUND",message:"Aparelho não encontrado."});
+      const config=decodeConfig(current.config_json);
+      const question=String(questions[0].question).slice(0,160);
+      const faqId="learn_"+input.questionHash.slice(0,20);
+      const entries=[...(config.personalization.faq || [])];
+      const index=entries.findIndex(item=>item.id===faqId ||
+        item.question.trim().toLocaleLowerCase("pt-BR")===question.trim().toLocaleLowerCase("pt-BR"));
+      const entry={id:index>=0?entries[index].id:faqId,question,
+        variations:input.variations,answer:input.answer,enabled:true};
+      if(index>=0) entries[index]=entry; else entries.push(entry);
+      const personalization=h2AutoPersonalizationSchema.parse({
+        ...config.personalization,faq:entries,
+      });
+      const updated:any=await db.execute(sql`UPDATE h2_auto_devices
+        SET config_json=JSON_SET(config_json,'$.personalization',CAST(${JSON.stringify(personalization)} AS JSON)),
+            revision=revision+1 WHERE id=${input.id} AND revision=${Number(current.revision)}`);
+      if(!updated[0]?.affectedRows)
+        throw new TRPCError({code:"CONFLICT",message:"Outro usuário alterou as respostas. Atualize e tente novamente."});
+      await deleteH2AutoUnknownQuestion(input.id,input.questionHash);
+      return {success:true,faqId:entry.id,revision:Number(current.revision)+1,
+        active:personalization.enabled};
     }),
   /** An isolated field update: never overwrite menus, customer security or APK pauses. */
   savePersonalization: adminProcedure
