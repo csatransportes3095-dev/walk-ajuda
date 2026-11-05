@@ -38,18 +38,21 @@ const STOP = new Set([
 export function safeH2AutoUnknownQuestion(input: unknown): { question: string; hash: string } | null {
   if (typeof input !== "string") return null;
   const question = input.replace(/\s+/g, " ").trim();
-  if (question.length < 8 || question.length > 160) return null;
-  // Identificadores, números, links e contatos: nunca registrar na fila.
-  if (/[0-9@]/.test(question) || /https?:|www\.|[\\/]|\b(?:senha|token|pix|chave|placa|cpf|cnpj|rg)\b/i.test(question))
+  if (question.length < 6 || question.length > 160) return null;
+  // Permitir apenas "99" como identificador público de serviço.
+  // Nenhum outro número, sequência de telefone, código, CPF ou contato entra na fila.
+  const withoutPublicService99 = question.replace(/\b99\b/g, "");
+  if (/\d/.test(withoutPublicService99)) return null;
+  if (/[0-9@]/.test(withoutPublicService99) || /https?:|www\.|[\\/]|\b(?:senha|token|pix|chave|placa|cpf|cnpj|rg)\b/i.test(question))
     return null;
   const normalized = question.normalize("NFD").replace(/[\u0300-\u036f]/g, "")
-    .toLowerCase().replace(/[^a-z\s]/g, " ").replace(/\s+/g, " ").trim();
+    .toLowerCase().replace(/[^a-z0-9\s]/g, " ").replace(/\s+/g, " ").trim();
   if (/^(?:menu|inicio|voltar|oi|ola|bom dia|boa tarde|boa noite|obrigado|obrigada|ok|sim|nao)$/.test(normalized))
     return null;
   const isQuestion = question.includes("?") ||
-    /^(?:como|quando|onde|qual|quais|porque|por que|quanto|quantos|posso|pode|tem|preciso|quero|queria|gostaria|nao consigo|não consigo|tenho uma duvida|tenho uma dúvida|me explica|me ajuda)\b/i.test(question);
+    /^(?:como|quando|onde|qual|quais|porque|por que|quanto|quantos|posso|pode|tem|faz|fazem|vende|trabalha|preciso|quero|queria|gostaria|nao consigo|não consigo|tenho uma duvida|tenho uma dúvida|me explica|me ajuda)\b/i.test(question);
   if (!isQuestion) return null;
-  const keywords = [...new Set(normalized.split(" ").filter(word => word.length > 2 && !STOP.has(word)))];
+  const keywords = [...new Set(normalized.split(" ").filter(word => (word.length > 2 && !STOP.has(word)) || word === "99"))];
   const canonical = keywords.length >= 2 ? keywords.sort().join(" ") : normalized;
   const hash = createHash("sha256").update(canonical).digest("hex");
   return { question, hash };
