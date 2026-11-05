@@ -90,6 +90,78 @@ const dateLabel = (value: number | null | undefined) =>
 const isStale = (value: number | null | undefined) =>
   value != null && Date.now() - value > 24 * 60 * 60 * 1000;
 
+
+function H2AutoLearningPanel({deviceId, enabled}:{deviceId:string,enabled:boolean}) {
+  const utils = trpc.useUtils();
+  const {data, isLoading, refetch} = trpc.h2AutoAdmin.learningQuestions.useQuery(
+    {id:deviceId,limit:100}, {refetchInterval:30000}
+  );
+  const [answers,setAnswers] = useState<Record<string,string>>({});
+  const [variations,setVariations] = useState<Record<string,string>>({});
+  const toggle = trpc.h2AutoAdmin.setQuestionCollection.useMutation({
+    onSuccess:async()=>{toast.success("Controle da coleta atualizado"); await utils.h2AutoAdmin.list.invalidate();},
+    onError:error=>toast.error(error.message),
+  });
+  const remove = trpc.h2AutoAdmin.deleteLearningQuestion.useMutation({
+    onSuccess:()=>{toast.success("Pergunta excluída");void refetch();},
+    onError:error=>toast.error(error.message),
+  });
+  const clear = trpc.h2AutoAdmin.clearLearningQuestions.useMutation({
+    onSuccess:()=>{toast.success("Fila de perguntas limpa");void refetch();},
+    onError:error=>toast.error(error.message),
+  });
+  const approve = trpc.h2AutoAdmin.answerLearningQuestion.useMutation({
+    onSuccess:result=>{
+      toast.success(result.active?"Resposta aprovada e liberada":"Resposta salva. Ative a personalização para responder automaticamente.");
+      void refetch(); void utils.h2AutoAdmin.list.invalidate();
+    },
+    onError:error=>toast.error(error.message),
+  });
+  return <section className="rounded-2xl border border-emerald-400/40 bg-slate-950 p-4 space-y-4">
+    <div className="flex flex-wrap gap-3 items-center justify-between">
+      <div>
+        <h4 className="font-black text-lg text-emerald-200">🧠 CENTRAL INTELIGENTE — PERGUNTAS SEM RESPOSTA</h4>
+        <p className="text-xs text-slate-300">Sem IA ou API paga. Perguntas agrupadas, editáveis e excluíveis. Coleta desligada até você autorizar.</p>
+      </div>
+      <button type="button" disabled={toggle.isPending}
+        onClick={()=>toggle.mutate({id:deviceId,enabled:!enabled})}
+        className={`rounded-xl px-4 py-3 font-black text-sm ${enabled?"bg-red-700 text-white":"bg-emerald-600 text-slate-950"}`}>
+        {enabled?"⛔ DESATIVAR COLETA":"✅ ATIVAR COLETA"}
+      </button>
+    </div>
+    <div className="flex gap-2 flex-wrap items-center justify-between">
+      <p className="text-sm font-bold text-cyan-200">{data?.pending??0} perguntas agrupadas · {data?.received??0} ocorrências</p>
+      <div className="flex gap-2">
+        <button type="button" onClick={()=>void refetch()} className="rounded-lg px-3 py-2 border border-slate-600 text-xs">ATUALIZAR</button>
+        <button type="button" disabled={!data?.pending||clear.isPending}
+          onClick={()=>{if(window.confirm("Excluir definitivamente todas as perguntas pendentes deste aparelho?"))clear.mutate({id:deviceId,confirmed:true});}}
+          className="rounded-lg px-3 py-2 border border-red-600 text-red-300 text-xs">LIMPAR FILA</button>
+      </div>
+    </div>
+    {isLoading?<p className="text-sm text-slate-400">Carregando...</p>:
+      !data?.questions.length?<p className="rounded-xl bg-slate-900 p-4 text-sm text-slate-300">Nenhuma pergunta desconhecida coletada.</p>:
+      <div className="grid gap-3 xl:grid-cols-2">
+        {data.questions.map(q=><div key={q.questionHash} className="rounded-xl border border-slate-700 bg-slate-900 p-3 space-y-2">
+          <div className="flex justify-between gap-2">
+            <p className="font-bold text-sm text-white break-words">{q.question}</p>
+            <span className="text-xs whitespace-nowrap text-cyan-200">{q.occurrences}x</span>
+          </div>
+          <textarea className={field} rows={3} maxLength={1200} placeholder="Escreva a resposta que o cliente receberá"
+            value={answers[q.questionHash]??""} onChange={e=>setAnswers(old=>({...old,[q.questionHash]:e.target.value}))}/>
+          <textarea className={field} rows={2} maxLength={600} placeholder="Variações da pergunta (uma por linha)"
+            value={variations[q.questionHash]??""} onChange={e=>setVariations(old=>({...old,[q.questionHash]:e.target.value}))}/>
+          <div className="flex flex-wrap gap-2">
+            <button type="button" disabled={approve.isPending||(answers[q.questionHash]??"").trim().length<3}
+              onClick={()=>approve.mutate({id:deviceId,questionHash:q.questionHash,answer:answers[q.questionHash].trim(),variations:variations[q.questionHash]??""})}
+              className="rounded-lg bg-emerald-600 text-slate-950 font-black px-3 py-2 text-xs disabled:opacity-40">APROVAR RESPOSTA</button>
+            <button type="button" disabled={remove.isPending} onClick={()=>remove.mutate({id:deviceId,questionHash:q.questionHash})}
+              className="rounded-lg border border-red-500 text-red-300 px-3 py-2 text-xs">EXCLUIR</button>
+          </div>
+        </div>)}
+      </div>}
+  </section>;
+}
+
 export default function AdminH2Auto() {
   const utils = trpc.useUtils();
   const { data = [], isLoading } = trpc.h2AutoAdmin.list.useQuery(undefined, {
@@ -641,6 +713,7 @@ export default function AdminH2Auto() {
                 </div>
               </section>
 
+              <H2AutoLearningPanel deviceId={d.id} enabled={Boolean(d.config.questionCollectionEnabled)} />
               <section className="rounded-2xl border border-violet-400/45 bg-gradient-to-br from-violet-950/30 to-slate-950 p-4 space-y-4">
                 <h4 className="text-lg font-black text-violet-200">🧠 ATENDIMENTO PERSONALIZADO — SEM CUSTO DE IA</h4>
                 <p className="text-sm text-slate-300">Reconhece perguntas livres sobre pedidos, códigos, fotos, valores, indicações e atendimento. Responde com orientação pública e tom escolhido; só usa o primeiro nome após validação do cliente. Não consulta status sem autenticação nem faz promessas de atendimento. Nenhum serviço de IA pago será contratado.</p>
@@ -665,8 +738,8 @@ export default function AdminH2Auto() {
                 </div>
                 <div className="space-y-3 rounded-xl border border-violet-400/25 bg-slate-950/65 p-3">
                   <div className="flex items-center justify-between gap-3 flex-wrap">
-                    <div><h5 className="font-black text-violet-100">PERGUNTAS E RESPOSTAS LIVRES</h5><p className="text-xs text-slate-300">Sem botões ou números para o cliente. Até 40 respostas individuais por aparelho.</p></div>
-                    <button type="button" disabled={(personalization.faq ?? []).length>=40} className="rounded-lg bg-violet-600 px-4 py-2 font-black text-xs disabled:opacity-40"
+                    <div><h5 className="font-black text-violet-100">PERGUNTAS E RESPOSTAS LIVRES</h5><p className="text-xs text-slate-300">Sem botões ou números para o cliente. Até 1000 respostas individuais por aparelho.</p></div>
+                    <button type="button" disabled={(personalization.faq ?? []).length>=1000} className="rounded-lg bg-violet-600 px-4 py-2 font-black text-xs disabled:opacity-40"
                       onClick={()=>updatePersonalization({faq:[...(personalization.faq??[]),{id:"faq_"+Date.now().toString(36)+"_"+Math.random().toString(36).slice(2,6),question:"",variations:"",answer:"",enabled:true}]})}>+ ADICIONAR PERGUNTA E RESPOSTA</button>
                   </div>
                   {(personalization.faq ?? []).map((faq,index)=><div key={faq.id} className="rounded-xl border border-violet-500/30 bg-[#080b1c] p-3 space-y-2">
