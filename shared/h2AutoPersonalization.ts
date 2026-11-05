@@ -79,9 +79,14 @@ function normalizeQuestion(value: string): string {
 function normalizedFaqQuestion(value: string): string {
   return normalizeQuestion(value).replace(/[^a-z0-9\s]/g, " ").replace(/\s+/g, " ").trim();
 }
-const FAQ_STOP_WORDS = new Set(["eu","quero","queria","preciso","gostaria","poderia","como","qual","quais","onde","que","me","meu","minha","meus","minhas","um","uma","de","do","da","dos","das","com","o","a","os","as","para","por","em","no","na","tenho","pode","faz","fazer","ver","saber","esta","estou"]);
+const FAQ_STOP_WORDS = new Set(["eu","quero","queria","preciso","gostaria","poderia","como","qual","quais","onde","que","me","meu","minha","meus","minhas","um","uma","de","do","da","dos","das","com","o","a","os","as","para","por","em","no","na","tenho","pode","faz","fazem","fazer","ver","saber","esta","estou","voces","voce","vcs","tem","pra","favor"]);
 function faqWords(question: string): Set<string> {
-  return new Set(normalizedFaqQuestion(question).split(" ").filter(w => w.length > 2 && !FAQ_STOP_WORDS.has(w)));
+  // "99" é um nome de serviço, não um código de cliente. Preservar o
+  // termo para distinguir perguntas sobre 99 de Uber, táxi ou login.
+  // Nunca aceitar números longos (telefone, CPF ou código) como palavras.
+  return new Set(normalizedFaqQuestion(question).split(" ")
+    .filter(w => (w.length > 2 && /^[a-z]+$/.test(w) && !FAQ_STOP_WORDS.has(w)) ||
+      w === "99"));
 }
 function faqMatchScore(input: string, candidate: string): number {
   const actual = normalizedFaqQuestion(input);
