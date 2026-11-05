@@ -40,7 +40,7 @@ describe("H2 AUTO: perguntas livres sem opções",()=>{
     const config=h2AutoPersonalizationSchema.parse({
       enabled:true,
       faq:[
-        {id:"conta_99",question:"Faz conta 99?",variations:"Faz conta 99?\\nVocês trabalham com conta 99?",
+        {id:"conta_99",question:"Faz conta 99?",variations:"Faz conta 99?\nVocês trabalham com conta 99?",
           answer:"Atendemos solicitações 99 conforme disponibilidade.",enabled:true},
         {id:"conta_uber",question:"Faz conta Uber?",variations:"Vocês fazem Uber?",
           answer:"Atendemos solicitações Uber conforme disponibilidade.",enabled:true},
