@@ -201,18 +201,23 @@ public sealed class H2PhoneDisplayForm : System.Windows.Forms.Form {
     using(var body=Rounded(0.7f,0.7f,w-1.4f,h-1.4f,45f))
     using(var metal=new System.Drawing.Drawing2D.LinearGradientBrush(
       new System.Drawing.RectangleF(0,0,w,h),
-      System.Drawing.Color.FromArgb(48,51,58),
+      System.Drawing.Color.FromArgb(28,32,39),
       System.Drawing.Color.FromArgb(3,4,7),0f)) {
       g.FillPath(metal,body);
     }
     using(var rim=Rounded(2f,2f,w-4f,h-4f,43f))
-    using(var edge=new System.Drawing.Pen(System.Drawing.Color.FromArgb(32,35,42),1.7f)) {
+    using(var edge=new System.Drawing.Pen(System.Drawing.Color.FromArgb(112,119,132),2.8f)) {
       g.DrawPath(edge,rim);
+    }
+    // Delicate secondary graphite ring makes the casing visually thicker.
+    using(var lip=Rounded(6f,6f,w-12f,h-12f,40f))
+    using(var lipInk=new System.Drawing.Pen(System.Drawing.Color.FromArgb(17,20,25),3.4f)) {
+      g.DrawPath(lipInk,lip);
     }
     using(var glass=Rounded(5f,5f,w-10f,h-10f,41f))
     using(var dark=new System.Drawing.Drawing2D.LinearGradientBrush(
       new System.Drawing.RectangleF(5,5,w-10,h-10),
-      System.Drawing.Color.FromArgb(13,15,21),
+      System.Drawing.Color.FromArgb(5,6,9),
       System.Drawing.Color.FromArgb(1,2,4),90f)) {
       g.FillPath(dark,glass);
     }
@@ -224,7 +229,7 @@ public sealed class H2PhoneDisplayForm : System.Windows.Forms.Form {
     // The status bar and Chrome remain inside this phone-safe rounded area.
     using(var screen=Rounded(20f,104f,w-40f,h-166f,28f))
     using(var back=new System.Drawing.SolidBrush(System.Drawing.Color.FromArgb(1,5,12)))
-    using(var outline=new System.Drawing.Pen(System.Drawing.Color.FromArgb(52,56,66),1.3f)) {
+    using(var outline=new System.Drawing.Pen(System.Drawing.Color.FromArgb(91,97,109),1.8f)) {
       g.FillPath(back,screen);
       g.DrawPath(outline,screen);
     }
@@ -305,7 +310,7 @@ $frame=New-Object H2PhoneDisplayForm
 $frame.FormBorderStyle=[System.Windows.Forms.FormBorderStyle]::None
 $frame.ShowInTaskbar=$false
 $frame.StartPosition=[System.Windows.Forms.FormStartPosition]::Manual
-$frame.BackColor=RGB 10 14 25
+$frame.BackColor=RGB 0 0 2
 $frame.ForeColor=RGB 243 248 255
 $frame.TopMost=$false
 $frame.AutoScaleMode=[System.Windows.Forms.AutoScaleMode]::None
@@ -448,7 +453,7 @@ $status=New-Object System.Windows.Forms.Panel
 $status.Height=88
 $status.Width=$frame.Width-44
 $status.Location=New-Object System.Drawing.Point(22,8)
-$status.BackColor=RGB 7 8 11
+$status.BackColor=RGB 0 0 2
 $status.Cursor=[System.Windows.Forms.Cursors]::Hand
 Set-RoundedPanelRegion $status 24
 $status.add_Paint({
@@ -463,9 +468,12 @@ $status.add_Paint({
   try {
     $watchLayout=Get-H2AdsWatchLayout ([int]$w)
     $g.DrawString([DateTime]::Now.ToString("HH:mm"),$font,$fg,20,$watchLayout.clockY)
+    # Two clean black-glass status rows with subtle separation.
+    $statusDivider=New-Object System.Drawing.Pen -ArgumentList (RGB 62 67 77),1.2
+    try { $g.DrawLine($statusDivider,16,39,($w-16),39) } finally { $statusDivider.Dispose() }
     # The first row is reserved for time, camera and phone indicators.
     # The second row shows stopwatch time and three LABELED buttons.
-    $divider=New-Object System.Drawing.Pen -ArgumentList (RGB 45 52 64),1
+    $divider=New-Object System.Drawing.Pen -ArgumentList (RGB 26 29 35),1
     try { $g.DrawLine($divider,16,39,($w-16),39) } finally { $divider.Dispose() }
     $watchText=Format-H2AdsWatchElapsed
     $maxTextWidth=[single][Math]::Max(35,$watchLayout.startX-$watchLayout.textX-6)
@@ -499,8 +507,8 @@ $status.add_Paint({
       }
     } finally {$actionFont.Dispose();$align.Dispose()}
     # Discreet punch-hole camera.
-    $ring=New-Object System.Drawing.SolidBrush -ArgumentList (RGB 43 53 73)
-    $lens=New-Object System.Drawing.SolidBrush -ArgumentList (RGB 2 6 14)
+    $ring=New-Object System.Drawing.SolidBrush -ArgumentList (RGB 39 43 52)
+    $lens=New-Object System.Drawing.SolidBrush -ArgumentList (RGB 0 1 4)
     $g.FillEllipse($ring,($w/2-9),16,18,18)
     $g.FillEllipse($lens,($w/2-5),20,10,10)
     $ring.Dispose();$lens.Dispose()
@@ -575,7 +583,7 @@ $footer=New-Object System.Windows.Forms.Panel
 $footer.Height=52
 $footer.Width=$frame.Width-44
 $footer.Location=New-Object System.Drawing.Point(22,($frame.Height-60))
-$footer.BackColor=RGB 6 7 10
+$footer.BackColor=RGB 0 0 2
 Set-RoundedPanelRegion $footer 24
 $footer.add_Paint({
   param($sender,$e)
@@ -585,6 +593,9 @@ $footer.add_Paint({
   $pen=New-Object System.Drawing.Pen -ArgumentList (RGB 222 235 252),2.5
   $pill=New-Object System.Drawing.SolidBrush -ArgumentList (RGB 222 235 252)
   try {
+    # Refined top seam of the curved black-glass navigation footer.
+    $seam=New-Object System.Drawing.Pen -ArgumentList (RGB 40 44 52),1
+    try { $g.DrawLine($seam,18,2,($w-18),2) } finally { $seam.Dispose() }
     # Back, home gesture bar and recent-apps icons: decorative only.
     $x=[int]($w*0.24);$y=27
     $g.DrawLine($pen,($x+6),($y-9),($x-3),$y)
