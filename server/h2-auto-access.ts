@@ -142,10 +142,13 @@ export function registerH2AutoAccessRoutes(app: Express): void {
       await ensure();
       const deviceId = await deviceFor(req);
       let identificationDisabled = false;
+      // A árvore tem uma chave própria. Desligá-la não pode desligar as
+      // respostas personalizadas, que são independentes e opcionais.
+      let treeEnabled = true;
       let confirmation = h2AutoConfirmationSchema.parse({});
       let personalization = { ...H2_AUTO_PERSONALIZATION_DEFAULT };
       if (deviceId) {
-        const live = await rows(sql`SELECT JSON_EXTRACT(config_json,'$.confirmation') AS confirmation_json, JSON_EXTRACT(config_json,'$.personalization') AS personalization_json, JSON_UNQUOTE(JSON_EXTRACT(config_json,'$.enabled')) AS bot_on,
+        const live = await rows(sql`SELECT JSON_EXTRACT(config_json,'$.confirmation') AS confirmation_json, JSON_EXTRACT(config_json,'$.personalization') AS personalization_json, JSON_UNQUOTE(JSON_EXTRACT(config_json,'$.tree.enabled')) AS tree_on, JSON_UNQUOTE(JSON_EXTRACT(config_json,'$.enabled')) AS bot_on,
           CAST(JSON_UNQUOTE(JSON_EXTRACT(config_json,'$.identificationSessionHours')) AS UNSIGNED) AS session_hours,
           JSON_UNQUOTE(JSON_EXTRACT(config_json,'$.identificationEnabled')) AS identity_on,
           JSON_UNQUOTE(JSON_EXTRACT(config_json,'$.blocked')) AS blocked_phones
@@ -160,6 +163,7 @@ export function registerH2AutoAccessRoutes(app: Express): void {
           const rawPersonalization = live[0]?.personalization_json;
           personalization = h2AutoPersonalizationSchema.parse(typeof rawPersonalization === "string" ? JSON.parse(rawPersonalization) : rawPersonalization || {});
         } catch { personalization = { ...H2_AUTO_PERSONALIZATION_DEFAULT }; }
+        treeEnabled = live[0]?.tree_on !== "false";
       }
       if (!deviceId) return respond(res, 401, { error: "unauthorized" });
       const initialMessage = confirmation.identificationWelcome;
@@ -226,10 +230,10 @@ export function registerH2AutoAccessRoutes(app: Express): void {
             customer_phone_hash=NULL,customer_email_hash=NULL,code_hash=NULL,code_expires=NULL,
             code_attempts=0,resend_after=0,expires_at=0,updated_at=VALUES(updated_at)`);
         await clearH2AutoPhoneFailures(deviceId,sessionId);
-        const firstStage = initialH2AutoChoiceStage(input) ??
+        const firstStage = treeEnabled ? (initialH2AutoChoiceStage(input) ??
           (h2AutoNaturalExistingCustomerIntent(input) ? "customer_phone" :
            h2AutoNaturalReferralsIntent(input) ? "referrals_phone" :
-           h2AutoNaturalNewCustomerIntent(input) ? "referral_phone" : null);
+           h2AutoNaturalNewCustomerIntent(input) ? "referral_phone" : null)) : null;
         if (firstStage) {
           await update(sessionId, sql`stage=${firstStage},updated_at=${now}`);
           return respond(res, 200, {state:firstStage, message:firstStage==="customer_phone" ? phoneMessage :
@@ -324,15 +328,15 @@ export function registerH2AutoAccessRoutes(app: Express): void {
       }
 
       if (s.stage === "choice") {
-        if (normalized === "1" || h2AutoNaturalExistingCustomerIntent(input)) {
+        if (treeEnabled && (normalized === "1" || h2AutoNaturalExistingCustomerIntent(input))) {
           await update(sessionId, sql`stage='customer_phone',updated_at=${now}`);
           return respond(res, 200, { state: "customer_phone", message: phoneMessage });
         }
-        if (normalized === "3" || h2AutoNaturalReferralsIntent(input)) {
+        if (treeEnabled && (normalized === "3" || h2AutoNaturalReferralsIntent(input))) {
           await update(sessionId, sql`stage='referrals_phone',updated_at=${now}`);
           return respond(res, 200, { state: "referrals_phone", message: confirmation.phonePrompt });
         }
-        if (normalized === "2" || h2AutoNaturalNewCustomerIntent(input)) {
+        if (treeEnabled && (normalized === "2" || h2AutoNaturalNewCustomerIntent(input))) {
           await update(sessionId, sql`stage='referral_phone',updated_at=${now}`);
           return respond(res, 200, { state: "referral_phone", message: referrerMessage });
         }

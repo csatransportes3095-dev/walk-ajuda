@@ -43,6 +43,10 @@ describe("H2 AUTO: respostas personalizadas com segurança", () => {
   it("preserva a árvore, OTP, MENU/0, bloqueios e isolamento da configuração", () => {
     expect(access).toContain("if (blockedPhones.length");
     expect(access).toContain("if (s?.stage === \"blocked\")");
+    expect(access).toContain("let treeEnabled = true");
+    expect(access).toContain("treeEnabled = live[0]?.tree_on !== \"false\"");
+    expect(access).toContain("if (treeEnabled && (normalized === \"1\"");
+    expect(access).toContain("const openingPersonalization = getH2AutoPersonalizedReply");
     expect(access).toContain("const navigation = h2AutoNavigationCommand(input)");
     expect(access).toContain("if (s.stage === \"customer_code\"");
     expect(access).toContain("await sendH2AutoOrderCode");
