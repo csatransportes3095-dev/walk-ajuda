@@ -22,6 +22,27 @@ describe("H2 AUTO: perguntas livres sem opções",()=>{
     expect(h2AutoPersonalizationSchema.safeParse({...cfg,faq:[{id:"faq_a",question:"Oi",answer:"Resposta"}]}).success).toBe(false);
     expect(h2AutoPersonalizationSchema.safeParse({...cfg,faq:Array.from({length:41},(_,i)=>({id:"faq_"+i,question:"Pergunta de teste",answer:"Resposta de teste",enabled:true}))}).success).toBe(true);
   });
+  it("aceita e preserva as 1.000 subperguntas por pergunta principal",()=>{
+    const lines=Array.from({length:1000},(_,i)=>"Como acesso minha conta na opcao "+i+"?");
+    const variations=lines.join("\\n");
+    const config=h2AutoPersonalizationSchema.parse({
+      enabled:true,
+      faq:[{id:"login_site",question:"Como faço login no site?",variations,
+        answer:"Informe seu telefone e confirme pelo e-mail.",enabled:true}],
+    });
+    expect(config.faq[0].variations.split(/\\r?\\n/)).toHaveLength(1000);
+    expect(getH2AutoPersonalizedReply(lines[999],config)?.message).toContain("Informe seu telefone");
+    const excess=[...lines,"A pergunta 1001 deve ser rejeitada"].join("\\n");
+    expect(h2AutoPersonalizationSchema.safeParse({...config,faq:[{...config.faq[0],variations:excess}]}).success).toBe(false);
+  });
+  it("o ADM usa contador e limite de 1000 linhas, sem corte em 600 caracteres",()=>{
+    const ui=readFileSync("client/src/pages/AdminH2Auto.tsx","utf8");
+    const api=readFileSync("server/h2-auto-remote.ts","utf8");
+    expect(ui).toContain("H2_AUTO_FAQ_MAX_VARIATION_LINES");
+    expect(ui).toContain("H2_AUTO_FAQ_MAX_VARIATION_CHARS");
+    expect(ui).not.toContain('maxLength={600} placeholder="Outras formas de perguntar');
+    expect(api).toContain('variations:h2AutoFaqVariationsSchema.default("")');
+  });
   it("o ADM usa perguntas digitadas e permite adicionar e excluir",()=>{
     const ui=readFileSync("client/src/pages/AdminH2Auto.tsx","utf8");
     expect(ui).toContain("+ ADICIONAR PERGUNTA E RESPOSTA");
