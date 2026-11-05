@@ -833,6 +833,9 @@ export default function AdminH2Auto() {
                   <p className="text-xs text-amber-200">Não elimina autenticação, verificação de e-mail ou bloqueio. A alteração vale no servidor sem recompilar o APK; diminuir o prazo também pode antecipar uma nova confirmação.</p>
                 </div>
                 <div className="rounded-lg border border-white/10 bg-black/25 p-3 space-y-1 text-xs text-slate-300">
+                  <p><strong>Última notificação recebida pelo APK:</strong> {diagnostic?.notificationLastCode ?? "Sem registro"}</p>
+                  <p><strong>Horário da notificação:</strong> {dateLabel(diagnostic?.notificationLastAt)}</p>
+                  <p className="text-amber-200">Se não houver evento no horário do cliente, o Android não entregou uma notificação verificável ao H2 AUTO. Não é erro da pergunta cadastrada.</p>
                   <p><strong>Diagnóstico Android:</strong> {diagnostic?.desktopLastCode ?? "Sem registro"}</p>
                   <p><strong>Último evento:</strong> {dateLabel(diagnostic?.desktopLastAt)}</p>
                   <p><strong>Modo no APK:</strong> {diagnostic?.desktopReadOnly?"Ativado":diagnostic?"Desativado":"Não informado"}</p>
