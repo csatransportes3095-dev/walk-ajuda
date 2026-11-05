@@ -13,7 +13,7 @@ import { manualSilencedPhones, normalizeSilencedPhone } from "./h2-auto-silenced
 import { h2AutoConfirmationSchema } from "../shared/h2AutoConfirmation";
 import { h2AutoPersonalizationSchema, H2_AUTO_PERSONALIZATION_DEFAULT, getH2AutoPersonalizedReply } from "../shared/h2AutoPersonalization";
 import { h2AutoCustomerNeedsProfileUpdate, selectH2AutoCustomerByPhone } from "./h2-auto-customer-profile-guidance";
-import { recordH2AutoUnknownQuestion } from "./h2-auto-learning";
+import { recordH2AutoUnknownQuestion, safeH2AutoUnknownQuestion } from "./h2-auto-learning";
 
 /**
  * WhatsApp first-contact gate. State is server-side and bound to a paired device
@@ -67,8 +67,40 @@ async function ensure() {
       window_started_at BIGINT NOT NULL,
       hits INT NOT NULL DEFAULT 0
     ) ENGINE=InnoDB`);
+    // O usuário autorizou a captura em 05/11. Migração única por aparelho,
+    // preservando futuras desativações feitas manualmente no ADM.
+    await db.execute(sql`CREATE TABLE IF NOT EXISTS h2_auto_learning_optin_20261105 (
+      device_id VARCHAR(32) PRIMARY KEY,
+      enabled_at BIGINT NOT NULL
+    ) ENGINE=InnoDB`);
   })().catch(error => { ready = undefined; throw error; });
   return ready;
+}
+const learningOptInApplied = new Set<string>();
+async function enableLearningOnce(deviceId: string): Promise<void> {
+  if (learningOptInApplied.has(deviceId)) return;
+  const db = await getDb();
+  if (!db) throw new Error("db_unavailable");
+  // Uma transação por aparelho: não sobrescreve configurações de outros módulos.
+  await db.transaction(async tx => {
+    const selected = await tx.execute(sql`SELECT
+      JSON_UNQUOTE(JSON_EXTRACT(config_json,'$.questionCollectionEnabled')) AS active
+      FROM h2_auto_devices WHERE id=${deviceId} LIMIT 1 FOR UPDATE`);
+    const row = (selected[0] as any[])[0];
+    if (!row) return;
+    const migrated = await tx.execute(sql`SELECT device_id FROM h2_auto_learning_optin_20261105
+      WHERE device_id=${deviceId} LIMIT 1`);
+    if ((migrated[0] as any[]).length) return;
+    if (String(row.active) !== "true") {
+      await tx.execute(sql`UPDATE h2_auto_devices SET
+        config_json=JSON_SET(config_json,'$.questionCollectionEnabled',
+          CAST(${JSON.stringify(true)} AS JSON)),
+        revision=revision+1 WHERE id=${deviceId}`);
+    }
+    await tx.execute(sql`INSERT INTO h2_auto_learning_optin_20261105
+      (device_id, enabled_at) VALUES (${deviceId},${Date.now()})`);
+  });
+  learningOptInApplied.add(deviceId);
 }
 async function rows(statement: ReturnType<typeof sql>): Promise<any[]> {
   const db = await getDb();
@@ -151,6 +183,9 @@ export function registerH2AutoAccessRoutes(app: Express): void {
       let confirmation = h2AutoConfirmationSchema.parse({});
       let personalization = { ...H2_AUTO_PERSONALIZATION_DEFAULT };
       if (deviceId) {
+        // Ativar uma única vez a coleta pedida, sem reativar após desligar no ADM.
+        try { await enableLearningOnce(deviceId); }
+        catch (error) { console.error("[H2Auto] ativação da coleta indisponível",error); }
         const live = await rows(sql`SELECT JSON_EXTRACT(config_json,'$.confirmation') AS confirmation_json, JSON_EXTRACT(config_json,'$.personalization') AS personalization_json, JSON_UNQUOTE(JSON_EXTRACT(config_json,'$.tree.enabled')) AS tree_on, JSON_UNQUOTE(JSON_EXTRACT(config_json,'$.questionCollectionEnabled')) AS collection_on, JSON_UNQUOTE(JSON_EXTRACT(config_json,'$.enabled')) AS bot_on,
           CAST(JSON_UNQUOTE(JSON_EXTRACT(config_json,'$.identificationSessionHours')) AS UNSIGNED) AS session_hours,
           JSON_UNQUOTE(JSON_EXTRACT(config_json,'$.identificationEnabled')) AS identity_on,
@@ -187,6 +222,22 @@ export function registerH2AutoAccessRoutes(app: Express): void {
       const normalized = input.trim().toLowerCase();
       const sessionId = digest(deviceId + "|" + conversation);
       const now = Date.now();
+      const unansweredResponse = async () => {
+        // A fila só recebe texto público de pergunta; nunca dados pessoais,
+        // códigos, telefones, comandos ou histórico da conversa.
+        if (!safeH2AutoUnknownQuestion(input)) return null;
+        let captured = false;
+        if (questionCollectionEnabled) {
+          try { captured = await recordH2AutoUnknownQuestion(deviceId, input); }
+          catch (error) { console.error("[H2Auto] coleta de pergunta indisponível", error); }
+        }
+        return {
+          state: "choice",
+          message: "⚡ *H2 COLOMBIANO* 🇨🇴\n\n🤖 Ainda não tenho uma resposta cadastrada para essa pergunta." +
+            (captured ? "\n\n📝 Sua pergunta foi registrada para análise." : "") +
+            "\n\n💬 Pode enviar outra pergunta. Continuamos por aqui.",
+        };
+      };
       const existing = await rows(sql`SELECT * FROM h2_auto_access_sessions WHERE id=${sessionId} AND device_id=${deviceId} LIMIT 1`);
       const s = existing[0] as Session | undefined;
 
@@ -254,15 +305,13 @@ export function registerH2AutoAccessRoutes(app: Express): void {
         if (["oi","ola","olá","menu","inicio","início"].includes(normalized))
           return respond(res, 200, {state:"choice",message:initialMessage});
         if (!treeEnabled) {
-          if(questionCollectionEnabled) try {await recordH2AutoUnknownQuestion(deviceId,input);} catch(error){console.error("[H2Auto] coleta indisponível",error);}
+          const fallback = await unansweredResponse();
+          if (fallback) return respond(res, 200, fallback);
           return respond(res, 200, {state:"tree_disabled",audience:"new_open",message:""});
         }
         return respond(res, 200, { state: "choice", message: initialMessage });
       }
 
-      const collectUnknown = async () => {
-        if(questionCollectionEnabled) try {await recordH2AutoUnknownQuestion(deviceId,input);} catch(error){console.error("[H2Auto] coleta indisponível",error);}
-      };
       // Navigation commands must be handled BEFORE the strict phone validator.
       // Persistent validation blocks and ADM contact silencing already took precedence.
       const navigation = h2AutoNavigationCommand(input);
@@ -320,7 +369,10 @@ export function registerH2AutoAccessRoutes(app: Express): void {
               message: destination === "customer_phone" ? phoneMessage :
                 destination === "referrals_phone" ? confirmation.phonePrompt : referrerMessage });
           }
-          return respond(res, 200, { state: "choice", message: initialMessage });
+          // Mesmo após abrir MENU, uma pergunta livre continua a conversa.
+          // Números fora de 1/2/3 continuam mostrando as opções disponíveis.
+          if (/^[0-9]{1,2}$/.test(normalized))
+            return respond(res, 200, { state: "choice", message: initialMessage });
         }
         // Personalize only public guidance after the existing authorization checks.
         if (personalization.enabled) {
@@ -333,10 +385,16 @@ export function registerH2AutoAccessRoutes(app: Express): void {
           const personalized = getH2AutoPersonalizedReply(input, personalization, {
             verified: authorizedAudience === "customer", verifiedFirstName, stage: "authorized",
           });
-          if (personalized) return respond(res, 200, {state: "authorized", message: personalized.message, topic: personalized.topic});
+          if (personalized) {
+            // A sessão permanece autorizada no banco. O estado "choice" é
+            // só um envelope de resposta aceito pelo APK 1.70, que descartava
+            // o texto vindo em "authorized".
+            return respond(res, 200, {state:"choice",message:personalized.message,topic:personalized.topic});
+          }
         }
-        // Existing normal service navigation remains authorized.
-        if (!treeEnabled) await collectUnknown();
+        const fallback = await unansweredResponse();
+        if (fallback) return respond(res, 200, fallback);
+        // Consultas protegidas e regras locais ainda usam o acesso autorizado.
         return respond(res, 200, verified(authorizedAudience));
       }
 
@@ -379,7 +437,8 @@ export function registerH2AutoAccessRoutes(app: Express): void {
         if (["oi","ola","olá","menu","inicio","início"].includes(normalized))
           return respond(res, 200, {state:"choice",message:initialMessage});
         if (!treeEnabled) {
-          await collectUnknown();
+          const fallback = await unansweredResponse();
+          if (fallback) return respond(res, 200, fallback);
           return respond(res, 200, {state:"tree_disabled",audience:"new_open",message:""});
         }
         return respond(res, 200, { state: "choice", message: initialMessage });
