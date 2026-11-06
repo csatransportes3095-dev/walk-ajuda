@@ -14,6 +14,7 @@ import { Textarea } from "@/components/ui/textarea";
 import { trpc } from "@/lib/trpc";
 import { uniqueH2BicoNewPhotos, chunkH2BicoNewPhotos, type H2BicoPhotoEarOption, type H2BicoPhotoReviewOption } from "@/lib/h2bicoPhotoBatchActions";
 import { extractCpfCandidatesFromText, extractCpfPeopleFromText, isValidCpf, H2BICO_CPF_MAX_FILES, readCpfSourceFile } from "@/lib/h2bicoCpfExtractor";
+import { extractH2BicoZipPhotos, type H2BicoZipIssue } from "@/lib/h2bicoZipImport";
 
 const STATUS:any = {available:"Disponível",reserved:"Reservado",in_use:"Em uso",used:"Usado",archived:"Arquivado"};
 const maskCpf=(cpf:string)=> cpf?.length===11 ? `${cpf.slice(0,3)}.***.***-${cpf.slice(-2)}` : cpf;
@@ -111,6 +112,7 @@ export default function AdminH2Bico(){
 
   const filesRef=useRef<HTMLInputElement>(null);
   const folderRef=useRef<HTMLInputElement>(null);
+  const zipRef=useRef<HTMLInputElement>(null);
   const cpfFileRef=useRef<HTMLInputElement>(null);
   const replacePhotoInputRef=useRef<HTMLInputElement>(null);
   const [replacePhotoTargetId,setReplacePhotoTargetId]=useState<number|null>(null);
@@ -123,6 +125,8 @@ export default function AdminH2Bico(){
   const [showCpf,setShowCpf]=useState(false);
   const [batch,setBatch]=useState<ParsedFile[]>([]);
   const [importing,setImporting]=useState(false);
+  const [extractingZips,setExtractingZips]=useState(false);
+  const [zipReport,setZipReport]=useState<{archives:number;photos:number;ready:number;metadata:number;issues:H2BicoZipIssue[]}|null>(null);
   const [importEarChoice,setImportEarChoice]=useState<H2BicoPhotoEarOption>("none");
   const [importReviewChoice,setImportReviewChoice]=useState<H2BicoPhotoReviewOption>("pending");
   const [recentCount,setRecentCount]=useState(40);
@@ -352,6 +356,36 @@ export default function AdminH2Bico(){
     setSummary(null);
   };
 
+  const prepareZipFiles=async(files:FileList|File[])=>{
+    if(extractingZips||importing)return;
+    const archives=Array.from(files);
+    if(!archives.length)return;
+    if(archives.length>10){toast.error("Selecione até 10 arquivos ZIP por vez.");return;}
+    setExtractingZips(true);
+    setZipReport(null);
+    const found:File[]=[];
+    const issues:H2BicoZipIssue[]=[];
+    let photos=0,metadata=0;
+    try{
+      for(const archive of archives){
+        try{
+          const result=await extractH2BicoZipPhotos(archive);
+          found.push(...result.files);
+          photos+=result.photosFound;
+          metadata+=result.metadataFound;
+          issues.push(...result.issues.map(issue=>({...issue,file:archive.name+" / "+issue.file})));
+        }catch(error){
+          issues.push({file:archive.name,reason:error instanceof Error?error.message:"Não foi possível ler ZIP."});
+        }
+      }
+      if(found.length)prepareFiles(found);
+      setZipReport({archives:archives.length,photos,ready:found.length,metadata,issues});
+      if(found.length)toast.success(found.length+" foto(s) com nome e CPF encaminhadas à conferência.");
+      if(issues.length)toast.warning(issues.length+" arquivo(s) com pendências no ZIP. Veja o relatório antes de importar.");
+      if(!found.length)toast.error("Nenhuma foto vinculada a nome e CPF encontrada nos ZIPs.");
+    }finally{setExtractingZips(false);}
+  };
+
   const onDropFolders=async(e:React.DragEvent<HTMLDivElement>)=>{
     e.preventDefault();
     if(importing) return;
@@ -517,16 +551,33 @@ export default function AdminH2Bico(){
           <p className="text-xs text-gray-500 mt-2 font-mono">Exemplo: RAFAEL ANTERIO BARBOSA_44249385817_SP.jpg</p>
         </div>
 
-        <div className="grid sm:grid-cols-2 gap-3">
-          <Button className="h-16 text-base font-black" onClick={()=>filesRef.current?.click()} disabled={importing}>
+        <div className="grid sm:grid-cols-3 gap-3">
+          <Button className="h-16 text-base font-black" onClick={()=>filesRef.current?.click()} disabled={importing||extractingZips}>
             <Images className="w-6 h-6 mr-2"/>SELECIONAR VÁRIAS FOTOS
           </Button>
-          <Button className="h-16 text-base font-black" variant="outline" onClick={()=>folderRef.current?.click()} disabled={importing}>
+          <Button className="h-16 text-base font-black" variant="outline" onClick={()=>folderRef.current?.click()} disabled={importing||extractingZips}>
             <FolderOpen className="w-6 h-6 mr-2"/>ADICIONAR PASTA
+          </Button>
+          <Button className="h-16 text-base font-black border-amber-400/60 bg-amber-700 hover:bg-amber-600" onClick={()=>zipRef.current?.click()} disabled={importing||extractingZips}>
+            <Archive className="w-6 h-6 mr-2"/>{extractingZips?"DESCOMPACTANDO ZIP...":"IMPORTAR LOTE ZIP"}
           </Button>
         </div>
         <input ref={filesRef} type="file" multiple accept="image/jpeg,image/png,image/webp" className="hidden" onChange={e=>{if(e.target.files)prepareFiles(e.target.files);e.currentTarget.value="";}}/>
         <input ref={folderRef} type="file" multiple accept="image/*" className="hidden" {...({webkitdirectory:"",directory:""} as any)} onChange={e=>{if(e.target.files)prepareFiles(e.target.files);e.currentTarget.value="";}}/>
+        <input ref={zipRef} type="file" multiple accept=".zip,application/zip,application/x-zip-compressed" className="hidden" onChange={e=>{const selected=e.target.files;if(selected)void prepareZipFiles(selected);e.currentTarget.value="";}}/>
+        <div className="rounded-xl border border-amber-400/30 bg-amber-950/20 p-3 text-xs text-slate-200 space-y-1">
+          <p className="font-black text-amber-200">LOTE ZIP — FOTO + NOME + CPF</p>
+          <p>Selecione até 10 arquivos ZIP por vez. O H2BICO descompacta no navegador e associa fotos JPG, PNG ou WEBP a dados TXT/CSV do tipo <strong>Nome: ... / CPF: ... / Posição: ...</strong>.</p>
+          <p>Confira a lista de fotos antes de clicar em IMPORTAR. ZIPs sem vínculo confiável não são salvos. Arquivos compactados não são enviados ao servidor.</p>
+          {zipReport&&<div role="status" className="mt-2 space-y-2">
+            <p className="font-bold text-emerald-200">ZIPs: {zipReport.archives} · Fotos: {zipReport.photos} · Metadados: {zipReport.metadata} · Prontas para conferência: {zipReport.ready} · Pendências: {zipReport.issues.length}</p>
+            {zipReport.issues.length>0&&<details className="max-h-48 overflow-y-auto rounded-lg border border-amber-400/20 bg-black/30 p-2">
+              <summary className="cursor-pointer font-bold text-amber-300">VER {zipReport.issues.length} PENDÊNCIA(S)</summary>
+              {zipReport.issues.slice(0,150).map((item,index)=><p key={index} className="mt-1 break-all text-slate-300">{item.file}: {item.reason}</p>)}
+              {zipReport.issues.length>150&&<p>... e mais {zipReport.issues.length-150} arquivo(s).</p>}
+            </details>}
+          </div>}
+        </div>
 
         <div
           onDragOver={e=>e.preventDefault()}
