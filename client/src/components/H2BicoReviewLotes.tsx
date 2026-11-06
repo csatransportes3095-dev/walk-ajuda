@@ -17,6 +17,10 @@ export default function H2BicoReviewLotes(){
   const [index,setIndex]=useState(0);
   const [busy,setBusy]=useState(false);
   const [copied,setCopied]=useState("");
+  const [recentCount,setRecentCount]=useState(50);
+  const [recentBusy,setRecentBusy]=useState(false);
+  const [recentCopied,setRecentCopied]=useState("");
+  const [recentTotal,setRecentTotal]=useState(0);
   const create=trpc.h2bicoReview.createRun.useMutation();
   const lots=trpc.h2bicoReview.lots.useQuery({runId:runId||1},{enabled:!!runId});
   const current=trpc.h2bicoReview.lot.useQuery({runId:runId||1,lotIndex:index},{enabled:!!runId});
@@ -38,11 +42,53 @@ export default function H2BicoReviewLotes(){
     try{await navigator.clipboard.writeText(value);toast.success(lines.length+" CPFs do lote copiados.");}
     catch{toast.warning("Não foi possível copiar automaticamente. Abra a lista abaixo para selecionar.");}
   };
+  const copyRecent=async()=>{
+    if(recentBusy||!Number.isInteger(recentCount)||recentCount<1||recentCount>10000){
+      toast.error("Informe uma quantidade entre 1 e 10.000.");return;
+    }
+    setRecentBusy(true);setRecentCopied("");setRecentTotal(0);
+    try{
+      const result=await utils.h2bico.recentCopyCpfs.fetch({limit:recentCount},{staleTime:0});
+      if(!result.cpfs.length){toast.info("Nenhum CPF cadastrado no H2BICO.");return;}
+      const body=result.cpfs.join("\n");
+      setRecentCopied(body);setRecentTotal(result.count);
+      try{
+        await navigator.clipboard.writeText(body);
+        toast.success(result.count+" últimos CPFs copiados, um por linha, dos mais novos para os mais antigos.");
+      }catch{
+        toast.warning("Lista preparada. Abra Visualizar e copiar manualmente.");
+      }
+    }catch(error){
+      toast.error(error instanceof Error?error.message:"Não foi possível consultar os CPFs recentes.");
+    }finally{setRecentBusy(false);}
+  };
   const openRun=(id:number)=>{setRunId(id);setIndex(0);setCopied("");};
   return <Card className="border-emerald-500/30 bg-gray-900 p-4 space-y-3 text-white">
     <div className="text-xs font-bold tracking-widest text-emerald-300">H2BICO · EXPORTAÇÃO POR LOTES</div>
     <h2 className="text-xl font-black">COPIAR CPFs EM LOTES DE 1.500</h2>
-    <p className="text-sm text-gray-400">Esta área serve apenas para copiar CPFs em lotes de 1.500. Confirmação e descarte ficam na Gestão em Massa abaixo.</p>
+    <p className="text-sm text-gray-400">Copie os últimos CPFs adicionados ou organize listas em lotes de 1.500. Confirmação e descarte ficam na Gestão em Massa.</p>
+    <div className="rounded-xl border border-cyan-400/30 bg-cyan-500/[0.06] p-3 space-y-3">
+      <div>
+        <p className="font-black text-cyan-200">COPIAR ÚLTIMOS CPFs ADICIONADOS</p>
+        <p className="text-xs text-slate-400">Ordem do cadastro: mais novo primeiro. Inclui disponíveis, usados e arquivados. Não altera nenhum CPF.</p>
+      </div>
+      <div className="flex flex-wrap items-end gap-2">
+        <label className="text-xs font-semibold text-slate-300">
+          Quantidade de CPFs
+          <input type="number" min={1} max={10000} step={1} value={recentCount}
+            disabled={recentBusy}
+            onChange={e=>setRecentCount(Math.max(1,Math.min(10000,Math.trunc(Number(e.target.value)||1))))}
+            className="mt-1 block w-36 rounded-lg border border-cyan-400/30 bg-gray-950 px-3 py-2 text-sm font-bold text-white"/>
+        </label>
+        <Button disabled={recentBusy} onClick={()=>void copyRecent()} className="font-black">
+          {recentBusy?"CONSULTANDO...":`COPIAR ÚLTIMOS ${recentCount} CPFs`}
+        </Button>
+      </div>
+      {recentCopied&&<details className="rounded-lg border border-white/10 p-2">
+        <summary className="cursor-pointer text-xs font-bold text-cyan-200">VISUALIZAR LISTA GERADA ({recentTotal} CPFs)</summary>
+        <Textarea readOnly value={recentCopied} className="mt-2 min-h-32 font-mono text-xs" aria-label="Últimos CPFs cadastrados, um por linha"/>
+      </details>}
+    </div>
     <div className="grid grid-cols-2 md:grid-cols-4 gap-2 text-center">
       {([["Total",stats.data?.total],["Pendentes",stats.data?.pending],["Confirmados",stats.data?.confirmed],["Descartados",stats.data?.discarded]] as const).map(([label,count])=>
         <div key={label} className="bg-gray-950 rounded-lg p-2"><p className="text-xs text-gray-400">{label}</p><p className="text-xl font-bold">{count??"..."}</p></div>)}
