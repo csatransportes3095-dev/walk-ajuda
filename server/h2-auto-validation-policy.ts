@@ -65,6 +65,13 @@ export function initialH2AutoChoiceStage(input: string):
   }
 }
 
+/** Saudações mantêm o diálogo; nunca iniciam cadastro ou validação. */
+export function isH2AutoGreeting(input: string): boolean {
+  const text = String(input || "").normalize("NFD").replace(/[\u0300-\u036f]/g, "")
+    .toLowerCase().replace(/[^a-z0-9\s]/g, " ").replace(/\s+/g, " ").trim();
+  return /^(?:bom dia|boa tarde|boa noite|oi|ola)(?:\s+h2)?$/.test(text);
+}
+
 
 /**
  * Uma frase claramente de NOVO cliente equivale a escolher 2 no menu.

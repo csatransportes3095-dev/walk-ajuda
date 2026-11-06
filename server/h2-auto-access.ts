@@ -8,7 +8,7 @@ import { resolveReferralDeclaration } from "./referral";
 import { sendH2AutoOrderCode } from "./h2-auto-order-email";
 import { recordH2AutoPhoneFailure, clearH2AutoPhoneFailures, type PhoneStage } from "./h2-auto-validation-blocks";
 import { h2AutoPhoneFailureMessage, type H2AutoPhoneKind, type H2AutoPhoneFailure } from "./h2-auto-phone-attempt-message";
-import { invalidH2AutoPhoneStageAnswer, normalizeH2AutoPhone11, h2AutoNavigationCommand, initialH2AutoChoiceStage, repeatedH2AutoChoice, isH2AutoHelpRequest, isH2AutoFreeTextDuringPhoneStage, h2AutoNaturalNewCustomerIntent, h2AutoNaturalExistingCustomerIntent, h2AutoNaturalReferralsIntent, h2AutoGreetingWelcome } from "./h2-auto-validation-policy";
+import { invalidH2AutoPhoneStageAnswer, normalizeH2AutoPhone11, h2AutoNavigationCommand, initialH2AutoChoiceStage, repeatedH2AutoChoice, isH2AutoHelpRequest, isH2AutoFreeTextDuringPhoneStage, isH2AutoGreeting, h2AutoNaturalNewCustomerIntent, h2AutoNaturalExistingCustomerIntent, h2AutoNaturalReferralsIntent, h2AutoGreetingWelcome } from "./h2-auto-validation-policy";
 import { manualSilencedPhones, normalizeSilencedPhone } from "./h2-auto-silenced-contacts";
 import { h2AutoConfirmationSchema } from "../shared/h2AutoConfirmation";
 import { h2AutoPersonalizationSchema, H2_AUTO_PERSONALIZATION_DEFAULT, getH2AutoPersonalizedReply } from "../shared/h2AutoPersonalization";
@@ -288,6 +288,8 @@ export function registerH2AutoAccessRoutes(app: Express): void {
         await clearH2AutoPhoneFailures(deviceId,sessionId);
         // 1/2/3 são atalhos de autenticação, não a árvore antiga.
         // A escolha deve funcionar também na primeira mensagem, sem sessão.
+        if (isH2AutoGreeting(input))
+          return respond(res, 200, {state: "choice", message: h2AutoGreetingWelcome(input, initialMessage)});
         const firstStage = initialH2AutoChoiceStage(input) ||
           (h2AutoNaturalExistingCustomerIntent(input) ? "customer_phone" :
           h2AutoNaturalReferralsIntent(input) ? "referrals_phone" :
@@ -416,6 +418,10 @@ export function registerH2AutoAccessRoutes(app: Express): void {
 
       if (s.stage === "choice") {
         // Numeric choice is separate from the retired question tree.
+        if (isH2AutoGreeting(input)) {
+          const greeting = h2AutoGreetingWelcome(input, initialMessage);
+          return respond(res, 200, {state: "choice", message: greeting});
+        }
         const selectedInitialStage = initialH2AutoChoiceStage(input);
         if (selectedInitialStage) {
           await update(sessionId, sql`stage=${selectedInitialStage},updated_at=${now}`);
@@ -545,6 +551,10 @@ export function registerH2AutoAccessRoutes(app: Express): void {
       if (s.stage === "referral_phone") {
         // The APK may replay the same choice on transition. A repeated '2'
         // is not an invalid indicator number and must not count as a failure.
+        if (isH2AutoGreeting(input)) {
+          await update(sessionId, sql`stage='choice',updated_at=${now}`);
+          return respond(res, 200, {state: "choice", message: h2AutoGreetingWelcome(input, initialMessage)});
+        }
         if (repeatedH2AutoChoice(s.stage,input) || h2AutoNaturalNewCustomerIntent(input))
           return respond(res,200,{state:"referral_phone",message:referrerMessage});
         if (normalized === "6") return respond(res, 200, { state: "human",

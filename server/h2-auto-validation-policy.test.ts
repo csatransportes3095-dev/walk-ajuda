@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { validH2AutoPhone11, normalizeH2AutoPhone11, allowsH2AutoMenuReset, invalidH2AutoPhoneStageAnswer, isH2AutoFreeTextDuringPhoneStage, h2AutoNavigationCommand, initialH2AutoChoiceStage, repeatedH2AutoChoice, h2AutoNaturalNewCustomerIntent, h2AutoNaturalExistingCustomerIntent, h2AutoNaturalReferralsIntent, h2AutoGreetingWelcome } from "./h2-auto-validation-policy";
+import { validH2AutoPhone11, normalizeH2AutoPhone11, allowsH2AutoMenuReset, invalidH2AutoPhoneStageAnswer, isH2AutoFreeTextDuringPhoneStage, isH2AutoGreeting, h2AutoNavigationCommand, initialH2AutoChoiceStage, repeatedH2AutoChoice, h2AutoNaturalNewCustomerIntent, h2AutoNaturalExistingCustomerIntent, h2AutoNaturalReferralsIntent, h2AutoGreetingWelcome } from "./h2-auto-validation-policy";
 
 describe("H2 Auto strict 11-digit WhatsApp phone validation", () => {
   it("accepts mobile phone numbers with a two-digit DDD", () => {
@@ -84,6 +84,11 @@ describe("H2 AUTO: primeiras mensagens livres sem repetir menu",()=> {
   it("não confunde conta 99 com cadastro de novo cliente",()=>{
     expect(h2AutoNaturalNewCustomerIntent("Queria uma conta 99")).toBe(false);
     expect(h2AutoNaturalNewCustomerIntent("Está fazendo conta 99")).toBe(false);
+  });
+  it("reconhece saudações, inclusive com H2, sem abrir cadastro",()=>{
+    for (const greeting of ["Bom dia", "Boa tarde", "Boa noite", "Boa tarde H2", "Oi H2"])
+      expect(isH2AutoGreeting(greeting)).toBe(true);
+    expect(h2AutoNaturalNewCustomerIntent("Boa tarde H2")).toBe(false);
   });
   it.each([
     "Quero acompanhar meu pedido",
