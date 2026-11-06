@@ -3,6 +3,7 @@ import { Car, Database, Search, ShieldCheck, ShieldX, Sparkles } from "lucide-re
 import AdminHeader from "@/components/AdminHeader";
 import { trpc } from "@/lib/trpc";
 import { toast } from "sonner";
+import VehicleVaultPanel from "@/components/VehicleVaultPanel";
 
 type Kind = "placa" | "chassi";
 
@@ -56,6 +57,9 @@ export default function AdminVehicleUsage() {
         {result && <div className={`mt-5 rounded-3xl border p-6 text-center ${result.exists?"border-red-400/45 bg-red-500/10 shadow-[0_0_38px_rgba(239,68,68,.16)]":"border-emerald-400/45 bg-emerald-500/10 shadow-[0_0_38px_rgba(16,185,129,.16)]"}`}>
           {result.exists ? <><ShieldX className="mx-auto h-12 w-12 text-red-300"/><p className="mt-3 text-2xl font-black text-red-300">JÁ UTILIZADO</p><p className="mt-1 text-sm font-bold text-white/55">{result.normalizedValue} já existe no banco.</p></> : <><ShieldCheck className="mx-auto h-12 w-12 text-emerald-300"/><p className="mt-3 text-2xl font-black text-emerald-300">NÃO UTILIZADO</p><p className="mt-1 text-sm font-bold text-white/55">{result.normalizedValue} ainda não existe no banco.</p><button onClick={()=>save.mutate({type:kind,value:result.normalizedValue})} disabled={save.isPending} className="mt-5 w-full rounded-2xl border border-yellow-300/45 bg-yellow-400/15 px-4 py-4 text-sm font-black text-yellow-200 shadow-[0_0_26px_rgba(245,184,0,.12)] hover:bg-yellow-400/25 disabled:opacity-50">{save.isPending?"GUARDANDO...":"GUARDAR COMO UTILIZADO"}</button></>}
         </div>}
+      </div>
+      <div className="relative mx-auto max-w-6xl px-4 pb-12">
+        <VehicleVaultPanel/>
       </div>
     </div>
   </div>;
