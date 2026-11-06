@@ -27,6 +27,16 @@ async function database() {
   if (!schemaPromise) {
     schemaPromise = (async () => {
       await db.execute(sql.raw(`
+        CREATE TABLE IF NOT EXISTS vehicle_usage_registry (
+          id INT NOT NULL AUTO_INCREMENT PRIMARY KEY,
+          type VARCHAR(16) NOT NULL,
+          normalizedValue VARCHAR(40) NOT NULL,
+          createdAt TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP,
+          UNIQUE KEY uq_vehicle_usage_type_value (type, normalizedValue),
+          KEY idx_vehicle_usage_value (normalizedValue)
+        ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci
+      `));
+      await db.execute(sql.raw(`
         CREATE TABLE IF NOT EXISTS vehicle_vault_documents (
           id INT NOT NULL AUTO_INCREMENT PRIMARY KEY,
           plate VARCHAR(7) NOT NULL,
