@@ -93,44 +93,107 @@ async function database() {
   await schemaPromise;
   return db;
 }
-function extractValue(lines: string[], labels: RegExp, pattern: RegExp): string {
-  for (let i = 0; i < lines.length; i++) {
-    const match = lines[i].match(labels);
-    if (!match) continue;
-    const candidates = [match[1] ?? "", lines[i + 1] ?? "", lines[i + 2] ?? ""];
-    for (const candidate of candidates) {
-      const result = candidate.match(pattern);
-      if (result) return String(result[1] ?? result[0] ?? "").trim();
-    }
-  }
-  return "";
-}
+/**
+ * CRLV-e is printed in two columns. pdftotext -layout interleaves the right
+ * insurance/signature column with the left vehicle-identification column.
+ * Keep the left-column spacing until the fields have been identified.
+ */
 function extractFields(raw: string) {
   const original = String(raw ?? "").slice(0, 120_000);
-  const ascii = original.normalize("NFD").replace(/[\u0300-\u036f]/g, "");
-  const lines = ascii.replace(/\r/g, "").split("\n").map(x => x.trim()).filter(Boolean);
-  const plate = extractValue(lines,
-    /^(?:PLACA(?:\s+DO\s+VEICULO)?|PLACA\s*\/\s*UF)\s*[:\-\s]*(.*)$/i,
-    /\b([A-Z]{3}[- ]?[0-9][A-Z0-9][0-9]{2})\b/i).replace(/[^A-Z0-9]/gi, "").toUpperCase();
-  const renavam = digits(extractValue(lines,
-    /^(?:CODIGO\s+)?RENAVAM\s*[:\-\s]*(.*)$/i, /\b(\d{9,11})\b/));
-  const chassis = onlyId(extractValue(lines,
-    /^(?:CHASSI|VIN|NUMERO\s+DO\s+CHASSI)\s*[:\-\s]*(.*)$/i, /\b([A-Z0-9]{8,30})\b/i));
-  const model = clean(extractValue(lines,
-    /^(?:MARCA\s*[\/\\-]\s*MODELO|MARCA\s+E\s+MODELO|MODELO\s+DO\s+VEICULO)\s*[:\-\s]*(.*)$/i,
-    /^([A-Z0-9][A-Z0-9 /_.+-]{2,159})$/i).replace(/\s{2,}(?:ANO|COR|TIPO|CHASSI|RENAVAM).*$/i, ""));
-  const color = clean(extractValue(lines,
-    /^(?:COR(?:\s+PREDOMINANTE)?|COR\s*\/\s*TIPO)\s*[:\-\s]*(.*)$/i,
-    /\b(BRANC[AO]|PRET[AO]|CINZA|PRATA|AZUL|VERMELH[AO]|VERDE|AMAREL[AO]|MARROM|BEGE|DOURAD[AO]|LARANJA|ROSA|ROXO|VINHO|GRAFITE|BORDO)\b/i));
-  const fab = extractValue(lines,
-    /^(?:ANO\s+(?:DE\s+)?FABRICACAO|ANO\s+FABR\.?|FABRICACAO)\s*[:\-\s]*(.*)$/i,
-    /\b((?:19|20)\d{2})\b/);
-  const mod = extractValue(lines,
-    /^(?:ANO\s+(?:DO\s+)?MODELO|ANO\s+MOD\.?)\s*[:\-\s]*(.*)$/i,
-    /\b((?:19|20)\d{2})\b/);
-  const pair = ascii.match(/(?:ANO\s+)?FAB(?:RICACAO)?\s*[\/-]\s*MOD(?:ELO)?\s*:?\s*((?:19|20)\d{2})\s*[\/-]\s*((?:19|20)\d{2})/i);
-  const manufactureYear = Number(fab || pair?.[1] || 0) || null;
-  const modelYear = Number(mod || pair?.[2] || 0) || null;
+  const ascii = original.normalize("NFD").replace(/[\u0300-\u036f]/g, "").replace(/\r/g, "");
+  const sourceLines = ascii.split("\n");
+  const isCrLvLayout = /CERTIFICADO DE REGISTRO E LICENCIAMENTO/i.test(ascii) &&
+    /MARCA\s*\/\s*MODELO/i.test(ascii) &&
+    (sourceLines.some(line => /^\s{65,}\S/.test(line)) ||
+      sourceLines.some(line => /PLACA\s{5,}EXERCICIO/i.test(line)));
+  // 100 fixed-width characters cover plate, VIN, fabrication/model years,
+  // model and color; right-side DETRAN/DPVAT texts are not vehicle data.
+  const lines = sourceLines.map(line => (isCrLvLayout ? line.slice(0, 100) : line).trim())
+    .filter(Boolean);
+
+  const nextMatching = (heading: RegExp, value: RegExp, maxFollowing = 8): string => {
+    for (let i = 0; i < lines.length; i++) {
+      if (!heading.test(lines[i])) continue;
+      for (let j = i; j < Math.min(lines.length, i + maxFollowing + 1); j++) {
+        const match = lines[j].match(value);
+        if (match) return String(match[1] ?? match[0]).trim();
+      }
+    }
+    return "";
+  };
+
+  const plate = onlyId(nextMatching(
+    /^PLACA\b(?!\s+ANTERIOR)/i,
+    /\b([A-Z]{3}[0-9][A-Z0-9][0-9]{2})\b/i, 5,
+  ));
+  const renavam = digits(nextMatching(
+    /^(?:(?:CODIGO|N[UÚ]MERO)\s+(?:DO\s+)?)?RENAVAM\b/i,
+    /\b(\d{9,11})\b/, 8,
+  ));
+  // The heading is often "PLACA ANTERIOR / UF     CHASSI";
+  // the actual VIN is on the next row, after *******/**.
+  const chassis = onlyId(nextMatching(
+    /\bCHASSI\b|\bVIN\b/i,
+    /\b([A-HJ-NPR-Z0-9]{17})\b/i, 8,
+  ));
+
+  let model = "";
+  for (let i = 0; i < lines.length; i++) {
+    const match = lines[i].match(/^(?:MARCA\s*\/\s*MODELO(?:\s*\/\s*VERSAO)?|MARCA\s+E\s+MODELO|MODELO\s+DO\s+VEICULO)\b\s*:?\s*(.*)$/i);
+    if (!match) continue;
+    for (let j = i; j < Math.min(lines.length, i + 12); j++) {
+      if (j > i && /^(?:ESPECIE\s*\/\s*TIPO|PLACA\s+ANTERIOR|COR\s+PREDOMINANTE)\b/i.test(lines[j])) break;
+      const candidate = (j === i ? match[1] : lines[j]).trim();
+      if (!candidate || candidate === "*" ||
+          /^(?:ASSINADO|DADOS\s+DO\s+SEGURO|SEGURO\s+DPVAT|CAT\.\s*TARIF|PAGAMENTO|REPASSE|COTA\s+UNICA|FALHA|QRCode)\b/i.test(candidate)) continue;
+      // A slash separates manufacturer/model in CRLV-e; do not accept
+      // unrelated right-column sentences as model names.
+      if (/^[A-Z][A-Z0-9 ._-]{1,55}\/[A-Z0-9][A-Z0-9 /.+_-]{1,98}$/i.test(candidate)) {
+        model = clean(candidate);
+        break;
+      }
+      // For plain, pasted one-line records such as "MARCA/MODELO: HYUNDAI HB20".
+      if (j === i && /^[A-Z][A-Z0-9 ._+/-]{3,120}$/i.test(candidate))
+        model = clean(candidate);
+    }
+    if (model) break;
+  }
+
+  const color = clean(nextMatching(
+    /^COR(?:\s+PREDOMINANTE|\s+DO\s+VEICULO)?\b/i,
+    /^(BRANC[AO]|PRET[AO]|CINZA|PRATA|AZUL|VERMELH[AO]|VERDE|AMAREL[AO]|MARROM|BEGE|DOURAD[AO]|LARANJA|ROSA|ROXO|VINHO|GRAFITE|BORDO)\b/i, 9,
+  ));
+
+  let fabricationYear: number | null = null;
+  let yearModel: number | null = null;
+  const yearToken = /\b(?:19|20)\d{2}\b/g;
+  // Layout CRLV: "ANO FABRICAÇÃO    ANO MODELO" / "2020    2021".
+  for (let i = 0; i < lines.length; i++) {
+    if (!/^ANO\s+(?:DE\s+)?FABRICACAO\b/i.test(lines[i]) ||
+        !/\bANO\s+(?:DO\s+)?MODELO\b/i.test(lines[i])) continue;
+    for (let j = i + 1; j < Math.min(i + 5, lines.length); j++) {
+      const years = lines[j].match(yearToken);
+      if (years && years.length >= 2) {
+        fabricationYear = Number(years[0]);
+        yearModel = Number(years[1]);
+        break;
+      }
+      if (/^(?:NUMERO\s+DO\s+CRV|MARCA\s*\/\s*MODELO)\b/i.test(lines[j])) break;
+    }
+    break;
+  }
+  if (!fabricationYear) fabricationYear = Number(nextMatching(
+    /^(?:ANO\s+(?:DE\s+)?FABRICACAO|ANO\s+FABR\.?)\b/i,
+    /\b((?:19|20)\d{2})\b/, 3,
+  )) || null;
+  if (!yearModel) yearModel = Number(nextMatching(
+    /^ANO\s+(?:DO\s+)?MODELO\b|^ANO\s+MOD\.?\b/i,
+    /\b((?:19|20)\d{2})\b/, 3,
+  )) || null;
+  const yearPair = ascii.match(/(?:ANO\s+)?FAB(?:RICACAO)?\s*[/-]\s*MOD(?:ELO)?\s*:?\s*((?:19|20)\d{2})\s*[/-]\s*((?:19|20)\d{2})/i);
+  const manufactureYear = fabricationYear || Number(yearPair?.[1] || 0) || null;
+  const modelYear = yearModel || Number(yearPair?.[2] || 0) || null;
+
   const result = { plate, renavam, chassis, model, color, manufactureYear, modelYear };
   return { ...result, text: original, missing: fields.filter(key => !result[key]) };
 }
