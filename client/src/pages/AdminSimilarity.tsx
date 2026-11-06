@@ -360,7 +360,8 @@ export default function AdminSimilarity() {
   const [similarRuntime, setSimilarRuntime] = useState<SimilarFaceRuntime | null>(null);
   const [runtimeLoading, setRuntimeLoading] = useState(true);
   const [runtimeMessage, setRuntimeMessage] = useState("Verificando motor de referência...");
-  const [h2bicoMode, setH2BicoMode] = useState<"all" | "name">("all");
+  const [h2bicoMode, setH2BicoMode] = useState<"all" | "name" | "recent">("all");
+  const [recentH2BicoCount, setRecentH2BicoCount] = useState(50);
   const [h2bicoSearch, setH2BicoSearch] = useState("");
   const [similarityMinPercent, setSimilarityMinPercent] = useState(H2_FACE_MINIMUM_PERCENT);
   const settingsQuery = trpc.settings.getAll.useQuery();
@@ -369,6 +370,10 @@ export default function AdminSimilarity() {
   const h2bicoQuery = trpc.h2bico.availableForSimilarity.useQuery(
     { search: h2bicoMode === "name" ? h2bicoSearch.trim() : "" },
     { enabled: false }
+  );
+  const recentH2BicoQuery = trpc.h2bico.recentForSimilarity.useQuery(
+    {limit: recentH2BicoCount},
+    {enabled: false}
   );
   const [loadingH2Bico, setLoadingH2Bico] = useState(false);
   const autoAnalyzeH2BicoRef = useRef(false);
@@ -543,10 +548,18 @@ export default function AdminSimilarity() {
     setProgress({ current: 0, total: 0, name: "Buscando banco H2BICO..." });
 
     try {
-      const response = await h2bicoQuery.refetch();
+      // Fetch a snapshot of the selected batch rather than searching every
+      // available entry. The recent mode is sorted by newest database ID.
+      const response = h2bicoMode === "recent"
+        ? await recentH2BicoQuery.refetch()
+        : await h2bicoQuery.refetch();
       const records = response.data || [];
       if (!records.length) {
-        toast.info(h2bicoMode === "name" ? `Nenhuma foto DISPONÍVEL encontrada para "${h2bicoSearch.trim()}".` : "Nenhuma foto DISPONÍVEL no H2BICO.");
+        toast.info(h2bicoMode === "recent"
+          ? "Nenhuma foto recente encontrada no H2BICO."
+          : h2bicoMode === "name"
+          ? `Nenhuma foto DISPONÍVEL encontrada para "${h2bicoSearch.trim()}".`
+          : "Nenhuma foto DISPONÍVEL no H2BICO.");
         return;
       }
 
@@ -1373,8 +1386,21 @@ export default function AdminSimilarity() {
                     <div className="flex gap-2">
                       <button type="button" onClick={() => setH2BicoMode("all")} className={`rounded-lg border px-3 py-2 text-xs font-black ${h2bicoMode === "all" ? "border-amber-300 bg-amber-300/15 text-amber-100" : "border-white/10 text-slate-400"}`}>TODOS</button>
                       <button type="button" onClick={() => setH2BicoMode("name")} className={`rounded-lg border px-3 py-2 text-xs font-black ${h2bicoMode === "name" ? "border-amber-300 bg-amber-300/15 text-amber-100" : "border-white/10 text-slate-400"}`}>NOME</button>
+                      <button type="button" onClick={() => setH2BicoMode("recent")} className={`rounded-lg border px-3 py-2 text-xs font-black ${h2bicoMode === "recent" ? "border-amber-300 bg-amber-300/15 text-amber-100" : "border-white/10 text-slate-400"}`}>ÚLTIMAS FOTOS</button>
                     </div>
                   </div>
+                  {h2bicoMode === "recent" && (
+                    <label className="min-w-[170px] text-xs font-bold text-slate-300">
+                      Quantidade de fotos recentes
+                      <input type="number" min={1} max={500} step={1}
+                        value={recentH2BicoCount}
+                        disabled={analyzing || loadingH2Bico}
+                        onChange={(event) => setRecentH2BicoCount(Math.max(1, Math.min(500, Math.trunc(Number(event.target.value) || 1))))}
+                        className="mt-1 w-full rounded-lg border border-amber-300/30 bg-black/30 px-3 py-2 text-sm font-black text-amber-100 outline-none focus:border-amber-300"
+                      />
+                      <span className="mt-1 block text-[10px] font-normal text-slate-400">Ex.: 50 últimas fotos adicionadas, inclusive já usadas. Não modifica os cadastros.</span>
+                    </label>
+                  )}
                   {h2bicoMode === "name" && (
                     <label className="min-w-[220px] flex-[2] text-xs font-bold text-slate-300">
                       Buscar nome
@@ -1443,9 +1469,9 @@ export default function AdminSimilarity() {
                   onClick={() => void loadH2BicoCandidates()}
                   disabled={analyzing || loadingH2Bico}
                   className="flex items-center justify-center gap-2 rounded-xl border border-amber-300/40 bg-amber-300/10 px-3 py-3 text-sm font-black text-amber-100 transition hover:bg-amber-300/15 disabled:cursor-not-allowed disabled:opacity-40"
-                  title={h2bicoMode === "name" ? "Carregar somente nomes encontrados no H2BICO" : "Carregar todas as fotos disponíveis armazenadas no H2BICO"}
+                  title={h2bicoMode === "recent" ? `Carregar as ${recentH2BicoCount} últimas fotos adicionadas ao H2BICO` : h2bicoMode === "name" ? "Carregar somente nomes encontrados no H2BICO" : "Carregar todas as fotos disponíveis armazenadas no H2BICO"}
                 >
-                  <FolderOpen className="h-4 w-4" /> {loadingH2Bico ? (progress.total ? `${progress.current}/${progress.total}` : "Buscando...") : h2bicoMode === "name" ? `Buscar ${h2bicoSearch.trim() || "nome"}` : "Banco H2BICO"}
+                  <FolderOpen className="h-4 w-4" /> {loadingH2Bico ? (progress.total ? `${progress.current}/${progress.total}` : "Buscando...") : h2bicoMode === "recent" ? `Últimas ${recentH2BicoCount} fotos` : h2bicoMode === "name" ? `Buscar ${h2bicoSearch.trim() || "nome"}` : "Banco H2BICO"}
                 </button>
               </div>
 
