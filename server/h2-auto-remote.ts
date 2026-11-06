@@ -78,6 +78,7 @@ const configSchema = z.object({
   confirmation: confirmationSchema.default(() => confirmationSchema.parse({})),
   enabled: z.boolean(),
   desktopReadOnly: z.boolean().default(true),
+  quickReplyText: z.string().max(500).default("Em que posso ajudar?"),
   identificationEnabled: z.boolean().default(true),
   identificationSessionHours: z.number().int().min(1).max(720).default(24),
   ordersEnabled: z.boolean().default(false),
@@ -130,6 +131,7 @@ const initial: RemoteConfig = {
     H2_AUTO_SHORT_ORDER_NOT_FOUND,
   enabled: false,
   desktopReadOnly: true,
+  quickReplyText: "Em que posso ajudar?",
   identificationEnabled: true,
   identificationSessionHours: 24,
   welcome: "",
@@ -365,6 +367,7 @@ function mergeWithoutDeleting(
       personalization: remote.personalization,
       identificationSessionHours: remote.identificationSessionHours,
       desktopReadOnly: remote.desktopReadOnly,
+      quickReplyText: remote.quickReplyText,
       ordersEnabled: remote.ordersEnabled,
       orderSessionHours: remote.orderSessionHours,
       orderCodeTtlMinutes: remote.orderCodeTtlMinutes,
@@ -592,6 +595,28 @@ export const h2AutoAdminRouter = router({
             "A configuração mudou. Atualize antes de salvar para não sobrescrever alterações.",
         });
       return { success: true };
+    }),
+  // Exclusivo da resposta rapida da notificacao; nao regrava outras
+  // configuracoes, pausas, bloqueios, identificacao ou perguntas do H2 AUTO.
+  saveQuickReplyText: adminProcedure
+    .input(z.object({
+      id: z.string().regex(/^[a-f0-9]{24}$/),
+      expectedRevision: z.number().int().min(0),
+      text: z.string().trim().min(1).max(500),
+    }))
+    .mutation(async ({input}) => {
+      await ensure();
+      const db=await getDb();
+      if(!db) throw new TRPCError({code:"INTERNAL_SERVER_ERROR",message:"Banco indisponível."});
+      const result:any=await db.execute(sql`
+        UPDATE h2_auto_devices
+        SET config_json=JSON_SET(config_json,'$.quickReplyText',CAST(${JSON.stringify(input.text)} AS JSON)),
+            revision=revision+1
+        WHERE id=${input.id} AND revision=${input.expectedRevision}
+      `);
+      if(!result[0]?.affectedRows)
+        throw new TRPCError({code:"CONFLICT",message:"Configuração atualizada por outro processo. Recarregue antes de salvar a resposta rápida."});
+      return {success:true,revision:input.expectedRevision+1};
     }),
   saveReplyRules: adminProcedure
     .input(z.object({
