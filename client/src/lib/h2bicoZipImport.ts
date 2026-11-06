@@ -107,6 +107,14 @@ async function expand(buffer:ArrayBuffer,item:Entry):Promise<Uint8Array>{
   if(output.byteLength!==item.size||crc32(output)!==item.crc)throw Error("Foto/TXT corrompido no ZIP.");
   return output;
 }
+function hasImageSignature(bytes:Uint8Array,mime:"image/jpeg"|"image/png"|"image/webp"):boolean {
+  if(mime==="image/jpeg")return bytes.length>3&&bytes[0]===0xff&&bytes[1]===0xd8&&bytes[2]===0xff;
+  if(mime==="image/png")return bytes.length>=8&&
+    [137,80,78,71,13,10,26,10].every((value,i)=>bytes[i]===value);
+  return bytes.length>=12&&
+    new TextDecoder("ascii").decode(bytes.subarray(0,4))==="RIFF"&&
+    new TextDecoder("ascii").decode(bytes.subarray(8,12))==="WEBP";
+}
 function people(text:string,path:string):Person[]{
   const raw=text.replace(/\r\n?/g,"\n");
   const positionMarks=[...raw.matchAll(/^\s*Posi(?:ç|c)(?:ã|a)o\s*:\s*\d+\s*$/gim)].map(x=>x.index||0);
@@ -185,6 +193,7 @@ export async function extractH2BicoZipPhotos(archive:File):Promise<H2BicoZipResu
       }
       const mime=photoMime(img.path)!;
       const raw=await expand(data,img);
+      if(!hasImageSignature(raw,mime))throw Error("Conteúdo da foto não corresponde ao formato declarado.");
       const ext=mime==="image/png"?".png":mime==="image/webp"?".webp":".jpg";
       const filename=record.name+"_"+record.cpf+(record.uf?"_"+record.uf:"")+ext;
       files.push(new File([Uint8Array.from(raw)],filename,{type:mime,lastModified:archive.lastModified||Date.now()}));
