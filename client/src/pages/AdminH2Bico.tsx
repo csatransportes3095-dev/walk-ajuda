@@ -126,6 +126,7 @@ export default function AdminH2Bico(){
   const [batch,setBatch]=useState<ParsedFile[]>([]);
   const [importing,setImporting]=useState(false);
   const [extractingZips,setExtractingZips]=useState(false);
+  const [zipProgress,setZipProgress]=useState({done:0,total:0,name:""});
   const [zipReport,setZipReport]=useState<{archives:number;photos:number;ready:number;metadata:number;issues:H2BicoZipIssue[]}|null>(null);
   const [importEarChoice,setImportEarChoice]=useState<H2BicoPhotoEarOption>("none");
   const [importReviewChoice,setImportReviewChoice]=useState<H2BicoPhotoReviewOption>("pending");
@@ -329,7 +330,7 @@ export default function AdminH2Bico(){
     }
   };
 
-  const prepareFiles=(files:FileList|File[])=>{
+  const prepareFiles=(files:FileList|File[],silent=false)=>{
     const incoming=Array.from(files);
     setBatch(current=>{
       const uniqueFiles=new Map<string,File>();
@@ -350,7 +351,7 @@ export default function AdminH2Bico(){
         return {...p,duplicateInSelection,alreadyExists:!!p.cpf&&existingCpfs.has(p.cpf)};
       });
       const valid=final.filter(p=>p.valid&&!p.duplicateInSelection).length;
-      toast.success(`${incoming.length} arquivo(s) adicionado(s). Lote atual: ${final.length} • ${valid} para verificar/importar.`);
+      if(!silent)toast.success(`${incoming.length} arquivo(s) adicionado(s). Lote atual: ${final.length} • ${valid} para verificar/importar.`);
       return final;
     });
     setSummary(null);
@@ -360,29 +361,44 @@ export default function AdminH2Bico(){
     if(extractingZips||importing)return;
     const archives=Array.from(files);
     if(!archives.length)return;
-    if(archives.length>10){toast.error("Selecione até 10 arquivos ZIP por vez.");return;}
+    // Sem limite artificial para a QUANTIDADE de ZIPs. Cada arquivo continua
+    // sujeito às verificações individuais de tamanho, formato e integridade.
     setExtractingZips(true);
+    setZipProgress({done:0,total:archives.length,name:""});
     setZipReport(null);
-    const found:File[]=[];
+    let pendingPhotos:File[]=[];
     const issues:H2BicoZipIssue[]=[];
-    let photos=0,metadata=0;
+    let photos=0,metadata=0,ready=0;
     try{
-      for(const archive of archives){
+      for(let index=0;index<archives.length;index++){
+        const archive=archives[index];
+        setZipProgress({done:index,total:archives.length,name:archive.name});
         try{
           const result=await extractH2BicoZipPhotos(archive);
-          found.push(...result.files);
+          pendingPhotos.push(...result.files);
+          ready+=result.files.length;
           photos+=result.photosFound;
           metadata+=result.metadataFound;
           issues.push(...result.issues.map(issue=>({...issue,file:archive.name+" / "+issue.file})));
+          // Não acumular todas as fotos descompactadas em um segundo array.
+          // A conferência existente continua acumulando e removendo CPFs duplicados.
+          if(pendingPhotos.length>=1000){
+            prepareFiles(pendingPhotos,true);
+            pendingPhotos=[];
+          }
         }catch(error){
           issues.push({file:archive.name,reason:error instanceof Error?error.message:"Não foi possível ler ZIP."});
         }
+        setZipProgress({done:index+1,total:archives.length,name:archive.name});
+        if((index+1)%20===0)await new Promise<void>(resolve=>setTimeout(resolve,0));
       }
-      if(found.length)prepareFiles(found);
-      setZipReport({archives:archives.length,photos,ready:found.length,metadata,issues});
-      if(found.length)toast.success(found.length+" foto(s) com nome e CPF encaminhadas à conferência.");
+      if(pendingPhotos.length)prepareFiles(pendingPhotos,true);
+      setZipReport({archives:archives.length,photos,ready,metadata,issues});
+      if(ready)toast.success(ready+" foto(s) com nome e CPF encaminhadas à conferência.");
       if(issues.length)toast.warning(issues.length+" arquivo(s) com pendências no ZIP. Veja o relatório antes de importar.");
-      if(!found.length)toast.error("Nenhuma foto vinculada a nome e CPF encontrada nos ZIPs.");
+      if(!ready)toast.error("Nenhuma foto vinculada a nome e CPF encontrada nos ZIPs.");
+    }catch(error){
+      toast.error(error instanceof Error?error.message:"Não foi possível concluir a leitura dos ZIPs.");
     }finally{setExtractingZips(false);}
   };
 
@@ -567,7 +583,15 @@ export default function AdminH2Bico(){
         <input ref={zipRef} type="file" multiple accept=".zip,application/zip,application/x-zip-compressed" className="hidden" onChange={e=>{const selected=e.target.files;if(selected)void prepareZipFiles(selected);e.currentTarget.value="";}}/>
         <div className="rounded-xl border border-amber-400/30 bg-amber-950/20 p-3 text-xs text-slate-200 space-y-1">
           <p className="font-black text-amber-200">LOTE ZIP — FOTO + NOME + CPF</p>
-          <p>Selecione até 10 arquivos ZIP por vez. O H2BICO descompacta no navegador e associa fotos JPG, PNG ou WEBP a dados TXT/CSV do tipo <strong>Nome: ... / CPF: ... / Posição: ...</strong>.</p>
+          <p><strong>Sem limite de quantidade de ZIPs por seleção.</strong> O H2BICO processa os arquivos um a um e associa fotos JPG, PNG ou WEBP a dados TXT/CSV do tipo <strong>Nome: ... / CPF: ... / Posição: ...</strong>.</p>
+          <p>Você também pode adicionar novos lotes depois. Cada ZIP mantém os limites individuais de tamanho e segurança para evitar arquivos danificados.</p>
+          {extractingZips&&<div role="status" className="space-y-1 rounded-lg border border-amber-400/30 p-2">
+            <p className="font-bold text-amber-200">DESCOMPACTANDO ZIPs: {zipProgress.done}/{zipProgress.total}</p>
+            <p className="truncate text-slate-300" title={zipProgress.name}>{zipProgress.name}</p>
+            <div className="h-2 overflow-hidden rounded-full bg-white/10">
+              <div className="h-full bg-amber-400 transition-all" style={{width:`${zipProgress.total?Math.round(100*zipProgress.done/zipProgress.total):0}%`}}/>
+            </div>
+          </div>}
           <p>Confira a lista de fotos antes de clicar em IMPORTAR. ZIPs sem vínculo confiável não são salvos. Arquivos compactados não são enviados ao servidor.</p>
           {zipReport&&<div role="status" className="mt-2 space-y-2">
             <p className="font-bold text-emerald-200">ZIPs: {zipReport.archives} · Fotos: {zipReport.photos} · Metadados: {zipReport.metadata} · Prontas para conferência: {zipReport.ready} · Pendências: {zipReport.issues.length}</p>
