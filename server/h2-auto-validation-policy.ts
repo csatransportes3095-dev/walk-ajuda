@@ -39,6 +39,12 @@ export function invalidH2AutoPhoneStageAnswer(stage: string, answer: string): bo
     !validH2AutoPhone11(answer);
 }
 
+/** Texto livre na etapa de telefone não é uma tentativa de telefone. */
+export function isH2AutoFreeTextDuringPhoneStage(stage: string, answer: string): boolean {
+  return (stage === "customer_phone" || stage === "referrals_phone" || stage === "referral_phone") &&
+    /[\p{L}]/u.test(String(answer || "").trim());
+}
+
 /** Pedido breve de orientação; nunca conta como telefone ou tentativa de OTP. */
 export function isH2AutoHelpRequest(value: string): boolean {
   const text = String(value ?? "").trim().toLowerCase();
@@ -74,6 +80,10 @@ export function h2AutoNaturalNewCustomerIntent(input: string): boolean {
     .toLowerCase().replace(/[^a-z0-9\s]/g, " ").replace(/\s+/g, " ").trim();
   if (!text || /\d{5,}/.test(text) || /^(?:menu|inicio|voltar|0|[1-9]|10|h2|h3)$/.test(text))
     return false;
+  // “conta 99” é uma dúvida sobre o serviço, não um pedido de cadastro.
+  // Sem esta exceção, “Queria uma conta 99” abre a etapa do indicador e a
+  // pergunta seguinte é indevidamente tratada como telefone.
+  if (/\bconta\s*99\b|\b99\s*(?:app|conta|corrida|uber)\b/.test(text)) return false;
   if (/\b(?:nao sou cliente|ainda nao sou cliente|novo cliente|primeiro cadastro|primeira conta)\b/.test(text)) return true;
   // Uma pessoa ja cadastrada, um indicador e pedidos de comissao nao podem
   // cair por engano na validacao de NOVO cliente.

@@ -8,7 +8,7 @@ import { resolveReferralDeclaration } from "./referral";
 import { sendH2AutoOrderCode } from "./h2-auto-order-email";
 import { recordH2AutoPhoneFailure, clearH2AutoPhoneFailures, type PhoneStage } from "./h2-auto-validation-blocks";
 import { h2AutoPhoneFailureMessage, type H2AutoPhoneKind, type H2AutoPhoneFailure } from "./h2-auto-phone-attempt-message";
-import { invalidH2AutoPhoneStageAnswer, normalizeH2AutoPhone11, h2AutoNavigationCommand, initialH2AutoChoiceStage, repeatedH2AutoChoice, isH2AutoHelpRequest, h2AutoNaturalNewCustomerIntent, h2AutoNaturalExistingCustomerIntent, h2AutoNaturalReferralsIntent, h2AutoGreetingWelcome } from "./h2-auto-validation-policy";
+import { invalidH2AutoPhoneStageAnswer, normalizeH2AutoPhone11, h2AutoNavigationCommand, initialH2AutoChoiceStage, repeatedH2AutoChoice, isH2AutoHelpRequest, isH2AutoFreeTextDuringPhoneStage, h2AutoNaturalNewCustomerIntent, h2AutoNaturalExistingCustomerIntent, h2AutoNaturalReferralsIntent, h2AutoGreetingWelcome } from "./h2-auto-validation-policy";
 import { manualSilencedPhones, normalizeSilencedPhone } from "./h2-auto-silenced-contacts";
 import { h2AutoConfirmationSchema } from "../shared/h2AutoConfirmation";
 import { h2AutoPersonalizationSchema, H2_AUTO_PERSONALIZATION_DEFAULT, getH2AutoPersonalizedReply } from "../shared/h2AutoPersonalization";
@@ -453,6 +453,14 @@ export function registerH2AutoAccessRoutes(app: Express): void {
           return respond(res,200,{state:s.stage,message:s.stage==="referrals_phone" ? confirmation.phonePrompt : phoneMessage});
         if (isH2AutoHelpRequest(input))
           return respond(res, 200, { state: s.stage, message: s.stage === "referrals_phone" ? confirmation.phonePrompt : phoneMessage });
+        // Pergunta livre não é telefone inválido: tenta FAQ aprovada e, sem
+        // correspondência, repete o pedido do telefone sem consumir tentativa.
+        if (isH2AutoFreeTextDuringPhoneStage(s.stage, input)) {
+          const freeTextReply = getH2AutoPersonalizedReply(input, personalization, {stage: "customer_phone"});
+          if (freeTextReply)
+            return respond(res, 200, {state: s.stage, message: freeTextReply.message, topic: freeTextReply.topic});
+          return respond(res, 200, {state: s.stage, message: s.stage === "referrals_phone" ? confirmation.phonePrompt : phoneMessage});
+        }
         const phone = normalizeH2AutoPhone11(input);
         const referralEntry = s.stage === "referrals_phone";
         if (invalidH2AutoPhoneStageAnswer(s.stage, input) || !phone)
@@ -545,6 +553,14 @@ export function registerH2AutoAccessRoutes(app: Express): void {
             normalized.includes("nao tenho") || normalized.includes("não tenho") ||
             normalized.includes("sem indicador"))
           return respond(res,200,{state:"referral_phone",message:noReferral});
+        // Texto livre não é um telefone de indicador inválido. Responde uma
+        // FAQ aprovada ou repete o pedido sem consumir tentativa/bloquear.
+        if (isH2AutoFreeTextDuringPhoneStage(s.stage, input)) {
+          const freeTextReply = getH2AutoPersonalizedReply(input, personalization, {stage: "customer_phone"});
+          if (freeTextReply)
+            return respond(res, 200, {state: s.stage, message: freeTextReply.message, topic: freeTextReply.topic});
+          return respond(res, 200, {state: "referral_phone", message: referrerMessage});
+        }
         if (invalidH2AutoPhoneStageAnswer(s.stage, input))
           return respond(res,200,await phoneError("referral_phone","indicador","formato"));
         if (await limited("referral:" + sessionId, 30, hour, now))

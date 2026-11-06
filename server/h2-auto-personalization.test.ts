@@ -7,6 +7,7 @@ import {
 
 const access=readFileSync("server/h2-auto-access.ts","utf8");
 const remote=readFileSync("server/h2-auto-remote.ts","utf8");
+const validationPolicy=readFileSync("server/h2-auto-validation-policy.ts","utf8");
 
 describe("H2 AUTO: respostas personalizadas com segurança", () => {
   it("vem desligado e não faz chamadas pagas", () => {
@@ -115,6 +116,12 @@ describe("H2 AUTO: respostas personalizadas com segurança", () => {
     expect(access).toContain("Number(s.expires_at) > now");
     expect(access).toContain("configuredHours*hour");
     expect(access).toContain("expires_at=\u0024{now+accessLifetime}");
+  });
+  it("não transforma pergunta livre em erro de indicador", () => {
+    expect(access).toContain("isH2AutoFreeTextDuringPhoneStage");
+    expect(access).toContain("const freeTextReply = getH2AutoPersonalizedReply");
+    expect(access).toContain("sem consumir tentativa/bloquear");
+    expect(validationPolicy).toContain("conta 99");
   });
   it("limita conteúdo e aceita somente configurações conhecidas", () => {
     expect(classifyH2AutoPersonalizedQuestion("a".repeat(300))).toBeNull();

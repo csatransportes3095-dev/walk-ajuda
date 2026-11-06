@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { validH2AutoPhone11, normalizeH2AutoPhone11, allowsH2AutoMenuReset, invalidH2AutoPhoneStageAnswer, h2AutoNavigationCommand, initialH2AutoChoiceStage, repeatedH2AutoChoice, h2AutoNaturalExistingCustomerIntent, h2AutoNaturalReferralsIntent, h2AutoGreetingWelcome } from "./h2-auto-validation-policy";
+import { validH2AutoPhone11, normalizeH2AutoPhone11, allowsH2AutoMenuReset, invalidH2AutoPhoneStageAnswer, isH2AutoFreeTextDuringPhoneStage, h2AutoNavigationCommand, initialH2AutoChoiceStage, repeatedH2AutoChoice, h2AutoNaturalNewCustomerIntent, h2AutoNaturalExistingCustomerIntent, h2AutoNaturalReferralsIntent, h2AutoGreetingWelcome } from "./h2-auto-validation-policy";
 
 describe("H2 Auto strict 11-digit WhatsApp phone validation", () => {
   it("accepts mobile phone numbers with a two-digit DDD", () => {
@@ -80,7 +80,11 @@ describe("H2 AUTO - escolha inicial e repetição",()=> {
 });
 
 
-describe("H2 AUTO: primeiras mensagens livres sem repetir menu",()=>{
+describe("H2 AUTO: primeiras mensagens livres sem repetir menu",()=> {
+  it("não confunde conta 99 com cadastro de novo cliente",()=>{
+    expect(h2AutoNaturalNewCustomerIntent("Queria uma conta 99")).toBe(false);
+    expect(h2AutoNaturalNewCustomerIntent("Está fazendo conta 99")).toBe(false);
+  });
   it.each([
     "Quero acompanhar meu pedido",
     "Como posso acompanhar meu pedido?",
@@ -122,5 +126,13 @@ describe("H2 AUTO: primeiras mensagens livres sem repetir menu",()=>{
     expect(repeatedH2AutoChoice("referral_phone","Quero acompanhar meu pedido")).toBe(false);
     expect(repeatedH2AutoChoice("customer_code","Quero acompanhar meu pedido")).toBe(false);
     expect(repeatedH2AutoChoice("blocked","Quero acompanhar meu pedido")).toBe(false);
+  });
+});
+
+describe("H2 AUTO: texto livre durante pedido de telefone",()=>{
+  it("não transforma pergunta em tentativa de indicador",()=>{
+    for (const stage of ["customer_phone","referrals_phone","referral_phone"])
+      expect(isH2AutoFreeTextDuringPhoneStage(stage,"Teria como fazer conta 99?")).toBe(true);
+    expect(isH2AutoFreeTextDuringPhoneStage("referral_phone","11993425306")).toBe(false);
   });
 });
