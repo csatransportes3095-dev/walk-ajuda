@@ -296,6 +296,15 @@ export default function AdminH2Auto() {
     },
     onError: error => toast.error(error.message || "Falha ao salvar mensagens fixas."),
   });
+  const [quickReplyDrafts,setQuickReplyDrafts] = useState<Record<string,string>>({});
+  const saveQuickReply = trpc.h2AutoAdmin.saveQuickReplyText.useMutation({
+    onSuccess: (_v,input) => {
+      setQuickReplyDrafts(old=>{const n={...old};delete n[input.id];return n;});
+      toast.success("Resposta rápida salva. Sincronize o H2 AUTO no celular para usar.");
+      void utils.h2AutoAdmin.list.invalidate();
+    },
+    onError: error=>toast.error(error.message||"Não foi possível salvar a resposta rápida."),
+  });
   const [validityDraft, setValidityDraft] = useState<Record<string,string>>({});
   const validity = trpc.h2AutoAdmin.saveIdentificationValidity.useMutation({
     onSuccess: (_result, variables) => {
@@ -786,6 +795,26 @@ export default function AdminH2Auto() {
                   </button>
                 </div>
                 <p className="text-xs text-amber-200">Requer APK H2 Auto 1.45 instalado e sincronizado para corrigir o encaminhamento do menu.</p>
+              </section>
+              <section className="rounded-2xl border border-emerald-400/40 bg-emerald-950/20 p-4 space-y-3">
+                <h4 className="font-black text-emerald-200">💬 NOTIFICAÇÃO — RESPOSTA RÁPIDA</h4>
+                <p className="text-xs text-slate-300">O botão RESPOSTA RÁPIDA é adicional: PAUSAR, 30 MIN e ATIVAR continuam funcionando. A mensagem é enviada ao contato da notificação e o robô segue ativo, sem liberar contatos pausados ou bloqueados.</p>
+                <label className="block text-xs font-bold text-slate-200">
+                  Texto do botão (editável pelo ADM)
+                  <textarea rows={3} maxLength={500} className={field+" mt-2"}
+                    value={quickReplyDrafts[d.id]??d.config.quickReplyText??"Em que posso ajudar?"}
+                    onChange={e=>setQuickReplyDrafts(old=>({...old,[d.id]:e.target.value}))}/>
+                </label>
+                <div className="flex flex-wrap items-center justify-between gap-2">
+                  <p className="text-xs text-slate-400">Até 500 caracteres · botão disponível somente com notificação individual válida e opção Responder do WhatsApp.</p>
+                  <button type="button" disabled={saveQuickReply.isPending||
+                    !(quickReplyDrafts[d.id]??d.config.quickReplyText??"Em que posso ajudar?").trim() ||
+                    (quickReplyDrafts[d.id]??d.config.quickReplyText??"Em que posso ajudar?")===(d.config.quickReplyText??"Em que posso ajudar?")}
+                    onClick={()=>saveQuickReply.mutate({id:d.id,expectedRevision:d.revision,text:(quickReplyDrafts[d.id]??"").trim()})}
+                    className="rounded-xl bg-emerald-500 px-4 py-3 text-xs font-black text-slate-950 disabled:opacity-40">
+                    SALVAR RESPOSTA RÁPIDA
+                  </button>
+                </div>
               </section>
               <section className="rounded-2xl border border-cyan-400/40 bg-gradient-to-br from-cyan-950/40 to-slate-950 p-4 space-y-3">
                 <h4 className="text-lg font-black text-cyan-200">🖥️ DESKTOP + PRAZO DE AUTENTICAÇÃO</h4>
