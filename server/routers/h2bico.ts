@@ -213,6 +213,30 @@ export const h2bicoRouter = router({
     }));
   }),
 
+  // Ultimas fotos inseridas no banco, independentemente de estarem
+  // disponiveis, reservadas ou ja utilizadas. Somente leitura para o ADM.
+  // Nenhuma foto e alterada ou marcada como usada nesta consulta.
+  recentForSimilarity: adminProcedure.input(z.object({
+    limit: z.number().int().min(1).max(500).default(50),
+  }).strict()).query(async ({ input }) => {
+    const db=await dbOrThrow();
+    const result=await db.execute(sql`
+      SELECT id,name,cpf,uf,photoUrl,originalFilename
+      FROM h2bico_records
+      WHERE photoUrl IS NOT NULL AND TRIM(photoUrl) <> ''
+      ORDER BY id DESC
+      LIMIT ${input.limit}
+    `);
+    return (result[0] as any[]).map(r => ({
+      id: Number(r.id),
+      name: String(r.name || ""),
+      cpf: String(r.cpf || ""),
+      uf: r.uf ? String(r.uf) : null,
+      photoUrl: String(r.photoUrl || ""),
+      originalFilename: r.originalFilename ? String(r.originalFilename) : null,
+    }));
+  }),
+
   stats: adminProcedure.query(async () => {
     const db = await dbOrThrow();
     const rows = await db.execute(sql`SELECT status, COUNT(*) total FROM h2bico_records GROUP BY status`);
