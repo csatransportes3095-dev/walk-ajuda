@@ -13,6 +13,46 @@ const NAMES: Array<[keyof VehicleFields,string]>=[
   ["model","MARCA / MODELO"],["color","COR"],["manufactureYear","ANO FABRICAÇÃO"],
   ["modelYear","ANO DO MODELO"],
 ];
+/**
+ * Cor apresentada como etiqueta visual. Para BRANCO e PRETO, o fundo
+ * permanece branco e o texto preto; a amostra distingue as duas cores.
+ * Não altera os campos originais nem a pesquisa no banco.
+ */
+function colorPalette(input: string) {
+  const name=String(input||"").normalize("NFD").replace(/[\u0300-\u036f]/g,"").toUpperCase().trim();
+  const palette: Array<[RegExp,string,string,string]>=[
+    [/^BRANC/, "#FFFFFF", "#111827", "#FFFFFF"],
+    [/^PRET/, "#FFFFFF", "#111827", "#111827"],
+    [/^CINZA/, "#9CA3AF", "#111827", "#9CA3AF"],
+    [/^PRATA/, "#D1D5DB", "#111827", "#D1D5DB"],
+    [/^GRAFITE/, "#4B5563", "#FFFFFF", "#4B5563"],
+    [/^AZUL/, "#2563EB", "#FFFFFF", "#2563EB"],
+    [/^VERMELH/, "#DC2626", "#FFFFFF", "#DC2626"],
+    [/^VERDE/, "#15803D", "#FFFFFF", "#15803D"],
+    [/^AMAREL/, "#FDE047", "#111827", "#FDE047"],
+    [/^MARROM/, "#92400E", "#FFFFFF", "#92400E"],
+    [/^BEGE/, "#E9D5AE", "#111827", "#E9D5AE"],
+    [/^DOURAD/, "#D4AF37", "#111827", "#D4AF37"],
+    [/^LARANJA/, "#EA580C", "#FFFFFF", "#EA580C"],
+    [/^ROSA/, "#F9A8D4", "#111827", "#F9A8D4"],
+    [/^ROX/, "#7E22CE", "#FFFFFF", "#7E22CE"],
+    [/^VINHO|^BORDO/, "#881337", "#FFFFFF", "#881337"],
+  ];
+  const found=palette.find(([pattern])=>pattern.test(name));
+  return {background:found?.[1]||"#F8FAFC",text:found?.[2]||"#111827",swatch:found?.[3]||"#64748B"};
+}
+function VehicleColorBadge({color,compact=false}:{color:string;compact?:boolean}) {
+  const selected=colorPalette(color);
+  return <span
+    className={"inline-flex max-w-full items-center gap-2 rounded-xl border border-black/15 font-black shadow-sm "+(compact?"px-2.5 py-1 text-xs":"px-3 py-2 text-sm")}
+    style={{backgroundColor:selected.background,color:selected.text}}
+    title={"Cor do veículo: "+color}>
+    <span aria-hidden="true" className="h-3.5 w-3.5 shrink-0 rounded-full border border-black/30"
+      style={{backgroundColor:selected.swatch}}/>
+    <span className="break-words">{color||"NÃO INFORMADA"}</span>
+  </span>;
+}
+
 function base64File(file:File):Promise<string>{
   return new Promise((resolve,reject)=>{
     const reader=new FileReader();
@@ -199,7 +239,9 @@ export default function VehicleVaultPanel(){
         {NAMES.map(([key,label])=><label key={key} className="block text-xs font-bold text-slate-300">
           {label}<input className="mt-1 w-full rounded-xl border border-white/20 bg-black/55 p-3 text-sm font-semibold text-white"
             value={fields[key]} onChange={e=>setFields(v=>({...v,[key]:e.target.value}))}
-            placeholder={label}/></label>)}
+            placeholder={label}/>
+          {key==="color"&&fields.color.trim()&&<span className="mt-2 block"><VehicleColorBadge color={fields.color} compact/></span>}
+          </label>)}
       </div>
       <button onClick={()=>void saveVehicle()} disabled={save.isPending||readingPdf||previewPdf.isPending}
         className="w-full rounded-xl bg-emerald-500 px-4 py-3 text-sm font-black text-slate-950 disabled:opacity-40">
@@ -232,7 +274,7 @@ export default function VehicleVaultPanel(){
         {(search.data||[]).map(item=><button type="button" key={item.id} onClick={()=>{setSelected(item.id);setClientQuery("");setPendingClientQuery("");}}
           className={"w-full rounded-xl border p-3 text-left "+(selected===item.id?"border-cyan-300 bg-cyan-500/15":"border-white/10 bg-white/[.03] hover:border-white/30")}>
           <div className="flex items-start justify-between gap-2">
-            <strong>{item.model} · {item.color}</strong>
+            <span className="flex flex-wrap items-center gap-2"><strong>{item.model}</strong><VehicleColorBadge color={item.color} compact/></span>
             <span className={"text-xs font-bold "+(item.inactive?"text-slate-400":item.activeClients?"text-amber-300":"text-emerald-300")}>
               {item.inactive?"INATIVO":item.activeClients?"EM USO":"SEM CLIENTE ATIVO"}</span>
           </div>
@@ -249,7 +291,7 @@ export default function VehicleVaultPanel(){
         {details.isLoading&&<p className="text-sm">Carregando ficha...</p>}
         {details.data&&<>
           <div className="grid grid-cols-2 gap-2 text-sm">
-            {NAMES.map(([key,label])=><div key={key}><div className="text-[10px] font-bold text-white/45">{label}</div><div className="break-all font-bold">{String(details.data?.[key]||"")}</div></div>)}
+            {NAMES.map(([key,label])=><div key={key}><div className="mb-1 text-[10px] font-bold text-white/45">{label}</div>{key==="color"?<VehicleColorBadge color={details.data?.color||""}/>:<div className="break-all font-bold">{String(details.data?.[key]||"")}</div>}</div>)}
           </div>
           <div className="flex flex-wrap gap-2">
             <button onClick={editVehicle} className="rounded-xl border border-white/20 px-3 py-2 text-xs font-bold"><Pencil className="mr-1 inline h-4 w-4"/>EDITAR DADOS / ANEXAR PDF</button>
