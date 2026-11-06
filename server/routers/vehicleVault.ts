@@ -143,12 +143,15 @@ function extractFields(raw: string) {
     if (!match) continue;
     for (let j = i; j < Math.min(lines.length, i + 12); j++) {
       if (j > i && /^(?:ESPECIE\s*\/\s*TIPO|PLACA\s+ANTERIOR|COR\s+PREDOMINANTE)\b/i.test(lines[j])) break;
-      const candidate = (j === i ? match[1] : lines[j]).trim();
+      // CRLV-e can interleave vehicle data and unrelated right-column text.
+      // Limit the model to the printed field, even on alternative layouts.
+      const candidate = (j === i ? match[1] : lines[j]).split(/\s{3,}/)[0].trim();
       if (!candidate || candidate === "*" ||
           /^(?:ASSINADO|DADOS\s+DO\s+SEGURO|SEGURO\s+DPVAT|CAT\.\s*TARIF|PAGAMENTO|REPASSE|COTA\s+UNICA|FALHA|QRCode)\b/i.test(candidate)) continue;
-      // A slash separates manufacturer/model in CRLV-e; do not accept
-      // unrelated right-column sentences as model names.
-      if (/^[A-Z][A-Z0-9 ._-]{1,55}\/[A-Z0-9][A-Z0-9 /.+_-]{1,98}$/i.test(candidate)) {
+      // CRLV-e manufacturer may be one letter (I/PEUGEOT, N/...),
+      // but it must be an explicit make/model value in this labelled section.
+      // Do not accept unrelated right-column sentences as model names.
+      if (/^[A-Z][A-Z0-9 ._-]{0,55}\/[A-Z0-9][A-Z0-9 /.+_-]{1,98}$/i.test(candidate)) {
         model = clean(candidate);
         break;
       }
