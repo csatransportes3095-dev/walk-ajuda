@@ -584,6 +584,7 @@ export const h2AutoAdminRouter = router({
         menu: saved.menu,
         rules: saved.rules,
         manualControls: saved.manualControls,
+        quickReplyText: saved.quickReplyText,
       };
       const result: any = await db.execute(
         sql`UPDATE h2_auto_devices SET config_json=${JSON.stringify(preserved)},revision=revision+1 WHERE id=${input.id} AND revision=${input.expectedRevision}`
