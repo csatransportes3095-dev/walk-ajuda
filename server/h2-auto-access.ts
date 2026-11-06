@@ -175,6 +175,7 @@ export function registerH2AutoAccessRoutes(app: Express): void {
       await ensure();
       const deviceId = await deviceFor(req);
       let identificationDisabled = false;
+      let liveConfig: any = null;
       // A árvore tem uma chave própria. Desligá-la não pode desligar as
       // respostas personalizadas, que são independentes e opcionais.
       // A árvore foi desativada definitivamente nesta reformulação.
@@ -191,17 +192,18 @@ export function registerH2AutoAccessRoutes(app: Express): void {
           JSON_UNQUOTE(JSON_EXTRACT(config_json,'$.identificationEnabled')) AS identity_on,
           JSON_UNQUOTE(JSON_EXTRACT(config_json,'$.blocked')) AS blocked_phones
           FROM h2_auto_devices WHERE id=${deviceId} LIMIT 1`);
-        if (live[0]?.bot_on !== "true") return respond(res,200,{state:"disabled"});
-        identificationDisabled = live[0]?.identity_on === "false";
+        liveConfig = live[0] as any;
+        if (liveConfig?.bot_on !== "true") return respond(res,200,{state:"disabled"});
+        identificationDisabled = liveConfig?.identity_on === "false";
         try {
-          const raw = live[0]?.confirmation_json;
+          const raw = liveConfig?.confirmation_json;
           confirmation = h2AutoConfirmationSchema.parse(typeof raw === "string" ? JSON.parse(raw) : raw || {});
         } catch { confirmation = h2AutoConfirmationSchema.parse({}); }
         try {
-          const rawPersonalization = live[0]?.personalization_json;
+          const rawPersonalization = liveConfig?.personalization_json;
           personalization = h2AutoPersonalizationSchema.parse(typeof rawPersonalization === "string" ? JSON.parse(rawPersonalization) : rawPersonalization || {});
         } catch { personalization = { ...H2_AUTO_PERSONALIZATION_DEFAULT }; }
-        questionCollectionEnabled = live[0]?.collection_on === "true";
+        questionCollectionEnabled = liveConfig?.collection_on === "true";
       }
       if (!deviceId) return respond(res, 401, { error: "unauthorized" });
       // O texto de boas-vindas pertence ao ADM: números, emojis e frases
@@ -210,7 +212,7 @@ export function registerH2AutoAccessRoutes(app: Express): void {
       const phoneMessage = confirmation.existingCustomerPrompt;
       const referrerMessage = confirmation.newCustomerPrompt;
       const noReferral = confirmation.noIndicatorMessage;
-      const rawHours=Number((await rows(sql`SELECT JSON_UNQUOTE(JSON_EXTRACT(config_json,'$.identificationSessionHours')) AS hours FROM h2_auto_devices WHERE id=${deviceId} LIMIT 1`))[0]?.hours);
+      const rawHours=Number(liveConfig?.session_hours);
       const configuredHours=Number.isInteger(rawHours) && rawHours>=1 && rawHours<=720 ? rawHours : defaultAccessHours;
       const accessLifetime=configuredHours*hour;
       const conversation = req.body?.conversationId;
@@ -244,9 +246,7 @@ export function registerH2AutoAccessRoutes(app: Express): void {
       // Verified customers are identified by the phone from their existing OTP
       // session, even if WhatsApp displays only a saved name. No chat identity
       // is inferred from a name, and blocked clients receive no automatic reply.
-      const blockedPhones = manualSilencedPhones(String((await rows(sql`SELECT
-        JSON_UNQUOTE(JSON_EXTRACT(config_json,'$.blocked')) AS blocked_phones
-        FROM h2_auto_devices WHERE id=${deviceId} LIMIT 1`))[0]?.blocked_phones || ""));
+      const blockedPhones = manualSilencedPhones(String(liveConfig?.blocked_phones || ""));
       // If WhatsApp exposes the actual number in the notification label, stop
       // even on first contact before the phone challenge or a config sync.
       const labelPhone=typeof req.body?.contactLabel === "string" ?
