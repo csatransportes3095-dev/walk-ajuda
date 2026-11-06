@@ -96,8 +96,30 @@ export async function ensureH2AutoReleaseTable() {
 }
 
 export async function getH2AutoApkRelease(): Promise<H2AutoApkRelease | null> {
-  // Release ativa do banco / R2 é a fonte de verdade.
-  // O fallback local fixo em 1.66 impedia servir APKs 1.70+ já publicados.
+  // A cópia assinada versionada no repositório é a fonte local de verdade
+  // durante a promoção do APK mais recente ao registro automático.
+  const publicDownloads = path.resolve(process.cwd(), "dist", "public", "downloads");
+  const localManifest = path.join(publicDownloads, "h2-auto-release.json");
+  const localApk = path.join(publicDownloads, "H2-AUTO-1.73.apk");
+  if (fs.existsSync(localManifest) && fs.existsSync(localApk)) {
+    try {
+      const manifest = JSON.parse(fs.readFileSync(localManifest, "utf8"));
+      const buffer = fs.readFileSync(localApk);
+      const sha256 = createHash("sha256").update(buffer).digest("hex");
+      if (manifest.versionCode === 73 && manifest.sha256 === sha256) {
+        return {
+          r2Key: `__local__:${localApk}`,
+          sha256,
+          fileSize: buffer.length,
+          versionName: "1.73",
+          versionCode: 73,
+          uploadedAt: Date.parse(manifest.publishedAt) || Date.now(),
+        };
+      }
+    } catch {
+      // Se a cópia local não passar na validação, mantém o caminho normal do DB.
+    }
+  }
   await ensureH2AutoReleaseTable();
   const db = await getDb() as any;
   const result = await db.execute(sql.raw(

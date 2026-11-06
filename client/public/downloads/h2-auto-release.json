@@ -1,11 +1,11 @@
 {
   "packageName": "com.h2colombiano.auto",
-  "apkFile": "H2-AUTO-1.66.apk",
-  "versionName": "1.66",
-  "versionCode": 66,
-  "sha256": "e425524e2d31240c788c73fb99ac5ea95d2e658f787c96967ee33a3cca80da64",
+  "apkFile": "H2-AUTO-1.73.apk",
+  "versionName": "1.73",
+  "versionCode": 73,
+  "sha256": "15d6a3578fc1430ee325ed1700ac08c0c68e0d831f2f59e3b16db0db3beefb73",
   "certificateSha256": "3215b6d6b643ae6b57ffaf6e4854a40be267d4816166255872410c696384b393",
-  "commit": "2c57064",
-  "workflowRun": null,
-  "publishedAt": "2026-11-04T14:22:24Z"
+  "commit": "5464f4c",
+  "workflowRun": "42238796168",
+  "publishedAt": "2026-11-06T15:00:14Z"
 }
