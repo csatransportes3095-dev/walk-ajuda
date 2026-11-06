@@ -162,9 +162,9 @@ function extractFields(raw: string) {
     if (model) break;
   }
 
-  const color = clean(nextMatching(
+  // Accept both "Cor: BRANCA" pasted from vehicle reports and the CRLV-e\n  // layout where the color is printed on a following line.\n  const color = clean(nextMatching(
     /^COR(?:\s+PREDOMINANTE|\s+DO\s+VEICULO)?\b/i,
-    /^(BRANC[AO]|PRET[AO]|CINZA|PRATA|AZUL|VERMELH[AO]|VERDE|AMAREL[AO]|MARROM|BEGE|DOURAD[AO]|LARANJA|ROSA|ROXO|VINHO|GRAFITE|BORDO)\b/i, 9,
+    /\b(BRANC[AO]|PRET[AO]|CINZA|PRATA|AZUL|VERMELH[AO]|VERDE|AMAREL[AO]|MARROM|BEGE|DOURAD[AO]|LARANJA|ROSA|ROXO|VINHO|GRAFITE|BORDO)\b/i, 9,
   ));
 
   let fabricationYear: number | null = null;
