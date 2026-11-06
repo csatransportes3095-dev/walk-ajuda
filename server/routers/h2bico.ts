@@ -652,7 +652,7 @@ export const h2bicoRouter = router({
       LIMIT ${input.limit}
     `);
     const cpfs=(result[0] as Array<{cpf:string}>).map(row=>String(row.cpf||""))
-      .filter(cpf=>/^\\d{11}$/.test(cpf));
+      .filter(cpf=>/^\d{11}$/.test(cpf));
     return {cpfs,count:cpfs.length};
   }),
 
