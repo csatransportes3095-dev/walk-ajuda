@@ -639,6 +639,23 @@ export const h2bicoRouter = router({
     return {updated:found.length};
   }),
 
+  // Copia os ultimos CPFs efetivamente cadastrados no H2BICO.
+  // Ordenacao por ID decrescente (mais recente primeiro), independentemente
+  // de ter foto, da origem ou do status. Somente leitura, sem alterar registros.
+  recentCopyCpfs: adminProcedure.input(z.object({
+    limit: z.number().int().min(1).max(10000).default(50),
+  }).strict()).query(async ({input}) => {
+    const db=await dbOrThrow();
+    const result=await db.execute(sql`
+      SELECT cpf FROM h2bico_records
+      ORDER BY id DESC
+      LIMIT ${input.limit}
+    `);
+    const cpfs=(result[0] as Array<{cpf:string}>).map(row=>String(row.cpf||""))
+      .filter(cpf=>/^\\d{11}$/.test(cpf));
+    return {cpfs,count:cpfs.length};
+  }),
+
   // Exporta os CPFs de todo o banco do H2BICO, sem depender do LIMIT 5000
   // da listagem da tela. Paginacao por ID em lotes de ate 1000 registros.
   bulkCopyCpfs: adminProcedure.input(z.object({
