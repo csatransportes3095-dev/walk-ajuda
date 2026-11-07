@@ -42,6 +42,17 @@ function setNoStore(res: Parameters<RequestHandler>[1]) {
 function isApi(pathname: string) {
   return pathname === "/api" || pathname.startsWith("/api/");
 }
+function normalizedRequestPath(req: Request) {
+  const raw = req.originalUrl || req.url || req.path;
+  const pathname = raw.split("?", 1)[0].replace(/\/+$/, "");
+  return pathname || "/";
+}
+function isTrustedAutomationRoute(req: Request) {
+  // This endpoint performs its own GitHub Actions OIDC verification in
+  // uploadRoute.ts. It must remain reachable while the public site is blocked;
+  // no browser/session authentication is accepted by that route.
+  return req.method === "POST" && normalizedRequestPath(req) === "/api/h2-auto/ci-publish";
+}
 function htmlPage(title: string, message: string, link = "") {
   return '<!doctype html><html lang="pt-BR"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width, initial-scale=1"><title>' +
     title + ' - H2 Colombiano</title><style>body{background:#070b18;color:#fff;font:16px system-ui;display:grid;place-items:center;min-height:90vh;margin:0;padding:16px;text-align:center}section{max-width:420px;border:1px solid #eab30855;padding:28px;border-radius:18px;background:#131827}a{color:#facc15}</style></head><body><section><h1>' +
@@ -52,6 +63,7 @@ export function createSiteAccessGateway(deps: SiteGatewayDependencies = defaults
     try {
       if (!deps.enabled()) return next();
       const pathname = req.path;
+      if (isTrustedAutomationRoute(req)) return next();
       // These are explicitly public or independently authenticated routes.
       if (isAdministrationPath(pathname) || isPublicFrontendAsset(pathname)) return next();
       const admin = deps.isAdmin(req);

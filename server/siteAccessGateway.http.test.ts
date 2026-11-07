@@ -110,6 +110,10 @@ describe("Segurança do Site - integration via isolated HTTP server",()=>{
       }
     }
   });
+  it("GitHub Actions APK publication reaches its own OIDC gate",async()=>{
+    expect((await probe("blocked","/api/h2-auto/ci-publish",{method:"POST"})).status).toBe(200);
+    expect((await probe("blocked","/api/h2-auto/ci-publish")).status).toBe(403);
+  });
   it("database failure fails closed for restricted and blocked",async()=>{
     for(const mode of ["restricted","blocked"] as const){
       const result=await probe(mode,"/api/trpc/products.listActive",{failMode:true});
