@@ -73,6 +73,7 @@ import AdminZohoConfig from "./pages/AdminZohoConfig";
 import AdminMedia from "./pages/AdminMedia";
 import AdminFeatureCards from "./pages/AdminFeatureCards";
 import AdminHubCentral from "./pages/AdminHubCentral";
+import AdminH2Android from "./pages/AdminH2Android";
 import AdminLocadora from "./pages/AdminLocadora";
 import LocadoraPortal from "./pages/LocadoraPortal";
 import AdminConsultas from "./pages/AdminConsultas";
@@ -287,6 +288,12 @@ function Router() {
       <Route path={"/admin/hub-central"}>
         <AdminGuard><AdminHubCentral /></AdminGuard>
       </Route>
+      <Route path={"/admin/android"}>
+        <AdminGuard><AdminH2Android /></AdminGuard>
+      </Route>
+      <Route path={"/android"}>
+        <AdminGuard><AdminH2Android /></AdminGuard>
+      </Route>
       <Route path={"/admin/locadora"}>
         <AdminGuard><AdminLocadora /></AdminGuard>
       </Route>
@@ -341,7 +348,7 @@ function ClientInstallGate({ children }: { children: React.ReactNode }) {
 
 function AppContent() {
   const [location] = useLocation();
-  const isAdminRoute = location.startsWith("/admin");
+  const isAdminRoute = location.startsWith("/admin") || location === "/android";
   const isTrackingRoute = location === "/acompanhar";
   const isLoginRoute = location === "/login";
   const isRaffleRoute = location === "/sorteio";
