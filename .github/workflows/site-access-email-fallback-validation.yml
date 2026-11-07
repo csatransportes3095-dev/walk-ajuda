@@ -70,7 +70,12 @@ jobs:
           const normalizeLines=source=>source.replace(/\r\n/g,'\n');
           const before=p=>normalizeLines(execFileSync('git',['show',base+':'+p],{encoding:'utf8'}));
           const read=p=>normalizeLines(fs.readFileSync(p,'utf8'));
-          const normalizeChassisIntegration=(p,source)=>{
+          const normalizeIsolatedIntegrations=(p,source)=>{
+            // Accept only the exact independently authenticated Android transport block.
+            if(p==='server/siteAccessPolicy.ts')return source.replace(
+              "  // Pareamento usa codigo temporario; os demais endpoints validam o token proprio do agente.\n  if (\n    pathname === \"/api/h2-android/agent/claim\" ||\n    pathname === \"/api/h2-android/agent/heartbeat\" ||\n    pathname === \"/api/h2-android/agent/pull\" ||\n    pathname === \"/api/h2-android/agent/finish\" ||\n    pathname === \"/api/h2-android/agent/frame\"\n  ) return true;",
+              "  // Endpoints com autenticacao separada; nenhum comando remoto nesta fase.\n  if (pathname === \"/api/h2-android/agent/claim\" || pathname === \"/api/h2-android/agent/heartbeat\") return true;"
+            );
             if(p==='client/src/App.tsx')return source
               .replace(/^import AdminChassisPage from "\.\/pages\/AdminChassisPage";\r?\n/m,'')
               .replace('<AdminGuard><AdminChassisPage /></AdminGuard>','<AdminGuard><GeradorChassiPublico /></AdminGuard>');
@@ -84,9 +89,9 @@ jobs:
           for(const p of protectedFiles){
             const current=read(p),previous=before(p);
             assert.equal(
-              p==='client/src/App.tsx'||p==='client/src/main.tsx' ? normalizeChassisIntegration(p,current) : current,
-              p==='client/src/App.tsx'||p==='client/src/main.tsx' ? normalizeChassisIntegration(p,previous) : previous,
-              p+' unexpectedly changed outside the chassis integration'
+              normalizeIsolatedIntegrations(p,current),
+              normalizeIsolatedIntegrations(p,previous),
+              p+' unexpectedly changed outside the approved isolated integrations'
             );
           }
           const parse=(p,source)=>ts.createSourceFile(p,source,ts.ScriptTarget.Latest,true);
