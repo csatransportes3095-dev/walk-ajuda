@@ -1,4 +1,5 @@
-import { useEffect, useState } from "react";
+import { useEffect, useRef, useState } from "react";
+import { startAndroidScreenStream, type AndroidScreenFrame, type AndroidScreenStream } from "@/lib/androidScreenStream";
 import { trpc } from "@/lib/trpc";
 import { toast } from "sonner";
 import { ArrowLeft, Home, Keyboard, MonitorPlay, Power, PowerOff, RefreshCcw, Router, Smartphone, Plus, MousePointerClick } from "lucide-react";
@@ -26,7 +27,8 @@ export default function H2AndroidLiveManager({
   refresh: () => void;
 }) {
   const [selectedKey, setSelectedKey] = useState("");
-  const [frameTick, setFrameTick] = useState(0);
+  const [frame, setFrame] = useState<(AndroidScreenFrame & { deviceKey: string }) | null>(null);
+  const screenStream = useRef<AndroidScreenStream | null>(null);
   const [frameLoaded, setFrameLoaded] = useState(false);
   const [watching, setWatching] = useState(false);
   const [proxyHost, setProxyHost] = useState("");
@@ -51,18 +53,21 @@ export default function H2AndroidLiveManager({
   const latest = commands.filter(c => chosen && c.agentId === chosen.agent.id && c.avdName === chosen.name).slice(0, 3);
 
   useEffect(() => {
-    if (!watching || !chosen?.running) return;
-    const interval = window.setInterval(() => setFrameTick(t => t + 1), 3000);
-    return () => window.clearInterval(interval);
-  }, [watching, chosen?.running, chosen?.key]);
-
-  useEffect(() => {
     setFrameLoaded(false);
-  }, [chosen?.key]);
+    setFrame(null);
+    if (!watching || !chosen?.running) return;
+    const deviceKey = chosen.key;
+    const url = "/api/h2-android/screen/" + chosen.agent.id + "/" + chosen.name;
+    const stream = startAndroidScreenStream(url, next => setFrame({ ...next, deviceKey }));
+    screenStream.current = stream;
+    return () => {
+      stream.stop();
+      if (screenStream.current === stream) screenStream.current = null;
+    };
+  }, [watching, chosen?.running, chosen?.key, chosen?.agent.id, chosen?.name]);
 
-  const frameUrl = chosen && watching && chosen.running
-    ? "/api/h2-android/screen/" + chosen.agent.id + "/" + chosen.name + "?t=" + frameTick
-    : "";
+  const visibleFrame = watching && chosen?.running && frame?.deviceKey === chosen.key ? frame : null;
+  const screenActive = watching && chosen?.running;
 
   function sendKey(key: "BACK" | "HOME" | "ENTER" | "POWER") {
     if (!chosen || !chosen.running) return;
@@ -105,7 +110,7 @@ export default function H2AndroidLiveManager({
             Nao e preciso abrir Android Studio.
           </p>
         </div>
-        <button type="button" onClick={() => { refresh(); setFrameTick(t => t + 1); }}
+        <button type="button" onClick={() => { refresh(); screenStream.current?.refresh(); }}
           className="rounded-lg border border-white/20 px-3 py-2 text-xs font-bold hover:bg-white/10">
           <RefreshCcw className="mr-1 inline h-4 w-4" /> Atualizar
         </button>
@@ -156,28 +161,29 @@ export default function H2AndroidLiveManager({
                 <div className="grid gap-4 lg:grid-cols-[minmax(250px,390px)_minmax(0,1fr)]">
                   <div className="space-y-3">
                     <div className="mx-auto max-w-[360px] overflow-hidden rounded-[2rem] border-[7px] border-slate-600 bg-black shadow-2xl">
-                      <div className="relative flex min-h-[410px] items-center justify-center bg-[#080c15]">
-                        {frameUrl ? (
+                      <div className="relative w-full overflow-hidden bg-[#080c15]" style={{ aspectRatio: visibleFrame ? visibleFrame.width + " / " + visibleFrame.height : "9 / 20" }}>
+                        {visibleFrame ? (
                           <img
-                            key={frameUrl}
-                            src={frameUrl}
+                            src={visibleFrame.src}
                             alt={"Tela real do " + chosen.name}
-                            onLoad={() => setFrameLoaded(true)}
-                            onError={() => setFrameLoaded(false)}
+                            onLoad={() => {
+                              setFrameLoaded(true);
+                              screenStream.current?.shown(visibleFrame.src);
+                            }}
                             onClick={tap}
                             draggable={false}
-                            className="w-full cursor-crosshair select-none object-contain"
+                            className="absolute inset-0 h-full w-full cursor-crosshair select-none object-contain"
                           />
                         ) : (
-                          <div className="p-6 text-center text-xs text-slate-400">
+                          <div className="absolute inset-0 flex flex-col items-center justify-center p-6 text-center text-xs text-slate-400">
                             <Smartphone className="mx-auto mb-3 h-12 w-12 text-[#8ce2bd]/50" />
-                            {chosen.running ? "Clique em Abrir tela para ver e tocar no Android." : "Android desligado."}
+                            {screenActive ? "Aguardando imagem do Android..." : chosen.running ? "Clique em Abrir tela para ver e tocar no Android." : "Android desligado."}
                           </div>
                         )}
                       </div>
                     </div>
                     <div className="flex flex-wrap items-center justify-center gap-2">
-                      <button type="button" disabled={!chosen.running} onClick={() => { setWatching(w => !w); setFrameTick(t => t + 1); }}
+                      <button type="button" disabled={!chosen.running} onClick={() => setWatching(w => !w)}
                         className="rounded-lg border border-[#80dcb5]/40 px-3 py-2 text-xs font-bold text-[#b5ecd6] disabled:opacity-30">
                         {watching ? "Fechar tela" : "Abrir tela"}
                       </button>
