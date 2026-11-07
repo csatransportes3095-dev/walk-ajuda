@@ -1,0 +1,39 @@
+name: H2 Android - verificacao do modulo ADM
+
+on:
+  pull_request:
+    branches:
+      - main
+    paths:
+      - "client/src/App.tsx"
+      - "client/src/pages/AdminCodes.tsx"
+      - "client/src/pages/AdminH2Android.tsx"
+      - "server/routers.ts"
+      - "server/routers/h2Android.ts"
+      - "server/h2Android.integration.test.ts"
+      - ".github/workflows/h2-android-admin-ci.yml"
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  validate-h2-android:
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+    steps:
+      - name: Checkout current pull request code
+        uses: actions/checkout@v4
+      - name: Setup pnpm
+        uses: pnpm/action-setup@v4
+      - name: Setup Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: 22
+          cache: pnpm
+      - name: Install project dependencies
+        run: pnpm install --no-frozen-lockfile
+      - name: Check H2 Android integration and ADM isolation
+        run: pnpm exec vitest run server/h2Android.integration.test.ts
+      - name: Production build
+        run: pnpm build
