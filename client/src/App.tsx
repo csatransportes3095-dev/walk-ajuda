@@ -164,6 +164,7 @@ function RecoveryRoute() {
 // Guard para rotas admin — redireciona para /admin/login se não autenticado
 function AdminGuard({ children }: { children: React.ReactNode }) {
   const { isAdmin, isLoading } = useAdminAuth();
+  const [location] = useLocation();
   // Logout automático após 30 minutos de inatividade
   useAdminIdleLogout(isAdmin);
 
@@ -176,7 +177,10 @@ function AdminGuard({ children }: { children: React.ReactNode }) {
   }
 
   if (!isAdmin) {
-    return <Redirect to="/admin/login" />;
+    const loginPath = location.toLowerCase() === "/adm/android"
+      ? "/admin/login?returnTo=%2Fadm%2Fandroid"
+      : "/admin/login";
+    return <Redirect to={loginPath} />;
   }
 
   return <>{children}</>;
