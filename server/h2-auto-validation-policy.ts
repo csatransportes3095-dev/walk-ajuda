@@ -72,6 +72,23 @@ export function isH2AutoGreeting(input: string): boolean {
   return /^(?:bom dia|boa tarde|boa noite|oi|ola)(?:\s+h2)?$/.test(text);
 }
 
+/**
+ * When WhatsApp delivers two short messages in one notification window,
+ * preserve the greeting while classifying the second line independently.
+ * Example: "Bom dia" + "Quero uma conta" becomes "Bom dia!" plus the
+ * new-customer prompt, instead of treating the whole block as one command.
+ */
+export function h2AutoGreetingPrefix(input: string): string {
+  const firstLine = String(input || "").split(/\r?\n/)[0].trim();
+  if (!isH2AutoGreeting(firstLine)) return "";
+  const normalized = firstLine.normalize("NFD").replace(/[\u0300-\u036f]/g, "")
+    .toLowerCase().replace(/[^a-z0-9\s]/g, " ").replace(/\s+/g, " ").trim();
+  if (normalized.startsWith("bom dia")) return "☀️ *Bom dia!*";
+  if (normalized.startsWith("boa tarde")) return "🌤️ *Boa tarde!*";
+  if (normalized.startsWith("boa noite")) return "🌙 *Boa noite!*";
+  return "👋 *Olá!*";
+}
+
 
 /**
  * Uma frase claramente de NOVO cliente equivale a escolher 2 no menu.

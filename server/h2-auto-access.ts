@@ -8,7 +8,7 @@ import { resolveReferralDeclaration } from "./referral";
 import { sendH2AutoOrderCode } from "./h2-auto-order-email";
 import { recordH2AutoPhoneFailure, clearH2AutoPhoneFailures, type PhoneStage } from "./h2-auto-validation-blocks";
 import { h2AutoPhoneFailureMessage, type H2AutoPhoneKind, type H2AutoPhoneFailure } from "./h2-auto-phone-attempt-message";
-import { invalidH2AutoPhoneStageAnswer, normalizeH2AutoPhone11, h2AutoNavigationCommand, initialH2AutoChoiceStage, repeatedH2AutoChoice, isH2AutoHelpRequest, isH2AutoFreeTextDuringPhoneStage, isH2AutoGreeting, h2AutoNaturalNewCustomerIntent, h2AutoNaturalExistingCustomerIntent, h2AutoNaturalReferralsIntent, h2AutoGreetingWelcome } from "./h2-auto-validation-policy";
+import { invalidH2AutoPhoneStageAnswer, normalizeH2AutoPhone11, h2AutoNavigationCommand, initialH2AutoChoiceStage, repeatedH2AutoChoice, isH2AutoHelpRequest, isH2AutoFreeTextDuringPhoneStage, isH2AutoGreeting, h2AutoNaturalNewCustomerIntent, h2AutoNaturalExistingCustomerIntent, h2AutoNaturalReferralsIntent, h2AutoGreetingWelcome, h2AutoGreetingPrefix } from "./h2-auto-validation-policy";
 import { manualSilencedPhones, normalizeSilencedPhone } from "./h2-auto-silenced-contacts";
 import { h2AutoConfirmationSchema } from "../shared/h2AutoConfirmation";
 import { h2AutoPersonalizationSchema, H2_AUTO_PERSONALIZATION_DEFAULT, getH2AutoPersonalizedReply } from "../shared/h2AutoPersonalization";
@@ -290,14 +290,23 @@ export function registerH2AutoAccessRoutes(app: Express): void {
         // A escolha deve funcionar também na primeira mensagem, sem sessão.
         if (isH2AutoGreeting(input))
           return respond(res, 200, {state: "choice", message: h2AutoGreetingWelcome(input, initialMessage)});
+        const groupedLines = input.split(/\r?\n/).map(line => line.trim()).filter(Boolean);
+        const groupedReplies = groupedLines
+          .filter(line => !isH2AutoGreeting(line))
+          .map(line => getH2AutoPersonalizedReply(line, personalization, {stage: "choice"}))
+          .filter((reply): reply is NonNullable<typeof reply> => Boolean(reply));
+        if (groupedLines.length > 1 && groupedReplies.length >= 2)
+          return respond(res, 200, {state: "choice", message: groupedReplies.map(reply => reply.message).join("\n\n"), topic: groupedReplies.map(reply => reply.topic).join(",")});
         const firstStage = initialH2AutoChoiceStage(input) ||
           (h2AutoNaturalExistingCustomerIntent(input) ? "customer_phone" :
           h2AutoNaturalReferralsIntent(input) ? "referrals_phone" :
           h2AutoNaturalNewCustomerIntent(input) ? "referral_phone" : null);
         if (firstStage) {
           await update(sessionId, sql`stage=${firstStage},updated_at=${now}`);
-          return respond(res, 200, {state:firstStage, message:firstStage==="customer_phone" ? phoneMessage :
-            firstStage==="referrals_phone" ? confirmation.phonePrompt : referrerMessage});
+          const nextMessage = firstStage==="customer_phone" ? phoneMessage :
+            firstStage==="referrals_phone" ? confirmation.phonePrompt : referrerMessage;
+          const greetingPrefix = h2AutoGreetingPrefix(input);
+          return respond(res, 200, {state:firstStage, message:greetingPrefix ? `${greetingPrefix}\n\n${nextMessage}` : nextMessage});
         }
         const openingPersonalization = getH2AutoPersonalizedReply(input, personalization, {stage: "choice"});
         if (openingPersonalization)
@@ -422,6 +431,13 @@ export function registerH2AutoAccessRoutes(app: Express): void {
           const greeting = h2AutoGreetingWelcome(input, initialMessage);
           return respond(res, 200, {state: "choice", message: greeting});
         }
+        const groupedLines = input.split(/\r?\n/).map(line => line.trim()).filter(Boolean);
+        const groupedReplies = groupedLines
+          .filter(line => !isH2AutoGreeting(line))
+          .map(line => getH2AutoPersonalizedReply(line, personalization, {stage: "choice"}))
+          .filter((reply): reply is NonNullable<typeof reply> => Boolean(reply));
+        if (groupedLines.length > 1 && groupedReplies.length >= 2)
+          return respond(res, 200, {state: "choice", message: groupedReplies.map(reply => reply.message).join("\n\n"), topic: groupedReplies.map(reply => reply.topic).join(",")});
         const selectedInitialStage = initialH2AutoChoiceStage(input);
         if (selectedInitialStage) {
           await update(sessionId, sql`stage=${selectedInitialStage},updated_at=${now}`);
@@ -439,7 +455,8 @@ export function registerH2AutoAccessRoutes(app: Express): void {
         }
         if (h2AutoNaturalNewCustomerIntent(input)) {
           await update(sessionId, sql`stage='referral_phone',updated_at=${now}`);
-          return respond(res, 200, { state: "referral_phone", message: referrerMessage });
+          const greetingPrefix = h2AutoGreetingPrefix(input);
+          return respond(res, 200, { state: "referral_phone", message: greetingPrefix ? `${greetingPrefix}\n\n${referrerMessage}` : referrerMessage });
         }
         const personalized = getH2AutoPersonalizedReply(input, personalization, {stage: "choice"});
         if (personalized) return respond(res, 200, {state: "choice", message: personalized.message, topic: personalized.topic});
