@@ -1,4 +1,5 @@
 import nodemailer from 'nodemailer';
+import { h2MailFrom } from "./mailSenderIdentity";
 import { displaySiteCode, validSiteCode } from '../shared/siteAccessCodePolicy';
 
 export type SiteCodeDelivery = {channel:'smtp'|'resend';messageId:string};
@@ -10,7 +11,7 @@ function safeFailure(error: unknown): string {
 /** Generation is internal. Delivery still requires a mail server; SMTP is independent of Resend quota. */
 export async function deliverOwnSiteCode(email: string, code: string, purpose: 'site-access' | 'password-recovery' = 'site-access'): Promise<SiteCodeDelivery> {
   if (!validSiteCode(code)) throw new Error('INVALID_GENERATED_CODE');
-  const from=process.env.SMTP_FROM || process.env.SMTP_USER || 'h2@h2colombiano.com';
+  const from=h2MailFrom(process.env.SMTP_FROM || process.env.SMTP_USER || 'h2@h2colombiano.com');
   const subject=purpose === 'password-recovery' ? 'H2 Colombiano - Recuperação de senha' : 'H2 Colombiano - Código de acesso';
   const formatted=displaySiteCode(code);
   const text=purpose === 'password-recovery' ? `Código para recuperar a senha do H2 Colombiano: ${formatted}\n\nEste código vale por 10 minutos e pode ser usado uma única vez para alterar sua senha. Não concede acesso nem libera serviços.\n\nSe não solicitou, ignore este e-mail.` : `Seu código para acessar o site H2 Colombiano: ${formatted}\n\nDigite ou cole os 6 números. Este código é de uso único e vale por 10 minutos. Após confirmar, seu acesso vale por até 24 horas, ou até você sair.\n\nNão compartilhe. Se não solicitou o acesso, ignore esta mensagem.`;
