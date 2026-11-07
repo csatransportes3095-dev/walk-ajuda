@@ -6,6 +6,12 @@ on:
       - recovery/organizar-salvos-2026-08-24
     paths:
       - "workers/windows/Preparar-H2Android-01.ps1"
+      - "workers/windows/H2AndroidAgent.ps1"
+      - "workers/windows/H2AndroidControl.ps1"
+      - "server/h2AndroidAgentStore.ts"
+      - "server/routers/h2Android.ts"
+      - "client/src/components/H2AndroidLiveManager.tsx"
+      - "server/h2AndroidControls.integration.test.ts"
       - "workers/windows/Preparar-Primeiro-Android.cmd"
       - "server/h2AndroidInstallerZip.ts"
       - "server/h2AndroidAgentRoute.ts"
@@ -31,7 +37,7 @@ jobs:
           cache: pnpm
       - run: pnpm install --no-frozen-lockfile
       - name: Tests for AVD wizard, installer, ADM and isolation
-        run: pnpm exec vitest run server/h2AndroidFirstAvd.integration.test.ts server/h2AndroidInstaller.integration.test.ts server/h2AndroidAgent.integration.test.ts server/h2Android.integration.test.ts server/siteAccessPolicy.test.ts
+        run: pnpm exec vitest run server/h2AndroidFirstAvd.integration.test.ts server/h2AndroidControls.integration.test.ts server/h2AndroidInstaller.integration.test.ts server/h2AndroidAgent.integration.test.ts server/h2Android.integration.test.ts server/siteAccessPolicy.test.ts
       - name: Production build
         run: pnpm build
 
@@ -50,6 +56,9 @@ jobs:
             $errors | ForEach-Object { Write-Error $_.Message }
             exit 1
           }
+          [System.Management.Automation.Language.Parser]::ParseFile("$PWD/workers/windows/H2AndroidAgent.ps1", [ref]$tokens, [ref]$errors) | Out-Null
+          [System.Management.Automation.Language.Parser]::ParseFile("$PWD/workers/windows/H2AndroidControl.ps1", [ref]$tokens, [ref]$errors) | Out-Null
+          if ($errors.Count -gt 0) { $errors | ForEach-Object { Write-Error $_.Message }; exit 1 }
           $cmd = Get-Content "workers/windows/Preparar-Primeiro-Android.cmd" -Raw
           if ($cmd -notmatch 'powershell.exe.*Preparar-H2Android-01.ps1') { throw 'Launcher missing wizard.' }
           if ($cmd -notmatch 'pause') { throw 'Launcher must keep window open.' }
