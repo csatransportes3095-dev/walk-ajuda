@@ -353,6 +353,16 @@ export default function AdminCodes() {
 
       <div className="max-w-4xl mx-auto py-6 px-4 space-y-6">
 
+        {/* Entrada independente do H2 Android: fora da ordenação dos cards atuais. */}
+        <a href="/admin/android" className="group flex items-center gap-3 rounded-2xl border border-cyan-400/35 bg-gradient-to-r from-cyan-500/15 via-[#142338] to-[#0b1020] p-4 shadow-[0_12px_30px_rgba(0,0,0,.16)] transition hover:border-cyan-300/70 hover:from-cyan-500/20">
+          <span className="flex h-12 w-12 shrink-0 items-center justify-center rounded-xl border border-cyan-400/30 bg-cyan-400/10 text-2xl" aria-hidden="true">📱</span>
+          <span className="min-w-0 flex-1">
+            <span className="block text-base font-black text-white">H2 ANDROID <span className="ml-1 rounded bg-amber-400/15 px-1.5 py-0.5 text-[10px] font-bold text-amber-200">EM PREPARAÇÃO</span></span>
+            <span className="mt-0.5 block text-xs leading-relaxed text-slate-300/75">Androids independentes, gerenciamento e moldura de celular. Acesso exclusivo ADM.</span>
+          </span>
+          <span className="text-xl font-black text-cyan-300 transition group-hover:translate-x-1" aria-hidden="true">›</span>
+        </a>
+
         {/* Atalhos administrativos — ordem configurável pelo ADM */}
         <section className="space-y-4" aria-label="Atalhos do painel administrativo">
           <div className="rounded-2xl border border-purple-400/20 bg-gradient-to-r from-purple-600/15 via-[#111127] to-transparent p-4 shadow-[0_12px_38px_rgba(0,0,0,.16)]">
