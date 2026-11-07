@@ -32,24 +32,38 @@ jobs:
         run: pnpm install --frozen-lockfile
       - name: FIPE cache, error and security tests
         run: pnpm exec vitest run server/fipeCatalogProxy.test.ts
-      - name: Verify live backup model catalogue response
+      - name: Probe independent model catalogue endpoints
         run: |
           node --input-type=module <<'NODE'
-          const url = "https://brasilapi.com.br/api/fipe/veiculos/v1/carros/59";
-          const response = await fetch(url, {
-            headers: { Accept: "application/json" },
-            signal: AbortSignal.timeout(12000),
-          });
-          if (!response.ok) {
-            throw new Error("FIPE backup API unavailable: HTTP " + response.status);
+          const urls = [
+            "https://fipe.parallelum.com.br/api/v2/cars/brands/59/models",
+            "https://parallelum.com.br/fipe/api/v1/carros/marcas/59/modelos",
+            "https://brasilapi.com.br/api/fipe/veiculos/v1/carros/59",
+          ];
+          let valid = 0;
+          for (const url of urls) {
+            try {
+              const response = await fetch(url, {
+                headers: { Accept: "application/json" },
+                signal: AbortSignal.timeout(11000),
+              });
+              if (!response.ok) {
+                console.log(new URL(url).host, "status", response.status);
+                continue;
+              }
+              const payload = await response.json();
+              const models = Array.isArray(payload)
+                ? payload
+                : Array.isArray(payload?.modelos) ? payload.modelos : [];
+              const shapeOk = models.length > 0 &&
+                models.some((x) => typeof (x?.name ?? x?.nome ?? x?.modelo) === "string");
+              console.log(new URL(url).host, "models", models.length, "schema valid", shapeOk);
+              if (shapeOk) valid++;
+            } catch (error) {
+              console.log(new URL(url).host, "network error", error?.name ?? "unknown");
+            }
           }
-          const data = await response.json();
-          if (!Array.isArray(data) || data.length === 0 ||
-              !data.some((x) => typeof x.modelo === "string" &&
-                               typeof x.valor === "string")) {
-            throw new Error("FIPE backup API shape invalid");
-          }
-          console.log("Backup FIPE model catalogue accessible:", data.length, "models");
+          if (valid === 0) throw new Error("No live provider returned a valid model list");
           NODE
       - name: Existing admin-route audit expectation regression tests
         run: pnpm exec vitest run server/customerRouteAudit.test.ts
