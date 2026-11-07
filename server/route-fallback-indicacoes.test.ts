@@ -27,10 +27,15 @@ describe("H2 public SPA route allowlist",()=>{
     expect(visit("/adm/transportes")).toEqual([]);
     expect(visit("/adm/rota-nova")).toEqual([]);
   });
+  it("permite abrir /android e /admin/android sem aplicar o login do cliente",()=>{
+    expect(visit("/android")).toEqual([]);
+    expect(visit("/android/")).toEqual([]);
+    expect(visit("/admin/android")).toEqual([]);
+  });
   it("continues rejecting unknown public routes",()=>{
     expect(visit("/rota-desconhecida")[0]).toContain("rota_invalida");
   });
   it("busts old guard cache for existing browsers",()=>{
-    expect(html).toContain("/route-fallback-guard-v1.js?v=20261102-adm-routes-v2");
+    expect(html).toContain("/route-fallback-guard-v1.js?v=20261107-android-adm-allowlist-v3");
   });
 });
