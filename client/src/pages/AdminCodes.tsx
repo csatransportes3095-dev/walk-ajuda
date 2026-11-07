@@ -354,7 +354,7 @@ export default function AdminCodes() {
       <div className="max-w-4xl mx-auto py-6 px-4 space-y-6">
 
         {/* Entrada independente do H2 Android: fora da ordenação dos cards atuais. */}
-        <a href="/admin/android" className="group flex items-center gap-3 rounded-2xl border border-cyan-400/35 bg-gradient-to-r from-cyan-500/15 via-[#142338] to-[#0b1020] p-4 shadow-[0_12px_30px_rgba(0,0,0,.16)] transition hover:border-cyan-300/70 hover:from-cyan-500/20">
+        <a href="/android" className="group flex items-center gap-3 rounded-2xl border border-cyan-400/35 bg-gradient-to-r from-cyan-500/15 via-[#142338] to-[#0b1020] p-4 shadow-[0_12px_30px_rgba(0,0,0,.16)] transition hover:border-cyan-300/70 hover:from-cyan-500/20">
           <span className="flex h-12 w-12 shrink-0 items-center justify-center rounded-xl border border-cyan-400/30 bg-cyan-400/10 text-2xl" aria-hidden="true">📱</span>
           <span className="min-w-0 flex-1">
             <span className="block text-base font-black text-white">H2 ANDROID <span className="ml-1 rounded bg-amber-400/15 px-1.5 py-0.5 text-[10px] font-bold text-amber-200">EM PREPARAÇÃO</span></span>
