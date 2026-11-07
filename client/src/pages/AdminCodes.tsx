@@ -1,7 +1,7 @@
 import { useState, useEffect } from "react";
 import { useSearch } from "wouter";
 import { toast } from "sonner";
-import { ToggleLeft, ToggleRight, KeyRound, Bell, CalendarClock, RefreshCw, ShieldCheck, ShieldAlert, ShieldX, Clock, X, Check, Loader2, Search, Eye, EyeOff, Ban, UserX, Plus, Trash2, Ticket, Package, Globe, Send, TrendingUp, ShoppingBag, Lock, HelpCircle, Layers, MapPin, Upload, Mail, LayoutGrid, Users, Gift, Shield, Phone, FileSearch, MessageCircle, Settings2, RotateCcw, Save, ArrowLeftRight, Truck, Bot, MailPlus, Monitor, ScanFace, DatabaseZap, Car } from "lucide-react";
+import { ToggleLeft, ToggleRight, KeyRound, Bell, CalendarClock, RefreshCw, ShieldCheck, ShieldAlert, ShieldX, Clock, X, Check, Loader2, Search, Eye, EyeOff, Ban, UserX, Plus, Trash2, Ticket, Package, Globe, Send, TrendingUp, ShoppingBag, Lock, HelpCircle, Layers, MapPin, Upload, Mail, LayoutGrid, Users, Gift, Shield, Phone, FileSearch, MessageCircle, Settings2, RotateCcw, Save, ArrowLeftRight, Truck, Bot, MailPlus, Monitor, ScanFace, DatabaseZap, Car, Smartphone } from "lucide-react";
 import { TIMEZONE_OPTIONS, DEFAULT_TIMEZONE } from "@/hooks/useTimezone";
 import AdminHeader from "@/components/AdminHeader";
 import { Button } from "@/components/ui/button";
@@ -28,6 +28,7 @@ type AdminShortcut = {
 };
 
 const ADMIN_SHORTCUTS: AdminShortcut[] = [
+  { id: "h2-android", href: "/android", label: "H2 Android", icon: Smartphone, tone: "bg-cyan-500/20 border-cyan-300/45 hover:bg-cyan-500/30", iconTone: "text-cyan-200" },
   { id: "transportes", href: "/adm/transportes", label: "Transportes", icon: Truck, tone: "bg-cyan-600/20 border-cyan-500/40 hover:bg-cyan-600/30", iconTone: "text-cyan-300" },
   { id: "h2-auto", href: "/admin/h2-auto", label: "H2 AUTO", icon: Bot, tone: "bg-cyan-500/20 border-cyan-400/40 hover:bg-cyan-500/30", iconTone: "text-cyan-300" },
   { id: 'schedule', href: '/admin/schedule', label: 'Agendamentos', icon: CalendarClock, tone: 'bg-fuchsia-600/20 border-fuchsia-500/30 hover:bg-fuchsia-600/30', iconTone: 'text-fuchsia-400' },
@@ -113,7 +114,10 @@ export default function AdminCodes() {
       const ordered = saved.filter((id: unknown): id is string => typeof id === 'string' && validIds.has(id));
       const missing = ADMIN_SHORTCUTS.map((card) => card.id).filter((id) => !ordered.includes(id));
       if (ordered.length > 0) {
-        setCardOrder(ordered.includes("h2-auto") ? [...ordered, ...missing] : ["h2-auto", ...ordered, ...missing.filter(id => id !== "h2-auto")]);
+        const resolved = ordered.includes("h2-auto") ? [...ordered, ...missing] : ["h2-auto", ...ordered, ...missing.filter(id => id !== "h2-auto")];
+        // Apos instalar o modulo, exibir o novo card entre os 12 principais,
+        // mesmo quando a ordem antiga ja foi salva no ADM. Ordem futura segue configuravel.
+        setCardOrder(saved.includes("h2-android") ? resolved : ["h2-android", ...resolved.filter(id => id !== "h2-android")]);
         setCardOrderDirty(false);
       }
     } catch {
