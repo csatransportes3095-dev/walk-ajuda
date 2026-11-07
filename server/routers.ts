@@ -31,6 +31,7 @@ import { syncUnifiedCustomerRegistry } from "./customerIdentity";
 import { adjustCustomerH2Score, getCustomerH2ScoreSummary, getH2ScoreCustomerDirectory, setCustomerCommercialProfileMode } from "./loans/h2Score";
 import { CUSTOMER_ROUTES, ensureCustomerIdentityInfrastructure, findMainCustomerByIdentity, getRouteAccess, getRouteReleaseMode, listRouteReleaseModes, normalizeCustomerCpf, normalizeCustomerEmail, normalizeCustomerPhone, requestCustomerRouteAccess, setCustomerRoutePermissions, setRouteReleaseMode } from "./customerAccess";
 import { adCampaignsRouter } from "./routers/adCampaigns";
+import { h2AndroidRouter } from "./routers/h2Android";
 import { publicProcedure, router, adminProcedure } from "./_core/trpc";
 import { TRPCError } from "@trpc/server";
 import { isValidCPF, normalizeCpf } from "@shared/cpf";
@@ -327,6 +328,7 @@ export const appRouter = router({
   customerPassword: customerPasswordRouter,
   customerUpdate: customerUpdateRouter,
   adCampaigns: adCampaignsRouter,
+  h2Android: h2AndroidRouter,
   preRegistrations: preRegistrationsRouter,
   preCadastroQuestions: preCadastroQuestionsRouter,
   attention: router({
