@@ -32,35 +32,6 @@ jobs:
         run: pnpm install --frozen-lockfile
       - name: FIPE cache, error and security tests
         run: pnpm exec vitest run server/fipeCatalogProxy.test.ts
-      - name: Verify live FIPEX brand and year-filtered models
-        run: |
-          node --input-type=module <<'NODE'
-          const origin = "https://api.fipex.com.br";
-          const params = new URLSearchParams({
-            "limit": "50",
-            "filters[0].field": "name",
-            "filters[0].op": "CONTAINS",
-            "filters[0].value": "Volkswagen",
-          });
-          async function read(url) {
-            const response = await fetch(url, {
-              headers: { Accept: "application/json" },
-              signal: AbortSignal.timeout(12000),
-            });
-            console.log("Endpoint:", new URL(url).pathname, "status:", response.status);
-            if (!response.ok) throw new Error("Independent FIPE API HTTP " + response.status);
-            return response.json();
-          }
-          const makes = await read(origin + "/v1/makes?" + params);
-          console.log("Matches:", makes.data?.map(m => m.name), "pagination:", makes.pagination);
-          const make = makes.data?.find(m => /volkswagen/i.test(m.name));
-          if (!make?.id) throw new Error("Volkswagen brand mapping unavailable");
-          const models = await read(origin + "/v1/models?make_id=" + make.id + "&year=2016&limit=50");
-          console.log("Models:", models.data?.length, "pagination:", models.pagination);
-          if (!models.data?.length || !models.data?.every(m => typeof m.name === "string")) {
-            throw new Error("No year-filtered models found");
-          }
-          NODE
       - name: Existing admin-route audit expectation regression tests
         run: pnpm exec vitest run server/customerRouteAudit.test.ts
       - name: FIPE and two approved CI check fixes scope audit

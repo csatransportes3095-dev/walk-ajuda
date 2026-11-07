@@ -101,7 +101,6 @@ export default function GeradorChassiPublico() {
   const [carregandoMarcas, setCarregandoMarcas] = useState(true);
   const [carregandoModelos, setCarregandoModelos] = useState(false);
   const [erroCatalogo, setErroCatalogo] = useState("");
-  const [avisoModelosGerais, setAvisoModelosGerais] = useState(false);
 
   const anoInfo =
     ANOS_GERADOR_PUBLICO.find((item) => item.code === anoCode) ||
@@ -190,72 +189,25 @@ export default function GeradorChassiPublico() {
       setModelos([]);
       setBuscaModelo("");
       setModelo("");
-      setAvisoModelosGerais(false);
       return;
     }
-
     let cancelado = false;
-
     async function carregarModelosDoAno() {
       setCarregandoModelos(true);
       setErroCatalogo("");
-      setAvisoModelosGerais(false);
       setModelos([]);
       setBuscaModelo("");
       setModelo("");
-
       try {
-        let lista: FipeModel[] = [];
-        let fallbackPorMarca = false;
-
-        try {
-          const respostaAnos = await fetch(
-            `${FIPE_BASE}/brands/${encodeURIComponent(marcaCode)}/years`,
-          );
-          if (!respostaAnos.ok) throw new Error("Falha ao consultar anos");
-
-          const anos = (await respostaAnos.json()) as FipeYear[];
-          const anosDoVeiculo = anos.filter((item) => {
-            const ano = Number.parseInt(item.name, 10);
-            return ano === anoInfo.ano;
-          });
-
-          if (anosDoVeiculo.length === 0) {
-            if (!cancelado) {
-              setModelos([]);
-              setModelo("");
-            }
-            return;
-          }
-
-          // Unlike the old code, failed model requests cannot silently create
-          // an empty list that looks like a valid FIPE response.
-          const respostas = await Promise.all(
-            anosDoVeiculo.map(async (item) => {
-              const resposta = await fetch(
-                `${FIPE_BASE}/brands/${encodeURIComponent(marcaCode)}/years/${encodeURIComponent(item.code)}/models`,
-              );
-              if (!resposta.ok) throw new Error("Consulta por ano indisponível");
-              return (await resposta.json()) as FipeModel[];
-            }),
-          );
-          lista = respostas.flat();
-        } catch {
-          // Official year-specific endpoint may be down/rate-limited. This
-          // fallback only restores the brand catalogue, not year certification.
-          const resposta = await fetch(
-            `${FIPE_BASE}/brands/${encodeURIComponent(marcaCode)}/models`,
-          );
-          if (!resposta.ok) {
-            throw new Error("Não foi possível carregar a lista FIPE, nem o catálogo alternativo.");
-          }
-          lista = (await resposta.json()) as FipeModel[];
-          fallbackPorMarca = true;
-        }
-
+        // FIPEX filters models server-side by make UUID and calendar year.
+        const resposta = await fetch(
+          `${FIPE_BASE}/brands/${encodeURIComponent(marca.code)}/models?year=${anoInfo.ano}`,
+        );
+        if (!resposta.ok) throw new Error("Consulta FIPE indisponivel");
+        const dados = (await resposta.json()) as FipeModel[];
         if (cancelado) return;
         const unicos = new Map<string, FipeModel>();
-        lista.forEach((item) => {
+        dados.forEach((item) => {
           const chave = item.name.trim().toLocaleLowerCase("pt-BR");
           if (!unicos.has(chave)) unicos.set(chave, item);
         });
@@ -264,23 +216,18 @@ export default function GeradorChassiPublico() {
         );
         setModelos(ordenados);
         setModelo(ordenados[0]?.name || "");
-        setAvisoModelosGerais(fallbackPorMarca);
       } catch {
         if (!cancelado) {
-          setErroCatalogo("Não foi possível carregar os modelos desta marca. Consulte novamente.");
+          setErroCatalogo("Não foi possível carregar os modelos desta marca/ano.");
           setModelos([]);
           setModelo("");
-          setAvisoModelosGerais(false);
         }
       } finally {
         if (!cancelado) setCarregandoModelos(false);
       }
     }
-
     carregarModelosDoAno();
-    return () => {
-      cancelado = true;
-    };
+    return () => { cancelado = true; };
   }, [marca?.code, anoInfo.ano]);
 
   const gerar = async () => {
@@ -571,19 +518,11 @@ export default function GeradorChassiPublico() {
               <p className="mt-1.5 text-xs text-zinc-500">
                 {carregandoModelos
                   ? "Consultando os modelos disponíveis para a marca e o ano..."
-                  : avisoModelosGerais
-                    ? `${modelosFiltrados.length} de ${modelos.length} modelos da marca (ano não confirmado).`
-                    : buscaModelo.trim()
-                      ? `${modelosFiltrados.length} de ${modelos.length} opções encontradas para ${anoInfo.ano}.`
-                      : `${modelos.length} opções encontradas para ${anoInfo.ano}.`}
+                  : buscaModelo.trim()
+                    ? `${modelosFiltrados.length} de ${modelos.length} opções encontradas para ${anoInfo.ano}.`
+                    : `${modelos.length} opções encontradas para ${anoInfo.ano}.`}
               </p>
             </div>
-
-            {avisoModelosGerais && (
-              <div className="rounded-xl border border-amber-500/30 bg-amber-950/20 px-3 py-2.5 text-xs text-amber-200">
-                A consulta FIPE por ano está indisponível. Mostrando a lista geral de modelos da marca; a disponibilidade em {anoInfo.ano} não foi confirmada.
-              </div>
-            )}
 
             {erroCatalogo && (
               <div className="rounded-xl border border-red-500/30 bg-red-950/30 px-3 py-2.5 text-xs text-red-200">
