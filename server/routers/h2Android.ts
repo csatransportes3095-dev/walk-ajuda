@@ -56,7 +56,7 @@ export const h2AndroidRouter = router({
       SELECT id, label, createdAt, updatedAt
       FROM h2_android_profiles ORDER BY createdAt DESC, id DESC
     `);
-    const profiles = (result[0] as ProfileRow[]).map(serializeProfile);
+    const profiles = (result[0] as unknown as ProfileRow[]).map(serializeProfile);
     return {
       profiles,
       maxSimultaneous: H2_ANDROID_MAX_RUNNING,
