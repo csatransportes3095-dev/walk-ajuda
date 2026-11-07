@@ -3,13 +3,14 @@ import { readFileSync } from "node:fs";
 import { packAndroidWindowsInstaller, getAndroidWindowsInstallerZip } from "./h2AndroidInstallerZip";
 
 describe("H2 Android: instalador Windows no ADM", () => {
-  it("gera um ZIP valido e extrai os dois arquivos esperados", async () => {
+  it("gera um ZIP valido com instalador, agente e controle", async () => {
     const buffer = await getAndroidWindowsInstallerZip();
     expect(buffer.readUInt32LE(0)).toBe(0x04034b50);
     expect(buffer.readUInt32LE(buffer.length - 22)).toBe(0x06054b50);
-    expect(buffer.readUInt16LE(buffer.length - 22 + 10)).toBe(2);
+    expect(buffer.readUInt16LE(buffer.length - 22 + 10)).toBe(3);
     expect(buffer.includes(Buffer.from("Instalar-H2-Android.cmd"))).toBe(true);
     expect(buffer.includes(Buffer.from("H2AndroidAgent.ps1"))).toBe(true);
+    expect(buffer.includes(Buffer.from("H2AndroidControl.ps1"))).toBe(true);
     expect(buffer.length).toBeGreaterThan(5000);
   });
 

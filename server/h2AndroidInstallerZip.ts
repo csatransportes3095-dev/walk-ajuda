@@ -76,7 +76,7 @@ export async function getAndroidFirstAvdWizardZip(): Promise<Buffer> {
 
 export async function getAndroidWindowsInstallerZip(): Promise<Buffer> {
   const directory = path.resolve(process.cwd(), "workers", "windows");
-  const names = ["Instalar-H2-Android.cmd", "H2AndroidAgent.ps1"];
+  const names = ["Instalar-H2-Android.cmd", "H2AndroidAgent.ps1", "H2AndroidControl.ps1"];
   const entries = await Promise.all(names.map(async name => ({
     name,
     // Batch commands need Windows CRLF even when the repository was checked out on Linux.

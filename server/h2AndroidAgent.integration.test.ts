@@ -45,7 +45,7 @@ describe("H2 Android Agent - conexao segura e independente", () => {
     expect(routes).toContain("isAdminJwtValid");
     expect(routes).toContain('"/api/h2-android/agent/heartbeat"');
     expect(entry).toContain("registerH2AndroidAgentRoutes(app)");
-    expect(policy).toContain('pathname === "/api/h2-android/agent/heartbeat"');
+    expect(policy).toContain('"/api/h2-android/agent/heartbeat"');
     expect(windows).toContain('H2AndroidAgent');
     expect(windows).toContain('H2AndroidAgent.ps1');
     expect(windows).not.toContain("H2AdsWorker.ps1");
@@ -56,7 +56,8 @@ describe("H2 Android Agent - conexao segura e independente", () => {
   it("continua limitando a cinco perfis ativos sem afirmar que existem emuladores ativos", () => {
     const router = read("server/routers/h2Android.ts");
     expect(router).toContain("H2_ANDROID_MAX_RUNNING = 5");
-    expect(router).toContain("activeCount: 0");
+    expect(router).toContain("agent.runningAvds.length");
+    expect(router).toContain("control: adminProcedure");
     expect(router).toContain("issueAndroidPairingCode");
     expect(router).toContain("revokeAndroidAgent");
   });

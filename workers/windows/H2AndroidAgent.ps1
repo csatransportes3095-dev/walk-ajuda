@@ -7,10 +7,13 @@ param(
 )
 $ErrorActionPreference = "Stop"
 $ProgressPreference = "SilentlyContinue"
-$AgentVersion = "0.1.1"
+$AgentVersion = "0.2.0"
 $Folder = Join-Path $env:LOCALAPPDATA "H2AndroidAgent"
 $ConfigPath = Join-Path $Folder "agent.json"
 $AgentPath = Join-Path $Folder "H2AndroidAgent.ps1"
+$ControlPath = Join-Path $Folder "H2AndroidControl.ps1"
+$ControlSource = Join-Path $PSScriptRoot "H2AndroidControl.ps1"
+if (Test-Path -LiteralPath $ControlSource) { . $ControlSource }
 $TaskName = "H2 Android Agent"
 $PanelUrl = $PanelUrl.TrimEnd("/")
 if ($PanelUrl -ne "https://h2colombiano.com") { throw "Use o endereco oficial https://h2colombiano.com." }
@@ -81,6 +84,8 @@ function Inspect-Computer {
     emulatorDetected = [bool]$emulator
     avdNames = @($avds)
     emulatorDevices = @($devices)
+    runningAvds = @(if (Get-Command Get-H2RunningAvds -ErrorAction SilentlyContinue) { Get-H2RunningAvds })
+    configuredProxies = $(if (Get-Command H2-Proxies -ErrorAction SilentlyContinue) { H2-Proxies } else { @{} })
     ramGb = $ram
     logicalProcessors = $threads
     virtualizationEnabled = $virtualization
@@ -111,6 +116,10 @@ function Register-Startup {
   if ([IO.Path]::GetFullPath($PSCommandPath) -ne [IO.Path]::GetFullPath($AgentPath)) {
     Copy-Item -LiteralPath $PSCommandPath -Destination $AgentPath -Force
   }
+  if (!(Test-Path -LiteralPath $ControlSource)) { throw "O arquivo H2AndroidControl.ps1 nao esta na pasta do instalador." }
+  if ([IO.Path]::GetFullPath($ControlSource) -ne [IO.Path]::GetFullPath($ControlPath)) {
+    Copy-Item -LiteralPath $ControlSource -Destination $ControlPath -Force
+  }
   $arguments = '-NoProfile -ExecutionPolicy Bypass -WindowStyle Hidden -File "' + $AgentPath + '" -Run'
   try {
     $action = New-ScheduledTaskAction -Execute "powershell.exe" -Argument $arguments
@@ -136,16 +145,39 @@ function Register-Startup {
 
 function Run-Agent {
   $config = Read-Config
-  $token = Read-Secret ([string]$config.tokenProtected)
-  Write-Host "H2 Android: agente iniciado. Apenas diagnostico e status; nenhum emulador sera ligado."
+  $script:H2AgentToken = Read-Secret ([string]$config.tokenProtected)
+  if (!(Get-Command Run-H2Control -ErrorAction SilentlyContinue)) { throw "Motor H2 Android nao instalado." }
+  Write-Host "H2 Android v0.2.0: controle de Androids habilitado pelo site."
+  $heartbeat = [datetime]::MinValue
+  $lastFrame = [datetime]::MinValue
   while ($true) {
     try {
-      $report = Inspect-Computer | ConvertTo-Json -Compress -Depth 6
-      Invoke-RestMethod -UseBasicParsing -Method Post -Uri "$PanelUrl/api/h2-android/agent/heartbeat" -Headers @{Authorization = "Bearer $token"} -ContentType "application/json" -Body $report -TimeoutSec 20 | Out-Null
-    } catch {
-      Write-Warning "Falha de conexao com H2 Android: $($_.Exception.Message)"
-    }
-    Start-Sleep -Seconds 30
+      $headers = @{Authorization = "Bearer $script:H2AgentToken"}
+      if ((Get-Date) -ge $heartbeat) {
+        $report = Inspect-Computer | ConvertTo-Json -Compress -Depth 6
+        Invoke-RestMethod -UseBasicParsing -Method Post -Uri "$PanelUrl/api/h2-android/agent/heartbeat" -Headers $headers -ContentType "application/json" -Body $report -TimeoutSec 20 | Out-Null
+        $heartbeat = (Get-Date).AddSeconds(25)
+      }
+      $poll = Invoke-RestMethod -UseBasicParsing -Method Post -Uri "$PanelUrl/api/h2-android/agent/pull" -Headers $headers -ContentType "application/json" -Body "{}" -TimeoutSec 20
+      if ($poll.command) {
+        $ok = $true
+        $message = ""
+        try { $message = [string](Run-H2Control $poll.command) }
+        catch { $ok = $false; $message = $_.Exception.Message }
+        $body = @{
+          id = [string]$poll.command.id
+          ok = $ok
+          message = $message.Substring(0,[Math]::Min($message.Length,300))
+        } | ConvertTo-Json -Compress
+        Invoke-RestMethod -UseBasicParsing -Method Post -Uri "$PanelUrl/api/h2-android/agent/finish" -Headers $headers -ContentType "application/json" -Body $body -TimeoutSec 20 | Out-Null
+        $heartbeat = [datetime]::MinValue
+      }
+      if ($poll.viewAvd -and (Get-Date) -ge $lastFrame.AddSeconds(3)) {
+        Capture-H2Screen ([string]$poll.viewAvd)
+        $lastFrame = Get-Date
+      }
+    } catch { Write-Warning ("Erro do H2 Android: " + $_.Exception.Message) }
+    Start-Sleep -Seconds 3
   }
 }
 
@@ -155,7 +187,18 @@ if ($Status) {
   exit 0
 }
 if ($Install) {
-  Pair-Agent
+  if (Test-Path -LiteralPath $ConfigPath) {
+    $null = Read-Config
+    Write-Host "Pareamento existente preservado."
+  } else {
+    Pair-Agent
+  }
+  # Upgrade only this agent. H2 Ads processes and tasks are untouched.
+  try {
+    Get-CimInstance Win32_Process -Filter "Name = 'powershell.exe'" | Where-Object {
+      $_.ProcessId -ne $PID -and $_.CommandLine -like ("*" + $AgentPath + "*") -and $_.CommandLine -match ' -Run( |$)'
+    } | ForEach-Object { Stop-Process -Id $_.ProcessId -Force -ErrorAction SilentlyContinue }
+  } catch {}
   Register-Startup
   $arguments = '-NoProfile -ExecutionPolicy Bypass -WindowStyle Hidden -File "' + $AgentPath + '" -Run'
   Start-Process -FilePath "$env:SystemRoot\System32\WindowsPowerShell\v1.0\powershell.exe" -ArgumentList $arguments -WindowStyle Hidden
