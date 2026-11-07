@@ -48,3 +48,10 @@ Machine-readable output: append `-Json`.
 To check a supplied AOSP VHDX integrity without creating a VM, pass `-ImagePath` and `-ExpectedSha256`. Hash calculation can take time on large images.
 It only reads hardware/Hyper-V status and optional image checksum. Never installs software, modifies configuration, creates virtual machines, or changes the network.
 An image checksum match does **not** prove that Android boots, or that the image is trusted or supports any specific applications. Verify provenance and boot on the real Windows host before proceeding.
+
+## Offline first boot verification
+AOSP x86_64 is NOT automatically UEFI/Hyper-V compatible. A bootable Gen2 VHDX with tested drivers and bootloader is required; this repository does not yet provide or build one.
+Read-only VM audit command:
+    powershell.exe -NoProfile -ExecutionPolicy Bypass -File .\workers\windows\h2-native\H2NativeBootAudit.ps1 -VMName H2N_001
+It checks H2 ownership, Hyper-V firmware, parent VHDX and disconnected network. It never starts the VM. safeToAttemptOfflineBoot only indicates host prerequisites, NOT Android boot.
+Actual guest boot must be confirmed at the Hyper-V console by a human. Running hypervisor state alone is not proof of Android boot. Do not enable networking until isolated SOCKS5 is implemented and validated.

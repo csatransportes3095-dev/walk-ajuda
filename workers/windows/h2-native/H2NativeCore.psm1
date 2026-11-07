@@ -6,7 +6,7 @@ $script:H2NativeTag = "H2_ANDROID_NATIVE_V1"
 
 function Test-H2NativeName {
   param([AllowEmptyString()][string]$Name)
-  return [bool]($Name -cmatch '^H2N_[0-9]{3}$')
+  return [bool]($Name -cmatch '^H2N_(?!000)[0-9]{3}$')
 }
 
 function Assert-H2NativeName {
@@ -248,4 +248,4 @@ function Stop-H2NativeVm {
   return [pscustomobject]@{ name=$VMName; state="Stopping"; forced=[bool]$ForcePowerOff }
 }
 
-Export-ModuleMember -Function Test-H2NativeName, Assert-H2NativeName, Test-H2NativeHash, Get-H2NativeHostStatus, Get-H2NativeInventory, New-H2NativeVm, Start-H2NativeVm, Stop-H2NativeVm
+Export-ModuleMember -Function Test-H2NativeName, Assert-H2NativeName, Test-H2NativeHash, Get-H2NativeRoot, Get-H2NativeHostStatus, Get-H2NativeOwnedVm, Get-H2NativeInventory, New-H2NativeVm, Start-H2NativeVm, Stop-H2NativeVm
