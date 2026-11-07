@@ -85,6 +85,7 @@ function Inspect-Computer {
     avdNames = @($avds)
     emulatorDevices = @($devices)
     runningAvds = @(if (Get-Command Get-H2RunningAvds -ErrorAction SilentlyContinue) { Get-H2RunningAvds })
+    configuredProxies = $(if (Get-Command H2-Proxies -ErrorAction SilentlyContinue) { H2-Proxies } else { @{} })
     ramGb = $ram
     logicalProcessors = $threads
     virtualizationEnabled = $virtualization
