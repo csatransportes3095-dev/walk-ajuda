@@ -94,10 +94,10 @@ export default function H2AndroidLiveManager({
   }
 
   return (
-    <section className="space-y-4 rounded-2xl border border-cyan-300/35 bg-[#0c1526] p-4 sm:p-5" aria-label="Controle real de Androids pelo site">
+    <section className="space-y-4 rounded-2xl border border-[#8ce2bd]/35 bg-[#0c1526] p-4 sm:p-5" aria-label="Controle real de Androids pelo site">
       <div className="flex flex-wrap items-start justify-between gap-3">
         <div>
-          <h2 className="flex items-center gap-2 text-lg font-black text-cyan-100">
+          <h2 className="flex items-center gap-2 text-lg font-black text-[#b5ecd6]">
             <MonitorPlay className="h-5 w-5" /> Androids virtuais — controle pelo site
           </h2>
           <p className="mt-1 max-w-2xl text-xs leading-relaxed text-slate-300">
@@ -125,13 +125,13 @@ export default function H2AndroidLiveManager({
         <>
           <div className="flex flex-wrap gap-2">
             <button type="button" onClick={() => setCreating(true)} disabled={mutation.isPending}
-              className="rounded-lg bg-cyan-400 px-4 py-2 text-sm font-black text-slate-950 disabled:opacity-50">
+              className="rounded-lg bg-[#80dcb5] px-4 py-2 text-sm font-black text-slate-950 disabled:opacity-50">
               <Plus className="mr-1 inline h-4 w-4" /> Novo Android
             </button>
             {creating && (
               <div className="flex items-center gap-2">
                 <span className="text-xs text-slate-300">Criar aparelho isolado com Android 15?</span>
-                <button type="button" onClick={createNext} className="rounded-lg border border-emerald-400 px-3 py-2 text-xs font-bold text-emerald-200">Confirmar</button>
+                <button type="button" onClick={createNext} className="rounded-lg border border-[#80dcb5] px-3 py-2 text-xs font-bold text-[#a0e8cc]">Confirmar</button>
                 <button type="button" onClick={() => setCreating(false)} className="rounded-lg border border-white/20 px-3 py-2 text-xs">Cancelar</button>
               </div>
             )}
@@ -146,7 +146,7 @@ export default function H2AndroidLiveManager({
                 {devices.map(d => (
                   <button key={d.key} type="button"
                     onClick={() => { setSelectedKey(d.key); setWatching(false); setFrameLoaded(false); }}
-                    className={"rounded-lg border px-3 py-2 text-xs font-bold " + (d.key === chosen?.key ? "border-cyan-300 bg-cyan-300/15 text-white" : "border-white/15 text-slate-300")}>
+                    className={"rounded-lg border px-3 py-2 text-xs font-bold " + (d.key === chosen?.key ? "border-[#8ce2bd] bg-[#8ce2bd]/15 text-white" : "border-white/15 text-slate-300")}>
                     <Smartphone className="mr-1 inline h-3.5 w-3.5" />
                     {d.name} · {d.running ? "Ligado" : "Desligado"}
                   </button>
@@ -170,7 +170,7 @@ export default function H2AndroidLiveManager({
                           />
                         ) : (
                           <div className="p-6 text-center text-xs text-slate-400">
-                            <Smartphone className="mx-auto mb-3 h-12 w-12 text-cyan-300/50" />
+                            <Smartphone className="mx-auto mb-3 h-12 w-12 text-[#8ce2bd]/50" />
                             {chosen.running ? "Clique em Abrir tela para ver e tocar no Android." : "Android desligado."}
                           </div>
                         )}
@@ -178,7 +178,7 @@ export default function H2AndroidLiveManager({
                     </div>
                     <div className="flex flex-wrap items-center justify-center gap-2">
                       <button type="button" disabled={!chosen.running} onClick={() => { setWatching(w => !w); setFrameTick(t => t + 1); }}
-                        className="rounded-lg border border-cyan-400/40 px-3 py-2 text-xs font-bold text-cyan-100 disabled:opacity-30">
+                        className="rounded-lg border border-[#80dcb5]/40 px-3 py-2 text-xs font-bold text-[#b5ecd6] disabled:opacity-30">
                         {watching ? "Fechar tela" : "Abrir tela"}
                       </button>
                       <button type="button" disabled={!chosen.running} onClick={() => sendKey("BACK")} className="rounded-lg border border-white/20 p-2 disabled:opacity-30" title="Voltar"><ArrowLeft className="h-5 w-5" /></button>
@@ -195,7 +195,7 @@ export default function H2AndroidLiveManager({
                       <div className="mt-3 flex flex-wrap gap-2">
                         <button type="button" disabled={chosen.running || mutation.isPending}
                           onClick={() => mutation.mutate({ action: "start", agentId: chosen.agent.id, avdName: chosen.name })}
-                          className="rounded-lg bg-emerald-500 px-4 py-2 text-xs font-black text-slate-950 disabled:opacity-30">
+                          className="rounded-lg bg-[#74cfa9] px-4 py-2 text-xs font-black text-slate-950 disabled:opacity-30">
                           <Power className="mr-1 inline h-4 w-4" /> Ligar
                         </button>
                         <button type="button" disabled={!chosen.running || mutation.isPending}
@@ -218,7 +218,7 @@ export default function H2AndroidLiveManager({
                         <input aria-label="Porta do proxy" placeholder="Porta" value={proxyPort} onChange={e => setProxyPort(e.target.value)}
                           className="min-w-0 rounded-lg border border-white/20 bg-slate-950 px-3 py-2 text-sm" inputMode="numeric" maxLength={5} />
                       </div>
-                      <button type="submit" disabled={chosen.running || mutation.isPending} className="mt-3 rounded-lg border border-cyan-400/40 px-3 py-2 text-xs font-bold text-cyan-100 disabled:opacity-30">
+                      <button type="submit" disabled={chosen.running || mutation.isPending} className="mt-3 rounded-lg border border-[#80dcb5]/40 px-3 py-2 text-xs font-bold text-[#b5ecd6] disabled:opacity-30">
                         Salvar proxy / remover se vazio
                       </button>
                       <p className="mt-2 text-[11px] text-amber-200">
