@@ -1,4 +1,5 @@
 import { useState } from "react";
+import H2AndroidLiveManager from "@/components/H2AndroidLiveManager";
 import AdminHeader from "@/components/AdminHeader";
 import { trpc } from "@/lib/trpc";
 import { toast } from "sonner";
@@ -129,7 +130,7 @@ export default function AdminH2Android() {
               </div>
               <h1 className="text-2xl font-black tracking-tight sm:text-3xl">Gerenciador H2 Android</h1>
               <p className="mt-2 max-w-xl text-sm leading-relaxed text-slate-300/75">
-                Cadastre perfis, instale o agente separado no Windows e acompanhe os diagnósticos reais do Android SDK.
+                Gerencie Androids reais no site: criar aparelhos, ligar, desligar, abrir a tela, tocar e configurar proxy individual HTTP.
               </p>
             </div>
             <div className="flex shrink-0 items-center gap-2 rounded-xl border border-amber-400/25 bg-amber-400/10 px-4 py-3 text-xs font-semibold text-amber-200">
@@ -138,6 +139,8 @@ export default function AdminH2Android() {
             </div>
           </div>
         </section>
+
+        <H2AndroidLiveManager agents={agents} commands={overviewQuery.data?.commands ?? []} refresh={() => { void overviewQuery.refetch(); }} />
 
         <section className="grid grid-cols-2 gap-3 sm:grid-cols-3" aria-label="Resumo de instâncias">
           <div className="rounded-xl border border-white/10 bg-white/[0.04] p-4">
@@ -160,8 +163,8 @@ export default function AdminH2Android() {
         <section className="space-y-4 rounded-2xl border border-cyan-400/25 bg-[#101827] p-4 sm:p-5" aria-label="Agente Windows H2 Android">
           <div className="flex flex-wrap items-center justify-between gap-3">
             <div>
-              <h2 className="flex items-center gap-2 text-base font-black text-cyan-200"><Monitor className="h-5 w-5" /> Agente Windows — Etapa 2</h2>
-              <p className="mt-1 text-xs text-slate-400">Agente separado do H2 ADS. Detecta Android SDK, ADB, emulador, RAM e CPU. Não controla aparelhos nesta etapa.</p>
+              <h2 className="flex items-center gap-2 text-base font-black text-cyan-200"><Monitor className="h-5 w-5" /> Agente Windows H2 Android — Atualização e conexão</h2>
+              <p className="mt-1 text-xs text-slate-400">Agente isolado do H2 ADS. A versão 0.2.0 permite controlar os Androids reais pelo site.</p>
             </div>
             <a href="/api/h2-android/agent/installer.zip" download="Instalador-H2-Android.zip" className="inline-flex items-center gap-2 rounded-lg border border-cyan-400/40 bg-cyan-500/15 px-3 py-2.5 text-sm font-bold text-cyan-200">
               <Download className="h-4 w-4" /> Baixar instalador ZIP
@@ -182,7 +185,7 @@ export default function AdminH2Android() {
             <div className="rounded-xl border border-white/10 bg-black/25 p-3">
               <h3 className="mb-2 text-sm font-bold">2. Instalar no computador Windows</h3>
               <p className="text-xs leading-relaxed text-slate-300">Baixe o ZIP e extraia todos os arquivos. Dê dois cliques em <strong>Instalar-H2-Android.cmd</strong>. Informe o código temporário do ADM quando solicitado.</p>
-              <div className="mt-2 rounded-lg border border-cyan-400/25 bg-cyan-400/5 p-2.5 text-[11px] text-cyan-100">O instalador abre uma janela com o resultado, configura a inicialização com o Windows e conecta o agente automaticamente. Não abra o arquivo .ps1 no editor.</div>
+              <div className="mt-2 rounded-lg border border-cyan-400/25 bg-cyan-400/5 p-2.5 text-[11px] text-cyan-100">O instalador atualiza o agente e preserva o pareamento existente. Atualize apenas uma vez para habilitar a operação diretamente no site.</div>
               <p className="mt-2 text-[11px] text-slate-400">Execute apenas o pacote baixado do seu próprio ADM. O agente se comunica por HTTPS e não altera o H2 ADS.</p>
             </div>
           </div>
@@ -220,7 +223,7 @@ export default function AdminH2Android() {
         <section className="rounded-2xl border border-emerald-400/25 bg-[#0c1a20] p-4 sm:p-5" aria-label="Preparação do primeiro Android virtual">
           <div className="flex flex-wrap items-start justify-between gap-3">
             <div className="max-w-2xl">
-              <h2 className="flex items-center gap-2 text-base font-black text-emerald-200"><Smartphone className="h-5 w-5" /> Etapa 3 — Preparar Android 01</h2>
+              <h2 className="flex items-center gap-2 text-base font-black text-emerald-200"><Smartphone className="h-5 w-5" /> Preparador de imagem Android — uso apenas técnico</h2>
               <p className="mt-2 text-xs leading-relaxed text-slate-300">
                 Assistente local do Windows para conferir Android SDK, ADB e virtualização.
                 Ele pode preparar um AVD Android 15 com imagem oficial Google Play, somente após sua confirmação.
@@ -235,7 +238,7 @@ export default function AdminH2Android() {
             <p><strong>1.</strong> Baixe e extraia o ZIP no PC em que o agente está online.</p>
             <p className="mt-1"><strong>2.</strong> Execute <strong>Preparar-Primeiro-Android.cmd</strong> com duplo clique.</p>
             <p className="mt-1"><strong>3.</strong> Confira os requisitos. Autorize individualmente qualquer download, criação de Android ou inicialização.</p>
-            <p className="mt-2 text-amber-200">Nenhuma instalação ou emulador é iniciado pelo painel. O assistente não mexe no H2 ADS, nos proxies ou nos Androids já existentes.</p>
+            <p className="mt-2 text-amber-200">Com a imagem pronta e o agente v0.2, criar e iniciar aparelhos deve ser feito no painel acima. Não execute novamente este preparador se já possui H2Android_01.</p>
           </div>
           <p className="mt-2 text-xs text-slate-400">
             O resultado será exibido no próprio Windows. Se faltar SDK, Java ou aceleração, ele indicará o requisito antes de continuar.
@@ -243,6 +246,8 @@ export default function AdminH2Android() {
           </p>
         </section>
 
+        <details className="rounded-xl border border-white/10 bg-white/[0.02] p-3">
+          <summary className="cursor-pointer text-xs font-semibold text-slate-400">Cadastros antigos de perfis (não são Androids reais)</summary>
         <section className="rounded-2xl border border-cyan-400/20 bg-[#10192b] p-4 sm:p-5">
           <form className="flex flex-col gap-3 sm:flex-row" onSubmit={(event) => { event.preventDefault(); createProfile(); }}>
             <div className="min-w-0 flex-1">
@@ -335,8 +340,9 @@ export default function AdminH2Android() {
 
         <div className="rounded-xl border border-amber-400/20 bg-amber-400/5 p-4 text-xs leading-relaxed text-amber-100/80">
           <p className="mb-1 font-extrabold">Etapa 2 — Pareamento e diagnóstico Windows</p>
-          <p>O agente mostra o SDK e o desempenho do computador. Moldura e comandos dos Androids continuam apenas visuais; nenhum aplicativo, proxy, câmera ou emulador é instalado ou iniciado automaticamente nesta etapa.</p>
+          <p>Os cadastros antigos e as molduras ilustrativas foram preservados apenas como histórico. O gerenciamento real de aparelhos está no painel superior.</p>
         </div>
+        </details>
       </main>
     </div>
   );
