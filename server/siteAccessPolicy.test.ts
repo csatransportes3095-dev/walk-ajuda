@@ -51,6 +51,16 @@ describe("Seguranca do Site - regras de servidor", () => {
     }
     expect(decision("blocked", "/api/trpc/transportes.list")).toBe("deny");
   });
+  it("H2 Android permanece acessivel sob o login ADM nos modos restrito e bloqueado", () => {
+    for (const route of ["/android", "/android/", "/admin/android"]) {
+      expect(decision("restricted", route)).toBe("allow");
+      expect(decision("blocked", route)).toBe("allow");
+    }
+    for (const other of ["/android/app", "/android-qualquer", "/api/trpc/h2Android.overview"]) {
+      expect(decision("blocked", other)).toBe("deny");
+    }
+  });
+
   it("preserva emergencia do ADM com autenticação propria", () => {
     expect(decision("blocked", "/admin/login")).toBe("allow");
     expect(decision("blocked", "/api/trpc/adminAuth.login")).toBe("allow");
