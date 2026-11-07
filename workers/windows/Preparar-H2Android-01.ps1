@@ -160,13 +160,15 @@ if (!$installed -and !$existing) {
   # cmdline-tools mais recentes encaminham sdkmanager para o Android CLI e aceitam / no caminho.
   # Chamar o executavel moderno diretamente evita o erro 'Package system-images not found'.
   $installSucceeded = $false
-  if ($androidCli) {
-    Say "Usando Android CLI atual para instalar a imagem oficial..."
-    & $androidCli "--sdk=$root" "sdk" "install" $AndroidCliImagePackage
+  if ($sdkmanager) {
+    # cmdline-tools 23+ aceita barras no lugar do ;. Aspas nao sao confiaveis
+    # quando sdkmanager.bat encaminha os argumentos ao Android CLI no Windows.
+    Say "Instalando imagem Google Play usando pacote compativel com Windows..."
+    & $sdkmanager "--sdk_root=$root" "--install" $AndroidCliImagePackage
     $installSucceeded = ($LASTEXITCODE -eq 0)
-  } else {
-    Say "Usando sdkmanager classico..."
-    & $sdkmanager "--sdk_root=$root" "--install" $ImagePackage
+  } elseif ($androidCli) {
+    Say "Usando Android CLI..."
+    & $androidCli "--sdk=$root" "sdk" "install" $AndroidCliImagePackage
     $installSucceeded = ($LASTEXITCODE -eq 0)
   }
   if (!$installSucceeded -or !(Test-Path -LiteralPath (Join-Path $imageRoot "system.img"))) {
@@ -178,19 +180,13 @@ if (!$installed -and !$existing) {
     exit 11
   }
 }
-# A nova Android CLI ainda apresenta limitacoes de criacao de AVD no Windows.
-# Use o Device Manager oficial, sem alterar AVDs ja existentes.
-if ($androidCli -and !$existing) {
-  Say "Imagem Google Play API 35 instalada. Falta criar o Android 01 no Device Manager."
-  Write-Host "No Android Studio, escolha More Actions > Virtual Device Manager (ou Device Manager)."
-  Write-Host "Clique Create Device, selecione Pixel e escolha Android 15 API 35 com Google Play."
-  Write-Host "Use o nome H2Android_01, confirme Finish e inicie pelo botao Play."
-  Write-Host "O agente ONLINE detectara o AVD no ADM. Nao reinstale o agente."
-  exit 0
-}
+# avdmanager.bat ainda pode criar AVDs no Windows, mesmo com SDK CLI 23+.
+# Se nao estiver disponivel, o Device Manager oficial e a alternativa segura.
 if (!$avdmanager -and !$existing) {
-  Notice "Ferramenta antiga avdmanager nao encontrada. Crie H2Android_01 pelo Device Manager do Android Studio."
-  exit 12
+  Say "Imagem instalada. Crie H2Android_01 em Android Studio > Device Manager."
+  Write-Host "Selecione um Pixel, Google Play Android 15 API 35 e confirme Finish."
+  Write-Host "Nao e necessario reinstalar o agente ONLINE."
+  exit 0
 }
 if (!$existing) {
   $deviceList = @(& $avdmanager list device -c 2>$null)
