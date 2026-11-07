@@ -6,6 +6,9 @@ on:
       - recovery/organizar-salvos-2026-08-24
     paths:
       - "client/src/App.tsx"
+      - "client/src/components/H2AndroidLiveManager.tsx"
+      - "client/src/lib/androidScreenStream.ts"
+      - "server/h2AndroidScreenStream.test.ts"
       - "client/src/pages/AdminCodes.tsx"
       - "server/siteAccessPolicy.ts"
       - "server/siteAccessPolicy.test.ts"
@@ -31,5 +34,7 @@ jobs:
         run: pnpm install --no-frozen-lockfile
       - name: Validate access control and ADM card
         run: pnpm exec vitest run server/h2Android.integration.test.ts server/siteAccessPolicy.test.ts
+      - name: Validate buffered screen refresh
+        run: pnpm exec vitest run server/h2AndroidScreenStream.test.ts
       - name: Production build
         run: pnpm build
