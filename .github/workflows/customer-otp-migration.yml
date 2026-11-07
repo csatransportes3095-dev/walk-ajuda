@@ -27,7 +27,16 @@ jobs:
         run: pnpm exec vitest run server/customerOtpAccess.test.ts server/customerLoginEmailProof.test.ts server/customerOtpCutoverRoutes.test.ts
       - name: Compare TypeScript errors against untouched target branch
         run: |
-          git fetch --depth=1 origin 6356666b0a79ef7334aa26a503978d790778bbad
+          # Compare against the PR's real target commit, never a historical snapshot.
+          BASE_SHA="${{ github.event.pull_request.base.sha }}"
+          if [ -z "$BASE_SHA" ]; then
+            BASE_SHA="$(git ls-remote origin refs/heads/recovery/organizar-salvos-2026-08-24 | cut -f1)"
+          fi
+          if ! [[ "$BASE_SHA" =~ ^[0-9a-f]{40}$ ]]; then
+            echo "Could not determine the actual target branch commit" >&2
+            exit 1
+          fi
+          git fetch --depth=1 origin "$BASE_SHA"
           mkdir -p .baseline
           git archive FETCH_HEAD | tar -x -C .baseline
           ln -s ../node_modules .baseline/node_modules
