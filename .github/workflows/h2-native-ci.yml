@@ -1,0 +1,39 @@
+name: H2 Native Windows guard checks
+
+on:
+  pull_request:
+    paths:
+      - 'workers/windows/h2-native/**'
+      - '.github/workflows/h2-native-ci.yml'
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  h2-native-guards:
+    runs-on: windows-latest
+    timeout-minutes: 10
+    steps:
+      - uses: actions/checkout@v4
+      - name: Parse and validate PowerShell files
+        shell: powershell
+        run: |
+          $files = @('workers/windows/h2-native/H2NativeCore.psm1', 'workers/windows/h2-native/tests/Guards.Tests.ps1')
+          foreach ($file in $files) {
+            $tokens = $null
+            $parseErrors = $null
+            [System.Management.Automation.Language.Parser]::ParseFile((Resolve-Path $file).Path, [ref]$tokens, [ref]$parseErrors) | Out-Null
+            if ($parseErrors.Count -gt 0) { $parseErrors | Out-String | Write-Error; exit 1 }
+          }
+      - name: H2 Native guard tests (no virtual machines)
+        shell: powershell
+        run: |
+          powershell.exe -NoProfile -ExecutionPolicy Bypass -File workers/windows/h2-native/tests/Guards.Tests.ps1
+      - name: Enforce separation from legacy engines
+        shell: powershell
+        run: |
+          $core = Get-Content workers/windows/h2-native/H2NativeCore.psm1 -Raw
+          foreach ($forbidden in @('adb.exe', 'emulator.exe', 'Invoke-RestMethod', 'New-VMSwitch', 'Connect-VMNetworkAdapter')) {
+            if ($core.Contains($forbidden)) { throw "Unexpected legacy/connected operation: $forbidden" }
+          }
