@@ -211,10 +211,8 @@ if (!$existing) {
 
 if (!$adb) { Notice "ADB nao instalado. Instale Android SDK Platform-Tools no SDK Manager antes de continuar."; exit 9 }
 
-# adb.exe imprime "daemon not running; starting now" em STDERR na primeira
-# execucao. Em Windows PowerShell 5.1 com ErrorActionPreference Stop,
-# a chamada nativa com 2>$null pode gerar NativeCommandError, mesmo sendo
-# apenas a inicializacao normal do daemon. Usar Process evita esse erro.
+# ADB pode escrever mensagens normais de inicializacao do daemon em stderr.
+# PowerShell 5.1 interpreta-as como NativeCommandError quando Stop esta ativo.
 function Get-RunningAndroidEmulators([string]$adbExe) {
   $startInfo = New-Object System.Diagnostics.ProcessStartInfo
   $startInfo.FileName = $adbExe
@@ -227,7 +225,6 @@ function Get-RunningAndroidEmulators([string]$adbExe) {
   $process.StartInfo = $startInfo
   try {
     if (!$process.Start()) { return $null }
-    # Esperar a inicializacao do ADB antes de ler as saidas.
     if (!$process.WaitForExit(30000)) {
       try { $process.Kill() } catch {}
       Notice "ADB demorou para responder. Abra o Device Manager para iniciar manualmente."
@@ -239,19 +236,8 @@ function Get-RunningAndroidEmulators([string]$adbExe) {
       Notice ("ADB retornou codigo " + $process.ExitCode + ". " + $stderrText.Trim())
       return $null
     }
-    # Contar somente emuladores ONLINE; ignorar cabecalhos, logs e offline.
-    $active = @($stdout -split '\r?\n' | Where-Object {
-      $_ -match '^emulator-[0-9]+\s+device
-
-if (Confirm-Action "Abrir agora o Android 01 em uma janela propria do Windows?") {
-  Start-Process -FilePath $emulator -ArgumentList @("-avd", $AvdName, "-no-snapshot-load") -WorkingDirectory (Split-Path -Parent $emulator)
-  Say "Android 01 foi solicitado para iniciar."
-  Write-Host "Confira a tela do emulador. O agente H2 Android identificara o AVD no ADM."
-  Write-Host "Depois da inicializacao, abra a Play Store e confira a disponibilidade dos apps."
-} else {
-  Write-Host "Android preparado e desligado. Nenhum emulador foi iniciado."
-}
-
+    $active = @($stdout -split "[\r\n]+" | Where-Object {
+      $_ -match '^emulator-[0-9]+[ \t]+device$'
     })
     return [int]$active.Count
   } catch {
