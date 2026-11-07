@@ -210,8 +210,66 @@ if (!$existing) {
 }
 
 if (!$adb) { Notice "ADB nao instalado. Instale Android SDK Platform-Tools no SDK Manager antes de continuar."; exit 9 }
-$running = @(& $adb devices 2>$null | Where-Object { $_ -match '^emulator-[0-9]+\\s+device$' })
-if ($running.Count -ge 5) { Notice "Ja existem cinco emuladores ligados. Desligue um antes de iniciar outro."; exit 10 }
+
+# adb.exe imprime "daemon not running; starting now" em STDERR na primeira
+# execucao. Em Windows PowerShell 5.1 com ErrorActionPreference Stop,
+# a chamada nativa com 2>$null pode gerar NativeCommandError, mesmo sendo
+# apenas a inicializacao normal do daemon. Usar Process evita esse erro.
+function Get-RunningAndroidEmulators([string]$adbExe) {
+  $startInfo = New-Object System.Diagnostics.ProcessStartInfo
+  $startInfo.FileName = $adbExe
+  $startInfo.Arguments = "devices"
+  $startInfo.UseShellExecute = $false
+  $startInfo.CreateNoWindow = $true
+  $startInfo.RedirectStandardOutput = $true
+  $startInfo.RedirectStandardError = $true
+  $process = New-Object System.Diagnostics.Process
+  $process.StartInfo = $startInfo
+  try {
+    if (!$process.Start()) { return $null }
+    # Esperar a inicializacao do ADB antes de ler as saidas.
+    if (!$process.WaitForExit(30000)) {
+      try { $process.Kill() } catch {}
+      Notice "ADB demorou para responder. Abra o Device Manager para iniciar manualmente."
+      return $null
+    }
+    $stdout = $process.StandardOutput.ReadToEnd()
+    $stderrText = $process.StandardError.ReadToEnd()
+    if ($process.ExitCode -ne 0) {
+      Notice ("ADB retornou codigo " + $process.ExitCode + ". " + $stderrText.Trim())
+      return $null
+    }
+    # Contar somente emuladores ONLINE; ignorar cabecalhos, logs e offline.
+    $active = @($stdout -split '\r?\n' | Where-Object {
+      $_ -match '^emulator-[0-9]+\s+device
+
+if (Confirm-Action "Abrir agora o Android 01 em uma janela propria do Windows?") {
+  Start-Process -FilePath $emulator -ArgumentList @("-avd", $AvdName, "-no-snapshot-load") -WorkingDirectory (Split-Path -Parent $emulator)
+  Say "Android 01 foi solicitado para iniciar."
+  Write-Host "Confira a tela do emulador. O agente H2 Android identificara o AVD no ADM."
+  Write-Host "Depois da inicializacao, abra a Play Store e confira a disponibilidade dos apps."
+} else {
+  Write-Host "Android preparado e desligado. Nenhum emulador foi iniciado."
+}
+
+    })
+    return [int]$active.Count
+  } catch {
+    Notice ("Nao foi possivel consultar ADB: " + $_.Exception.Message)
+    return $null
+  } finally {
+    $process.Dispose()
+  }
+}
+
+$runningCount = Get-RunningAndroidEmulators $adb
+if ($null -eq $runningCount) {
+  Notice "Nao foi possivel confirmar quantos Androids estao ligados. Por seguranca, nao vamos iniciar outro automaticamente."
+  Write-Host "Abra Android Studio > Device Manager e inicie H2Android_01 manualmente."
+  exit 13
+}
+Write-Host ("Emuladores Android ativos: " + $runningCount)
+if ($runningCount -ge 5) { Notice "Ja existem cinco emuladores ligados. Desligue um antes de iniciar outro."; exit 10 }
 
 if (Confirm-Action "Abrir agora o Android 01 em uma janela propria do Windows?") {
   Start-Process -FilePath $emulator -ArgumentList @("-avd", $AvdName, "-no-snapshot-load") -WorkingDirectory (Split-Path -Parent $emulator)
