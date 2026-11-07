@@ -10,6 +10,7 @@ type Agent = {
   online: boolean;
   avdNames: string[];
   runningAvds: string[];
+  configuredProxies: Record<string, string>;
 };
 type Command = {
   id: string; agentId: string; avdName: string; commandType: string;
@@ -145,7 +146,7 @@ export default function H2AndroidLiveManager({
               <div className="flex flex-wrap gap-2">
                 {devices.map(d => (
                   <button key={d.key} type="button"
-                    onClick={() => { setSelectedKey(d.key); setWatching(false); setFrameLoaded(false); }}
+                    onClick={() => { setSelectedKey(d.key); setWatching(false); setFrameLoaded(false); setProxyHost(""); setProxyPort(""); }}
                     className={"rounded-lg border px-3 py-2 text-xs font-bold " + (d.key === chosen?.key ? "border-cyan-300 bg-cyan-300/15 text-white" : "border-white/15 text-slate-300")}>
                     <Smartphone className="mr-1 inline h-3.5 w-3.5" />
                     {d.name} · {d.running ? "Ligado" : "Desligado"}
@@ -192,6 +193,7 @@ export default function H2AndroidLiveManager({
                     <div className="rounded-xl border border-white/10 bg-black/25 p-4">
                       <p className="text-sm font-black">{chosen.name}</p>
                       <p className="mt-1 text-xs text-slate-400">Computador: {chosen.agent.computerName}</p>
+                      <p className="mt-1 text-xs text-slate-400">Proxy salvo: <strong>{chosen.agent.configuredProxies?.[chosen.name] ?? "Sem proxy"}</strong></p>
                       <div className="mt-3 flex flex-wrap gap-2">
                         <button type="button" disabled={chosen.running || mutation.isPending}
                           onClick={() => mutation.mutate({ action: "start", agentId: chosen.agent.id, avdName: chosen.name })}
