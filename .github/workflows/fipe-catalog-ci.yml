@@ -32,6 +32,25 @@ jobs:
         run: pnpm install --frozen-lockfile
       - name: FIPE cache, error and security tests
         run: pnpm exec vitest run server/fipeCatalogProxy.test.ts
+      - name: Verify live backup model catalogue response
+        run: |
+          node --input-type=module <<'NODE'
+          const url = "https://brasilapi.com.br/api/fipe/veiculos/v1/carros/59";
+          const response = await fetch(url, {
+            headers: { Accept: "application/json" },
+            signal: AbortSignal.timeout(12000),
+          });
+          if (!response.ok) {
+            throw new Error("FIPE backup API unavailable: HTTP " + response.status);
+          }
+          const data = await response.json();
+          if (!Array.isArray(data) || data.length === 0 ||
+              !data.some((x) => typeof x.modelo === "string" &&
+                               typeof x.valor === "string")) {
+            throw new Error("FIPE backup API shape invalid");
+          }
+          console.log("Backup FIPE model catalogue accessible:", data.length, "models");
+          NODE
       - name: Existing admin-route audit expectation regression tests
         run: pnpm exec vitest run server/customerRouteAudit.test.ts
       - name: FIPE and two approved CI check fixes scope audit
