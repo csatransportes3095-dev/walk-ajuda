@@ -6,6 +6,7 @@ import type { Express, Request, Response } from "express";
 import path from "node:path";
 import { isAdminJwtValid } from "./_core/trpc";
 import { claimAndroidAgent, recordAndroidAgentHeartbeat } from "./h2AndroidAgentStore";
+import { getAndroidWindowsInstallerZip } from "./h2AndroidInstallerZip";
 
 function noStore(res: Response) {
   res.setHeader("Cache-Control", "private, no-store");
@@ -13,6 +14,24 @@ function noStore(res: Response) {
 }
 
 export function registerH2AndroidAgentRoutes(app: Express): void {
+  app.get("/api/h2-android/agent/installer.zip", async (req: Request, res: Response) => {
+    noStore(res);
+    if (!isAdminJwtValid(req as any)) {
+      res.status(403).json({ error: "Acesso exclusivo do ADM." });
+      return;
+    }
+    try {
+      const data = await getAndroidWindowsInstallerZip();
+      res.setHeader("Content-Type", "application/zip");
+      res.setHeader("Content-Disposition", 'attachment; filename="Instalador-H2-Android.zip"');
+      res.setHeader("Content-Length", String(data.length));
+      res.status(200).end(data);
+    } catch (error) {
+      console.error("[H2 Android] falha ao gerar ZIP:", error instanceof Error ? error.message : String(error));
+      if (!res.headersSent) res.status(503).json({ error: "Instalador temporariamente indisponivel." });
+    }
+  });
+
   app.get("/api/h2-android/agent/windows-agent.ps1", (req: Request, res: Response) => {
     noStore(res);
     if (!isAdminJwtValid(req as any)) {
