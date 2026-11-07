@@ -62,6 +62,18 @@ export function packAndroidWindowsInstaller(entries: { name: string; content: Bu
   return Buffer.concat([...local, ...central, end]);
 }
 
+export async function getAndroidFirstAvdWizardZip(): Promise<Buffer> {
+  const directory = path.resolve(process.cwd(), "workers", "windows");
+  const names = ["Preparar-Primeiro-Android.cmd", "Preparar-H2Android-01.ps1"];
+  const entries = await Promise.all(names.map(async name => ({
+    name,
+    content: name.endsWith(".cmd")
+      ? Buffer.from((await readFile(path.join(directory, name), "utf8")).replace(/\r?\n/g, "\r\n"), "utf8")
+      : await readFile(path.join(directory, name)),
+  })));
+  return packAndroidWindowsInstaller(entries);
+}
+
 export async function getAndroidWindowsInstallerZip(): Promise<Buffer> {
   const directory = path.resolve(process.cwd(), "workers", "windows");
   const names = ["Instalar-H2-Android.cmd", "H2AndroidAgent.ps1"];
