@@ -28,7 +28,7 @@ type AdminShortcut = {
 };
 
 const ADMIN_SHORTCUTS: AdminShortcut[] = [
-  { id: "h2-android", href: "/android", label: "H2 Android", icon: Smartphone, tone: "bg-cyan-500/20 border-cyan-300/45 hover:bg-cyan-500/30", iconTone: "text-cyan-200" },
+  { id: "h2-android", href: "/adm/android", label: "H2 Android", icon: Smartphone, tone: "bg-cyan-500/20 border-cyan-300/45 hover:bg-cyan-500/30", iconTone: "text-cyan-200" },
   { id: "transportes", href: "/adm/transportes", label: "Transportes", icon: Truck, tone: "bg-cyan-600/20 border-cyan-500/40 hover:bg-cyan-600/30", iconTone: "text-cyan-300" },
   { id: "h2-auto", href: "/admin/h2-auto", label: "H2 AUTO", icon: Bot, tone: "bg-cyan-500/20 border-cyan-400/40 hover:bg-cyan-500/30", iconTone: "text-cyan-300" },
   { id: 'schedule', href: '/admin/schedule', label: 'Agendamentos', icon: CalendarClock, tone: 'bg-fuchsia-600/20 border-fuchsia-500/30 hover:bg-fuchsia-600/30', iconTone: 'text-fuchsia-400' },
