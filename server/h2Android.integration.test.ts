@@ -39,11 +39,11 @@ describe("H2 Android - modulo isolado e privado", () => {
   });
 
   it("nao finge que instancias estao operantes sem agente", () => {
-    expect(androidRouter).toContain('activeCount: 0');
+    expect(androidRouter).toContain("agent.runningAvds.length");
     expect(androidRouter).toContain("agents.some(agent => agent.online)");
     expect(androidRouter).toContain("H2_ANDROID_MAX_RUNNING = 5");
-    expect(androidPage).toContain('disabled title="Disponível somente após conectar o agente H2 Android"');
-    expect(androidPage).toContain("nenhum aplicativo, proxy, câmera ou emulador é instalado ou iniciado automaticamente");
+    expect(androidPage).toContain("H2AndroidLiveManager");
+    expect(androidPage).toContain("Agente Windows H2 Android");
   });
 
   it("isola os perfis na propria tabela, sem tocar cadastros ou pedidos", () => {
