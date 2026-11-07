@@ -67,7 +67,10 @@ export async function getAndroidWindowsInstallerZip(): Promise<Buffer> {
   const names = ["Instalar-H2-Android.cmd", "H2AndroidAgent.ps1"];
   const entries = await Promise.all(names.map(async name => ({
     name,
-    content: await readFile(path.join(directory, name)),
+    // Batch commands need Windows CRLF even when the repository was checked out on Linux.
+    content: name.endsWith(".cmd")
+      ? Buffer.from((await readFile(path.join(directory, name), "utf8")).replace(/\r?\n/g, "\r\n"), "utf8")
+      : await readFile(path.join(directory, name)),
   })));
   return packAndroidWindowsInstaller(entries);
 }
