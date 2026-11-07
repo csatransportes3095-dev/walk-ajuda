@@ -14,10 +14,11 @@ const FETCH_TIMEOUT_MS = 8_000;
 const MAX_RESPONSE_BYTES = 2_000_000;
 
 export type FipeCatalogItem = { code: string; name: string };
-export type FipeCatalogSource = "upstream" | "cache" | "stale";
+export type FipeCatalogSource = "upstream" | "brasilapi" | "cache" | "stale";
 export type FipeCatalogResource =
   | { kind: "brands" }
   | { kind: "years"; brand: string }
+  | { kind: "brandModels"; brand: string }
   | { kind: "models"; brand: string; year: string };
 
 type CatalogResult = { data: FipeCatalogItem[]; source: FipeCatalogSource };
@@ -36,6 +37,7 @@ export function fipeCatalogPath(resource: FipeCatalogResource): string {
     throw new FipeCatalogError(400, "INVALID_BRAND", "Marca FIPE invalida.");
   }
   if (resource.kind === "years") return "/brands/" + resource.brand + "/years";
+  if (resource.kind === "brandModels") return "/brands/" + resource.brand + "/models";
   if (!/^[0-9]{4,5}-[0-9]{1,2}$/.test(resource.year)) {
     throw new FipeCatalogError(400, "INVALID_YEAR", "Ano FIPE invalido.");
   }
@@ -116,6 +118,50 @@ export function createFipeCatalogService(
     }
   }
 
+  async function fetchBrasilModels(brand: string): Promise<FipeCatalogItem[]> {
+    // Fixed, allowlisted URL and digits-only code, checked by fipeCatalogPath.
+    const controller = new AbortController();
+    const timer = setTimeout(() => controller.abort(), FETCH_TIMEOUT_MS);
+    try {
+      const response = await fetchImpl(
+        "https://brasilapi.com.br/api/fipe/veiculos/v1/carros/" + brand,
+        { method: "GET", headers: { Accept: "application/json" }, redirect: "error", signal: controller.signal },
+      );
+      if (!response.ok) {
+        throw new FipeCatalogError(502, "FIPE_BACKUP_UPSTREAM", "Catalogo alternativo indisponivel (" + response.status + ").");
+      }
+      const declaredSize = Number(response.headers.get("content-length") || "0");
+      if (declaredSize > MAX_RESPONSE_BYTES) {
+        throw new FipeCatalogError(502, "FIPE_BACKUP_INVALID", "Catalogo alternativo excedeu limite.");
+      }
+      const body = await response.text();
+      if (body.length > MAX_RESPONSE_BYTES) {
+        throw new FipeCatalogError(502, "FIPE_BACKUP_INVALID", "Catalogo alternativo excedeu limite.");
+      }
+      let payload: unknown;
+      try { payload = JSON.parse(body); }
+      catch { throw new FipeCatalogError(502, "FIPE_BACKUP_INVALID", "Resposta alternativa invalida."); }
+      if (!Array.isArray(payload) || payload.length === 0 || payload.length > 10000) {
+        throw new FipeCatalogError(502, "FIPE_BACKUP_INVALID", "Lista alternativa invalida.");
+      }
+      return normalizeFipeItems(payload.map((entry: unknown) => {
+        if (!entry || typeof entry !== "object") {
+          throw new FipeCatalogError(502, "FIPE_BACKUP_INVALID", "Modelo alternativo invalido.");
+        }
+        const row = entry as Record<string, unknown>;
+        return { code: row.valor, name: row.modelo };
+      }));
+    } catch (error) {
+      if (error instanceof FipeCatalogError) throw error;
+      if (controller.signal.aborted) {
+        throw new FipeCatalogError(504, "FIPE_BACKUP_TIMEOUT", "Catalogo alternativo demorou demais.");
+      }
+      throw new FipeCatalogError(502, "FIPE_BACKUP_NETWORK", "Erro de conexao com catalogo alternativo.");
+    } finally {
+      clearTimeout(timer);
+    }
+  }
+
   async function load(resource: FipeCatalogResource): Promise<CatalogResult> {
     const path = fipeCatalogPath(resource);
     const existing = cache.get(path);
@@ -128,7 +174,27 @@ export function createFipeCatalogService(
     const task = (async (): Promise<CatalogResult> => {
       try {
         // Do not retry 429: respect provider quota; serve stale cache if available.
-        const data = await fetchUpstream(path, resource.kind === "models");
+        let source: FipeCatalogSource = "upstream";
+        let data: FipeCatalogItem[];
+        if (resource.kind === "brandModels") {
+          try {
+            data = await fetchUpstream(path, false);
+          } catch (primaryError) {
+            // Official alternate path: BrasilAPI returns all models of a FIPE brand,
+            // not models verified for a specific year. The client labels this explicitly.
+            try {
+              data = await fetchBrasilModels(resource.brand);
+              source = "brasilapi";
+            } catch (secondaryError) {
+              console.warn("[FIPE catalog] both model suppliers unavailable:",
+                primaryError instanceof FipeCatalogError ? primaryError.code : "PRIMARY_ERROR",
+                secondaryError instanceof FipeCatalogError ? secondaryError.code : "SECONDARY_ERROR");
+              throw secondaryError;
+            }
+          }
+        } else {
+          data = await fetchUpstream(path, resource.kind === "models");
+        }
         const timestamp = now();
         cache.delete(path);
         cache.set(path, {
@@ -139,7 +205,7 @@ export function createFipeCatalogService(
           const oldest = cache.keys().next().value;
           if (oldest) cache.delete(oldest);
         }
-        return { data, source: "upstream" };
+        return { data, source };
       } catch (error) {
         const old = cache.get(path);
         if (old && now() < old.staleUntil) {
@@ -174,13 +240,17 @@ export function registerFipeCatalogRoutes(app: Express): void {
         ? error
         : new FipeCatalogError(502, "FIPE_UNAVAILABLE", "Catalogo FIPE indisponivel.");
       res.setHeader("Cache-Control", "no-store");
-      console.warn("[FIPE catalog] request failed:", failure.code, req.path);
+      console.warn("[FIPE catalog] request failed:", failure.code, failure.message, req.path);
       res.status(failure.status).json({ code: failure.code, error: failure.message });
     }
   }
 
   app.get("/api/fipe/catalog/brands", (_req, res) => {
     void reply(_req, res, { kind: "brands" });
+  });
+  app.get("/api/fipe/catalog/brands/:brand/models", (req, res) => {
+    res.setHeader("X-H2-Fipe-Scope", "brand-not-year-verified");
+    void reply(req, res, { kind: "brandModels", brand: String(req.params.brand) });
   });
   app.get("/api/fipe/catalog/brands/:brand/years", (req, res) => {
     void reply(req, res, { kind: "years", brand: String(req.params.brand) });

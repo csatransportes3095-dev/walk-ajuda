@@ -96,4 +96,49 @@ describe("FIPE isolated catalogue proxy", () => {
     await expect(service.load(models)).rejects.toMatchObject({ code: "FIPE_UPSTREAM" });
     expect(fetcher).toHaveBeenCalledTimes(1);
   });
+
+  it("builds safe all-models paths for the brand fallback", () => {
+    expect(fipeCatalogPath({ kind: "brandModels", brand: "59" })).toBe("/brands/59/models");
+    expect(() => fipeCatalogPath({ kind: "brandModels", brand: "../admin" })).toThrow(FipeCatalogError);
+  });
+
+  it("uses all-models endpoint when upstream works without the backup", async () => {
+    const requested: string[] = [];
+    const service = createFipeCatalogService(async (url) => {
+      requested.push(url);
+      return ok([{ code: "005387-2", name: "GOL" }]);
+    });
+    const result = await service.load({ kind: "brandModels", brand: "59" });
+    expect(result.source).toBe("upstream");
+    expect(result.data).toEqual([{ code: "005387-2", name: "GOL" }]);
+    expect(requested).toEqual(["https://fipe.parallelum.com.br/api/v2/cars/brands/59/models"]);
+    expect((await service.load({ kind: "brandModels", brand: "59" })).source).toBe("cache");
+    expect(requested).toHaveLength(1);
+  });
+
+  it("falls back to BrasilAPI brand models without claiming year validation", async () => {
+    const requested: string[] = [];
+    const service = createFipeCatalogService(async (url) => {
+      requested.push(url);
+      if (url.includes("fipe.parallelum.com.br")) {
+        return new Response("blocked", { status: 429 });
+      }
+      if (url === "https://brasilapi.com.br/api/fipe/veiculos/v1/carros/59") {
+        return ok([{ valor: "005387-2", modelo: "GOL" }]);
+      }
+      throw new Error("unexpected upstream");
+    });
+    const result = await service.load({ kind: "brandModels", brand: "59" });
+    expect(result.source).toBe("brasilapi");
+    expect(result.data).toEqual([{ code: "005387-2", name: "GOL" }]);
+    expect(requested).toHaveLength(2);
+    expect(requested[1]).toBe("https://brasilapi.com.br/api/fipe/veiculos/v1/carros/59");
+  });
+
+  it("does not return fabricated models when both upstreams fail", async () => {
+    const service = createFipeCatalogService(async () => new Response("", { status: 503 }));
+    await expect(service.load({ kind: "brandModels", brand: "59" }))
+      .rejects.toMatchObject({ code: "FIPE_BACKUP_UPSTREAM" });
+  });
+
 });
