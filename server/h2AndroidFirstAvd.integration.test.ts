@@ -16,13 +16,17 @@ describe("H2 Android - primeiro AVD com consentimento", () => {
     const ps = readFileSync("workers/windows/Preparar-H2Android-01.ps1", "utf8");
     const cmd = readFileSync("workers/windows/Preparar-Primeiro-Android.cmd", "utf8");
     expect(ps).toContain("Confirm-Action");
-    expect((ps.match(/Confirm-Action /g) || []).length).toBe(3); // download, criacao e inicio
+    expect((ps.match(/Confirm-Action /g) || []).length).toBe(3); // as tres chamadas de consentimento
     expect(ps).toContain("system-images;android-35;google_apis_playstore;x86_64");
     expect(ps).toContain('system-images/android-35/google_apis_playstore/x86_64');
     expect(ps).toContain('& $sdkmanager "--sdk_root=$root" "--install" $AndroidCliImagePackage');
     expect(ps).not.toContain('& $sdkmanager "--sdk_root=$root" "--install" $ImagePackage');
     expect(ps).toContain("-accel-check");
-    expect(ps).toContain("$running.Count -ge 5");
+    expect(ps).toContain("$runningCount -ge 5");
+    expect(ps).toContain("Get-RunningAndroidEmulators");
+    expect(ps).toContain("RedirectStandardError = $true");
+    expect(ps).toContain("WaitForExit(30000)");
+    expect(ps).not.toContain("$adb devices 2>$null");
     expect(ps).toContain("$existing");
     expect(ps).toContain("if ($CheckOnly)");
     expect(cmd).toContain("pause");
