@@ -201,7 +201,7 @@ export default function GeradorChassiPublico() {
       try {
         // FIPEX filters models server-side by make UUID and calendar year.
         const resposta = await fetch(
-          `${FIPE_BASE}/brands/${encodeURIComponent(marca.code)}/models?year=${anoInfo.ano}`,
+          `${FIPE_BASE}/brands/${encodeURIComponent(marcaCode)}/models?year=${anoInfo.ano}`,
         );
         if (!resposta.ok) throw new Error("Consulta FIPE indisponivel");
         const dados = (await resposta.json()) as FipeModel[];
