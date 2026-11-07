@@ -30,7 +30,7 @@ describe("FIPE isolated catalogue proxy", () => {
     expect(normalizeFipeItems([{ code: "59", name: "Volkswagen" }])).toEqual([
       { code: "59", name: "Volkswagen" },
     ]);
-    expect(normalizeFipeItems([])).toThrow(FipeCatalogError);
+    expect(() => normalizeFipeItems([])).toThrow(FipeCatalogError);
     expect(normalizeFipeItems([], true)).toEqual([]);
     expect(() => normalizeFipeItems([{ code: "/api/private", name: "x" }])).toThrow(FipeCatalogError);
   });
