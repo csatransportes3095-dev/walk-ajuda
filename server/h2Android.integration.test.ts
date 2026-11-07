@@ -42,7 +42,8 @@ describe("H2 Android - modulo isolado e privado", () => {
     expect(androidRouter).toContain("agent.runningAvds.length");
     expect(androidRouter).toContain("agents.some(agent => agent.online)");
     expect(androidRouter).toContain("H2_ANDROID_MAX_RUNNING = 5");
-    expect(androidPage).toContain("H2AndroidLiveManager");
+    expect(androidRouter).toContain("control: adminProcedure");
+    expect(androidPage).not.toContain("H2AndroidLiveManager");
     expect(androidPage).toContain("Agente Windows H2 Android");
   });
 
