@@ -3,6 +3,7 @@ import express from "express";
 import { createServer, type Server } from "node:http";
 import { createSiteAccessGateway, type SiteGatewayDependencies } from "./siteAccessGateway";
 import type { SiteAccessMode } from "./siteAccessPolicy";
+import { registerH2AndroidAgentRoutes } from "./h2AndroidAgentRoute";
 
 const servers: Server[] = [];
 const previousOwner=process.env.H2_SITE_SECURITY_OWNER;
@@ -16,6 +17,7 @@ afterEach(async () => {
 
 async function probe(mode: SiteAccessMode, path: string, opts: {
   method?: string;
+  authorization?: string;
   enabled?: boolean;
   admin?: boolean;
   visitor?: boolean;
@@ -29,13 +31,17 @@ async function probe(mode: SiteAccessMode, path: string, opts: {
     visitor: async () => !!opts.visitor,
   };
   app.use(createSiteAccessGateway(deps));
+  app.use(express.json());
+  registerH2AndroidAgentRoutes(app);
   app.all("*", (_req, res) => res.status(200).json({ok:true}));
   const server = createServer(app);
   servers.push(server);
   await new Promise<void>(resolve => server.listen(0, "127.0.0.1", resolve));
   const addr = server.address();
   if (!addr || typeof addr === "string") throw Error("No socket");
-  const res = await fetch("http://127.0.0.1:" + addr.port + path, {method: opts.method || "GET", redirect:"manual"});
+  const headers: Record<string, string> = {};
+  if (opts.authorization) headers.authorization = opts.authorization;
+  const res = await fetch("http://127.0.0.1:" + addr.port + path, {method: opts.method || "GET", headers, redirect:"manual"});
   const body = await res.text();
   return {status:res.status,location:res.headers.get("location"),cache:res.headers.get("cache-control"),body};
 }
@@ -77,6 +83,32 @@ describe("Segurança do Site - integration via isolated HTTP server",()=>{
   it("workers still use their pre-existing own authentication",async()=>{
     expect((await probe("blocked","/api/h2ads/worker/heartbeat")).status).toBe(200);
     expect((await probe("blocked","/api/h2ads/administration")).status).toBe(403);
+  });
+  it("Android command endpoints reach their own token authentication even when the site is restricted or blocked",async()=>{
+    for(const mode of ["restricted","blocked"] as const) {
+      for(const path of ["/api/h2-android/agent/pull","/api/h2-android/agent/finish","/api/h2-android/agent/frame"]) {
+        for(const authorization of [undefined,"Bearer invalid-agent-token"]) {
+          const result=await probe(mode,path,{method:"POST",authorization});
+          expect(result.status, mode+" "+path).toBe(401);
+          expect(result.cache).toContain("no-store");
+          expect(result.body).not.toContain("SITE_RESTRICTED");
+          expect(result.body).not.toContain("SITE_BLOCKED");
+        }
+      }
+    }
+  });
+  it("Android exceptions do not expose screens, ADM controls, or arbitrary agent paths",async()=>{
+    for(const mode of ["restricted","blocked"] as const) {
+      for(const path of [
+        "/api/h2-android/agent/pull/extra",
+        "/api/h2-android/agent/unknown",
+        "/api/h2-android/screen/00000000-0000-4000-8000-000000000000/H2Android_01",
+        "/api/trpc/h2Android.control",
+      ]) {
+        const method = path.startsWith("/api/h2-android/screen/") ? "GET" : "POST";
+        expect((await probe(mode,path,{method})).status).toBe(403);
+      }
+    }
   });
   it("database failure fails closed for restricted and blocked",async()=>{
     for(const mode of ["restricted","blocked"] as const){
