@@ -183,8 +183,8 @@ export default function AdminH2Android() {
               <h3 className="mb-2 text-sm font-bold">2. Instalar no computador Windows</h3>
               <p className="text-xs leading-relaxed text-slate-300">Baixe o arquivo no seu computador, confira a origem e abra o PowerShell na pasta do download.</p>
               <div className="mt-2 space-y-2">
-                <code className="block overflow-x-auto rounded-lg border border-white/10 bg-slate-950 p-2 text-[11px] text-emerald-200">powershell -NoProfile -File .&#92;H2AndroidAgent.ps1 -Install</code>
-                <code className="block overflow-x-auto rounded-lg border border-white/10 bg-slate-950 p-2 text-[11px] text-emerald-200">powershell -NoProfile -File .&#92;H2AndroidAgent.ps1 -Run</code>
+                <code className="block overflow-x-auto rounded-lg border border-white/10 bg-slate-950 p-2 text-[11px] text-emerald-200">powershell -NoProfile -ExecutionPolicy Bypass -File .&#92;H2AndroidAgent.ps1 -Install</code>
+                <code className="block overflow-x-auto rounded-lg border border-white/10 bg-slate-950 p-2 text-[11px] text-emerald-200">powershell -NoProfile -ExecutionPolicy Bypass -File .&#92;H2AndroidAgent.ps1 -Run</code>
               </div>
               <p className="mt-2 text-[11px] text-slate-400">O agente inicia com o Windows após o pareamento e se comunica apenas por HTTPS.</p>
             </div>
