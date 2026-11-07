@@ -22,7 +22,11 @@ describe("H2 Android - primeiro AVD com consentimento", () => {
     expect(ps).toContain('& $sdkmanager "--sdk_root=$root" "--install" $AndroidCliImagePackage');
     expect(ps).not.toContain('& $sdkmanager "--sdk_root=$root" "--install" $ImagePackage');
     expect(ps).toContain("-accel-check");
-    expect(ps).toContain("$running.Count -ge 5");
+    expect(ps).toContain("$runningCount -ge 5");
+    expect(ps).toContain("Get-RunningAndroidEmulators");
+    expect(ps).toContain("RedirectStandardError = $true");
+    expect(ps).toContain("WaitForExit(30000)");
+    expect(ps).not.toContain("$adb devices 2>$null");
     expect(ps).toContain("$existing");
     expect(ps).toContain("if ($CheckOnly)");
     expect(cmd).toContain("pause");
