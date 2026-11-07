@@ -1,0 +1,56 @@
+name: H2 Android - instalador Windows ZIP
+
+on:
+  pull_request:
+    branches:
+      - recovery/organizar-salvos-2026-08-24
+    paths:
+      - "workers/windows/H2AndroidAgent.ps1"
+      - "workers/windows/Instalar-H2-Android.cmd"
+      - "server/h2AndroidAgentRoute.ts"
+      - "server/h2AndroidInstallerZip.ts"
+      - "server/h2AndroidInstaller.integration.test.ts"
+      - "server/siteAccessPolicy.ts"
+      - "client/src/pages/AdminH2Android.tsx"
+      - ".github/workflows/h2-android-installer-ci.yml"
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  linux:
+    runs-on: ubuntu-latest
+    timeout-minutes: 25
+    steps:
+      - uses: actions/checkout@v4
+      - uses: pnpm/action-setup@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+          cache: pnpm
+      - run: pnpm install --no-frozen-lockfile
+      - name: Integration tests for ZIP, admin and agent
+        run: pnpm exec vitest run server/h2AndroidInstaller.integration.test.ts server/h2AndroidAgent.integration.test.ts server/h2Android.integration.test.ts server/siteAccessPolicy.test.ts
+      - name: Production build
+        run: pnpm build
+
+  windows:
+    runs-on: windows-latest
+    timeout-minutes: 12
+    steps:
+      - uses: actions/checkout@v4
+      - name: Parse PowerShell 5.1 and verify launcher
+        shell: powershell
+        run: |
+          $errors = $null
+          $tokens = $null
+          [System.Management.Automation.Language.Parser]::ParseFile("$PWD/workers/windows/H2AndroidAgent.ps1", [ref]$tokens, [ref]$errors) | Out-Null
+          if ($errors.Count -gt 0) {
+            $errors | ForEach-Object { Write-Error $_.Message }
+            exit 1
+          }
+          $launcher = Get-Content "workers/windows/Instalar-H2-Android.cmd" -Raw
+          if ($launcher -notmatch 'powershell.exe.*-Install') { throw 'Launcher not invoking install.' }
+          if ($launcher -notmatch 'pause') { throw 'Launcher must keep error window open.' }
+          Write-Host "Windows installer syntax validated."

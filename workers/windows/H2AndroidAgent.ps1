@@ -7,7 +7,7 @@ param(
 )
 $ErrorActionPreference = "Stop"
 $ProgressPreference = "SilentlyContinue"
-$AgentVersion = "0.1.0"
+$AgentVersion = "0.1.1"
 $Folder = Join-Path $env:LOCALAPPDATA "H2AndroidAgent"
 $ConfigPath = Join-Path $Folder "agent.json"
 $AgentPath = Join-Path $Folder "H2AndroidAgent.ps1"
@@ -108,13 +108,30 @@ function Pair-Agent {
 
 function Register-Startup {
   New-Item -ItemType Directory -Path $Folder -Force | Out-Null
-  Copy-Item -LiteralPath $PSCommandPath -Destination $AgentPath -Force
-  $execute = "powershell.exe -NoProfile -ExecutionPolicy Bypass -WindowStyle Hidden -File `"$AgentPath`" -Run"
-  $action = New-ScheduledTaskAction -Execute "powershell.exe" -Argument "-NoProfile -ExecutionPolicy Bypass -WindowStyle Hidden -File `"$AgentPath`" -Run"
-  $trigger = New-ScheduledTaskTrigger -AtLogOn -User $env:USERNAME
-  $principal = New-ScheduledTaskPrincipal -UserId ([Security.Principal.WindowsIdentity]::GetCurrent().Name) -LogonType Interactive -RunLevel Limited
-  Register-ScheduledTask -TaskName $TaskName -Action $action -Trigger $trigger -Principal $principal -Force | Out-Null
-  Write-Host "Inicializacao automatica configurada para este usuario."
+  if ([IO.Path]::GetFullPath($PSCommandPath) -ne [IO.Path]::GetFullPath($AgentPath)) {
+    Copy-Item -LiteralPath $PSCommandPath -Destination $AgentPath -Force
+  }
+  $arguments = '-NoProfile -ExecutionPolicy Bypass -WindowStyle Hidden -File "' + $AgentPath + '" -Run'
+  try {
+    $action = New-ScheduledTaskAction -Execute "powershell.exe" -Argument $arguments
+    $trigger = New-ScheduledTaskTrigger -AtLogOn -User $env:USERNAME
+    $principal = New-ScheduledTaskPrincipal -UserId ([Security.Principal.WindowsIdentity]::GetCurrent().Name) -LogonType Interactive -RunLevel Limited
+    Register-ScheduledTask -TaskName $TaskName -Action $action -Trigger $trigger -Principal $principal -Force | Out-Null
+    Write-Host "Inicializacao automatica configurada no Agendador de Tarefas."
+  } catch {
+    # Alguns computadores bloqueiam a criacao de tarefas sem elevacao.
+    # Alternativa no Startup do usuario, sem modificar o H2 ADS.
+    Write-Warning "Agendador indisponivel. Usando Inicializar do Windows para este usuario."
+    $startup = [Environment]::GetFolderPath("Startup")
+    if (!(Test-Path -LiteralPath $startup)) { throw "A pasta Inicializar do Windows nao foi encontrada." }
+    $shortcut = (New-Object -ComObject WScript.Shell).CreateShortcut((Join-Path $startup "H2 Android Agent.lnk"))
+    $shortcut.TargetPath = "$env:SystemRoot\System32\WindowsPowerShell\v1.0\powershell.exe"
+    $shortcut.Arguments = $arguments
+    $shortcut.WorkingDirectory = $Folder
+    $shortcut.WindowStyle = 7
+    $shortcut.Save()
+    Write-Host "Inicializacao automatica configurada via pasta Inicializar."
+  }
 }
 
 function Run-Agent {
@@ -140,7 +157,9 @@ if ($Status) {
 if ($Install) {
   Pair-Agent
   Register-Startup
-  Write-Host "Pareamento concluido. Execute -Run para iniciar agora; nas proximas entradas Windows iniciara automaticamente."
+  $arguments = '-NoProfile -ExecutionPolicy Bypass -WindowStyle Hidden -File "' + $AgentPath + '" -Run'
+  Start-Process -FilePath "$env:SystemRoot\System32\WindowsPowerShell\v1.0\powershell.exe" -ArgumentList $arguments -WindowStyle Hidden
+  Write-Host "Instalado e iniciado. Confira o status ONLINE em https://h2colombiano.com/adm/android."
   exit 0
 }
 if ($Run) { Run-Agent; exit 0 }
