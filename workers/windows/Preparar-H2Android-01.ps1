@@ -132,7 +132,7 @@ $existing = @($avds | Where-Object { $_ -eq $AvdName }).Count -gt 0
 $imageRoot = Join-Path $root "system-images\android-35\google_apis_playstore\x86_64"
 $installed = Test-Path -LiteralPath (Join-Path $imageRoot "system.img") -PathType Leaf
 Write-Host ("Google Play Android 15 (API 35): " + $(if ($installed) {"instalado"} else {"nao instalado"}))
-Write-Host ("Perfil $AvdName: " + $(if ($existing) {"existente"} else {"novo"}))
+Write-Host ("Perfil ${AvdName}: " + $(if ($existing) {"existente"} else {"novo"}))
 if ($CheckOnly) {
   Say "Diagnostico concluido. Nenhuma alteracao foi feita."
   exit 0
