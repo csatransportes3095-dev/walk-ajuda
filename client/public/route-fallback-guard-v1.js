@@ -12,12 +12,19 @@
     return;
   }
 
+  // Migrar links anteriores do H2 Android para a rota administrativa definitiva.
+  // O destino continua protegido no React por AdminGuard e na API por adminProcedure.
+  if (path === '/android' || path === '/android/' || path === '/admin/android' || path === '/admin/android/') {
+    window.location.replace('/adm/android' + window.location.search + window.location.hash);
+    return;
+  }
+
   // Rotas conhecidas do H2. Qualquer rota pública fora desta lista não deve cair
   // no WelcomeScreen/PasswordGate antigo; vai para a entrada atual do sistema.
   const exact = new Set([
     '/', '/login', '/recuperarsenha', '/foto', '/sorteio', '/acompanhar', '/revendedor',
     '/pre-cadastro', '/consultar-cadastro', '/atualizarcadastro', '/locadora',
-    '/gastos', '/emprestimo', '/cartoes', '/indicacoes', '/android', '/android/', '/gerador-chassi', '/gerador-chassi/',
+    '/gastos', '/emprestimo', '/cartoes', '/indicacoes', '/adm/android', '/adm/android/', '/gerador-chassi', '/gerador-chassi/',
     '/adm/chassis', '/adm/chassis/', '/adm/placa', '/adm/placa/', '/h2chassis', '/h2chassis/', '/ajuda',
     '/video/tutorial', '/tutorial', '/bot', '/app', '/app-pro', '/vip', '/similaridade', '/404'
   ]);

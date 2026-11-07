@@ -223,9 +223,12 @@ function Router() {
       <Route path={"/h2ads"}>
         <H2AdsGuard><H2Ads /></H2AdsGuard>
       </Route>
-      <Route path={"/android/"}><Redirect to="/android" /></Route>
-      <Route path={"/android"}><AdminGuard><AdminH2Android /></AdminGuard></Route>
-      <Route path={"/admin/android"}><AdminGuard><AdminH2Android /></AdminGuard></Route>
+      {/* H2 Android pertence exclusivamente ao namespace administrativo /adm. */}
+      <Route path={"/adm/android"}><AdminGuard><AdminH2Android /></AdminGuard></Route>
+      <Route path={"/adm/android/"}><Redirect to="/adm/android" /></Route>
+      <Route path={"/android"}><Redirect to="/adm/android" /></Route>
+      <Route path={"/android/"}><Redirect to="/adm/android" /></Route>
+      <Route path={"/admin/android"}><Redirect to="/adm/android" /></Route>
       <Route path={"/admin/authenticator"}>
         <AdminGuard><AdminAuthenticator /></AdminGuard>
       </Route>

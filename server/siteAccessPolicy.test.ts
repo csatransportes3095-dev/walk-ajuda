@@ -52,7 +52,7 @@ describe("Seguranca do Site - regras de servidor", () => {
     expect(decision("blocked", "/api/trpc/transportes.list")).toBe("deny");
   });
   it("H2 Android permanece acessivel sob o login ADM nos modos restrito e bloqueado", () => {
-    for (const route of ["/android", "/android/", "/admin/android"]) {
+    for (const route of ["/adm/android", "/adm/android/", "/android", "/android/", "/admin/android"]) {
       expect(decision("restricted", route)).toBe("allow");
       expect(decision("blocked", route)).toBe("allow");
     }

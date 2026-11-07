@@ -12,16 +12,16 @@ describe("H2 Android - modulo isolado e privado", () => {
   const androidRouter = read("server/routers/h2Android.ts");
   const androidPage = read("client/src/pages/AdminH2Android.tsx");
 
-  it("mantem /android e /admin/android exclusivamente sob AdminGuard", () => {
-    expect(app).toContain('<Route path={"/android"}><AdminGuard><AdminH2Android /></AdminGuard></Route>');
-    expect(app).toContain('<Route path={"/admin/android"}><AdminGuard><AdminH2Android /></AdminGuard></Route>');
-    expect((app.match(/<AdminGuard><AdminH2Android \/><\/AdminGuard>/g) || []).length).toBe(2);
-    expect(app).toContain('location === "/android" || location === "/android/"');
-    expect(app).toContain('<Route path={"/android/"}><Redirect to="/android" /></Route>');
+  it("mantem /adm/android como rota unica protegida por AdminGuard", () => {
+    expect(app).toContain('<Route path={"/adm/android"}><AdminGuard><AdminH2Android /></AdminGuard></Route>');
+    expect((app.match(/<AdminGuard><AdminH2Android \/><\/AdminGuard>/g) || []).length).toBe(1);
+    expect(app).toContain('<Route path={"/android"}><Redirect to="/adm/android" /></Route>');
+    expect(app).toContain('<Route path={"/android/"}><Redirect to="/adm/android" /></Route>');
+    expect(app).toContain('<Route path={"/admin/android"}><Redirect to="/adm/android" /></Route>');
   });
 
   it("exibe card individual no ADM sem alterar a ordenacao dos atalhos", () => {
-    expect(dashboard).toContain('id: "h2-android", href: "/android"');
+    expect(dashboard).toContain('id: "h2-android", href: "/adm/android"');
     expect(dashboard).toContain("label: \"H2 Android\"");
     expect(dashboard).toContain("featuredAdminShortcuts = orderedAdminShortcuts.slice(0, 12)");
     expect(dashboard).toContain("setCardOrder(saved.includes(\"h2-android\")");
