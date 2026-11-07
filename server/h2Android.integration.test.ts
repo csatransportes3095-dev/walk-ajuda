@@ -30,7 +30,7 @@ describe("H2 Android - modulo isolado e privado", () => {
 
   it("exige adminProcedure em todas as operacoes", () => {
     expect(routers).toContain("h2Android: h2AndroidRouter");
-    for (const action of ["overview", "createProfile", "renameProfile", "deleteProfile"]) {
+    for (const action of ["overview", "createPairingCode", "revokeAgent", "createProfile", "renameProfile", "deleteProfile"]) {
       expect(androidRouter).toMatch(new RegExp(action + ": adminProcedure"));
     }
     expect(androidRouter).not.toContain("publicProcedure");
@@ -40,10 +40,10 @@ describe("H2 Android - modulo isolado e privado", () => {
 
   it("nao finge que instancias estao operantes sem agente", () => {
     expect(androidRouter).toContain('activeCount: 0');
-    expect(androidRouter).toContain('agentStatus: "not_installed"');
+    expect(androidRouter).toContain("agents.some(agent => agent.online)");
     expect(androidRouter).toContain("H2_ANDROID_MAX_RUNNING = 5");
     expect(androidPage).toContain('disabled title="Disponível somente após conectar o agente H2 Android"');
-    expect(androidPage).toContain("Nenhum aplicativo, proxy, câmera ou emulador foi instalado");
+    expect(androidPage).toContain("nenhum aplicativo, proxy, câmera ou emulador é instalado ou iniciado automaticamente");
   });
 
   it("isola os perfis na propria tabela, sem tocar cadastros ou pedidos", () => {
