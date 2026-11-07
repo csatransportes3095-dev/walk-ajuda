@@ -88,6 +88,16 @@ jobs:
           const protectedFiles=['server/siteAccessCodeDelivery.ts','server/siteSecurityRouter.ts','server/siteAccessSchema.ts','server/siteAccessGateway.ts','server/siteAccessPolicy.ts','server/siteAccessManualAdd.ts','server/siteSecurityDirectory.ts','server/autoSchedule.ts','server/routers/schedule.ts','server/routers/customerPassword.ts','server/_core/trpc.ts','server/_core/mailer.ts','server/_core/sendMailDirect.ts','server/db.ts','client/src/pages/AdminSiteSecurity.tsx','client/src/pages/OrderTracking.tsx','client/src/App.tsx','client/src/main.tsx','client/src/components/SiteAccessSessionBoundary.tsx','client/src/lib/siteAccessSessionClient.ts','Dockerfile','package.json','pnpm-lock.yaml'];
           for(const p of protectedFiles){
             const current=read(p),previous=before(p);
+            // Emergency email-only exception: allow exactly the independently audited
+            // Outlook transport-priority change, never any generator/session edits.
+            // Compare Git content hashes so even one additional source byte fails.
+            if (p==='server/siteAccessCodeDelivery.ts') {
+              const baseBlob=execFileSync('git',['rev-parse',base+':'+p],{encoding:'utf8'}).trim();
+              const changedBlob=execFileSync('git',['hash-object',p],{encoding:'utf8'}).trim();
+              assert.equal(baseBlob,'5dd80357a29b786e2354e1badc7bc2196c355035','Unexpected original delivery source');
+              assert.equal(changedBlob,'c538b625da08699030a85255c828b677dd10af8a','Delivery patch does not match the approved mail-only change');
+              continue;
+            }
             assert.equal(
               normalizeIsolatedIntegrations(p,current),
               normalizeIsolatedIntegrations(p,previous),

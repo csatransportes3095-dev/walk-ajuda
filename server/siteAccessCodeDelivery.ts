@@ -27,7 +27,15 @@ export async function deliverOwnSiteCode(email: string, code: string, purpose: '
     +'<p>Após a confirmação, o acesso vale por até 24 horas, ou até você sair.</p>'
     +'<p>Não compartilhe. Se não solicitou o acesso, ignore esta mensagem.</p></div>';
   const pass=process.env.SMTP_PASS || process.env.ZOHO_EMAIL_PASSWORD || '';
-  if (pass) {
+  const key=process.env.RESEND_API_KEY;
+  const domain=emailKey(email).split('@').pop() || '';
+  // Outlook/Hotmail may bounce an SMTP-accepted message later with 550 5.7.1.
+  // Prefer the existing Resend transport for these recipients, never generate
+  // a new code or change its validity, bindings, or authentication.
+  const preferResend=/^(?:outlook|hotmail|live|msn)\.(?:com(?:\.br|\.au)?|co\.uk|fr|de|it|es|ca)$/i.test(domain);
+
+  async function trySmtp(): Promise<SiteCodeDelivery|null> {
+    if (!pass) return null;
     const port=Number(process.env.SMTP_PORT || '465');
     const secure=process.env.SMTP_SECURE?[ '1','true','yes','on' ].includes(process.env.SMTP_SECURE.toLowerCase()):port===465;
     const transport=nodemailer.createTransport({
@@ -43,10 +51,12 @@ export async function deliverOwnSiteCode(email: string, code: string, purpose: '
       return {channel:'smtp',messageId:String(result.messageId || '').slice(0,255)};
     } catch(error) {
       console.warn('[SiteCode] channel=smtp state=failed code='+safeFailure(error));
+      return null;
     } finally { transport.close(); }
   }
-  const key=process.env.RESEND_API_KEY;
-  if (key) {
+
+  async function tryResend(): Promise<SiteCodeDelivery|null> {
+    if (!key) return null;
     try {
       const response=await fetch('https://api.resend.com/emails',{
         method:'POST',signal:AbortSignal.timeout(8000),
@@ -55,13 +65,27 @@ export async function deliverOwnSiteCode(email: string, code: string, purpose: '
       });
       if (!response.ok) {
         console.warn('[SiteCode] channel=resend state=failed http='+response.status);
-        throw Object.assign(new Error('PROVIDER_REJECTED'),{code:'PROVIDER_REJECTED'});
+        return null;
       }
       const result=await response.json() as {id?:unknown};
       if (typeof result.id!=='string'||!result.id) throw new Error('MISSING_PROVIDER_ID');
       console.info('[SiteCode] channel=resend state=accepted');
       return {channel:'resend',messageId:result.id.slice(0,255)};
-    } catch(error) {console.warn('[SiteCode] channel=resend state=failed code='+safeFailure(error));}
+    } catch(error) {
+      console.warn('[SiteCode] channel=resend state=failed code='+safeFailure(error));
+      return null;
+    }
+  }
+
+  if (preferResend) {
+    const delivered=await tryResend();
+    if (delivered) return delivered;
+  }
+  const smtp=await trySmtp();
+  if (smtp) return smtp;
+  if (!preferResend) {
+    const delivered=await tryResend();
+    if (delivered) return delivered;
   }
   // Neither logs nor thrown errors contain OTP, addresses, SQL, credentials or provider response bodies.
   throw new Error('SITE_CODE_DELIVERY_UNAVAILABLE');

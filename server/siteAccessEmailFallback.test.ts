@@ -17,6 +17,32 @@ describe('own code delivery: direct SMTP with HTTPS contingency',()=>{
     expect(await deliverOwnSiteCode(email,code)).toEqual({channel:'smtp',messageId:'smtp-test'});expect(mocks.fetch).not.toHaveBeenCalled();
     expect(mocks.transport).toHaveBeenCalledWith(expect.objectContaining({host:'smtp.example.test',port:465,secure:true}));expect(mocks.close).toHaveBeenCalledTimes(1);
   });
+  it('uses the H2-generated code via Resend first for Outlook/Hotmail without changing it',async()=>{
+    const recipient='cliente@outlook.com';
+    const result=await deliverOwnSiteCode(recipient,code);
+    expect(result).toEqual({channel:'resend',messageId:'resend-test'});
+    expect(mocks.send).not.toHaveBeenCalled();
+    expect(mocks.fetch).toHaveBeenCalledTimes(1);
+    const sent=JSON.parse(mocks.fetch.mock.calls[0][1].body);
+    expect(sent.to).toEqual([recipient]);
+    expect(sent.text).toContain(code);
+    expect(sent.html).toContain(code);
+  });
+  it('uses the same original code via SMTP when Microsoft Resend delivery fails',async()=>{
+    mocks.fetch.mockResolvedValue({ok:false,status:503});
+    const recipient='cliente@hotmail.com';
+    mocks.send.mockResolvedValue({accepted:[recipient],rejected:[],messageId:'smtp-test'});
+    expect(await deliverOwnSiteCode(recipient,code)).toEqual({channel:'smtp',messageId:'smtp-test'});
+    expect(mocks.send).toHaveBeenCalledTimes(1);
+    const sent=mocks.send.mock.calls[0][0];
+    expect(sent.to).toBe(recipient);
+    expect(sent.text).toContain(code);
+    expect(sent.html).toContain(code);
+  });
+  it('keeps existing SMTP-first behavior for non-Microsoft domains',async()=>{
+    expect(await deliverOwnSiteCode(email,code)).toEqual({channel:'smtp',messageId:'smtp-test'});
+    expect(mocks.fetch).not.toHaveBeenCalled();
+  });
   it('falls back to HTTPS only when SMTP fails',async()=>{
     mocks.send.mockRejectedValue(Object.assign(new Error('private provider error'),{code:'ETIMEDOUT'}));
     expect(await deliverOwnSiteCode(email,code)).toEqual({channel:'resend',messageId:'resend-test'});expect(mocks.fetch).toHaveBeenCalledTimes(1);
