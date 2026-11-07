@@ -217,6 +217,32 @@ export default function AdminH2Android() {
           </div>
         </section>
 
+        <section className="rounded-2xl border border-emerald-400/25 bg-[#0c1a20] p-4 sm:p-5" aria-label="Preparação do primeiro Android virtual">
+          <div className="flex flex-wrap items-start justify-between gap-3">
+            <div className="max-w-2xl">
+              <h2 className="flex items-center gap-2 text-base font-black text-emerald-200"><Smartphone className="h-5 w-5" /> Etapa 3 — Preparar Android 01</h2>
+              <p className="mt-2 text-xs leading-relaxed text-slate-300">
+                Assistente local do Windows para conferir Android SDK, ADB e virtualização.
+                Ele pode preparar um AVD Android 15 com imagem oficial Google Play, somente após sua confirmação.
+              </p>
+            </div>
+            <a href="/api/h2-android/agent/first-avd.zip" download="Preparar-Primeiro-Android.zip"
+              className="inline-flex items-center gap-2 rounded-xl border border-emerald-400/40 bg-emerald-400/15 px-4 py-2.5 text-sm font-bold text-emerald-100 hover:bg-emerald-400/25">
+              <Download className="h-4 w-4" /> Baixar preparador ZIP
+            </a>
+          </div>
+          <div className="mt-3 rounded-xl border border-white/10 bg-black/25 p-3 text-xs leading-relaxed text-slate-300">
+            <p><strong>1.</strong> Baixe e extraia o ZIP no PC em que o agente está online.</p>
+            <p className="mt-1"><strong>2.</strong> Execute <strong>Preparar-Primeiro-Android.cmd</strong> com duplo clique.</p>
+            <p className="mt-1"><strong>3.</strong> Confira os requisitos. Autorize individualmente qualquer download, criação de Android ou inicialização.</p>
+            <p className="mt-2 text-amber-200">Nenhuma instalação ou emulador é iniciado pelo painel. O assistente não mexe no H2 ADS, nos proxies ou nos Androids já existentes.</p>
+          </div>
+          <p className="mt-2 text-xs text-slate-400">
+            O resultado será exibido no próprio Windows. Se faltar SDK, Java ou aceleração, ele indicará o requisito antes de continuar.
+            A compatibilidade de Uber Motorista, 99, inDrive e WhatsApp ainda precisa de testes reais.
+          </p>
+        </section>
+
         <section className="rounded-2xl border border-cyan-400/20 bg-[#10192b] p-4 sm:p-5">
           <form className="flex flex-col gap-3 sm:flex-row" onSubmit={(event) => { event.preventDefault(); createProfile(); }}>
             <div className="min-w-0 flex-1">
