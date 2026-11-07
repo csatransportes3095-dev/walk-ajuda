@@ -5,7 +5,7 @@
 import type { Express, Request, Response } from "express";
 import path from "node:path";
 import { isAdminJwtValid } from "./_core/trpc";
-import { claimAndroidAgent, recordAndroidAgentHeartbeat } from "./h2AndroidAgentStore";
+import { claimAndroidAgent, recordAndroidAgentHeartbeat, pullAndroidCommand, finishAndroidCommand, requestAndroidFrame, storeAndroidFrame } from "./h2AndroidAgentStore";
 import { getAndroidWindowsInstallerZip, getAndroidFirstAvdWizardZip } from "./h2AndroidInstallerZip";
 
 function noStore(res: Response) {
@@ -14,6 +14,45 @@ function noStore(res: Response) {
 }
 
 export function registerH2AndroidAgentRoutes(app: Express): void {
+  // Independent H2 Android agent token only; the browser cannot poll worker commands.
+  app.post("/api/h2-android/agent/pull", async (req: Request, res: Response) => {
+    noStore(res);
+    try {
+      const result = await pullAndroidCommand(req.header("authorization"));
+      if (!result) { res.status(401).json({ error: "Agente nao autorizado." }); return; }
+      res.json(result);
+    } catch { res.status(503).json({ error: "Fila indisponivel." }); }
+  });
+
+  app.post("/api/h2-android/agent/finish", async (req: Request, res: Response) => {
+    noStore(res);
+    try {
+      const ok = await finishAndroidCommand(req.header("authorization"), req.body);
+      res.status(ok ? 200 : 401).json({ ok });
+    } catch { res.status(503).json({ error: "Falha ao registrar comando." }); }
+  });
+
+  app.post("/api/h2-android/agent/frame", async (req: Request, res: Response) => {
+    noStore(res);
+    try {
+      const ok = await storeAndroidFrame(req.header("authorization"), req.body);
+      res.status(ok ? 200 : 401).json({ ok });
+    } catch { res.status(503).json({ error: "Falha ao receber tela." }); }
+  });
+
+  app.get("/api/h2-android/screen/:agentId/:avdName", (req: Request, res: Response) => {
+    noStore(res);
+    res.setHeader("X-Frame-Options", "DENY");
+    if (!isAdminJwtValid(req as any)) { res.sendStatus(403); return; }
+    const agentId = String(req.params.agentId || "");
+    if (!/^[0-9a-f-]{36}$/i.test(agentId)) { res.sendStatus(400); return; }
+    const png = requestAndroidFrame(agentId, String(req.params.avdName || ""));
+    if (!png) { res.status(204).end(); return; }
+    res.setHeader("Content-Type", "image/png");
+    res.setHeader("Content-Length", String(png.length));
+    res.status(200).end(png);
+  });
+
   app.get("/api/h2-android/agent/first-avd.zip", async (req: Request, res: Response) => {
     noStore(res);
     if (!isAdminJwtValid(req as any)) {
