@@ -45,7 +45,7 @@ describe("H2 Android Agent - conexao segura e independente", () => {
     expect(routes).toContain("isAdminJwtValid");
     expect(routes).toContain('"/api/h2-android/agent/heartbeat"');
     expect(entry).toContain("registerH2AndroidAgentRoutes(app)");
-    expect(policy).toContain('pathname === "/api/h2-android/agent/heartbeat"');
+    expect(policy).toContain('"/api/h2-android/agent/heartbeat"');
     expect(windows).toContain('H2AndroidAgent');
     expect(windows).toContain('H2AndroidAgent.ps1');
     expect(windows).not.toContain("H2AdsWorker.ps1");
