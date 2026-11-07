@@ -59,7 +59,7 @@ describe("H2 Android - operacao real pelo ADM", () => {
     expect(packageService).toContain('H2AndroidControl.ps1');
     expect(router).toContain("control: adminProcedure");
     expect(router).toContain("createPairingCode: adminProcedure");
-    expect(adminPage).not.toContain("H2AndroidLiveManager");
+    expect(adminPage).toContain("H2AndroidLiveManager");
     expect(adminPage).not.toContain("controle verdadeiro no site");
   });
 });
