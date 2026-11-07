@@ -81,6 +81,7 @@ import AdminZohoConfig from "./pages/AdminZohoConfig";
 import AdminMedia from "./pages/AdminMedia";
 import AdminFeatureCards from "./pages/AdminFeatureCards";
 import AdminHubCentral from "./pages/AdminHubCentral";
+import AdminH2Android from "./pages/AdminH2Android";
 import AdminTransportes from "./pages/AdminTransportes";
 import AdminLocadora from "./pages/AdminLocadora";
 import LocadoraPortal from "./pages/LocadoraPortal";
@@ -222,6 +223,8 @@ function Router() {
       <Route path={"/h2ads"}>
         <H2AdsGuard><H2Ads /></H2AdsGuard>
       </Route>
+      <Route path={"/android"}><AdminGuard><AdminH2Android /></AdminGuard></Route>
+      <Route path={"/admin/android"}><AdminGuard><AdminH2Android /></AdminGuard></Route>
       <Route path={"/admin/authenticator"}>
         <AdminGuard><AdminAuthenticator /></AdminGuard>
       </Route>
@@ -439,7 +442,7 @@ function AppContent() {
   const [location] = useLocation();
   const isGeradorChassiRoute = isChassisAdminPath(location);
   const isVehicleUsageAdminRoute = location.toLowerCase() === "/adm/placa";
-  const isAdminRoute = location.startsWith("/admin") || location.toLowerCase() === "/adm" || location.toLowerCase().startsWith("/adm/") || isGeradorChassiRoute || isVehicleUsageAdminRoute || location.toLowerCase() === "/transpostes";
+  const isAdminRoute = location === "/android" || location.startsWith("/admin") || location.toLowerCase() === "/adm" || location.toLowerCase().startsWith("/adm/") || isGeradorChassiRoute || isVehicleUsageAdminRoute || location.toLowerCase() === "/transpostes";
   const isH2AdsRoute = isH2AdsPath(location);
   const isSimilarityRoute = location.toLowerCase() === "/similaridade";
   const isTrackingRoute = location === "/acompanhar";
