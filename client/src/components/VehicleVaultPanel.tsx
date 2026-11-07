@@ -2,6 +2,7 @@ import { useState } from "react";
 import { Archive, ClipboardPaste, FileSearch, FileText, FolderOpen, Loader2, Pencil, Plus, Printer, Search, ShieldCheck, Users, X } from "lucide-react";
 import { toast } from "sonner";
 import { trpc } from "@/lib/trpc";
+import VehicleVaultBatchPanel from "./VehicleVaultBatchPanel";
 
 type VehicleFields = {
   plate:string; renavam:string; chassis:string; model:string; color:string;
@@ -216,6 +217,7 @@ export default function VehicleVaultPanel(){
       </div>
     </div>
     {mode==="extract"&&<div className="space-y-3 rounded-2xl border border-amber-400/30 bg-amber-500/5 p-4">
+      {!editId&&<VehicleVaultBatchPanel onSaved={async()=>{await utils.vehicleVault.invalidate();}}/>}
       <h3 className="font-black text-amber-200">{editId?"EDITAR DOCUMENTO EXISTENTE":"EXTRATOR PDF OU TEXTO"}</h3>
       <div className="flex flex-wrap gap-2">
         <label className="flex cursor-pointer items-center gap-2 rounded-xl border border-cyan-400/40 bg-cyan-500/10 px-4 py-3 text-sm font-bold">

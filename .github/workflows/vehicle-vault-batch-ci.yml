@@ -1,0 +1,34 @@
+name: Placa Chassi - extrator PDF lote
+
+on:
+  pull_request:
+    branches:
+      - recovery/organizar-salvos-2026-08-24
+    paths:
+      - "client/src/components/VehicleVaultPanel.tsx"
+      - "client/src/components/VehicleVaultBatchPanel.tsx"
+      - "client/src/components/vehicleVaultBatchUtils.ts"
+      - "server/vehicleVaultBatch.test.ts"
+      - ".github/workflows/vehicle-vault-batch-ci.yml"
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  validate:
+    runs-on: ubuntu-latest
+    timeout-minutes: 25
+    steps:
+      - uses: actions/checkout@v4
+      - uses: pnpm/action-setup@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+          cache: pnpm
+      - name: Install dependencies
+        run: pnpm install --no-frozen-lockfile
+      - name: Testar extrator em lote
+        run: pnpm exec vitest run server/vehicleVaultBatch.test.ts
+      - name: Build de producao
+        run: pnpm build
