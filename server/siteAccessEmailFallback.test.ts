@@ -31,6 +31,7 @@ describe('own code delivery: direct SMTP with HTTPS contingency',()=>{
   it('uses the same original code via SMTP when Microsoft Resend delivery fails',async()=>{
     mocks.fetch.mockResolvedValue({ok:false,status:503});
     const recipient='cliente@hotmail.com';
+    mocks.send.mockResolvedValue({accepted:[recipient],rejected:[],messageId:'smtp-test'});
     expect(await deliverOwnSiteCode(recipient,code)).toEqual({channel:'smtp',messageId:'smtp-test'});
     expect(mocks.send).toHaveBeenCalledTimes(1);
     const sent=mocks.send.mock.calls[0][0];
