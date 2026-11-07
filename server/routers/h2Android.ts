@@ -9,6 +9,7 @@ import { sql } from "drizzle-orm";
 import { z } from "zod";
 import { adminProcedure, router } from "../_core/trpc";
 import { getDb } from "../db";
+import { issueAndroidPairingCode, listAndroidAgents, revokeAndroidAgent } from "../h2AndroidAgentStore";
 
 export const H2_ANDROID_MAX_RUNNING = 5;
 let initialized: Promise<void> | null = null;
@@ -57,14 +58,22 @@ export const h2AndroidRouter = router({
       FROM h2_android_profiles ORDER BY createdAt DESC, id DESC
     `);
     const profiles = (result[0] as unknown as ProfileRow[]).map(serializeProfile);
+    const agents = await listAndroidAgents();
     return {
       profiles,
+      agents,
       maxSimultaneous: H2_ANDROID_MAX_RUNNING,
       activeCount: 0,
-      agentStatus: "not_installed" as const,
+      agentStatus: agents.some(agent => agent.online) ? "online" as const : agents.length ? "offline" as const : "not_installed" as const,
       phase: "cadastro" as const,
     };
   }),
+
+  createPairingCode: adminProcedure.mutation(() => issueAndroidPairingCode()),
+
+  revokeAgent: adminProcedure
+    .input(z.object({ id: z.string().uuid() }))
+    .mutation(async ({ input }) => ({ success: await revokeAndroidAgent(input.id) })),
 
   createProfile: adminProcedure
     .input(z.object({ label: profileLabel }))
