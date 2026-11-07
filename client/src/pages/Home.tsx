@@ -1,3 +1,4 @@
+import { orderedVisibleQuestions, type QuestionFlowRule } from "@/lib/questionFlow";
 import { useAuth } from "@/_core/hooks/useAuth";
 import { useRoute } from "wouter";
 import { ServicosExtras } from "@/components/ServicosExtras";
@@ -1437,10 +1438,19 @@ export default function Home() {
       };
       // Construir answersArray com ordenação hierárquica (pai → sub → sub-sub) e depth
       const allQs = selectedOption?.questions || [];
+      const flowRules: QuestionFlowRule[] = allQs.flatMap(q => {
+        if (q.fieldType !== 'select' || !q.options) return [];
+        try {
+          const opts = JSON.parse(q.options);
+          return Array.isArray(opts) ? opts.filter((o: any) => o && typeof o === 'object' && o.flowAction && o.flowAction !== 'continue')
+            .map((o: any) => ({ questionId: q.id, answer: String(o.label), action: o.flowAction, targetQuestionId: o.flowTarget ? Number(o.flowTarget) : null, message: o.flowMessage || null })) : [];
+        } catch { return []; }
+      });
+      const includedAnswerIds = new Set(orderedVisibleQuestions(allQs, questionAnswers, flowRules).questions.map(q => q.id));
       const orderedAnswers: Array<{ question: string; questionId: number; answer: string; answerType?: string; depth: number; optionsMeta?: string; audioUrl?: string; durationSeconds?: number }> = [];
       const addWithDepth = (q: ProductQuestion, depth: number) => {
         const audio = questionAudioAnswers[q.id];
-        if (!isQVisibleFinal(q) || (!audio && !questionAnswers[q.id]?.trim())) return;
+        if (!includedAnswerIds.has(q.id) || !isQVisibleFinal(q) || (!audio && !questionAnswers[q.id]?.trim())) return;
         const base: { question: string; questionId: number; answer: string; answerType?: string; depth: number; optionsMeta?: string; audioUrl?: string; durationSeconds?: number } = audio
           ? { question: q.question, questionId: q.id, answer: 'Áudio anexado', answerType: 'audio', audioUrl: audio.audioUrl, durationSeconds: audio.durationSeconds, depth }
           : { question: q.question, questionId: q.id, answer: questionAnswers[q.id], depth };
@@ -2948,37 +2958,28 @@ export default function Home() {
       {step === "questions" && (() => {
         const allQsModal = selectedOption?.questions || [];
 
-        // Constrói lista ordenada: perguntas raiz em ordem, sub-perguntas logo após o pai
-        const buildOrderedQs = (answers: Record<number, string>): ProductQuestion[] => {
-          const roots = allQsModal.filter(q => !q.parentQuestionId).sort((a, b) => a.sortOrder - b.sortOrder);
-          const result: ProductQuestion[] = [];
-          for (const root of roots) {
-            result.push(root);
-            // Inserir sub-perguntas visíveis logo após o pai
-            const subs = allQsModal
-              .filter(q => q.parentQuestionId === root.id)
-              .sort((a, b) => a.sortOrder - b.sortOrder);
-            for (const sub of subs) {
-              const parentAnswer = answers[root.id]?.trim() || "";
-              const isVisible = !sub.triggerOption || parentAnswer === sub.triggerOption;
-              if (isVisible) {
-                result.push(sub);
-                // Inserir sub-sub-perguntas visíveis logo após a sub-pergunta pai
-                const subSubs = allQsModal
-                  .filter(q => q.parentQuestionId === sub.id)
-                  .sort((a, b) => a.sortOrder - b.sortOrder);
-                for (const subSub of subSubs) {
-                  const subAnswer = answers[sub.id]?.trim() || "";
-                  const isSubVisible = !subSub.triggerOption || subAnswer === subSub.triggerOption;
-                  if (isSubVisible) result.push(subSub);
-                }
-              }
-            }
-          }
-          return result;
-        };
+        // As configurações de fluxo são armazenadas nas opções da pergunta.
+        // Sem configuração, mantém-se a navegação hierárquica atual.
+        const rules: QuestionFlowRule[] = allQsModal.flatMap(q => {
+          if (q.fieldType !== 'select' || !q.options) return [];
+          try {
+            const options = JSON.parse(q.options);
+            if (!Array.isArray(options)) return [];
+            return options.filter((item: any) => item && typeof item === 'object' && item.flowAction && item.flowAction !== 'continue')
+              .map((item: any) => ({
+                questionId: q.id, answer: String(item.label),
+                action: item.flowAction as QuestionFlowRule['action'],
+                targetQuestionId: item.flowTarget ? Number(item.flowTarget) : null,
+                message: item.flowMessage || null,
+              }));
+          } catch { return []; }
+        });
+        const buildOrderedQs = (answers: Record<number, string>): ProductQuestion[] =>
+          orderedVisibleQuestions(allQsModal, answers, rules).questions as ProductQuestion[];
+        const flowState = orderedVisibleQuestions(allQsModal, questionAnswers, rules);
 
         const visibleQs = buildOrderedQs(questionAnswers);
+        const flowMessage = flowState.ended ? flowState.message : null;
         const totalQs = visibleQs.length;
         const safeIndex = Math.min(currentQuestionIndex, Math.max(0, totalQs - 1));
         const currentQ = visibleQs[safeIndex];
@@ -3229,6 +3230,9 @@ export default function Home() {
                 )}
                 {currentQ.questionPresentation === 'audio' && currentQ.questionAudioUrl && (
                   <div className="rounded-xl border border-cyan-400/40 bg-cyan-500/10 p-3"><p className="mb-2 text-xs font-bold text-cyan-200">🔊 Ouça a pergunta</p><audio controls preload="metadata" src={currentQ.questionAudioUrl} className="h-8 w-full" /></div>
+                )}
+                {flowMessage && currentQ && questionAnswers[currentQ.id] && (
+                  <p className="text-sm text-cyan-200 border border-cyan-500/30 rounded-lg p-3">{flowMessage}</p>
                 )}
                 <div>
                   {renderQuestionInput(currentQ)}
