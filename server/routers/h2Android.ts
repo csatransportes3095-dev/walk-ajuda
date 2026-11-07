@@ -9,7 +9,7 @@ import { sql } from "drizzle-orm";
 import { z } from "zod";
 import { adminProcedure, router } from "../_core/trpc";
 import { getDb } from "../db";
-import { issueAndroidPairingCode, listAndroidAgents, revokeAndroidAgent } from "../h2AndroidAgentStore";
+import { issueAndroidPairingCode, listAndroidAgents, revokeAndroidAgent, enqueueAndroidCommand, listAndroidCommands, h2AndroidAvdName } from "../h2AndroidAgentStore";
 
 export const H2_ANDROID_MAX_RUNNING = 5;
 let initialized: Promise<void> | null = null;
@@ -62,12 +62,34 @@ export const h2AndroidRouter = router({
     return {
       profiles,
       agents,
+      commands: await listAndroidCommands(),
       maxSimultaneous: H2_ANDROID_MAX_RUNNING,
-      activeCount: 0,
+      activeCount: agents.reduce((n, agent) => n + (agent.online ? agent.runningAvds.length : 0), 0),
       agentStatus: agents.some(agent => agent.online) ? "online" as const : agents.length ? "offline" as const : "not_installed" as const,
       phase: "cadastro" as const,
     };
   }),
+
+  /** Operations run on the paired Windows host, never inside Render. */
+  control: adminProcedure
+    .input(z.discriminatedUnion("action", [
+      z.object({ action: z.literal("create"), agentId: z.string().uuid(), avdName: z.string().regex(h2AndroidAvdName) }),
+      z.object({ action: z.literal("start"), agentId: z.string().uuid(), avdName: z.string().regex(h2AndroidAvdName) }),
+      z.object({ action: z.literal("stop"), agentId: z.string().uuid(), avdName: z.string().regex(h2AndroidAvdName) }),
+      z.object({ action: z.literal("tap"), agentId: z.string().uuid(), avdName: z.string().regex(h2AndroidAvdName), x: z.number().int().min(0).max(5000), y: z.number().int().min(0).max(10000) }),
+      z.object({ action: z.literal("key"), agentId: z.string().uuid(), avdName: z.string().regex(h2AndroidAvdName), key: z.enum(["BACK","HOME","ENTER","POWER"]) }),
+      z.object({ action: z.literal("proxy"), agentId: z.string().uuid(), avdName: z.string().regex(h2AndroidAvdName), host: z.string().trim().max(253).regex(/^[a-zA-Z0-9.-]*$/), port: z.number().int().min(0).max(65535) }),
+    ]))
+    .mutation(async ({ input }) => {
+      let payload: Record<string, unknown> = {};
+      if (input.action === "tap") payload = { x: input.x, y: input.y };
+      if (input.action === "key") payload = { key: input.key };
+      if (input.action === "proxy") {
+        if ((input.host.length === 0) !== (input.port === 0)) throw new TRPCError({ code: "BAD_REQUEST", message: "Informe host e porta ou deixe ambos vazios." });
+        payload = { host: input.host, port: input.port };
+      }
+      return enqueueAndroidCommand({ agentId: input.agentId, avdName: input.avdName, action: input.action, payload });
+    }),
 
   createPairingCode: adminProcedure.mutation(() => issueAndroidPairingCode()),
 
