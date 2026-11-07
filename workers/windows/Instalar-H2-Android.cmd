@@ -13,8 +13,13 @@ if not exist "%~dp0H2AndroidAgent.ps1" (
   pause
   exit /b 1
 )
-echo Abra o painel /adm/android e clique em Gerar codigo.
-echo Cole o codigo temporario quando solicitado.
+if not exist "%~dp0H2AndroidControl.ps1" (
+  echo ERRO: Arquivo H2AndroidControl.ps1 nao encontrado nesta pasta.
+  pause
+  exit /b 1
+)
+echo Se ja esta pareado, os dados serao preservados.
+echo No primeiro uso, informe o codigo do painel /adm/android.
 echo.
 powershell.exe -NoProfile -ExecutionPolicy Bypass -File "%~dp0H2AndroidAgent.ps1" -Install
 set "STATUS=%ERRORLEVEL%"
