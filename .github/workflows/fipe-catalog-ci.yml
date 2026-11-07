@@ -32,38 +32,30 @@ jobs:
         run: pnpm install --frozen-lockfile
       - name: FIPE cache, error and security tests
         run: pnpm exec vitest run server/fipeCatalogProxy.test.ts
-      - name: Probe independent model catalogue endpoints
+      - name: Probe additional independent FIPE catalogues
         run: |
           node --input-type=module <<'NODE'
-          const urls = [
-            "https://fipe.parallelum.com.br/api/v2/cars/brands/59/models",
-            "https://parallelum.com.br/fipe/api/v1/carros/marcas/59/modelos",
-            "https://brasilapi.com.br/api/fipe/veiculos/v1/carros/59",
+          const checks = [
+            ["fipex", "https://api.fipex.com.br/v1/models?limit=5&year=2016"],
+            ["precofipe", "https://precofipe.com/v1/veiculos?marca=Volkswagen&limit=10"],
           ];
           let valid = 0;
-          for (const url of urls) {
+          for (const [label, url] of checks) {
             try {
               const response = await fetch(url, {
                 headers: { Accept: "application/json" },
-                signal: AbortSignal.timeout(11000),
+                signal: AbortSignal.timeout(10000),
               });
-              if (!response.ok) {
-                console.log(new URL(url).host, "status", response.status);
-                continue;
-              }
-              const payload = await response.json();
-              const models = Array.isArray(payload)
-                ? payload
-                : Array.isArray(payload?.modelos) ? payload.modelos : [];
-              const shapeOk = models.length > 0 &&
-                models.some((x) => typeof (x?.name ?? x?.nome ?? x?.modelo) === "string");
-              console.log(new URL(url).host, "models", models.length, "schema valid", shapeOk);
-              if (shapeOk) valid++;
-            } catch (error) {
-              console.log(new URL(url).host, "network error", error?.name ?? "unknown");
-            }
+              console.log(label, "HTTP", response.status);
+              if (!response.ok) continue;
+              const data = await response.json();
+              const rows = Array.isArray(data?.data) ? data.data
+                : Array.isArray(data?.resultados) ? data.resultados : [];
+              console.log(label, "rows", rows.length, "first fields", Object.keys(rows[0] ?? {}).join(",").slice(0,250));
+              if (rows.some(x=>typeof(x?.name ?? x?.modelo) === "string")) valid++;
+            } catch (e) { console.log(label, "error", e?.name ?? "unknown"); }
           }
-          if (valid === 0) throw new Error("No live provider returned a valid model list");
+          if (!valid) throw new Error("No independent FIPE catalogue reachable");
           NODE
       - name: Existing admin-route audit expectation regression tests
         run: pnpm exec vitest run server/customerRouteAudit.test.ts
