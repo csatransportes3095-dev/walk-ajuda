@@ -3,6 +3,8 @@ $ErrorActionPreference = "Stop"
 $ProgressPreference = "SilentlyContinue"
 $AvdName = "H2Android_01"
 $ImagePackage = "system-images;android-35;google_apis_playstore;x86_64"
+# Android CLI 2026 usa caminhos separados por barra, nao por ponto-e-virgula.
+$AndroidCliImagePackage = "system-images/android-35/google_apis_playstore/x86_64"
 $OfficialDocs = "https://developer.android.com/studio"
 $Host.UI.RawUI.WindowTitle = "H2 Android - Primeiro Aparelho" 
 
@@ -30,6 +32,15 @@ function Find-SdkTool([string]$root, [string]$name) {
   $file = switch ($name) {
     "emulator" { Join-Path $root "emulator\emulator.exe"; break }
     "adb" { Join-Path $root "platform-tools\adb.exe"; break }
+    "android" {
+      foreach ($candidate in @(
+        (Join-Path $root "cmdline-tools\latest\bin\android.bat"),
+        (Join-Path $root "cmdline-tools\latest\bin\android.exe")
+      )) {
+        if (Test-Path -LiteralPath $candidate -PathType Leaf) { return $candidate }
+      }
+      return $null
+    }
     "sdkmanager" {
       $latest = Join-Path $root "cmdline-tools\latest\bin\sdkmanager.bat"
       if (Test-Path -LiteralPath $latest) { return $latest }
@@ -78,7 +89,8 @@ $emulator = Find-SdkTool $root "emulator"
 $adb = Find-SdkTool $root "adb"
 $sdkmanager = Find-SdkTool $root "sdkmanager"
 $avdmanager = Find-SdkTool $root "avdmanager"
-if (!$sdkmanager -or !$avdmanager) {
+$androidCli = Find-SdkTool $root "android"
+if (!$sdkmanager -and !$androidCli) {
   Notice "Faltam as Android SDK Command-line Tools."
   Write-Host "Abra Android Studio > SDK Manager > SDK Tools > Android SDK Command-line Tools (latest)."
   exit 3
@@ -145,11 +157,40 @@ if (!$installed -and !$existing) {
     exit 0
   }
   Write-Host "O Google podera solicitar aceite dos termos. Leia antes de aceitar."
-  & $sdkmanager "--sdk_root=$root" "--install" $ImagePackage
-  if ($LASTEXITCODE -ne 0) { Stop-Setup "Falha no SDK Manager. Verifique licencas, Java e internet." }
-  if (!(Test-Path -LiteralPath (Join-Path $imageRoot "system.img"))) {
-    Stop-Setup "Imagem nao foi instalada no caminho esperado. Use o SDK Manager do Android Studio."
+  # cmdline-tools mais recentes encaminham sdkmanager para o Android CLI e aceitam / no caminho.
+  # Chamar o executavel moderno diretamente evita o erro 'Package system-images not found'.
+  $installSucceeded = $false
+  if ($androidCli) {
+    Say "Usando Android CLI atual para instalar a imagem oficial..."
+    & $androidCli "--sdk=$root" "sdk" "install" $AndroidCliImagePackage
+    $installSucceeded = ($LASTEXITCODE -eq 0)
+  } else {
+    Say "Usando sdkmanager classico..."
+    & $sdkmanager "--sdk_root=$root" "--install" $ImagePackage
+    $installSucceeded = ($LASTEXITCODE -eq 0)
   }
+  if (!$installSucceeded -or !(Test-Path -LiteralPath (Join-Path $imageRoot "system.img"))) {
+    Notice "A instalacao automatica nao concluiu. O computador e o H2 ADS permanecem intactos."
+    Write-Host "Use Android Studio > More Actions > SDK Manager > SDK Platforms."
+    Write-Host "Marque Show Package Details e abra Android 15.0 (API 35)."
+    Write-Host "Selecione Google Play Intel x86_64 Atom System Image e clique Apply."
+    Write-Host "Depois execute este preparador novamente: ele detecta a imagem e NAO baixa de novo."
+    exit 11
+  }
+}
+# A nova Android CLI ainda apresenta limitacoes de criacao de AVD no Windows.
+# Use o Device Manager oficial, sem alterar AVDs ja existentes.
+if ($androidCli -and !$existing) {
+  Say "Imagem Google Play API 35 instalada. Falta criar o Android 01 no Device Manager."
+  Write-Host "No Android Studio, escolha More Actions > Virtual Device Manager (ou Device Manager)."
+  Write-Host "Clique Create Device, selecione Pixel e escolha Android 15 API 35 com Google Play."
+  Write-Host "Use o nome H2Android_01, confirme Finish e inicie pelo botao Play."
+  Write-Host "O agente ONLINE detectara o AVD no ADM. Nao reinstale o agente."
+  exit 0
+}
+if (!$avdmanager -and !$existing) {
+  Notice "Ferramenta antiga avdmanager nao encontrada. Crie H2Android_01 pelo Device Manager do Android Studio."
+  exit 12
 }
 if (!$existing) {
   $deviceList = @(& $avdmanager list device -c 2>$null)
