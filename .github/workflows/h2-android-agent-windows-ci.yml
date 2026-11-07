@@ -1,0 +1,41 @@
+name: H2 Android Agent - conexao Windows
+
+on:
+  pull_request:
+    branches:
+      - recovery/organizar-salvos-2026-08-24
+    paths:
+      - "client/src/pages/AdminH2Android.tsx"
+      - "server/h2AndroidAgentStore.ts"
+      - "server/h2AndroidAgentRoute.ts"
+      - "server/h2AndroidAgent.integration.test.ts"
+      - "server/h2Android.integration.test.ts"
+      - "server/routers/h2Android.ts"
+      - "server/_core/index.ts"
+      - "server/siteAccessPolicy.ts"
+      - "workers/windows/H2AndroidAgent.ps1"
+      - ".github/workflows/h2-android-agent-windows-ci.yml"
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  validate:
+    runs-on: ubuntu-latest
+    timeout-minutes: 25
+    steps:
+      - uses: actions/checkout@v4
+      - uses: pnpm/action-setup@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+          cache: pnpm
+      - name: Install dependencies
+        run: pnpm install --no-frozen-lockfile
+      - name: Validate Android agent and access regressions
+        run: pnpm exec vitest run server/h2AndroidAgent.integration.test.ts server/h2Android.integration.test.ts server/siteAccessPolicy.test.ts
+      - name: Check TypeScript
+        run: pnpm check
+      - name: Production build
+        run: pnpm build
