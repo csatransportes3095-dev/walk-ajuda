@@ -13,10 +13,10 @@ describe("H2 Android - modulo isolado e privado", () => {
   const androidPage = read("client/src/pages/AdminH2Android.tsx");
 
   it("mantem /android e /admin/android exclusivamente sob AdminGuard", () => {
-    expect(app).toContain('<Route path={"/android"}>');
-    expect(app).toContain('<Route path={"/admin/android"}>');
+    expect(app).toContain('<Route path={"/android"}><AdminGuard><AdminH2Android /></AdminGuard></Route>');
+    expect(app).toContain('<Route path={"/admin/android"}><AdminGuard><AdminH2Android /></AdminGuard></Route>');
     expect((app.match(/<AdminGuard><AdminH2Android \/><\/AdminGuard>/g) || []).length).toBe(2);
-    expect(app).toContain('location.startsWith("/admin") || location === "/android"');
+    expect(app).toContain('location === "/android" || location.startsWith("/admin")');
   });
 
   it("exibe card individual no ADM sem alterar a ordenacao dos atalhos", () => {
