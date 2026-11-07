@@ -94,8 +94,8 @@ jobs:
             if (p==='server/siteAccessCodeDelivery.ts') {
               const baseBlob=execFileSync('git',['rev-parse',base+':'+p],{encoding:'utf8'}).trim();
               const changedBlob=execFileSync('git',['hash-object',p],{encoding:'utf8'}).trim();
-              assert.equal(baseBlob,'5dd80357a29b786e2354e1badc7bc2196c355035','Unexpected original delivery source');
-              assert.equal(changedBlob,'c538b625da08699030a85255c828b677dd10af8a','Delivery patch does not match the approved mail-only change');
+              assert.equal(baseBlob,'c538b625da08699030a85255c828b677dd10af8a','Unexpected original delivery source');
+              assert.equal(changedBlob,'7c2435e97c61d27aa8cb950902a06064cdf2db22','Delivery patch does not match the approved mail-only change');
               continue;
             }
             assert.equal(
@@ -133,7 +133,7 @@ jobs:
         run: |
           set -o pipefail
           mapfile -t tests < <(find server -maxdepth 1 -type f -name 'site*.test.ts' | sort)
-          pnpm exec vitest run "${tests[@]}" server/trackingScheduleTopCard.test.ts server/analysisSchedulePriority.test.ts server/orderStatusVisibility.test.ts 2>&1 | tee /tmp/site-own-code-evidence/tests-before.txt
+          pnpm exec vitest run "${tests[@]}" server/mailSenderIdentity.test.ts server/trackingScheduleTopCard.test.ts server/analysisSchedulePriority.test.ts server/orderStatusVisibility.test.ts 2>&1 | tee /tmp/site-own-code-evidence/tests-before.txt
       - name: Apply exact Render source preparation
         run: |
           node --input-type=module <<'JS'
@@ -147,7 +147,7 @@ jobs:
         run: |
           set -o pipefail
           mapfile -t tests < <(find server -maxdepth 1 -type f -name 'site*.test.ts' | sort)
-          pnpm exec vitest run "${tests[@]}" server/trackingScheduleTopCard.test.ts server/analysisSchedulePriority.test.ts server/orderStatusVisibility.test.ts 2>&1 | tee /tmp/site-own-code-evidence/tests-after.txt
+          pnpm exec vitest run "${tests[@]}" server/mailSenderIdentity.test.ts server/trackingScheduleTopCard.test.ts server/analysisSchedulePriority.test.ts server/orderStatusVisibility.test.ts 2>&1 | tee /tmp/site-own-code-evidence/tests-after.txt
       - name: Build production application
         run: |
           set -o pipefail
