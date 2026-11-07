@@ -47,19 +47,19 @@ describe("H2 Android - operacao real pelo ADM", () => {
     expect(windows).not.toContain("iex ");
   });
 
-  it("instalador preserva pareamento existente e mostra controle verdadeiro no site", () => {
+  it("prepara agente e API para controle pelo site independente", () => {
     const agent = read("workers/windows/H2AndroidAgent.ps1");
-    const ui = read("client/src/components/H2AndroidLiveManager.tsx");
     const packageService = read("server/h2AndroidInstallerZip.ts");
+    const router = read("server/routers/h2Android.ts");
+    const adminPage = read("client/src/pages/AdminH2Android.tsx");
     expect(agent).toContain('Test-Path -LiteralPath $ConfigPath');
     expect(agent).toContain("Pareamento existente preservado");
     expect(agent).toContain("Run-H2Control");
     expect(agent).toContain("Capture-H2Screen");
     expect(packageService).toContain('H2AndroidControl.ps1');
-    expect(ui).toContain("mutation.mutate");
-    expect(ui).toContain("naturalWidth");
-    expect(ui).toContain("Proxy individual HTTP");
-    expect(ui).toContain("SOCKS5");
-    expect(ui).not.toContain("H2AdsWorker");
+    expect(router).toContain("control: adminProcedure");
+    expect(router).toContain("createPairingCode: adminProcedure");
+    expect(adminPage).not.toContain("H2AndroidLiveManager");
+    expect(adminPage).not.toContain("controle verdadeiro no site");
   });
 });
