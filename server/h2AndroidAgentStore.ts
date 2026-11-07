@@ -260,13 +260,18 @@ export async function enqueueAndroidCommand(input: {
   if (input.action === "start") {
     // One agent owns this computer. Count live devices and undelivered starts.
     const active = report.runningAvds.length;
+    // AVD boot can take several minutes; reserve a slot for recent successful
+    // starts until the heartbeat reports the device online. Otherwise six rapid
+    // consecutive Start requests could bypass the five-instance limit.
     const [pendingRows] = await db.execute(sql`
-      SELECT COUNT(*) AS total FROM h2_android_commands
+      SELECT avdName FROM h2_android_commands
       WHERE agentId = ${input.agentId} AND commandType = 'start'
-      AND status IN ('pending','running') AND createdAt > DATE_SUB(NOW(), INTERVAL 2 MINUTE)
+      AND status IN ('pending','running','done')
+      AND createdAt > DATE_SUB(NOW(), INTERVAL 5 MINUTE)
     `);
-    const pending = Number((pendingRows as unknown as { total: number }[])[0]?.total || 0);
-    if (active + pending >= 5) throw new TRPCError({ code: "CONFLICT", message: "Limite de cinco Androids simultaneos." });
+    const recent = new Set((pendingRows as unknown as { avdName: string }[])
+      .map(row => row.avdName).filter(name => !report!.runningAvds.includes(name)));
+    if (active + recent.size >= 5) throw new TRPCError({ code: "CONFLICT", message: "Limite de cinco Androids simultaneos." });
   }
   const id = randomUUID();
   await db.execute(sql`
