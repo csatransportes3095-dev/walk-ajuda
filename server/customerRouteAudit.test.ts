@@ -39,8 +39,9 @@ describe("getCustomerRouteAuditTarget", () => {
         areaName: "",
       });
     }
-    expect(getCustomerRouteAuditTarget("/adm/chassis-outro").tracked).toBe(true);
-    expect(getCustomerRouteAuditTarget("/adm/chassis/cliente").tracked).toBe(true);
+    // A regra existente ignora TODAS as subrotas administrativas /adm/.
+    expect(getCustomerRouteAuditTarget("/adm/chassis-outro").tracked).toBe(false);
+    expect(getCustomerRouteAuditTarget("/adm/chassis/cliente").tracked).toBe(false);
     expect(getCustomerRouteAuditTarget("/gerador-chassi-outro").tracked).toBe(true);
   });
 

@@ -10,6 +10,8 @@ on:
       - 'server/_core/index.ts'
       - 'client/src/pages/GeradorChassiPublico.tsx'
       - '.github/workflows/fipe-catalog-ci.yml'
+      - '.github/workflows/customer-otp-migration.yml'
+      - 'server/customerRouteAudit.test.ts'
   workflow_dispatch:
 
 permissions:
@@ -30,7 +32,9 @@ jobs:
         run: pnpm install --frozen-lockfile
       - name: FIPE cache, error and security tests
         run: pnpm exec vitest run server/fipeCatalogProxy.test.ts
-      - name: FIPE-only change audit
+      - name: Existing admin-route audit expectation regression tests
+        run: pnpm exec vitest run server/customerRouteAudit.test.ts
+      - name: FIPE and two approved CI check fixes scope audit
         if: github.event_name == 'pull_request'
         env:
           BASE_SHA: ${{ github.event.pull_request.base.sha }}
@@ -43,7 +47,7 @@ jobs:
           while IFS= read -r file; do
             [ -z "$file" ] && continue
             case "$file" in
-              server/fipeCatalogProxy.ts|server/fipeCatalogProxy.test.ts|server/_core/index.ts|client/src/pages/GeradorChassiPublico.tsx|.github/workflows/fipe-catalog-ci.yml) ;;
+              server/fipeCatalogProxy.ts|server/fipeCatalogProxy.test.ts|server/_core/index.ts|client/src/pages/GeradorChassiPublico.tsx|.github/workflows/fipe-catalog-ci.yml|.github/workflows/customer-otp-migration.yml|server/customerRouteAudit.test.ts) ;;
               *) echo "Non-FIPE file modified: $file" >&2; exit 1 ;;
             esac
           done <<< "$files"
