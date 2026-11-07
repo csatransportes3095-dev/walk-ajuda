@@ -570,7 +570,7 @@ function AppContent() {
         <div className="min-h-screen pb-24 sm:pb-0">
           <Router />
         </div>
-        {(isAdminRoute || isSimilarityRoute) && location !== "/admin/login" && <AdminPWABanner />}
+        {(isAdminRoute || isSimilarityRoute) && location.split(/[?#]/, 1)[0] !== "/admin/login" && <AdminPWABanner />}
       </>
     );
   }
