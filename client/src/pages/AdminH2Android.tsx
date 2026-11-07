@@ -163,8 +163,8 @@ export default function AdminH2Android() {
               <h2 className="flex items-center gap-2 text-base font-black text-cyan-200"><Monitor className="h-5 w-5" /> Agente Windows — Etapa 2</h2>
               <p className="mt-1 text-xs text-slate-400">Agente separado do H2 ADS. Detecta Android SDK, ADB, emulador, RAM e CPU. Não controla aparelhos nesta etapa.</p>
             </div>
-            <a href="/api/h2-android/agent/windows-agent.ps1" download="H2AndroidAgent.ps1" className="inline-flex items-center gap-2 rounded-lg border border-cyan-400/40 bg-cyan-500/15 px-3 py-2.5 text-sm font-bold text-cyan-200">
-              <Download className="h-4 w-4" /> Baixar agente
+            <a href="/api/h2-android/agent/installer.zip" download="Instalador-H2-Android.zip" className="inline-flex items-center gap-2 rounded-lg border border-cyan-400/40 bg-cyan-500/15 px-3 py-2.5 text-sm font-bold text-cyan-200">
+              <Download className="h-4 w-4" /> Baixar instalador ZIP
             </a>
           </div>
           <div className="grid gap-3 sm:grid-cols-2">
@@ -181,12 +181,9 @@ export default function AdminH2Android() {
             </div>
             <div className="rounded-xl border border-white/10 bg-black/25 p-3">
               <h3 className="mb-2 text-sm font-bold">2. Instalar no computador Windows</h3>
-              <p className="text-xs leading-relaxed text-slate-300">Baixe o arquivo no seu computador, confira a origem e abra o PowerShell na pasta do download.</p>
-              <div className="mt-2 space-y-2">
-                <code className="block overflow-x-auto rounded-lg border border-white/10 bg-slate-950 p-2 text-[11px] text-emerald-200">powershell -NoProfile -ExecutionPolicy Bypass -File .&#92;H2AndroidAgent.ps1 -Install</code>
-                <code className="block overflow-x-auto rounded-lg border border-white/10 bg-slate-950 p-2 text-[11px] text-emerald-200">powershell -NoProfile -ExecutionPolicy Bypass -File .&#92;H2AndroidAgent.ps1 -Run</code>
-              </div>
-              <p className="mt-2 text-[11px] text-slate-400">O agente inicia com o Windows após o pareamento e se comunica apenas por HTTPS.</p>
+              <p className="text-xs leading-relaxed text-slate-300">Baixe o ZIP e extraia todos os arquivos. Dê dois cliques em <strong>Instalar-H2-Android.cmd</strong>. Informe o código temporário do ADM quando solicitado.</p>
+              <div className="mt-2 rounded-lg border border-cyan-400/25 bg-cyan-400/5 p-2.5 text-[11px] text-cyan-100">O instalador abre uma janela com o resultado, configura a inicialização com o Windows e conecta o agente automaticamente. Não abra o arquivo .ps1 no editor.</div>
+              <p className="mt-2 text-[11px] text-slate-400">Execute apenas o pacote baixado do seu próprio ADM. O agente se comunica por HTTPS e não altera o H2 ADS.</p>
             </div>
           </div>
           <div>
