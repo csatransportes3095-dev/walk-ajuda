@@ -40,3 +40,11 @@ Unsigned boot can be explicitly authorized using -AllowUnsignedBoot when provisi
 4. Implement fail-closed per-VM SOCKS5 with DNS, IPv4/IPv6 and reconnect tests.
 5. Expose native controls behind a separately tested administrator feature flag.
 6. Test APK installation and app compatibility; Play Store and driver app support cannot be guaranteed.
+
+## Hardware readiness report (added after PR #625)
+Run the read-only Windows PowerShell 5.1 tool:
+`powershell.exe -NoProfile -ExecutionPolicy Bypass -File .\workers\windows\h2-native\H2NativeReadiness.ps1`
+Machine-readable output: append `-Json`.
+To check a supplied AOSP VHDX integrity without creating a VM, pass `-ImagePath` and `-ExpectedSha256`. Hash calculation can take time on large images.
+It only reads hardware/Hyper-V status and optional image checksum. Never installs software, modifies configuration, creates virtual machines, or changes the network.
+An image checksum match does **not** prove that Android boots, or that the image is trusted or supports any specific applications. Verify provenance and boot on the real Windows host before proceeding.
