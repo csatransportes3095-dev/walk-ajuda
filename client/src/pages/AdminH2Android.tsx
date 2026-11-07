@@ -1,6 +1,6 @@
 import { useState } from "react";
 import H2AndroidLiveManager from "@/components/H2AndroidLiveManager";
-import AdminHeader from "@/components/AdminHeader";
+import H2AndroidAdminShell, { type AndroidAdminSection } from "@/components/H2AndroidAdminShell";
 import { trpc } from "@/lib/trpc";
 import { toast } from "sonner";
 import {
@@ -31,8 +31,8 @@ function PhoneFrame({ label }: { label: string }) {
         </div>
         <div className="absolute left-1/2 top-[4px] z-20 h-[13px] w-14 -translate-x-1/2 rounded-b-xl bg-[#060912]" />
         <div className="relative z-10 flex h-[calc(100%-60px)] flex-col items-center justify-center gap-3 px-3 text-center">
-          <div className="rounded-2xl border border-cyan-300/20 bg-cyan-400/10 p-3">
-            <Smartphone className="h-8 w-8 text-cyan-300/70" strokeWidth={1.5} />
+          <div className="rounded-2xl border border-[#8ce2bd]/20 bg-[#80dcb5]/10 p-3">
+            <Smartphone className="h-8 w-8 text-[#8ce2bd]/70" strokeWidth={1.5} />
           </div>
           <p className="w-full truncate text-xs font-extrabold text-white">{label}</p>
           <p className="text-[10px] font-semibold text-amber-300">Aguardando agente</p>
@@ -50,6 +50,7 @@ function PhoneFrame({ label }: { label: string }) {
 
 export default function AdminH2Android() {
   const utils = trpc.useUtils();
+  const [activeSection, setActiveSection] = useState<AndroidAdminSection>("overview");
   const overviewQuery = trpc.h2Android.overview.useQuery(undefined, {
     staleTime: 0,
     refetchOnWindowFocus: true,
@@ -106,6 +107,7 @@ export default function AdminH2Android() {
   const agents = overviewQuery.data?.agents ?? [];
   const onlineAgents = agents.filter(agent => agent.online).length;
   const activeCount = overviewQuery.data?.activeCount ?? 0;
+  const commands = overviewQuery.data?.commands ?? [];
   const maxRunning = overviewQuery.data?.maxSimultaneous ?? 5;
 
   function createProfile() {
@@ -119,30 +121,40 @@ export default function AdminH2Android() {
   }
 
   return (
-    <div className="min-h-screen bg-[#080b17] text-white">
-      <AdminHeader title="H2 Android" icon={<MonitorSmartphone className="h-5 w-5" />} backTo="/admin/codes" />
-      <main className="mx-auto max-w-6xl space-y-5 px-3 py-5 sm:px-5 sm:py-7">
-        <section className="overflow-hidden rounded-2xl border border-cyan-400/20 bg-gradient-to-br from-[#15253a] via-[#101628] to-[#0b0d19] p-5 sm:p-6">
-          <div className="flex flex-col justify-between gap-4 sm:flex-row sm:items-center">
-            <div>
-              <div className="mb-2 inline-flex items-center gap-2 rounded-full border border-cyan-400/25 bg-cyan-500/10 px-3 py-1 text-[11px] font-bold text-cyan-200">
-                <ShieldCheck className="h-3.5 w-3.5" /> Módulo exclusivo do ADM
-              </div>
-              <h1 className="text-2xl font-black tracking-tight sm:text-3xl">Gerenciador H2 Android</h1>
-              <p className="mt-2 max-w-xl text-sm leading-relaxed text-slate-300/75">
-                Gerencie Androids reais no site: criar aparelhos, ligar, desligar, abrir a tela, tocar e configurar proxy individual HTTP.
-              </p>
-            </div>
-            <div className="flex shrink-0 items-center gap-2 rounded-xl border border-amber-400/25 bg-amber-400/10 px-4 py-3 text-xs font-semibold text-amber-200">
-              {onlineAgents > 0 ? <Wifi className="h-4 w-4" /> : <WifiOff className="h-4 w-4" />}
-              {onlineAgents > 0 ? onlineAgents + " agente(s) online" : agents.length ? "Agente offline" : "Agente ainda não instalado"}
-            </div>
+    <H2AndroidAdminShell
+      activeSection={activeSection}
+      onNavigate={(section) => {
+        setActiveSection(section);
+        document.getElementById(section)?.scrollIntoView({ behavior: "smooth", block: "start" });
+      }}
+    >
+      <main className="mx-auto max-w-[1400px] space-y-6 px-4 py-7 sm:px-6 lg:px-7">
+        <section id="overview" className="scroll-mt-6 flex flex-col justify-between gap-5 md:flex-row md:items-start">
+          <div>
+            <p className="mb-2 text-[10px] font-bold uppercase tracking-[0.2em] text-[#8ce2bd]">H2 Android</p>
+            <h1 className="text-3xl font-bold tracking-tight text-[#e9edf2] sm:text-[34px]">Seus Androids, em um só lugar.</h1>
+            <p className="mt-2 text-sm text-[#92a0ad]">Controle os aparelhos e acompanhe cada operação.</p>
+          </div>
+          <div className="flex shrink-0 gap-2">
+            <button type="button" onClick={() => void overviewQuery.refetch()} disabled={overviewQuery.isFetching}
+              className="inline-flex h-10 items-center gap-2 rounded-lg border border-[#2a3948] bg-[#14202c] px-3.5 text-xs font-semibold text-[#b2bdc7] transition hover:bg-[#1a2835] disabled:opacity-50">
+              <RefreshCw className="h-3.5 w-3.5" /> Atualizar
+            </button>
+            <button type="button" onClick={() => {
+              setActiveSection("devices");
+              document.getElementById("devices")?.scrollIntoView({ behavior: "smooth", block: "start" });
+            }}
+              className="inline-flex h-10 items-center gap-2 rounded-lg bg-[#8ce2bd] px-3.5 text-xs font-bold text-[#123126] transition hover:bg-[#9de9ca]">
+              <Plus className="h-3.5 w-3.5" /> Novo Android
+            </button>
           </div>
         </section>
 
+        <div id="devices" className="scroll-mt-6">
         <H2AndroidLiveManager agents={agents} commands={overviewQuery.data?.commands ?? []} refresh={() => { void overviewQuery.refetch(); }} />
+        </div>
 
-        <section className="grid grid-cols-2 gap-3 sm:grid-cols-3" aria-label="Resumo de instâncias">
+        <section className="grid grid-cols-2 gap-3 lg:grid-cols-4" aria-label="Resumo de instâncias">
           <div className="rounded-xl border border-white/10 bg-white/[0.04] p-4">
             <div className="flex items-center gap-2 text-xs text-slate-400"><HardDrive className="h-4 w-4" /> Perfis cadastrados</div>
             <p className="mt-2 text-2xl font-black tabular-nums">{profiles.length}</p>
@@ -158,34 +170,69 @@ export default function AdminH2Android() {
             <p className="mt-2 text-2xl font-black tabular-nums">{maxRunning}</p>
             <p className="text-[11px] text-slate-500">Perfis desligados não contam</p>
           </div>
+          <div className="rounded-xl border border-white/10 bg-white/[0.04] p-4">
+            <div className="flex items-center gap-2 text-xs text-slate-400"><Wifi className="h-4 w-4" /> Agentes online</div>
+            <p className="mt-2 text-2xl font-black tabular-nums">{onlineAgents}</p>
+            <p className="text-[11px] text-slate-500">Computadores conectados</p>
+          </div>
         </section>
 
-        <section className="space-y-4 rounded-2xl border border-cyan-400/25 bg-[#101827] p-4 sm:p-5" aria-label="Agente Windows H2 Android">
+        <section id="activity" className="scroll-mt-6 rounded-xl border border-[#263543] bg-[#111b26] p-4 sm:p-5">
+          <div className="mb-4 flex items-center justify-between gap-3">
+            <div>
+              <p className="text-[10px] font-bold uppercase tracking-[0.16em] text-[#8ce2bd]">Acompanhamento</p>
+              <h2 className="mt-1 text-base font-bold text-[#e6ebf1]">Atividade recente</h2>
+            </div>
+            <Activity className="h-5 w-5 text-[#8ce2bd]" />
+          </div>
+          {overviewQuery.isLoading ? (
+            <p className="text-xs text-[#95a2af]">Carregando atividade...</p>
+          ) : commands.length === 0 ? (
+            <p className="rounded-lg border border-dashed border-[#334252] px-3 py-4 text-xs text-[#95a2af]">Nenhuma operação registrada.</p>
+          ) : (
+            <div className="space-y-2">
+              {commands.slice(0, 6).map((command) => (
+                <div key={command.id} className="grid gap-1 rounded-lg border border-[#273543] bg-[#0c1520] px-3 py-2.5 sm:grid-cols-[1fr_auto_auto] sm:items-center sm:gap-4">
+                  <div className="min-w-0">
+                    <p className="truncate text-xs font-semibold text-[#e2e8ed]">{command.avdName}</p>
+                    <p className="mt-0.5 text-[10px] text-[#8d9aa7]">{command.commandType}</p>
+                  </div>
+                  <span className="text-[10px] font-semibold text-[#9ce6c8]">
+                    {({ queued: "Na fila", delivered: "Enviado", completed: "Concluído", failed: "Falhou", expired: "Expirado" } as Record<string, string>)[command.status] ?? command.status}
+                  </span>
+                  <time className="text-[10px] text-[#788694]">{new Date(command.createdAt).toLocaleString("pt-BR")}</time>
+                </div>
+              ))}
+            </div>
+          )}
+        </section>
+
+        <section id="settings" className="scroll-mt-6 space-y-4 rounded-2xl border border-[#80dcb5]/25 bg-[#101827] p-4 sm:p-5" aria-label="Agente Windows H2 Android">
           <div className="flex flex-wrap items-center justify-between gap-3">
             <div>
-              <h2 className="flex items-center gap-2 text-base font-black text-cyan-200"><Monitor className="h-5 w-5" /> Agente Windows H2 Android — Atualização e conexão</h2>
+              <h2 className="flex items-center gap-2 text-base font-black text-[#a0e8cc]"><Monitor className="h-5 w-5" /> Agente Windows H2 Android — Atualização e conexão</h2>
               <p className="mt-1 text-xs text-slate-400">Agente isolado do H2 ADS. A versão 0.2.0 permite controlar os Androids reais pelo site.</p>
             </div>
-            <a href="/api/h2-android/agent/installer.zip" download="Instalador-H2-Android.zip" className="inline-flex items-center gap-2 rounded-lg border border-cyan-400/40 bg-cyan-500/15 px-3 py-2.5 text-sm font-bold text-cyan-200">
+            <a href="/api/h2-android/agent/installer.zip" download="Instalador-H2-Android.zip" className="inline-flex items-center gap-2 rounded-lg border border-[#80dcb5]/40 bg-[#74cfa9]/15 px-3 py-2.5 text-sm font-bold text-[#a0e8cc]">
               <Download className="h-4 w-4" /> Baixar instalador ZIP
             </a>
           </div>
           <div className="grid gap-3 sm:grid-cols-2">
             <div className="rounded-xl border border-white/10 bg-black/25 p-3">
               <h3 className="mb-2 text-sm font-bold">1. Gerar código de pareamento</h3>
-              <button type="button" disabled={pairingMutation.isPending} onClick={() => pairingMutation.mutate()} className="inline-flex items-center gap-2 rounded-lg bg-cyan-500 px-4 py-2 text-xs font-black text-slate-950 disabled:opacity-50">
+              <button type="button" disabled={pairingMutation.isPending} onClick={() => pairingMutation.mutate()} className="inline-flex items-center gap-2 rounded-lg bg-[#74cfa9] px-4 py-2 text-xs font-black text-slate-950 disabled:opacity-50">
                 <Link2 className="h-4 w-4" /> {pairingMutation.isPending ? "Gerando..." : "Gerar código válido por 10 minutos"}
               </button>
               {pairingCode && <div className="mt-3 space-y-2">
                 <p className="break-all rounded-lg border border-amber-400/25 bg-slate-950 p-2.5 font-mono text-xs tracking-wider text-amber-200">{pairingCode}</p>
-                <button type="button" onClick={() => { void navigator.clipboard?.writeText(pairingCode); toast.info("Código copiado, se permitido pelo navegador."); }} className="flex items-center gap-1 text-xs font-bold text-cyan-200"><Copy className="h-3.5 w-3.5" /> Copiar código</button>
+                <button type="button" onClick={() => { void navigator.clipboard?.writeText(pairingCode); toast.info("Código copiado, se permitido pelo navegador."); }} className="flex items-center gap-1 text-xs font-bold text-[#a0e8cc]"><Copy className="h-3.5 w-3.5" /> Copiar código</button>
               </div>}
               <p className="mt-2 text-[11px] text-slate-400">Código de uso único. Não compartilhe com outras pessoas.</p>
             </div>
             <div className="rounded-xl border border-white/10 bg-black/25 p-3">
               <h3 className="mb-2 text-sm font-bold">2. Instalar no computador Windows</h3>
               <p className="text-xs leading-relaxed text-slate-300">Baixe o ZIP e extraia todos os arquivos. Dê dois cliques em <strong>Instalar-H2-Android.cmd</strong>. Informe o código temporário do ADM quando solicitado.</p>
-              <div className="mt-2 rounded-lg border border-cyan-400/25 bg-cyan-400/5 p-2.5 text-[11px] text-cyan-100">O instalador atualiza o agente e preserva o pareamento existente. Atualize apenas uma vez para habilitar a operação diretamente no site.</div>
+              <div className="mt-2 rounded-lg border border-[#80dcb5]/25 bg-[#80dcb5]/5 p-2.5 text-[11px] text-[#b5ecd6]">O instalador atualiza o agente e preserva o pareamento existente. Atualize apenas uma vez para habilitar a operação diretamente no site.</div>
               <p className="mt-2 text-[11px] text-slate-400">Execute apenas o pacote baixado do seu próprio ADM. O agente se comunica por HTTPS e não altera o H2 ADS.</p>
             </div>
           </div>
@@ -198,7 +245,7 @@ export default function AdminH2Android() {
                 <div className="flex flex-wrap items-center justify-between gap-2">
                   <div className="min-w-0">
                     <p className="break-all text-sm font-bold text-white">{agent.computerName}</p>
-                    <p className={agent.online ? "text-xs font-bold text-emerald-300" : "text-xs font-bold text-amber-300"}>{agent.online ? "ONLINE" : "OFFLINE"} · Agente v{agent.agentVersion || "não informado"}</p>
+                    <p className={agent.online ? "text-xs font-bold text-[#8ce2bd]" : "text-xs font-bold text-amber-300"}>{agent.online ? "ONLINE" : "OFFLINE"} · Agente v{agent.agentVersion || "não informado"}</p>
                   </div>
                   {confirmRevoke === agent.id
                     ? <div className="flex flex-wrap gap-2">
@@ -220,17 +267,17 @@ export default function AdminH2Android() {
           </div>
         </section>
 
-        <section className="rounded-2xl border border-emerald-400/25 bg-[#0c1a20] p-4 sm:p-5" aria-label="Preparação do primeiro Android virtual">
+        <section className="rounded-2xl border border-[#80dcb5]/25 bg-[#0c1a20] p-4 sm:p-5" aria-label="Preparação do primeiro Android virtual">
           <div className="flex flex-wrap items-start justify-between gap-3">
             <div className="max-w-2xl">
-              <h2 className="flex items-center gap-2 text-base font-black text-emerald-200"><Smartphone className="h-5 w-5" /> Preparador de imagem Android — uso apenas técnico</h2>
+              <h2 className="flex items-center gap-2 text-base font-black text-[#a0e8cc]"><Smartphone className="h-5 w-5" /> Preparador de imagem Android — uso apenas técnico</h2>
               <p className="mt-2 text-xs leading-relaxed text-slate-300">
                 Assistente local do Windows para conferir Android SDK, ADB e virtualização.
                 Ele pode preparar um AVD Android 15 com imagem oficial Google Play, somente após sua confirmação.
               </p>
             </div>
             <a href="/api/h2-android/agent/first-avd.zip" download="Preparar-Primeiro-Android.zip"
-              className="inline-flex items-center gap-2 rounded-xl border border-emerald-400/40 bg-emerald-400/15 px-4 py-2.5 text-sm font-bold text-emerald-100 hover:bg-emerald-400/25">
+              className="inline-flex items-center gap-2 rounded-xl border border-[#80dcb5]/40 bg-[#80dcb5]/15 px-4 py-2.5 text-sm font-bold text-[#b5ecd6] hover:bg-[#80dcb5]/25">
               <Download className="h-4 w-4" /> Baixar preparador ZIP
             </a>
           </div>
@@ -248,7 +295,7 @@ export default function AdminH2Android() {
 
         <details className="rounded-xl border border-white/10 bg-white/[0.02] p-3">
           <summary className="cursor-pointer text-xs font-semibold text-slate-400">Cadastros antigos de perfis (não são Androids reais)</summary>
-        <section className="rounded-2xl border border-cyan-400/20 bg-[#10192b] p-4 sm:p-5">
+        <section className="rounded-2xl border border-[#80dcb5]/20 bg-[#10192b] p-4 sm:p-5">
           <form className="flex flex-col gap-3 sm:flex-row" onSubmit={(event) => { event.preventDefault(); createProfile(); }}>
             <div className="min-w-0 flex-1">
               <label htmlFor="android-label" className="mb-1.5 block text-xs font-semibold text-slate-200">Nome do novo Android</label>
@@ -258,10 +305,10 @@ export default function AdminH2Android() {
                 onChange={(event) => setNewLabel(event.target.value)}
                 maxLength={80}
                 placeholder="Ex.: Android 01 (opcional)"
-                className="h-11 w-full rounded-lg border border-slate-500/35 bg-[#090f1d] px-3 text-sm text-white outline-none placeholder:text-slate-500 focus:border-cyan-400"
+                className="h-11 w-full rounded-lg border border-slate-500/35 bg-[#090f1d] px-3 text-sm text-white outline-none placeholder:text-slate-500 focus:border-[#80dcb5]"
               />
             </div>
-            <button type="submit" disabled={createMutation.isPending || overviewQuery.isLoading} className="flex h-11 shrink-0 items-center justify-center gap-2 self-end rounded-lg bg-cyan-500 px-5 text-sm font-black text-slate-950 transition hover:bg-cyan-400 disabled:opacity-50">
+            <button type="submit" disabled={createMutation.isPending || overviewQuery.isLoading} className="flex h-11 shrink-0 items-center justify-center gap-2 self-end rounded-lg bg-[#74cfa9] px-5 text-sm font-black text-slate-950 transition hover:bg-[#80dcb5] disabled:opacity-50">
               <Plus className="h-4 w-4" /> {createMutation.isPending ? "Criando..." : "Criar perfil Android"}
             </button>
           </form>
@@ -269,7 +316,7 @@ export default function AdminH2Android() {
         </section>
 
         <div className="flex items-center justify-between gap-3">
-          <h2 className="text-base font-extrabold">Meus aparelhos <span className="text-cyan-300">({profiles.length})</span></h2>
+          <h2 className="text-base font-extrabold">Meus aparelhos <span className="text-[#8ce2bd]">({profiles.length})</span></h2>
           <button type="button" onClick={() => void overviewQuery.refetch()} disabled={overviewQuery.isFetching} className="flex items-center gap-1.5 rounded-lg border border-white/15 px-3 py-2 text-xs font-semibold text-slate-200 hover:bg-white/10 disabled:opacity-40">
             <RefreshCw className="h-3.5 w-3.5" /> Atualizar
           </button>
@@ -285,8 +332,8 @@ export default function AdminH2Android() {
           <div className="rounded-xl border border-white/10 p-8 text-center text-sm text-slate-400">Carregando perfis...</div>
         )}
         {!overviewQuery.isLoading && !overviewQuery.isError && profiles.length === 0 && (
-          <div className="rounded-2xl border border-dashed border-cyan-400/20 bg-white/[0.025] p-8 text-center">
-            <Smartphone className="mx-auto mb-3 h-10 w-10 text-cyan-300/60" />
+          <div className="rounded-2xl border border-dashed border-[#80dcb5]/20 bg-white/[0.025] p-8 text-center">
+            <Smartphone className="mx-auto mb-3 h-10 w-10 text-[#8ce2bd]/60" />
             <p className="font-bold">Nenhum Android cadastrado</p>
             <p className="mt-1 text-sm text-slate-400">Crie o primeiro perfil acima. Ele ficará aguardando a instalação do agente.</p>
           </div>
@@ -300,14 +347,14 @@ export default function AdminH2Android() {
                   <div className="min-w-0">
                     {renamingId === profile.id ? (
                       <form className="flex gap-1" onSubmit={(event) => { event.preventDefault(); saveRename(profile.id); }}>
-                        <input aria-label="Renomear Android" value={renameLabel} maxLength={80} onChange={(event) => setRenameLabel(event.target.value)} className="min-w-0 w-full rounded border border-cyan-500/60 bg-black/40 px-2 py-1 text-sm text-white" />
-                        <button type="submit" title="Salvar nome" disabled={renameMutation.isPending} className="rounded p-1 text-emerald-300 hover:bg-emerald-400/10"><Check className="h-4 w-4" /></button>
+                        <input aria-label="Renomear Android" value={renameLabel} maxLength={80} onChange={(event) => setRenameLabel(event.target.value)} className="min-w-0 w-full rounded border border-[#74cfa9]/60 bg-black/40 px-2 py-1 text-sm text-white" />
+                        <button type="submit" title="Salvar nome" disabled={renameMutation.isPending} className="rounded p-1 text-[#8ce2bd] hover:bg-[#80dcb5]/10"><Check className="h-4 w-4" /></button>
                         <button type="button" title="Cancelar" onClick={() => setRenamingId(null)} className="rounded p-1 text-slate-300 hover:bg-white/10"><X className="h-4 w-4" /></button>
                       </form>
                     ) : (
                       <div className="flex items-center gap-1">
                         <h3 className="truncate text-sm font-extrabold">{profile.label}</h3>
-                        <button type="button" title="Renomear Android" onClick={() => { setRenamingId(profile.id); setRenameLabel(profile.label); }} className="rounded p-1 text-slate-400 hover:bg-white/10 hover:text-cyan-300"><Pencil className="h-3.5 w-3.5" /></button>
+                        <button type="button" title="Renomear Android" onClick={() => { setRenamingId(profile.id); setRenameLabel(profile.label); }} className="rounded p-1 text-slate-400 hover:bg-white/10 hover:text-[#8ce2bd]"><Pencil className="h-3.5 w-3.5" /></button>
                       </div>
                     )}
                     <span className="mt-1 inline-flex items-center gap-1 rounded-full border border-amber-300/25 bg-amber-300/10 px-2 py-0.5 text-[10px] font-bold text-amber-200">
@@ -344,6 +391,6 @@ export default function AdminH2Android() {
         </div>
         </details>
       </main>
-    </div>
+    </H2AndroidAdminShell>
   );
 }
