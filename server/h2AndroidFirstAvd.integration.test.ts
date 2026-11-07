@@ -16,7 +16,7 @@ describe("H2 Android - primeiro AVD com consentimento", () => {
     const ps = readFileSync("workers/windows/Preparar-H2Android-01.ps1", "utf8");
     const cmd = readFileSync("workers/windows/Preparar-Primeiro-Android.cmd", "utf8");
     expect(ps).toContain("Confirm-Action");
-    expect((ps.match(/Confirm-Action /g) || []).length).toBe(3); // download, criacao e inicio
+    expect((ps.match(/Confirm-Action /g) || []).length).toBe(4); // funcao e tres confirmacoes
     expect(ps).toContain("system-images;android-35;google_apis_playstore;x86_64");
     expect(ps).toContain('system-images/android-35/google_apis_playstore/x86_64');
     expect(ps).toContain('& $sdkmanager "--sdk_root=$root" "--install" $AndroidCliImagePackage');
