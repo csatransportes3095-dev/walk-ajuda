@@ -18,7 +18,7 @@ import {
 } from "@/lib/vinGenerator";
 import { trpc } from "@/lib/trpc";
 
-const FIPE_BASE = "https://fipe.parallelum.com.br/api/v2/cars";
+const FIPE_BASE = "/api/fipe/catalog";
 
 const ANOS_GERADOR_PUBLICO = [
   { code: "G", ano: 2016 },
@@ -185,7 +185,7 @@ export default function GeradorChassiPublico() {
   }, [modelosFiltrados, modelo]);
 
   useEffect(() => {
-    if (!marcaCode || !anoInfo) {
+    if (!marca || !anoInfo) {
       setModelos([]);
       setBuscaModelo("");
       setModelo("");
@@ -261,7 +261,7 @@ export default function GeradorChassiPublico() {
     return () => {
       cancelado = true;
     };
-  }, [marcaCode, anoInfo.ano]);
+  }, [marca?.code, anoInfo.ano]);
 
   const gerar = async () => {
     if (verificandoUnicidade) return;
