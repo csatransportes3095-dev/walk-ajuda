@@ -32,30 +32,34 @@ jobs:
         run: pnpm install --frozen-lockfile
       - name: FIPE cache, error and security tests
         run: pnpm exec vitest run server/fipeCatalogProxy.test.ts
-      - name: Probe additional independent FIPE catalogues
+      - name: Verify live FIPEX brand and year-filtered models
         run: |
           node --input-type=module <<'NODE'
-          const checks = [
-            ["fipex", "https://api.fipex.com.br/v1/models?limit=5&year=2016"],
-            ["precofipe", "https://precofipe.com/v1/veiculos?marca=Volkswagen&limit=10"],
-          ];
-          let valid = 0;
-          for (const [label, url] of checks) {
-            try {
-              const response = await fetch(url, {
-                headers: { Accept: "application/json" },
-                signal: AbortSignal.timeout(10000),
-              });
-              console.log(label, "HTTP", response.status);
-              if (!response.ok) continue;
-              const data = await response.json();
-              const rows = Array.isArray(data?.data) ? data.data
-                : Array.isArray(data?.resultados) ? data.resultados : [];
-              console.log(label, "rows", rows.length, "first fields", Object.keys(rows[0] ?? {}).join(",").slice(0,250));
-              if (rows.some(x=>typeof(x?.name ?? x?.modelo) === "string")) valid++;
-            } catch (e) { console.log(label, "error", e?.name ?? "unknown"); }
+          const origin = "https://api.fipex.com.br";
+          const params = new URLSearchParams({
+            "limit": "50",
+            "filters[0].field": "name",
+            "filters[0].op": "CONTAINS",
+            "filters[0].value": "Volkswagen",
+          });
+          async function read(url) {
+            const response = await fetch(url, {
+              headers: { Accept: "application/json" },
+              signal: AbortSignal.timeout(12000),
+            });
+            console.log("Endpoint:", new URL(url).pathname, "status:", response.status);
+            if (!response.ok) throw new Error("Independent FIPE API HTTP " + response.status);
+            return response.json();
           }
-          if (!valid) throw new Error("No independent FIPE catalogue reachable");
+          const makes = await read(origin + "/v1/makes?" + params);
+          console.log("Matches:", makes.data?.map(m => m.name), "pagination:", makes.pagination);
+          const make = makes.data?.find(m => /volkswagen/i.test(m.name));
+          if (!make?.id) throw new Error("Volkswagen brand mapping unavailable");
+          const models = await read(origin + "/v1/models?make_id=" + make.id + "&year=2016&limit=50");
+          console.log("Models:", models.data?.length, "pagination:", models.pagination);
+          if (!models.data?.length || !models.data?.every(m => typeof m.name === "string")) {
+            throw new Error("No year-filtered models found");
+          }
           NODE
       - name: Existing admin-route audit expectation regression tests
         run: pnpm exec vitest run server/customerRouteAudit.test.ts
