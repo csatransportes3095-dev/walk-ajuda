@@ -19,7 +19,7 @@ jobs:
       - name: Parse and validate PowerShell files
         shell: powershell
         run: |
-          $files = @('workers/windows/h2-native/H2NativeCore.psm1', 'workers/windows/h2-native/tests/Guards.Tests.ps1')
+          $files = @('workers/windows/h2-native/H2NativeCore.psm1', 'workers/windows/h2-native/H2NativeReadiness.ps1', 'workers/windows/h2-native/tests/Guards.Tests.ps1', 'workers/windows/h2-native/tests/Readiness.Tests.ps1')
           foreach ($file in $files) {
             $tokens = $null
             $parseErrors = $null
@@ -30,6 +30,7 @@ jobs:
         shell: powershell
         run: |
           powershell.exe -NoProfile -ExecutionPolicy Bypass -File workers/windows/h2-native/tests/Guards.Tests.ps1
+          powershell.exe -NoProfile -ExecutionPolicy Bypass -File workers/windows/h2-native/tests/Readiness.Tests.ps1
       - name: Enforce separation from legacy engines
         shell: powershell
         run: |
