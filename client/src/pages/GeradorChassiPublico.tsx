@@ -191,58 +191,29 @@ export default function GeradorChassiPublico() {
       setModelo("");
       return;
     }
-
     let cancelado = false;
-
     async function carregarModelosDoAno() {
       setCarregandoModelos(true);
       setErroCatalogo("");
       setModelos([]);
       setBuscaModelo("");
       setModelo("");
-
       try {
-        const respostaAnos = await fetch(
-          `${FIPE_BASE}/brands/${encodeURIComponent(marcaCode)}/years`,
+        // FIPEX filters models server-side by make UUID and calendar year.
+        const resposta = await fetch(
+          `${FIPE_BASE}/brands/${encodeURIComponent(marcaCode)}/models?year=${anoInfo.ano}`,
         );
-        if (!respostaAnos.ok) throw new Error("Falha ao consultar anos");
-
-        const anos = (await respostaAnos.json()) as FipeYear[];
-        const anosDoVeiculo = anos.filter((item) => {
-          const ano = Number.parseInt(item.name, 10);
-          return ano === anoInfo.ano;
-        });
-
-        if (anosDoVeiculo.length === 0) {
-          if (!cancelado) {
-            setModelos([]);
-            setModelo("");
-          }
-          return;
-        }
-
-        const respostas = await Promise.all(
-          anosDoVeiculo.map(async (item) => {
-            const resposta = await fetch(
-              `${FIPE_BASE}/brands/${encodeURIComponent(marcaCode)}/years/${encodeURIComponent(item.code)}/models`,
-            );
-            if (!resposta.ok) return [] as FipeModel[];
-            return (await resposta.json()) as FipeModel[];
-          }),
-        );
-
+        if (!resposta.ok) throw new Error("Consulta FIPE indisponivel");
+        const dados = (await resposta.json()) as FipeModel[];
         if (cancelado) return;
-
         const unicos = new Map<string, FipeModel>();
-        respostas.flat().forEach((item) => {
+        dados.forEach((item) => {
           const chave = item.name.trim().toLocaleLowerCase("pt-BR");
           if (!unicos.has(chave)) unicos.set(chave, item);
         });
-
         const ordenados = [...unicos.values()].sort((a, b) =>
           a.name.localeCompare(b.name, "pt-BR", { numeric: true }),
         );
-
         setModelos(ordenados);
         setModelo(ordenados[0]?.name || "");
       } catch {
@@ -255,12 +226,8 @@ export default function GeradorChassiPublico() {
         if (!cancelado) setCarregandoModelos(false);
       }
     }
-
     carregarModelosDoAno();
-
-    return () => {
-      cancelado = true;
-    };
+    return () => { cancelado = true; };
   }, [marca?.code, anoInfo.ano]);
 
   const gerar = async () => {
