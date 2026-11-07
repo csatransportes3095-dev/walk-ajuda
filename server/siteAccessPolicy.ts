@@ -3,7 +3,8 @@ export type SiteAccessMode = "public" | "restricted" | "blocked";
 export type SiteAccessDecision = "allow" | "challenge" | "deny";
 
 export function isAdministrationPath(pathname: string): boolean {
-  return pathname === "/admin" || pathname.startsWith("/admin/") || pathname === "/adm" || pathname.startsWith("/adm/");
+  // H2 Android usa rota curta, mas so renderiza sob AdminGuard no cliente e adminProcedure na API.
+  return pathname === "/android" || pathname === "/android/" || pathname === "/admin" || pathname.startsWith("/admin/") || pathname === "/adm" || pathname.startsWith("/adm/");
 }
 
 /** Visitor entry is open only in Public and Restricted, never Blocked. */
@@ -84,6 +85,6 @@ export function safeReturnUrl(value: string | null): string {
     value.includes("\n")
   )
     return "/";
-  if (value.startsWith("/admin") || value.startsWith("/api/")) return "/";
+  if (value === "/android" || value.startsWith("/android/") || value.startsWith("/admin") || value.startsWith("/api/")) return "/";
   return value;
 }
