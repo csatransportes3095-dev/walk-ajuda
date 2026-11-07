@@ -39,9 +39,9 @@ export function isSecurityPublicPath(pathname: string): boolean {
     return true;
   // Scripts and worker APIs are governed by H2ADS' own existing authentication.
   // Endpoints com autenticacao separada; nenhum comando remoto nesta fase.
-  if (pathname === "/api/h2-android/agent/claim" || pathname === "/api/h2-android/agent/heartbeat") return true;
+  if ([ "/api/h2-android/agent/claim", "/api/h2-android/agent/heartbeat", "/api/h2-android/agent/pull", "/api/h2-android/agent/finish", "/api/h2-android/agent/frame" ].includes(pathname)) return true;
   // Download validado pelo cookie ADM dentro da rota Express.
-  if (pathname === "/api/h2-android/agent/windows-agent.ps1" || pathname === "/api/h2-android/agent/installer.zip" || pathname === "/api/h2-android/agent/first-avd.zip") return true;
+  if (pathname === "/api/h2-android/agent/windows-agent.ps1" || pathname === "/api/h2-android/agent/installer.zip" || pathname === "/api/h2-android/agent/first-avd.zip" || /^\/api\/h2-android\/screen\/[0-9a-f-]{36}\/H2Android_[0-9]{2,3}$/.test(pathname)) return true;
   if (pathname.startsWith("/api/h2ads/worker/")) return true;
   return false;
 }
