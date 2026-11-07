@@ -41,7 +41,7 @@ export function isSecurityPublicPath(pathname: string): boolean {
   // Endpoints com autenticacao separada; nenhum comando remoto nesta fase.
   if (pathname === "/api/h2-android/agent/claim" || pathname === "/api/h2-android/agent/heartbeat") return true;
   // Download validado pelo cookie ADM dentro da rota Express.
-  if (pathname === "/api/h2-android/agent/windows-agent.ps1") return true;
+  if (pathname === "/api/h2-android/agent/windows-agent.ps1" || pathname === "/api/h2-android/agent/installer.zip") return true;
   if (pathname.startsWith("/api/h2ads/worker/")) return true;
   return false;
 }
