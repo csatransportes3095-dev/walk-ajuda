@@ -53,8 +53,8 @@ function Pair-H2NativeAgent {
 }
 function Install-H2NativeAgent {
   # Fase 1: validar tudo ANTES de tocar no processo e tarefa existentes.
-  $status=Get-H2NativeHostStatus
-  if(!$status.ready){throw ("Hyper-V nao preparado. Agente antigo preservado. "+$status.reason)}
+  $hostReadiness=Get-H2NativeHostStatus
+  if(!$hostReadiness.ready){throw ("Hyper-V nao preparado. Agente antigo preservado. "+$hostReadiness.reason)}
   $config=Get-H2AgentConfig
   $token=Get-H2AgentToken
   if($token -cnotmatch '^[a-f0-9]{64}$'){throw "Token antigo invalido. Nenhuma migracao executada."}
@@ -183,8 +183,8 @@ function Run-H2NativeAgent {
 if($Status){
   Get-H2NativeAgentReport|ConvertTo-Json -Depth 6
 }elseif($Install){
-  $status=Get-H2NativeHostStatus
-  if(!$status.administrator){
+  $hostReadiness=Get-H2NativeHostStatus
+  if(!$hostReadiness.administrator){
     # Apenas o instalador solicita UAC; o agente nunca ativa o Hyper-V sozinho.
     $exe="$env:SystemRoot\System32\WindowsPowerShell\v1.0\powershell.exe"
     $args='-NoProfile -ExecutionPolicy Bypass -File "'+$PSCommandPath+'" -Install'
