@@ -1,0 +1,47 @@
+name: H2 Android Native - Windows PowerShell 5.1
+
+on:
+  push:
+    branches:
+      - recovery/organizar-salvos-2026-08-24
+    paths:
+      - "workers/windows/h2-native/**"
+      - ".github/workflows/h2-android-native-ci.yml"
+  pull_request:
+    branches:
+      - recovery/organizar-salvos-2026-08-24
+    paths:
+      - "workers/windows/h2-native/**"
+      - ".github/workflows/h2-android-native-ci.yml"
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  native-powershell:
+    runs-on: windows-latest
+    timeout-minutes: 10
+    steps:
+      - uses: actions/checkout@v4
+      - name: Parse all native scripts in Windows PowerShell 5.1
+        shell: powershell
+        run: |
+          $files = Get-ChildItem "workers/windows/h2-native" -File |
+            Where-Object { $_.Extension -in ".ps1", ".psm1" }
+          foreach ($file in $files) {
+            $tokens = $null
+            $parseErrors = $null
+            [Management.Automation.Language.Parser]::ParseFile(
+              $file.FullName, [ref]$tokens, [ref]$parseErrors) | Out-Null
+            if ($parseErrors.Count -gt 0) {
+              throw ($file.Name + ": " + ($parseErrors | Out-String))
+            }
+            Write-Host ("PASS syntax " + $file.Name)
+          }
+      - name: Verify native agent and read-only diagnostics
+        shell: powershell
+        run: |
+          & ./workers/windows/h2-native/tests/NativeAgent.Tests.ps1
+          & ./workers/windows/h2-native/tests/Readiness.Tests.ps1
+          & ./workers/windows/h2-native/tests/Doctor.Tests.ps1

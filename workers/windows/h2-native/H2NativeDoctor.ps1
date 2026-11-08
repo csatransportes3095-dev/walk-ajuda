@@ -12,8 +12,8 @@ $ErrorActionPreference = "Stop"
 Import-Module (Join-Path $PSScriptRoot "H2NativeCore.psm1") -Force -ErrorAction Stop
 
 function Read-H2JsonScript {
-  param([string]$Path, [string[]]$Arguments)
-  $raw = & $Path @Arguments
+  param([string]$Path, [hashtable]$Parameters)
+  $raw = & $Path @Parameters
   if ($null -eq $raw) { throw "Diagnostico H2 nao retornou relatorio." }
   return (($raw | Out-String) | ConvertFrom-Json -ErrorAction Stop)
 }
@@ -23,7 +23,7 @@ function Format-H2Check {
   return "PENDENTE"
 }
 
-$hostData = Read-H2JsonScript -Path (Join-Path $PSScriptRoot "H2NativeReadiness.ps1") -Arguments @("-Json")
+$hostData = Read-H2JsonScript -Path (Join-Path $PSScriptRoot "H2NativeReadiness.ps1") -Parameters @{ Json = $true }
 $media = $null
 $vm = $null
 $warnings = @()
@@ -51,10 +51,10 @@ if (![string]::IsNullOrWhiteSpace($IsoPath) -or
     try {
       # Esta e a unica verificacao opcional que monta uma ISO; o script de midia
       # desmonta somente imagens montadas por ele, sempre com finally.
-      $media = Read-H2JsonScript -Path (Join-Path $PSScriptRoot "H2NativeIsoBootstrap.ps1") -Arguments @(
-        "-Action", "CheckMedia", "-IsoPath", $IsoPath,
-        "-ExpectedSha256", $ExpectedSha256, "-Json"
-      )
+      $media = Read-H2JsonScript -Path (Join-Path $PSScriptRoot "H2NativeIsoBootstrap.ps1") -Parameters @{
+        Action = "CheckMedia"; IsoPath = $IsoPath
+        ExpectedSha256 = $ExpectedSha256; Json = $true
+      }
       if (!$media.readyForOfflineInstallAttempt) {
         $warnings += "A ISO nao confirmou o boot UEFI e o payload Android-x86."
       }
@@ -70,22 +70,22 @@ if (![string]::IsNullOrWhiteSpace($VMName)) {
   try {
     # Os scripts chamados validam o identificador/manifesto antes de ler a VM.
     $owned = Get-H2NativeOwnedVm -VMName $VMName
-    $manifest = Get-Content -LiteralPath (Join-Path
-      (Split-Path (Get-H2NativeDiskPath $VMName) -Parent) "manifest.json") -Raw -ErrorAction Stop |
+    $manifestPath = Join-Path (Split-Path (Get-H2NativeDiskPath $VMName) -Parent) "manifest.json"
+    $manifest = Get-Content -LiteralPath $manifestPath -Raw -ErrorAction Stop |
       ConvertFrom-Json -ErrorAction Stop
     $mode = [string]$manifest.mode
     if ($mode -ceq "ISO_INSTALLER") {
-      $vm = Read-H2JsonScript -Path (Join-Path $PSScriptRoot "H2NativeIsoBootstrap.ps1") -Arguments @(
-        "-Action", "Audit", "-VMName", $VMName, "-Json"
-      )
+      $vm = Read-H2JsonScript -Path (Join-Path $PSScriptRoot "H2NativeIsoBootstrap.ps1") -Parameters @{
+        Action = "Audit"; VMName = $VMName; Json = $true
+      }
     } elseif ($mode -ceq "DISK_FIRST_BOOT") {
-      $vm = Read-H2JsonScript -Path (Join-Path $PSScriptRoot "H2NativeInstalledBoot.ps1") -Arguments @(
-        "-Action", "Inspect", "-VMName", $VMName, "-Json"
-      )
+      $vm = Read-H2JsonScript -Path (Join-Path $PSScriptRoot "H2NativeInstalledBoot.ps1") -Parameters @{
+        Action = "Inspect"; VMName = $VMName; Json = $true
+      }
     } else {
-      $vm = Read-H2JsonScript -Path (Join-Path $PSScriptRoot "H2NativeBootAudit.ps1") -Arguments @(
-        "-VMName", $VMName, "-Json"
-      )
+      $vm = Read-H2JsonScript -Path (Join-Path $PSScriptRoot "H2NativeBootAudit.ps1") -Parameters @{
+        VMName = $VMName; Json = $true
+      }
     }
   } catch {
     $warnings += "A VM H2 selecionada nao passou na auditoria de propriedade, imagem ou rede: " + $_.Exception.Message
