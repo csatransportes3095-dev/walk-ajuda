@@ -52,44 +52,94 @@ function Pair-H2NativeAgent {
     Set-Content -LiteralPath $ConfigPath -Encoding UTF8
 }
 function Install-H2NativeAgent {
-  # Nenhuma exclusao do agente antigo antes de copiar e validar o NOVO.
+  # Fase 1: validar tudo ANTES de tocar no processo e tarefa existentes.
   $status=Get-H2NativeHostStatus
-  if(!$status.ready){throw ("Hyper-V nao preparado. Agente antigo foi preservado. "+$status.reason)}
-  if(!(Test-Path -LiteralPath $ConfigPath -PathType Leaf)){
-    throw "Pareamento antigo nao localizado. Utilize -Pair explicitamente antes de instalar."
-  }
-  Get-H2AgentConfig|Out-Null
+  if(!$status.ready){throw ("Hyper-V nao preparado. Agente antigo preservado. "+$status.reason)}
+  $config=Get-H2AgentConfig
+  $token=Get-H2AgentToken
+  if($token -cnotmatch '^[a-f0-9]{64}$'){throw "Token antigo invalido. Nenhuma migracao executada."}
   $required=@(
     "H2NativeAgent.ps1","H2NativeControl.ps1","H2NativeCore.psm1",
     "H2NativeReadiness.ps1","H2NativeIsoBootstrap.ps1","H2NativeInstalledBoot.ps1",
     "H2NativeFirstBoot.ps1","H2NativeBootAudit.ps1","H2NativeDoctor.ps1"
   )
   foreach($name in $required){
-    if(!(Test-Path -LiteralPath (Join-Path $PSScriptRoot $name) -PathType Leaf)){
-      throw "Pacote incompleto: $name. Agente anterior nao foi removido."
+    $source=Join-Path $PSScriptRoot $name
+    if(!(Test-Path -LiteralPath $source -PathType Leaf)){
+      throw "Pacote incompleto: $name. Agente antigo preservado."
     }
+    # Parser de PS5.1: um arquivo com erro de sintaxe nao substitui o antigo.
+    $tokens=$null
+    $syntaxErrors=$null
+    [Management.Automation.Language.Parser]::ParseFile(
+      $source,[ref]$tokens,[ref]$syntaxErrors) | Out-Null
+    if($syntaxErrors.Count -gt 0){throw ("Erro de sintaxe em "+$name+". Agente antigo preservado.")}
   }
-  New-Item -ItemType Directory -Path $Folder -Force|Out-Null
-  # Atualiza SOMENTE arquivos do novo agente; nao altera H2 Ads ou outros servicos.
+  $report=Get-H2NativeAgentReport | ConvertTo-Json -Depth 6 -Compress
+  $headers=@{Authorization="Bearer $token"}
+  try {
+    # Somente heartbeat H2 Android. Verifica autenticacao/compatibilidade da nova API.
+    Invoke-RestMethod -Method Post -UseBasicParsing -Uri "$PanelUrl/api/h2-android/agent/heartbeat" -Headers $headers -ContentType "application/json" -Body $report -TimeoutSec 20 | Out-Null
+  } catch {
+    throw "Servidor ADM nao aceitou o agente nativo. Nenhuma substituicao executada."
+  }
+  New-Item -ItemType Directory -Path $Folder -Force | Out-Null
   foreach($name in $required){
     $source=Join-Path $PSScriptRoot $name
-    $destination=Join-Path $Folder $name
-    if([IO.Path]::GetFullPath($source) -ine [IO.Path]::GetFullPath($destination)){
-      Copy-Item -LiteralPath $source -Destination $destination -Force -ErrorAction Stop
+    $target=Join-Path $Folder $name
+    if([IO.Path]::GetFullPath($source) -ine [IO.Path]::GetFullPath($target)){
+      Copy-Item -LiteralPath $source -Destination $target -Force -ErrorAction Stop
     }
   }
-  # Preservar o token antigo; reusar o mesmo nome de tarefa para evitar duplicidade.
+  # Fase 2: guardar tarefa anterior em memoria; substituir SOMENTE H2 Android Agent.
+  $oldTask=Get-ScheduledTask -TaskName $TaskName -ErrorAction SilentlyContinue
+  $oldTaskXml=$null
+  if($oldTask){$oldTaskXml=Export-ScheduledTask -TaskName $TaskName -ErrorAction Stop}
+  $executable="$env:SystemRoot\System32\WindowsPowerShell\v1.0\powershell.exe"
   $arguments='-NoProfile -ExecutionPolicy Bypass -WindowStyle Hidden -File "'+$AgentPath+'" -Run'
-  $action=New-ScheduledTaskAction -Execute "$env:SystemRoot\System32\WindowsPowerShell\v1.0\powershell.exe" -Argument $arguments
-  $trigger=New-ScheduledTaskTrigger -AtLogOn -User $env:USERNAME
-  $principal=New-ScheduledTaskPrincipal -UserId ([Security.Principal.WindowsIdentity]::GetCurrent().Name) -LogonType Interactive -RunLevel Highest
-  Register-ScheduledTask -TaskName $TaskName -Action $action -Trigger $trigger -Principal $principal -Force -ErrorAction Stop|Out-Null
-  # Somente depois do registro correto, para agente antigo sem processo duplicado.
   $legacyPath=Join-Path $Folder "H2AndroidAgent.ps1"
-  Get-CimInstance Win32_Process -Filter "Name = 'powershell.exe'" -ErrorAction SilentlyContinue |
-    Where-Object { $_.ProcessId -ne $PID -and $_.CommandLine -and $_.CommandLine.Contains($legacyPath) -and $_.CommandLine -match ' -Run( |$)' } |
-    ForEach-Object { Stop-Process -Id $_.ProcessId -Force -ErrorAction SilentlyContinue }
-  # Atalho de inicializacao antigo, APENAS se apontar exatamente para H2 Android.
+  $legacyStopped=$false
+  $newProcess=$null
+  $taskReplaced=$false
+  try {
+    $action=New-ScheduledTaskAction -Execute $executable -Argument $arguments
+    $trigger=New-ScheduledTaskTrigger -AtLogOn -User $env:USERNAME
+    $principal=New-ScheduledTaskPrincipal -UserId ([Security.Principal.WindowsIdentity]::GetCurrent().Name) -LogonType Interactive -RunLevel Highest
+    Register-ScheduledTask -TaskName $TaskName -Action $action -Trigger $trigger -Principal $principal -Force -ErrorAction Stop | Out-Null
+    $taskReplaced=$true
+
+    # Encerrar SOMENTE instancia antiga vinculada ao caminho exato deste agente.
+    Get-CimInstance Win32_Process -Filter "Name = 'powershell.exe'" -ErrorAction SilentlyContinue |
+      Where-Object { $_.ProcessId -ne $PID -and $_.CommandLine -and $_.CommandLine.Contains($legacyPath) -and $_.CommandLine -match ' -Run( |$)' } |
+      ForEach-Object {
+        Stop-Process -Id $_.ProcessId -Force -ErrorAction Stop
+        $legacyStopped=$true
+      }
+    $newProcess=Start-Process -FilePath $executable -ArgumentList $arguments -WindowStyle Hidden -PassThru -ErrorAction Stop
+    Start-Sleep -Seconds 3
+    $newProcess.Refresh()
+    if($newProcess.HasExited){throw "Novo agente encerrou imediatamente. Revertendo tarefa antiga."}
+  } catch {
+    $errorText=$_.Exception.Message
+    if($taskReplaced){
+      try {
+        if($oldTaskXml){
+          Register-ScheduledTask -TaskName $TaskName -Xml $oldTaskXml -Force -ErrorAction Stop | Out-Null
+        } else {
+          Unregister-ScheduledTask -TaskName $TaskName -Confirm:$false -ErrorAction Stop
+        }
+      } catch { Write-Warning "Nao foi possivel restaurar a tarefa anterior. Confira Agendador de Tarefas." }
+    }
+    if($legacyStopped -and (Test-Path -LiteralPath $legacyPath -PathType Leaf)){
+      try {
+        $legacyArgs='-NoProfile -ExecutionPolicy Bypass -WindowStyle Hidden -File "'+$legacyPath+'" -Run'
+        Start-Process -FilePath $executable -ArgumentList $legacyArgs -WindowStyle Hidden -ErrorAction Stop | Out-Null
+      } catch { Write-Warning "Reinicie o agente legado manualmente, se necessario." }
+    }
+    throw ("Migracao cancelada; agente anterior preservado ou restaurado. "+$errorText)
+  }
+
+  # Fase 3: so apagar atalho legado DEPOIS da nova instancia ficar ativa.
   $startup=Join-Path ([Environment]::GetFolderPath("Startup")) "H2 Android Agent.lnk"
   if(Test-Path -LiteralPath $startup -PathType Leaf){
     try {
@@ -99,8 +149,7 @@ function Install-H2NativeAgent {
       }
     } catch { Write-Warning ("Atalho legado nao removido: "+$_.Exception.Message) }
   }
-  Start-Process -FilePath "$env:SystemRoot\System32\WindowsPowerShell\v1.0\powershell.exe" -ArgumentList $arguments -WindowStyle Hidden|Out-Null
-  Write-Host "Agente nativo iniciado com pareamento preservado. Arquivos antigos mantidos como recuperacao."
+  Write-Host "H2 Android Nativo instalado. Pareamento preservado; arquivos do agente antigo mantidos para recuperacao."
 }
 function Run-H2NativeAgent {
   $token=Get-H2AgentToken
@@ -134,7 +183,16 @@ function Run-H2NativeAgent {
 if($Status){
   Get-H2NativeAgentReport|ConvertTo-Json -Depth 6
 }elseif($Install){
-  Install-H2NativeAgent
+  $status=Get-H2NativeHostStatus
+  if(!$status.administrator){
+    # Apenas o instalador solicita UAC; o agente nunca ativa o Hyper-V sozinho.
+    $exe="$env:SystemRoot\System32\WindowsPowerShell\v1.0\powershell.exe"
+    $args='-NoProfile -ExecutionPolicy Bypass -File "'+$PSCommandPath+'" -Install'
+    $elevated=Start-Process -FilePath $exe -ArgumentList $args -Verb RunAs -Wait -PassThru -ErrorAction Stop
+    if($elevated.ExitCode -ne 0){throw "Permissao de administrador nao concedida ou migracao falhou. Agente anterior preservado."}
+  }else{
+    Install-H2NativeAgent
+  }
 }elseif($Pair){
   Pair-H2NativeAgent
 }elseif($Run){

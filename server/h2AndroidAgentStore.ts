@@ -27,6 +27,8 @@ const availabilitySchema = z.object({
   ramGb: z.number().min(0).max(2048).nullable().default(null),
   logicalProcessors: z.number().int().min(0).max(512).nullable().default(null),
   virtualizationEnabled: z.boolean().nullable().default(null),
+  hyperVReady: z.boolean().default(false),
+  hyperVReason: z.string().max(240).default(""),
 }).strict();
 
 export type AndroidAgentReport = z.infer<typeof availabilitySchema>;
@@ -125,6 +127,8 @@ export async function listAndroidAgents() {
       ramGb: typeof report.ramGb === "number" ? report.ramGb : null,
       logicalProcessors: typeof report.logicalProcessors === "number" ? report.logicalProcessors : null,
       virtualizationEnabled: typeof report.virtualizationEnabled === "boolean" ? report.virtualizationEnabled : null,
+      hyperVReady: report.hyperVReady === true,
+      hyperVReason: typeof report.hyperVReason === "string" ? report.hyperVReason.slice(0, 240) : "",
     };
   });
 }
@@ -252,8 +256,15 @@ export async function enqueueAndroidCommand(input: {
   }
   let report: AndroidAgentReport | null = null;
   try { report = validateAndroidAgentReport(JSON.parse(agent.reportJson || "{}")); } catch {}
-  if (!report || !/^0\.(?:[2-9]|[1-9][0-9])\./.test(report.agentVersion)) {
-    throw new TRPCError({ code: "PRECONDITION_FAILED", message: "Atualize o agente H2 Android para habilitar os controles reais." });
+  if (!report || report.agentVersion !== "0.3.0-native") {
+    throw new TRPCError({ code: "PRECONDITION_FAILED", message: "Substitua o agente antigo pelo H2 Android Nativo no ADM." });
+  }
+  if (!report.hyperVReady) {
+    throw new TRPCError({ code: "PRECONDITION_FAILED", message: report.hyperVReason || "Hyper-V nao esta pronto neste computador." });
+  }
+  // Fail-closed: remote screen, tap, keys and proxy are NOT implemented for Hyper-V.
+  if (!["create", "start", "stop"].includes(input.action)) {
+    throw new TRPCError({ code: "PRECONDITION_FAILED", message: "Comando indisponivel no motor Hyper-V nativo." });
   }
   const exists = report.avdNames.includes(input.avdName);
   if (input.action === "create" ? exists : !exists) {

@@ -46,6 +46,8 @@ function Get-H2NativeAgentReport {
     ramGb = $ram
     logicalProcessors = $processors
     virtualizationEnabled = $virt
+    hyperVReady = [bool]$hostInfo.hyperVReady
+    hyperVReason = ([string]$hostInfo.reason).Substring(0,[Math]::Min(240,([string]$hostInfo.reason).Length))
   }
 }
 

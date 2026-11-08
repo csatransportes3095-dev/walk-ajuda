@@ -9,6 +9,8 @@ type Agent = {
   computerName: string;
   agentVersion: string;
   online: boolean;
+  hyperVReady: boolean;
+  hyperVReason: string;
   avdNames: string[];
   runningAvds: string[];
 };
@@ -44,7 +46,7 @@ export default function H2AndroidLiveManager({
     },
     onError: error => toast.error(error.message),
   });
-  const ready = agents.filter(agent => agent.online && agent.agentVersion === "0.3.0-native");
+  const ready = agents.filter(agent => agent.online && agent.agentVersion === "0.3.0-native" && agent.hyperVReady);
   const devices = ready.flatMap(agent =>
     agent.avdNames.filter(name => H2_NAME.test(name)).map(name => ({
       key: agent.id + ":" + name, agent, name, running: agent.runningAvds.includes(name),
@@ -112,11 +114,11 @@ export default function H2AndroidLiveManager({
       <div className="flex flex-wrap items-start justify-between gap-3">
         <div>
           <h2 className="flex items-center gap-2 text-lg font-black text-[#b5ecd6]">
-            <MonitorPlay className="h-5 w-5" /> Androids virtuais — controle pelo site
+            <MonitorPlay className="h-5 w-5" /> H2 Android — máquinas virtuais nativas
           </h2>
           <p className="mt-1 max-w-2xl text-xs leading-relaxed text-slate-300">
             Instancias Hyper-V locais, sem Android Studio, SDK ou ADB.
-            O controle nativo inicial suporta criar, iniciar e desligar; tela interativa e proxy estao pendentes.
+            O controle nativo permite preparar, ligar e desligar VMs. Ainda é necessário instalar e validar o Android; tela remota e proxy estão pendentes.
           </p>
         </div>
         <button type="button" onClick={() => { refresh(); screenStream.current?.refresh(); }}
@@ -132,7 +134,9 @@ export default function H2AndroidLiveManager({
             O agente antigo usa ADB/emulador e nao controla maquinas Hyper-V.
             Baixe <strong>H2 Android Nativo — substituir agente antigo</strong> na secao de downloads
             do ADM, execute <strong>Instalar-H2-Android-Nativo.cmd</strong> e preserve o pareamento existente.
-            O motor nativo ainda precisa ser validado no Windows; tela e proxy permanecem indisponiveis.
+            {agents.some(agent => agent.online && agent.agentVersion === "0.3.0-native" && !agent.hyperVReady)
+              ? "O agente nativo está conectado, mas o Hyper-V está pendente: " + (agents.find(agent => agent.online && agent.agentVersion === "0.3.0-native")?.hyperVReason || "Verifique Windows e administrador.")
+              : "O motor nativo ainda precisa ser validado no Windows; tela e proxy permanecem indisponíveis."}
           </p>
         </div>
       ) : (
@@ -140,12 +144,12 @@ export default function H2AndroidLiveManager({
           <div className="flex flex-wrap gap-2">
             <button type="button" onClick={() => setCreating(true)} disabled={mutation.isPending}
               className="rounded-lg bg-[#80dcb5] px-4 py-2 text-sm font-black text-slate-950 disabled:opacity-50">
-              <Plus className="mr-1 inline h-4 w-4" /> Novo Android
+              <Plus className="mr-1 inline h-4 w-4" /> Preparar VM H2
             </button>
             {creating && (
               <div className="flex items-center gap-2">
                 <div className="flex min-w-[280px] flex-col gap-2">
-                  <span className="text-xs text-slate-300">Criar VM offline a partir de ISO local Android x86_64 UEFI</span>
+                  <span className="text-xs text-slate-300">Preparar VM offline usando ISO Android x86_64 UEFI do Windows (boot não comprovado)</span>
                   <input aria-label="Caminho ISO no computador Windows" placeholder="C:\\Android\\android.iso" value={isoPath} onChange={e => setIsoPath(e.target.value)}
                     className="rounded-lg border border-white/20 bg-slate-950 px-2 py-2 text-xs" />
                   <input aria-label="SHA-256 da ISO Android" placeholder="SHA-256 oficial (64 caracteres)" value={isoSha256} onChange={e => setIsoSha256(e.target.value)}
@@ -206,10 +210,10 @@ export default function H2AndroidLiveManager({
                         className="rounded-lg border border-[#80dcb5]/40 px-3 py-2 text-xs font-bold text-[#b5ecd6] disabled:opacity-30">
                         {watching ? "Fechar tela" : "Abrir tela"}
                       </button>
-                      <button type="button" disabled title="Teclas indisponiveis no motor Hyper-V" onClick={() => sendKey("BACK")} className="rounded-lg border border-white/20 p-2 disabled:opacity-30" title="Voltar"><ArrowLeft className="h-5 w-5" /></button>
-                      <button type="button" disabled title="Teclas indisponiveis no motor Hyper-V" onClick={() => sendKey("HOME")} className="rounded-lg border border-white/20 p-2 disabled:opacity-30" title="Inicio"><Home className="h-5 w-5" /></button>
-                      <button type="button" disabled title="Teclas indisponiveis no motor Hyper-V" onClick={() => sendKey("ENTER")} className="rounded-lg border border-white/20 p-2 disabled:opacity-30" title="Enter"><Keyboard className="h-5 w-5" /></button>
-                      <button type="button" disabled title="Teclas indisponiveis no motor Hyper-V" onClick={() => sendKey("POWER")} className="rounded-lg border border-white/20 p-2 disabled:opacity-30" title="Botao de energia"><Power className="h-5 w-5" /></button>
+                      <button type="button" disabled title="Voltar — indisponivel no Hyper-V" onClick={() => sendKey("BACK")} className="rounded-lg border border-white/20 p-2 disabled:opacity-30"><ArrowLeft className="h-5 w-5" /></button>
+                      <button type="button" disabled title="Inicio — indisponivel no Hyper-V" onClick={() => sendKey("HOME")} className="rounded-lg border border-white/20 p-2 disabled:opacity-30"><Home className="h-5 w-5" /></button>
+                      <button type="button" disabled title="Enter — indisponivel no Hyper-V" onClick={() => sendKey("ENTER")} className="rounded-lg border border-white/20 p-2 disabled:opacity-30"><Keyboard className="h-5 w-5" /></button>
+                      <button type="button" disabled title="Botao de energia — indisponivel no Hyper-V" onClick={() => sendKey("POWER")} className="rounded-lg border border-white/20 p-2 disabled:opacity-30"><Power className="h-5 w-5" /></button>
                     </div>
                     <p className="text-center text-[11px] text-slate-400"><MousePointerClick className="mr-1 inline h-3 w-3" /> Tela e toques ainda nao disponiveis no motor nativo.</p>
                   </div>

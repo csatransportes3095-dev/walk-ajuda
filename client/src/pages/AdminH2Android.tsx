@@ -271,8 +271,12 @@ export default function AdminH2Android() {
                 <div className="mt-2 grid grid-cols-2 gap-2 text-xs text-slate-300 sm:grid-cols-3">
                   <div>Motor: <strong>{agent.agentVersion === "0.3.0-native" ? "H2 Hyper-V nativo" : "Agente antigo"}</strong></div>
                   <div>RAM: <strong>{agent.ramGb === null ? "—" : agent.ramGb + " GB"}</strong></div>
+                  <div>Hyper-V: <strong>{agent.agentVersion === "0.3.0-native" ? (agent.hyperVReady ? "Pronto" : "Pendente") : "Agente antigo"}</strong></div>
                   <div>VMs H2: <strong>{agent.avdNames.length}</strong></div>
                 </div>
+                {agent.agentVersion === "0.3.0-native" && !agent.hyperVReady && (
+                  <p className="mt-2 text-[11px] font-semibold text-amber-200">Hyper-V: {agent.hyperVReason || "Verifique Windows Pro e permissões."}</p>
+                )}
                 <p className="mt-2 text-[11px] text-slate-500">CPU lógica: {agent.logicalProcessors ?? "—"} · Virtualização: {agent.virtualizationEnabled === null ? "não identificada" : agent.virtualizationEnabled ? "ativa" : "inativa"} · Instâncias: {agent.avdNames.length ? agent.avdNames.join(", ") : "nenhuma"}</p>
                 <p className="mt-1 text-[11px] text-slate-500">VMs ligadas: {agent.runningAvds.length ? agent.runningAvds.join(", ") : "nenhuma"} · Último sinal: {agent.lastSeenAt ? new Date(agent.lastSeenAt).toLocaleString("pt-BR") : "ainda não recebido"}</p>
               </div>)}
