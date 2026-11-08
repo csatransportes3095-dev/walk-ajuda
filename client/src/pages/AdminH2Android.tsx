@@ -378,7 +378,7 @@ export default function AdminH2Android() {
           <p className="mb-1 font-extrabold">Etapa 2 — Pareamento e diagnóstico Windows</p>
           <p>Os cadastros antigos e as molduras ilustrativas foram preservados apenas como histórico. O gerenciamento real de aparelhos está no painel superior.</p>
         </div>
-        </details>
+
       </main>
     </H2AndroidAdminShell>
   );
