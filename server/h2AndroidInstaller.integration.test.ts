@@ -27,8 +27,8 @@ describe("H2 Android: instalador Windows no ADM", () => {
     expect(route).toContain('"/api/h2-android/agent/installer.zip"');
     expect(route).toContain("isAdminJwtValid");
     expect(policy).toContain('pathname === "/api/h2-android/agent/installer.zip"');
-    expect(ui).toContain('download="Instalador-H2-Android.zip"');
-    expect(ui).toContain("Instalar-H2-Android.cmd");
+    expect(ui).toContain('download="H2-Android-Nativo.zip"');
+    expect(ui).toContain("Instalar-H2-Android-Nativo.cmd");
     expect(agent).toContain('Start-Process -FilePath');
     expect(agent).toContain("Register-ScheduledTask");
     expect(agent).toContain("H2 Android Agent.lnk");

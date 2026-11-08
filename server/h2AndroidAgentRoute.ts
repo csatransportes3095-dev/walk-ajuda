@@ -3,10 +3,9 @@
  * Pairing usa codigo temporario obtido no ADM. Heartbeat usa token proprio.
  */
 import type { Express, Request, Response } from "express";
-import path from "node:path";
 import { isAdminJwtValid } from "./_core/trpc";
 import { claimAndroidAgent, recordAndroidAgentHeartbeat, pullAndroidCommand, finishAndroidCommand, requestAndroidFrame, storeAndroidFrame } from "./h2AndroidAgentStore";
-import { getAndroidWindowsInstallerZip, getAndroidFirstAvdWizardZip } from "./h2AndroidInstallerZip";
+import { getAndroidNativeOfflineZip } from "./h2AndroidInstallerZip";
 
 function noStore(res: Response) {
   res.setHeader("Cache-Control", "private, no-store");
@@ -53,55 +52,33 @@ export function registerH2AndroidAgentRoutes(app: Express): void {
     res.status(200).end(png);
   });
 
-  app.get("/api/h2-android/agent/first-avd.zip", async (req: Request, res: Response) => {
+  // O novo ADM distribui somente o agente Hyper-V; os instaladores
+  // Google SDK/AVD foram descontinuados, sem alterar seus arquivos de backup.
+  app.get("/api/h2-android/agent/first-avd.zip", (req: Request, res: Response) => {
     noStore(res);
-    if (!isAdminJwtValid(req as any)) {
-      res.status(403).json({ error: "Acesso exclusivo do ADM." });
-      return;
-    }
-    try {
-      const data = await getAndroidFirstAvdWizardZip();
-      res.setHeader("Content-Type", "application/zip");
-      res.setHeader("Content-Disposition", 'attachment; filename="Preparar-Primeiro-Android.zip"');
-      res.setHeader("Content-Length", String(data.length));
-      res.status(200).end(data);
-    } catch (error) {
-      console.error("[H2 Android] falha ao gerar pacote AVD:", error instanceof Error ? error.message : String(error));
-      if (!res.headersSent) res.status(503).json({ error: "Pacote AVD temporariamente indisponivel." });
-    }
-  });
-
-  app.get("/api/h2-android/agent/installer.zip", async (req: Request, res: Response) => {
-    noStore(res);
-    if (!isAdminJwtValid(req as any)) {
-      res.status(403).json({ error: "Acesso exclusivo do ADM." });
-      return;
-    }
-    try {
-      const data = await getAndroidWindowsInstallerZip();
-      res.setHeader("Content-Type", "application/zip");
-      res.setHeader("Content-Disposition", 'attachment; filename="Instalador-H2-Android.zip"');
-      res.setHeader("Content-Length", String(data.length));
-      res.status(200).end(data);
-    } catch (error) {
-      console.error("[H2 Android] falha ao gerar ZIP:", error instanceof Error ? error.message : String(error));
-      if (!res.headersSent) res.status(503).json({ error: "Instalador temporariamente indisponivel." });
-    }
+    if (!isAdminJwtValid(req as any)) { res.sendStatus(403); return; }
+    res.status(410).json({ error: "Preparador antigo removido. Baixe o agente nativo em /adm/android." });
   });
 
   app.get("/api/h2-android/agent/windows-agent.ps1", (req: Request, res: Response) => {
     noStore(res);
-    if (!isAdminJwtValid(req as any)) {
-      res.status(403).json({ error: "Acesso exclusivo do ADM." });
-      return;
+    if (!isAdminJwtValid(req as any)) { res.sendStatus(403); return; }
+    res.status(410).json({ error: "Agente legado substituido pelo pacote nativo do ADM." });
+  });
+
+  app.get("/api/h2-android/agent/installer.zip", async (req: Request, res: Response) => {
+    noStore(res);
+    if (!isAdminJwtValid(req as any)) { res.sendStatus(403); return; }
+    try {
+      const data = await getAndroidNativeOfflineZip();
+      res.setHeader("Content-Type", "application/zip");
+      res.setHeader("Content-Disposition", 'attachment; filename="H2-Android-Nativo.zip"');
+      res.setHeader("Content-Length", String(data.length));
+      res.status(200).end(data);
+    } catch (error) {
+      console.error("[H2 Android] falha ao gerar agente nativo:", error instanceof Error ? error.message : String(error));
+      if (!res.headersSent) res.status(503).json({ error: "Agente nativo temporariamente indisponivel." });
     }
-    res.download(
-      path.resolve(process.cwd(), "workers", "windows", "H2AndroidAgent.ps1"),
-      "H2AndroidAgent.ps1",
-      error => {
-        if (error && !res.headersSent) res.status(404).json({ error: "Instalador não disponível." });
-      },
-    );
   });
 
   app.post("/api/h2-android/agent/claim", async (req: Request, res: Response) => {

@@ -41,6 +41,7 @@ describe("H2 Android - primeiro AVD com consentimento", () => {
     expect(api).toContain('"/api/h2-android/agent/first-avd.zip"');
     expect(api).toContain("isAdminJwtValid");
     expect(access).toContain('pathname === "/api/h2-android/agent/first-avd.zip"');
-    expect(ui).toContain('download="Preparar-Primeiro-Android.zip"');
+    expect(api).toContain("res.status(410)");
+    expect(ui).not.toContain('download="Preparar-Primeiro-Android.zip"');
   });
 });

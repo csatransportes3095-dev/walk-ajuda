@@ -210,12 +210,26 @@ export default function AdminH2Android() {
         <section id="settings" className="scroll-mt-6 space-y-4 rounded-2xl border border-[#80dcb5]/25 bg-[#101827] p-4 sm:p-5" aria-label="Agente Windows H2 Android">
           <div className="flex flex-wrap items-center justify-between gap-3">
             <div>
-              <h2 className="flex items-center gap-2 text-base font-black text-[#a0e8cc]"><Monitor className="h-5 w-5" /> Agente Windows H2 Android — Atualização e conexão</h2>
-              <p className="mt-1 text-xs text-slate-400">Agente isolado do H2 ADS. A versão 0.2.0 permite controlar os Androids reais pelo site.</p>
+              <h2 className="flex items-center gap-2 text-base font-black text-[#a0e8cc]"><Monitor className="h-5 w-5" /> H2 Android — conexão e substituição do agente</h2>
+              <p className="mt-1 text-xs text-slate-400">O agente antigo usa SDK/ADB. Para usar o motor Hyper-V nativo, instale o novo pacote abaixo. A troca preserva o pareamento.</p>
             </div>
-            <a href="/api/h2-android/agent/installer.zip" download="Instalador-H2-Android.zip" className="inline-flex items-center gap-2 rounded-lg border border-[#80dcb5]/40 bg-[#74cfa9]/15 px-3 py-2.5 text-sm font-bold text-[#a0e8cc]">
-              <Download className="h-4 w-4" /> Baixar instalador ZIP
-            </a>
+          </div>
+          <div className="rounded-xl border border-[#80dcb5]/35 bg-[#80dcb5]/[0.06] p-4" aria-label="Download H2 Android nativo">
+            <div className="flex flex-wrap items-center justify-between gap-4">
+              <div className="max-w-2xl">
+                <h3 className="text-sm font-extrabold text-[#b5ecd6]">H2 Android Nativo — substituir agente antigo</h3>
+                <p className="mt-1 text-xs leading-relaxed text-slate-300">
+                  Novo agente Hyper-V, controle nativo e instalação offline, sem Android Studio ou ADB. Baixe pelo ADM e execute o instalador nativo no Windows. O pareamento atual será preservado. Não desinstale manualmente o agente anterior.
+                </p>
+                <p className="mt-1.5 text-[11px] text-amber-200">
+                  Instalador experimental: exige Hyper-V pronto e confirmação. O agente antigo só será interrompido após o novo ser registrado. Tela interativa, proxy e aplicativos ainda não estão disponíveis no motor nativo.
+                </p>
+              </div>
+              <a href="/api/h2-android/agent/installer.zip" download="H2-Android-Nativo.zip"
+                className="inline-flex shrink-0 items-center gap-2 rounded-lg bg-[#80dcb5] px-4 py-2.5 text-sm font-extrabold text-[#102b23] transition hover:bg-[#a4eed1]">
+                <Download className="h-4 w-4" /> Baixar novo agente H2 nativo
+              </a>
+            </div>
           </div>
           <div className="grid gap-3 sm:grid-cols-2">
             <div className="rounded-xl border border-white/10 bg-black/25 p-3">
@@ -231,8 +245,8 @@ export default function AdminH2Android() {
             </div>
             <div className="rounded-xl border border-white/10 bg-black/25 p-3">
               <h3 className="mb-2 text-sm font-bold">2. Instalar no computador Windows</h3>
-              <p className="text-xs leading-relaxed text-slate-300">Baixe o ZIP e extraia todos os arquivos. Dê dois cliques em <strong>Instalar-H2-Android.cmd</strong>. Informe o código temporário do ADM quando solicitado.</p>
-              <div className="mt-2 rounded-lg border border-[#80dcb5]/25 bg-[#80dcb5]/5 p-2.5 text-[11px] text-[#b5ecd6]">O instalador atualiza o agente e preserva o pareamento existente. Atualize apenas uma vez para habilitar a operação diretamente no site.</div>
+              <p className="text-xs leading-relaxed text-slate-300">Baixe o ZIP nativo e extraia os arquivos. Execute <strong>Instalar-H2-Android-Nativo.cmd</strong>. Ele reutiliza o pareamento existente e substitui somente a tarefa H2 Android após validar Hyper-V.</p>
+              <div className="mt-2 rounded-lg border border-[#80dcb5]/25 bg-[#80dcb5]/5 p-2.5 text-[11px] text-[#b5ecd6]">O motor antigo usa ADB; a substituição nativa só ocorre se Hyper-V estiver pronto. A nova versão não fornece tela remota, Play Store ou proxy automaticamente.</div>
               <p className="mt-2 text-[11px] text-slate-400">Execute apenas o pacote baixado do seu próprio ADM. O agente se comunica por HTTPS e não altera o H2 ADS.</p>
             </div>
           </div>
@@ -254,47 +268,18 @@ export default function AdminH2Android() {
                       </div>
                     : <button onClick={() => setConfirmRevoke(agent.id)} className="rounded-lg border border-red-500/30 px-2 py-1.5 text-xs font-bold text-red-300">Desconectar</button>}
                 </div>
-                <div className="mt-2 grid grid-cols-2 gap-2 text-xs text-slate-300 sm:grid-cols-4">
-                  <div>Android SDK: <strong>{agent.sdkDetected ? "Detectado" : "Ausente"}</strong></div>
-                  <div>ADB: <strong>{agent.adbDetected ? "Sim" : "Não"}</strong></div>
-                  <div>Emulador: <strong>{agent.emulatorDetected ? "Sim" : "Não"}</strong></div>
+                <div className="mt-2 grid grid-cols-2 gap-2 text-xs text-slate-300 sm:grid-cols-3">
+                  <div>Motor: <strong>{agent.agentVersion === "0.3.0-native" ? "H2 Hyper-V nativo" : "Agente antigo"}</strong></div>
                   <div>RAM: <strong>{agent.ramGb === null ? "—" : agent.ramGb + " GB"}</strong></div>
+                  <div>VMs H2: <strong>{agent.avdNames.length}</strong></div>
                 </div>
-                <p className="mt-2 text-[11px] text-slate-500">CPU lógica: {agent.logicalProcessors ?? "—"} · Virtualização: {agent.virtualizationEnabled === null ? "não identificada" : agent.virtualizationEnabled ? "ativa" : "inativa"} · AVDs: {agent.avdNames.length ? agent.avdNames.join(", ") : "nenhum"}</p>
-                <p className="mt-1 text-[11px] text-slate-500">Emuladores em execução: {agent.emulatorDevices.length ? agent.emulatorDevices.join(", ") : "nenhum"} · Último sinal: {agent.lastSeenAt ? new Date(agent.lastSeenAt).toLocaleString("pt-BR") : "ainda não recebido"}</p>
+                <p className="mt-2 text-[11px] text-slate-500">CPU lógica: {agent.logicalProcessors ?? "—"} · Virtualização: {agent.virtualizationEnabled === null ? "não identificada" : agent.virtualizationEnabled ? "ativa" : "inativa"} · Instâncias: {agent.avdNames.length ? agent.avdNames.join(", ") : "nenhuma"}</p>
+                <p className="mt-1 text-[11px] text-slate-500">VMs ligadas: {agent.runningAvds.length ? agent.runningAvds.join(", ") : "nenhuma"} · Último sinal: {agent.lastSeenAt ? new Date(agent.lastSeenAt).toLocaleString("pt-BR") : "ainda não recebido"}</p>
               </div>)}
             </div>}
           </div>
         </section>
 
-        <section className="rounded-2xl border border-[#80dcb5]/25 bg-[#0c1a20] p-4 sm:p-5" aria-label="Preparação do primeiro Android virtual">
-          <div className="flex flex-wrap items-start justify-between gap-3">
-            <div className="max-w-2xl">
-              <h2 className="flex items-center gap-2 text-base font-black text-[#a0e8cc]"><Smartphone className="h-5 w-5" /> Preparador de imagem Android — uso apenas técnico</h2>
-              <p className="mt-2 text-xs leading-relaxed text-slate-300">
-                Assistente local do Windows para conferir Android SDK, ADB e virtualização.
-                Ele pode preparar um AVD Android 15 com imagem oficial Google Play, somente após sua confirmação.
-              </p>
-            </div>
-            <a href="/api/h2-android/agent/first-avd.zip" download="Preparar-Primeiro-Android.zip"
-              className="inline-flex items-center gap-2 rounded-xl border border-[#80dcb5]/40 bg-[#80dcb5]/15 px-4 py-2.5 text-sm font-bold text-[#b5ecd6] hover:bg-[#80dcb5]/25">
-              <Download className="h-4 w-4" /> Baixar preparador ZIP
-            </a>
-          </div>
-          <div className="mt-3 rounded-xl border border-white/10 bg-black/25 p-3 text-xs leading-relaxed text-slate-300">
-            <p><strong>1.</strong> Baixe e extraia o ZIP no PC em que o agente está online.</p>
-            <p className="mt-1"><strong>2.</strong> Execute <strong>Preparar-Primeiro-Android.cmd</strong> com duplo clique.</p>
-            <p className="mt-1"><strong>3.</strong> Confira os requisitos. Autorize individualmente qualquer download, criação de Android ou inicialização.</p>
-            <p className="mt-2 text-amber-200">Com a imagem pronta e o agente v0.2, criar e iniciar aparelhos deve ser feito no painel acima. Não execute novamente este preparador se já possui H2Android_01.</p>
-          </div>
-          <p className="mt-2 text-xs text-slate-400">
-            O resultado será exibido no próprio Windows. Se faltar SDK, Java ou aceleração, ele indicará o requisito antes de continuar.
-            A compatibilidade de Uber Motorista, 99, inDrive e WhatsApp ainda precisa de testes reais.
-          </p>
-        </section>
-
-        <details className="rounded-xl border border-white/10 bg-white/[0.02] p-3">
-          <summary className="cursor-pointer text-xs font-semibold text-slate-400">Cadastros antigos de perfis (não são Androids reais)</summary>
         <section className="rounded-2xl border border-[#80dcb5]/20 bg-[#10192b] p-4 sm:p-5">
           <form className="flex flex-col gap-3 sm:flex-row" onSubmit={(event) => { event.preventDefault(); createProfile(); }}>
             <div className="min-w-0 flex-1">
