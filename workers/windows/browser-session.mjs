@@ -10,6 +10,8 @@ import { Server } from "proxy-chain";
 const execFileAsync = promisify(execFile);
 const IP_CHECK_INTERVAL_MS = 15_000;
 const KILL_SWITCH_CHECK_INTERVAL_MS = 5_000;
+const PROXY_RECOVERY_BASE_DELAY_MS = 5_000;
+const PROXY_RECOVERY_MAX_DELAY_MS = 60_000;
 const ROTATION_DRAIN_MS = 500;
 const CHROME_PROBE_TIMEOUT_MS = 35_000;
 const required = ["H2ADS_PANEL_URL", "H2ADS_WORKER_KEY", "H2ADS_WORKER_TOKEN", "H2ADS_INSTANCE_ID", "H2ADS_COMMAND_ID", "H2ADS_PROXY_JSON", "H2ADS_PROFILE_DIRECTORY", "H2ADS_BROWSER_EXECUTABLE"];
@@ -59,6 +61,9 @@ let sessionLockedIp = null;
 let sessionIpChanged = false;
 let runnerLockOwned = false;
 let browserProbeInProgress = false;
+let proxyRecoveryInProgress = false;
+let proxyRecoveryFailureCount = 0;
+let proxyRecoveryNextAttemptAt = 0;
 let stopMobileRemote = null;
 const mobileRemoteRequested = process.env.H2ADS_REMOTE_DEBUG === "1";
 
@@ -351,10 +356,32 @@ async function resumeProxyTraffic() {
   // session can resume ONLY after the original locked IP is observed again
   // through the upstream and the independent Chrome verification. A changed
   // IP is never accepted automatically and Chrome remains fail-closed.
-  if (!networkSuspended || browserExitHandled || browserProbeInProgress) return;
+  if (!networkSuspended || browserExitHandled || browserProbeInProgress || proxyRecoveryInProgress) return;
+  if (Date.now() < proxyRecoveryNextAttemptAt) return;
   if (suspendingProxyTraffic) await suspendingProxyTraffic;
-  if (!networkSuspended || browserExitHandled) return;
+  if (!networkSuspended || browserExitHandled || proxyRecoveryInProgress) return;
+  proxyRecoveryInProgress = true;
+  const scheduleRecovery = (reason) => {
+    proxyRecoveryFailureCount = Math.min(proxyRecoveryFailureCount + 1, 8);
+    const delay = Math.min(
+      PROXY_RECOVERY_BASE_DELAY_MS * (2 ** (proxyRecoveryFailureCount - 1)),
+      PROXY_RECOVERY_MAX_DELAY_MS,
+    );
+    proxyRecoveryNextAttemptAt = Date.now() + delay;
+    try {
+      writeSession({
+        networkRecovery: "scheduled",
+        networkRecoveryAttempt: proxyRecoveryFailureCount,
+        networkRecoveryNextAttemptAt: new Date(proxyRecoveryNextAttemptAt).toISOString(),
+        networkRecoveryReason: classifyNetworkError({ message: String(reason) }, "proxy_path_unverified"),
+      });
+    } catch { }
+  };
   try {
+    // Uma sessão viva só recupera uma rota já fixada e validada. Nunca se
+    // cria um bloqueio novo durante a recuperação, pois isso poderia aceitar
+    // silenciosamente um IP diferente e expor a conexão local.
+    if (!sessionLockedIp) throw new Error("session_ip_not_locked");
     if (!backendRelay) {
       backendRelay = createBackendRelay();
       await backendRelay.listen();
@@ -376,6 +403,7 @@ async function resumeProxyTraffic() {
         killSwitchReason: "session_ip_changed",
       });
       await suspendProxyTraffic("session_ip_changed");
+      scheduleRecovery("session_ip_changed");
       return;
     }
     const executable = chromeExecutable();
@@ -388,21 +416,25 @@ async function resumeProxyTraffic() {
       frontRelay = replacement;
     }
 
-    // Se o provedor voltou com outro IP, adotar somente depois da validação dupla.
+    // O IP bloqueado permanece imutável durante toda a sessão. Um novo IP só
+    // pode ser aceito depois de fechar e preparar uma nova sessão explicitamente.
     const previousLockedIp = sessionLockedIp;
-    sessionLockedIp = observedIp;
-    sessionIpChanged = Boolean(previousLockedIp && normalizeIp(previousLockedIp) !== normalizeIp(observedIp));
     activeBackendPort = backendRelay.port;
     networkSuspended = false;
 
     const frontIp = await checkIp();
     if (normalizeIp(frontIp) !== normalizeIp(observedIp)) throw new Error("exit_ip_mismatch");
+    sessionIpChanged = false;
 
     writeSession({
       networkState: "online",
       privacyGuard: "protected",
       killSwitch: "armed",
       networkFailureCategory: null,
+      networkRecovery: "online",
+      networkRecoveryAttempt: 0,
+      networkRecoveryNextAttemptAt: null,
+      networkRecoveryReason: null,
       networkRestoredAt: new Date().toISOString(),
       previousSessionLockedIp: previousLockedIp || null,
       sessionLockedIp,
@@ -413,6 +445,8 @@ async function resumeProxyTraffic() {
       browserProxyVerified: true,
       browserProxyVerification: "verified",
     });
+    proxyRecoveryFailureCount = 0;
+    proxyRecoveryNextAttemptAt = 0;
     lastReportedIp = frontIp;
     try {
       await post("/api/h2ads/worker/runs/" + instanceId + "/state", {
@@ -431,7 +465,11 @@ async function resumeProxyTraffic() {
     }
     void syncPanelOpening(frontIp);
   } catch (error) {
-    await suspendProxyTraffic(error instanceof Error ? error.message : "proxy_path_unverified");
+    const reason = error instanceof Error ? error.message : "proxy_path_unverified";
+    await suspendProxyTraffic(reason);
+    scheduleRecovery(reason);
+  } finally {
+    proxyRecoveryInProgress = false;
   }
 }
 

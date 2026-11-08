@@ -242,12 +242,17 @@ describe("fundação multi-Worker H2 Ads", () => {
     expect(end).toBeGreaterThan(start);
     const events: string[] = [];
     const sandbox: Record<string, any> = {
+      PROXY_RECOVERY_BASE_DELAY_MS: 5_000, PROXY_RECOVERY_MAX_DELAY_MS: 60_000,
       networkSuspended: true, browserExitHandled: false, browserProbeInProgress: false, sessionIpChanged: false, activeBackendPort: undefined,
+      proxyRecoveryInProgress: false, proxyRecoveryFailureCount: 0, proxyRecoveryNextAttemptAt: 0,
+      sessionLockedIp: "198.51.100.1",
       suspendingProxyTraffic: null,
       backendRelay: undefined, frontRelay: { kind: "front_blocked" }, relayPort: 9876,
       createBackendRelay: () => ({ port: 6543, listen: async () => undefined }),
       checkIpThroughPort: async () => { throw new Error("proxy_tcp_timeout"); },
       suspendProxyTraffic: async () => { events.push("keep_blocked"); },
+      classifyNetworkError: (_error: unknown, fallback: string) => fallback,
+      writeSession: () => undefined,
     };
     runInNewContext(session.slice(start, end), sandbox);
     await sandbox.resumeProxyTraffic();
