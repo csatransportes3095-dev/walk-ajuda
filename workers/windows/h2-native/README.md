@@ -83,3 +83,42 @@ O primeiro boot fica inteiramente offline. H2 Native nao habilita rede sem isola
 de proxy testado. Rodar Hyper-V NAO comprova que o Android iniciou. Se o AOSP VHDX nao
 existir, o console nao cria uma VM de fachada. A imagem do Android, guest video/input
 e proxy SOCKS5 validado continuam pendentes.
+
+
+## Etapa 3: finalizar instalacao e iniciar pelo disco H2
+
+Estes comandos SOMENTE funcionam depois de:
+1. Confirmar Windows Hyper-V compativel e criar a VM pelo H2NativeIsoBootstrap.ps1.
+2. Instalar o Android realmente na VM pela ISO (instalador interativo no console).
+3. Desligar a VM normalmente antes de trocar a origem de inicializacao.
+
+O script novo H2NativeInstalledBoot.ps1 NAO instala Android sozinho, NAO usa Android
+Studio/ADB e nao altera rede, outros projetos ou outras VMs. Sempre confere
+o identificador e manifesto de propriedade H2, disco exclusivo, rede desligada
+e ISO original. O controle somente altera a VM H2 selecionada.
+
+Inspecionar o host sem fazer mudancas (acao padrao, nenhuma VM necessaria):
+
+    powershell.exe -NoProfile -ExecutionPolicy Bypass -File .\workers\windows\h2-native\H2NativeInstalledBoot.ps1 -Action Inspect -Json
+
+Apos instalar o Android e DESLIGAR a VM H2N_001, executar como administrador:
+
+    powershell.exe -NoProfile -ExecutionPolicy Bypass -File .\workers\windows\h2-native\H2NativeInstalledBoot.ps1 -Action Inspect -VMName H2N_001
+    powershell.exe -NoProfile -ExecutionPolicy Bypass -File .\workers\windows\h2-native\H2NativeInstalledBoot.ps1 -Action SwitchToDisk -VMName H2N_001 -InstallationCompleted
+    powershell.exe -NoProfile -ExecutionPolicy Bypass -File .\workers\windows\h2-native\H2NativeInstalledBoot.ps1 -Action Start -VMName H2N_001
+    powershell.exe -NoProfile -ExecutionPolicy Bypass -File .\workers\windows\h2-native\H2NativeInstalledBoot.ps1 -Action Console -VMName H2N_001
+
+Se o boot pelo disco falhar, desligue a VM e reanexe a ISO original, sem apagar o disco:
+
+    powershell.exe -NoProfile -ExecutionPolicy Bypass -File .\workers\windows\h2-native\H2NativeInstalledBoot.ps1 -Action Stop -VMName H2N_001
+    powershell.exe -NoProfile -ExecutionPolicy Bypass -File .\workers\windows\h2-native\H2NativeInstalledBoot.ps1 -Action RestoreInstaller -VMName H2N_001
+
+Depois de RestoreInstaller, use H2NativeIsoBootstrap.ps1 para iniciar a ISO.
+SwitchToDisk requer confirmacao porque nenhum comando Windows consegue afirmar
+que o sistema Android realmente foi instalado e inicializou no disco.
+O console VMConnect precisa exibir Android funcionando para haver comprovacao real.
+Play Store, apps Android, camera, proxy individual e compatibilidade ainda NAO foram testados.
+
+O controle original H2NativeFirstBoot.ps1 e usado separadamente para VHDX
+preinstalado com disco diferencial. O instalador ISO usa disco H2 dinamico
+individual. Os dois fluxos sao isolados e nao devem ser misturados.
