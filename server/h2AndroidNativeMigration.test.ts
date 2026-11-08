@@ -22,7 +22,7 @@ describe("H2 Android Native - migracao segura do agente", () => {
     const route = readFileSync("server/routers/h2Android.ts", "utf8");
     expect(agent).toContain('$TaskName="H2 Android Agent"');
     expect(agent).toContain('"agent.json"');
-    expect(agent).toContain("if(!$status.ready)");
+    expect(agent).toContain("if(!$hostReadiness.ready)");
         expect(agent).toContain("Get-H2AgentToken");
         expect(agent).toContain("H2NativeHostStatus");
         expect(agent).toContain("Parser]::ParseFile");
