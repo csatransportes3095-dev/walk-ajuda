@@ -20,30 +20,61 @@ function Publish-H2Result {
   else { $Value | Format-List | Out-String | Write-Output }
 }
 
-function Test-H2IsoEfi {
+function Inspect-H2IsoMediaFiles {
   param([Parameter(Mandatory = $true)][string]$FullIsoPath)
-  # Temporariamente montar APENAS a ISO local; nenhuma particao de sistema e alterada.
+  # Somente a ISO fornecida explicitamente e montada em modo read-only.
+  # UEFI sozinho NAO e prova de Android; exige kernel, initrd e payload system.
   $state = Get-DiskImage -ImagePath $FullIsoPath -ErrorAction Stop
   $mountedHere = !$state.Attached
+  $efiFound = $false
+  $androidFound = $false
+  $androidLayout = "not_detected"
+  $accessible = $false
   try {
     if ($mountedHere) {
       Mount-DiskImage -ImagePath $FullIsoPath -StorageType ISO -Access ReadOnly -ErrorAction Stop | Out-Null
     }
     $volumes = @(Get-DiskImage -ImagePath $FullIsoPath -ErrorAction Stop | Get-Volume -ErrorAction Stop)
     foreach ($volume in $volumes) {
-      if (![string]::IsNullOrWhiteSpace([string]$volume.DriveLetter)) {
-        $driveRoot = ([string]$volume.DriveLetter) + ":\"
-        if (Test-Path -LiteralPath (Join-Path $driveRoot "EFI\BOOT\BOOTX64.EFI") -PathType Leaf) {
-          return $true
+      if ([string]::IsNullOrWhiteSpace([string]$volume.DriveLetter)) { continue }
+      $accessible = $true
+      $driveRoot = ([string]$volume.DriveLetter) + ":\"
+      if (Test-Path -LiteralPath (Join-Path $driveRoot "EFI\BOOT\BOOTX64.EFI") -PathType Leaf) {
+        $efiFound = $true
+      }
+      # Layout AOSP x86 derivado de Android-x86: arquivos no root ou pasta android.
+      $folders = @($driveRoot)
+      foreach ($subfolder in @(Get-ChildItem -LiteralPath $driveRoot -Directory -ErrorAction Stop |
+        Where-Object { $_.Name -match '^(android|android-x86|android-x86_64|bliss|blissos)([-_.][a-zA-Z0-9._-]+)?$' } |
+        Select-Object -First 8)) {
+        $folders += [string]$subfolder.FullName
+      }
+      foreach ($folder in $folders) {
+        $hasKernel = (Test-Path -LiteralPath (Join-Path $folder "kernel") -PathType Leaf)
+        $hasInitrd = (Test-Path -LiteralPath (Join-Path $folder "initrd.img") -PathType Leaf)
+        $systemNames = @("system.sfs", "system.img", "system")
+        $hasSystem = $false
+        foreach ($name in $systemNames) {
+          if (Test-Path -LiteralPath (Join-Path $folder $name)) { $hasSystem = $true; break }
+        }
+        if ($hasKernel -and $hasInitrd -and $hasSystem) {
+          $androidFound = $true
+          $androidLayout = if ($folder -ieq $driveRoot) { "android_x86_root" } else { "android_x86_subdirectory" }
+          break
         }
       }
     }
-    return $false
   } finally {
     if ($mountedHere) {
-      # Nunca desmontar ISO que ja estava montada pelo usuario.
+      # Nao desmontar midia que o usuario ja tinha montado.
       Dismount-DiskImage -ImagePath $FullIsoPath -ErrorAction Stop | Out-Null
     }
+  }
+  return [pscustomobject]@{
+    isoVolumeAccessible = [bool]$accessible
+    efiBootX64Found = [bool]$efiFound
+    androidPayloadFound = [bool]$androidFound
+    androidLayout = $androidLayout
   }
 }
 
@@ -58,18 +89,21 @@ function Get-H2IsoMediaStatus {
   if ($size -lt 64MB) { throw "ISO pequena demais para uma imagem Android completa." }
   $digest = (Get-FileHash -LiteralPath $resolved -Algorithm SHA256 -ErrorAction Stop).Hash
   if ($digest -ine $Sha256) { throw "SHA-256 nao confere; imagem nao autorizada." }
-  $uefi = Test-H2IsoEfi -FullIsoPath $resolved
+  $scan = Inspect-H2IsoMediaFiles -FullIsoPath $resolved
   return [pscustomobject]@{
     project = "H2 Android Native"
     path = $resolved
     sizeGB = [Math]::Round(([double]$size / 1GB), 2)
     isoSha256 = $digest
     sha256Match = $true
-    efiBootX64Found = [bool]$uefi
+    isoVolumeAccessible = $scan.isoVolumeAccessible
+    efiBootX64Found = $scan.efiBootX64Found
+    androidPayloadFound = $scan.androidPayloadFound
+    androidLayout = $scan.androidLayout
     imageProvenanceVerified = $false
     androidBootVerified = $false
-    readyForOfflineInstallAttempt = [bool]$uefi
-    note = "EFI BOOTX64 encontrado apenas indica candidato UEFI; boot Android precisa teste real."
+    readyForOfflineInstallAttempt = [bool]($scan.efiBootX64Found -and $scan.androidPayloadFound)
+    note = "UEFI e arquivos Android encontrados sao apenas pre-requisitos; boot e drivers Hyper-V precisam teste real."
   }
 }
 
@@ -136,7 +170,7 @@ switch ($Action) {
     Assert-H2NativeName $VMName
     Assert-H2NativeReady
     $media = Get-H2IsoMediaStatus -FilePath $IsoPath -Sha256 $ExpectedSha256
-    if (!$media.readyForOfflineInstallAttempt) { throw "ISO nao contem EFI\BOOT\BOOTX64.EFI. Gen2 UEFI nao verificado." }
+    if (!$media.readyForOfflineInstallAttempt) { throw "ISO sem UEFI BOOTX64.EFI ou sem payload Android-x86 reconhecido. Nao criar VM H2." }
     if (Get-VM -Name $VMName -ErrorAction SilentlyContinue) {
       throw "VM com esse nome ja existe; nunca sobrescrever."
     }

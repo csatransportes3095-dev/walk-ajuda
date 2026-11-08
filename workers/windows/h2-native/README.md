@@ -122,3 +122,19 @@ Play Store, apps Android, camera, proxy individual e compatibilidade ainda NAO f
 O controle original H2NativeFirstBoot.ps1 e usado separadamente para VHDX
 preinstalado com disco diferencial. O instalador ISO usa disco H2 dinamico
 individual. Os dois fluxos sao isolados e nao devem ser misturados.
+
+
+## Etapa 4 - validacao previa da ISO Android
+
+O diagnostico de midia foi reforcado: uma ISO generica com BOOTX64.EFI nao basta.
+Agora CheckMedia so indica candidato a instalacao offline quando confirma SHA-256,
+carregador UEFI x86_64 e os arquivos Android-x86 kernel, initrd.img e system
+(system.sfs ou system.img), no root ou em diretorio Android reconhecido.
+
+Exemplo para a ISO que voce tiver, com hash oficial verificado de forma independente:
+
+    powershell.exe -NoProfile -ExecutionPolicy Bypass -File .\workers\windows\h2-native\H2NativeIsoBootstrap.ps1 -Action CheckMedia -IsoPath D:\AOSP\android.iso -ExpectedSha256 HASH_EXATO -Json
+
+Este procedimento NAO garante compatibilidade com Hyper-V, placa grafica virtual,
+drivers ou inicializacao do Android. Nao baixa arquivos ou configura rede.
+A criacao da VM permanece uma acao separada e explicitamente solicitada (Prepare).

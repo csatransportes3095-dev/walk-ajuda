@@ -16,6 +16,15 @@ foreach ($required in @(
 foreach ($forbidden in @("Invoke-RestMethod","Invoke-WebRequest","New-VMSwitch","Connect-VMNetworkAdapter","adb.exe","emulator.exe")) {
   if ($code.Contains($forbidden)) { throw "Acao proibida encontrada: $forbidden" }
 }
+# A ISO deve conter Android real, nao apenas um executavel EFI de outro sistema.
+foreach ($required in @(
+  'Inspect-H2IsoMediaFiles', 'androidPayloadFound', 'androidLayout',
+  'initrd.img', 'system.sfs', 'system.img',
+  '$hasKernel -and $hasInitrd -and $hasSystem',
+  '$scan.efiBootX64Found -and $scan.androidPayloadFound'
+)) {
+  if (!$code.Contains($required)) { throw "Guarda de payload Android ausente: $required" }
+}
 if (!$code.Contains('[string]$Action = "CheckHost"')) { throw "Acao padrao precisa ser somente leitura." }
 $report = & $scriptPath -Action CheckHost -Json | ConvertFrom-Json
 if (!$report.readOnly -or $report.androidBootVerified) { throw "Diagnostico deve ser somente leitura e nao afirmar boot." }
