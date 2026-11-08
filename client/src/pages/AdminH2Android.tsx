@@ -220,19 +220,17 @@ export default function AdminH2Android() {
           <div className="rounded-xl border border-[#80dcb5]/35 bg-[#80dcb5]/[0.06] p-4" aria-label="Download H2 Android nativo">
             <div className="flex flex-wrap items-center justify-between gap-4">
               <div className="max-w-2xl">
-                <h3 className="text-sm font-extrabold text-[#b5ecd6]">H2 Android Nativo — pacote completo</h3>
+                <h3 className="text-sm font-extrabold text-[#b5ecd6]">H2 Android Nativo — substituir agente antigo</h3>
                 <p className="mt-1 text-xs leading-relaxed text-slate-300">
-                  Arquivos do controlador Hyper-V, diagnóstico e instalação offline, sem Android Studio.
-                  Baixe tudo por esta página do ADM. O agente já instalado no PC continua como está: não desinstale e não pareie novamente.
+                  Novo agente Hyper-V, controle nativo e instalação offline, sem Android Studio ou ADB. Baixe pelo ADM e execute o instalador nativo no Windows. O pareamento atual será preservado. Não desinstale manualmente o agente anterior.
                 </p>
                 <p className="mt-1.5 text-[11px] text-amber-200">
-                  O pacote ainda não controla Android pelo ADM: o motor nativo e o agente existente precisam ser integrados e testados no Windows.
-                  Nenhum Android ou proxy é instalado automaticamente.
+                  Instalador experimental: exige Hyper-V pronto e confirmação. O agente antigo só será interrompido após o novo ser registrado. Tela interativa, proxy e aplicativos ainda não estão disponíveis no motor nativo.
                 </p>
               </div>
               <a href="/api/h2-android/agent/installer.zip?engine=native" download="H2-Android-Nativo.zip"
                 className="inline-flex shrink-0 items-center gap-2 rounded-lg bg-[#80dcb5] px-4 py-2.5 text-sm font-extrabold text-[#102b23] transition hover:bg-[#a4eed1]">
-                <Download className="h-4 w-4" /> Baixar H2 Android nativo
+                <Download className="h-4 w-4" /> Baixar novo agente H2 nativo
               </a>
             </div>
           </div>

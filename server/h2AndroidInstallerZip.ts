@@ -90,25 +90,25 @@ export async function getAndroidWindowsInstallerZip(): Promise<Buffer> {
 /**
  * H2 Native offline package downloaded only from the existing authenticated
  * H2 Android ADM installer endpoint, with ?engine=native. This contains NO
- * second agent, SDK, Android Studio, ISO, credentials, or auto-installer.
- * It never modifies the current paired Windows H2 Android Agent 0.2.0.
+ * SDK, Android Studio, ISO or credentials. It contains the replacement H2 native agent.
+ * Installer preserves existing paired credentials and only replaces the H2 Android task after Hyper-V readiness.
  */
 export async function getAndroidNativeOfflineZip(): Promise<Buffer> {
   const directory = path.resolve(process.cwd(), "workers", "windows", "h2-native");
   // Exact allowlist, all files in one folder so relative PowerShell imports work.
   const names = [
-    "H2Android-Diagnostico.cmd",
-    "H2Android-Painel.cmd",
+    "Instalar-H2-Android-Nativo.cmd",
+    "H2NativeAgent.ps1",
+    "H2NativeControl.ps1",
     "H2NativeBootAudit.ps1",
     "H2NativeCore.psm1",
     "H2NativeDoctor.ps1",
     "H2NativeFirstBoot.ps1",
     "H2NativeInstalledBoot.ps1",
     "H2NativeIsoBootstrap.ps1",
-    "H2NativePanel.ps1",
     "H2NativeReadiness.ps1",
     "README.md",
-  ];
+    ];
   const entries = await Promise.all(names.map(async name => ({
     name,
     content: name.endsWith(".cmd")

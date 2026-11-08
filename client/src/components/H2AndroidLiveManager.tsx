@@ -34,6 +34,9 @@ export default function H2AndroidLiveManager({
   const [proxyHost, setProxyHost] = useState("");
   const [proxyPort, setProxyPort] = useState("");
   const [creating, setCreating] = useState(false);
+  const [isoPath, setIsoPath] = useState("");
+  const [isoSha256, setIsoSha256] = useState("");
+  const [allowUnsignedBoot, setAllowUnsignedBoot] = useState(false);
   const utils = trpc.useUtils();
   const mutation = trpc.h2Android.control.useMutation({
     onSuccess: () => {
@@ -43,7 +46,7 @@ export default function H2AndroidLiveManager({
     },
     onError: error => toast.error(error.message),
   });
-  const ready = agents.filter(agent => agent.online && /^0\.(?:[2-9]|[1-9][0-9])\./.test(agent.agentVersion));
+  const ready = agents.filter(agent => agent.online && agent.agentVersion === "0.3.0-native");
   const devices = ready.flatMap(agent =>
     agent.avdNames.filter(name => H2_NAME.test(name)).map(name => ({
       key: agent.id + ":" + name, agent, name, running: agent.runningAvds.includes(name),
@@ -66,8 +69,9 @@ export default function H2AndroidLiveManager({
     };
   }, [watching, chosen?.running, chosen?.key, chosen?.agent.id, chosen?.name]);
 
-  const visibleFrame = watching && chosen?.running && frame?.deviceKey === chosen.key ? frame : null;
-  const screenActive = watching && chosen?.running;
+  // O motor Hyper-V ainda nao oferece captura grafica autenticada, logo nunca mostrar stream legado.
+  const visibleFrame = null as (typeof frame);
+  const screenActive = false;
 
   function sendKey(key: "BACK" | "HOME" | "ENTER" | "POWER") {
     if (!chosen || !chosen.running) return;
@@ -94,7 +98,13 @@ export default function H2AndroidLiveManager({
       if (!known.has(name)) { next = name; break; }
     }
     if (!next) return toast.error("Limite de nomes disponiveis.");
-    mutation.mutate({ action: "create", agentId: agent.id, avdName: next });
+    if (!/^[A-Za-z]:[\\/].*\.iso$/i.test(isoPath.trim()) || !/^[a-fA-F0-9]{64}$/.test(isoSha256.trim())) {
+      return toast.error("Informe caminho da ISO local no Windows e o SHA-256 valido.");
+    }
+    mutation.mutate({
+      action: "create", agentId: agent.id, avdName: next,
+      isoPath: isoPath.trim(), isoSha256: isoSha256.trim(), allowUnsignedBoot,
+    });
     setCreating(false);
   }
 
@@ -106,8 +116,8 @@ export default function H2AndroidLiveManager({
             <MonitorPlay className="h-5 w-5" /> Androids virtuais — controle pelo site
           </h2>
           <p className="mt-1 max-w-2xl text-xs leading-relaxed text-slate-300">
-            Android real executado no computador pareado, com tela e toques pelo navegador.
-            Nao e preciso abrir Android Studio.
+            Instancias Hyper-V locais, sem Android Studio, SDK ou ADB.
+            O controle nativo inicial suporta criar, iniciar e desligar; tela interativa e proxy estao pendentes.
           </p>
         </div>
         <button type="button" onClick={() => { refresh(); screenStream.current?.refresh(); }}
@@ -120,10 +130,10 @@ export default function H2AndroidLiveManager({
         <div className="rounded-xl border border-amber-400/25 bg-amber-400/10 p-4 text-sm text-amber-100">
           <p className="font-black">Atualizacao unica do agente Windows</p>
           <p className="mt-2 text-xs leading-relaxed">
-            O agente antigo informa apenas diagnosticos. Baixe novamente o
-            <strong> Instalador H2 Android ZIP</strong> na secao abaixo e execute
-            <strong> Instalar-H2-Android.cmd</strong>. O pareamento existente sera preservado.
-            Depois disso os comandos funcionarao pelo site, sem usar Android Studio.
+            O agente antigo usa ADB/emulador e nao controla maquinas Hyper-V.
+            Baixe <strong>H2 Android Nativo — substituir agente antigo</strong> na secao de downloads
+            do ADM, execute <strong>Instalar-H2-Android-Nativo.cmd</strong> e preserve o pareamento existente.
+            O motor nativo ainda precisa ser validado no Windows; tela e proxy permanecem indisponiveis.
           </p>
         </div>
       ) : (
@@ -135,7 +145,17 @@ export default function H2AndroidLiveManager({
             </button>
             {creating && (
               <div className="flex items-center gap-2">
-                <span className="text-xs text-slate-300">Criar aparelho isolado com Android 15?</span>
+                <div className="flex min-w-[280px] flex-col gap-2">
+                  <span className="text-xs text-slate-300">Criar VM offline a partir de ISO local Android x86_64 UEFI</span>
+                  <input aria-label="Caminho ISO no computador Windows" placeholder="C:\\Android\\android.iso" value={isoPath} onChange={e => setIsoPath(e.target.value)}
+                    className="rounded-lg border border-white/20 bg-slate-950 px-2 py-2 text-xs" />
+                  <input aria-label="SHA-256 da ISO Android" placeholder="SHA-256 oficial (64 caracteres)" value={isoSha256} onChange={e => setIsoSha256(e.target.value)}
+                    className="rounded-lg border border-white/20 bg-slate-950 px-2 py-2 text-xs" />
+                  <label className="flex items-center gap-2 text-xs text-amber-100">
+                    <input type="checkbox" checked={allowUnsignedBoot} onChange={e => setAllowUnsignedBoot(e.target.checked)} />
+                    Desativar Secure Boot somente nesta nova VM, se necessário
+                  </label>
+                </div>
                 <button type="button" onClick={createNext} className="rounded-lg border border-[#80dcb5] px-3 py-2 text-xs font-bold text-[#a0e8cc]">Confirmar</button>
                 <button type="button" onClick={() => setCreating(false)} className="rounded-lg border border-white/20 px-3 py-2 text-xs">Cancelar</button>
               </div>
@@ -143,7 +163,7 @@ export default function H2AndroidLiveManager({
           </div>
           {devices.length === 0 ? (
             <p className="rounded-xl border border-white/10 p-4 text-xs text-slate-300">
-              Nenhum Android H2 detectado. Clique em <strong>Novo Android</strong> para criar o primeiro pelo site.
+              Nenhuma VM H2 nativa detectada. Informe ISO local e SHA-256 para preparar uma nova maquina offline.
             </p>
           ) : (
             <>
@@ -177,22 +197,22 @@ export default function H2AndroidLiveManager({
                         ) : (
                           <div className="absolute inset-0 flex flex-col items-center justify-center p-6 text-center text-xs text-slate-400">
                             <Smartphone className="mx-auto mb-3 h-12 w-12 text-[#8ce2bd]/50" />
-                            {screenActive ? "Aguardando imagem do Android..." : chosen.running ? "Clique em Abrir tela para ver e tocar no Android." : "Android desligado."}
+                            {screenActive ? "Aguardando imagem do Android..." : chosen.running ? "Tela remota pendente para Hyper-V." : "Android desligado."}
                           </div>
                         )}
                       </div>
                     </div>
                     <div className="flex flex-wrap items-center justify-center gap-2">
-                      <button type="button" disabled={!chosen.running} onClick={() => setWatching(w => !w)}
+                      <button type="button" disabled title="Tela remota nativa ainda indisponivel" onClick={() => setWatching(w => !w)}
                         className="rounded-lg border border-[#80dcb5]/40 px-3 py-2 text-xs font-bold text-[#b5ecd6] disabled:opacity-30">
                         {watching ? "Fechar tela" : "Abrir tela"}
                       </button>
-                      <button type="button" disabled={!chosen.running} onClick={() => sendKey("BACK")} className="rounded-lg border border-white/20 p-2 disabled:opacity-30" title="Voltar"><ArrowLeft className="h-5 w-5" /></button>
-                      <button type="button" disabled={!chosen.running} onClick={() => sendKey("HOME")} className="rounded-lg border border-white/20 p-2 disabled:opacity-30" title="Inicio"><Home className="h-5 w-5" /></button>
-                      <button type="button" disabled={!chosen.running} onClick={() => sendKey("ENTER")} className="rounded-lg border border-white/20 p-2 disabled:opacity-30" title="Enter"><Keyboard className="h-5 w-5" /></button>
-                      <button type="button" disabled={!chosen.running} onClick={() => sendKey("POWER")} className="rounded-lg border border-white/20 p-2 disabled:opacity-30" title="Botao de energia"><Power className="h-5 w-5" /></button>
+                      <button type="button" disabled title="Teclas indisponiveis no motor Hyper-V" onClick={() => sendKey("BACK")} className="rounded-lg border border-white/20 p-2 disabled:opacity-30" title="Voltar"><ArrowLeft className="h-5 w-5" /></button>
+                      <button type="button" disabled title="Teclas indisponiveis no motor Hyper-V" onClick={() => sendKey("HOME")} className="rounded-lg border border-white/20 p-2 disabled:opacity-30" title="Inicio"><Home className="h-5 w-5" /></button>
+                      <button type="button" disabled title="Teclas indisponiveis no motor Hyper-V" onClick={() => sendKey("ENTER")} className="rounded-lg border border-white/20 p-2 disabled:opacity-30" title="Enter"><Keyboard className="h-5 w-5" /></button>
+                      <button type="button" disabled title="Teclas indisponiveis no motor Hyper-V" onClick={() => sendKey("POWER")} className="rounded-lg border border-white/20 p-2 disabled:opacity-30" title="Botao de energia"><Power className="h-5 w-5" /></button>
                     </div>
-                    <p className="text-center text-[11px] text-slate-400"><MousePointerClick className="mr-1 inline h-3 w-3" /> Clique ou toque diretamente na imagem para interagir.</p>
+                    <p className="text-center text-[11px] text-slate-400"><MousePointerClick className="mr-1 inline h-3 w-3" /> Tela e toques ainda nao disponiveis no motor nativo.</p>
                   </div>
                   <div className="space-y-4">
                     <div className="rounded-xl border border-white/10 bg-black/25 p-4">
@@ -224,11 +244,11 @@ export default function H2AndroidLiveManager({
                         <input aria-label="Porta do proxy" placeholder="Porta" value={proxyPort} onChange={e => setProxyPort(e.target.value)}
                           className="min-w-0 rounded-lg border border-white/20 bg-slate-950 px-3 py-2 text-sm" inputMode="numeric" maxLength={5} />
                       </div>
-                      <button type="submit" disabled={chosen.running || mutation.isPending} className="mt-3 rounded-lg border border-[#80dcb5]/40 px-3 py-2 text-xs font-bold text-[#b5ecd6] disabled:opacity-30">
+                      <button type="submit" disabled title="Proxy nativo ainda em desenvolvimento" className="mt-3 rounded-lg border border-[#80dcb5]/40 px-3 py-2 text-xs font-bold text-[#b5ecd6] disabled:opacity-30">
                         Salvar proxy / remover se vazio
                       </button>
                       <p className="mt-2 text-[11px] text-amber-200">
-                        Nesta versao: proxy HTTP sem usuario/senha. SOCKS5 e roteamento integral ainda nao estao disponiveis.
+                        Proxy individual ainda indisponivel: nenhuma VM H2 tem acesso a rede sem validacao de isolamento.
                       </p>
                     </form>
                     <div className="rounded-xl border border-white/10 bg-black/25 p-3">
