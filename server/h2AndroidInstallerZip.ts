@@ -18,7 +18,7 @@ function checksum(data: Buffer): number {
 }
 
 export function packAndroidWindowsInstaller(entries: { name: string; content: Buffer }[]): Buffer {
-  if (!entries.length || entries.length > 4) throw new Error("Quantidade invalida de arquivos");
+  if (!entries.length || entries.length > 16) throw new Error("Quantidade invalida de arquivos");
   const local: Buffer[] = [];
   const central: Buffer[] = [];
   let offset = 0;
@@ -80,6 +80,37 @@ export async function getAndroidWindowsInstallerZip(): Promise<Buffer> {
   const entries = await Promise.all(names.map(async name => ({
     name,
     // Batch commands need Windows CRLF even when the repository was checked out on Linux.
+    content: name.endsWith(".cmd")
+      ? Buffer.from((await readFile(path.join(directory, name), "utf8")).replace(/\r?\n/g, "\r\n"), "utf8")
+      : await readFile(path.join(directory, name)),
+  })));
+  return packAndroidWindowsInstaller(entries);
+}
+
+/**
+ * H2 Native offline package downloaded only from the existing authenticated
+ * H2 Android ADM installer endpoint, with ?engine=native. This contains NO
+ * second agent, SDK, Android Studio, ISO, credentials, or auto-installer.
+ * It never modifies the current paired Windows H2 Android Agent 0.2.0.
+ */
+export async function getAndroidNativeOfflineZip(): Promise<Buffer> {
+  const directory = path.resolve(process.cwd(), "workers", "windows", "h2-native");
+  // Exact allowlist, all files in one folder so relative PowerShell imports work.
+  const names = [
+    "H2Android-Diagnostico.cmd",
+    "H2Android-Painel.cmd",
+    "H2NativeBootAudit.ps1",
+    "H2NativeCore.psm1",
+    "H2NativeDoctor.ps1",
+    "H2NativeFirstBoot.ps1",
+    "H2NativeInstalledBoot.ps1",
+    "H2NativeIsoBootstrap.ps1",
+    "H2NativePanel.ps1",
+    "H2NativeReadiness.ps1",
+    "README.md",
+  ];
+  const entries = await Promise.all(names.map(async name => ({
+    name,
     content: name.endsWith(".cmd")
       ? Buffer.from((await readFile(path.join(directory, name), "utf8")).replace(/\r?\n/g, "\r\n"), "utf8")
       : await readFile(path.join(directory, name)),

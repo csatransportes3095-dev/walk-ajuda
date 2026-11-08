@@ -217,6 +217,25 @@ export default function AdminH2Android() {
               <Download className="h-4 w-4" /> Baixar instalador ZIP
             </a>
           </div>
+          <div className="rounded-xl border border-[#80dcb5]/35 bg-[#80dcb5]/[0.06] p-4" aria-label="Download H2 Android nativo">
+            <div className="flex flex-wrap items-center justify-between gap-4">
+              <div className="max-w-2xl">
+                <h3 className="text-sm font-extrabold text-[#b5ecd6]">H2 Android Nativo — pacote completo</h3>
+                <p className="mt-1 text-xs leading-relaxed text-slate-300">
+                  Arquivos do controlador Hyper-V, diagnóstico e instalação offline, sem Android Studio.
+                  Baixe tudo por esta página do ADM. O agente já instalado no PC continua como está: não desinstale e não pareie novamente.
+                </p>
+                <p className="mt-1.5 text-[11px] text-amber-200">
+                  O pacote ainda não controla Android pelo ADM: o motor nativo e o agente existente precisam ser integrados e testados no Windows.
+                  Nenhum Android ou proxy é instalado automaticamente.
+                </p>
+              </div>
+              <a href="/api/h2-android/agent/installer.zip?engine=native" download="H2-Android-Nativo.zip"
+                className="inline-flex shrink-0 items-center gap-2 rounded-lg bg-[#80dcb5] px-4 py-2.5 text-sm font-extrabold text-[#102b23] transition hover:bg-[#a4eed1]">
+                <Download className="h-4 w-4" /> Baixar H2 Android nativo
+              </a>
+            </div>
+          </div>
           <div className="grid gap-3 sm:grid-cols-2">
             <div className="rounded-xl border border-white/10 bg-black/25 p-3">
               <h3 className="mb-2 text-sm font-bold">1. Gerar código de pareamento</h3>

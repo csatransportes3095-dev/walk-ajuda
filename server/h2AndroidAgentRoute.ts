@@ -6,7 +6,7 @@ import type { Express, Request, Response } from "express";
 import path from "node:path";
 import { isAdminJwtValid } from "./_core/trpc";
 import { claimAndroidAgent, recordAndroidAgentHeartbeat, pullAndroidCommand, finishAndroidCommand, requestAndroidFrame, storeAndroidFrame } from "./h2AndroidAgentStore";
-import { getAndroidWindowsInstallerZip, getAndroidFirstAvdWizardZip } from "./h2AndroidInstallerZip";
+import { getAndroidWindowsInstallerZip, getAndroidFirstAvdWizardZip, getAndroidNativeOfflineZip } from "./h2AndroidInstallerZip";
 
 function noStore(res: Response) {
   res.setHeader("Cache-Control", "private, no-store");
@@ -78,9 +78,16 @@ export function registerH2AndroidAgentRoutes(app: Express): void {
       return;
     }
     try {
-      const data = await getAndroidWindowsInstallerZip();
+      // Existing authenticated ADM download, with a separate native package.
+      // Default remains exactly the existing v0.2.0 agent installer.
+      const nativePackage = req.query.engine === "native";
+      const data = nativePackage
+        ? await getAndroidNativeOfflineZip()
+        : await getAndroidWindowsInstallerZip();
       res.setHeader("Content-Type", "application/zip");
-      res.setHeader("Content-Disposition", 'attachment; filename="Instalador-H2-Android.zip"');
+      res.setHeader("Content-Disposition", nativePackage
+        ? 'attachment; filename="H2-Android-Nativo.zip"'
+        : 'attachment; filename="Instalador-H2-Android.zip"');
       res.setHeader("Content-Length", String(data.length));
       res.status(200).end(data);
     } catch (error) {
