@@ -248,4 +248,4 @@ function Stop-H2NativeVm {
   return [pscustomobject]@{ name=$VMName; state="Stopping"; forced=[bool]$ForcePowerOff }
 }
 
-Export-ModuleMember -Function Test-H2NativeName, Assert-H2NativeName, Test-H2NativeHash, Get-H2NativeRoot, Get-H2NativeHostStatus, Get-H2NativeOwnedVm, Get-H2NativeInventory, New-H2NativeVm, Start-H2NativeVm, Stop-H2NativeVm
+Export-ModuleMember -Function Test-H2NativeName, Assert-H2NativeName, Test-H2NativeHash, Get-H2NativeRoot, Get-H2NativeDiskPath, Get-H2NativeHostStatus, Assert-H2NativeReady, Get-H2NativeOwnedVm, Get-H2NativeInventory, New-H2NativeVm, Start-H2NativeVm, Stop-H2NativeVm
