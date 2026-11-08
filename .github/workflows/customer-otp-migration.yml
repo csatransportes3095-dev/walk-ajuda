@@ -27,14 +27,13 @@ jobs:
         run: pnpm exec vitest run server/customerOtpAccess.test.ts server/customerLoginEmailProof.test.ts server/customerOtpCutoverRoutes.test.ts
       - name: Compare TypeScript errors against untouched target branch
         run: |
-          # Compare with the actual base commit for this PR, not a historical SHA.
-          # workflow_dispatch has no pull_request context; use current destination branch.
+          # Compare against the PR's real target commit, never a historical snapshot.
           BASE_SHA="${{ github.event.pull_request.base.sha }}"
           if [ -z "$BASE_SHA" ]; then
             BASE_SHA="$(git ls-remote origin refs/heads/recovery/organizar-salvos-2026-08-24 | cut -f1)"
           fi
           if ! [[ "$BASE_SHA" =~ ^[0-9a-f]{40}$ ]]; then
-            echo "Could not determine an authoritative baseline commit" >&2
+            echo "Could not determine the actual target branch commit" >&2
             exit 1
           fi
           git fetch --depth=1 origin "$BASE_SHA"
