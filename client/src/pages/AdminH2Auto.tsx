@@ -33,7 +33,7 @@ const Box = ({ children }: { children: React.ReactNode }) => (
 
 const mediaDefaults = {
   enabled: false,
-  transcribeAudio: false,
+  transcribeAudio: true,
   audioFallback:
     H2_AUTO_SHORT_MEDIA.audioFallback,
   photoReply:

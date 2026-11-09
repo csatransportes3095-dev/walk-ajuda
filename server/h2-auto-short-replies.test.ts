@@ -15,7 +15,7 @@ function example() {
   return {
     tree,
     confirmation: {...H2_AUTO_CONFIRMATION_DEFAULTS},
-    media: {enabled:true,transcribeAudio:false,cooldownSeconds:60,maxAudioSeconds:30,
+    media: {enabled:true,transcribeAudio:true,cooldownSeconds:60,maxAudioSeconds:30,
       ...H2_AUTO_SHORT_MEDIA},
     orderNoOrdersMessage:"Cadastro localizado com sucesso, mas não encontramos nenhum pedido associado a este cadastro no momento.",
     welcome:"Olá! Por favor, informe o que precisa.",

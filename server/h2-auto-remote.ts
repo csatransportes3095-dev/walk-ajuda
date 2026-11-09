@@ -33,7 +33,7 @@ const matchesHash = (stored: unknown, supplied: string) => {
 };
 const mediaSchema = z.object({
   enabled: z.boolean().default(false),
-  transcribeAudio: z.boolean().default(false),
+  transcribeAudio: z.boolean().default(true),
   audioFallback: z
     .string()
     .max(3000)
