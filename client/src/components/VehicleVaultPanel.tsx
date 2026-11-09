@@ -1,4 +1,4 @@
-import { useState } from "react";
+import { useEffect, useState } from "react";
 import { Archive, ClipboardPaste, FileSearch, FileText, FolderOpen, Loader2, Pencil, Plus, Printer, Search, ShieldCheck, Users, X } from "lucide-react";
 import { toast } from "sonner";
 import { trpc } from "@/lib/trpc";
@@ -6,13 +6,13 @@ import VehicleVaultBatchPanel from "./VehicleVaultBatchPanel";
 
 type VehicleFields = {
   plate:string; renavam:string; chassis:string; model:string; color:string;
-  manufactureYear:string; modelYear:string;
+  manufactureYear:string; modelYear:string; category:string; exerciseYear:string;
 };
-const EMPTY:VehicleFields={plate:"",renavam:"",chassis:"",model:"",color:"",manufactureYear:"",modelYear:""};
+const EMPTY:VehicleFields={plate:"",renavam:"",chassis:"",model:"",color:"",manufactureYear:"",modelYear:"",category:"",exerciseYear:""};
 const NAMES: Array<[keyof VehicleFields,string]>=[
   ["plate","PLACA"],["renavam","RENAVAM"],["chassis","CHASSI"],
   ["model","MARCA / MODELO"],["color","COR"],["manufactureYear","ANO FABRICAÇÃO"],
-  ["modelYear","ANO DO MODELO"],
+  ["modelYear","ANO DO MODELO"],["category","CATEGORIA"],["exerciseYear","EXERCÍCIO"],
 ];
 /**
  * Cor apresentada como etiqueta visual. Para BRANCO e PRETO, o fundo
@@ -81,6 +81,8 @@ export default function VehicleVaultPanel(){
   const utils=trpc.useUtils();
   const [mode,setMode]=useState<"search"|"extract">("search");
   const [text,setText]=useState("");
+  const [pendingText,setPendingText]=useState<string|null>(null);
+  const [autoTextStatus,setAutoTextStatus]=useState<"idle"|"pending"|"reading"|"done"|"error">("idle");
   const [fields,setFields]=useState<VehicleFields>({...EMPTY});
   const [pdfName,setPdfName]=useState("");
   const [pdfBase64,setPdfBase64]=useState("");
@@ -113,24 +115,64 @@ export default function VehicleVaultPanel(){
   const unlink=trpc.vehicleVault.unlinkCustomer.useMutation();
   const setInactive=trpc.vehicleVault.setInactive.useMutation();
   const openPdf=trpc.vehicleVault.openPdf.useMutation();
-  const preview=(result:{plate:string;renavam:string;chassis:string;model:string;color:string;manufactureYear:number|null;modelYear:number|null;text:string;missing:string[]})=>{
+  const preview=(result:{plate:string;renavam:string;chassis:string;model:string;color:string;manufactureYear:number|null;modelYear:number|null;category:string;exerciseYear:number|null;text:string;missing:string[]},silent=false)=>{
     setFields({plate:result.plate||"",renavam:result.renavam||"",chassis:result.chassis||"",
       model:result.model||"",color:result.color||"",
       manufactureYear:result.manufactureYear?String(result.manufactureYear):"",
-      modelYear:result.modelYear?String(result.modelYear):""});
+      modelYear:result.modelYear?String(result.modelYear):"",
+      category:result.category||"",exerciseYear:result.exerciseYear?String(result.exerciseYear):""});
     setText(result.text||"");
     setMissing(result.missing||[]);
-    toast.success("Dados extraídos. Confira os sete campos antes de salvar.");
+    if(!silent)toast.success("Dados extraídos. Confira os dados antes de salvar.");
+  };
+  // Atualiza os campos ao colar ou digitar texto, sem gravar automaticamente no Cofre.
+  useEffect(()=>{
+    if(pendingText===null||pendingText.trim().length<5||mode!=="extract")return;
+    let active=true;
+    const timer=setTimeout(async()=>{
+      if(!active)return;
+      setAutoTextStatus("reading");
+      try{
+        const result=await previewText.mutateAsync({text:pendingText});
+        if(!active)return; // Ignora resultado antigo caso o usuário altere o texto.
+        preview(result,true);
+        setAutoTextStatus("done");
+      }catch(error){
+        if(!active)return;
+        setFields({...EMPTY});
+        setMissing([]);
+        setAutoTextStatus("error");
+        toast.error(error instanceof Error?error.message:"Falha na leitura automática do texto.");
+      }
+    },550);
+    return ()=>{active=false;clearTimeout(timer);};
+  },[pendingText,mode]);
+  const changeText=(value:string)=>{
+    setText(value);
+    setPendingText(value);
+    setMissing([]);
+    if(value.trim().length<5){
+      setFields({...EMPTY});
+      setAutoTextStatus("idle");
+    }else setAutoTextStatus("pending");
   };
   const extractText=async()=>{
     if(text.trim().length<5)return toast.error("Cole o texto completo do documento.");
-    try{preview(await previewText.mutateAsync({text}));}
-    catch(error){toast.error(error instanceof Error?error.message:"Falha na leitura do texto.");}
+    setPendingText(null);
+    setAutoTextStatus("reading");
+    try{
+      preview(await previewText.mutateAsync({text}));
+      setAutoTextStatus("done");
+    }catch(error){
+      setAutoTextStatus("error");
+      toast.error(error instanceof Error?error.message:"Falha na leitura do texto.");
+    }
   };
   const extractPdf=async(file:File)=>{
     if(!/\.pdf$/i.test(file.name)||file.size>10*1024*1024||!file.size){
       toast.error("Selecione PDF com até 10 MB.");return;
     }
+    setPendingText(null);setAutoTextStatus("idle");
     setReadingPdf(true);
     try{
       const base64=await base64File(file);
@@ -141,22 +183,28 @@ export default function VehicleVaultPanel(){
     finally{setReadingPdf(false);}
   };
   const reset=()=>{
+    setPendingText(null);setAutoTextStatus("idle");
     setFields({...EMPTY});setEditId(null);setText("");setPdfName("");setPdfBase64("");
     setMissing([]);setMode("extract");
   };
   const saveVehicle=async()=>{
-    if(NAMES.some(([key])=>!String(fields[key]).trim())){
+    if(NAMES.slice(0,7).some(([key])=>!String(fields[key]).trim())){
       toast.error("Preencha os 7 campos obrigatórios.");return;
     }
     if(!/^\d{4}$/.test(fields.manufactureYear)||!/^\d{4}$/.test(fields.modelYear)){
       toast.error("Informe os dois anos com quatro dígitos.");return;
     }
+    const category=fields.category.trim().toUpperCase();
+    const exerciseYear=fields.exerciseYear.trim();
+    if(category && category!=="PARTICULAR" && category!=="ALUGUEL")return toast.error("Categoria deve ser PARTICULAR ou ALUGUEL.");
+    if(exerciseYear && (!/^\d{4}$/.test(exerciseYear) || Number(exerciseYear)<1900 || Number(exerciseYear)>2100))return toast.error("Exercício inválido.");
     try{
       const data=await save.mutateAsync({
         ...(editId?{id:editId}:{}),
         plate:fields.plate,renavam:fields.renavam,chassis:fields.chassis,
         model:fields.model,color:fields.color,
         manufactureYear:Number(fields.manufactureYear),modelYear:Number(fields.modelYear),
+        category:category || null,exerciseYear:exerciseYear?Number(exerciseYear):null,
         sourceText:text,pdfBase64:pdfBase64||undefined,pdfFilename:pdfName||undefined,
       });
       toast.success("Documento guardado no Cofre da Frota.");
@@ -170,7 +218,9 @@ export default function VehicleVaultPanel(){
     setFields({
       plate:d.plate,renavam:d.renavam,chassis:d.chassis,model:d.model,color:d.color,
       manufactureYear:String(d.manufactureYear),modelYear:String(d.modelYear),
+      category:d.category||"",exerciseYear:d.exerciseYear?String(d.exerciseYear):"",
     });
+    setPendingText(null);setAutoTextStatus("idle");
     setText(d.sourceText||"");setPdfBase64("");setPdfName("");
     setEditId(d.id);setMissing([]);setMode("extract");
   };
@@ -228,13 +278,15 @@ export default function VehicleVaultPanel(){
         {pdfName&&<span className="self-center break-all text-xs text-emerald-300">PDF anexado: {pdfName}</span>}
         {previewPdf.isPending&&<span className="self-center text-xs text-amber-200"><Loader2 className="mr-1 inline h-4 w-4 animate-spin"/>Lendo texto/OCR...</span>}
       </div>
-      <label className="block text-xs font-bold text-slate-300">OU COLE O TEXTO COMPLETO DO DOCUMENTO</label>
+      <label className="block text-xs font-bold text-slate-300">OU COLE O TEXTO COMPLETO DO DOCUMENTO — PREENCHIMENTO AUTOMÁTICO</label>
       <textarea className="min-h-28 w-full rounded-xl border border-white/15 bg-black/55 p-3 text-xs text-white"
-        value={text} onChange={e=>setText(e.target.value)} placeholder="Cole os dados do CRLV aqui..."/>
+        value={text} onChange={e=>changeText(e.target.value)} placeholder="Cole os dados do CRLV aqui: os campos serão preenchidos automaticamente..."/>
       <button onClick={()=>void extractText()} disabled={previewText.isPending||readingPdf}
         className="rounded-xl border border-cyan-400/30 bg-cyan-500/10 px-4 py-2 text-sm font-bold text-cyan-200">
-        <ClipboardPaste className="mr-2 inline h-4 w-4"/>EXTRAIR DO TEXTO
+        <ClipboardPaste className="mr-2 inline h-4 w-4"/>EXTRAIR NOVAMENTE
       </button>
+      {autoTextStatus==="pending"||autoTextStatus==="reading"?<p className="text-xs text-cyan-200"><Loader2 className="mr-1 inline h-3.5 w-3.5 animate-spin"/>Extraindo e preenchendo os campos automaticamente...</p>:null}
+      {autoTextStatus==="done"&&<p className="text-xs text-emerald-300">Campos preenchidos automaticamente. Confira antes de guardar.</p>}
       {missing.length>0&&<p className="rounded-lg border border-amber-400/30 p-2 text-xs text-amber-200">
         Campos não identificados automaticamente: {missing.join(", ")}. Confira e preencha manualmente.</p>}
       <div className="grid gap-3 sm:grid-cols-2">
@@ -245,7 +297,7 @@ export default function VehicleVaultPanel(){
           {key==="color"&&fields.color.trim()&&<span className="mt-2 block"><VehicleColorBadge color={fields.color} compact/></span>}
           </label>)}
       </div>
-      <button onClick={()=>void saveVehicle()} disabled={save.isPending||readingPdf||previewPdf.isPending}
+      <button onClick={()=>void saveVehicle()} disabled={save.isPending||readingPdf||previewPdf.isPending||autoTextStatus==="pending"||autoTextStatus==="reading"}
         className="w-full rounded-xl bg-emerald-500 px-4 py-3 text-sm font-black text-slate-950 disabled:opacity-40">
         {save.isPending?"SALVANDO...":editId?"SALVAR ALTERAÇÕES":"CONFERIR E GUARDAR DOCUMENTO"}
       </button>
@@ -281,7 +333,7 @@ export default function VehicleVaultPanel(){
               {item.inactive?"INATIVO":item.activeClients?"EM USO":"SEM CLIENTE ATIVO"}</span>
           </div>
           <div className="mt-2 text-xs text-white/70">Placa {item.plate} · Renavam {item.renavam} · Chassi {item.chassis}</div>
-          <div className="mt-1 text-xs text-white/50">Fabricação {item.manufactureYear} · Modelo {item.modelYear} · {item.activeClients} cliente(s) ativo(s) · {item.usageCount} vinculação(ões) · {item.pdfCount} PDF(s)</div>
+          <div className="mt-1 text-xs text-white/50">Fabricação {item.manufactureYear} · Modelo {item.modelYear} · Categoria {item.category||"N/I"} · Exercício {item.exerciseYear||"N/I"} · {item.activeClients} cliente(s) ativo(s) · {item.usageCount} vinculação(ões) · {item.pdfCount} PDF(s)</div>
           {item.chassisUsed&&<div className="mt-1 text-xs font-bold text-red-300">CHASSI MARCADO COMO USADO NO CONTROLE DEFINITIVO</div>}
         </button>)}
       </div>
