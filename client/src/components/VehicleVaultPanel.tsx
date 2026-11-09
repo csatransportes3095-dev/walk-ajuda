@@ -6,13 +6,13 @@ import VehicleVaultBatchPanel from "./VehicleVaultBatchPanel";
 
 type VehicleFields = {
   plate:string; renavam:string; chassis:string; model:string; color:string;
-  manufactureYear:string; modelYear:string;
+  manufactureYear:string; modelYear:string; category:string; exerciseYear:string;
 };
-const EMPTY:VehicleFields={plate:"",renavam:"",chassis:"",model:"",color:"",manufactureYear:"",modelYear:""};
+const EMPTY:VehicleFields={plate:"",renavam:"",chassis:"",model:"",color:"",manufactureYear:"",modelYear:"",category:"",exerciseYear:""};
 const NAMES: Array<[keyof VehicleFields,string]>=[
   ["plate","PLACA"],["renavam","RENAVAM"],["chassis","CHASSI"],
   ["model","MARCA / MODELO"],["color","COR"],["manufactureYear","ANO FABRICAÇÃO"],
-  ["modelYear","ANO DO MODELO"],
+  ["modelYear","ANO DO MODELO"],["category","CATEGORIA"],["exerciseYear","EXERCÍCIO"],
 ];
 /**
  * Cor apresentada como etiqueta visual. Para BRANCO e PRETO, o fundo
@@ -113,14 +113,15 @@ export default function VehicleVaultPanel(){
   const unlink=trpc.vehicleVault.unlinkCustomer.useMutation();
   const setInactive=trpc.vehicleVault.setInactive.useMutation();
   const openPdf=trpc.vehicleVault.openPdf.useMutation();
-  const preview=(result:{plate:string;renavam:string;chassis:string;model:string;color:string;manufactureYear:number|null;modelYear:number|null;text:string;missing:string[]})=>{
+  const preview=(result:{plate:string;renavam:string;chassis:string;model:string;color:string;manufactureYear:number|null;modelYear:number|null;category:string;exerciseYear:number|null;text:string;missing:string[]})=>{
     setFields({plate:result.plate||"",renavam:result.renavam||"",chassis:result.chassis||"",
       model:result.model||"",color:result.color||"",
       manufactureYear:result.manufactureYear?String(result.manufactureYear):"",
-      modelYear:result.modelYear?String(result.modelYear):""});
+      modelYear:result.modelYear?String(result.modelYear):"",
+      category:result.category||"",exerciseYear:result.exerciseYear?String(result.exerciseYear):""});
     setText(result.text||"");
     setMissing(result.missing||[]);
-    toast.success("Dados extraídos. Confira os sete campos antes de salvar.");
+    toast.success("Dados extraídos. Confira os dados antes de salvar.");
   };
   const extractText=async()=>{
     if(text.trim().length<5)return toast.error("Cole o texto completo do documento.");
@@ -145,18 +146,23 @@ export default function VehicleVaultPanel(){
     setMissing([]);setMode("extract");
   };
   const saveVehicle=async()=>{
-    if(NAMES.some(([key])=>!String(fields[key]).trim())){
+    if(NAMES.slice(0,7).some(([key])=>!String(fields[key]).trim())){
       toast.error("Preencha os 7 campos obrigatórios.");return;
     }
     if(!/^\d{4}$/.test(fields.manufactureYear)||!/^\d{4}$/.test(fields.modelYear)){
       toast.error("Informe os dois anos com quatro dígitos.");return;
     }
+    const category=fields.category.trim().toUpperCase();
+    const exerciseYear=fields.exerciseYear.trim();
+    if(category && category!=="PARTICULAR" && category!=="ALUGUEL")return toast.error("Categoria deve ser PARTICULAR ou ALUGUEL.");
+    if(exerciseYear && (!/^\d{4}$/.test(exerciseYear) || Number(exerciseYear)<1900 || Number(exerciseYear)>2100))return toast.error("Exercício inválido.");
     try{
       const data=await save.mutateAsync({
         ...(editId?{id:editId}:{}),
         plate:fields.plate,renavam:fields.renavam,chassis:fields.chassis,
         model:fields.model,color:fields.color,
         manufactureYear:Number(fields.manufactureYear),modelYear:Number(fields.modelYear),
+        category:category || null,exerciseYear:exerciseYear?Number(exerciseYear):null,
         sourceText:text,pdfBase64:pdfBase64||undefined,pdfFilename:pdfName||undefined,
       });
       toast.success("Documento guardado no Cofre da Frota.");
@@ -170,6 +176,7 @@ export default function VehicleVaultPanel(){
     setFields({
       plate:d.plate,renavam:d.renavam,chassis:d.chassis,model:d.model,color:d.color,
       manufactureYear:String(d.manufactureYear),modelYear:String(d.modelYear),
+      category:d.category||"",exerciseYear:d.exerciseYear?String(d.exerciseYear):"",
     });
     setText(d.sourceText||"");setPdfBase64("");setPdfName("");
     setEditId(d.id);setMissing([]);setMode("extract");
@@ -281,7 +288,7 @@ export default function VehicleVaultPanel(){
               {item.inactive?"INATIVO":item.activeClients?"EM USO":"SEM CLIENTE ATIVO"}</span>
           </div>
           <div className="mt-2 text-xs text-white/70">Placa {item.plate} · Renavam {item.renavam} · Chassi {item.chassis}</div>
-          <div className="mt-1 text-xs text-white/50">Fabricação {item.manufactureYear} · Modelo {item.modelYear} · {item.activeClients} cliente(s) ativo(s) · {item.usageCount} vinculação(ões) · {item.pdfCount} PDF(s)</div>
+          <div className="mt-1 text-xs text-white/50">Fabricação {item.manufactureYear} · Modelo {item.modelYear} · Categoria {item.category||"N/I"} · Exercício {item.exerciseYear||"N/I"} · {item.activeClients} cliente(s) ativo(s) · {item.usageCount} vinculação(ões) · {item.pdfCount} PDF(s)</div>
           {item.chassisUsed&&<div className="mt-1 text-xs font-bold text-red-300">CHASSI MARCADO COMO USADO NO CONTROLE DEFINITIVO</div>}
         </button>)}
       </div>
