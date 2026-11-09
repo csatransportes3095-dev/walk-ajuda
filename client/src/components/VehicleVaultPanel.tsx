@@ -288,44 +288,90 @@ export default function VehicleVaultPanel(){
         </div>
       </div>
     </div>
-    {mode==="extract"&&<div className="space-y-3 rounded-2xl border border-amber-400/30 bg-amber-500/5 p-4">
-      {!editId&&<VehicleVaultBatchPanel onSaved={async()=>{await utils.vehicleVault.invalidate();}}/>}
-      <h3 className="font-black text-amber-200">{editId?"EDITAR DOCUMENTO EXISTENTE":"EXTRATOR PDF OU TEXTO"}</h3>
-      <div className="flex flex-wrap gap-2">
-        <label className="flex cursor-pointer items-center gap-2 rounded-xl border border-cyan-400/40 bg-cyan-500/10 px-4 py-3 text-sm font-bold">
-          <FolderOpen className="h-5 w-5"/> {readingPdf?"EXTRAINDO PDF...":"ESCOLHER PDF"}
-          <input type="file" accept=".pdf,application/pdf" disabled={readingPdf||save.isPending} className="hidden"
-            onChange={e=>{const f=e.target.files?.[0];if(f)void extractPdf(f);e.target.value="";}}/>
-        </label>
-        {pdfName&&<span className="self-center break-all text-xs text-emerald-300">PDF anexado: {pdfName}</span>}
-        {previewPdf.isPending&&<span className="self-center text-xs text-amber-200"><Loader2 className="mr-1 inline h-4 w-4 animate-spin"/>Lendo texto/OCR...</span>}
-      </div>
-      <label className="block text-xs font-bold text-slate-300">OU COLE O TEXTO COMPLETO DO DOCUMENTO — PREENCHIMENTO AUTOMÁTICO</label>
-      <textarea className="min-h-28 w-full rounded-xl border border-white/15 bg-black/55 p-3 text-xs text-white"
-        value={text} onChange={e=>changeText(e.target.value)} placeholder="Cole os dados do CRLV aqui: os campos serão preenchidos automaticamente..."/>
-      <button onClick={()=>void extractText()} disabled={previewText.isPending||readingPdf}
-        className="rounded-xl border border-cyan-400/30 bg-cyan-500/10 px-4 py-2 text-sm font-bold text-cyan-200">
-        <ClipboardPaste className="mr-2 inline h-4 w-4"/>EXTRAIR NOVAMENTE
-      </button>
-      {autoTextStatus==="pending"||autoTextStatus==="reading"?<p className="text-xs text-cyan-200"><Loader2 className="mr-1 inline h-3.5 w-3.5 animate-spin"/>Extraindo e preenchendo os campos automaticamente...</p>:null}
-      {autoTextStatus==="done"&&<p className="text-xs text-emerald-300">Campos preenchidos automaticamente. Confira antes de guardar.</p>}
-      {missing.length>0&&<p className="rounded-lg border border-amber-400/30 p-2 text-xs text-amber-200">
-        Campos não identificados automaticamente: {missing.join(", ")}. Confira e preencha manualmente.</p>}
-      <div className="grid gap-3 sm:grid-cols-2">
-        {NAMES.map(([key,label])=><label key={key} className="block text-xs font-bold text-slate-300">
-          {label}<input className="mt-1 w-full rounded-xl border border-white/20 bg-black/55 p-3 text-sm font-semibold text-white"
-            value={fields[key]} onChange={e=>setFields(v=>({...v,[key]:e.target.value}))}
-            placeholder={label}/>
-          {key==="color"&&fields.color.trim()&&<span className="mt-2 block"><VehicleColorBadge color={fields.color} compact/></span>}
-          </label>)}
-      </div>
-      <button onClick={()=>void saveVehicle()} disabled={save.isPending||readingPdf||previewPdf.isPending||autoTextStatus==="pending"||autoTextStatus==="reading"}
-        className="w-full rounded-xl bg-emerald-500 px-4 py-3 text-sm font-black text-slate-950 disabled:opacity-40">
-        {save.isPending?"SALVANDO...":editId?"SALVAR ALTERAÇÕES":"CONFERIR E GUARDAR DOCUMENTO"}
-      </button>
-      <p className="text-xs text-slate-400">O PDF original só é salvo quando anexado. O texto original permanece guardado. Nada é registrado sem confirmar.</p>
-    </div>}
-    {mode==="search"&&<>
+    {mode==="extract"&&createPortal(
+      <div className="fixed inset-0 z-[120] flex items-center justify-center bg-black/80 p-2 backdrop-blur-sm sm:p-5">
+        <section role="dialog" aria-modal="true" aria-labelledby="cofre-editor-title"
+          className="flex max-h-[calc(100dvh-1rem)] w-full max-w-6xl flex-col overflow-hidden rounded-3xl border border-cyan-400/40 bg-[#090f20] text-white shadow-2xl sm:max-h-[calc(100dvh-2.5rem)]">
+          <header className="flex shrink-0 items-center justify-between gap-3 border-b border-white/10 bg-slate-950 px-4 py-3 sm:px-5">
+            <div className="min-w-0">
+              <h3 id="cofre-editor-title" className="flex items-center gap-2 text-base font-black text-cyan-200 sm:text-lg">
+                <FileText className="h-5 w-5 shrink-0"/>{editId?"EDITAR DOCUMENTO":"NOVO DOCUMENTO"}
+              </h3>
+              <p className="text-xs text-white/50">Cofre da Frota · Cadastro e conferência na mesma janela</p>
+            </div>
+            <button type="button" onClick={()=>setMode("search")}
+              disabled={save.isPending||readingPdf||previewPdf.isPending}
+              className="shrink-0 rounded-xl border border-white/20 p-2.5 text-white/80 hover:border-red-400/50 hover:bg-red-500/10 disabled:opacity-40"
+              aria-label="Fechar janela" title="Fechar"><X className="h-5 w-5"/></button>
+          </header>
+          {!editId&&<div role="tablist" aria-label="Modo de cadastro"
+            className="grid shrink-0 grid-cols-2 gap-2 border-b border-white/10 bg-slate-900/70 p-3 sm:px-5">
+            <button type="button" role="tab" aria-selected={editorTab==="single"} onClick={()=>setEditorTab("single")}
+              className={"flex items-center justify-center gap-2 rounded-xl border px-3 py-2.5 text-xs font-black sm:text-sm "+(editorTab==="single"?"border-amber-300/60 bg-amber-400/15 text-amber-200":"border-white/10 bg-black/20 text-slate-400 hover:text-white")}>
+              <FileText className="h-4 w-4"/> PDF OU TEXTO
+            </button>
+            <button type="button" role="tab" aria-selected={editorTab==="batch"} onClick={()=>setEditorTab("batch")}
+              className={"flex items-center justify-center gap-2 rounded-xl border px-3 py-2.5 text-xs font-black sm:text-sm "+(editorTab==="batch"?"border-cyan-300/60 bg-cyan-400/15 text-cyan-200":"border-white/10 bg-black/20 text-slate-400 hover:text-white")}>
+              <FolderOpen className="h-4 w-4"/> PDFs EM LOTE
+            </button>
+          </div>}
+          <div className="min-h-0 flex-1 overflow-y-auto overscroll-contain p-3 sm:p-5">
+            {!editId&&editorTab==="batch"?
+              <VehicleVaultBatchPanel onSaved={async()=>{await utils.vehicleVault.invalidate();}}/>:
+              <div className="grid gap-4 lg:grid-cols-[minmax(0,0.9fr)_minmax(0,1.1fr)]">
+                <div className="space-y-3 rounded-2xl border border-amber-400/20 bg-amber-500/[.04] p-3 sm:p-4">
+                  <h4 className="text-sm font-black text-amber-200">1. ADICIONAR DOCUMENTO</h4>
+                  <div className="flex flex-wrap items-center gap-2">
+                    <label className="flex cursor-pointer items-center gap-2 rounded-xl border border-cyan-400/40 bg-cyan-500/10 px-3 py-2.5 text-xs font-black text-cyan-100 hover:bg-cyan-500/20">
+                      <FolderOpen className="h-4 w-4"/> {readingPdf?"LENDO PDF...":"ESCOLHER PDF"}
+                      <input type="file" accept=".pdf,application/pdf" disabled={readingPdf||save.isPending} className="hidden"
+                        onChange={e=>{const file=e.target.files?.[0];if(file)void extractPdf(file);e.target.value="";}}/>
+                    </label>
+                    {pdfName&&<span className="min-w-0 break-all text-xs text-emerald-300">{pdfName}</span>}
+                    {previewPdf.isPending&&<span className="flex items-center gap-1 text-xs text-amber-200"><Loader2 className="h-4 w-4 animate-spin"/>Lendo OCR...</span>}
+                  </div>
+                  <label className="block text-xs font-bold text-slate-300" htmlFor="cofre-texto-documento">OU COLE O TEXTO · PREENCHIMENTO AUTOMÁTICO</label>
+                  <textarea id="cofre-texto-documento" className="h-40 w-full resize-y rounded-xl border border-white/15 bg-black/55 p-3 text-xs text-white outline-none focus:border-cyan-300/50"
+                    value={text} onChange={e=>changeText(e.target.value)}
+                    placeholder="Cole aqui os dados do veículo. Os campos ao lado serão preenchidos automaticamente."/>
+                  <div className="flex flex-wrap items-center gap-2">
+                    <button type="button" onClick={()=>void extractText()} disabled={previewText.isPending||readingPdf}
+                      className="rounded-xl border border-cyan-400/30 bg-cyan-500/10 px-3 py-2 text-xs font-bold text-cyan-200 disabled:opacity-40">
+                      <ClipboardPaste className="mr-1 inline h-4 w-4"/> EXTRAIR NOVAMENTE
+                    </button>
+                    {(autoTextStatus==="pending"||autoTextStatus==="reading")&&
+                      <span className="flex items-center gap-1 text-xs text-cyan-200"><Loader2 className="h-4 w-4 animate-spin"/>Preenchendo...</span>}
+                    {autoTextStatus==="done"&&<span className="text-xs text-emerald-300">Preenchido automaticamente</span>}
+                  </div>
+                  {missing.length>0&&<p className="rounded-lg border border-amber-400/30 bg-amber-400/5 p-2 text-xs text-amber-200">
+                    Conferir campos não identificados: {missing.join(", ")}.</p>}
+                </div>
+                <div className="rounded-2xl border border-cyan-400/20 bg-cyan-500/[.03] p-3 sm:p-4">
+                  <div className="mb-3 flex flex-wrap items-center justify-between gap-2">
+                    <h4 className="text-sm font-black text-cyan-200">2. CONFERIR OS DADOS</h4>
+                    <span className="text-[11px] text-white/45">Campos editáveis</span>
+                  </div>
+                  <div className="grid grid-cols-2 gap-2 sm:gap-3">
+                    {NAMES.map(([key,label])=><label key={key} className={"min-w-0 text-[11px] font-bold text-slate-300 "+(key==="chassis"||key==="model"?"col-span-2 sm:col-span-1":"")}>
+                      {label}<input className="mt-1 w-full min-w-0 rounded-lg border border-white/20 bg-black/55 px-2.5 py-2.5 text-sm font-semibold text-white outline-none focus:border-cyan-300/50"
+                        value={fields[key]} onChange={e=>setFields(v=>({...v,[key]:e.target.value}))} placeholder={label}/>
+                      {key==="color"&&fields.color.trim()&&<span className="mt-1 block"><VehicleColorBadge color={fields.color} compact/></span>}
+                    </label>)}
+                  </div>
+                </div>
+              </div>}
+          </div>
+          {(editId||editorTab==="single")&&<footer className="flex shrink-0 flex-wrap items-center justify-between gap-2 border-t border-white/10 bg-slate-950 px-4 py-3 sm:px-5">
+            <span className="text-[11px] text-slate-400">Os dados só serão salvos após confirmação.</span>
+            <button type="button" onClick={()=>void saveVehicle()}
+              disabled={save.isPending||readingPdf||previewPdf.isPending||autoTextStatus==="pending"||autoTextStatus==="reading"}
+              className="rounded-xl bg-emerald-500 px-5 py-3 text-xs font-black text-slate-950 hover:bg-emerald-400 disabled:cursor-not-allowed disabled:opacity-40 sm:text-sm">
+              {save.isPending?"SALVANDO...":editId?"SALVAR ALTERAÇÕES":"CONFERIR E GUARDAR DOCUMENTO"}
+            </button>
+          </footer>}
+        </section>
+      </div>,document.body)}
+
       <div className="space-y-2 rounded-2xl border border-cyan-500/20 bg-black/35 p-3">
         <div className="flex gap-2">
           <input value={query} onChange={e=>setQuery(e.target.value)} onKeyDown={e=>{if(e.key==="Enter")setSearchQuery(query);}}
@@ -411,6 +457,6 @@ export default function VehicleVaultPanel(){
           </details>
         </>}
       </div>}
-    </>}
+    </>
   </div>;
 }
