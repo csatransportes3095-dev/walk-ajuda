@@ -4,11 +4,15 @@ on:
   pull_request:
     branches:
       - recovery/organizar-salvos-2026-08-24
+      - feat/placa-pdf-em-lote-20261106
     paths:
       - "client/src/components/VehicleVaultPanel.tsx"
       - "client/src/components/VehicleVaultBatchPanel.tsx"
       - "client/src/components/vehicleVaultBatchUtils.ts"
       - "server/vehicleVaultBatch.test.ts"
+      - "server/vehicleVaultClassification.ts"
+      - "server/vehicleVaultClassification.test.ts"
+      - "server/routers/vehicleVault.ts"
       - ".github/workflows/vehicle-vault-batch-ci.yml"
   workflow_dispatch:
 
@@ -29,6 +33,6 @@ jobs:
       - name: Install dependencies
         run: pnpm install --no-frozen-lockfile
       - name: Testar extrator em lote
-        run: pnpm exec vitest run server/vehicleVaultBatch.test.ts
+        run: pnpm exec vitest run server/vehicleVaultBatch.test.ts server/vehicleVaultClassification.test.ts
       - name: Build de producao
         run: pnpm build

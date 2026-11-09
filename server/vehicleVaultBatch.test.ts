@@ -9,7 +9,7 @@ import {
 
 const valid: VaultFields = {
   plate: "ABC1D23", renavam: "01234567890", chassis: "9BWZZZ377VT004251",
-  model: "VW/GOL 1.0", color: "PRATA", manufactureYear: "2020", modelYear: "2021",
+  model: "VW/GOL 1.0", color: "PRATA", manufactureYear: "2020", modelYear: "2021", category: "", exerciseYear: "",
 };
 
 describe("Extrator PDF em lote - Cofre da Frota", () => {
