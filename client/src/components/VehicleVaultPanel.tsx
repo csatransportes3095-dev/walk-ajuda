@@ -371,7 +371,7 @@ export default function VehicleVaultPanel(){
           </footer>}
         </section>
       </div>,document.body)}
-
+    <>
       <div className="space-y-2 rounded-2xl border border-cyan-500/20 bg-black/35 p-3">
         <div className="flex gap-2">
           <input value={query} onChange={e=>setQuery(e.target.value)} onKeyDown={e=>{if(e.key==="Enter")setSearchQuery(query);}}
