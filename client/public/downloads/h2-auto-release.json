@@ -1,11 +1,11 @@
 {
   "packageName": "com.h2colombiano.auto",
-  "apkFile": "H2-AUTO-1.81.apk",
-  "versionName": "1.81-human-dialogue-and-menu-dedup",
-  "versionCode": 81,
-  "sha256": "e2f7864329f9925a356ce0c7541a2d4ab85d65b6fe34e14db0905ca6bf7e8530",
+  "apkFile": "H2-AUTO-1.82.apk",
+  "versionName": "1.82-audio-transcription-default",
+  "versionCode": 82,
+  "sha256": "087ff0b221c42fe5d5ecd4844b4794bbefa34a954b7f575a60ef3b6b6fb50196",
   "certificateSha256": "3215b6d6b643ae6b57ffaf6e4854a40be267d4816166255872410c696384b393",
-  "commit": "264189d043dc5750c6f6bd56b5936506b001535e",
-  "workflowRun": "42387922234",
-  "publishedAt": "2026-11-07T15:54:36Z"
+  "commit": "5fc8d35b03a3d0a0e3908fd09844525669e9ab18",
+  "workflowRun": "42680830657",
+  "publishedAt": "2026-11-09T19:12:02Z"
 }
