@@ -19,7 +19,7 @@ type BatchItem = {
 };
 const EMPTY_FIELDS: VaultFields = {
   plate: "", renavam: "", chassis: "", model: "", color: "",
-  manufactureYear: "", modelYear: "",
+  manufactureYear: "", modelYear: "",category: "",exerciseYear: "",
 };
 
 function readPdfAsBase64(file: File): Promise<string> {
@@ -154,6 +154,8 @@ export default function VehicleVaultBatchPanel({ onSaved }: Props) {
             color: item.fields.color,
             manufactureYear: Number(item.fields.manufactureYear),
             modelYear: Number(item.fields.modelYear),
+            category: item.fields.category.trim().toUpperCase() === "" ? null : item.fields.category.trim().toUpperCase() as "PARTICULAR" | "ALUGUEL",
+            exerciseYear: item.fields.exerciseYear.trim() ? Number(item.fields.exerciseYear) : null,
             sourceText: item.sourceText,
             pdfBase64: base64,
             pdfFilename: item.file.name,
