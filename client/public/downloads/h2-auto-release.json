@@ -1,11 +1,11 @@
 {
   "packageName": "com.h2colombiano.auto",
-  "apkFile": "H2-AUTO-1.82.apk",
-  "versionName": "1.82-audio-transcription-default",
-  "versionCode": 82,
-  "sha256": "087ff0b221c42fe5d5ecd4844b4794bbefa34a954b7f575a60ef3b6b6fb50196",
+  "apkFile": "H2-AUTO-1.83.apk",
+  "versionName": "1.83-audio-transcript-routing",
+  "versionCode": 83,
+  "sha256": "a02020952cee1cb7fabb1e19f0a734c3004dd32ae4fbbe4422472d0cf054e42d",
   "certificateSha256": "3215b6d6b643ae6b57ffaf6e4854a40be267d4816166255872410c696384b393",
-  "commit": "5fc8d35b03a3d0a0e3908fd09844525669e9ab18",
-  "workflowRun": "42680830657",
-  "publishedAt": "2026-11-09T19:12:02Z"
+  "commit": "0a57629edd9a97e1b90c8e0438cf5d61f3aed014",
+  "workflowRun": "42687680789",
+  "publishedAt": "2026-11-09T19:54:39Z"
 }
