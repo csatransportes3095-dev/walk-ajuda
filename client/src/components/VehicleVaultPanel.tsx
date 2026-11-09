@@ -96,7 +96,7 @@ export default function VehicleVaultPanel(){
   const [color,setColor]=useState("");
   const [yearFab,setYearFab]=useState("");
   const [yearMod,setYearMod]=useState("");
-  const [status,setStatus]=useState<"all"|"available"|"in_use"|"used"|"inactive">("all");
+  const [status,setStatus]=useState<"all"|"available"|"in_use"|"used">("all");
   const [selected,setSelected]=useState<number|null>(null);
   const [clientQuery,setClientQuery]=useState("");
   const [pendingClientQuery,setPendingClientQuery]=useState("");
@@ -262,6 +262,7 @@ export default function VehicleVaultPanel(){
     const d=details.data;if(!d)return;
     try{
       await setInactive.mutateAsync({id:d.id,inactive:!d.inactive});
+      if(!d.inactive)setSelected(null); // Inativado: fechar a ficha que deixa de fazer parte da consulta.
       await utils.vehicleVault.invalidate();toast.success("Situação do arquivo atualizada.");
     }catch(error){toast.error(error instanceof Error?error.message:"Falha ao atualizar situação.");}
   };
@@ -386,7 +387,6 @@ export default function VehicleVaultPanel(){
             className="min-w-0 rounded-lg border border-white/15 bg-slate-900 p-2 text-xs">
             <option value="all">Todos</option><option value="available">Sem cliente em uso</option>
             <option value="in_use">Em uso</option><option value="used">Já utilizado</option>
-            <option value="inactive">Inativo</option>
           </select>
         </div>
       </div>

@@ -302,7 +302,8 @@ export const vehicleVaultRouter = router({
     const modFromQuery = normalized.match(/\b(?:ANO\s+(?:DO\s+)?MODELO|MODELO\s+ANO)\s+(19\d{2}|20\d{2})\b/)?.[1];
     const yearF=input.manufactureYear||Number(fabFromQuery)||0;
     const yearM=input.modelYear||Number(modFromQuery)||0;
-    const filters: any[]=[sql`1=1`];
+    // Inativos ficam guardados no banco (inclusive para bloquear placas duplicadas), mas nunca aparecem nas pesquisas.
+    const filters: any[]=[sql`d.inactive=0`];
     for(const term of tokensFromQuery(input.query)) {
       const v="%"+term+"%";
       filters.push(sql`(d.plate LIKE ${v} OR d.renavam LIKE ${v} OR d.chassis LIKE ${v}
@@ -313,7 +314,7 @@ export const vehicleVaultRouter = router({
     if(input.model.trim())filters.push(sql`d.model LIKE ${"%"+clean(input.model)+"%"}`);
     if(yearF)filters.push(sql`d.manufactureYear=${yearF}`);
     if(yearM)filters.push(sql`d.modelYear=${yearM}`);
-    if(input.status==="inactive")filters.push(sql`d.inactive=1`);
+    if(input.status==="inactive")filters.push(sql`1=0`); // compatibilidade: pesquisa antiga por inativos retorna vazio
     if(input.status==="available")filters.push(sql`d.inactive=0 AND NOT EXISTS
       (SELECT 1 FROM vehicle_vault_clients a WHERE a.vehicleId=d.id AND a.unlinkedAt IS NULL)`);
     if(input.status==="in_use")filters.push(sql`d.inactive=0 AND EXISTS
