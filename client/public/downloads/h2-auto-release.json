@@ -1,11 +1,11 @@
 {
   "packageName": "com.h2colombiano.auto",
-  "apkFile": "H2-AUTO-1.84.apk",
-  "versionName": "1.84-audio-phrase-routing",
-  "versionCode": 84,
-  "sha256": "c82a70282ca742f857e2843b828670ec7346a4a51a9a2900124f13f1881defad",
+  "apkFile": "H2-AUTO-1.85.apk",
+  "versionName": "1.85-audio-greeting-routing",
+  "versionCode": 85,
+  "sha256": "c669807a0cc008f39dbba8872fb15ed7efd25866d7b9d81a23fb9760acd042bb",
   "certificateSha256": "3215b6d6b643ae6b57ffaf6e4854a40be267d4816166255872410c696384b393",
-  "commit": "cba6853",
-  "workflowRun": "42689802448",
-  "publishedAt": "2026-11-09T20:08:40Z"
+  "commit": "c5bf689",
+  "workflowRun": "42691799245",
+  "publishedAt": "2026-11-09T20:20:21Z"
 }
