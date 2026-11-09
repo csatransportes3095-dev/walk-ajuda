@@ -1,4 +1,5 @@
 import { TRPCError } from "@trpc/server";
+import { parseVehicleVaultClassification } from "../vehicleVaultClassification";
 import { z } from "zod";
 import { sql } from "drizzle-orm";
 import { router, adminProcedure } from "../_core/trpc";
@@ -57,6 +58,12 @@ async function database() {
           KEY idx_vehicle_vault_color (color)
         ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci
       `));
+      // Campos opcionais: preservar registros antigos e migrar somente as colunas necessárias.
+      const columns = rows(await db.execute(sql`SELECT COLUMN_NAME AS name FROM information_schema.COLUMNS
+        WHERE TABLE_SCHEMA=DATABASE() AND TABLE_NAME='vehicle_vault_documents'`));
+      const present = new Set(columns.map(row => String(row.name).toLowerCase()));
+      if (!present.has("category")) await db.execute(sql.raw(`ALTER TABLE vehicle_vault_documents ADD COLUMN category VARCHAR(16) NULL`));
+      if (!present.has("exerciseyear")) await db.execute(sql.raw(`ALTER TABLE vehicle_vault_documents ADD COLUMN exerciseYear SMALLINT NULL`));
       await db.execute(sql.raw(`
         CREATE TABLE IF NOT EXISTS vehicle_vault_pdf_files (
           id INT NOT NULL AUTO_INCREMENT PRIMARY KEY,
@@ -199,7 +206,8 @@ function extractFields(raw: string) {
   const manufactureYear = fabricationYear || Number(yearPair?.[1] || 0) || null;
   const modelYear = yearModel || Number(yearPair?.[2] || 0) || null;
 
-  const result = { plate, renavam, chassis, model, color, manufactureYear, modelYear };
+  const { category, exerciseYear } = parseVehicleVaultClassification(original);
+  const result = { plate, renavam, chassis, model, color, manufactureYear, modelYear, category, exerciseYear };
   return { ...result, text: original, missing: fields.filter(key => !result[key]) };
 }
 async function readPdf(base64: string) {
@@ -248,6 +256,8 @@ const fieldSchema = z.object({
   color: z.string().min(1).max(48),
   manufactureYear: z.number().int().min(1900).max(2100),
   modelYear: z.number().int().min(1900).max(2100),
+  category: z.enum(["PARTICULAR", "ALUGUEL"]).nullable().optional(),
+  exerciseYear: z.number().int().min(1900).max(2100).nullable().optional(),
   sourceText: z.string().max(120_000).default(""),
   pdfBase64: z.string().min(30).max(PDF_BASE64_LIMIT).optional(),
   pdfFilename: z.string().max(220).optional(),
@@ -300,7 +310,7 @@ export const vehicleVaultRouter = router({
     if(input.status==="used")filters.push(sql`EXISTS
       (SELECT 1 FROM vehicle_vault_history h WHERE h.vehicleId=d.id AND h.event='linked')`);
     const result=await db.execute(sql`
-      SELECT d.id,d.plate,d.renavam,d.chassis,d.model,d.color,d.manufactureYear,d.modelYear,d.inactive,d.updatedAt,
+      SELECT d.id,d.plate,d.renavam,d.chassis,d.model,d.color,d.manufactureYear,d.modelYear,d.category,d.exerciseYear,d.inactive,d.updatedAt,
         (SELECT COUNT(*) FROM vehicle_vault_clients a WHERE a.vehicleId=d.id AND a.unlinkedAt IS NULL) activeClients,
         (SELECT COUNT(*) FROM vehicle_vault_history h WHERE h.vehicleId=d.id AND h.event='linked') usageCount,
         (SELECT COUNT(*) FROM vehicle_vault_pdf_files p WHERE p.vehicleId=d.id) pdfCount,
@@ -340,13 +350,13 @@ export const vehicleVaultRouter = router({
       if(id){
         await db.execute(sql`UPDATE vehicle_vault_documents SET
           plate=${plate},renavam=${renavam},chassis=${chassis},model=${model},color=${color},
-          manufactureYear=${input.manufactureYear},modelYear=${input.modelYear},sourceText=${input.sourceText}
+          manufactureYear=${input.manufactureYear},modelYear=${input.modelYear},category=${input.category ?? null},exerciseYear=${input.exerciseYear ?? null},sourceText=${input.sourceText}
           WHERE id=${id}`);
       }else{
         const created=await db.execute(sql`INSERT INTO vehicle_vault_documents
-          (plate,renavam,chassis,model,color,manufactureYear,modelYear,sourceText)
+          (plate,renavam,chassis,model,color,manufactureYear,modelYear,category,exerciseYear,sourceText)
           VALUES (${plate},${renavam},${chassis},${model},${color},
-          ${input.manufactureYear},${input.modelYear},${input.sourceText})`);
+          ${input.manufactureYear},${input.modelYear},${input.category ?? null},${input.exerciseYear ?? null},${input.sourceText})`);
         id=Number((created[0] as any)?.insertId||0);
       }
       if(!id)throw new TRPCError({code:"INTERNAL_SERVER_ERROR",message:"Falha ao guardar veículo."});
@@ -366,7 +376,7 @@ export const vehicleVaultRouter = router({
   details: adminProcedure.input(z.object({id:z.number().int().positive()})).query(async ({input})=>{
     const db=await database();
     const doc=rows(await db.execute(sql`SELECT id,plate,renavam,chassis,model,color,
-      manufactureYear,modelYear,sourceText,inactive,createdAt,updatedAt
+      manufactureYear,modelYear,category,exerciseYear,sourceText,inactive,createdAt,updatedAt
       FROM vehicle_vault_documents WHERE id=${input.id} LIMIT 1`))[0];
     if(!doc)throw new TRPCError({code:"NOT_FOUND",message:"Veículo não encontrado."});
     const [linked,history,pdfs]=await Promise.all([
