@@ -105,6 +105,7 @@ export default function VehicleVaultPanel(){
     modelYear:/^\d{4}$/.test(yearMod)?Number(yearMod):undefined,
     status,limit:150,
   },{retry:false});
+  const totalCount=trpc.vehicleVault.totalCount.useQuery(undefined,{retry:false});
   const details=trpc.vehicleVault.details.useQuery({id:selected||1},{enabled:!!selected,retry:false});
   const customers=trpc.vehicleVault.findCustomers.useQuery({query:pendingClientQuery},
     {enabled:!!selected&&pendingClientQuery.length>=2,retry:false});
@@ -261,9 +262,13 @@ export default function VehicleVaultPanel(){
         <h2 className="flex items-center gap-2 text-xl font-black text-cyan-200"><Archive className="h-6 w-6"/>COFRE DA FROTA</h2>
         <p className="text-xs text-white/55">PDFs originais, dados pesquisáveis e vários clientes por documento. Controle de chassi usado continua separado.</p>
       </div>
-      <div className="flex gap-2">
+      <div className="flex flex-wrap items-center gap-2">
         <button onClick={()=>setMode("search")} className={"rounded-xl px-3 py-2 text-xs font-bold "+(mode==="search"?"bg-cyan-500 text-black":"border border-white/20")}>PESQUISAR</button>
         <button onClick={reset} className={"rounded-xl px-3 py-2 text-xs font-bold "+(mode==="extract"?"bg-amber-500 text-black":"border border-white/20")}><Plus className="mr-1 inline h-4 w-4"/>NOVO DOCUMENTO</button>
+        <div className="min-w-[154px] rounded-xl border border-cyan-400/40 bg-cyan-400/10 px-4 py-2 text-center shadow-[0_0_18px_rgba(34,211,238,.12)]" title="Quantidade total de documentos cadastrados no Cofre, independentemente do limite de 150 da pesquisa.">
+          <span className="block text-[10px] font-black tracking-[.12em] text-cyan-200">TOTAL NO COFRE</span>
+          <strong className="block text-xl font-black tabular-nums text-white" aria-live="polite">{totalCount.isLoading?"...":totalCount.isError?"—":(totalCount.data?.total??0).toLocaleString("pt-BR")}</strong>
+        </div>
       </div>
     </div>
     {mode==="extract"&&<div className="space-y-3 rounded-2xl border border-amber-400/30 bg-amber-500/5 p-4">
@@ -323,7 +328,7 @@ export default function VehicleVaultPanel(){
           </select>
         </div>
       </div>
-      <div className="text-xs text-slate-400">{search.isFetching?"Consultando...":search.error?"Não foi possível consultar os documentos.":(search.data?.length||0)+" documento(s) encontrado(s)"} · Busque modelo + cor juntos.</div>
+      <div className="text-xs text-slate-400">{search.isFetching?"Consultando...":search.error?"Não foi possível consultar os documentos.":"Exibindo "+(search.data?.length||0)+" registro(s) nesta consulta (máx. 150)"} · Busque modelo + cor juntos.</div>
       <div className="max-h-[34rem] space-y-2 overflow-auto">
         {(search.data||[]).map(item=><button type="button" key={item.id} onClick={()=>{setSelected(item.id);setClientQuery("");setPendingClientQuery("");}}
           className={"w-full rounded-xl border p-3 text-left "+(selected===item.id?"border-cyan-300 bg-cyan-500/15":"border-white/10 bg-white/[.03] hover:border-white/30")}>

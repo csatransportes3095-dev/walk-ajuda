@@ -282,6 +282,11 @@ export const vehicleVaultRouter = router({
     .mutation(({ input }) => extractFields(input.text)),
   previewPdf: adminProcedure.input(z.object({ base64: z.string().min(30).max(PDF_BASE64_LIMIT) }))
     .mutation(async ({ input }) => readPdf(input.base64)),
+  totalCount: adminProcedure.query(async () => {
+    const db=await database();
+    const result=rows(await db.execute(sql`SELECT COUNT(*) AS total FROM vehicle_vault_documents`));
+    return {total:Number(result[0]?.total??0)};
+  }),
   search: adminProcedure.input(z.object({
     query:z.string().max(160).default(""),
     color:z.string().max(48).default(""),
