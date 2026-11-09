@@ -120,19 +120,13 @@ export default function VehicleVaultPanel(){
   const unlink=trpc.vehicleVault.unlinkCustomer.useMutation();
   const setInactive=trpc.vehicleVault.setInactive.useMutation();
   const openPdf=trpc.vehicleVault.openPdf.useMutation();
+  // O ADM só fecha o cadastro pelo X. Esc, salvamento e clique externo não fecham.
   useEffect(()=>{
     if(mode!=="extract")return;
     const previousOverflow=document.body.style.overflow;
     document.body.style.overflow="hidden";
-    const onEscape=(event:KeyboardEvent)=>{
-      if(event.key==="Escape"&&!save.isPending&&!readingPdf&&!previewPdf.isPending)setMode("search");
-    };
-    document.addEventListener("keydown",onEscape);
-    return ()=>{
-      document.body.style.overflow=previousOverflow;
-      document.removeEventListener("keydown",onEscape);
-    };
-  },[mode,save.isPending,readingPdf,previewPdf.isPending]);
+    return ()=>{document.body.style.overflow=previousOverflow;};
+  },[mode]);
   const preview=(result:{plate:string;renavam:string;chassis:string;model:string;color:string;manufactureYear:number|null;modelYear:number|null;category:string;exerciseYear:number|null;text:string;missing:string[]},silent=false)=>{
     setFields({plate:result.plate||"",renavam:result.renavam||"",chassis:result.chassis||"",
       model:result.model||"",color:result.color||"",
@@ -226,9 +220,12 @@ export default function VehicleVaultPanel(){
         category:category || null,exerciseYear:exerciseYear?Number(exerciseYear):null,
         sourceText:text,pdfBase64:pdfBase64||undefined,pdfFilename:pdfName||undefined,
       });
-      toast.success("Documento guardado no Cofre da Frota.");
-      setEditId(null);setPdfBase64("");setPdfName("");
-      setSelected(data.id);setMode("search");
+      toast.success("Documento guardado! Pode adicionar o próximo.");
+      // Manter o popup aberto; começar um cadastro limpo após cada salvamento.
+      setSelected(data.id);
+      setPendingText(null);setAutoTextStatus("idle");
+      setText("");setFields({...EMPTY});setMissing([]);
+      setPdfBase64("");setPdfName("");setEditId(null);setEditorTab("single");
       await utils.vehicleVault.invalidate();
     }catch(error){toast.error(error instanceof Error?error.message:"Falha ao salvar documento.");}
   };
@@ -364,11 +361,11 @@ export default function VehicleVaultPanel(){
               </div>}
           </div>
           {(editId||editorTab==="single")&&<footer className="flex shrink-0 flex-wrap items-center justify-between gap-2 border-t border-white/10 bg-slate-950 px-4 py-3 sm:px-5">
-            <span className="text-[11px] text-slate-400">Os dados só serão salvos após confirmação.</span>
+            <span className="text-[11px] text-slate-400">Cadastre quantos documentos quiser. A janela só fecha no X.</span>
             <button type="button" onClick={()=>void saveVehicle()}
               disabled={save.isPending||readingPdf||previewPdf.isPending||autoTextStatus==="pending"||autoTextStatus==="reading"}
               className="rounded-xl bg-emerald-500 px-5 py-3 text-xs font-black text-slate-950 hover:bg-emerald-400 disabled:cursor-not-allowed disabled:opacity-40 sm:text-sm">
-              {save.isPending?"SALVANDO...":editId?"SALVAR ALTERAÇÕES":"CONFERIR E GUARDAR DOCUMENTO"}
+              {save.isPending?"SALVANDO...":editId?"SALVAR E CONTINUAR":"GUARDAR E ADICIONAR OUTRO"}
             </button>
           </footer>}
         </section>
