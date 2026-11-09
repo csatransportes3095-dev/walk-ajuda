@@ -1,4 +1,5 @@
 import { useEffect, useState } from "react";
+import { createPortal } from "react-dom";
 import { Archive, ClipboardPaste, FileSearch, FileText, FolderOpen, Loader2, Pencil, Plus, Printer, Search, ShieldCheck, Users, X } from "lucide-react";
 import { toast } from "sonner";
 import { trpc } from "@/lib/trpc";
@@ -80,6 +81,7 @@ function downloadPdf(base64:string,name:string,print:boolean){
 export default function VehicleVaultPanel(){
   const utils=trpc.useUtils();
   const [mode,setMode]=useState<"search"|"extract">("search");
+  const [editorTab,setEditorTab]=useState<"single"|"batch">("single");
   const [text,setText]=useState("");
   const [pendingText,setPendingText]=useState<string|null>(null);
   const [autoTextStatus,setAutoTextStatus]=useState<"idle"|"pending"|"reading"|"done"|"error">("idle");
@@ -116,6 +118,19 @@ export default function VehicleVaultPanel(){
   const unlink=trpc.vehicleVault.unlinkCustomer.useMutation();
   const setInactive=trpc.vehicleVault.setInactive.useMutation();
   const openPdf=trpc.vehicleVault.openPdf.useMutation();
+  useEffect(()=>{
+    if(mode!=="extract")return;
+    const previousOverflow=document.body.style.overflow;
+    document.body.style.overflow="hidden";
+    const onEscape=(event:KeyboardEvent)=>{
+      if(event.key==="Escape"&&!save.isPending&&!readingPdf&&!previewPdf.isPending)setMode("search");
+    };
+    document.addEventListener("keydown",onEscape);
+    return ()=>{
+      document.body.style.overflow=previousOverflow;
+      document.removeEventListener("keydown",onEscape);
+    };
+  },[mode,save.isPending,readingPdf,previewPdf.isPending]);
   const preview=(result:{plate:string;renavam:string;chassis:string;model:string;color:string;manufactureYear:number|null;modelYear:number|null;category:string;exerciseYear:number|null;text:string;missing:string[]},silent=false)=>{
     setFields({plate:result.plate||"",renavam:result.renavam||"",chassis:result.chassis||"",
       model:result.model||"",color:result.color||"",
@@ -184,6 +199,7 @@ export default function VehicleVaultPanel(){
     finally{setReadingPdf(false);}
   };
   const reset=()=>{
+    setEditorTab("single");
     setPendingText(null);setAutoTextStatus("idle");
     setFields({...EMPTY});setEditId(null);setText("");setPdfName("");setPdfBase64("");
     setMissing([]);setMode("extract");
@@ -223,6 +239,7 @@ export default function VehicleVaultPanel(){
     });
     setPendingText(null);setAutoTextStatus("idle");
     setText(d.sourceText||"");setPdfBase64("");setPdfName("");
+    setEditorTab("single");
     setEditId(d.id);setMissing([]);setMode("extract");
   };
   const linkCustomer=async(customerId:number)=>{
