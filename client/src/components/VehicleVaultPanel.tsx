@@ -101,12 +101,14 @@ export default function VehicleVaultPanel(){
   const [clientQuery,setClientQuery]=useState("");
   const [pendingClientQuery,setPendingClientQuery]=useState("");
   const [readingPdf,setReadingPdf]=useState(false);
+  // A vitrine inicial não carrega 150 veículos; os resultados aparecem apenas com uma pesquisa ou filtro.
+  const hasActiveSearch=Boolean(searchQuery.trim()||model.trim()||color.trim()||yearFab.trim()||yearMod.trim()||status!=="all");
   const search=trpc.vehicleVault.search.useQuery({
     query:searchQuery,model,color,
     manufactureYear:/^\d{4}$/.test(yearFab)?Number(yearFab):undefined,
     modelYear:/^\d{4}$/.test(yearMod)?Number(yearMod):undefined,
     status,limit:150,
-  },{retry:false});
+  },{enabled:hasActiveSearch,retry:false});
   const totalCount=trpc.vehicleVault.totalCount.useQuery(undefined,{retry:false});
   const details=trpc.vehicleVault.details.useQuery({id:selected||1},{enabled:!!selected,retry:false});
   const customers=trpc.vehicleVault.findCustomers.useQuery({query:pendingClientQuery},
@@ -391,7 +393,8 @@ export default function VehicleVaultPanel(){
           </select>
         </div>
       </div>
-      <div className="text-xs text-slate-400">{search.isFetching?"Consultando...":search.error?"Não foi possível consultar os documentos.":"Exibindo "+(search.data?.length||0)+" registro(s) nesta consulta (máx. 150)"} · Busque modelo + cor juntos.</div>
+      {hasActiveSearch&&<>
+      {search.isFetching?<p className="text-xs text-slate-400">Consultando...</p>:search.error?<p className="text-xs text-amber-200">Não foi possível consultar os documentos.</p>:search.data?.length===0?<p className="text-xs text-slate-400">Nenhum veículo encontrado para os filtros informados.</p>:null}
       <div className="max-h-[34rem] space-y-2 overflow-auto">
         {(search.data||[]).map(item=><button type="button" key={item.id} onClick={()=>{setSelected(item.id);setClientQuery("");setPendingClientQuery("");}}
           className={"w-full rounded-xl border p-3 text-left "+(selected===item.id?"border-cyan-300 bg-cyan-500/15":"border-white/10 bg-white/[.03] hover:border-white/30")}>
@@ -405,6 +408,7 @@ export default function VehicleVaultPanel(){
           {item.chassisUsed&&<div className="mt-1 text-xs font-bold text-red-300">CHASSI MARCADO COMO USADO NO CONTROLE DEFINITIVO</div>}
         </button>)}
       </div>
+      </>}
       {selected&&<div className="space-y-4 rounded-2xl border border-cyan-400/25 bg-slate-900/70 p-4">
         <div className="flex items-center justify-between gap-2">
           <h3 className="font-black text-cyan-200">FICHA DO DOCUMENTO</h3>
