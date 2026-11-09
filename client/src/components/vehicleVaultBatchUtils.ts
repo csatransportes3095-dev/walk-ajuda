@@ -65,7 +65,7 @@ export function validateBatchFields(fields: VaultFields): string[] {
   const category=fields.category.trim().toUpperCase();
   if(category && category!=="PARTICULAR" && category!=="ALUGUEL")issues.push("Categoria inválida.");
   const exercise=fields.exerciseYear.trim();
-  if(exercise && (!/^\\d{4}$/.test(exercise) || Number(exercise)<1900 || Number(exercise)>2100))issues.push("Exercício inválido.");
+  if(exercise && (!/^\d{4}$/.test(exercise) || Number(exercise)<1900 || Number(exercise)>2100))issues.push("Exercício inválido.");
   return issues;
 }
 
