@@ -225,7 +225,8 @@ async function readPdf(base64: string) {
       text = output.stdout;
     } catch {}
     let found = extractFields(text);
-    if (found.missing.length > 2) {
+    // OCR também quando só categoria/exercício faltarem; manter dados já reconhecidos.
+    if (found.missing.length > 2 || !found.category || !found.exerciseYear) {
       try {
         const prefix = join(dir, "pagina");
         await run("pdftoppm", ["-f", "1", "-l", "3", "-scale-to", "1800", "-png", file, prefix], { timeout: 40_000, maxBuffer: 1_000_000 });
@@ -240,6 +241,11 @@ async function readPdf(base64: string) {
         if (second.missing.length < found.missing.length) {
           text = combined;
           found = second;
+        } else if (second.missing.length === found.missing.length &&
+          ((!found.category && second.category) || (!found.exerciseYear && second.exerciseYear))) {
+          text = combined;
+          found = { ...found, category: found.category || second.category,
+            exerciseYear: found.exerciseYear || second.exerciseYear, text: combined };
         }
       } catch {}
     }
