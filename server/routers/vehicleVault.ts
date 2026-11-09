@@ -408,11 +408,18 @@ export const vehicleVaultRouter = router({
   findCustomers: adminProcedure.input(z.object({query:z.string().min(2).max(100)}))
     .query(async ({input})=>{
       const db=await database();
-      const q="%"+input.query.trim()+"%";
-      const found=await db.execute(sql`SELECT id,customerNumber,name,phone,cpf
-        FROM customers WHERE deletedAt IS NULL AND
-        (name LIKE ${q} OR phone LIKE ${q} OR cpf LIKE ${q} OR CAST(customerNumber AS CHAR) LIKE ${q})
-        ORDER BY name LIMIT 25`);
+      const raw=input.query.trim();
+      // O cadastro mostrado como *199 é armazenado numericamente como 199.
+      const numbered=raw.match(/^[*#]\s*(\d{1,9})$/);
+      const q="%"+raw+"%";
+      const found=numbered
+        ? await db.execute(sql`SELECT id,customerNumber,name,phone,cpf
+            FROM customers WHERE deletedAt IS NULL AND customerNumber=${Number(numbered[1])}
+            ORDER BY name LIMIT 25`)
+        : await db.execute(sql`SELECT id,customerNumber,name,phone,cpf
+            FROM customers WHERE deletedAt IS NULL AND
+            (name LIKE ${q} OR phone LIKE ${q} OR cpf LIKE ${q} OR CAST(customerNumber AS CHAR) LIKE ${q})
+            ORDER BY name LIMIT 25`);
       return rows(found).map(x=>({...x,id:Number(x.id)}));
     }),
   linkCustomer: adminProcedure.input(z.object({
