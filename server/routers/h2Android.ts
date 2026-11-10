@@ -86,7 +86,7 @@ export const h2AndroidRouter = router({
         agentId: z.string().uuid(),
         avdName: z.string().regex(h2AndroidAvdName),
         sourceAvdName: z.string().regex(h2AndroidAvdName),
-      }).refine(input => input.avdName !== input.sourceAvdName, { message: "Origem e destino devem ser diferentes." }),
+      }),
       z.object({ action: z.literal("start"), agentId: z.string().uuid(), avdName: z.string().regex(h2AndroidAvdName) }),
       z.object({ action: z.literal("stop"), agentId: z.string().uuid(), avdName: z.string().regex(h2AndroidAvdName) }),
       z.object({ action: z.literal("tap"), agentId: z.string().uuid(), avdName: z.string().regex(h2AndroidAvdName), x: z.number().int().min(0).max(5000), y: z.number().int().min(0).max(10000) }),
