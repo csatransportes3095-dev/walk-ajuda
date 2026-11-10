@@ -92,4 +92,16 @@ describe("H2 Android Agent - conexao segura e independente", () => {
     expect(control).toContain('if ($action -ceq "clone")');
     expect(router).toContain('action: z.literal("clone")');
   });
+  it("inclui atualizador seguro do motor nativo no ZIP sem reinstalar VMs", () => {
+    const installer = read("server/h2AndroidInstallerZip.ts");
+    const update = read("workers/windows/h2-native/Atualizar-H2-Android-Nativo.ps1");
+    const page = read("client/src/pages/AdminH2Android.tsx");
+    expect(installer).toContain("Atualizar-H2-Android-Nativo.cmd");
+    expect(installer).toContain("Atualizar-H2-Android-Nativo.ps1");
+    expect(update).toContain('Get-ScheduledTask -TaskName $taskName');
+    expect(update).toContain('New-H2NativeClone');
+    expect(update).toContain("Backup-Atualizacao-");
+    expect(update).not.toContain("Remove-VM");
+    expect(page).toContain("Baixar atualizacao do agente H2");
+  });
 });
