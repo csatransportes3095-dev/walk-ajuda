@@ -243,7 +243,11 @@ function Stop-H2NativeVm {
     # Explicit request only: equivalent to removing power, may lose data.
     Stop-VM -Name $VMName -TurnOff -Force -ErrorAction Stop
   } else {
-    Stop-VM -Name $VMName -Shutdown -ErrorAction Stop
+    # Stop-VM sem flags solicita shutdown via o SO convidado.
+    # -Shutdown NAO e parametro do cmdlet Hyper-V no Windows PowerShell 5.1.
+    # Falhas do servico de integracao do Android devem ser explicitas; nunca desligar
+    # a forca sem pedido separado do administrador.
+    Stop-VM -Name $VMName -ErrorAction Stop
   }
   return [pscustomobject]@{ name=$VMName; state="Stopping"; forced=[bool]$ForcePowerOff }
 }
