@@ -12,7 +12,7 @@ import { getDb } from "./db";
 let initialization: Promise<void> | null = null;
 const ONLINE_WINDOW_MS = 90_000;
 const PAIRING_DURATION_MINUTES = 10;
-const NATIVE_H2_AGENT_VERSIONS = new Set(["0.3.0-native", "0.3.2-native-clone"]);
+const NATIVE_H2_AGENT_VERSIONS = new Set(["0.3.0-native", "0.3.2-native-clone", "0.3.3-native-guard"]);
 
 const availabilitySchema = z.object({
   computerName: z.string().trim().min(1).max(80),

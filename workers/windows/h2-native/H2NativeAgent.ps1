@@ -1,4 +1,4 @@
-# H2 Android Native Agent v0.3.0 - substitui v0.2 sem Google SDK/ADB.
+# H2 Android Native Agent v0.3.3 - guarda de instancia unica, sem Google SDK/ADB.
 # Mantem token e pareamento EXISTENTES em %LOCALAPPDATA%\H2AndroidAgent\agent.json.
 # Executa SOMENTE comandos allowlisted da API autenticada H2 Android.
 [CmdletBinding()]
@@ -11,7 +11,7 @@ param(
   [string]$PanelUrl = "https://h2colombiano.com"
 )
 $ErrorActionPreference="Stop"
-$AgentVersion="0.3.0-native"
+$AgentVersion="0.3.3-native-guard"
 $Folder=Join-Path $env:LOCALAPPDATA "H2AndroidAgent"
 $ConfigPath=Join-Path $Folder "agent.json"
 $AgentPath=Join-Path $Folder "H2NativeAgent.ps1"
