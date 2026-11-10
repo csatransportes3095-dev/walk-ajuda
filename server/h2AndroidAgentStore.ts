@@ -267,6 +267,14 @@ export async function enqueueAndroidCommand(input: {
   if (!["create", "clone", "start", "stop"].includes(input.action)) {
     throw new TRPCError({ code: "PRECONDITION_FAILED", message: "Comando indisponivel no motor Hyper-V nativo." });
   }
+  // Nao expor copia de Android usado como se fosse um aparelho independente.
+  // O destino pode herdar dados e IDs da origem. Somente imagem-base limpa sera liberada.
+  if (input.action === "clone") {
+    throw new TRPCError({
+      code: "PRECONDITION_FAILED",
+      message: "Criacao por copia desativada. Novos Androids exigem imagem-base limpa e configuracao independente.",
+    });
+  }
   const exists = report.avdNames.includes(input.avdName);
   const creating = input.action === "create" || input.action === "clone";
   if (creating ? exists : !exists) {
