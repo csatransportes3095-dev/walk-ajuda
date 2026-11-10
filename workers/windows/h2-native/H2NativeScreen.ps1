@@ -41,57 +41,36 @@ function Get-H2NativeConsoleVideo {
   }
   throw "Resolucao de video Hyper-V indisponivel."
 }
-function Get-H2NativeScreenPngBase64 {
-  param([Parameter(Mandatory=$true)][string]$VMName)
-  $vm = Get-H2NativeWmiConsole -VMName $VMName
-  # The documented thumbnail API accepts a requested resolution even when the
-  # guest does not expose Msvm_VideoHead (common while Android-x86 boots).
-  try { $video = Get-H2NativeConsoleVideo -VmWmi $vm }
-  catch { $video = [pscustomobject]@{width=640; height=480} }
-  $scale = [Math]::Min(1.0,[Math]::Min(768.0 / $video.width, 1024.0 / $video.height))
-  # Even width keeps 16-bit RGB565 row stride aligned on a 4-byte boundary.
-  $width = [int]([Math]::Floor($video.width * $scale / 2.0) * 2)
-  $height = [int][Math]::Floor($video.height * $scale)
-  if ($width -lt 64 -or $height -lt 64) { throw "Resolucao pequena demais." }
-
-  $settings = @($vm.GetRelated("Msvm_VirtualSystemSettingData",
-    "Msvm_SettingsDefineState", $null, $null, "SettingData", "ManagedElement", $false, $null))
-  if ($settings.Count -lt 1) { throw "Configuracao grafica Hyper-V indisponivel." }
-  $service = Get-WmiObject -Namespace "root\virtualization\v2" -Class "Msvm_VirtualSystemManagementService" -ErrorAction Stop |
-    Select-Object -First 1
-  if (!$service) { throw "Servico de captura Hyper-V indisponivel." }
-  $request = $service.GetMethodParameters("GetVirtualSystemThumbnailImage")
-  $request["TargetSystem"] = [string]$settings[0].__PATH
-  $request["WidthPixels"] = [uint16]$width
-  $request["HeightPixels"] = [uint16]$height
-  $answer = $service.InvokeMethod("GetVirtualSystemThumbnailImage", $request, $null)
-  if (!$answer -or [uint32]$answer["ReturnValue"] -ne 0) {
-    $status = if ($answer) { [string]$answer["ReturnValue"] } else { "sem resposta" }
-    throw ("O video real da VM nao esta disponivel (WMI " + $status + ").")
+function Convert-H2NativeRgb565ToPng {
+  param([Parameter(Mandatory=$true)][byte[]]$ImageData,
+        [Parameter(Mandatory=$true)][int]$Width,
+        [Parameter(Mandatory=$true)][int]$Height)
+  if ($Width -lt 64 -or $Width -gt 1024 -or $Height -lt 64 -or $Height -gt 1024) {
+    throw "Resolucao de captura invalida."
   }
-  [byte[]]$rgb565 = $answer["ImageData"]
-  if (!$rgb565 -or $rgb565.Length -ne ($width * $height * 2)) {
-    throw "Dados de video Hyper-V incompletos."
+  if ($ImageData.Length -eq 0 -or ($ImageData.Length % $Height) -ne 0) {
+    throw ("RGB565: comprimento invalido " + $ImageData.Length + " bytes.")
   }
-
+  $rowBytes = [int]($ImageData.Length / $Height)
+  if ($rowBytes -lt $Width*2 -or $rowBytes -gt ($Width*2+256) -or $rowBytes % 2 -ne 0) {
+    throw ("RGB565: stride invalido " + $rowBytes + " bytes.")
+  }
   Add-Type -AssemblyName System.Drawing -ErrorAction Stop
-  $bitmap = [System.Drawing.Bitmap]::new($width,$height,[System.Drawing.Imaging.PixelFormat]::Format16bppRgb565)
+  $bitmap = [System.Drawing.Bitmap]::new($Width,$Height,[System.Drawing.Imaging.PixelFormat]::Format16bppRgb565)
   $stream = New-Object System.IO.MemoryStream
-  $rect = [System.Drawing.Rectangle]::new(0,0,$width,$height)
+  $rect = [System.Drawing.Rectangle]::new(0,0,$Width,$Height)
   $data = $null
   try {
     $data = $bitmap.LockBits($rect,[System.Drawing.Imaging.ImageLockMode]::WriteOnly,
       [System.Drawing.Imaging.PixelFormat]::Format16bppRgb565)
-    for($y=0; $y -lt $height; $y++){
+    for ($y=0; $y -lt $Height; $y++) {
       $target = [IntPtr]::Add($data.Scan0,$y*$data.Stride)
-      [System.Runtime.InteropServices.Marshal]::Copy($rgb565,$y*$width*2,$target,$width*2)
+      [System.Runtime.InteropServices.Marshal]::Copy($ImageData,$y*$rowBytes,$target,$Width*2)
     }
     $bitmap.UnlockBits($data)
     $data = $null
     $bitmap.Save($stream,[System.Drawing.Imaging.ImageFormat]::Png)
-    if ($stream.Length -lt 100 -or $stream.Length -gt 3300000) {
-      throw "Quadro PNG fora dos limites permitidos."
-    }
+    if ($stream.Length -lt 100 -or $stream.Length -gt 3300000) { throw "PNG fora do limite." }
     return [Convert]::ToBase64String($stream.ToArray())
   } finally {
     if ($null -ne $data) { $bitmap.UnlockBits($data) }
@@ -100,6 +79,63 @@ function Get-H2NativeScreenPngBase64 {
   }
 }
 
+function Get-H2NativeScreenPngBase64 {
+  param([Parameter(Mandatory=$true)][string]$VMName)
+  $vm = Get-H2NativeWmiConsole -VMName $VMName
+  $settings = @($vm.GetRelated("Msvm_VirtualSystemSettingData",
+    "Msvm_SettingsDefineState", $null, $null, "SettingData", "ManagedElement", $false, $null))
+  $realized = @($settings | Where-Object { [int]$_.SettingType -eq 3 })
+  if ($realized.Count -ne 1) {
+    throw ("Configuracao corrente Hyper-V ausente (atuais=" + $realized.Count + ").")
+  }
+  $service = Get-WmiObject -Namespace "root\virtualization\v2" -Class "Msvm_VirtualSystemManagementService" -ErrorAction Stop |
+    Select-Object -First 1
+  if (!$service) { throw "Servico de captura Hyper-V indisponivel." }
+  $sizes = @()
+  try {
+    $video = Get-H2NativeConsoleVideo -VmWmi $vm
+    $scale = [Math]::Min(1.0,[Math]::Min(640.0/$video.width,480.0/$video.height))
+    $w = [int]([Math]::Floor($video.width*$scale/2)*2)
+    $h = [int][Math]::Floor($video.height*$scale)
+    if ($w -ge 64 -and $h -ge 64) { $sizes += ,@($w,$h) }
+  } catch {}
+  $sizes += ,@(640,480)
+  $sizes += ,@(320,240)
+  $sizes += ,@(160,120)
+  $diagnostics = @()
+  foreach ($size in $sizes) {
+    $width = [int]$size[0]
+    $height = [int]$size[1]
+    try {
+      $request = $service.GetMethodParameters("GetVirtualSystemThumbnailImage")
+      $request["TargetSystem"] = [string]$realized[0].__PATH
+      $request["WidthPixels"] = [uint16]$width
+      $request["HeightPixels"] = [uint16]$height
+      $answer = $service.InvokeMethod("GetVirtualSystemThumbnailImage",$request,$null)
+      if (!$answer -or [uint32]$answer["ReturnValue"] -ne 0) {
+        $code = if ($answer) { [string]$answer["ReturnValue"] } else { "sem resposta" }
+        $diagnostics += ($width + "x" + $height + ": WMI=" + $code)
+        continue
+      }
+      [byte[]]$rgb = $answer["ImageData"]
+      $expected = $width*$height*2
+      if (!$rgb -or $rgb.Length -eq 0) {
+        $diagnostics += ($width + "x" + $height + ": 0/" + $expected + " bytes")
+        continue
+      }
+      try {
+        return Convert-H2NativeRgb565ToPng -ImageData $rgb -Width $width -Height $height
+      } catch {
+        $diagnostics += ($width + "x" + $height + ": " + $rgb.Length + "/" + $expected + " bytes")
+      }
+    } catch {
+      $diagnostics += ($width + "x" + $height + ": erro WMI")
+    }
+  }
+  $reason = [string]::Join("; ",[string[]]$diagnostics)
+  if ($reason.Length -gt 150) { $reason = $reason.Substring(0,150) }
+  throw ("Quadro RGB565 indisponivel: " + $reason)
+}
 function Invoke-H2NativeConsoleTap {
   param(
     [Parameter(Mandatory=$true)][string]$VMName,
