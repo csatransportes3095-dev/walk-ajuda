@@ -39,7 +39,8 @@ foreach ($name in $files) {
 $newCore = Get-Content -LiteralPath (Join-Path $PSScriptRoot "H2NativeCore.psm1") -Raw
 $newControl = Get-Content -LiteralPath (Join-Path $PSScriptRoot "H2NativeControl.ps1") -Raw
 if (!$newCore.Contains("function New-H2NativeClone {") -or
-    !$newControl.Contains('if ($action -ceq "clone")')) {
+    !$newControl.Contains('if ($action -ceq "clone")') -or
+    !$newControl.Contains('agentVersion = "0.3.2-native-clone"')) {
   throw "Pacote sem rotina de clonagem H2. Nenhuma alteracao."
 }
 $backupDir = Join-Path $folder ("Backup-Atualizacao-" + (Get-Date -Format "yyyyMMdd-HHmmss"))
