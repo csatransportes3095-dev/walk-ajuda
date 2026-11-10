@@ -66,10 +66,19 @@ function Convert-H2NativeRgb565ToPng {
   if ($Width -lt 64 -or $Width -gt 1024 -or $Height -lt 64 -or $Height -gt 1024) {
     throw "Resolucao de captura invalida."
   }
-  if ($ImageData.Length -eq 0 -or ($ImageData.Length % $Height) -ne 0) {
+  # WALKARTS: WMI returns exactly 4 surplus bytes at 640x480, 320x240 and
+  # 160x120. The documented image is raw RGB565; reference implementations
+  # copy pixel data from offset zero. Ignore ONLY this proven four-byte tail,
+  # never skip the first pixels or silently accept arbitrary truncated data.
+  $expectedBytes = $Width * $Height * 2
+  $usableBytes = $ImageData.Length
+  if ($usableBytes -eq ($expectedBytes + 4)) {
+    $usableBytes = $expectedBytes
+  }
+  if ($usableBytes -eq 0 -or ($usableBytes % $Height) -ne 0) {
     throw ("RGB565: comprimento invalido " + $ImageData.Length + " bytes.")
   }
-  $rowBytes = [int]($ImageData.Length / $Height)
+  $rowBytes = [int]($usableBytes / $Height)
   if ($rowBytes -lt $Width*2 -or $rowBytes -gt ($Width*2+256) -or $rowBytes % 2 -ne 0) {
     throw ("RGB565: stride invalido " + $rowBytes + " bytes.")
   }
@@ -153,7 +162,9 @@ function Get-H2NativeScreenPngBase64 {
       try {
         return Convert-H2NativeRgb565ToPng -ImageData $rgb -Width $width -Height $height
       } catch {
-        $diagnostics += (Format-H2NativeScreenDiagnostic -Width $width -Height $height -Detail (('{0}/{1} bytes' -f $rgb.Length, $expected)))
+        $decoderFailure = [string]$_.Exception.Message
+        if ($decoderFailure.Length -gt 80) { $decoderFailure = $decoderFailure.Substring(0,80) }
+        $diagnostics += (Format-H2NativeScreenDiagnostic -Width $width -Height $height -Detail (('{0}/{1} bytes; {2}' -f $rgb.Length, $expected, $decoderFailure)))
       }
     } catch {
             $diagnostics += (Format-H2NativeScreenDiagnostic -Width $width -Height $height -Detail ("erro WMI: " + $_.Exception.Message))
