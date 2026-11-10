@@ -45,7 +45,7 @@ export default function H2AndroidLiveManager({
     },
     onError: error => toast.error(error.message),
   });
-  const ready = agents.filter(agent => agent.online && agent.agentVersion === "0.3.0-native" && agent.hyperVReady);
+  const ready = agents.filter(agent => agent.online && agent.agentVersion === "0.3.2-native-clone" && agent.hyperVReady);
   const devices = ready.flatMap(agent =>
     agent.avdNames.filter(name => H2_NAME.test(name)).map(name => ({
       key: agent.id + ":" + name, agent, name, running: agent.runningAvds.includes(name),
@@ -155,8 +155,8 @@ export default function H2AndroidLiveManager({
             O agente antigo usa ADB/emulador e nao controla maquinas Hyper-V.
             Baixe <strong>H2 Android Nativo — substituir agente antigo</strong> na secao de downloads
             do ADM, execute <strong>Instalar-H2-Android-Nativo.cmd</strong> e preserve o pareamento existente.
-            {agents.some(agent => agent.online && agent.agentVersion === "0.3.0-native" && !agent.hyperVReady)
-              ? "O agente nativo está conectado, mas o Hyper-V está pendente: " + (agents.find(agent => agent.online && agent.agentVersion === "0.3.0-native")?.hyperVReason || "Verifique Windows e administrador.")
+            {agents.some(agent => agent.online && agent.agentVersion.startsWith("0.3.") && agent.agentVersion.includes("-native") && !agent.hyperVReady)
+              ? "O agente nativo está conectado, mas o Hyper-V está pendente: " + (agents.find(agent => agent.online && agent.agentVersion.startsWith("0.3.") && agent.agentVersion.includes("-native"))?.hyperVReason || "Verifique Windows e administrador.")
               : "O motor nativo ainda precisa ser validado no Windows; tela e proxy permanecem indisponíveis."}
           </p>
         </div>
