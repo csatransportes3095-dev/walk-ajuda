@@ -33,9 +33,9 @@ export default function AdminH2Android() {
 
   const agents = overviewQuery.data?.agents ?? [];
   const onlineAgents = agents.filter(agent => agent.online).length;
-  const nativeAgentPaired = agents.some(agent => agent.agentVersion === "0.3.0-native");
-  const nativeAgentOnline = agents.some(agent => agent.agentVersion === "0.3.0-native" && agent.online);
-  const nativeCount = agents.filter(agent => agent.agentVersion === "0.3.0-native")
+  const nativeAgentPaired = agents.some(agent => agent.agentVersion.startsWith("0.3.") && agent.agentVersion.includes("-native"));
+  const nativeAgentOnline = agents.some(agent => agent.agentVersion.startsWith("0.3.") && agent.agentVersion.includes("-native") && agent.online);
+  const nativeCount = agents.filter(agent => agent.agentVersion.startsWith("0.3.") && agent.agentVersion.includes("-native"))
     .reduce((count, agent) => count + agent.avdNames.length, 0);
   const activeCount = overviewQuery.data?.activeCount ?? 0;
   const commands = overviewQuery.data?.commands ?? [];
@@ -140,7 +140,7 @@ export default function AdminH2Android() {
                 className="mt-3 inline-flex items-center gap-2 rounded-lg border border-[#80dcb5]/40 bg-[#80dcb5]/10 px-3 py-2 text-xs font-bold text-[#b5ecd6]">
                 <Download className="h-4 w-4" /> Baixar atualização do agente H2
               </a>
-              <p className="mt-2 text-[11px] text-slate-400">Extraia o ZIP e execute Atualizar-H2-Android-Nativo.cmd como administrador. A atualização preserva o Android 01 e o pareamento.</p>
+              <p className="mt-2 text-[11px] text-slate-400">Extraia o ZIP e execute Atualizar-H2-Android-Nativo.cmd como administrador. A atualização preserva o Android 01 e o pareamento. Depois, confira a versão 0.3.2-native-clone no painel.</p>
             </div>
           )}
           {!nativeAgentPaired && (
@@ -202,12 +202,12 @@ export default function AdminH2Android() {
                     : <button onClick={() => setConfirmRevoke(agent.id)} className="rounded-lg border border-red-500/30 px-2 py-1.5 text-xs font-bold text-red-300">Desconectar</button>}
                 </div>
                 <div className="mt-2 grid grid-cols-2 gap-2 text-xs text-slate-300 sm:grid-cols-3">
-                  <div>Motor: <strong>{agent.agentVersion === "0.3.0-native" ? "H2 Hyper-V nativo" : "Agente antigo"}</strong></div>
+                  <div>Motor: <strong>{agent.agentVersion.startsWith("0.3.") && agent.agentVersion.includes("-native") ? "H2 Hyper-V nativo" : "Agente antigo"}</strong></div>
                   <div>RAM: <strong>{agent.ramGb === null ? "—" : agent.ramGb + " GB"}</strong></div>
-                  <div>Hyper-V: <strong>{agent.agentVersion === "0.3.0-native" ? (agent.hyperVReady ? "Pronto" : "Pendente") : "Agente antigo"}</strong></div>
+                  <div>Hyper-V: <strong>{agent.agentVersion.startsWith("0.3.") && agent.agentVersion.includes("-native") ? (agent.hyperVReady ? "Pronto" : "Pendente") : "Agente antigo"}</strong></div>
                   <div>VMs H2: <strong>{agent.avdNames.length}</strong></div>
                 </div>
-                {agent.agentVersion === "0.3.0-native" && !agent.hyperVReady && (
+                {agent.agentVersion.startsWith("0.3.") && agent.agentVersion.includes("-native") && !agent.hyperVReady && (
                   <p className="mt-2 text-[11px] font-semibold text-amber-200">Hyper-V: {agent.hyperVReason || "Verifique Windows Pro e permissões."}</p>
                 )}
                 <p className="mt-2 text-[11px] text-slate-500">CPU lógica: {agent.logicalProcessors ?? "—"} · Virtualização: {agent.virtualizationEnabled === null ? "não identificada" : agent.virtualizationEnabled ? "ativa" : "inativa"} · Instâncias: {agent.avdNames.length ? agent.avdNames.join(", ") : "nenhuma"}</p>
