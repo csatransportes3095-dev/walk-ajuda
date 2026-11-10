@@ -6,7 +6,7 @@ $ErrorActionPreference = "Stop"
 $folder = Join-Path $env:LOCALAPPDATA "H2AndroidAgent"
 $taskName = "H2 Android Agent"
 $agentPath = Join-Path $folder "H2NativeAgent.ps1"
-$files = @("H2NativeControl.ps1","H2NativeCore.psm1")
+$files = @("H2NativeAgent.ps1","H2NativeControl.ps1","H2NativeCore.psm1")
 $id = [Security.Principal.WindowsIdentity]::GetCurrent()
 $principal = New-Object Security.Principal.WindowsPrincipal($id)
 if (!$principal.IsInRole([Security.Principal.WindowsBuiltInRole]::Administrator)) {
@@ -36,12 +36,14 @@ foreach ($name in $files) {
     $source, [ref]$tokens, [ref]$syntaxErrors) | Out-Null
   if ($syntaxErrors.Count -gt 0) { throw "Erro de sintaxe no pacote: $name." }
 }
+$newAgent = Get-Content -LiteralPath (Join-Path $PSScriptRoot "H2NativeAgent.ps1") -Raw
 $newCore = Get-Content -LiteralPath (Join-Path $PSScriptRoot "H2NativeCore.psm1") -Raw
 $newControl = Get-Content -LiteralPath (Join-Path $PSScriptRoot "H2NativeControl.ps1") -Raw
-if (!$newCore.Contains("function New-H2NativeClone {") -or
-    !$newControl.Contains('if ($action -ceq "clone")') -or
+if (!$newAgent.Contains("H2AndroidNativeAgentSingleInstanceV1") -or
+    !$newAgent.Contains("WaitOne(0)") -or
+    !$newCore.Contains("function New-H2NativeClone {") -or
     !$newControl.Contains('agentVersion = "0.3.2-native-clone"')) {
-  throw "Pacote sem rotina de clonagem H2. Nenhuma alteracao."
+  throw "Pacote H2 invalido ou sem protecao contra instancias duplicadas. Nada foi modificado."
 }
 $backupDir = Join-Path $folder ("Backup-Atualizacao-" + (Get-Date -Format "yyyyMMdd-HHmmss"))
 New-Item -ItemType Directory -Path $backupDir -ErrorAction Stop | Out-Null
