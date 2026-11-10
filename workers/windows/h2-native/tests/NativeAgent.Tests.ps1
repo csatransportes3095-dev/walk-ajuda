@@ -46,4 +46,11 @@ if(!$screen.Contains('Microsoft:Hyper-V:System:Realized')) {
 if($screen.Contains('$_.SettingType')) {
   throw "Captura ainda usa SettingType, ausente no WMI v2."
 }
+$screen=Get-Content -LiteralPath (Join-Path $folder "H2NativeScreen.ps1") -Raw
+foreach($expected in @("System.Collections.Generic.List[object]",'$size.Width','$size.Height')) {
+  if(!$screen.Contains($expected)){throw ("Dimensoes de captura H2 nao tipadas: "+$expected)}
+}
+if($screen.Contains('$size[0]') -or $screen.Contains('$size[1]')) {
+  throw "Conversao numerica ambigua da captura H2 continua presente."
+}
 Write-Host "PASS - H2 Native Agent, migracao e comandos limitados" -ForegroundColor Green
