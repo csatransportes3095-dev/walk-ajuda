@@ -39,4 +39,11 @@ foreach($source in @($agent,$control)){
     if($source.Contains($forbidden)){throw ("Motor nativo contem dependencia indevida: "+$forbidden)}
   }
 }
+$screen=Get-Content -LiteralPath (Join-Path $folder "H2NativeScreen.ps1") -Raw
+if(!$screen.Contains('Microsoft:Hyper-V:System:Realized')) {
+  throw "Captura nao filtra configuracao corrente pela propriedade VirtualSystemType."
+}
+if($screen.Contains('$_.SettingType')) {
+  throw "Captura ainda usa SettingType, ausente no WMI v2."
+}
 Write-Host "PASS - H2 Native Agent, migracao e comandos limitados" -ForegroundColor Green
