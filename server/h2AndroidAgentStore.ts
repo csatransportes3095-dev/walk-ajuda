@@ -12,6 +12,7 @@ import { getDb } from "./db";
 let initialization: Promise<void> | null = null;
 const ONLINE_WINDOW_MS = 90_000;
 const PAIRING_DURATION_MINUTES = 10;
+const NATIVE_H2_AGENT_VERSIONS = new Set(["0.3.0-native", "0.3.2-native-clone"]);
 
 const availabilitySchema = z.object({
   computerName: z.string().trim().min(1).max(80),
@@ -256,7 +257,7 @@ export async function enqueueAndroidCommand(input: {
   }
   let report: AndroidAgentReport | null = null;
   try { report = validateAndroidAgentReport(JSON.parse(agent.reportJson || "{}")); } catch {}
-  if (!report || report.agentVersion !== "0.3.0-native") {
+  if (!report || !NATIVE_H2_AGENT_VERSIONS.has(report.agentVersion)) {
     throw new TRPCError({ code: "PRECONDITION_FAILED", message: "Substitua o agente antigo pelo H2 Android Nativo no ADM." });
   }
   if (!report.hyperVReady) {
@@ -284,6 +285,14 @@ export async function enqueueAndroidCommand(input: {
     }
   }
   if (input.action === "clone") {
+    // Old paired agents do not know "clone". Refuse early rather than enqueue a
+    // command that fails only after the Windows worker receives it.
+    if (report.agentVersion !== "0.3.2-native-clone") {
+      throw new TRPCError({
+        code: "PRECONDITION_FAILED",
+        message: "Atualize apenas o agente H2 Android pelo ADM antes de criar outra maquina.",
+      });
+    }
     const source = input.payload.sourceAvdName;
     if (typeof source !== "string" || !h2AndroidAvdName.test(source) ||
         source === input.avdName || !report.avdNames.includes(source)) {

@@ -45,7 +45,8 @@ export default function H2AndroidLiveManager({
     },
     onError: error => toast.error(error.message),
   });
-  const ready = agents.filter(agent => agent.online && agent.agentVersion === "0.3.0-native" && agent.hyperVReady);
+  const ready = agents.filter(agent => agent.online && agent.agentVersion.startsWith("0.3.") && agent.agentVersion.includes("-native") && agent.hyperVReady);
+  const cloneCapable = ready.some(agent => agent.agentVersion === "0.3.2-native-clone");
   const devices = ready.flatMap(agent =>
     agent.avdNames.filter(name => H2_NAME.test(name)).map(name => ({
       key: agent.id + ":" + name, agent, name, running: agent.runningAvds.includes(name),
@@ -106,6 +107,7 @@ export default function H2AndroidLiveManager({
   function createNext() {
     const source = chosen;
     if (!source) return toast.error("Selecione o Android que sera usado como origem.");
+    if (source.agent.agentVersion !== "0.3.2-native-clone") return toast.error("Atualize apenas o agente H2 Android na aba Configurações para habilitar clonagem.");
     if (source.running) return toast.error("Desligue o Android original antes de criar uma copia.");
     const known = new Set(source.agent.avdNames);
     let next = "";
@@ -155,15 +157,16 @@ export default function H2AndroidLiveManager({
             O agente antigo usa ADB/emulador e nao controla maquinas Hyper-V.
             Baixe <strong>H2 Android Nativo — substituir agente antigo</strong> na secao de downloads
             do ADM, execute <strong>Instalar-H2-Android-Nativo.cmd</strong> e preserve o pareamento existente.
-            {agents.some(agent => agent.online && agent.agentVersion === "0.3.0-native" && !agent.hyperVReady)
-              ? "O agente nativo está conectado, mas o Hyper-V está pendente: " + (agents.find(agent => agent.online && agent.agentVersion === "0.3.0-native")?.hyperVReason || "Verifique Windows e administrador.")
+            {agents.some(agent => agent.online && agent.agentVersion.startsWith("0.3.") && agent.agentVersion.includes("-native") && !agent.hyperVReady)
+              ? "O agente nativo está conectado, mas o Hyper-V está pendente: " + (agents.find(agent => agent.online && agent.agentVersion.startsWith("0.3.") && agent.agentVersion.includes("-native"))?.hyperVReason || "Verifique Windows e administrador.")
               : "O motor nativo ainda precisa ser validado no Windows; tela e proxy permanecem indisponíveis."}
           </p>
         </div>
       ) : (
         <>
           <div className="flex flex-wrap gap-2">
-            <button type="button" onClick={() => setCreating(true)} disabled={mutation.isPending || devices.length === 0}
+            {!cloneCapable && <p className="w-full text-xs text-amber-200">Clonagem pendente: atualize somente o agente H2 Android em Configurações. Ligar e desligar continuam disponíveis.</p>}
+            <button type="button" onClick={() => setCreating(true)} disabled={mutation.isPending || devices.length === 0 || !cloneCapable}
               className="rounded-lg bg-[#80dcb5] px-4 py-2 text-sm font-black text-slate-950 disabled:opacity-40">
               <Plus className="mr-1 inline h-4 w-4" /> Criar proximo Android
             </button>

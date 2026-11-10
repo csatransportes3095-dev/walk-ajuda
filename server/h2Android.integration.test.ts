@@ -82,6 +82,8 @@ describe("H2 Android - modulo isolado e privado", () => {
     const manager = read("client/src/components/H2AndroidLiveManager.tsx");
     expect(manager).toContain("Criar proximo Android");
     expect(manager).toContain('action: "clone"');
+    expect(manager).toContain('agent.agentVersion === "0.3.2-native-clone"');
+    expect(androidPage).toContain("0.3.2-native-clone");
     expect(manager).toContain("sourceAvdName: source.name");
     expect(manager).not.toContain("setIsoPath");
     expect(androidPage).not.toContain("PhoneFrame");
