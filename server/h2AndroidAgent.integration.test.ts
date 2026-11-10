@@ -90,6 +90,10 @@ describe("H2 Android Agent - conexao segura e independente", () => {
     expect(core).toContain("Copy-Item -LiteralPath $sourceDisk -Destination $disk");
     expect(core).toContain("independentGuestIdentityVerified = $false");
     expect(control).toContain('if ($action -ceq "clone")');
+    expect(control).toContain('agentVersion = "0.3.2-native-clone"');
+    const store = read("server/h2AndroidAgentStore.ts");
+    expect(store).toContain('report.agentVersion !== "0.3.2-native-clone"');
+    expect(store).toContain("NATIVE_H2_AGENT_VERSIONS");
     expect(router).toContain('action: z.literal("clone")');
   });
   it("inclui atualizador seguro do motor nativo no ZIP sem reinstalar VMs", () => {
