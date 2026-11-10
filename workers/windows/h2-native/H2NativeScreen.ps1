@@ -84,7 +84,11 @@ function Get-H2NativeScreenPngBase64 {
   $vm = Get-H2NativeWmiConsole -VMName $VMName
   $settings = @($vm.GetRelated("Msvm_VirtualSystemSettingData",
     "Msvm_SettingsDefineState", $null, $null, "SettingData", "ManagedElement", $false, $null))
-  $realized = @($settings | Where-Object { [int]$_.SettingType -eq 3 })
+  # Msvm_VirtualSystemSettingData does not expose SettingType on Hyper-V WMI v2.
+  # Filter by the documented realized-system discriminator and avoid snapshots.
+  $realized = @($settings | Where-Object {
+    [string]$_.VirtualSystemType -eq "Microsoft:Hyper-V:System:Realized"
+  })
   if ($realized.Count -ne 1) {
     throw ("Configuracao corrente Hyper-V ausente (atuais=" + $realized.Count + ").")
   }
