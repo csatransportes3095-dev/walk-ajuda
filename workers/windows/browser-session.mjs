@@ -158,20 +158,30 @@ function classifyNetworkError(error, fallback = "proxy_path_unverified") {
 
 async function checkIpThroughPort(localPort) {
   if (!localPort) throw new Error("relay_unavailable");
-  try {
-    const { stdout } = await execFileAsync("curl.exe", [
-      "--silent", "--show-error", "--fail", "--connect-timeout", "10", "--max-time", "20",
-      "--proxy", `http://127.0.0.1:${localPort}`, "https://api.ipify.org?format=json",
-    ], { windowsHide: true, timeout: 25_000, maxBuffer: 8_192 });
-    const data = JSON.parse(stdout);
-    if (typeof data.ip !== "string" || data.ip.length < 3 || data.ip.length > 64) throw new Error("invalid_ip_response");
-    return data.ip.trim();
-  } catch (error) {
-    const category = classifyNetworkError(error);
-    const wrapped = new Error(category);
-    wrapped.cause = error;
-    throw wrapped;
+  // An IP-check provider outage must not be mistaken for a failed upstream.
+  // Both independent endpoints are queried ONLY through the instance relay.
+  // The session IP lock and independent Chrome verification remain mandatory.
+  let lastError;
+  for (const [url, connectTimeout, maxTime, processTimeout] of [
+    ["https://api.ipify.org?format=json", "10", "20", 25_000],
+    ["https://ipapi.co/json/", "5", "10", 12_000],
+  ]) {
+    try {
+      const { stdout } = await execFileAsync("curl.exe", [
+        "--silent", "--show-error", "--fail", "--connect-timeout", connectTimeout, "--max-time", maxTime,
+        "--proxy", `http://127.0.0.1:${localPort}`, url,
+      ], { windowsHide: true, timeout: processTimeout, maxBuffer: 8_192 });
+      const data = JSON.parse(stdout);
+      if (typeof data.ip !== "string" || data.ip.length < 3 || data.ip.length > 64) throw new Error("invalid_ip_response");
+      return data.ip.trim();
+    } catch (error) {
+      lastError = error;
+    }
   }
+  const category = classifyNetworkError(lastError);
+  const wrapped = new Error(category);
+  wrapped.cause = lastError;
+  throw wrapped;
 }
 
 async function checkIp() {
