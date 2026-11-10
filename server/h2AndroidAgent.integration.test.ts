@@ -139,7 +139,7 @@ describe("H2 Android Agent - conexao segura e independente", () => {
     const screen = read("workers/windows/h2-native/H2NativeScreen.ps1");
     expect(screen).toContain("GetVirtualSystemThumbnailImage");
     expect(screen).toContain("Convert-H2NativeRgb565ToPng");
-    expect(screen).toContain("RGB565 stride");
+    expect(screen).toContain("RGB565: stride invalido");
     expect(screen).toContain("@(160,120)");
     expect(screen).toContain("Get-H2NativeOwnedVm -VMName");
     expect(screen).toContain("Invoke-H2NativeConsoleTap");
