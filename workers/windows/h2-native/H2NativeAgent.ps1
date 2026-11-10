@@ -190,50 +190,7 @@ function Run-H2NativeAgent {
         $heartbeat=[datetime]::MinValue
       }
       # Publicar somente quadros reais da VM solicitada pelo administrador.
-      if ($poll.viewAvd -and [string]$poll.viewAvd -match '^H2Android_[0-9]{2,3}
-    }catch{
-      Write-Warning ("H2 Native: "+$_.Exception.Message)
-    }
-    Start-Sleep -Seconds 4
-  }
-}
-if($Status){
-  Get-H2NativeAgentReport|ConvertTo-Json -Depth 6
-}elseif($Install){
-  $hostReadiness=Get-H2NativeHostStatus
-  if(!$hostReadiness.administrator){
-    # Apenas o instalador solicita UAC; o agente nunca ativa o Hyper-V sozinho.
-    $exe="$env:SystemRoot\System32\WindowsPowerShell\v1.0\powershell.exe"
-    $args='-NoProfile -ExecutionPolicy Bypass -File "'+$PSCommandPath+'" -Install'
-    $elevated=Start-Process -FilePath $exe -ArgumentList $args -Verb RunAs -Wait -PassThru -ErrorAction Stop
-    if($elevated.ExitCode -ne 0){throw "Permissao de administrador nao concedida ou migracao falhou. Agente anterior preservado."}
-  }else{
-    Install-H2NativeAgent
-  }
-}elseif($Pair){
-  Pair-H2NativeAgent
-}elseif($Run){
-  # Uma unica instancia por computador: mutex adquirido por toda a vida do agente.
-  # O bloqueio persiste apenas enquanto o processo existe; o Windows libera em crash.
-  $guard = [System.Threading.Mutex]::new($false, "Global\H2AndroidNativeAgentSingleInstanceV1")
-  $ownsLock = $false
-  try {
-    try { $ownsLock = $guard.WaitOne(0) }
-    catch [System.Threading.AbandonedMutexException] { $ownsLock = $true }
-    if (!$ownsLock) {
-      Write-Host "Agente H2 ja ativo; segunda instancia nao sera iniciada."
-      return
-    }
-    Run-H2NativeAgent
-  } finally {
-    if ($ownsLock) { $guard.ReleaseMutex() }
-    $guard.Dispose()
-  }
-}else{
-  Write-Host "H2 Android Native $AgentVersion"
-  Write-Host "Use -Status, -Install (substituicao segura) ou -Pair (somente sem token)."
-}
-) {
+      if ($poll.viewAvd -and [string]$poll.viewAvd -match '^H2Android_[0-9]{2,3}$') {
         try {
           $vmName = ConvertTo-H2NativeVmName -AvdName ([string]$poll.viewAvd)
           $png = Get-H2NativeScreenPngBase64 -VMName $vmName
