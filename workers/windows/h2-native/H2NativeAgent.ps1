@@ -196,7 +196,22 @@ if($Status){
 }elseif($Pair){
   Pair-H2NativeAgent
 }elseif($Run){
-  Run-H2NativeAgent
+  # Uma unica instancia por computador: mutex adquirido por toda a vida do agente.
+  # O bloqueio persiste apenas enquanto o processo existe; o Windows libera em crash.
+  $guard = [System.Threading.Mutex]::new($false, "Global\H2AndroidNativeAgentSingleInstanceV1")
+  $ownsLock = $false
+  try {
+    try { $ownsLock = $guard.WaitOne(0) }
+    catch [System.Threading.AbandonedMutexException] { $ownsLock = $true }
+    if (!$ownsLock) {
+      Write-Host "Agente H2 ja ativo; segunda instancia nao sera iniciada."
+      return
+    }
+    Run-H2NativeAgent
+  } finally {
+    if ($ownsLock) { $guard.ReleaseMutex() }
+    $guard.Dispose()
+  }
 }else{
   Write-Host "H2 Android Native $AgentVersion"
   Write-Host "Use -Status, -Install (substituicao segura) ou -Pair (somente sem token)."
