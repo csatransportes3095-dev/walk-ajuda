@@ -4,7 +4,7 @@
  */
 import type { Express, Request, Response } from "express";
 import { isAdminJwtValid } from "./_core/trpc";
-import { claimAndroidAgent, recordAndroidAgentHeartbeat, pullAndroidCommand, finishAndroidCommand, requestAndroidFrame, storeAndroidFrame } from "./h2AndroidAgentStore";
+import { claimAndroidAgent, recordAndroidAgentHeartbeat, pullAndroidCommand, finishAndroidCommand, requestAndroidScreen, storeAndroidFrame } from "./h2AndroidAgentStore";
 import { getAndroidNativeOfflineZip } from "./h2AndroidInstallerZip";
 
 function noStore(res: Response) {
@@ -45,7 +45,8 @@ export function registerH2AndroidAgentRoutes(app: Express): void {
     if (!isAdminJwtValid(req as any)) { res.sendStatus(403); return; }
     const agentId = String(req.params.agentId || "");
     if (!/^[0-9a-f-]{36}$/i.test(agentId)) { res.sendStatus(400); return; }
-    const png = requestAndroidFrame(agentId, String(req.params.avdName || ""));
+    const { png, error } = requestAndroidScreen(agentId, String(req.params.avdName || ""));
+    if (error) { res.status(503).json({ error }); return; }
     if (!png) { res.status(204).end(); return; }
     res.setHeader("Content-Type", "image/png");
     res.setHeader("Content-Length", String(png.length));
