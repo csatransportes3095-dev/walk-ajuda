@@ -102,6 +102,6 @@ describe("H2 Android Agent - conexao segura e independente", () => {
     expect(update).toContain('New-H2NativeClone');
     expect(update).toContain("Backup-Atualizacao-");
     expect(update).not.toContain("Remove-VM");
-    expect(page).toContain("Baixar atualizacao do agente H2");
+    expect(page).toContain("Baixar atualização do agente H2");
   });
 });
