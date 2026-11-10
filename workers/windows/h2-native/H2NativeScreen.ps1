@@ -22,22 +22,32 @@ function Get-H2NativeWmiConsole {
 
 function Get-H2NativeConsoleVideo {
   param([Parameter(Mandatory=$true)]$VmWmi)
-  $controllers = @($VmWmi.GetRelated("Msvm_SyntheticDisplayController") | Select-Object -First 1)
-  if ($controllers.Count -ne 1 -or !$controllers[0]) { throw "Controlador de video Hyper-V indisponivel." }
-  $head = @($controllers[0].GetRelated("Msvm_VideoHead") | Select-Object -First 1)
-  if ($head.Count -ne 1 -or !$head[0]) { throw "O Hyper-V nao disponibilizou video da VM." }
-  $width = [int]$head[0].CurrentHorizontalResolution
-  $height = [int]$head[0].CurrentVerticalResolution
-  if ($width -lt 64 -or $height -lt 64 -or $width -gt 8192 -or $height -gt 8192) {
-    throw "Dimensoes da tela nao suportadas."
+  # Gen2 guests may expose synthetic or emulated video, depending on boot phase.
+  foreach ($controllerType in @("Msvm_SyntheticDisplayController","Msvm_S3DisplayController")) {
+    try {
+      foreach ($controller in @($VmWmi.GetRelated($controllerType))) {
+        foreach ($head in @($controller.GetRelated("Msvm_VideoHead"))) {
+          $width = [int]$head.CurrentHorizontalResolution
+          $height = [int]$head.CurrentVerticalResolution
+          if ($width -ge 64 -and $height -ge 64 -and
+              $width -le 8192 -and $height -le 8192) {
+            return [pscustomobject]@{ width=$width; height=$height }
+          }
+        }
+      }
+    } catch {
+      # Missing video-head metadata must not prevent a real WMI thumbnail capture.
+    }
   }
-  return [pscustomobject]@{ width=$width; height=$height }
+  throw "Resolucao de video Hyper-V indisponivel."
 }
-
 function Get-H2NativeScreenPngBase64 {
   param([Parameter(Mandatory=$true)][string]$VMName)
   $vm = Get-H2NativeWmiConsole -VMName $VMName
-  $video = Get-H2NativeConsoleVideo -VmWmi $vm
+  # The documented thumbnail API accepts a requested resolution even when the
+  # guest does not expose Msvm_VideoHead (common while Android-x86 boots).
+  try { $video = Get-H2NativeConsoleVideo -VmWmi $vm }
+  catch { $video = [pscustomobject]@{width=640; height=480} }
   $scale = [Math]::Min(1.0,[Math]::Min(768.0 / $video.width, 1024.0 / $video.height))
   # Even width keeps 16-bit RGB565 row stride aligned on a 4-byte boundary.
   $width = [int]([Math]::Floor($video.width * $scale / 2.0) * 2)

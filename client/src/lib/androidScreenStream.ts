@@ -22,7 +22,10 @@ const browserTransport: AndroidScreenTransport = {
   async request(url, signal) {
     const response = await fetch(url, { signal, credentials: "same-origin", cache: "no-store" });
     if (response.status === 204) return null;
-    if (!response.ok) throw new Error("Tela temporariamente indisponivel.");
+    if (!response.ok) {
+      const diagnostic = await response.json().catch(() => null) as { error?: string } | null;
+      throw new Error(diagnostic?.error || "Tela temporariamente indisponivel.");
+    }
     const blob = await response.blob();
     return blob.size > 0 && blob.type === "image/png" ? blob : null;
   },
@@ -44,9 +47,10 @@ const browserTransport: AndroidScreenTransport = {
 export function startAndroidScreenStream(
   url: string,
   onFrame: (frame: AndroidScreenFrame) => void,
-  { transport = browserTransport, intervalMs = 3000 }: {
+  { transport = browserTransport, intervalMs = 3000, onError }: {
     transport?: AndroidScreenTransport;
     intervalMs?: number;
+    onError?: (message: string) => void;
   } = {},
 ): AndroidScreenStream {
   let stopped = false;
@@ -92,8 +96,9 @@ export function startAndroidScreenStream(
       const frame = { src: candidate, ...size };
       candidate = null;
       onFrame(frame);
-    } catch {
-      // Keep the previous frame; the next poll retries without clearing the phone.
+    } catch (error) {
+      // Keep the previous frame, but show a safe diagnostic to the administrator.
+      if (!stopped && !controller.signal.aborted) onError?.(error instanceof Error ? error.message : "Erro ao consultar a tela.");
     } finally {
       if (candidate) release(candidate);
       if (request === controller) request = null;

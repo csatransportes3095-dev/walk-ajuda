@@ -12,7 +12,7 @@ import { getDb } from "./db";
 let initialization: Promise<void> | null = null;
 const ONLINE_WINDOW_MS = 90_000;
 const PAIRING_DURATION_MINUTES = 10;
-const NATIVE_H2_AGENT_VERSIONS = new Set(["0.3.0-native", "0.3.2-native-clone", "0.3.3-native-guard", "0.3.4-native-screen"]);
+const NATIVE_H2_AGENT_VERSIONS = new Set(["0.3.0-native", "0.3.2-native-clone", "0.3.3-native-guard", "0.3.4-native-screen", "0.3.5-native-screen"]);
 
 const availabilitySchema = z.object({
   computerName: z.string().trim().min(1).max(80),
@@ -204,6 +204,7 @@ export type AndroidControlAction = "create" | "clone" | "start" | "stop" | "tap"
 type AndroidCommandRow = { id: string; agentId: string; avdName: string; commandType: AndroidControlAction; payloadJson: string; createdAt: Date | string };
 type AndroidAgentIdentity = { id: string; reportJson: string | null; lastSeenAt: Date | string | null };
 const screenshots = new Map<string, { bytes: Buffer; updatedAt: number }>();
+const captureErrors = new Map<string, { message: string; updatedAt: number }>();
 const viewers = new Map<string, { avdName: string; until: number }>();
 let commandsInit: Promise<void> | null = null;
 
@@ -268,7 +269,7 @@ export async function enqueueAndroidCommand(input: {
     throw new TRPCError({ code: "PRECONDITION_FAILED", message: "Comando indisponivel no motor Hyper-V nativo." });
   }
   if (["tap", "key"].includes(input.action)) {
-    if (report.agentVersion !== "0.3.4-native-screen") {
+    if (!["0.3.4-native-screen", "0.3.5-native-screen"].includes(report.agentVersion)) {
       throw new TRPCError({ code: "PRECONDITION_FAILED", message: "Agente H2 sem suporte ao console nativo." });
     }
     if (!report.runningAvds.includes(input.avdName)) {
@@ -409,6 +410,16 @@ export async function finishAndroidCommand(bearer: string | undefined, body: unk
   return (result as { affectedRows?: number }).affectedRows === 1;
 }
 
+export function requestAndroidScreen(agentId: string, avdName: string): { png: Buffer | null; error: string | null } {
+  if (!h2AndroidAvdName.test(avdName)) return { png: null, error: null };
+  const key = agentId + ":" + avdName;
+  viewers.set(agentId, { avdName, until: Date.now() + 18_000 });
+  const frame = screenshots.get(key);
+  if (frame && Date.now() - frame.updatedAt < 15_000) return { png: frame.bytes, error: null };
+  const diagnostic = captureErrors.get(key);
+  return { png: null, error: diagnostic && Date.now() - diagnostic.updatedAt < 15_000 ? diagnostic.message : null };
+}
+
 export function requestAndroidFrame(agentId: string, avdName: string): Buffer | null {
   if (!h2AndroidAvdName.test(avdName)) return null;
   const key = agentId + ":" + avdName;
@@ -419,16 +430,29 @@ export function requestAndroidFrame(agentId: string, avdName: string): Buffer | 
 
 export async function storeAndroidFrame(bearer: string | undefined, body: unknown): Promise<boolean> {
   const agent = await authenticatedAndroidAgent(bearer);
-  const parsed = z.object({
-    avdName: z.string().regex(h2AndroidAvdName),
-    pngBase64: z.string().min(100).max(4_500_000),
-  }).strict().safeParse(body);
+  const parsed = z.discriminatedUnion("kind", [
+    z.object({ kind: z.literal("frame"), avdName: z.string().regex(h2AndroidAvdName), pngBase64: z.string().min(100).max(4_500_000) }).strict(),
+    z.object({ kind: z.literal("error"), avdName: z.string().regex(h2AndroidAvdName), error: z.string().trim().min(1).max(200) }).strict(),
+  ]).safeParse(
+    typeof body === "object" && body && "pngBase64" in body
+      ? { ...body, kind: "frame" }
+      : typeof body === "object" && body && "error" in body
+        ? { ...body, kind: "error" }
+        : body,
+  );
   if (!agent || !parsed.success) return false;
   const viewed = viewers.get(agent.id);
   if (!viewed || viewed.avdName !== parsed.data.avdName || viewed.until < Date.now()) return false;
+  const key = agent.id + ":" + parsed.data.avdName;
+  if (parsed.data.kind === "error") {
+    captureErrors.set(key, { message: parsed.data.error, updatedAt: Date.now() });
+    screenshots.delete(key);
+    return true;
+  }
   const bytes = Buffer.from(parsed.data.pngBase64, "base64");
   if (bytes.length < 100 || bytes.length > 3_300_000 || !bytes.subarray(0,8).equals(Buffer.from([137,80,78,71,13,10,26,10]))) return false;
-  screenshots.set(agent.id + ":" + parsed.data.avdName, { bytes, updatedAt: Date.now() });
+  screenshots.set(key, { bytes, updatedAt: Date.now() });
+  captureErrors.delete(key);
   if (screenshots.size > 20) {
     for (const [key, image] of screenshots) if (Date.now() - image.updatedAt > 30_000) screenshots.delete(key);
   }
