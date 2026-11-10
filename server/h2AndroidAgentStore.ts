@@ -309,10 +309,18 @@ export async function pullAndroidCommand(bearer: string | undefined) {
   const agent = await authenticatedAndroidAgent(bearer);
   if (!agent) return null;
   const db = await androidCommandDb();
+  // Commands waiting to be delivered expire quickly. Commands already running
+  // on the Windows host may be verifying large ISO hashes or preparing Hyper-V.
+  // Do not expire a real in-flight VM operation after just two minutes.
   await db.execute(sql`
-    UPDATE h2_android_commands SET status='expired', payloadJson='{}', resultText='Tempo limite.'
-    WHERE agentId=${agent.id} AND status IN ('pending','running')
+    UPDATE h2_android_commands SET status='expired', payloadJson='{}', resultText='Tempo limite aguardando agente.'
+    WHERE agentId=${agent.id} AND status='pending'
     AND createdAt < DATE_SUB(NOW(), INTERVAL 2 MINUTE)
+  `);
+  await db.execute(sql`
+    UPDATE h2_android_commands SET status='expired', payloadJson='{}', resultText='Tempo limite executando no Windows.'
+    WHERE agentId=${agent.id} AND status='running'
+    AND COALESCE(deliveredAt, createdAt) < DATE_SUB(NOW(), INTERVAL 30 MINUTE)
   `);
   const [rows] = await db.execute(sql`
     SELECT id, agentId, avdName, commandType, payloadJson, createdAt
