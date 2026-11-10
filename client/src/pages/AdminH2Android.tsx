@@ -151,7 +151,7 @@ export default function AdminH2Android() {
         </section>
 
         <div id="devices" className="scroll-mt-6">
-        <H2AndroidLiveManager agents={agents} commands={overviewQuery.data?.commands ?? []} refresh={() => { void overviewQuery.refetch(); }} />
+        <H2AndroidLiveManager agents={agents} commands={overviewQuery.data?.commands ?? []} refresh={() => overviewQuery.refetch({ throwOnError: true })} />
         </div>
 
         <section className="grid grid-cols-2 gap-3 lg:grid-cols-4" aria-label="Resumo de instâncias">
