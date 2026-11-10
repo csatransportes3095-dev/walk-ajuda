@@ -414,6 +414,10 @@ export function requestAndroidScreen(agentId: string, avdName: string): { png: B
   if (!h2AndroidAvdName.test(avdName)) return { png: null, error: null };
   const key = agentId + ":" + avdName;
   viewers.set(agentId, { avdName, until: Date.now() + 18_000 });
+  // An error belongs to a previous capture attempt. Do not replay it when the
+  // administrator opens a fresh screen session; the agent will publish a new
+  // frame or a new error for this session.
+  captureErrors.delete(key);
   const frame = screenshots.get(key);
   if (frame && Date.now() - frame.updatedAt < 15_000) return { png: frame.bytes, error: null };
   const diagnostic = captureErrors.get(key);
