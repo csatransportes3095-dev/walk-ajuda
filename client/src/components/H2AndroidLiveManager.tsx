@@ -58,7 +58,7 @@ export default function H2AndroidLiveManager({
     setFrameLoaded(false);
     setFrame(null);
     setScreenError(null);
-    if (!watching || !chosen?.running || chosen.agent.agentVersion !== "0.3.5-native-screen") return;
+    if (!watching || !chosen?.running || chosen.agent.agentVersion !== "0.3.6-native-screen") return;
     const deviceKey = chosen.key;
     const url = "/api/h2-android/screen/" + chosen.agent.id + "/" + chosen.name;
     const stream = startAndroidScreenStream(url, next => {
@@ -73,7 +73,7 @@ export default function H2AndroidLiveManager({
   }, [watching, chosen?.running, chosen?.key, chosen?.agent.id, chosen?.name]);
 
   // O agente 0.3.4 publica somente capturas reais WMI autenticadas.
-  const nativeScreenAvailable = chosen?.agent.agentVersion === "0.3.5-native-screen";
+  const nativeScreenAvailable = chosen?.agent.agentVersion === "0.3.6-native-screen";
   const visibleFrame = nativeScreenAvailable && watching && chosen?.running && frame?.deviceKey === chosen.key ? frame : null;
   const screenActive = nativeScreenAvailable && watching;
 
