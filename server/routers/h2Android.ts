@@ -81,6 +81,12 @@ export const h2AndroidRouter = router({
         isoSha256: z.string().regex(/^[a-fA-F0-9]{64}$/),
         allowUnsignedBoot: z.boolean().default(false),
       }),
+      z.object({
+        action: z.literal("clone"),
+        agentId: z.string().uuid(),
+        avdName: z.string().regex(h2AndroidAvdName),
+        sourceAvdName: z.string().regex(h2AndroidAvdName),
+      }),
       z.object({ action: z.literal("start"), agentId: z.string().uuid(), avdName: z.string().regex(h2AndroidAvdName) }),
       z.object({ action: z.literal("stop"), agentId: z.string().uuid(), avdName: z.string().regex(h2AndroidAvdName) }),
       z.object({ action: z.literal("tap"), agentId: z.string().uuid(), avdName: z.string().regex(h2AndroidAvdName), x: z.number().int().min(0).max(5000), y: z.number().int().min(0).max(10000) }),
@@ -94,6 +100,7 @@ export const h2AndroidRouter = router({
         isoSha256: input.isoSha256,
         allowUnsignedBoot: input.allowUnsignedBoot,
       };
+      if (input.action === "clone") payload = { sourceAvdName: input.sourceAvdName };
       if (input.action === "tap") payload = { x: input.x, y: input.y };
       if (input.action === "key") payload = { key: input.key };
       if (input.action === "proxy") {

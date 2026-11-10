@@ -78,4 +78,12 @@ describe("H2 Android - modulo isolado e privado", () => {
     expect(manager).toContain('toast.error(error instanceof Error ? error.message');
     expect(manager).toContain("Video remoto ainda nao implementado");
   });
+  it("habilita criacao de aparelho real por clonagem no painel", () => {
+    const manager = read("client/src/components/H2AndroidLiveManager.tsx");
+    expect(manager).toContain("Criar proximo Android");
+    expect(manager).toContain('action: "clone"');
+    expect(manager).toContain("sourceAvdName: source.name");
+    expect(manager).not.toContain("setIsoPath");
+    expect(androidPage).not.toContain("PhoneFrame");
+  });
 });

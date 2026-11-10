@@ -199,7 +199,7 @@ export async function revokeAndroidAgent(id: string) {
 
 /** Real H2 Android controls: finite, allowlisted commands. No shell or arbitrary paths. */
 export const h2AndroidAvdName = /^H2Android_[0-9]{2,3}$/;
-export type AndroidControlAction = "create" | "start" | "stop" | "tap" | "key" | "proxy";
+export type AndroidControlAction = "create" | "clone" | "start" | "stop" | "tap" | "key" | "proxy";
 type AndroidCommandRow = { id: string; agentId: string; avdName: string; commandType: AndroidControlAction; payloadJson: string; createdAt: Date | string };
 type AndroidAgentIdentity = { id: string; reportJson: string | null; lastSeenAt: Date | string | null };
 const screenshots = new Map<string, { bytes: Buffer; updatedAt: number }>();
@@ -263,12 +263,35 @@ export async function enqueueAndroidCommand(input: {
     throw new TRPCError({ code: "PRECONDITION_FAILED", message: report.hyperVReason || "Hyper-V nao esta pronto neste computador." });
   }
   // Fail-closed: remote screen, tap, keys and proxy are NOT implemented for Hyper-V.
-  if (!["create", "start", "stop"].includes(input.action)) {
+  if (!["create", "clone", "start", "stop"].includes(input.action)) {
     throw new TRPCError({ code: "PRECONDITION_FAILED", message: "Comando indisponivel no motor Hyper-V nativo." });
   }
   const exists = report.avdNames.includes(input.avdName);
-  if (input.action === "create" ? exists : !exists) {
+  const creating = input.action === "create" || input.action === "clone";
+  if (creating ? exists : !exists) {
     throw new TRPCError({ code: "BAD_REQUEST", message: exists ? "Android ja existe." : "Android nao encontrado no agente." });
+  }
+  if (creating) {
+    // Multiple browser clicks must never prepare the same destination twice.
+    const [pending] = await db.execute(sql`
+      SELECT id FROM h2_android_commands
+      WHERE agentId = ${input.agentId} AND avdName = ${input.avdName}
+      AND commandType IN ('create','clone')
+      AND status IN ('pending','running') LIMIT 1
+    `);
+    if ((pending as unknown as { id: string }[]).length) {
+      throw new TRPCError({ code: "CONFLICT", message: "A criacao deste Android ja esta em andamento." });
+    }
+  }
+  if (input.action === "clone") {
+    const source = input.payload.sourceAvdName;
+    if (typeof source !== "string" || !h2AndroidAvdName.test(source) ||
+        source === input.avdName || !report.avdNames.includes(source)) {
+      throw new TRPCError({ code: "BAD_REQUEST", message: "Android de origem invalido ou nao encontrado no agente." });
+    }
+    if (report.runningAvds.includes(source)) {
+      throw new TRPCError({ code: "PRECONDITION_FAILED", message: "Desligue o Android original antes de criar uma copia." });
+    }
   }
   if (input.action === "start") {
     // One agent owns this computer. Count live devices and undelivered starts.

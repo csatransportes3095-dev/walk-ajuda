@@ -26,7 +26,7 @@ foreach($expected in @(
 }
 foreach($expected in @(
   'Get-H2NativeOwnedVm', 'hyperVReady', 'Assert-H2NativeReady',
-  'H2NativeIsoBootstrap.ps1', '("create","start","stop")'
+  'H2NativeIsoBootstrap.ps1', '("create","clone","start","stop")', 'New-H2NativeClone'
 )){
   if(!$control.Contains($expected)){throw ("Controle nativo ausente: "+$expected)}
 }

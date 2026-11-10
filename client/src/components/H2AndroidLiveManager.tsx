@@ -34,9 +34,6 @@ export default function H2AndroidLiveManager({
   const [frameLoaded, setFrameLoaded] = useState(false);
   const [watching, setWatching] = useState(false);
   const [creating, setCreating] = useState(false);
-  const [isoPath, setIsoPath] = useState("");
-  const [isoSha256, setIsoSha256] = useState("");
-  const [allowUnsignedBoot, setAllowUnsignedBoot] = useState(false);
   const [refreshing, setRefreshing] = useState(false);
   const [lastRefreshedAt, setLastRefreshedAt] = useState<string | null>(null);
   const utils = trpc.useUtils();
@@ -107,21 +104,21 @@ export default function H2AndroidLiveManager({
   }
 
   function createNext() {
-    const agent = ready[0];
-    if (!agent) return toast.error("Atualize o agente Windows primeiro.");
-    const known = new Set(agent.avdNames);
+    const source = chosen;
+    if (!source) return toast.error("Selecione o Android que sera usado como origem.");
+    if (source.running) return toast.error("Desligue o Android original antes de criar uma copia.");
+    const known = new Set(source.agent.avdNames);
     let next = "";
     for (let i = 1; i <= 999; i++) {
       const name = "H2Android_" + String(i).padStart(2, "0");
       if (!known.has(name)) { next = name; break; }
     }
     if (!next) return toast.error("Limite de nomes disponiveis.");
-    if (!/^[A-Za-z]:[\\/].*\.iso$/i.test(isoPath.trim()) || !/^[a-fA-F0-9]{64}$/.test(isoSha256.trim())) {
-      return toast.error("Informe caminho da ISO local no Windows e o SHA-256 valido.");
-    }
     mutation.mutate({
-      action: "create", agentId: agent.id, avdName: next,
-      isoPath: isoPath.trim(), isoSha256: isoSha256.trim(), allowUnsignedBoot,
+      action: "clone",
+      agentId: source.agent.id,
+      avdName: next,
+      sourceAvdName: source.name,
     });
     setCreating(false);
   }
@@ -135,7 +132,7 @@ export default function H2AndroidLiveManager({
           </h2>
           <p className="mt-1 max-w-2xl text-xs leading-relaxed text-slate-300">
             Instancias Hyper-V locais, sem Android Studio, SDK ou ADB.
-            O controle nativo permite preparar, ligar e desligar VMs. O agente informa as máquinas reais do Hyper-V; vídeo remoto e proxy ainda estão pendentes.
+            Crie um novo Android copiando uma VM H2 instalada e desligada, ou ligue e desligue as VMs existentes. Vídeo remoto e proxy ainda estão pendentes.
           </p>
         </div>
         <div className="flex flex-col items-end gap-1">
@@ -166,31 +163,27 @@ export default function H2AndroidLiveManager({
       ) : (
         <>
           <div className="flex flex-wrap gap-2">
-            <button type="button" onClick={() => setCreating(true)} disabled={mutation.isPending}
-              className="rounded-lg bg-[#80dcb5] px-4 py-2 text-sm font-black text-slate-950 disabled:opacity-50">
-              <Plus className="mr-1 inline h-4 w-4" /> Preparar VM H2
+            <button type="button" onClick={() => setCreating(true)} disabled={mutation.isPending || devices.length === 0}
+              className="rounded-lg bg-[#80dcb5] px-4 py-2 text-sm font-black text-slate-950 disabled:opacity-40">
+              <Plus className="mr-1 inline h-4 w-4" /> Criar proximo Android
             </button>
-            {creating && (
-              <div className="flex items-center gap-2">
-                <div className="flex min-w-[280px] flex-col gap-2">
-                  <span className="text-xs text-slate-300">Preparar VM offline usando ISO Android x86_64 UEFI do Windows (boot não comprovado)</span>
-                  <input aria-label="Caminho ISO no computador Windows" placeholder="C:\\Android\\android.iso" value={isoPath} onChange={e => setIsoPath(e.target.value)}
-                    className="rounded-lg border border-white/20 bg-slate-950 px-2 py-2 text-xs" />
-                  <input aria-label="SHA-256 da ISO Android" placeholder="SHA-256 oficial (64 caracteres)" value={isoSha256} onChange={e => setIsoSha256(e.target.value)}
-                    className="rounded-lg border border-white/20 bg-slate-950 px-2 py-2 text-xs" />
-                  <label className="flex items-center gap-2 text-xs text-amber-100">
-                    <input type="checkbox" checked={allowUnsignedBoot} onChange={e => setAllowUnsignedBoot(e.target.checked)} />
-                    Desativar Secure Boot somente nesta nova VM, se necessário
-                  </label>
+            {creating && chosen && (
+              <div className="flex flex-col gap-2 rounded-xl border border-[#80dcb5]/35 bg-slate-950/80 p-3 text-xs text-slate-200">
+                <strong>Criar nova maquina a partir de {chosen.name}</strong>
+                <p>O Android de origem precisa estar desligado. O disco sera copiado sem internet. A copia ainda precisara validar boot e identidade propria antes de conectar contas.</p>
+                <div className="flex flex-wrap gap-2">
+                  <button type="button" disabled={mutation.isPending || chosen.running} onClick={createNext}
+                    className="rounded-lg border border-[#80dcb5] px-3 py-2 font-bold text-[#a0e8cc] disabled:opacity-40">
+                    {chosen.running ? "Desligue a origem" : "Confirmar copia"}
+                  </button>
+                  <button type="button" onClick={() => setCreating(false)} className="rounded-lg border border-white/20 px-3 py-2">Cancelar</button>
                 </div>
-                <button type="button" onClick={createNext} className="rounded-lg border border-[#80dcb5] px-3 py-2 text-xs font-bold text-[#a0e8cc]">Confirmar</button>
-                <button type="button" onClick={() => setCreating(false)} className="rounded-lg border border-white/20 px-3 py-2 text-xs">Cancelar</button>
               </div>
             )}
           </div>
           {devices.length === 0 ? (
             <p className="rounded-xl border border-white/10 p-4 text-xs text-slate-300">
-              Nenhuma VM H2 nativa detectada. Informe ISO local e SHA-256 para preparar uma nova maquina offline.
+              Nenhuma VM H2 nativa detectada. Prepare o primeiro Android antes de criar copias pelo site.
             </p>
           ) : (
             <>

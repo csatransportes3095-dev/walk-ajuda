@@ -82,4 +82,14 @@ describe("H2 Android Agent - conexao segura e independente", () => {
     expect(stopFn).toContain("if ($ForcePowerOff)");
     expect(stopFn).toContain("Stop-VM -Name $VMName -TurnOff -Force -ErrorAction Stop");
   });
+  it("clona apenas VM H2 desligada e com disco independente", () => {
+    const core = read("workers/windows/h2-native/H2NativeCore.psm1");
+    const control = read("workers/windows/h2-native/H2NativeControl.ps1");
+    const router = read("server/routers/h2Android.ts");
+    expect(core).toContain("function New-H2NativeClone {");
+    expect(core).toContain("Copy-Item -LiteralPath $sourceDisk -Destination $disk");
+    expect(core).toContain("independentGuestIdentityVerified = $false");
+    expect(control).toContain('if ($action -ceq "clone")');
+    expect(router).toContain('action: z.literal("clone")');
+  });
 });

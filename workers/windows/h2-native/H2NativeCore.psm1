@@ -212,6 +212,158 @@ function New-H2NativeVm {
   }
 }
 
+
+# Copia OFFLINE um disco Android H2 ja instalado para uma VM totalmente nova.
+# A copia de /data tambem leva os identificadores do Android convidado:
+# nao afirmar identidade independente ate uma inicializacao/redefinicao propria.
+function New-H2NativeClone {
+  param(
+    [Parameter(Mandatory = $true)][string]$VMName,
+    [Parameter(Mandatory = $true)][string]$SourceVMName
+  )
+  Assert-H2NativeName $VMName
+  Assert-H2NativeName $SourceVMName
+  if ($VMName -ceq $SourceVMName) { throw "Origem e destino devem ser diferentes." }
+  Assert-H2NativeReady
+  if (Get-VM -Name $VMName -ErrorAction SilentlyContinue) {
+    throw "A VM destino ja existe. Nenhum disco sera sobrescrito."
+  }
+
+  $source = Get-H2NativeOwnedVm -VMName $SourceVMName
+  if ([string]$source.State -ne "Off") {
+    throw "Desligue a VM de origem antes de copiar. Nao sera desligada automaticamente."
+  }
+  if (@(Get-VMSnapshot -VMName $SourceVMName -ErrorAction Stop).Count -gt 0) {
+    throw "A VM original tem checkpoints. Resolva-os antes da copia; nada sera alterado."
+  }
+  $sourceDisk = Get-H2NativeDiskPath $SourceVMName
+  $sourceVhd = Get-VHD -Path $sourceDisk -ErrorAction Stop
+  if ([string]$sourceVhd.VhdFormat -cne "VHDX" -or
+      [string]$sourceVhd.VhdType -cne "Dynamic" -or
+      ![string]::IsNullOrWhiteSpace([string]$sourceVhd.ParentPath) -or
+      !(Test-VHD -Path $sourceDisk -ErrorAction Stop)) {
+    throw "O disco original nao e VHDX dinamico independente e integro. Copia bloqueada."
+  }
+  $manifestPath = Join-Path (Split-Path $sourceDisk -Parent) "manifest.json"
+  $sourceManifest = Get-Content -LiteralPath $manifestPath -Raw -ErrorAction Stop |
+    ConvertFrom-Json -ErrorAction Stop
+  if ([string]$sourceManifest.mode -cne "DISK_FIRST_BOOT" -or
+      [IO.Path]::GetExtension([string]$sourceManifest.imagePath) -ine ".iso" -or
+      !(Test-H2NativeHash ([string]$sourceManifest.imageSha256))) {
+    throw "Instale e inicie primeiro o Android de origem pelo disco, sem ISO."
+  }
+  $dvd = @(Get-VMDvdDrive -VMName $SourceVMName -ErrorAction Stop)
+  if ($dvd.Count -ne 1 -or
+      ![string]::IsNullOrWhiteSpace([string]$dvd[0].Path)) {
+    throw "Retire a ISO da VM de origem antes de copiar."
+  }
+  $attached = @(Get-VMNetworkAdapter -VMName $SourceVMName -ErrorAction Stop |
+    Where-Object { ![string]::IsNullOrWhiteSpace([string]$_.SwitchName) })
+  if ($attached.Count -gt 0) { throw "Origem com rede ligada: copia bloqueada ate validar isolamento." }
+  if ([string](Get-VMFirmware -VMName $SourceVMName -ErrorAction Stop).SecureBoot -ne "Off") {
+    throw "Origem nao usa o perfil EFI esperado para Android-x86."
+  }
+  $count = @(Get-VM -ErrorAction Stop | Where-Object {
+    (Test-H2NativeName $_.Name) -and [string]$_.Notes -ceq $script:H2NativeTag
+  }).Count
+  if ($count -ge 100) { throw "Limite de 100 maquinas H2 cadastradas." }
+
+  $sourceFile = Get-Item -LiteralPath $sourceDisk -ErrorAction Stop
+  $disk = Get-H2NativeDiskPath $VMName
+  $folder = Split-Path $disk -Parent
+  if (Test-Path -LiteralPath $folder) {
+    throw "A pasta do novo Android ja existe. Nao sera sobrescrita."
+  }
+  $free = (New-Object System.IO.DriveInfo([IO.Path]::GetPathRoot($disk))).AvailableFreeSpace
+  $required = [Math]::Max(8GB, [int64]$sourceFile.Length + 4GB)
+  if ($free -lt $required) { throw "Espaco em disco insuficiente para copiar Android e manter margem livre." }
+
+  $createdFolder = $false
+  $createdVM = $false
+  $newVMId = ""
+  try {
+    New-Item -ItemType Directory -Path $folder -ErrorAction Stop | Out-Null
+    $createdFolder = $true
+    # Nao usar disco diferencial da origem: o novo Android precisa ter disco proprio.
+    Copy-Item -LiteralPath $sourceDisk -Destination $disk -ErrorAction Stop
+    if ((Get-VM -Name $SourceVMName -ErrorAction Stop).State -ne "Off") {
+      throw "Origem foi ligada durante a copia. Copia descartada."
+    }
+    $afterSource = Get-Item -LiteralPath $sourceDisk -ErrorAction Stop
+    if ($afterSource.Length -ne $sourceFile.Length -or
+        $afterSource.LastWriteTimeUtc -ne $sourceFile.LastWriteTimeUtc) {
+      throw "Disco de origem mudou durante a copia. Copia descartada."
+    }
+    $sourceHash = (Get-FileHash -LiteralPath $sourceDisk -Algorithm SHA256 -ErrorAction Stop).Hash
+    $destHash = (Get-FileHash -LiteralPath $disk -Algorithm SHA256 -ErrorAction Stop).Hash
+    if ($sourceHash -ine $destHash -or !(Test-VHD -Path $disk -ErrorAction Stop)) {
+      throw "O disco copiado nao passou na verificacao de integridade."
+    }
+    $configPath = Join-Path (Get-H2NativeRoot) "Configs"
+    New-Item -ItemType Directory -Path $configPath -Force -ErrorAction Stop | Out-Null
+    $newVM = New-VM -Name $VMName -Generation 2 -Path $configPath -VHDPath $disk -MemoryStartupBytes 4GB -ErrorAction Stop
+    $newVMId = $newVM.Id.ToString()
+    $createdVM = $true
+    Set-VM -VM $newVM -Notes $script:H2NativeTag -AutomaticStartAction Nothing -AutomaticStopAction ShutDown -AutomaticCheckpointsEnabled $false -ErrorAction Stop
+    Set-VMProcessor -VMName $VMName -Count 2 -ErrorAction Stop
+    Set-VMFirmware -VMName $VMName -EnableSecureBoot Off -ErrorAction Stop
+    Add-VMDvdDrive -VMName $VMName -ErrorAction Stop | Out-Null
+    foreach ($adapter in @(Get-VMNetworkAdapter -VMName $VMName -ErrorAction Stop)) {
+      if (![string]::IsNullOrWhiteSpace([string]$adapter.SwitchName)) {
+        Disconnect-VMNetworkAdapter -VMNetworkAdapter $adapter -ErrorAction Stop
+      }
+    }
+    $newDisk = @(Get-VMHardDiskDrive -VMName $VMName -ErrorAction Stop)
+    if ($newDisk.Count -ne 1) { throw "Discos da nova VM inconsistentes." }
+    Set-VMFirmware -VMName $VMName -FirstBootDevice $newDisk[0] -ErrorAction Stop
+    $manifest = @{
+      owner = $script:H2NativeTag
+      name = $VMName
+      vmId = $newVMId
+      mode = "DISK_FIRST_BOOT"
+      imagePath = [string]$sourceManifest.imagePath
+      imageSha256 = [string]$sourceManifest.imageSha256
+      cloneSourceName = $SourceVMName
+      cloneSourceDiskSha256 = $sourceHash
+      createdUtc = [datetime]::UtcNow.ToString("o")
+      networkPolicy = "disconnected-until-proxy-guest-isolation"
+      androidBootVerified = $false
+      independentGuestIdentityVerified = $false
+    }
+    $manifest | ConvertTo-Json -Depth 5 |
+      Set-Content -LiteralPath (Join-Path $folder "manifest.json") -Encoding UTF8 -ErrorAction Stop
+    Get-H2NativeOwnedVm -VMName $VMName | Out-Null
+    return [pscustomobject]@{
+      name=$VMName
+      state="Created"
+      clonedFrom=$SourceVMName
+      networkConnected=$false
+      guestBootVerified=$false
+      independentGuestIdentityVerified=$false
+      note="Disco separado copiado offline. Primeiro boot e identidade Android precisam validacao; nao configure contas antes disso."
+    }
+  } catch {
+    $cause = $_.Exception.Message
+    # Nunca tocar na origem. Reverter somente a VM de destino criada nesta tentativa.
+    if ($createdVM) {
+      try {
+        $registered = Get-VM -Name $VMName -ErrorAction SilentlyContinue
+        if ($registered -and $registered.Id.ToString() -ceq $newVMId -and
+            [string]$registered.State -eq "Off") {
+          Remove-VM -VM $registered -Force -ErrorAction Stop
+        } else {
+          throw "Registro da nova VM mudou; nenhuma limpeza automatica."
+        }
+      } catch { throw "Clone interrompido: $cause. Verifique manualmente o destino antes de continuar." }
+    }
+    if ($createdFolder -and (Test-Path -LiteralPath $folder)) {
+      try { Remove-Item -LiteralPath $folder -Recurse -Force -ErrorAction Stop }
+      catch { throw "Clone interrompido: $cause. Pasta destino precisa verificacao manual." }
+    }
+    throw $cause
+  }
+}
+
 function Start-H2NativeVm {
   param([Parameter(Mandatory = $true)][string]$VMName)
   Assert-H2NativeName $VMName
@@ -252,4 +404,4 @@ function Stop-H2NativeVm {
   return [pscustomobject]@{ name=$VMName; state="Stopping"; forced=[bool]$ForcePowerOff }
 }
 
-Export-ModuleMember -Function Test-H2NativeName, Assert-H2NativeName, Test-H2NativeHash, Get-H2NativeRoot, Get-H2NativeDiskPath, Get-H2NativeHostStatus, Assert-H2NativeReady, Get-H2NativeOwnedVm, Get-H2NativeInventory, New-H2NativeVm, Start-H2NativeVm, Stop-H2NativeVm
+Export-ModuleMember -Function Test-H2NativeName, Assert-H2NativeName, Test-H2NativeHash, Get-H2NativeRoot, Get-H2NativeDiskPath, Get-H2NativeHostStatus, Assert-H2NativeReady, Get-H2NativeOwnedVm, Get-H2NativeInventory, New-H2NativeVm, New-H2NativeClone, Start-H2NativeVm, Stop-H2NativeVm
