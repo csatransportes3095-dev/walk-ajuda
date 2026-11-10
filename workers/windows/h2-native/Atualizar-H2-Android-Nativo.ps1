@@ -42,7 +42,7 @@ $newControl = Get-Content -LiteralPath (Join-Path $PSScriptRoot "H2NativeControl
 if (!$newAgent.Contains("H2AndroidNativeAgentSingleInstanceV1") -or
     !$newAgent.Contains("WaitOne(0)") -or
     !$newCore.Contains("function New-H2NativeClone {") -or
-    !$newControl.Contains('agentVersion = "0.3.2-native-clone"')) {
+    !$newControl.Contains('agentVersion = "0.3.3-native-guard"')) {
   throw "Pacote H2 invalido ou sem protecao contra instancias duplicadas. Nada foi modificado."
 }
 $backupDir = Join-Path $folder ("Backup-Atualizacao-" + (Get-Date -Format "yyyyMMdd-HHmmss"))
@@ -54,13 +54,31 @@ $updated = $false
 try {
   # Parar somente a tarefa H2 Android e o processo de seu caminho especifico.
   Stop-ScheduledTask -TaskName $taskName -ErrorAction Stop
-  $running = @(Get-CimInstance Win32_Process -Filter "Name = 'powershell.exe'" -ErrorAction Stop |
+  # Encerrar instancias antigas que ainda tenham o script anterior carregado.
+  # A tarefa fica parada ate TODOS os workers H2 legados encerrarem.
+  $remaining = @()
+  for ($attempt = 1; $attempt -le 5; $attempt++) {
+    $remaining = @(Get-CimInstance Win32_Process -Filter "Name = 'powershell.exe'" -ErrorAction Stop |
+      Where-Object {
+        $_.ProcessId -ne $PID -and $_.CommandLine -and
+        $_.CommandLine.IndexOf($agentPath, [StringComparison]::OrdinalIgnoreCase) -ge 0 -and
+        $_.CommandLine -match ' -Run(\s|$)'
+      })
+    if ($remaining.Count -eq 0) { break }
+    foreach ($proc in $remaining) {
+      Stop-Process -Id $proc.ProcessId -Force -ErrorAction SilentlyContinue
+    }
+    Start-Sleep -Seconds 1
+  }
+  $remaining = @(Get-CimInstance Win32_Process -Filter "Name = 'powershell.exe'" -ErrorAction Stop |
     Where-Object {
       $_.ProcessId -ne $PID -and $_.CommandLine -and
       $_.CommandLine.IndexOf($agentPath, [StringComparison]::OrdinalIgnoreCase) -ge 0 -and
       $_.CommandLine -match ' -Run(\s|$)'
     })
-  foreach ($proc in $running) { Stop-Process -Id $proc.ProcessId -ErrorAction Stop }
+  if ($remaining.Count -gt 0) {
+    throw "Ainda ha agente H2 antigo ativo. Atualizacao interrompida sem alterar arquivos."
+  }
   foreach ($name in $files) {
     Copy-Item -LiteralPath (Join-Path $PSScriptRoot $name) -Destination (Join-Path $folder $name) -Force -ErrorAction Stop
     $sourceHash = (Get-FileHash -LiteralPath (Join-Path $PSScriptRoot $name) -Algorithm SHA256).Hash
@@ -72,11 +90,21 @@ try {
   Start-Sleep -Seconds 3
   $status = (Get-ScheduledTask -TaskName $taskName -ErrorAction Stop).State
   if ([string]$status -ne "Running") { throw "A tarefa H2 nao permaneceu executando." }
-  Write-Host "AGENTE H2 ATUALIZADO. PAREAMENTO E ANDROID PRESERVADOS." -ForegroundColor Green
+  $active = @(Get-CimInstance Win32_Process -Filter "Name = 'powershell.exe'" -ErrorAction Stop |
+    Where-Object {
+      $_.ProcessId -ne $PID -and $_.CommandLine -and
+      $_.CommandLine.IndexOf($agentPath, [StringComparison]::OrdinalIgnoreCase) -ge 0 -and
+      $_.CommandLine -match ' -Run(\s|$)'
+    })
+  if ($active.Count -ne 1) {
+    throw ("Quantidade inesperada de agentes H2 ativos: " + $active.Count)
+  }
+  Write-Host "AGENTE H2 v0.3.3-native-guard ATUALIZADO. UMA INSTANCIA ATIVA." -ForegroundColor Green
+  Write-Host "PAREAMENTO E ANDROID PRESERVADOS." -ForegroundColor Green
   Write-Host ("Backup do motor antigo: " + $backupDir)
 } catch {
   $errorText = $_.Exception.Message
-  # Restaurar apenas os dois arquivos do motor do H2 Android.
+  # Restaurar os arquivos originais do agente H2 Android.
   foreach ($name in $files) {
     try {
       Copy-Item -LiteralPath (Join-Path $backupDir $name) -Destination (Join-Path $folder $name) -Force -ErrorAction Stop
