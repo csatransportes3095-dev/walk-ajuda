@@ -6,7 +6,7 @@ import { sendMail } from "./mailer";
 import { getDb } from "../db";
 import { customerPasswordSessions, customers } from "../../drizzle/schema";
 import { requireCustomerSession } from "../customerSession";
-import { notifyCustomerRouteActivity } from "./customerEntryNotification";
+
 import { getCustomerRouteAuditTarget, shouldNotifyForRouteAudit } from "../../shared/customerRouteAudit";
 
 const ADMIN_EMAIL = 'h2@h2colombiano.com';
@@ -472,33 +472,8 @@ export const systemRouter = router({
           WHERE token=${input.sessionToken}
         `);
 
-        if (!shouldNotify) return { tracked: true, notified: false } as const;
-
-        let emailSent = false;
-        try {
-          const customerRows = await db
-            .select({
-              name: customers.name,
-              phone: customers.phone,
-              profilePhotoUrl: customers.profilePhotoUrl,
-            })
-            .from(customers)
-            .where(eq(customers.phone, identity.phone))
-            .limit(1);
-          const customer = customerRows?.[0];
-          await notifyCustomerRouteActivity({
-            name: customer?.name ?? null,
-            phone: customer?.phone || identity.phone,
-            profilePhotoUrl: customer?.profilePhotoUrl ?? null,
-            areaName: target.areaName,
-            changedArea: routeChanged,
-            happenedAt: now,
-          });
-          emailSent = true;
-        } catch (error) {
-          console.warn("[customer-route-audit] Falha ao enviar e-mail:", error);
-        }
-        return { tracked: true, notified: emailSent, routeChanged } as const;
+        // Route activity remains recorded, but never sends email notifications.
+        return { tracked: true, notified: false, routeChanged } as const;
       });
     }),
 
