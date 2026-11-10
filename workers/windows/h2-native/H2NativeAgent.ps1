@@ -11,7 +11,7 @@ param(
   [string]$PanelUrl = "https://h2colombiano.com"
 )
 $ErrorActionPreference="Stop"
-$AgentVersion="0.3.5-native-screen"
+$AgentVersion="0.3.6-native-screen"
 $Folder=Join-Path $env:LOCALAPPDATA "H2AndroidAgent"
 $ConfigPath=Join-Path $Folder "agent.json"
 $AgentPath=Join-Path $Folder "H2NativeAgent.ps1"
