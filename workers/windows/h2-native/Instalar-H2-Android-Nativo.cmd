@@ -1,6 +1,6 @@
 @echo off
 setlocal EnableExtensions DisableDelayedExpansion
-title H2 Android Nativo - Substituir agente antigo
+title H2 Android Nativo - Instalar ou atualizar agente existente
 set "H2_NATIVE_INSTALLER=%~f0"
 set "H2_NATIVE_DIR=%~dp0"
 rem Pedir UAC ANTES da verificacao; sem isso o Hyper-V sempre parece indisponivel.
@@ -15,6 +15,48 @@ if errorlevel 1 (
     pause
     exit /b 1
   )
+  exit /b 0
+)
+rem Se a tarefa H2 ja aponta para o agente nativo, executar SOMENTE o atualizador.
+rem Nunca abrir segunda copia em modo Run, pois existe bloqueio de instancia unica.
+powershell.exe -NoProfile -ExecutionPolicy Bypass -Command "$t=Get-ScheduledTask -TaskName 'H2 Android Agent' -ErrorAction SilentlyContinue; if ($null -ne $t) { $a=@($t.Actions | Where-Object { $_.Execute -match 'powershell(\.exe)?
+echo ============================================================
+echo Executando como administrador. Sem Android Studio, ADB e H2 ADS.
+echo Nenhum agente sera removido se o Hyper-V nao estiver pronto.
+echo.
+powershell.exe -NoProfile -ExecutionPolicy Bypass -File "%H2_NATIVE_DIR%H2NativeAgent.ps1" -Status
+if errorlevel 1 (
+  echo ERRO: nao foi possivel verificar este computador. Nada foi alterado.
+  pause
+  exit /b 1
+)
+echo.
+choice /C SN /M "Deseja instalar o agente nativo e substituir somente a tarefa H2 Android"
+if errorlevel 2 exit /b 0
+powershell.exe -NoProfile -ExecutionPolicy Bypass -File "%H2_NATIVE_DIR%H2NativeAgent.ps1" -Install
+if errorlevel 1 (
+  echo.
+  echo ERRO DO INSTALADOR ACIMA. Hyper-V, token ou permissao podem estar pendentes.
+  echo Agente antigo mantido ou restaurado. Nao exclua a pasta anterior.
+  pause
+  exit /b 1
+)
+echo.
+echo Novo agente registrado. Verifique o status no ADM.
+pause
+exit /b 0
+ -and $_.Arguments -like '*H2NativeAgent.ps1*' -and $_.Arguments -match ' -Run(\s|$)' }); if ($a.Count -eq 1) { exit 0 } }; exit 1"
+if not errorlevel 1 (
+  echo.
+  echo Agente H2 Android ja instalado. Executando atualizacao segura.
+  powershell.exe -NoProfile -ExecutionPolicy Bypass -File "%H2_NATIVE_DIR%Atualizar-H2-Android-Nativo.ps1"
+  if errorlevel 1 (
+    echo Falha na atualizacao. Agente e Android existentes preservados.
+    pause
+    exit /b 1
+  )
+  echo Atualizacao concluida. Nao foi criado outro agente.
+  pause
   exit /b 0
 )
 echo.
