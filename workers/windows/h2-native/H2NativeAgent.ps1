@@ -52,6 +52,22 @@ function Pair-H2NativeAgent {
     Set-Content -LiteralPath $ConfigPath -Encoding UTF8
 }
 function Install-H2NativeAgent {
+  # Se a tarefa ja executa o agente H2 nativo, atualizar em vez de instalar de novo.
+  $existingTask = Get-ScheduledTask -TaskName $TaskName -ErrorAction SilentlyContinue
+  if ($existingTask) {
+    $nativeActions = @($existingTask.Actions | Where-Object {
+      $_.Arguments -like "*H2NativeAgent.ps1*" -and $_.Arguments -like "*-Run*"
+    })
+    if ($nativeActions.Count -eq 1) {
+      $updater = Join-Path $PSScriptRoot "Atualizar-H2-Android-Nativo.ps1"
+      if (!(Test-Path -LiteralPath $updater -PathType Leaf)) {
+        throw "Agente H2 ja instalado: use Atualizar-H2-Android-Nativo.cmd."
+      }
+      Write-Host "Agente H2 existente detectado: atualizando sem segunda instalacao."
+      & $updater
+      return
+    }
+  }
   # Fase 1: validar tudo ANTES de tocar no processo e tarefa existentes.
   $hostReadiness=Get-H2NativeHostStatus
   if(!$hostReadiness.ready){throw ("Hyper-V nao preparado. Agente antigo preservado. "+$hostReadiness.reason)}

@@ -17,6 +17,20 @@ if errorlevel 1 (
   )
   exit /b 0
 )
+rem Tarefa H2 nativa existente: use atualizador e nao reinstalador.
+powershell.exe -NoProfile -ExecutionPolicy Bypass -Command "$t=Get-ScheduledTask -TaskName 'H2 Android Agent' -ErrorAction SilentlyContinue; if ($null -eq $t) { exit 1 }; $a=@($t.Actions | Where-Object { $_.Arguments -like '*H2NativeAgent.ps1*' -and $_.Arguments -like '*-Run*' }); if ($a.Count -eq 1) { exit 0 }; exit 1"
+if not errorlevel 1 (
+  echo Agente H2 Android ja instalado. Executando atualizacao segura.
+  powershell.exe -NoProfile -ExecutionPolicy Bypass -File "%H2_NATIVE_DIR%Atualizar-H2-Android-Nativo.ps1"
+  if errorlevel 1 (
+    echo Falha na atualizacao. Os arquivos originais foram preservados ou restaurados.
+    pause
+    exit /b 1
+  )
+  echo Atualizacao concluida. Nenhum agente duplicado foi instalado.
+  pause
+  exit /b 0
+)
 echo.
 echo ============================================================
 echo            H2 ANDROID NATIVO - INSTALACAO

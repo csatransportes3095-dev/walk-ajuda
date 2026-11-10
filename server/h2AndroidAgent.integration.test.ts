@@ -102,6 +102,13 @@ describe("H2 Android Agent - conexao segura e independente", () => {
     const page = read("client/src/pages/AdminH2Android.tsx");
     expect(installer).toContain("Atualizar-H2-Android-Nativo.cmd");
     expect(installer).toContain("Atualizar-H2-Android-Nativo.ps1");
+    const installCmd = read("workers/windows/h2-native/Instalar-H2-Android-Nativo.cmd");
+    expect(installCmd).toContain("Agente H2 Android ja instalado. Executando atualizacao segura.");
+    expect(installCmd).toContain('Atualizar-H2-Android-Nativo.ps1');
+    expect(installCmd.indexOf("atualizacao segura.")).toBeLessThan(installCmd.indexOf(" -Status"));
+    const installedAgent = read("workers/windows/h2-native/H2NativeAgent.ps1");
+    expect(installedAgent).toContain("Agente H2 existente detectado: atualizando sem segunda instalacao.");
+    expect(installedAgent).toContain('& $updater');
     expect(update).toContain('Get-ScheduledTask -TaskName $taskName');
     expect(update).toContain("H2AndroidNativeAgentSingleInstanceV1");
     expect(update).toContain("Backup-Atualizacao-");
