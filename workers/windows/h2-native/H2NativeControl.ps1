@@ -35,7 +35,7 @@ function Get-H2NativeAgentReport {
   return @{
     computerName = $computerName.Substring(0,[Math]::Min(80,$computerName.Length))
     windowsVersion = $windowsText.Substring(0,[Math]::Min(100,$windowsText.Length))
-    agentVersion = "0.3.2-native-clone"
+    agentVersion = "0.3.3-native-guard"
     sdkDetected = $false
     adbDetected = $false
     emulatorDetected = $false
