@@ -135,7 +135,7 @@ export default function H2AndroidLiveManager({
           </h2>
           <p className="mt-1 max-w-2xl text-xs leading-relaxed text-slate-300">
             Instancias Hyper-V locais, sem Android Studio, SDK ou ADB.
-            O controle nativo permite preparar, ligar e desligar VMs. Ainda é necessário instalar e validar o Android; tela remota e proxy estão pendentes.
+            O controle nativo permite preparar, ligar e desligar VMs. O agente informa as máquinas reais do Hyper-V; vídeo remoto e proxy ainda estão pendentes.
           </p>
         </div>
         <div className="flex flex-col items-end gap-1">

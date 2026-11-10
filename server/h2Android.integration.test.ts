@@ -47,6 +47,18 @@ describe("H2 Android - modulo isolado e privado", () => {
     expect(androidPage).toContain("Agente Windows H2 Android");
   });
 
+  it("mostra somente VMs reais e oculta o cadastro visual antigo", () => {
+    expect(androidPage).toContain("H2AndroidLiveManager");
+    expect(androidPage).toContain("Máquinas H2 detectadas");
+    expect(androidPage).toContain("nativeAgentPaired");
+    expect(androidPage).toContain("!nativeAgentPaired");
+    expect(androidPage).not.toContain("PhoneFrame");
+    expect(androidPage).not.toContain("Criar perfil Android");
+    expect(androidPage).not.toContain("Perfis de Android cadastrados");
+    expect(androidPage).not.toContain("Meus aparelhos");
+    expect(androidPage).toContain("Agente Windows H2 Android");
+  });
+
   it("isola os perfis na propria tabela, sem tocar cadastros ou pedidos", () => {
     expect(androidRouter).toContain("h2_android_profiles");
     expect(androidRouter).toContain("WHERE id =");
