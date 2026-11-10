@@ -6,7 +6,7 @@ describe("H2 Android Native - migracao segura do agente", () => {
   it("inclui agente nativo e instalador em ZIP servido no ADM", async () => {
     const zip = await getAndroidNativeOfflineZip();
     const count = zip.readUInt16LE(zip.length - 22 + 10);
-    expect(count).toBe(11);
+    expect(count).toBe(14);
     for (const name of [
       "Instalar-H2-Android-Nativo.cmd", "H2NativeAgent.ps1",
       "H2NativeControl.ps1", "H2NativeCore.psm1",
@@ -33,13 +33,13 @@ describe("H2 Android Native - migracao segura do agente", () => {
         expect(ui).toContain("&& agent.hyperVReady");
         const store = readFileSync("server/h2AndroidAgentStore.ts", "utf8");
         expect(store).toContain('hyperVReady: z.boolean().default(false)');
-        expect(store).toContain('report.agentVersion !== "0.3.0-native"');
+        expect(store).toContain('!NATIVE_H2_AGENT_VERSIONS.has(report.agentVersion)');
         expect(store).toContain('if (!report.hyperVReady)');
-        expect(store).toContain('["create", "start", "stop"].includes(input.action)');
+        expect(store).toContain('["create", "clone", "start", "stop", "tap", "key"].includes(input.action)');
     expect(motor).toContain("Get-H2NativeOwnedVm");
-    expect(motor).toContain('("create","start","stop")');
-    expect(ui).toContain('agent.agentVersion === "0.3.0-native"');
-    expect(ui).toContain("Tela remota nativa ainda indisponivel");
+    expect(motor).toContain('("create","clone","start","stop","tap","key")');
+    expect(ui).toContain('agent.agentVersion === "0.3.6-native-screen"');
+    expect(ui).toContain("H2 Android — máquinas virtuais nativas");
     expect(route).toContain("isoSha256: input.isoSha256");
     expect(agent).not.toContain("H2AdsWorker");
     expect(agent).not.toContain("emulator.exe");

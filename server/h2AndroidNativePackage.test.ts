@@ -2,12 +2,26 @@ import { describe, expect, it } from "vitest";
 import { readFileSync } from "node:fs";
 import { getAndroidNativeOfflineZip, getAndroidWindowsInstallerZip } from "./h2AndroidInstallerZip";
 
+function zipEntryNames(zip: Buffer): string[] {
+  const end = zip.length - 22;
+  const count = zip.readUInt16LE(end + 10);
+  let offset = zip.readUInt32LE(end + 16);
+  const names: string[] = [];
+  for (let i = 0; i < count; i++) {
+    expect(zip.readUInt32LE(offset)).toBe(0x02014B50);
+    const length = zip.readUInt16LE(offset + 28);
+    names.push(zip.subarray(offset + 46, offset + 46 + length).toString("utf8"));
+    offset += 46 + length;
+  }
+  return names;
+}
+
 describe("H2 Android native package only through ADM", () => {
   it("packages only the native agent and its prerequisites", async () => {
     const zip = await getAndroidNativeOfflineZip();
     expect(zip.readUInt32LE(0)).toBe(0x04034b50);
     expect(zip.readUInt32LE(zip.length - 22)).toBe(0x06054b50);
-    expect(zip.readUInt16LE(zip.length - 22 + 10)).toBe(11);
+    expect(zip.readUInt16LE(zip.length - 22 + 10)).toBe(14);
     for (const name of [
       "Instalar-H2-Android-Nativo.cmd", "H2NativeAgent.ps1",
       "H2NativeControl.ps1", "H2NativeCore.psm1",
@@ -15,8 +29,9 @@ describe("H2 Android native package only through ADM", () => {
     ]) {
       expect(zip.includes(Buffer.from(name))).toBe(true);
     }
-    expect(zip.includes(Buffer.from("H2AndroidAgent.ps1"))).toBe(false);
-    expect(zip.includes(Buffer.from("Instalar-H2-Android.cmd"))).toBe(false);
+    const entries = zipEntryNames(zip);
+    expect(entries).not.toContain("H2AndroidAgent.ps1");
+    expect(entries).not.toContain("Instalar-H2-Android.cmd");
   });
 
   it("keeps the existing v0.2.0 agent installer unchanged", async () => {
