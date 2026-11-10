@@ -54,4 +54,16 @@ describe("H2 Android - modulo isolado e privado", () => {
     expect(androidRouter).not.toContain("DELETE FROM order");
     expect(androidRouter).not.toContain("DELETE FROM access");
   });
+
+
+  it("informa visualmente quando a consulta do painel Android e concluida ou falha", () => {
+    const manager = read("client/src/components/H2AndroidLiveManager.tsx");
+    expect(androidPage).toContain("overviewQuery.refetch({ throwOnError: true })");
+    expect(manager).toContain("await refresh()");
+    expect(manager).toContain("disabled={refreshing}");
+    expect(manager).toContain('aria-live="polite"');
+    expect(manager).toContain("setLastRefreshedAt(new Date().toLocaleTimeString");
+    expect(manager).toContain('toast.error(error instanceof Error ? error.message');
+    expect(manager).toContain("Video remoto ainda nao implementado");
+  });
 });
