@@ -127,6 +127,11 @@ export default function AdminH2Android() {
               {nativeAgentOnline
                 ? "Agente Hyper-V nativo já instalado e conectado. Não é necessário baixar, reinstalar ou parear outro agente."
                 : "Agente nativo já pareado, mas offline. Verifique a conexão do computador e o serviço Windows."}
+              <a href="/api/h2-android/agent/installer.zip" download="H2-Android-Nativo.zip"
+                className="mt-3 inline-flex items-center gap-2 rounded-lg border border-[#80dcb5]/40 bg-[#80dcb5]/10 px-3 py-2 text-xs font-bold text-[#b5ecd6]">
+                <Download className="h-4 w-4" /> Baixar atualizacao do agente H2
+              </a>
+              <p className="mt-2 text-[11px] text-slate-400">Extraia o ZIP e execute Atualizar-H2-Android-Nativo.cmd como administrador. Atualiza somente o agente H2; nao reinstala Android nem altera o pareamento.</p>
             </div>
           )}
           {!nativeAgentPaired && (

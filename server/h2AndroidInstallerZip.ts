@@ -98,6 +98,8 @@ export async function getAndroidNativeOfflineZip(): Promise<Buffer> {
   // Exact allowlist, all files in one folder so relative PowerShell imports work.
   const names = [
     "Instalar-H2-Android-Nativo.cmd",
+    "Atualizar-H2-Android-Nativo.cmd",
+    "Atualizar-H2-Android-Nativo.ps1",
     "H2NativeAgent.ps1",
     "H2NativeControl.ps1",
     "H2NativeBootAudit.ps1",
