@@ -50,6 +50,9 @@ $screen=Get-Content -LiteralPath (Join-Path $folder "H2NativeScreen.ps1") -Raw
 foreach($expected in @("System.Collections.Generic.List[object]",'$size.Width','$size.Height')) {
   if(!$screen.Contains($expected)){throw ("Dimensoes de captura H2 nao tipadas: "+$expected)}
 }
+foreach($expected in @('[int]::TryParse($widthText', '[int]::TryParse($heightText', 'literal "x"')) {
+  if(!$screen.Contains($expected)){throw ("Guard de dimensao WMI invalida ausente: "+$expected)}
+}
 if($screen.Contains('$size[0]') -or $screen.Contains('$size[1]')) {
   throw "Conversao numerica ambigua da captura H2 continua presente."
 }

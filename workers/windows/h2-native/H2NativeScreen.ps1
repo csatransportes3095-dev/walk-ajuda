@@ -27,8 +27,18 @@ function Get-H2NativeConsoleVideo {
     try {
       foreach ($controller in @($VmWmi.GetRelated($controllerType))) {
         foreach ($head in @($controller.GetRelated("Msvm_VideoHead"))) {
-          $width = [int]$head.CurrentHorizontalResolution
-          $height = [int]$head.CurrentVerticalResolution
+          # Hyper-V can expose an empty value or the literal "x" while the
+          # guest display is still initializing. Never cast that value directly
+          # to Int32; skip it and let the thumbnail fallback sizes run.
+          $width = 0
+          $height = 0
+          $widthText = [string]$head.CurrentHorizontalResolution
+          $heightText = [string]$head.CurrentVerticalResolution
+          $widthOk = [int]::TryParse($widthText, [Globalization.NumberStyles]::Integer,
+            [Globalization.CultureInfo]::InvariantCulture, [ref]$width)
+          $heightOk = [int]::TryParse($heightText, [Globalization.NumberStyles]::Integer,
+            [Globalization.CultureInfo]::InvariantCulture, [ref]$height)
+          if (!$widthOk -or !$heightOk) { continue }
           if ($width -ge 64 -and $height -ge 64 -and
               $width -le 8192 -and $height -le 8192) {
             return [pscustomobject]@{ width=$width; height=$height }

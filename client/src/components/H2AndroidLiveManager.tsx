@@ -72,7 +72,7 @@ export default function H2AndroidLiveManager({
     };
   }, [watching, chosen?.running, chosen?.key, chosen?.agent.id, chosen?.name]);
 
-  // O agente 0.3.4 publica somente capturas reais WMI autenticadas.
+  // O agente 0.3.6 publica somente capturas reais WMI autenticadas.
   const nativeScreenAvailable = chosen?.agent.agentVersion === "0.3.6-native-screen";
   const visibleFrame = nativeScreenAvailable && watching && chosen?.running && frame?.deviceKey === chosen.key ? frame : null;
   const screenActive = nativeScreenAvailable && watching;
@@ -117,7 +117,7 @@ export default function H2AndroidLiveManager({
           </h2>
           <p className="mt-1 max-w-2xl text-xs leading-relaxed text-slate-300">
             Instancias Hyper-V locais, sem Android Studio, SDK ou ADB.
-            Ligue e desligue as VMs existentes. A tela real pode ser testada com o agente 0.3.4; a criacao de novos Androids independentes e o proxy ainda exigem validacao.
+            Ligue e desligue as VMs existentes. A tela real pode ser testada com o agente 0.3.6-native-screen; a criacao de novos Androids independentes e o proxy ainda exigem validacao.
           </p>
         </div>
         <div className="flex flex-col items-end gap-1">
