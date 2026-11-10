@@ -55,7 +55,7 @@ function Invoke-H2NativeControl {
   param([Parameter(Mandatory=$true)]$Command)
   $name = ConvertTo-H2NativeVmName -AvdName ([string]$Command.avdName)
   $action = [string]$Command.action
-  if ($action -cnotin @("create","start","stop")) {
+  if ($action -cnotin @("create","clone","start","stop")) {
     throw "Funcao nao disponivel neste motor: $action. Rede, tela e teclas continuam bloqueadas."
   }
   Assert-H2NativeReady
@@ -70,6 +70,12 @@ function Invoke-H2NativeControl {
     $res = & (Join-Path $PSScriptRoot "H2NativeIsoBootstrap.ps1") -Action Prepare -VMName $name -IsoPath $iso -ExpectedSha256 $sha -AllowUnsignedBoot:$allowUnsigned -Json | ConvertFrom-Json -ErrorAction Stop
     if (!$res.readyForOfflineBootAttempt -or $res.networkConnected) { throw "VM preparada mas auditoria offline nao passou." }
     return "VM H2 preparada OFFLINE. Ainda falta instalar o Android no disco."
+  }
+  if ($action -ceq "clone") {
+    if ($null -eq $Command.payload) { throw "Origem do Android nao informada." }
+    $source = ConvertTo-H2NativeVmName -AvdName ([string]$Command.payload.sourceAvdName)
+    $result = New-H2NativeClone -VMName $name -SourceVMName $source
+    return ("VM H2 criada offline a partir de " + $result.clonedFrom + ". Inicializacao e identidade independente ainda exigem validacao.")
   }
   Get-H2NativeOwnedVm -VMName $name | Out-Null
   if ($action -ceq "stop") {
