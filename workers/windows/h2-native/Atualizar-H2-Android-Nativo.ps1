@@ -44,7 +44,7 @@ $newControl = Get-Content -LiteralPath (Join-Path $PSScriptRoot "H2NativeControl
 if (!$newAgent.Contains("H2AndroidNativeAgentSingleInstanceV1") -or
     !$newAgent.Contains("WaitOne(0)") -or
     !$newCore.Contains("function New-H2NativeClone {") -or
-    !$newControl.Contains('agentVersion = "0.3.6-native-screen"')) {
+    !$newControl.Contains('agentVersion = "0.3.7-native-screen"')) {
   throw "Pacote H2 invalido ou sem protecao contra instancias duplicadas. Nada foi modificado."
 }
 $backupDir = Join-Path $folder ("Backup-Atualizacao-" + (Get-Date -Format "yyyyMMdd-HHmmss"))
@@ -104,7 +104,7 @@ try {
   if ($active.Count -ne 1) {
     throw ("Quantidade inesperada de agentes H2 ativos: " + $active.Count)
   }
-  Write-Host "AGENTE H2 v0.3.6-native-screen ATUALIZADO. UMA INSTANCIA ATIVA." -ForegroundColor Green
+  Write-Host "AGENTE H2 v0.3.7-native-screen ATUALIZADO. UMA INSTANCIA ATIVA." -ForegroundColor Green
   Write-Host "PAREAMENTO E ANDROID PRESERVADOS." -ForegroundColor Green
   Write-Host ("Backup do motor antigo: " + $backupDir)
 } catch {
