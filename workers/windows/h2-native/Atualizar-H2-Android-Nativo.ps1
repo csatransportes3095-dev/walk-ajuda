@@ -6,7 +6,7 @@ $ErrorActionPreference = "Stop"
 $folder = Join-Path $env:LOCALAPPDATA "H2AndroidAgent"
 $taskName = "H2 Android Agent"
 $agentPath = Join-Path $folder "H2NativeAgent.ps1"
-$files = @("H2NativeAgent.ps1","H2NativeControl.ps1","H2NativeCore.psm1")
+$files = @("H2NativeAgent.ps1","H2NativeControl.ps1","H2NativeCore.psm1","H2NativeScreen.ps1")
 $id = [Security.Principal.WindowsIdentity]::GetCurrent()
 $principal = New-Object Security.Principal.WindowsPrincipal($id)
 if (!$principal.IsInRole([Security.Principal.WindowsBuiltInRole]::Administrator)) {
@@ -42,7 +42,7 @@ $newControl = Get-Content -LiteralPath (Join-Path $PSScriptRoot "H2NativeControl
 if (!$newAgent.Contains("H2AndroidNativeAgentSingleInstanceV1") -or
     !$newAgent.Contains("WaitOne(0)") -or
     !$newCore.Contains("function New-H2NativeClone {") -or
-    !$newControl.Contains('agentVersion = "0.3.3-native-guard"')) {
+    !$newControl.Contains('agentVersion = "0.3.4-native-screen"')) {
   throw "Pacote H2 invalido ou sem protecao contra instancias duplicadas. Nada foi modificado."
 }
 $backupDir = Join-Path $folder ("Backup-Atualizacao-" + (Get-Date -Format "yyyyMMdd-HHmmss"))
@@ -99,7 +99,7 @@ try {
   if ($active.Count -ne 1) {
     throw ("Quantidade inesperada de agentes H2 ativos: " + $active.Count)
   }
-  Write-Host "AGENTE H2 v0.3.3-native-guard ATUALIZADO. UMA INSTANCIA ATIVA." -ForegroundColor Green
+  Write-Host "AGENTE H2 v0.3.4-native-screen ATUALIZADO. UMA INSTANCIA ATIVA." -ForegroundColor Green
   Write-Host "PAREAMENTO E ANDROID PRESERVADOS." -ForegroundColor Green
   Write-Host ("Backup do motor antigo: " + $backupDir)
 } catch {
