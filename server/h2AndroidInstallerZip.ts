@@ -104,6 +104,7 @@ export async function getAndroidNativeOfflineZip(): Promise<Buffer> {
     "H2NativeControl.ps1",
     "H2NativeBootAudit.ps1",
     "H2NativeCore.psm1",
+    "H2NativeScreen.ps1",
     "H2NativeDoctor.ps1",
     "H2NativeFirstBoot.ps1",
     "H2NativeInstalledBoot.ps1",

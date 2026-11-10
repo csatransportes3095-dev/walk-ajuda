@@ -11,7 +11,7 @@ param(
   [string]$PanelUrl = "https://h2colombiano.com"
 )
 $ErrorActionPreference="Stop"
-$AgentVersion="0.3.3-native-guard"
+$AgentVersion="0.3.4-native-screen"
 $Folder=Join-Path $env:LOCALAPPDATA "H2AndroidAgent"
 $ConfigPath=Join-Path $Folder "agent.json"
 $AgentPath=Join-Path $Folder "H2NativeAgent.ps1"
@@ -75,7 +75,7 @@ function Install-H2NativeAgent {
   $token=Get-H2AgentToken
   if($token -cnotmatch '^[a-f0-9]{64}$'){throw "Token antigo invalido. Nenhuma migracao executada."}
   $required=@(
-    "H2NativeAgent.ps1","H2NativeControl.ps1","H2NativeCore.psm1",
+    "H2NativeAgent.ps1","H2NativeControl.ps1","H2NativeCore.psm1","H2NativeScreen.ps1",
     "H2NativeReadiness.ps1","H2NativeIsoBootstrap.ps1","H2NativeInstalledBoot.ps1",
     "H2NativeFirstBoot.ps1","H2NativeBootAudit.ps1","H2NativeDoctor.ps1"
   )
@@ -189,7 +189,17 @@ function Run-H2NativeAgent {
         Invoke-RestMethod -Method Post -UseBasicParsing -Uri "$PanelUrl/api/h2-android/agent/finish" -ContentType "application/json" -Headers $headers -Body $payload -TimeoutSec 20|Out-Null
         $heartbeat=[datetime]::MinValue
       }
-      # Nao publicar frames de tela falsos; Hyper-V ainda nao tem canal grafico remoto autenticado.
+      # Publicar somente quadros reais da VM solicitada pelo administrador.
+      if ($poll.viewAvd -and [string]$poll.viewAvd -match '^H2Android_[0-9]{2,3}$') {
+        try {
+          $vmName = ConvertTo-H2NativeVmName -AvdName ([string]$poll.viewAvd)
+          $png = Get-H2NativeScreenPngBase64 -VMName $vmName
+          $frameBody = @{ avdName=[string]$poll.viewAvd; pngBase64=$png } | ConvertTo-Json -Compress
+          Invoke-RestMethod -Method Post -UseBasicParsing -Uri "$PanelUrl/api/h2-android/agent/frame" -ContentType "application/json" -Headers $headers -Body $frameBody -TimeoutSec 20 | Out-Null
+        } catch {
+          Write-Warning ("H2 Native Screen: " + $_.Exception.Message)
+        }
+      }
     }catch{
       Write-Warning ("H2 Native: "+$_.Exception.Message)
     }

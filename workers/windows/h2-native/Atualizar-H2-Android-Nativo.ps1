@@ -6,7 +6,7 @@ $ErrorActionPreference = "Stop"
 $folder = Join-Path $env:LOCALAPPDATA "H2AndroidAgent"
 $taskName = "H2 Android Agent"
 $agentPath = Join-Path $folder "H2NativeAgent.ps1"
-$files = @("H2NativeAgent.ps1","H2NativeControl.ps1","H2NativeCore.psm1")
+$files = @("H2NativeAgent.ps1","H2NativeControl.ps1","H2NativeCore.psm1","H2NativeScreen.ps1")
 $id = [Security.Principal.WindowsIdentity]::GetCurrent()
 $principal = New-Object Security.Principal.WindowsPrincipal($id)
 if (!$principal.IsInRole([Security.Principal.WindowsBuiltInRole]::Administrator)) {
@@ -26,9 +26,11 @@ if ($validAction.Count -ne 1) { throw "Tarefa nao corresponde ao agente H2 nativ
 foreach ($name in $files) {
   $source = Join-Path $PSScriptRoot $name
   $target = Join-Path $folder $name
-  if (!(Test-Path -LiteralPath $source -PathType Leaf) -or
-      !(Test-Path -LiteralPath $target -PathType Leaf)) {
-    throw "Arquivo H2 ausente: $name. Nenhuma alteracao."
+  if (!(Test-Path -LiteralPath $source -PathType Leaf)) {
+    throw "Arquivo H2 ausente no pacote: $name. Nenhuma alteracao."
+  }
+  if ($name -ne "H2NativeScreen.ps1" -and !(Test-Path -LiteralPath $target -PathType Leaf)) {
+    throw "Agente H2 existente incompleto: $name. Nenhuma alteracao."
   }
   $tokens = $null
   $syntaxErrors = $null
@@ -42,13 +44,16 @@ $newControl = Get-Content -LiteralPath (Join-Path $PSScriptRoot "H2NativeControl
 if (!$newAgent.Contains("H2AndroidNativeAgentSingleInstanceV1") -or
     !$newAgent.Contains("WaitOne(0)") -or
     !$newCore.Contains("function New-H2NativeClone {") -or
-    !$newControl.Contains('agentVersion = "0.3.3-native-guard"')) {
+    !$newControl.Contains('agentVersion = "0.3.4-native-screen"')) {
   throw "Pacote H2 invalido ou sem protecao contra instancias duplicadas. Nada foi modificado."
 }
 $backupDir = Join-Path $folder ("Backup-Atualizacao-" + (Get-Date -Format "yyyyMMdd-HHmmss"))
 New-Item -ItemType Directory -Path $backupDir -ErrorAction Stop | Out-Null
 foreach ($name in $files) {
-  Copy-Item -LiteralPath (Join-Path $folder $name) -Destination (Join-Path $backupDir $name) -ErrorAction Stop
+  $previous = Join-Path $folder $name
+  if (Test-Path -LiteralPath $previous -PathType Leaf) {
+    Copy-Item -LiteralPath $previous -Destination (Join-Path $backupDir $name) -ErrorAction Stop
+  }
 }
 $updated = $false
 try {
@@ -99,7 +104,7 @@ try {
   if ($active.Count -ne 1) {
     throw ("Quantidade inesperada de agentes H2 ativos: " + $active.Count)
   }
-  Write-Host "AGENTE H2 v0.3.3-native-guard ATUALIZADO. UMA INSTANCIA ATIVA." -ForegroundColor Green
+  Write-Host "AGENTE H2 v0.3.4-native-screen ATUALIZADO. UMA INSTANCIA ATIVA." -ForegroundColor Green
   Write-Host "PAREAMENTO E ANDROID PRESERVADOS." -ForegroundColor Green
   Write-Host ("Backup do motor antigo: " + $backupDir)
 } catch {
@@ -107,7 +112,13 @@ try {
   # Restaurar os arquivos originais do agente H2 Android.
   foreach ($name in $files) {
     try {
-      Copy-Item -LiteralPath (Join-Path $backupDir $name) -Destination (Join-Path $folder $name) -Force -ErrorAction Stop
+      $original = Join-Path $backupDir $name
+      $installed = Join-Path $folder $name
+      if (Test-Path -LiteralPath $original -PathType Leaf) {
+        Copy-Item -LiteralPath $original -Destination $installed -Force -ErrorAction Stop
+      } elseif ($name -eq "H2NativeScreen.ps1" -and (Test-Path -LiteralPath $installed -PathType Leaf)) {
+        Remove-Item -LiteralPath $installed -Force -ErrorAction Stop
+      }
     } catch { Write-Warning ("Verifique manualmente o arquivo H2: " + $name) }
   }
   try { Start-ScheduledTask -TaskName $taskName -ErrorAction Stop }

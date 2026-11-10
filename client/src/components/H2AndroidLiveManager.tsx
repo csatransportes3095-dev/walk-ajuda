@@ -56,7 +56,7 @@ export default function H2AndroidLiveManager({
   useEffect(() => {
     setFrameLoaded(false);
     setFrame(null);
-    if (!watching || !chosen?.running || !agents.some(agent => agent.agentVersion === "0.3.1-native-screen")) return;
+    if (!watching || !chosen?.running || chosen.agent.agentVersion !== "0.3.4-native-screen") return;
     const deviceKey = chosen.key;
     const url = "/api/h2-android/screen/" + chosen.agent.id + "/" + chosen.name;
     const stream = startAndroidScreenStream(url, next => setFrame({ ...next, deviceKey }));
@@ -67,10 +67,10 @@ export default function H2AndroidLiveManager({
     };
   }, [watching, chosen?.running, chosen?.key, chosen?.agent.id, chosen?.name]);
 
-  // O motor Hyper-V ainda nao oferece captura grafica autenticada, logo nunca mostrar stream legado.
-  const nativeScreenAvailable = agents.some(agent => agent.agentVersion === "0.3.1-native-screen");
+  // O agente 0.3.4 publica somente capturas reais WMI autenticadas.
+  const nativeScreenAvailable = chosen?.agent.agentVersion === "0.3.4-native-screen";
   const visibleFrame = nativeScreenAvailable && watching && chosen?.running && frame?.deviceKey === chosen.key ? frame : null;
-  const screenActive = false;
+  const screenActive = nativeScreenAvailable && watching;
 
   function sendKey(key: "BACK" | "HOME" | "ENTER" | "POWER") {
     if (!chosen || !chosen.running) return;
@@ -82,8 +82,8 @@ export default function H2AndroidLiveManager({
     const image = event.currentTarget;
     const bounds = image.getBoundingClientRect();
     if (!image.naturalWidth || !image.naturalHeight || !bounds.width || !bounds.height) return;
-    const x = Math.max(0, Math.min(5000, Math.round((event.clientX - bounds.left) / bounds.width * image.naturalWidth)));
-    const y = Math.max(0, Math.min(10000, Math.round((event.clientY - bounds.top) / bounds.height * image.naturalHeight)));
+    const x = Math.max(0, Math.min(10000, Math.round((event.clientX - bounds.left) / bounds.width * 10000)));
+    const y = Math.max(0, Math.min(10000, Math.round((event.clientY - bounds.top) / bounds.height * 10000)));
     mutation.mutate({ action: "tap", agentId: chosen.agent.id, avdName: chosen.name, x, y });
   }
 
@@ -112,7 +112,7 @@ export default function H2AndroidLiveManager({
           </h2>
           <p className="mt-1 max-w-2xl text-xs leading-relaxed text-slate-300">
             Instancias Hyper-V locais, sem Android Studio, SDK ou ADB.
-            Ligue e desligue as VMs existentes. A criacao de novos Androids por imagem-base limpa ainda esta em desenvolvimento; tela remota e proxy permanecem pendentes.
+            Ligue e desligue as VMs existentes. A tela real pode ser testada com o agente 0.3.4; a criacao de novos Androids independentes e o proxy ainda exigem validacao.
           </p>
         </div>
         <div className="flex flex-col items-end gap-1">
@@ -182,22 +182,22 @@ export default function H2AndroidLiveManager({
                         ) : (
                           <div className="absolute inset-0 flex flex-col items-center justify-center p-6 text-center text-xs text-slate-400">
                             <Smartphone className="mx-auto mb-3 h-12 w-12 text-[#8ce2bd]/50" />
-                            {screenActive ? "Aguardando imagem do Android..." : chosen.running ? "Android ligado. Video remoto ainda nao implementado; a janela Hyper-V pode ser fechada." : "Android desligado."}
+                            {screenActive ? "Aguardando imagem do Android..." : chosen.running ? "Android ligado. Abra a pre-visualizacao real quando o agente 0.3.4 estiver conectado." : "Android desligado."}
                           </div>
                         )}
                       </div>
                     </div>
                     <div className="flex flex-wrap items-center justify-center gap-2">
-                      <button type="button" disabled title="Tela remota nativa ainda indisponivel" onClick={() => setWatching(w => !w)}
+                      <button type="button" disabled={!nativeScreenAvailable || !chosen?.running} title="Abrir pre-visualizacao real da VM" onClick={() => setWatching(w => !w)}
                         className="rounded-lg border border-[#80dcb5]/40 px-3 py-2 text-xs font-bold text-[#b5ecd6] disabled:opacity-30">
                         {watching ? "Fechar tela" : "Abrir tela"}
                       </button>
-                      <button type="button" disabled title="Voltar — indisponivel no Hyper-V" onClick={() => sendKey("BACK")} className="rounded-lg border border-white/20 p-2 disabled:opacity-30"><ArrowLeft className="h-5 w-5" /></button>
-                      <button type="button" disabled title="Inicio — indisponivel no Hyper-V" onClick={() => sendKey("HOME")} className="rounded-lg border border-white/20 p-2 disabled:opacity-30"><Home className="h-5 w-5" /></button>
-                      <button type="button" disabled title="Enter — indisponivel no Hyper-V" onClick={() => sendKey("ENTER")} className="rounded-lg border border-white/20 p-2 disabled:opacity-30"><Keyboard className="h-5 w-5" /></button>
+                      <button type="button" disabled={!nativeScreenAvailable || !chosen?.running} title="Tecla Escape / voltar" onClick={() => sendKey("BACK")} className="rounded-lg border border-white/20 p-2 disabled:opacity-30"><ArrowLeft className="h-5 w-5" /></button>
+                      <button type="button" disabled={!nativeScreenAvailable || !chosen?.running} title="Tecla Home" onClick={() => sendKey("HOME")} className="rounded-lg border border-white/20 p-2 disabled:opacity-30"><Home className="h-5 w-5" /></button>
+                      <button type="button" disabled={!nativeScreenAvailable || !chosen?.running} title="Tecla Enter" onClick={() => sendKey("ENTER")} className="rounded-lg border border-white/20 p-2 disabled:opacity-30"><Keyboard className="h-5 w-5" /></button>
                       <button type="button" disabled title="Botao de energia — indisponivel no Hyper-V" onClick={() => sendKey("POWER")} className="rounded-lg border border-white/20 p-2 disabled:opacity-30"><Power className="h-5 w-5" /></button>
                     </div>
-                    <p className="text-center text-[11px] text-slate-400"><MousePointerClick className="mr-1 inline h-3 w-3" /> Tela e toques ainda nao disponiveis no motor nativo.</p>
+                    <p className="text-center text-[11px] text-slate-400"><MousePointerClick className="mr-1 inline h-3 w-3" /> {nativeScreenAvailable ? "Previa WMI real; toque depende do suporte do Android ao mouse virtual." : "Tela e toques exigem agente de video nativo."}</p>
                   </div>
                   <div className="space-y-4">
                     <div className="rounded-xl border border-white/10 bg-black/25 p-4">
