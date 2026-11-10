@@ -92,7 +92,7 @@ describe("H2 Android Agent - conexao segura e independente", () => {
     expect(control).toContain('if ($action -ceq "clone")');
     expect(control).toContain('agentVersion = "0.3.2-native-clone"');
     const store = read("server/h2AndroidAgentStore.ts");
-    expect(store).toContain('report.agentVersion !== "0.3.2-native-clone"');
+    expect(store).toContain("Criacao por copia desativada");
     expect(store).toContain("NATIVE_H2_AGENT_VERSIONS");
     expect(router).toContain('action: z.literal("clone")');
   });
@@ -103,9 +103,14 @@ describe("H2 Android Agent - conexao segura e independente", () => {
     expect(installer).toContain("Atualizar-H2-Android-Nativo.cmd");
     expect(installer).toContain("Atualizar-H2-Android-Nativo.ps1");
     expect(update).toContain('Get-ScheduledTask -TaskName $taskName');
-    expect(update).toContain('New-H2NativeClone');
+    expect(update).toContain("H2AndroidNativeAgentSingleInstanceV1");
     expect(update).toContain("Backup-Atualizacao-");
     expect(update).not.toContain("Remove-VM");
     expect(page).toContain("Baixar atualização do agente H2");
+    const nativeAgent = read("workers/windows/h2-native/H2NativeAgent.ps1");
+    expect(nativeAgent).toContain("Global\\H2AndroidNativeAgentSingleInstanceV1");
+    expect(nativeAgent).toContain("WaitOne(0)");
+    expect(nativeAgent).toContain("ReleaseMutex()");
+    expect(update).toContain('$files = @("H2NativeAgent.ps1","H2NativeControl.ps1","H2NativeCore.psm1")');
   });
 });
