@@ -32,6 +32,7 @@ export default function H2AndroidLiveManager({
   const [frame, setFrame] = useState<(AndroidScreenFrame & { deviceKey: string }) | null>(null);
   const screenStream = useRef<AndroidScreenStream | null>(null);
   const [frameLoaded, setFrameLoaded] = useState(false);
+  const [screenError, setScreenError] = useState<string | null>(null);
   const [watching, setWatching] = useState(false);
   const [refreshing, setRefreshing] = useState(false);
   const [lastRefreshedAt, setLastRefreshedAt] = useState<string | null>(null);
@@ -56,10 +57,14 @@ export default function H2AndroidLiveManager({
   useEffect(() => {
     setFrameLoaded(false);
     setFrame(null);
-    if (!watching || !chosen?.running || chosen.agent.agentVersion !== "0.3.4-native-screen") return;
+    setScreenError(null);
+    if (!watching || !chosen?.running || chosen.agent.agentVersion !== "0.3.5-native-screen") return;
     const deviceKey = chosen.key;
     const url = "/api/h2-android/screen/" + chosen.agent.id + "/" + chosen.name;
-    const stream = startAndroidScreenStream(url, next => setFrame({ ...next, deviceKey }));
+    const stream = startAndroidScreenStream(url, next => {
+      setScreenError(null);
+      setFrame({ ...next, deviceKey });
+    }, { onError: message => setScreenError(message) });
     screenStream.current = stream;
     return () => {
       stream.stop();
@@ -68,7 +73,7 @@ export default function H2AndroidLiveManager({
   }, [watching, chosen?.running, chosen?.key, chosen?.agent.id, chosen?.name]);
 
   // O agente 0.3.4 publica somente capturas reais WMI autenticadas.
-  const nativeScreenAvailable = chosen?.agent.agentVersion === "0.3.4-native-screen";
+  const nativeScreenAvailable = chosen?.agent.agentVersion === "0.3.5-native-screen";
   const visibleFrame = nativeScreenAvailable && watching && chosen?.running && frame?.deviceKey === chosen.key ? frame : null;
   const screenActive = nativeScreenAvailable && watching;
 
@@ -182,7 +187,7 @@ export default function H2AndroidLiveManager({
                         ) : (
                           <div className="absolute inset-0 flex flex-col items-center justify-center p-6 text-center text-xs text-slate-400">
                             <Smartphone className="mx-auto mb-3 h-12 w-12 text-[#8ce2bd]/50" />
-                            {screenActive ? "Aguardando imagem do Android..." : chosen.running ? "Android ligado. Abra a pre-visualizacao real quando o agente 0.3.4 estiver conectado." : "Android desligado."}
+                            {screenActive ? screenError ? "Captura indisponivel: " + screenError : "Aguardando imagem do Android..." : chosen.running ? "Android ligado. Abra a pre-visualizacao real quando o agente estiver conectado." : "Android desligado."}
                           </div>
                         )}
                       </div>
