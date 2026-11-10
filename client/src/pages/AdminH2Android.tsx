@@ -140,7 +140,7 @@ export default function AdminH2Android() {
                 className="mt-3 inline-flex items-center gap-2 rounded-lg border border-[#80dcb5]/40 bg-[#80dcb5]/10 px-3 py-2 text-xs font-bold text-[#b5ecd6]">
                 <Download className="h-4 w-4" /> Baixar atualização do agente H2
               </a>
-              <p className="mt-2 text-[11px] text-slate-400">Extraia o ZIP e execute Atualizar-H2-Android-Nativo.cmd como administrador. A atualização preserva o Android 01 e o pareamento. Depois, confira a versão 0.3.6-native-screen no painel para testar o video real.</p>
+              <p className="mt-2 text-[11px] text-slate-400">Extraia o ZIP e execute Atualizar-H2-Android-Nativo.cmd como administrador. A atualização preserva o Android 01 e o pareamento. Depois, confira a versão 0.3.7-native-screen no painel para testar o video real.</p>
             </div>
           )}
           {!nativeAgentPaired && (

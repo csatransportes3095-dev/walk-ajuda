@@ -18,7 +18,7 @@ foreach($path in $paths){
 }
 $agent=Get-Content -LiteralPath (Join-Path $folder "H2NativeAgent.ps1") -Raw
 $control=Get-Content -LiteralPath (Join-Path $folder "H2NativeControl.ps1") -Raw
-foreach($expected in @("Global\H2AndroidNativeAgentSingleInstanceV1","WaitOne(0)","ReleaseMutex()","0.3.6-native-screen")){
+foreach($expected in @("Global\H2AndroidNativeAgentSingleInstanceV1","WaitOne(0)","ReleaseMutex()","0.3.7-native-screen")){
   if(!$agent.Contains($expected)){throw ("Guarda de instancia unica ausente: "+$expected)}
 }
 foreach($expected in @(
@@ -55,5 +55,14 @@ foreach($expected in @('[int]::TryParse($widthText', '[int]::TryParse($heightTex
 }
 if($screen.Contains('$size[0]') -or $screen.Contains('$size[1]')) {
   throw "Conversao numerica ambigua da captura H2 continua presente."
+}
+# Execute the diagnostic formatter, not just a static string inspection.
+. (Join-Path $folder "H2NativeScreen.ps1")
+$formatted = Format-H2NativeScreenDiagnostic -Width 640 -Height 480 -Detail "WMI=32770"
+if ($formatted -cne "640x480: WMI=32770") {
+  throw "Diagnostico de captura falhou: $formatted"
+}
+if ($screen.Contains('$width + "x" + $height')) {
+  throw "Concatenacao numerica perigosa ainda presente nos erros de captura."
 }
 Write-Host "PASS - H2 Native Agent, migracao e comandos limitados" -ForegroundColor Green
