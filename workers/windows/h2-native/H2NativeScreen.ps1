@@ -3,6 +3,14 @@
 # If the host or guest video/input device does not support WMI, fail explicitly.
 Set-StrictMode -Version Latest
 
+# Explicit string formatting; adding an int to "x" in PowerShell triggers an Int32 cast.
+function Format-H2NativeScreenDiagnostic {
+  param([Parameter(Mandatory=$true)][int]$Width,
+        [Parameter(Mandatory=$true)][int]$Height,
+        [Parameter(Mandatory=$true)][string]$Detail)
+  return ('{0}x{1}: {2}' -f $Width, $Height, $Detail)
+}
+
 function Get-H2NativeWmiConsole {
   param([Parameter(Mandatory=$true)][string]$VMName)
   $owned = Get-H2NativeOwnedVm -VMName $VMName
@@ -133,22 +141,22 @@ function Get-H2NativeScreenPngBase64 {
       $answer = $service.InvokeMethod("GetVirtualSystemThumbnailImage",$request,$null)
       if (!$answer -or [uint32]$answer["ReturnValue"] -ne 0) {
         $code = if ($answer) { [string]$answer["ReturnValue"] } else { "sem resposta" }
-        $diagnostics += ($width + "x" + $height + ": WMI=" + $code)
+        $diagnostics += (Format-H2NativeScreenDiagnostic -Width $width -Height $height -Detail ("WMI=" + $code))
         continue
       }
       [byte[]]$rgb = $answer["ImageData"]
       $expected = $width*$height*2
       if (!$rgb -or $rgb.Length -eq 0) {
-        $diagnostics += ($width + "x" + $height + ": 0/" + $expected + " bytes")
+        $diagnostics += (Format-H2NativeScreenDiagnostic -Width $width -Height $height -Detail ("0/" + $expected + " bytes"))
         continue
       }
       try {
         return Convert-H2NativeRgb565ToPng -ImageData $rgb -Width $width -Height $height
       } catch {
-        $diagnostics += ($width + "x" + $height + ": " + $rgb.Length + "/" + $expected + " bytes")
+        $diagnostics += (Format-H2NativeScreenDiagnostic -Width $width -Height $height -Detail (('{0}/{1} bytes' -f $rgb.Length, $expected)))
       }
     } catch {
-      $diagnostics += ($width + "x" + $height + ": erro WMI")
+            $diagnostics += (Format-H2NativeScreenDiagnostic -Width $width -Height $height -Detail ("erro WMI: " + $_.Exception.Message))
     }
   }
   $reason = [string]::Join("; ",[string[]]$diagnostics)
