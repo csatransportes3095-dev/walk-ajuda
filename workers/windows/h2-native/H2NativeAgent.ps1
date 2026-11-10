@@ -11,7 +11,7 @@ param(
   [string]$PanelUrl = "https://h2colombiano.com"
 )
 $ErrorActionPreference="Stop"
-$AgentVersion="0.3.3-native-guard"
+$AgentVersion="0.3.4-native-screen"
 $Folder=Join-Path $env:LOCALAPPDATA "H2AndroidAgent"
 $ConfigPath=Join-Path $Folder "agent.json"
 $AgentPath=Join-Path $Folder "H2NativeAgent.ps1"
@@ -75,7 +75,7 @@ function Install-H2NativeAgent {
   $token=Get-H2AgentToken
   if($token -cnotmatch '^[a-f0-9]{64}$'){throw "Token antigo invalido. Nenhuma migracao executada."}
   $required=@(
-    "H2NativeAgent.ps1","H2NativeControl.ps1","H2NativeCore.psm1",
+    "H2NativeAgent.ps1","H2NativeControl.ps1","H2NativeCore.psm1","H2NativeScreen.ps1",
     "H2NativeReadiness.ps1","H2NativeIsoBootstrap.ps1","H2NativeInstalledBoot.ps1",
     "H2NativeFirstBoot.ps1","H2NativeBootAudit.ps1","H2NativeDoctor.ps1"
   )
@@ -189,7 +189,60 @@ function Run-H2NativeAgent {
         Invoke-RestMethod -Method Post -UseBasicParsing -Uri "$PanelUrl/api/h2-android/agent/finish" -ContentType "application/json" -Headers $headers -Body $payload -TimeoutSec 20|Out-Null
         $heartbeat=[datetime]::MinValue
       }
-      # Nao publicar frames de tela falsos; Hyper-V ainda nao tem canal grafico remoto autenticado.
+      # Publicar somente quadros reais da VM solicitada pelo administrador.
+      if ($poll.viewAvd -and [string]$poll.viewAvd -match '^H2Android_[0-9]{2,3}
+    }catch{
+      Write-Warning ("H2 Native: "+$_.Exception.Message)
+    }
+    Start-Sleep -Seconds 4
+  }
+}
+if($Status){
+  Get-H2NativeAgentReport|ConvertTo-Json -Depth 6
+}elseif($Install){
+  $hostReadiness=Get-H2NativeHostStatus
+  if(!$hostReadiness.administrator){
+    # Apenas o instalador solicita UAC; o agente nunca ativa o Hyper-V sozinho.
+    $exe="$env:SystemRoot\System32\WindowsPowerShell\v1.0\powershell.exe"
+    $args='-NoProfile -ExecutionPolicy Bypass -File "'+$PSCommandPath+'" -Install'
+    $elevated=Start-Process -FilePath $exe -ArgumentList $args -Verb RunAs -Wait -PassThru -ErrorAction Stop
+    if($elevated.ExitCode -ne 0){throw "Permissao de administrador nao concedida ou migracao falhou. Agente anterior preservado."}
+  }else{
+    Install-H2NativeAgent
+  }
+}elseif($Pair){
+  Pair-H2NativeAgent
+}elseif($Run){
+  # Uma unica instancia por computador: mutex adquirido por toda a vida do agente.
+  # O bloqueio persiste apenas enquanto o processo existe; o Windows libera em crash.
+  $guard = [System.Threading.Mutex]::new($false, "Global\H2AndroidNativeAgentSingleInstanceV1")
+  $ownsLock = $false
+  try {
+    try { $ownsLock = $guard.WaitOne(0) }
+    catch [System.Threading.AbandonedMutexException] { $ownsLock = $true }
+    if (!$ownsLock) {
+      Write-Host "Agente H2 ja ativo; segunda instancia nao sera iniciada."
+      return
+    }
+    Run-H2NativeAgent
+  } finally {
+    if ($ownsLock) { $guard.ReleaseMutex() }
+    $guard.Dispose()
+  }
+}else{
+  Write-Host "H2 Android Native $AgentVersion"
+  Write-Host "Use -Status, -Install (substituicao segura) ou -Pair (somente sem token)."
+}
+) {
+        try {
+          $vmName = ConvertTo-H2NativeVmName -AvdName ([string]$poll.viewAvd)
+          $png = Get-H2NativeScreenPngBase64 -VMName $vmName
+          $frameBody = @{ avdName=[string]$poll.viewAvd; pngBase64=$png } | ConvertTo-Json -Compress
+          Invoke-RestMethod -Method Post -UseBasicParsing -Uri "$PanelUrl/api/h2-android/agent/frame" -ContentType "application/json" -Headers $headers -Body $frameBody -TimeoutSec 20 | Out-Null
+        } catch {
+          Write-Warning ("H2 Native Screen: " + $_.Exception.Message)
+        }
+      }
     }catch{
       Write-Warning ("H2 Native: "+$_.Exception.Message)
     }
