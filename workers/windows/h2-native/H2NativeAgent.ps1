@@ -11,7 +11,7 @@ param(
   [string]$PanelUrl = "https://h2colombiano.com"
 )
 $ErrorActionPreference="Stop"
-$AgentVersion="0.3.4-native-screen"
+$AgentVersion="0.3.5-native-screen"
 $Folder=Join-Path $env:LOCALAPPDATA "H2AndroidAgent"
 $ConfigPath=Join-Path $Folder "agent.json"
 $AgentPath=Join-Path $Folder "H2NativeAgent.ps1"
@@ -197,7 +197,16 @@ function Run-H2NativeAgent {
           $frameBody = @{ avdName=[string]$poll.viewAvd; pngBase64=$png } | ConvertTo-Json -Compress
           Invoke-RestMethod -Method Post -UseBasicParsing -Uri "$PanelUrl/api/h2-android/agent/frame" -ContentType "application/json" -Headers $headers -Body $frameBody -TimeoutSec 20 | Out-Null
         } catch {
-          Write-Warning ("H2 Native Screen: " + $_.Exception.Message)
+          $screenError = [string]$_.Exception.Message
+          if ($screenError.Length -gt 200) { $screenError=$screenError.Substring(0,200) }
+          Write-Warning ("H2 Native Screen: " + $screenError)
+          # The admin must see the actual capture error, not a perpetual loading icon.
+          try {
+            $errorBody = @{avdName=[string]$poll.viewAvd; error=$screenError} | ConvertTo-Json -Compress
+            Invoke-RestMethod -Method Post -UseBasicParsing -Uri "$PanelUrl/api/h2-android/agent/frame" -ContentType "application/json" -Headers $headers -Body $errorBody -TimeoutSec 20 | Out-Null
+          } catch {
+            Write-Warning ("H2 Native Screen report: " + $_.Exception.Message)
+          }
         }
       }
     }catch{
