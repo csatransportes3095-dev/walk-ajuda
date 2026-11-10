@@ -86,4 +86,17 @@ describe("H2 Android - modulo isolado e privado", () => {
     expect(manager).not.toContain("setIsoPath");
     expect(androidPage).not.toContain("PhoneFrame");
   });
+
+  it("exibe Configuracoes e download na propria aba, sem rolagem pela pagina inteira", () => {
+    const admin = read("client/src/pages/AdminH2Android.tsx");
+    expect(admin).toContain('activeSection === "settings" && (');
+    expect(admin).toContain('activeSection === "activity" && (');
+    expect(admin).toContain('activeSection === "overview" && (');
+    expect(admin).toContain('activeSection === "overview" || activeSection === "devices"');
+    expect(admin).toContain('id="h2-android-content-top"');
+    expect(admin).toContain('id="settings"');
+    expect(admin).toContain('Baixar atualização do agente H2');
+    expect(admin).toContain('"/api/h2-android/agent/installer.zip"');
+    expect(admin).not.toContain('getElementById(section)?.scrollIntoView');
+  });
 });
