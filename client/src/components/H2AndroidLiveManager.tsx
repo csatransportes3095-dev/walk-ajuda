@@ -2,7 +2,7 @@ import { useEffect, useRef, useState } from "react";
 import { startAndroidScreenStream, type AndroidScreenFrame, type AndroidScreenStream } from "@/lib/androidScreenStream";
 import { trpc } from "@/lib/trpc";
 import { toast } from "sonner";
-import { ArrowLeft, Home, Keyboard, MonitorPlay, Power, PowerOff, RefreshCcw, Smartphone, Plus, MousePointerClick } from "lucide-react";
+import { ArrowLeft, Home, Keyboard, MonitorPlay, Power, PowerOff, RefreshCcw, Smartphone, MousePointerClick } from "lucide-react";
 
 type Agent = {
   id: string;
@@ -33,7 +33,6 @@ export default function H2AndroidLiveManager({
   const screenStream = useRef<AndroidScreenStream | null>(null);
   const [frameLoaded, setFrameLoaded] = useState(false);
   const [watching, setWatching] = useState(false);
-  const [creating, setCreating] = useState(false);
   const [refreshing, setRefreshing] = useState(false);
   const [lastRefreshedAt, setLastRefreshedAt] = useState<string | null>(null);
   const utils = trpc.useUtils();
@@ -46,7 +45,6 @@ export default function H2AndroidLiveManager({
     onError: error => toast.error(error.message),
   });
   const ready = agents.filter(agent => agent.online && agent.agentVersion.startsWith("0.3.") && agent.agentVersion.includes("-native") && agent.hyperVReady);
-  const cloneCapable = ready.some(agent => agent.agentVersion === "0.3.2-native-clone");
   const devices = ready.flatMap(agent =>
     agent.avdNames.filter(name => H2_NAME.test(name)).map(name => ({
       key: agent.id + ":" + name, agent, name, running: agent.runningAvds.includes(name),
@@ -104,26 +102,6 @@ export default function H2AndroidLiveManager({
     }
   }
 
-  function createNext() {
-    const source = chosen;
-    if (!source) return toast.error("Selecione o Android que sera usado como origem.");
-    if (source.agent.agentVersion !== "0.3.2-native-clone") return toast.error("Atualize apenas o agente H2 Android na aba Configurações para habilitar clonagem.");
-    if (source.running) return toast.error("Desligue o Android original antes de criar uma copia.");
-    const known = new Set(source.agent.avdNames);
-    let next = "";
-    for (let i = 1; i <= 999; i++) {
-      const name = "H2Android_" + String(i).padStart(2, "0");
-      if (!known.has(name)) { next = name; break; }
-    }
-    if (!next) return toast.error("Limite de nomes disponiveis.");
-    mutation.mutate({
-      action: "clone",
-      agentId: source.agent.id,
-      avdName: next,
-      sourceAvdName: source.name,
-    });
-    setCreating(false);
-  }
 
   return (
     <section className="space-y-4 rounded-2xl border border-[#8ce2bd]/35 bg-[#0c1526] p-4 sm:p-5" aria-label="Controle real de Androids pelo site">
@@ -134,7 +112,7 @@ export default function H2AndroidLiveManager({
           </h2>
           <p className="mt-1 max-w-2xl text-xs leading-relaxed text-slate-300">
             Instancias Hyper-V locais, sem Android Studio, SDK ou ADB.
-            Crie um novo Android copiando uma VM H2 instalada e desligada, ou ligue e desligue as VMs existentes. Vídeo remoto e proxy ainda estão pendentes.
+            Ligue e desligue as VMs existentes. A criacao de novos Androids por imagem-base limpa ainda esta em desenvolvimento; tela remota e proxy permanecem pendentes.
           </p>
         </div>
         <div className="flex flex-col items-end gap-1">
@@ -164,25 +142,9 @@ export default function H2AndroidLiveManager({
         </div>
       ) : (
         <>
-          <div className="flex flex-wrap gap-2">
-            {!cloneCapable && <p className="w-full text-xs text-amber-200">Clonagem pendente: atualize somente o agente H2 Android em Configurações. Ligar e desligar continuam disponíveis.</p>}
-            <button type="button" onClick={() => setCreating(true)} disabled={mutation.isPending || devices.length === 0 || !cloneCapable}
-              className="rounded-lg bg-[#80dcb5] px-4 py-2 text-sm font-black text-slate-950 disabled:opacity-40">
-              <Plus className="mr-1 inline h-4 w-4" /> Criar proximo Android
-            </button>
-            {creating && chosen && (
-              <div className="flex flex-col gap-2 rounded-xl border border-[#80dcb5]/35 bg-slate-950/80 p-3 text-xs text-slate-200">
-                <strong>Criar nova maquina a partir de {chosen.name}</strong>
-                <p>O Android de origem precisa estar desligado. O disco sera copiado sem internet. A copia ainda precisara validar boot e identidade propria antes de conectar contas.</p>
-                <div className="flex flex-wrap gap-2">
-                  <button type="button" disabled={mutation.isPending || chosen.running} onClick={createNext}
-                    className="rounded-lg border border-[#80dcb5] px-3 py-2 font-bold text-[#a0e8cc] disabled:opacity-40">
-                    {chosen.running ? "Desligue a origem" : "Confirmar copia"}
-                  </button>
-                  <button type="button" onClick={() => setCreating(false)} className="rounded-lg border border-white/20 px-3 py-2">Cancelar</button>
-                </div>
-              </div>
-            )}
+          <div role="status" className="rounded-xl border border-amber-400/25 bg-amber-400/[0.05] p-3 text-xs leading-relaxed text-amber-100">
+            Criacao independente em preparacao: novos Androids precisarao de uma imagem-base limpa e identificadores proprios.
+            A copia direta de um aparelho existente esta desativada para evitar duplicacao de dados.
           </div>
           {devices.length === 0 ? (
             <p className="rounded-xl border border-white/10 p-4 text-xs text-slate-300">
