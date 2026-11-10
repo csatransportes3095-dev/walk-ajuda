@@ -128,3 +128,52 @@ test("failed local front bind never reports an active relay", async () => {
   assert.equal(state.networkSuspended, true);
   assert.equal(state.activeBackendPort, undefined);
 });
+
+
+const ipCheckSource = source.slice(source.indexOf("async function checkIpThroughPort(localPort)"), source.indexOf("async function checkIp()"));
+assert.ok(ipCheckSource.includes("https://api.ipify.org?format=json"), "primary IP check must remain");
+function ipCheckHarness({ primaryFails = false, secondaryFails = false, primaryIp = "198.51.100.1", secondaryIp = "198.51.100.1" } = {}) {
+  const calls = [];
+  const state = {
+    calls,
+    execFileAsync: async (_exe, args) => {
+      calls.push(args);
+      const target = args.at(-1);
+      assert.ok(args.includes("--proxy"), "probe must always use the proxy");
+      assert.ok(args.includes("http://127.0.0.1:9001"), "probe must use the dedicated relay");
+      if (target.includes("ipify.org")) {
+        if (primaryFails) throw new Error("primary_ip_provider_down");
+        return { stdout: JSON.stringify({ ip: primaryIp }) };
+      }
+      if (secondaryFails) throw new Error("secondary_ip_provider_down");
+      return { stdout: JSON.stringify({ ip: secondaryIp }) };
+    },
+    classifyNetworkError: () => "proxy_path_unverified",
+  };
+  vm.createContext(state);
+  vm.runInContext(ipCheckSource + "\nthis.checkIp = checkIpThroughPort;", state);
+  return state;
+}
+test("healthy primary IP check never calls fallback", async () => {
+  const s = ipCheckHarness();
+  assert.equal(await s.checkIp(9001), "198.51.100.1");
+  assert.equal(s.calls.length, 1);
+});
+test("IP check recovers with same proxy when the primary provider fails", async () => {
+  const s = ipCheckHarness({ primaryFails: true });
+  assert.equal(await s.checkIp(9001), "198.51.100.1");
+  assert.equal(s.calls.length, 2);
+  assert.ok(s.calls[1].at(-1).includes("ipapi.co"));
+});
+test("both IP check providers down leaves the session protected", async () => {
+  const s = ipCheckHarness({ primaryFails: true, secondaryFails: true });
+  await assert.rejects(s.checkIp(9001), /proxy_path_unverified/);
+  assert.equal(s.calls.length, 2);
+});
+test("changed IP from fallback is not silently replaced by the original IP", async () => {
+  const s = ipCheckHarness({ primaryFails: true, secondaryIp: "198.51.100.2" });
+  assert.equal(await s.checkIp(9001), "198.51.100.2");
+  assert.equal(s.calls.length, 2);
+  // Existing session IP lock in resumeProxyTraffic rejects this changed IP.
+  assert.ok(recovery.includes("normalizeIp(observedIp) !== normalizeIp(sessionLockedIp)"));
+});
