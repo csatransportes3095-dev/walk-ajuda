@@ -73,4 +73,13 @@ describe("H2 Android Agent - conexao segura e independente", () => {
     expect(router).toContain("issueAndroidPairingCode");
     expect(router).toContain("revokeAndroidAgent");
   });
+
+  it("desliga Hyper-V com parametros oficiais e nunca corta energia automaticamente", () => {
+    const nativeCore = read("workers/windows/h2-native/H2NativeCore.psm1");
+    const stopFn = nativeCore.slice(nativeCore.indexOf("function Stop-H2NativeVm {"), nativeCore.indexOf("\nExport-ModuleMember"));
+    expect(stopFn).toContain("Stop-VM -Name $VMName -ErrorAction Stop");
+    expect(stopFn).not.toContain("Stop-VM -Name $VMName -Shutdown");
+    expect(stopFn).toContain("if ($ForcePowerOff)");
+    expect(stopFn).toContain("Stop-VM -Name $VMName -TurnOff -Force -ErrorAction Stop");
+  });
 });
