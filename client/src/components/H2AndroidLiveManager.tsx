@@ -26,7 +26,7 @@ export default function H2AndroidLiveManager({
 }: {
   agents: Agent[];
   commands: Command[];
-  refresh: () => void;
+  refresh: () => Promise<unknown>;
 }) {
   const [selectedKey, setSelectedKey] = useState("");
   const [frame, setFrame] = useState<(AndroidScreenFrame & { deviceKey: string }) | null>(null);
@@ -37,12 +37,14 @@ export default function H2AndroidLiveManager({
   const [isoPath, setIsoPath] = useState("");
   const [isoSha256, setIsoSha256] = useState("");
   const [allowUnsignedBoot, setAllowUnsignedBoot] = useState(false);
+  const [refreshing, setRefreshing] = useState(false);
+  const [lastRefreshedAt, setLastRefreshedAt] = useState<string | null>(null);
   const utils = trpc.useUtils();
   const mutation = trpc.h2Android.control.useMutation({
     onSuccess: () => {
       toast.success("Comando enviado ao agente Windows.");
       void utils.h2Android.overview.invalidate();
-      refresh();
+      void refresh().catch(() => {});
     },
     onError: error => toast.error(error.message),
   });
@@ -89,6 +91,21 @@ export default function H2AndroidLiveManager({
     mutation.mutate({ action: "tap", agentId: chosen.agent.id, avdName: chosen.name, x, y });
   }
 
+  async function refreshStatus() {
+    if (refreshing) return;
+    setRefreshing(true);
+    try {
+      await refresh();
+      screenStream.current?.refresh();
+      setLastRefreshedAt(new Date().toLocaleTimeString("pt-BR"));
+      toast.success("Consulta dos aparelhos concluida.");
+    } catch (error) {
+      toast.error(error instanceof Error ? error.message : "Falha ao atualizar o painel H2 Android.");
+    } finally {
+      setRefreshing(false);
+    }
+  }
+
   function createNext() {
     const agent = ready[0];
     if (!agent) return toast.error("Atualize o agente Windows primeiro.");
@@ -121,10 +138,17 @@ export default function H2AndroidLiveManager({
             O controle nativo permite preparar, ligar e desligar VMs. Ainda é necessário instalar e validar o Android; tela remota e proxy estão pendentes.
           </p>
         </div>
-        <button type="button" onClick={() => { refresh(); screenStream.current?.refresh(); }}
-          className="rounded-lg border border-white/20 px-3 py-2 text-xs font-bold hover:bg-white/10">
-          <RefreshCcw className="mr-1 inline h-4 w-4" /> Atualizar
-        </button>
+        <div className="flex flex-col items-end gap-1">
+          <button type="button" onClick={() => void refreshStatus()} disabled={refreshing}
+            aria-label="Atualizar estado dos aparelhos"
+            className="rounded-lg border border-white/20 px-3 py-2 text-xs font-bold hover:bg-white/10 disabled:cursor-wait disabled:opacity-60">
+            <RefreshCcw className={"mr-1 inline h-4 w-4 " + (refreshing ? "animate-spin" : "")} />
+            {refreshing ? "Atualizando..." : "Atualizar"}
+          </button>
+          <span aria-live="polite" className="text-[10px] text-slate-400">
+            {refreshing ? "Consultando o painel..." : lastRefreshedAt ? "Consulta realizada as " + lastRefreshedAt : "Dados verificados automaticamente"}
+          </span>
+        </div>
       </div>
 
       {ready.length === 0 ? (
@@ -200,7 +224,7 @@ export default function H2AndroidLiveManager({
                         ) : (
                           <div className="absolute inset-0 flex flex-col items-center justify-center p-6 text-center text-xs text-slate-400">
                             <Smartphone className="mx-auto mb-3 h-12 w-12 text-[#8ce2bd]/50" />
-                            {screenActive ? "Aguardando imagem do Android..." : chosen.running ? "Tela remota pendente para Hyper-V." : "Android desligado."}
+                            {screenActive ? "Aguardando imagem do Android..." : chosen.running ? "Android ligado. Video remoto ainda nao implementado; a janela Hyper-V pode ser fechada." : "Android desligado."}
                           </div>
                         )}
                       </div>
