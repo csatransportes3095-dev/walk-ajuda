@@ -18,7 +18,7 @@ foreach($path in $paths){
 }
 $agent=Get-Content -LiteralPath (Join-Path $folder "H2NativeAgent.ps1") -Raw
 $control=Get-Content -LiteralPath (Join-Path $folder "H2NativeControl.ps1") -Raw
-foreach($expected in @("Global\H2AndroidNativeAgentSingleInstanceV1","WaitOne(0)","ReleaseMutex()","0.3.7-native-screen")){
+foreach($expected in @("Global\H2AndroidNativeAgentSingleInstanceV1","WaitOne(0)","ReleaseMutex()","0.3.8-native-screen")){
   if(!$agent.Contains($expected)){throw ("Guarda de instancia unica ausente: "+$expected)}
 }
 foreach($expected in @(
@@ -65,4 +65,28 @@ if ($formatted -cne "640x480: WMI=32770") {
 if ($screen.Contains('$width + "x" + $height')) {
   throw "Concatenacao numerica perigosa ainda presente nos erros de captura."
 }
+# Verify a genuine RGB565 decoder path in PowerShell 5.1, including WALKARTS' four extra bytes.
+$w=160; $h=120
+$rawPixels=New-Object byte[] ($w*$h*2)
+for ($i=0; $i -lt $rawPixels.Length; $i++) { $rawPixels[$i]=[byte](($i*37+11) % 256) }
+$extraPixels=New-Object byte[] ($rawPixels.Length+4)
+[Array]::Copy($rawPixels,$extraPixels,$rawPixels.Length)
+$extraPixels[$rawPixels.Length]=191
+$extraPixels[$rawPixels.Length+1]=192
+$extraPixels[$rawPixels.Length+2]=193
+$extraPixels[$rawPixels.Length+3]=194
+$plainPng=Convert-H2NativeRgb565ToPng -ImageData $rawPixels -Width $w -Height $h
+$tailPng=Convert-H2NativeRgb565ToPng -ImageData $extraPixels -Width $w -Height $h
+if ($plainPng -cne $tailPng) { throw "A captura RGB565 com 4 bytes excedentes alterou os pixels." }
+$decodedPng=[Convert]::FromBase64String($tailPng)
+$signature=[byte[]]@(137,80,78,71,13,10,26,10)
+for($i=0;$i -lt $signature.Length;$i++){
+  if($decodedPng[$i] -ne $signature[$i]){throw "Captura nao gerou PNG valido."}
+}
+$invalidPixels=New-Object byte[] ($rawPixels.Length+2)
+[Array]::Copy($rawPixels,$invalidPixels,$rawPixels.Length)
+$invalidRejected=$false
+try { Convert-H2NativeRgb565ToPng -ImageData $invalidPixels -Width $w -Height $h | Out-Null }
+catch { $invalidRejected=$true }
+if (!$invalidRejected) { throw "Comprimento RGB565 inesperado foi aceito." }
 Write-Host "PASS - H2 Native Agent, migracao e comandos limitados" -ForegroundColor Green
