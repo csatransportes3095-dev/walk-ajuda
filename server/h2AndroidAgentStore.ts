@@ -12,7 +12,7 @@ import { getDb } from "./db";
 let initialization: Promise<void> | null = null;
 const ONLINE_WINDOW_MS = 90_000;
 const PAIRING_DURATION_MINUTES = 10;
-const NATIVE_H2_AGENT_VERSIONS = new Set(["0.3.0-native", "0.3.2-native-clone", "0.3.3-native-guard"]);
+const NATIVE_H2_AGENT_VERSIONS = new Set(["0.3.0-native", "0.3.2-native-clone", "0.3.3-native-guard", "0.3.4-native-screen"]);
 
 const availabilitySchema = z.object({
   computerName: z.string().trim().min(1).max(80),
@@ -264,8 +264,16 @@ export async function enqueueAndroidCommand(input: {
     throw new TRPCError({ code: "PRECONDITION_FAILED", message: report.hyperVReason || "Hyper-V nao esta pronto neste computador." });
   }
   // Fail-closed: remote screen, tap, keys and proxy are NOT implemented for Hyper-V.
-  if (!["create", "clone", "start", "stop"].includes(input.action)) {
+  if (!["create", "clone", "start", "stop", "tap", "key"].includes(input.action)) {
     throw new TRPCError({ code: "PRECONDITION_FAILED", message: "Comando indisponivel no motor Hyper-V nativo." });
+  }
+  if (["tap", "key"].includes(input.action)) {
+    if (report.agentVersion !== "0.3.4-native-screen") {
+      throw new TRPCError({ code: "PRECONDITION_FAILED", message: "Agente H2 sem suporte ao console nativo." });
+    }
+    if (!report.runningAvds.includes(input.avdName)) {
+      throw new TRPCError({ code: "PRECONDITION_FAILED", message: "Ligue o Android antes de usar os controles." });
+    }
   }
   // Nao expor copia de Android usado como se fosse um aparelho independente.
   // O destino pode herdar dados e IDs da origem. Somente imagem-base limpa sera liberada.
