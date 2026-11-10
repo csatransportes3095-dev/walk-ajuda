@@ -90,7 +90,7 @@ describe("H2 Android Agent - conexao segura e independente", () => {
     expect(core).toContain("Copy-Item -LiteralPath $sourceDisk -Destination $disk");
     expect(core).toContain("independentGuestIdentityVerified = $false");
     expect(control).toContain('if ($action -ceq "clone")');
-    expect(control).toContain('agentVersion = "0.3.5-native-screen"');
+    expect(control).toContain('agentVersion = "0.3.6-native-screen"');
     const store = read("server/h2AndroidAgentStore.ts");
     expect(store).toContain("Criacao por copia desativada");
     expect(store).toContain("NATIVE_H2_AGENT_VERSIONS");
@@ -121,9 +121,9 @@ describe("H2 Android Agent - conexao segura e independente", () => {
     expect(update).toContain('$files = @("H2NativeAgent.ps1","H2NativeControl.ps1","H2NativeCore.psm1","H2NativeScreen.ps1")');
     expect(update).toContain("Quantidade inesperada de agentes H2 ativos");
     expect(update).toContain("UMA INSTANCIA ATIVA");
-    expect(page).toContain("0.3.5-native-screen");
+    expect(page).toContain("0.3.6-native-screen");
     const store = read("server/h2AndroidAgentStore.ts");
-    expect(store).toContain('"0.3.5-native-screen"');
+    expect(store).toContain('"0.3.6-native-screen"');
     expect(store).toContain("captureErrors");
     expect(store).toContain('kind: z.literal("error")');
     expect(store).toContain("requestAndroidScreen");
@@ -135,9 +135,12 @@ describe("H2 Android Agent - conexao segura e independente", () => {
     expect(view).toContain("Captura indisponivel:");
     const transport = read("client/src/lib/androidScreenStream.ts");
     expect(transport).toContain("onError?.(");
-    expect(store).toContain('!["0.3.4-native-screen", "0.3.5-native-screen"].includes(report.agentVersion)');
+    expect(store).toContain('!["0.3.4-native-screen", "0.3.5-native-screen", "0.3.6-native-screen"].includes(report.agentVersion)');
     const screen = read("workers/windows/h2-native/H2NativeScreen.ps1");
     expect(screen).toContain("GetVirtualSystemThumbnailImage");
+    expect(screen).toContain("Convert-H2NativeRgb565ToPng");
+    expect(screen).toContain("RGB565 stride");
+    expect(screen).toContain("@(160,120)");
     expect(screen).toContain("Get-H2NativeOwnedVm -VMName");
     expect(screen).toContain("Invoke-H2NativeConsoleTap");
     expect(screen).toContain("Invoke-H2NativeConsoleKey");
