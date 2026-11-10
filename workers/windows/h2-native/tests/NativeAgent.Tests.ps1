@@ -17,6 +17,9 @@ foreach($path in $paths){
 }
 $agent=Get-Content -LiteralPath (Join-Path $folder "H2NativeAgent.ps1") -Raw
 $control=Get-Content -LiteralPath (Join-Path $folder "H2NativeControl.ps1") -Raw
+foreach($expected in @("Global\H2AndroidNativeAgentSingleInstanceV1","WaitOne(0)","ReleaseMutex()")){
+  if(!$agent.Contains($expected)){throw ("Guarda de instancia unica ausente: "+$expected)}
+}
 foreach($expected in @(
   '$TaskName="H2 Android Agent"', '"agent.json"', 'Get-H2AgentToken',
   'H2NativeHostStatus', 'Parser]::ParseFile', 'Export-ScheduledTask',
