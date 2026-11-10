@@ -5,6 +5,7 @@ $paths=@(
   (Join-Path $folder "H2NativeAgent.ps1"),
   (Join-Path $folder "H2NativeControl.ps1"),
   (Join-Path $folder "H2NativeCore.psm1"),
+  (Join-Path $folder "H2NativeScreen.ps1"),
   (Join-Path $folder "H2NativeIsoBootstrap.ps1"),
   (Join-Path $folder "H2NativeInstalledBoot.ps1")
 )
@@ -17,7 +18,7 @@ foreach($path in $paths){
 }
 $agent=Get-Content -LiteralPath (Join-Path $folder "H2NativeAgent.ps1") -Raw
 $control=Get-Content -LiteralPath (Join-Path $folder "H2NativeControl.ps1") -Raw
-foreach($expected in @("Global\H2AndroidNativeAgentSingleInstanceV1","WaitOne(0)","ReleaseMutex()","0.3.3-native-guard")){
+foreach($expected in @("Global\H2AndroidNativeAgentSingleInstanceV1","WaitOne(0)","ReleaseMutex()","0.3.4-native-screen")){
   if(!$agent.Contains($expected)){throw ("Guarda de instancia unica ausente: "+$expected)}
 }
 foreach($expected in @(
@@ -29,7 +30,7 @@ foreach($expected in @(
 }
 foreach($expected in @(
   'Get-H2NativeOwnedVm', 'hyperVReady', 'Assert-H2NativeReady',
-  'H2NativeIsoBootstrap.ps1', '("create","clone","start","stop")', 'New-H2NativeClone'
+  'H2NativeIsoBootstrap.ps1', '("create","clone","start","stop","tap","key")', 'New-H2NativeClone'
 )){
   if(!$control.Contains($expected)){throw ("Controle nativo ausente: "+$expected)}
 }
