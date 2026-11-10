@@ -2,6 +2,7 @@
 # Nao executa Android Studio, SDK, ADB ou motor de H2 ADS.
 Set-StrictMode -Version Latest
 Import-Module (Join-Path $PSScriptRoot "H2NativeCore.psm1") -Force -ErrorAction Stop
+. (Join-Path $PSScriptRoot "H2NativeScreen.ps1")
 
 function ConvertTo-H2NativeVmName {
   param([Parameter(Mandatory=$true)][string]$AvdName)
@@ -35,7 +36,7 @@ function Get-H2NativeAgentReport {
   return @{
     computerName = $computerName.Substring(0,[Math]::Min(80,$computerName.Length))
     windowsVersion = $windowsText.Substring(0,[Math]::Min(100,$windowsText.Length))
-    agentVersion = "0.3.3-native-guard"
+    agentVersion = "0.3.4-native-screen"
     sdkDetected = $false
     adbDetected = $false
     emulatorDetected = $false
@@ -55,10 +56,20 @@ function Invoke-H2NativeControl {
   param([Parameter(Mandatory=$true)]$Command)
   $name = ConvertTo-H2NativeVmName -AvdName ([string]$Command.avdName)
   $action = [string]$Command.action
-  if ($action -cnotin @("create","clone","start","stop")) {
+  if ($action -cnotin @("create","clone","start","stop","tap","key")) {
     throw "Funcao nao disponivel neste motor: $action. Rede, tela e teclas continuam bloqueadas."
   }
   Assert-H2NativeReady
+  if ($action -ceq "tap") {
+    if ($null -eq $Command.payload) { throw "Coordenadas ausentes." }
+    Invoke-H2NativeConsoleTap -VMName $name -X ([int]$Command.payload.x) -Y ([int]$Command.payload.y)
+    return "Toque enviado ao console nativo."
+  }
+  if ($action -ceq "key") {
+    if ($null -eq $Command.payload) { throw "Tecla ausente." }
+    Invoke-H2NativeConsoleKey -VMName $name -Key ([string]$Command.payload.key)
+    return "Tecla enviada ao console nativo."
+  }
   if ($action -ceq "create") {
     if ($null -eq $Command.payload) { throw "Imagem Android nao informada no ADM." }
     $iso = [string]$Command.payload.isoPath
