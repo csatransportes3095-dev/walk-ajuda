@@ -67,7 +67,7 @@ export default function H2AndroidLiveManager({
     };
   }, [watching, chosen?.running, chosen?.key, chosen?.agent.id, chosen?.name]);
 
-  // O motor Hyper-V ainda nao oferece captura grafica autenticada, logo nunca mostrar stream legado.
+  // O agente 0.3.4 publica somente capturas reais WMI autenticadas.
   const nativeScreenAvailable = chosen?.agent.agentVersion === "0.3.4-native-screen";
   const visibleFrame = nativeScreenAvailable && watching && chosen?.running && frame?.deviceKey === chosen.key ? frame : null;
   const screenActive = nativeScreenAvailable && watching;
@@ -112,7 +112,7 @@ export default function H2AndroidLiveManager({
           </h2>
           <p className="mt-1 max-w-2xl text-xs leading-relaxed text-slate-300">
             Instancias Hyper-V locais, sem Android Studio, SDK ou ADB.
-            Ligue e desligue as VMs existentes. A criacao de novos Androids por imagem-base limpa ainda esta em desenvolvimento; tela remota e proxy permanecem pendentes.
+            Ligue e desligue as VMs existentes. A tela real pode ser testada com o agente 0.3.4; a criacao de novos Androids independentes e o proxy ainda exigem validacao.
           </p>
         </div>
         <div className="flex flex-col items-end gap-1">
@@ -182,7 +182,7 @@ export default function H2AndroidLiveManager({
                         ) : (
                           <div className="absolute inset-0 flex flex-col items-center justify-center p-6 text-center text-xs text-slate-400">
                             <Smartphone className="mx-auto mb-3 h-12 w-12 text-[#8ce2bd]/50" />
-                            {screenActive ? "Aguardando imagem do Android..." : chosen.running ? "Android ligado. Video remoto ainda nao implementado; a janela Hyper-V pode ser fechada." : "Android desligado."}
+                            {screenActive ? "Aguardando imagem do Android..." : chosen.running ? "Android ligado. Abra a pre-visualizacao real quando o agente 0.3.4 estiver conectado." : "Android desligado."}
                           </div>
                         )}
                       </div>
