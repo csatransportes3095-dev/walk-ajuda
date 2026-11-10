@@ -60,7 +60,10 @@ export default function H2AndroidLiveManager({
     setScreenError(null);
     if (!watching || !chosen?.running || chosen.agent.agentVersion !== "0.3.6-native-screen") return;
     const deviceKey = chosen.key;
-    const url = "/api/h2-android/screen/" + chosen.agent.id + "/" + chosen.name;
+    const sessionId = typeof crypto.randomUUID === "function"
+      ? crypto.randomUUID()
+      : Math.random().toString(36).slice(2) + Date.now().toString(36);
+    const url = "/api/h2-android/screen/" + chosen.agent.id + "/" + chosen.name + "?session=" + encodeURIComponent(sessionId);
     const stream = startAndroidScreenStream(url, next => {
       setScreenError(null);
       setFrame({ ...next, deviceKey });

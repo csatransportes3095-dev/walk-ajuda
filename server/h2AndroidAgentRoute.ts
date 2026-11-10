@@ -45,7 +45,8 @@ export function registerH2AndroidAgentRoutes(app: Express): void {
     if (!isAdminJwtValid(req as any)) { res.sendStatus(403); return; }
     const agentId = String(req.params.agentId || "");
     if (!/^[0-9a-f-]{36}$/i.test(agentId)) { res.sendStatus(400); return; }
-    const { png, error } = requestAndroidScreen(agentId, String(req.params.avdName || ""));
+    const sessionId = String(req.query.session || "");
+    const { png, error } = requestAndroidScreen(agentId, String(req.params.avdName || ""), sessionId);
     if (error) { res.status(503).json({ error }); return; }
     if (!png) { res.status(204).end(); return; }
     res.setHeader("Content-Type", "image/png");

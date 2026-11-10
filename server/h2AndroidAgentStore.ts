@@ -205,7 +205,7 @@ type AndroidCommandRow = { id: string; agentId: string; avdName: string; command
 type AndroidAgentIdentity = { id: string; reportJson: string | null; lastSeenAt: Date | string | null };
 const screenshots = new Map<string, { bytes: Buffer; updatedAt: number }>();
 const captureErrors = new Map<string, { message: string; updatedAt: number }>();
-const viewers = new Map<string, { avdName: string; until: number }>();
+const viewers = new Map<string, { avdName: string; sessionId: string; until: number }>();
 let commandsInit: Promise<void> | null = null;
 
 async function androidCommandDb() {
@@ -410,12 +410,13 @@ export async function finishAndroidCommand(bearer: string | undefined, body: unk
   return (result as { affectedRows?: number }).affectedRows === 1;
 }
 
-export function requestAndroidScreen(agentId: string, avdName: string): { png: Buffer | null; error: string | null } {
+export function requestAndroidScreen(agentId: string, avdName: string, sessionId: string): { png: Buffer | null; error: string | null } {
   if (!h2AndroidAvdName.test(avdName)) return { png: null, error: null };
+  if (!/^[A-Za-z0-9_-]{16,100}$/.test(sessionId)) return { png: null, error: null };
   const key = agentId + ":" + avdName;
   const previousViewer = viewers.get(agentId);
-  const newSession = !previousViewer || previousViewer.avdName !== avdName || previousViewer.until < Date.now();
-  viewers.set(agentId, { avdName, until: Date.now() + 18_000 });
+  const newSession = !previousViewer || previousViewer.avdName !== avdName || previousViewer.sessionId !== sessionId || previousViewer.until < Date.now();
+  viewers.set(agentId, { avdName, sessionId, until: Date.now() + 18_000 });
   // An error belongs to a previous capture attempt. Do not replay it when the
   // administrator opens a fresh screen session; the agent will publish a new
   // frame or a new error for this session.
@@ -429,7 +430,8 @@ export function requestAndroidScreen(agentId: string, avdName: string): { png: B
 export function requestAndroidFrame(agentId: string, avdName: string): Buffer | null {
   if (!h2AndroidAvdName.test(avdName)) return null;
   const key = agentId + ":" + avdName;
-  viewers.set(agentId, { avdName, until: Date.now() + 18_000 });
+  const previousViewer = viewers.get(agentId);
+  viewers.set(agentId, { avdName, sessionId: previousViewer?.sessionId || "legacy", until: Date.now() + 18_000 });
   const frame = screenshots.get(key);
   return frame && Date.now() - frame.updatedAt < 15_000 ? frame.bytes : null;
 }
