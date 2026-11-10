@@ -90,7 +90,7 @@ describe("H2 Android Agent - conexao segura e independente", () => {
     expect(core).toContain("Copy-Item -LiteralPath $sourceDisk -Destination $disk");
     expect(core).toContain("independentGuestIdentityVerified = $false");
     expect(control).toContain('if ($action -ceq "clone")');
-    expect(control).toContain('agentVersion = "0.3.2-native-clone"');
+    expect(control).toContain('agentVersion = "0.3.3-native-guard"');
     const store = read("server/h2AndroidAgentStore.ts");
     expect(store).toContain("Criacao por copia desativada");
     expect(store).toContain("NATIVE_H2_AGENT_VERSIONS");
@@ -112,5 +112,10 @@ describe("H2 Android Agent - conexao segura e independente", () => {
     expect(nativeAgent).toContain("WaitOne(0)");
     expect(nativeAgent).toContain("ReleaseMutex()");
     expect(update).toContain('$files = @("H2NativeAgent.ps1","H2NativeControl.ps1","H2NativeCore.psm1")');
+    expect(update).toContain("Quantidade inesperada de agentes H2 ativos");
+    expect(update).toContain("UMA INSTANCIA ATIVA");
+    expect(page).toContain("0.3.3-native-guard");
+    const store = read("server/h2AndroidAgentStore.ts");
+    expect(store).toContain('"0.3.3-native-guard"');
   });
 });
