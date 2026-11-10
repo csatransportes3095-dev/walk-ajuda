@@ -22,7 +22,9 @@ function Get-H2NativeWmiConsole {
 
 function Get-H2NativeConsoleVideo {
   param([Parameter(Mandatory=$true)]$VmWmi)
-  $head = @($VmWmi.GetRelated("Msvm_VideoHead") | Select-Object -First 1)
+  $controllers = @($VmWmi.GetRelated("Msvm_SyntheticDisplayController") | Select-Object -First 1)
+  if ($controllers.Count -ne 1 -or !$controllers[0]) { throw "Controlador de video Hyper-V indisponivel." }
+  $head = @($controllers[0].GetRelated("Msvm_VideoHead") | Select-Object -First 1)
   if ($head.Count -ne 1 -or !$head[0]) { throw "O Hyper-V nao disponibilizou video da VM." }
   $width = [int]$head[0].CurrentHorizontalResolution
   $height = [int]$head[0].CurrentVerticalResolution
@@ -63,9 +65,9 @@ function Get-H2NativeScreenPngBase64 {
   }
 
   Add-Type -AssemblyName System.Drawing -ErrorAction Stop
-  $bitmap = New-Object System.Drawing.Bitmap($width,$height,[System.Drawing.Imaging.PixelFormat]::Format16bppRgb565)
+  $bitmap = [System.Drawing.Bitmap]::new($width,$height,[System.Drawing.Imaging.PixelFormat]::Format16bppRgb565)
   $stream = New-Object System.IO.MemoryStream
-  $rect = New-Object System.Drawing.Rectangle(0,0,$width,$height)
+  $rect = [System.Drawing.Rectangle]::new(0,0,$width,$height)
   $data = $null
   try {
     $data = $bitmap.LockBits($rect,[System.Drawing.Imaging.ImageLockMode]::WriteOnly,
