@@ -89,7 +89,7 @@ export const h2AndroidRouter = router({
       }),
       z.object({ action: z.literal("start"), agentId: z.string().uuid(), avdName: z.string().regex(h2AndroidAvdName) }),
       z.object({ action: z.literal("stop"), agentId: z.string().uuid(), avdName: z.string().regex(h2AndroidAvdName) }),
-      z.object({ action: z.literal("tap"), agentId: z.string().uuid(), avdName: z.string().regex(h2AndroidAvdName), x: z.number().int().min(0).max(5000), y: z.number().int().min(0).max(10000) }),
+      z.object({ action: z.literal("tap"), agentId: z.string().uuid(), avdName: z.string().regex(h2AndroidAvdName), x: z.number().int().min(0).max(10000), y: z.number().int().min(0).max(10000) }),
       z.object({ action: z.literal("key"), agentId: z.string().uuid(), avdName: z.string().regex(h2AndroidAvdName), key: z.enum(["BACK","HOME","ENTER","POWER"]) }),
       z.object({ action: z.literal("proxy"), agentId: z.string().uuid(), avdName: z.string().regex(h2AndroidAvdName), host: z.string().trim().max(253).regex(/^[a-zA-Z0-9.-]*$/), port: z.number().int().min(0).max(65535) }),
     ]))
