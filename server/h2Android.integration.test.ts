@@ -76,7 +76,7 @@ describe("H2 Android - modulo isolado e privado", () => {
     expect(manager).toContain('aria-live="polite"');
     expect(manager).toContain("setLastRefreshedAt(new Date().toLocaleTimeString");
     expect(manager).toContain('toast.error(error instanceof Error ? error.message');
-    expect(manager).toContain("Video remoto ainda nao implementado");
+    expect(manager).toContain("Abrir pre-visualizacao real da VM");
   });
   it("nao oferece clonagem que replica dados de outro Android", () => {
     const manager = read("client/src/components/H2AndroidLiveManager.tsx");
