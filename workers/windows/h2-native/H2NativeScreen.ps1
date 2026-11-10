@@ -95,21 +95,26 @@ function Get-H2NativeScreenPngBase64 {
   $service = Get-WmiObject -Namespace "root\virtualization\v2" -Class "Msvm_VirtualSystemManagementService" -ErrorAction Stop |
     Select-Object -First 1
   if (!$service) { throw "Servico de captura Hyper-V indisponivel." }
-  $sizes = @()
+  # Store dimensions as typed records, not nested PowerShell arrays (which can be unrolled).
+  $sizes = New-Object 'System.Collections.Generic.List[object]'
   try {
     $video = Get-H2NativeConsoleVideo -VmWmi $vm
-    $scale = [Math]::Min(1.0,[Math]::Min(640.0/$video.width,480.0/$video.height))
-    $w = [int]([Math]::Floor($video.width*$scale/2)*2)
-    $h = [int][Math]::Floor($video.height*$scale)
-    if ($w -ge 64 -and $h -ge 64) { $sizes += ,@($w,$h) }
-  } catch {}
-  $sizes += ,@(640,480)
-  $sizes += ,@(320,240)
-  $sizes += ,@(160,120)
+    $scale = [Math]::Min(1.0,[Math]::Min(640.0 / $video.width,480.0 / $video.height))
+    $w = [int]([Math]::Floor($video.width * $scale / 2) * 2)
+    $h = [int][Math]::Floor($video.height * $scale)
+    if ($w -ge 64 -and $h -ge 64) {
+      $sizes.Add([pscustomobject]@{ Width=$w; Height=$h })
+    }
+  } catch {
+    # Guest video-head metadata is optional; static fallback sizes remain available.
+  }
+  foreach ($dimensions in @(@(640,480),@(320,240),@(160,120))) {
+    $sizes.Add([pscustomobject]@{ Width=[int]$dimensions[0]; Height=[int]$dimensions[1] })
+  }
   $diagnostics = @()
   foreach ($size in $sizes) {
-    $width = [int]$size[0]
-    $height = [int]$size[1]
+    $width = [int]$size.Width
+    $height = [int]$size.Height
     try {
       $request = $service.GetMethodParameters("GetVirtualSystemThumbnailImage")
       $request["TargetSystem"] = [string]$realized[0].__PATH
