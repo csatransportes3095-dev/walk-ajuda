@@ -46,10 +46,11 @@ export default function AdminH2Android() {
       activeSection={activeSection}
       onNavigate={(section) => {
         setActiveSection(section);
-        document.getElementById(section)?.scrollIntoView({ behavior: "smooth", block: "start" });
+        document.getElementById("h2-android-content-top")?.scrollIntoView({ behavior: "auto", block: "start" });
       }}
     >
-      <main className="mx-auto max-w-[1400px] space-y-6 px-4 py-7 sm:px-6 lg:px-7">
+      <main id="h2-android-content-top" className="mx-auto max-w-[1400px] space-y-6 px-4 py-7 sm:px-6 lg:px-7">
+        {activeSection === "overview" && (
         <section id="overview" className="scroll-mt-6 flex flex-col justify-between gap-5 md:flex-row md:items-start">
           <div>
             <p className="mb-2 text-[10px] font-bold uppercase tracking-[0.2em] text-[#8ce2bd]">H2 Android</p>
@@ -57,11 +58,15 @@ export default function AdminH2Android() {
             <p className="mt-2 text-sm text-[#92a0ad]">Controle os aparelhos e acompanhe cada operação.</p>
           </div>
         </section>
+        )}
 
+        {(activeSection === "overview" || activeSection === "devices") && (
         <div id="devices" className="scroll-mt-6">
         <H2AndroidLiveManager agents={agents} commands={overviewQuery.data?.commands ?? []} refresh={() => overviewQuery.refetch({ throwOnError: true })} />
         </div>
+        )}
 
+        {activeSection === "overview" && (
         <section className="grid grid-cols-2 gap-3 lg:grid-cols-4" aria-label="Resumo de instâncias">
           <div className="rounded-xl border border-white/10 bg-white/[0.04] p-4">
             <div className="flex items-center gap-2 text-xs text-slate-400"><HardDrive className="h-4 w-4" /> Máquinas H2 detectadas</div>
@@ -84,7 +89,9 @@ export default function AdminH2Android() {
             <p className="text-[11px] text-slate-500">Computadores conectados</p>
           </div>
         </section>
+        )}
 
+        {activeSection === "activity" && (
         <section id="activity" className="scroll-mt-6 rounded-xl border border-[#263543] bg-[#111b26] p-4 sm:p-5">
           <div className="mb-4 flex items-center justify-between gap-3">
             <div>
@@ -114,7 +121,9 @@ export default function AdminH2Android() {
             </div>
           )}
         </section>
+        )}
 
+        {activeSection === "settings" && (
         <section id="settings" className="scroll-mt-6 space-y-4 rounded-2xl border border-[#80dcb5]/25 bg-[#101827] p-4 sm:p-5" aria-label="Agente Windows H2 Android">
           <div className="flex flex-wrap items-center justify-between gap-3">
             <div>
@@ -129,9 +138,9 @@ export default function AdminH2Android() {
                 : "Agente nativo já pareado, mas offline. Verifique a conexão do computador e o serviço Windows."}
               <a href="/api/h2-android/agent/installer.zip" download="H2-Android-Nativo.zip"
                 className="mt-3 inline-flex items-center gap-2 rounded-lg border border-[#80dcb5]/40 bg-[#80dcb5]/10 px-3 py-2 text-xs font-bold text-[#b5ecd6]">
-                <Download className="h-4 w-4" /> Baixar atualizacao do agente H2
+                <Download className="h-4 w-4" /> Baixar atualização do agente H2
               </a>
-              <p className="mt-2 text-[11px] text-slate-400">Extraia o ZIP e execute Atualizar-H2-Android-Nativo.cmd como administrador. Atualiza somente o agente H2; nao reinstala Android nem altera o pareamento.</p>
+              <p className="mt-2 text-[11px] text-slate-400">Extraia o ZIP e execute Atualizar-H2-Android-Nativo.cmd como administrador. A atualização preserva o Android 01 e o pareamento.</p>
             </div>
           )}
           {!nativeAgentPaired && (
@@ -207,6 +216,7 @@ export default function AdminH2Android() {
             </div>}
           </div>
         </section>
+        )}
 
       </main>
     </H2AndroidAdminShell>
