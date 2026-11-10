@@ -53,6 +53,18 @@ describe("H2 Android Agent - conexao segura e independente", () => {
     expect(routes).not.toContain("eval(");
   });
 
+
+  it("nao declara a preparacao do Hyper-V expirada apos apenas dois minutos", () => {
+    const store = read("server/h2AndroidAgentStore.ts");
+    const poll = store.slice(store.indexOf("export async function pullAndroidCommand"), store.indexOf("export async function finishAndroidCommand"));
+    expect(poll).toContain("WHERE agentId=${agent.id} AND status='pending'");
+    expect(poll).toContain("AND createdAt < DATE_SUB(NOW(), INTERVAL 2 MINUTE)");
+    expect(poll).toContain("WHERE agentId=${agent.id} AND status='running'");
+    expect(poll).toContain("COALESCE(deliveredAt, createdAt) < DATE_SUB(NOW(), INTERVAL 30 MINUTE)");
+    expect(poll).not.toContain("status IN ('pending','running')");
+    expect(store).toContain("WHERE id=${parsed.data.id} AND agentId=${agent.id} AND status='running'");
+  });
+
   it("continua limitando a cinco perfis ativos sem afirmar que existem emuladores ativos", () => {
     const router = read("server/routers/h2Android.ts");
     expect(router).toContain("H2_ANDROID_MAX_RUNNING = 5");
