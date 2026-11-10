@@ -260,6 +260,13 @@ export function registerH2AutoAccessRoutes(app: Express): void {
           blockedPhones.includes(normalizeCustomerPhone(input) || ""))
         return respond(res, 200, {state:"disabled"});
       if (s?.stage === "blocked") return respond(res, 200, { state: "blocked", message: "" });
+      // Audio captions are not customer input. Check device/contact blocks without
+      // creating a session, consuming an OTP attempt or advancing a phone stage.
+      // The recognized speech must subsequently pass this same gate as typed text.
+      if (req.body?.inputKind === "audio_pending") {
+        if (input !== "") return respond(res, 400, { error: "invalid_audio_probe" });
+        return respond(res, 200, { state: "audio_pending" });
+      }
       const phoneError = async (stage: PhoneStage, kind: H2AutoPhoneKind,
         reason: H2AutoPhoneFailure) => {
         const result = await recordH2AutoPhoneFailure({deviceId,sessionId,conversationId:conversation,
