@@ -24,6 +24,7 @@ import { H2_AUTO_CONFIRMATION_DEFAULTS as confirmationDefaults, H2_AUTO_CONFIRMA
 import { H2_AUTO_SHORT_MEDIA, H2_AUTO_SHORT_ORDER_NOT_FOUND } from "@shared/h2AutoShortReplies";
 import { H2_AUTO_PERSONALIZATION_DEFAULT, H2_AUTO_FAQ_MAX_VARIATION_CHARS, H2_AUTO_FAQ_MAX_VARIATION_LINES, h2AutoFaqVariationLineCount, type H2AutoPersonalization } from "@shared/h2AutoPersonalization";
 import { prepareH2AutoCommonFaq, H2_AUTO_FAQ_SUGGESTIONS } from "@shared/h2AutoFaqPresets";
+import { displayH2AutoFaqWithDraftFirst } from "@/lib/h2AutoFaqEditorOrder";
 
 const Box = ({ children }: { children: React.ReactNode }) => (
   <div className="rounded-2xl border border-cyan-500/30 bg-slate-900/90 p-5 space-y-3">
@@ -209,12 +210,14 @@ export default function AdminH2Auto() {
   };
 
   const [personalDrafts, setPersonalDrafts] = useState<Record<string, H2AutoPersonalization>>({});
+  const [newFaqDraftIds, setNewFaqDraftIds] = useState<Record<string,string>>({});
   const [personalSamples, setPersonalSamples] = useState<Record<string,string>>({});
   const [personalPreviews, setPersonalPreviews] = useState<Record<string,string>>({});
   const savePersonalization = trpc.h2AutoAdmin.savePersonalization.useMutation({
     onSuccess: (_result, vars) => {
       setPersonalDrafts(prev => { const next = {...prev}; delete next[vars.id]; return next; });
-      toast.success("Personalização salva, sem alterar menus, pausas ou autenticação.");
+      setNewFaqDraftIds(prev => { const next = {...prev}; delete next[vars.id]; return next; });
+      toast.success("Personalização salva. Nova pergunta movida para o final da fila.");
       void utils.h2AutoAdmin.list.invalidate();
     },
     onError: e => toast.error(e.message || "Falha ao salvar personalização"),
@@ -593,6 +596,9 @@ export default function AdminH2Auto() {
           const media = { ...mediaDefaults, ...(value.media || {}) };
           const presetPreparation = prepareH2AutoCommonFaq(personalDrafts[d.id] ?? d.config.personalization ?? H2_AUTO_PERSONALIZATION_DEFAULT);
           const personalization = presetPreparation.personalization;
+          const faqInEditor = displayH2AutoFaqWithDraftFirst(personalization.faq??[],newFaqDraftIds[d.id]);
+          const canSavePersonalization = !savePersonalization.isPending && Boolean(personalDrafts[d.id]||presetPreparation.added>0)
+            && !(personalization.faq??[]).some(x=>x.question.trim().length<3 || x.answer.trim().length<3 || h2AutoFaqVariationLineCount(x.variations)>H2_AUTO_FAQ_MAX_VARIATION_LINES);
           const updatePersonalization = (patch: Partial<H2AutoPersonalization>) => {
             setPersonalDrafts(prev => ({...prev, [d.id]: {...personalization,...patch}}));
             setPersonalPreviews(prev => ({...prev, [d.id]: ""}));
@@ -912,17 +918,25 @@ export default function AdminH2Auto() {
                   <div className="flex items-center justify-between gap-3 flex-wrap">
                     <div><h5 className="font-black text-violet-100">PERGUNTAS E RESPOSTAS LIVRES</h5><p className="text-xs text-slate-300">Sem botões ou números para o cliente. Até 1000 respostas individuais por aparelho.</p></div>
                     <button type="button" disabled={(personalization.faq ?? []).length>=1000} className="rounded-lg bg-violet-600 px-4 py-2 font-black text-xs disabled:opacity-40"
-                      onClick={()=>updatePersonalization({faq:[...(personalization.faq??[]),{id:"faq_"+Date.now().toString(36)+"_"+Math.random().toString(36).slice(2,6),question:"",variations:"",answer:"",enabled:true}]})}>+ ADICIONAR PERGUNTA E RESPOSTA</button>
+                      onClick={()=>{
+                        const id="faq_"+Date.now().toString(36)+"_"+Math.random().toString(36).slice(2,6);
+                        // O item real fica no fim; apenas a visualizacao do rascunho fica no topo.
+                        updatePersonalization({faq:[...(personalization.faq??[]),{id,question:"",variations:"",answer:"",enabled:true}]});
+                        setNewFaqDraftIds(prev=>({...prev,[d.id]:id}));
+                      }}>+ ADICIONAR PERGUNTA E RESPOSTA</button>
                   </div>
-                  {(personalization.faq ?? []).map((faq,index)=><div key={faq.id} className="rounded-xl border border-violet-500/30 bg-[#080b1c] p-3 space-y-2">
+                  {faqInEditor.map((faq,index)=><div key={faq.id} className={"rounded-xl border bg-[#080b1c] p-3 space-y-2 "+(newFaqDraftIds[d.id]===faq.id?"border-emerald-400/70 ring-2 ring-emerald-400/20":"border-violet-500/30")}>
                     <div className="flex justify-between items-center gap-2">
-                      <strong className="text-sm">PERGUNTA {index+1}</strong>
+                      <strong className="text-sm">{newFaqDraftIds[d.id]===faq.id?"✍️ NOVA PERGUNTA — EDITAR AGORA":`PERGUNTA ${personalization.faq.findIndex(item=>item.id===faq.id)+1}`}</strong>
                       <div className="flex gap-3 items-center">
                         <label className="text-xs flex gap-1 items-center"><input type="checkbox" checked={faq.enabled} onChange={e=>updatePersonalization({faq:personalization.faq.map(x=>x.id===faq.id?{...x,enabled:e.target.checked}:x)})}/> Ativa</label>
-                        <button type="button" className="text-red-300 text-xs font-bold" onClick={()=>updatePersonalization({faq:personalization.faq.filter(x=>x.id!==faq.id)})}>EXCLUIR</button>
+                        <button type="button" className="text-red-300 text-xs font-bold" onClick={()=>{
+                          updatePersonalization({faq:personalization.faq.filter(x=>x.id!==faq.id)});
+                          if(newFaqDraftIds[d.id]===faq.id) setNewFaqDraftIds(prev=>{const next={...prev};delete next[d.id];return next;});
+                        }}>EXCLUIR</button>
                       </div>
                     </div>
-                    <input className={field} maxLength={160} placeholder="Pergunta que o cliente pode escrever" value={faq.question}
+                    <input className={field} autoFocus={newFaqDraftIds[d.id]===faq.id} maxLength={160} placeholder="Pergunta que o cliente pode escrever" value={faq.question}
                       onChange={e=>updatePersonalization({faq:personalization.faq.map(x=>x.id===faq.id?{...x,question:e.target.value}:x)})}/>
                     <label className="block text-xs font-black text-violet-200">SUBPERGUNTAS — outras formas de perguntar</label>
                     <textarea className={field+" min-h-44 resize-y"} rows={7} maxLength={H2_AUTO_FAQ_MAX_VARIATION_CHARS} placeholder="Digite ou cole até 1.000 linhas, uma subpergunta por linha" value={faq.variations}
@@ -932,6 +946,14 @@ export default function AdminH2Auto() {
                     </p>
                     <textarea className={field} rows={4} maxLength={1200} placeholder="Resposta automática em texto livre, com quebras de linha para celular" value={faq.answer}
                       onChange={e=>updatePersonalization({faq:personalization.faq.map(x=>x.id===faq.id?{...x,answer:e.target.value}:x)})}/>
+                    {newFaqDraftIds[d.id]===faq.id && <div className="flex flex-wrap items-center justify-between gap-2 rounded-lg border border-emerald-400/30 bg-emerald-400/10 p-2">
+                      <p className="text-xs text-emerald-100">Ao salvar, esta pergunta irá para o final da fila.</p>
+                      <button type="button" disabled={!canSavePersonalization}
+                        onClick={()=>savePersonalization.mutate({id:d.id,personalization})}
+                        className="rounded-lg bg-emerald-500 px-4 py-2 text-xs font-black text-slate-950 disabled:opacity-40">
+                        {savePersonalization.isPending?"SALVANDO...":"SALVAR PERGUNTA"}
+                      </button>
+                    </div>}
                   </div>)}
                   <p className="text-xs text-emerald-200">{H2_AUTO_FAQ_SUGGESTIONS.length} perguntas sugeridas, desativadas e editáveis. Confira e salve para conservar as edições.</p>
                   <p className="text-xs text-amber-200">Salve apenas perguntas e respostas completas. Perguntas ambíguas seguem o atendimento atual, sem inventar respostas.</p>
@@ -952,7 +974,7 @@ export default function AdminH2Auto() {
                   {personalPreviews[d.id] && <pre className="whitespace-pre-wrap rounded-lg bg-black/30 p-3 text-xs leading-relaxed text-white">{personalPreviews[d.id]}</pre>}
                 </div>
                 <button type="button" className="rounded-xl bg-violet-500 px-5 py-3 font-black text-slate-950 disabled:opacity-50"
-                  disabled={savePersonalization.isPending || (!personalDrafts[d.id] && presetPreparation.added===0) || (personalization.faq??[]).some(x=>x.question.trim().length<3 || x.answer.trim().length<3 || h2AutoFaqVariationLineCount(x.variations)>H2_AUTO_FAQ_MAX_VARIATION_LINES)}
+                  disabled={!canSavePersonalization}
                   onClick={()=>savePersonalization.mutate({id:d.id,personalization})}>SALVAR PERSONALIZAÇÃO DESTE APARELHO</button>
               </section>
               </div>
