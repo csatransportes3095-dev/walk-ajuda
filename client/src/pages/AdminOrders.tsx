@@ -1,4 +1,6 @@
 import { OrderLoginCopyButton } from "@/components/OrderLoginCopyButton";
+import CompactOrderStatusPicker from "@/components/CompactOrderStatusPicker";
+import { hasOrderSurname, visibleOrderName } from "@/lib/orderCardCompactUtils";
 import { globalActiveStatuses, isGlobalStatus, statusChoicesForFlow } from "@shared/orderStatusScope";
 import React, { useState, useRef, useEffect, useMemo } from "react";
 import { createPortal } from "react-dom";
@@ -691,6 +693,12 @@ export default function AdminOrders() {
   const [expandedId, setExpandedId] = useState<string | null>(null);
   const [activeTab, setActiveTab] = useState<Record<string, "status" | "cliente" | "historico" | "documentos" | "anotacoes">>({});
   const [selectedStatus, setSelectedStatus] = useState<Record<string, string>>({});
+  const [revealedOrderNames, setRevealedOrderNames] = useState<Set<string>>(() => new Set());
+  const toggleOrderName = (key: string) => setRevealedOrderNames(previous => {
+    const next = new Set(previous);
+    if (next.has(key)) next.delete(key); else next.add(key);
+    return next;
+  });
   const [note, setNote] = useState<Record<string, string>>({});
   const [editingCustomer, setEditingCustomer] = useState<Record<string, EditData>>({});
   const [confirmDelete, setConfirmDelete] = useState<string | null>(null);
@@ -5831,7 +5839,14 @@ export default function AdminOrders() {
                               *{order.customerNumber}
                             </span>
                           )}
-                          <p className="font-semibold text-sm">{name}</p>
+                          <p className="font-semibold text-sm">{visibleOrderName(name, revealedOrderNames.has(getOrderKey(order)))}</p>
+                          {hasOrderSurname(name) && (
+                            <button type="button"
+                              onClick={e => { e.stopPropagation(); toggleOrderName(getOrderKey(order)); }}
+                              aria-pressed={revealedOrderNames.has(getOrderKey(order))}
+                              className="rounded-md border border-white/15 bg-white/[0.06] px-2 py-1 text-[10px] font-bold text-cyan-300 hover:border-cyan-400/50"
+                            >{revealedOrderNames.has(getOrderKey(order)) ? "Ocultar sobrenome" : "Mostrar sobrenome"}</button>
+                          )}
                         </div>
                         {/* Linha do telefone + botões Copiar Nome e Deletar na mesma largura */}
                         <div className="flex items-center gap-1" onClick={e => e.stopPropagation()}>
@@ -5922,13 +5937,10 @@ export default function AdminOrders() {
                         {order.customerEmail && (
                           <p className="text-xs text-muted-foreground truncate">{order.customerEmail}</p>
                         )}
-                        {(order.customerStreet || order.customerAddressNumber || order.customerNeighborhood || order.customerCep || order.customerCity || order.customerUf) && (
-                          <div className="mt-1 text-xs text-muted-foreground">
-                            {(order.customerStreet || order.customerAddressNumber) && <p>{[order.customerStreet, order.customerAddressNumber].filter(Boolean).join(", ")}</p>}
-                            {(order.customerNeighborhood || order.customerCity || order.customerUf) && <p>{[order.customerNeighborhood, order.customerCity, order.customerUf].filter(Boolean).join(" · ")}</p>}
-                            {order.customerAddressComplement && <p>Complemento: {order.customerAddressComplement}</p>}
-                            {order.customerCep && <p>CEP: {order.customerCep}</p>}
-                          </div>
+                        {(order.customerCity || order.customerUf) && (
+                          <p className="mt-1 text-xs text-muted-foreground">
+                            📍 {[order.customerCity, order.customerUf].filter(Boolean).join(" / ")}
+                          </p>
                         )}
                         <div className="mt-1">
                           {editingPrice[String(order.id)] !== undefined ? (
@@ -6406,36 +6418,20 @@ export default function AdminOrders() {
                   {tab === "status" && (
                     <div className="p-4 space-y-3">
                       <p className="text-xs font-medium text-muted-foreground">Atualizar status do pedido</p>
-                      <div className="grid grid-cols-2 gap-2">
-                        {getStatusOrderForOrder(order).filter(isManualSelectableStatus).map(s => {
+                      <CompactOrderStatusPicker
+                        options={getStatusOrderForOrder(order).filter(isManualSelectableStatus).flatMap(s => {
                           const cfg = getVisualStatusConfigForOrder(order, s);
-                          if (!cfg) return null;
-                          const isSel = (selectedStatus[getOrderKey(order)] || latestStatus) === s;
-                          // Buscar data/hora em que este status foi aplicado
-                          const statusEntry = historyQuery.data?.find(h => h.status === s);
-                          const appliedAt = statusEntry?.createdAt
-                            ? new Date(statusEntry.createdAt).toLocaleString('pt-BR', { day: '2-digit', month: '2-digit', year: '2-digit', hour: '2-digit', minute: '2-digit' })
+                          if (!cfg) return [];
+                          const entry = historyQuery.data?.find(h => h.status === s);
+                          const appliedAt = entry?.createdAt
+                            ? new Date(entry.createdAt).toLocaleString('pt-BR', { day: '2-digit', month: '2-digit', year: '2-digit', hour: '2-digit', minute: '2-digit' })
                             : null;
-                          return (
-                            <button
-                              key={s}
-                              onClick={() => setSelectedStatus(prev => ({ ...prev, [getOrderKey(order)]: s }))}
-                              className={`flex flex-col items-start gap-0.5 p-2 rounded-lg border text-xs font-medium transition-all ${
-                                isSel
-                                  ? `${cfg.bg} ${cfg.color} border-current`
-                                  : "bg-card border-border text-muted-foreground hover:border-primary/50"
-                              }`}
-                            >
-                              <span className="flex items-center gap-1.5">{cfg.icon}{cfg.label}</span>
-                              {appliedAt && (
-                                <span className={`text-[10px] font-normal ${
-                                  isSel ? 'opacity-70' : 'text-green-400/70'
-                                }`}>✓ {appliedAt}</span>
-                              )}
-                            </button>
-                          );
+                          return [{ key: s, label: cfg.label, bg: cfg.bg, color: cfg.color, icon: cfg.icon, appliedAt }];
                         })}
-                      </div>
+                        selectedKey={selectedStatus[getOrderKey(order)] || latestStatus}
+                        selectedLabel={latestStatus ? getVisualStatusConfigForOrder(order, latestStatus)?.label : undefined}
+                        onSelect={s => setSelectedStatus(prev => ({ ...prev, [getOrderKey(order)]: s }))}
+                      />
 
                       {/* === CONTROLE DE PROGRESSO DO CLIENTE === */}
                       <textarea
@@ -7531,7 +7527,15 @@ export default function AdminOrders() {
 
 
                           <div className="space-y-2">
-                            <InfoRow icon={<User className="w-3.5 h-3.5" />} label="Nome" value={order.customerName || "—"} />
+                            <div className="flex flex-wrap items-center justify-between gap-2">
+                              <InfoRow icon={<User className="w-3.5 h-3.5" />} label="Nome" value={visibleOrderName(order.customerName || order.codeClientName, revealedOrderNames.has(getOrderKey(order)))} />
+                              {hasOrderSurname(order.customerName || order.codeClientName) && (
+                                <button type="button" onClick={() => toggleOrderName(getOrderKey(order))}
+                                  className="rounded-lg border border-cyan-400/30 px-2.5 py-1 text-[11px] font-bold text-cyan-300 hover:bg-cyan-400/10">
+                                  {revealedOrderNames.has(getOrderKey(order)) ? "Ocultar sobrenome" : "Mostrar sobrenome"}
+                                </button>
+                              )}
+                            </div>
                             <InfoRow icon={<Phone className="w-3.5 h-3.5" />} label="Telefone" value={formatPhone(order.phone)} />
                             <InfoRow icon={<Mail className="w-3.5 h-3.5" />} label="Email" value={order.customerEmail || "—"} />
                             <InfoRow
