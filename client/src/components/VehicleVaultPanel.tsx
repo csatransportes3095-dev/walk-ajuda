@@ -5,6 +5,20 @@ import { toast } from "sonner";
 import { trpc } from "@/lib/trpc";
 import VehicleVaultBatchPanel from "./VehicleVaultBatchPanel";
 
+type ApprovalStatus = "pending" | "approved" | "rejected";
+type ApprovalFilter = "all" | ApprovalStatus;
+const APPROVAL_LABELS: Record<ApprovalStatus,string> = {pending:"NÃO AVALIADO",approved:"APROVADO",rejected:"REPROVADO"};
+function ApprovalBadge({status}:{status:ApprovalStatus}) {
+  const appearance=status==="approved"
+    ?"border-emerald-400/65 bg-emerald-500/20 text-emerald-200"
+    :status==="rejected"
+      ?"border-rose-400/65 bg-rose-500/20 text-rose-200"
+      :"border-slate-500/50 bg-slate-500/15 text-slate-300";
+  return <span className={"inline-flex shrink-0 items-center gap-1 rounded-lg border px-2.5 py-1 text-[11px] font-black "+appearance}>
+    <span aria-hidden="true" className={"h-2 w-2 rounded-full "+(status==="approved"?"bg-emerald-400":status==="rejected"?"bg-rose-400":"bg-slate-400")}/>
+    {APPROVAL_LABELS[status]}
+  </span>;
+}
 type VehicleFields = {
   plate:string; renavam:string; chassis:string; model:string; color:string;
   manufactureYear:string; modelYear:string; category:string; exerciseYear:string;
@@ -97,17 +111,18 @@ export default function VehicleVaultPanel(){
   const [yearFab,setYearFab]=useState("");
   const [yearMod,setYearMod]=useState("");
   const [status,setStatus]=useState<"all"|"available"|"in_use"|"used">("all");
+  const [approval,setApproval]=useState<ApprovalFilter>("all");
   const [selected,setSelected]=useState<number|null>(null);
   const [clientQuery,setClientQuery]=useState("");
   const [pendingClientQuery,setPendingClientQuery]=useState("");
   const [readingPdf,setReadingPdf]=useState(false);
   // A vitrine inicial não carrega 150 veículos; os resultados aparecem apenas com uma pesquisa ou filtro.
-  const hasActiveSearch=Boolean(searchQuery.trim()||model.trim()||color.trim()||yearFab.trim()||yearMod.trim()||status!=="all");
+  const hasActiveSearch=Boolean(searchQuery.trim()||model.trim()||color.trim()||yearFab.trim()||yearMod.trim()||status!=="all"||approval!=="all");
   const search=trpc.vehicleVault.search.useQuery({
     query:searchQuery,model,color,
     manufactureYear:/^\d{4}$/.test(yearFab)?Number(yearFab):undefined,
     modelYear:/^\d{4}$/.test(yearMod)?Number(yearMod):undefined,
-    status,limit:150,
+    status,approval,limit:150,
   },{enabled:hasActiveSearch,retry:false});
   const totalCount=trpc.vehicleVault.totalCount.useQuery(undefined,{retry:false});
   const details=trpc.vehicleVault.details.useQuery({id:selected||1},{enabled:!!selected,retry:false});
@@ -119,6 +134,7 @@ export default function VehicleVaultPanel(){
   const link=trpc.vehicleVault.linkCustomer.useMutation();
   const unlink=trpc.vehicleVault.unlinkCustomer.useMutation();
   const setInactive=trpc.vehicleVault.setInactive.useMutation();
+  const setApprovalMutation=trpc.vehicleVault.setApproval.useMutation();
   const openPdf=trpc.vehicleVault.openPdf.useMutation();
   // O ADM só fecha o cadastro pelo X. Esc, salvamento e clique externo não fecham.
   useEffect(()=>{
@@ -258,6 +274,16 @@ export default function VehicleVaultPanel(){
       toast.success("Cliente desvinculado; histórico preservado.");
     }catch(error){toast.error(error instanceof Error?error.message:"Falha ao desvincular.");}
   };
+  const changeApproval=async(next:ApprovalStatus)=>{
+    const d=details.data;
+    if(!d||setApprovalMutation.isPending)return;
+    const target:ApprovalStatus=d.approvalStatus===next?"pending":next;
+    try{
+      await setApprovalMutation.mutateAsync({id:d.id,approvalStatus:target});
+      await utils.vehicleVault.invalidate();
+      toast.success(target==="pending"?"Avaliação retirada.":target==="approved"?"Documento aprovado.":"Documento reprovado.");
+    }catch(error){toast.error(error instanceof Error?error.message:"Não foi possível atualizar a avaliação.");}
+  };
   const toggleInactive=async()=>{
     const d=details.data;if(!d)return;
     try{
@@ -389,6 +415,19 @@ export default function VehicleVaultPanel(){
             <option value="in_use">Em uso</option><option value="used">Já utilizado</option>
           </select>
         </div>
+        <div className="flex flex-wrap items-center gap-2" role="group" aria-label="Filtrar por aprovação do documento">
+          <span className="mr-1 text-[11px] font-black uppercase tracking-wide text-slate-400">Avaliação:</span>
+          {([
+            ["all","TODOS","border-white/30 bg-slate-700/70 text-white"],
+            ["approved","APROVADOS","border-emerald-400/70 bg-emerald-500/25 text-emerald-100"],
+            ["rejected","REPROVADOS","border-rose-400/70 bg-rose-500/25 text-rose-100"],
+            ["pending","NÃO AVALIADOS","border-slate-400/60 bg-slate-500/20 text-slate-100"],
+          ] as const).map(([value,label,selectedClass])=><button key={value} type="button"
+            aria-pressed={approval===value} onClick={()=>setApproval(value)}
+            className={"rounded-xl border px-3 py-2 text-xs font-black transition-colors "+(approval===value?selectedClass:"border-white/15 bg-slate-900 text-slate-400 hover:border-white/35 hover:text-white")}>
+            {label}
+          </button>)}
+        </div>
       </div>
       {hasActiveSearch&&<>
       {search.isFetching?<p className="text-xs text-slate-400">Consultando...</p>:search.error?<p className="text-xs text-amber-200">Não foi possível consultar os documentos.</p>:search.data?.length===0?<p className="text-xs text-slate-400">Nenhum veículo encontrado para os filtros informados.</p>:null}
@@ -397,8 +436,11 @@ export default function VehicleVaultPanel(){
           className={"w-full rounded-xl border p-3 text-left "+(selected===item.id?"border-cyan-300 bg-cyan-500/15":"border-white/10 bg-white/[.03] hover:border-white/30")}>
           <div className="flex items-start justify-between gap-2">
             <span className="flex flex-wrap items-center gap-2"><strong>{item.model}</strong><VehicleColorBadge color={item.color} compact/></span>
-            <span className={"text-xs font-bold "+(item.inactive?"text-slate-400":item.activeClients?"text-amber-300":"text-emerald-300")}>
-              {item.inactive?"INATIVO":item.activeClients?"EM USO":"SEM CLIENTE ATIVO"}</span>
+            <span className="flex flex-wrap items-center justify-end gap-2">
+              <ApprovalBadge status={(item.approvalStatus||"pending") as ApprovalStatus}/>
+              <span className={"text-xs font-bold "+(item.inactive?"text-slate-400":item.activeClients?"text-amber-300":"text-emerald-300")}>
+                {item.inactive?"INATIVO":item.activeClients?"EM USO":"SEM CLIENTE ATIVO"}</span>
+            </span>
           </div>
           <div className="mt-2 text-xs text-white/70">Placa {item.plate} · Renavam {item.renavam} · Chassi {item.chassis}</div>
           <div className="mt-1 text-xs text-white/50">Fabricação {item.manufactureYear} · Modelo {item.modelYear} · Categoria {item.category||"N/I"} · Exercício {item.exerciseYear||"N/I"} · {item.activeClients} cliente(s) ativo(s) · {item.usageCount} vinculação(ões) · {item.pdfCount} PDF(s)</div>
@@ -414,7 +456,26 @@ export default function VehicleVaultPanel(){
         {details.isLoading&&<p className="text-sm">Carregando ficha...</p>}
         {details.data&&<>
           <div className="grid grid-cols-2 gap-2 text-sm">
-            {NAMES.map(([key,label])=><div key={key}><div className="mb-1 text-[10px] font-bold text-white/45">{label}</div>{key==="color"?<VehicleColorBadge color={details.data?.color||""}/>:<div className="break-all font-bold">{String(details.data?.[key]||"")}</div>}</div>)}
+            {NAMES.map(([key,label])=><div key={key}><div className="mb-1 text-[10px] font-bold text-white/45">{label}</div>{key==="color"?<VehicleColorBadge color={details.data?.color||""}/>:<div className="break-all font-bold">{String(details.data?.[key]||"")}</div>}
+              {key==="category"&&<div className="mt-4 space-y-2" role="group" aria-label="Avaliação do documento">
+                <p className="text-[10px] font-black uppercase tracking-wider text-white/60">AVALIAÇÃO DO DOCUMENTO</p>
+                <div className="grid grid-cols-2 gap-2">
+                  {([
+                    ["approved","APROVADO","border-emerald-400 bg-emerald-500 text-white shadow-[0_0_18px_rgba(16,185,129,.28)]","border-emerald-500/50 bg-emerald-500/10 text-emerald-200 hover:bg-emerald-500/20"],
+                    ["rejected","REPROVADO","border-red-400 bg-red-600 text-white shadow-[0_0_18px_rgba(239,68,68,.28)]","border-red-500/50 bg-red-500/10 text-red-200 hover:bg-red-500/20"],
+                  ] as const).map(([value,label,activeClass,idleClass])=><button key={value} type="button"
+                    disabled={setApprovalMutation.isPending||details.data.inactive}
+                    aria-pressed={details.data.approvalStatus===value}
+                    onClick={()=>void changeApproval(value)}
+                    title={details.data.approvalStatus===value?"Clique novamente para retirar a avaliação":undefined}
+                    className={"flex min-h-12 items-center justify-center rounded-xl border-2 px-2 py-3 text-xs font-black transition-all disabled:cursor-not-allowed disabled:opacity-50 "+(details.data.approvalStatus===value?activeClass:idleClass)}>
+                    {setApprovalMutation.isPending?<Loader2 className="mr-1 h-4 w-4 animate-spin"/>:<span aria-hidden="true" className="mr-1.5 text-base">{details.data.approvalStatus===value?"●":"○"}</span>}{label}
+                  </button>)}
+                </div>
+                {details.data.approvalStatus==="pending"&&<p className="text-[10px] text-slate-400">Não avaliado — selecione uma situação.</p>}
+                {details.data.approvalStatus!=="pending"&&<p className="text-[10px] text-slate-400">Clique no card selecionado para voltar a não avaliado.</p>}
+              </div>}
+            </div>)}
           </div>
           <div className="flex flex-wrap gap-2">
             <button onClick={editVehicle} className="rounded-xl border border-white/20 px-3 py-2 text-xs font-bold"><Pencil className="mr-1 inline h-4 w-4"/>EDITAR DADOS / ANEXAR PDF</button>
