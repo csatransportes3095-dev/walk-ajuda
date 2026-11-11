@@ -26,6 +26,7 @@ import { AuthenticatorQrAdminField, type PendingQr } from "@/components/Authenti
 import { OrderLoginAuthenticatorCode } from "@/components/OrderLoginAuthenticatorCode";
 import OrderH2AdsBrowserShortcut from "@/components/OrderH2AdsBrowserShortcut";
 import OrderPhotoConfirmation from "@/components/OrderPhotoConfirmation";
+import OrderPhotoMarkers from "@/components/OrderPhotoMarkers";
 import { normalizePublicSiteLinks, normalizeWhatsAppTrackingLinks, publicSiteUrl, publicTrackingShareUrl } from "@shared/publicLinks";
 import { getOperationalBucket } from "@shared/orderBuckets";
 import { repairWhatsappReplacementIcons } from "@shared/whatsappMessageText";
@@ -5799,7 +5800,10 @@ export default function AdminOrders() {
                 >
                   <div className="flex items-start justify-between gap-2">
                     <div className="flex w-full min-w-0 flex-1 flex-col items-stretch gap-3">
-                      {/* Avatar */}
+                      {/* Avatar e marcadores manuais: desktop lado a lado, celular empilhados */}
+                      <div className={isExpanded
+                        ? "grid w-full grid-cols-1 items-start gap-3 lg:grid-cols-[minmax(0,210px)_minmax(0,1fr)]"
+                        : "w-full"}>
                       <div className="flex flex-col items-center self-center gap-1.5 flex-shrink-0">
                         <div className="relative">
                           {order.isBlocked && (
@@ -5830,7 +5834,10 @@ export default function AdminOrders() {
                             <ZoomIn className="h-3.5 w-3.5" /> EXPANDIR
                           </button>
                         </div>
-
+                      </div>
+                      {isExpanded && (
+                        <OrderPhotoMarkers registrationId={order.id} subOrderIndex={order.subOrderIndex ?? 0} />
+                      )}
                       </div>
                       <div className="w-full min-w-0 flex-1">
                         <div className="flex items-center gap-1.5 flex-wrap">
