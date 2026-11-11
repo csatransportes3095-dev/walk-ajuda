@@ -41,7 +41,6 @@ import { getRegistrationReviewMode, setRegistrationReviewMode, registerNewCustom
 import { adjustCustomerH2Score, getCustomerH2ScoreSummary, getH2ScoreCustomerDirectory, setCustomerCommercialProfileMode } from "./loans/h2Score";
 import { CUSTOMER_ROUTES, ensureCustomerIdentityInfrastructure, findMainCustomerByIdentity, getRouteAccess, getRouteReleaseMode, listRouteReleaseModes, normalizeCustomerCpf, normalizeCustomerEmail, normalizeCustomerPhone, requestCustomerRouteAccess, setCustomerRoutePermissions, setRouteReleaseMode } from "./customerAccess";
 import { adCampaignsRouter } from "./routers/adCampaigns";
-import { h2AndroidRouter } from "./routers/h2Android";
 import { globalPromotionRouter } from "./routers/globalPromotion";
 import { hasActiveProductPromotion, isPromotionWithoutCommission, REFERRAL_PROMOTION_LABEL } from "../shared/referralPromotionPolicy";
 import { parseGlobalPromotionConfig, globalPromotionOverridesIndividual, calculateGlobalPromotionPrice, globalPromotionPrice } from "../shared/globalPromotion";
@@ -474,7 +473,6 @@ export const appRouter = router({
   clientReferrals: clientReferralsRouter,
   customerUpdate: customerUpdateRouter,
   adCampaigns: adCampaignsRouter,
-  h2Android: h2AndroidRouter,
   preRegistrations: preRegistrationsRouter,
   preCadastroQuestions: preCadastroQuestionsRouter,
   attention: router({
