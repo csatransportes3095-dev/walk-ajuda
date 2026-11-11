@@ -56,6 +56,22 @@ function selectRows(result: any): any[] {
 }
 
 export const orderPhotoAttemptsRouter = router({
+  // Uma consulta para todos os cards fechados: evita uma requisicao por pedido.
+  // Retorna somente os marcadores efetivamente assinalados, sem dados pessoais.
+  overview: adminProcedure.query(async () => {
+    const db = await database();
+    const result = await db.execute(sql`
+      SELECT registrationId, subOrderIndex, photoSlot
+      FROM order_photo_attempt_controls
+      WHERE completed=1 AND photoSlot IN (1,2,3)
+    `);
+    return selectRows(result).map((row: any) => ({
+      registrationId: Number(row.registrationId),
+      subOrderIndex: Number(row.subOrderIndex),
+      slot: Number(row.photoSlot),
+    }));
+  }),
+
   get: adminProcedure.input(orderKey).query(async ({ input }) => {
     const db = await database();
     const result = await db.execute(sql`
