@@ -83,6 +83,10 @@ fs.writeFileSync(serverPath, server);
 
 let client = fs.readFileSync(clientPath, 'utf8');
 
+// Compatibilidade com a busca unificada (*cadastro/nome/email/telefone) da aba Entregues.
+// Preserva o filtro independente de e-mail/login criado, inclusive historicos.
+const hasUnifiedDeliveredSearch = client.includes('const [deliveredSearch, setDeliveredSearch] = useState("");');
+
 client = replaceOnce(
   client,
 `  customerEmail: string | null;
@@ -93,18 +97,29 @@ client = replaceOnce(
   'Order type loginSearchText'
 );
 
-client = replaceOnce(
-  client,
-`  const [deliveredSortKey, setDeliveredSortKey] = useState<DeliveredSortKey>("notified");
-  const [deliveredSortDir, setDeliveredSortDir] = useState<FolderSortDir>("desc");
-  const [deliveredPhoneFilter, setDeliveredPhoneFilter] = useState("");`,
-`  const [deliveredSortKey, setDeliveredSortKey] = useState<DeliveredSortKey>("notified");
-  const [deliveredSortDir, setDeliveredSortDir] = useState<FolderSortDir>("desc");
+if (hasUnifiedDeliveredSearch) {
+  client = replaceOnce(
+    client,
+    `  const [deliveredSearch, setDeliveredSearch] = useState("");`,
+    `  const [deliveredSearch, setDeliveredSearch] = useState("");
   const [activeLoginEmailFilter, setActiveLoginEmailFilter] = useState("");
-  const [deliveredPhoneFilter, setDeliveredPhoneFilter] = useState("");
   const [deliveredLoginEmailFilter, setDeliveredLoginEmailFilter] = useState("");`,
-  'filter states'
-);
+    'unified delivered filter states'
+  );
+} else {
+  client = replaceOnce(
+    client,
+  `  const [deliveredSortKey, setDeliveredSortKey] = useState<DeliveredSortKey>("notified");
+    const [deliveredSortDir, setDeliveredSortDir] = useState<FolderSortDir>("desc");
+    const [deliveredPhoneFilter, setDeliveredPhoneFilter] = useState("");`,
+  `  const [deliveredSortKey, setDeliveredSortKey] = useState<DeliveredSortKey>("notified");
+    const [deliveredSortDir, setDeliveredSortDir] = useState<FolderSortDir>("desc");
+    const [activeLoginEmailFilter, setActiveLoginEmailFilter] = useState("");
+    const [deliveredPhoneFilter, setDeliveredPhoneFilter] = useState("");
+    const [deliveredLoginEmailFilter, setDeliveredLoginEmailFilter] = useState("");`,
+    'filter states'
+  );
+}
 
 client = replaceOnce(
   client,
@@ -127,29 +142,44 @@ client = replaceOnce(
   'active filter application'
 );
 
-client = replaceOnce(
-  client,
-`  const deliveredPhoneClean = deliveredPhoneFilter.replace(/\\D/g, '');
+if (hasUnifiedDeliveredSearch) {
+  client = replaceOnce(
+    client,
+    `  const deliveredOrders = sortDeliveredOrders(
+    orders.filter(o => isDeliveredStatus(o.latestStatus) && matchesDeliveredOrderSearch(o, deliveredSearch)),`,
+    `  const deliveredLoginEmailClean = deliveredLoginEmailFilter.trim().toLowerCase();
   const deliveredOrders = sortDeliveredOrders(
-    orders.filter(o => {
-      if (!isDeliveredStatus(o.latestStatus)) return false;
-      if (!deliveredPhoneClean) return true;
-      const orderPhone = (o.phone || '').replace(/\\D/g, '');
-      return orderPhone.includes(deliveredPhoneClean);
-    }),`,
-`  const deliveredPhoneClean = deliveredPhoneFilter.replace(/\\D/g, '');
-  const deliveredLoginEmailClean = deliveredLoginEmailFilter.trim().toLowerCase();
-  const deliveredOrders = sortDeliveredOrders(
-    orders.filter(o => {
-      if (!isDeliveredStatus(o.latestStatus)) return false;
-      const orderPhone = (o.phone || '').replace(/\\D/g, '');
-      const loginSearchText = (o.loginSearchText || '').toLowerCase();
-      const matchPhone = !deliveredPhoneClean || orderPhone.includes(deliveredPhoneClean);
-      const matchLoginEmail = !deliveredLoginEmailClean || loginSearchText.includes(deliveredLoginEmailClean);
-      return matchPhone && matchLoginEmail;
-    }),`,
-  'delivered filter application'
-);
+    orders.filter(o =>
+      isDeliveredStatus(o.latestStatus)
+      && matchesDeliveredOrderSearch(o, deliveredSearch)
+      && (!deliveredLoginEmailClean || (o.loginSearchText || '').toLowerCase().includes(deliveredLoginEmailClean))),`,
+    'unified delivered filter application'
+  );
+} else {
+  client = replaceOnce(
+    client,
+  `  const deliveredPhoneClean = deliveredPhoneFilter.replace(/\\D/g, '');
+    const deliveredOrders = sortDeliveredOrders(
+      orders.filter(o => {
+        if (!isDeliveredStatus(o.latestStatus)) return false;
+        if (!deliveredPhoneClean) return true;
+        const orderPhone = (o.phone || '').replace(/\\D/g, '');
+        return orderPhone.includes(deliveredPhoneClean);
+      }),`,
+  `  const deliveredPhoneClean = deliveredPhoneFilter.replace(/\\D/g, '');
+    const deliveredLoginEmailClean = deliveredLoginEmailFilter.trim().toLowerCase();
+    const deliveredOrders = sortDeliveredOrders(
+      orders.filter(o => {
+        if (!isDeliveredStatus(o.latestStatus)) return false;
+        const orderPhone = (o.phone || '').replace(/\\D/g, '');
+        const loginSearchText = (o.loginSearchText || '').toLowerCase();
+        const matchPhone = !deliveredPhoneClean || orderPhone.includes(deliveredPhoneClean);
+        const matchLoginEmail = !deliveredLoginEmailClean || loginSearchText.includes(deliveredLoginEmailClean);
+        return matchPhone && matchLoginEmail;
+      }),`,
+    'delivered filter application'
+  );
+}
 
 client = replaceOnce(
   client,
@@ -186,33 +216,34 @@ client = replaceOnce(
   'active login email input'
 );
 
-client = replaceOnce(
-  client,
-`                  {/* Filtro por telefone */}
+if (hasUnifiedDeliveredSearch) {
+  client = replaceOnce(
+    client,
+    `                  {/* Filtro por telefone */}
                   <div className="flex items-center gap-2">
                     <input
                       type="text"
-                      value={deliveredPhoneFilter}
-                      onChange={e => setDeliveredPhoneFilter(e.target.value)}
-                      placeholder="Filtrar por telefone..."
+                      value={deliveredSearch}
+                      onChange={e => setDeliveredSearch(e.target.value)}
+                      placeholder="Buscar por *código, nome, e-mail ou telefone..."
                       className="flex-1 h-8 px-3 rounded-lg bg-black/30 border border-teal-500/30 text-white text-xs placeholder:text-white/30 focus:outline-none focus:border-teal-400/60"
                     />
-                    {deliveredPhoneFilter && (
-                      <button onClick={() => setDeliveredPhoneFilter('')} className="h-8 px-2 rounded-lg bg-teal-500/20 border border-teal-500/40 text-teal-300 text-xs hover:bg-teal-500/30">✕ Limpar</button>
+                    {deliveredSearch && (
+                      <button onClick={() => setDeliveredSearch('')} className="h-8 px-2 rounded-lg bg-teal-500/20 border border-teal-500/40 text-teal-300 text-xs hover:bg-teal-500/30">✕ Limpar</button>
                     )}
                   </div>`,
-`                  {/* Filtros independentes por telefone e pelo e-mail/login criado */}
+    `                  {/* Busca por cadastro/nome/email/telefone e filtro independente de login criado */}
                   <div className="grid grid-cols-1 md:grid-cols-2 gap-2">
                     <div className="flex items-center gap-2">
                       <input
                         type="text"
-                        value={deliveredPhoneFilter}
-                        onChange={e => setDeliveredPhoneFilter(e.target.value)}
-                        placeholder="Filtrar por telefone..."
+                        value={deliveredSearch}
+                        onChange={e => setDeliveredSearch(e.target.value)}
+                        placeholder="Buscar por *código, nome, e-mail ou telefone..."
                         className="flex-1 h-8 px-3 rounded-lg bg-black/30 border border-teal-500/30 text-white text-xs placeholder:text-white/30 focus:outline-none focus:border-teal-400/60"
                       />
-                      {deliveredPhoneFilter && (
-                        <button onClick={() => setDeliveredPhoneFilter('')} className="h-8 px-2 rounded-lg bg-teal-500/20 border border-teal-500/40 text-teal-300 text-xs hover:bg-teal-500/30" title="Limpar telefone">✕</button>
+                      {deliveredSearch && (
+                        <button onClick={() => setDeliveredSearch('')} className="h-8 px-2 rounded-lg bg-teal-500/20 border border-teal-500/40 text-teal-300 text-xs hover:bg-teal-500/30">✕ Limpar</button>
                       )}
                     </div>
                     <div className="flex items-center gap-2">
@@ -228,8 +259,54 @@ client = replaceOnce(
                       )}
                     </div>
                   </div>`,
-  'delivered login email input'
-);
+    'unified delivered login email input'
+  );
+} else {
+  client = replaceOnce(
+    client,
+  `                  {/* Filtro por telefone */}
+                    <div className="flex items-center gap-2">
+                      <input
+                        type="text"
+                        value={deliveredPhoneFilter}
+                        onChange={e => setDeliveredPhoneFilter(e.target.value)}
+                        placeholder="Filtrar por telefone..."
+                        className="flex-1 h-8 px-3 rounded-lg bg-black/30 border border-teal-500/30 text-white text-xs placeholder:text-white/30 focus:outline-none focus:border-teal-400/60"
+                      />
+                      {deliveredPhoneFilter && (
+                        <button onClick={() => setDeliveredPhoneFilter('')} className="h-8 px-2 rounded-lg bg-teal-500/20 border border-teal-500/40 text-teal-300 text-xs hover:bg-teal-500/30">✕ Limpar</button>
+                      )}
+                    </div>`,
+  `                  {/* Filtros independentes por telefone e pelo e-mail/login criado */}
+                    <div className="grid grid-cols-1 md:grid-cols-2 gap-2">
+                      <div className="flex items-center gap-2">
+                        <input
+                          type="text"
+                          value={deliveredPhoneFilter}
+                          onChange={e => setDeliveredPhoneFilter(e.target.value)}
+                          placeholder="Filtrar por telefone..."
+                          className="flex-1 h-8 px-3 rounded-lg bg-black/30 border border-teal-500/30 text-white text-xs placeholder:text-white/30 focus:outline-none focus:border-teal-400/60"
+                        />
+                        {deliveredPhoneFilter && (
+                          <button onClick={() => setDeliveredPhoneFilter('')} className="h-8 px-2 rounded-lg bg-teal-500/20 border border-teal-500/40 text-teal-300 text-xs hover:bg-teal-500/30" title="Limpar telefone">✕</button>
+                        )}
+                      </div>
+                      <div className="flex items-center gap-2">
+                        <input
+                          type="text"
+                          value={deliveredLoginEmailFilter}
+                          onChange={e => setDeliveredLoginEmailFilter(e.target.value)}
+                          placeholder="Filtrar por e-mail/login criado..."
+                          className="flex-1 h-8 px-3 rounded-lg bg-black/30 border border-cyan-500/30 text-white text-xs placeholder:text-white/30 focus:outline-none focus:border-cyan-400/60"
+                        />
+                        {deliveredLoginEmailFilter && (
+                          <button onClick={() => setDeliveredLoginEmailFilter('')} className="h-8 px-2 rounded-lg bg-cyan-500/20 border border-cyan-500/40 text-cyan-300 text-xs hover:bg-cyan-500/30" title="Limpar login">✕</button>
+                        )}
+                      </div>
+                    </div>`,
+    'delivered login email input'
+  );
+}
 
 client = replaceOnce(
   client,
