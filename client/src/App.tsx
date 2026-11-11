@@ -81,7 +81,6 @@ import AdminZohoConfig from "./pages/AdminZohoConfig";
 import AdminMedia from "./pages/AdminMedia";
 import AdminFeatureCards from "./pages/AdminFeatureCards";
 import AdminHubCentral from "./pages/AdminHubCentral";
-import AdminH2Android from "./pages/AdminH2Android";
 import AdminTransportes from "./pages/AdminTransportes";
 import AdminLocadora from "./pages/AdminLocadora";
 import LocadoraPortal from "./pages/LocadoraPortal";
@@ -164,7 +163,6 @@ function RecoveryRoute() {
 // Guard para rotas admin — redireciona para /admin/login se não autenticado
 function AdminGuard({ children }: { children: React.ReactNode }) {
   const { isAdmin, isLoading } = useAdminAuth();
-  const [location] = useLocation();
   // Logout automático após 30 minutos de inatividade
   useAdminIdleLogout(isAdmin);
 
@@ -177,10 +175,7 @@ function AdminGuard({ children }: { children: React.ReactNode }) {
   }
 
   if (!isAdmin) {
-    const loginPath = location.toLowerCase() === "/adm/android"
-      ? "/admin/login?returnTo=%2Fadm%2Fandroid"
-      : "/admin/login";
-    return <Redirect to={loginPath} />;
+    return <Redirect to="/admin/login" />;
   }
 
   return <>{children}</>;
@@ -227,12 +222,6 @@ function Router() {
       <Route path={"/h2ads"}>
         <H2AdsGuard><H2Ads /></H2AdsGuard>
       </Route>
-      {/* H2 Android pertence exclusivamente ao namespace administrativo /adm. */}
-      <Route path={"/adm/android"}><AdminGuard><AdminH2Android /></AdminGuard></Route>
-      <Route path={"/adm/android/"}><Redirect to="/adm/android" /></Route>
-      <Route path={"/android"}><Redirect to="/adm/android" /></Route>
-      <Route path={"/android/"}><Redirect to="/adm/android" /></Route>
-      <Route path={"/admin/android"}><Redirect to="/adm/android" /></Route>
       <Route path={"/admin/authenticator"}>
         <AdminGuard><AdminAuthenticator /></AdminGuard>
       </Route>
