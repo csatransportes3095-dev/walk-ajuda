@@ -21,7 +21,10 @@ export default function OrderPhotoMarkers({
   });
   const save = trpc.orderPhotoAttempts.save.useMutation({
     onSuccess: async () => {
-      await utils.orderPhotoAttempts.get.invalidate(input);
+      await Promise.all([
+        utils.orderPhotoAttempts.get.invalidate(input),
+        utils.orderPhotoAttempts.overview.invalidate(),
+      ]);
     },
     onError: error => toast.error(error.message || "Não foi possível salvar a marcação."),
   });

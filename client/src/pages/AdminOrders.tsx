@@ -27,6 +27,7 @@ import { OrderLoginAuthenticatorCode } from "@/components/OrderLoginAuthenticato
 import OrderH2AdsBrowserShortcut from "@/components/OrderH2AdsBrowserShortcut";
 import OrderPhotoConfirmation from "@/components/OrderPhotoConfirmation";
 import OrderPhotoMarkers from "@/components/OrderPhotoMarkers";
+import CompactOrderPhotoMarkers from "@/components/CompactOrderPhotoMarkers";
 import { normalizePublicSiteLinks, normalizeWhatsAppTrackingLinks, publicSiteUrl, publicTrackingShareUrl } from "@shared/publicLinks";
 import { getOperationalBucket } from "@shared/orderBuckets";
 import { repairWhatsappReplacementIcons } from "@shared/whatsappMessageText";
@@ -1115,6 +1116,23 @@ export default function AdminOrders() {
     // Manter dados anteriores visíveis durante o refetch (evita lista vazia ao buscar)
     placeholderData: (prev: any) => prev,
   });
+
+  // Uma consulta compartilhada para todos os cards fechados, sem chamada por card.
+  const photoMarkersOverviewQuery = trpc.orderPhotoAttempts.overview.useQuery(undefined, {
+    enabled: isAdmin,
+    staleTime: 15000,
+    refetchOnWindowFocus: true,
+  });
+  const completedPhotoSlotsByOrder = useMemo(() => {
+    const byOrder = new Map<string, number[]>();
+    for (const entry of photoMarkersOverviewQuery.data ?? []) {
+      const key = `${entry.registrationId}_${entry.subOrderIndex}`;
+      const slots = byOrder.get(key) ?? [];
+      if (!slots.includes(entry.slot)) slots.push(entry.slot);
+      byOrder.set(key, slots);
+    }
+    return byOrder;
+  }, [photoMarkersOverviewQuery.data]);
 
   // Uma única sincronização por abertura do painel garante o retroativo das opções
   // que já estavam com agendamento automático ativo antes desta correção.
@@ -5835,8 +5853,16 @@ export default function AdminOrders() {
                           </button>
                         </div>
                       </div>
-                      {isExpanded && (
+                      {isExpanded ? (
                         <OrderPhotoMarkers registrationId={order.id} subOrderIndex={order.subOrderIndex ?? 0} />
+                      ) : (
+                        <CompactOrderPhotoMarkers
+                          registrationId={order.id}
+                          subOrderIndex={order.subOrderIndex ?? 0}
+                          completedSlots={completedPhotoSlotsByOrder.get(`${order.id}_${order.subOrderIndex ?? 0}`) ?? []}
+                          loading={photoMarkersOverviewQuery.isLoading}
+                          error={photoMarkersOverviewQuery.isError}
+                        />
                       )}
                       </div>
                       <div className="w-full min-w-0 flex-1">
