@@ -63,6 +63,8 @@ async function database() {
         WHERE TABLE_SCHEMA=DATABASE() AND TABLE_NAME='vehicle_vault_documents'`));
       const present = new Set(columns.map(row => String(row.name).toLowerCase()));
       if (!present.has("category")) await db.execute(sql.raw(`ALTER TABLE vehicle_vault_documents ADD COLUMN category VARCHAR(16) NULL`));
+      // Dados antigos permanecem sem avaliacao. Revisao manual independente do uso do veiculo.
+      if (!present.has("approvalstatus")) await db.execute(sql.raw(`ALTER TABLE vehicle_vault_documents ADD COLUMN approvalStatus VARCHAR(12) NOT NULL DEFAULT 'pending'`));
       if (!present.has("exerciseyear")) await db.execute(sql.raw(`ALTER TABLE vehicle_vault_documents ADD COLUMN exerciseYear SMALLINT NULL`));
       await db.execute(sql.raw(`
         CREATE TABLE IF NOT EXISTS vehicle_vault_pdf_files (
@@ -294,6 +296,7 @@ export const vehicleVaultRouter = router({
     manufactureYear:z.number().int().min(1900).max(2100).optional(),
     modelYear:z.number().int().min(1900).max(2100).optional(),
     status:z.enum(["all","available","in_use","used","inactive"]).default("all"),
+    approval:z.enum(["all","pending","approved","rejected"]).default("all"),
     limit:z.number().int().min(1).max(150).default(100),
   }).strict()).query(async ({ input }) => {
     const db=await database();
@@ -321,8 +324,9 @@ export const vehicleVaultRouter = router({
       (SELECT 1 FROM vehicle_vault_clients a WHERE a.vehicleId=d.id AND a.unlinkedAt IS NULL)`);
     if(input.status==="used")filters.push(sql`EXISTS
       (SELECT 1 FROM vehicle_vault_history h WHERE h.vehicleId=d.id AND h.event='linked')`);
+    if(input.approval!=="all")filters.push(sql`d.approvalStatus=${input.approval}`);
     const result=await db.execute(sql`
-      SELECT d.id,d.plate,d.renavam,d.chassis,d.model,d.color,d.manufactureYear,d.modelYear,d.category,d.exerciseYear,d.inactive,d.updatedAt,
+      SELECT d.id,d.plate,d.renavam,d.chassis,d.model,d.color,d.manufactureYear,d.modelYear,d.category,d.exerciseYear,d.approvalStatus,d.inactive,d.updatedAt,
         (SELECT COUNT(*) FROM vehicle_vault_clients a WHERE a.vehicleId=d.id AND a.unlinkedAt IS NULL) activeClients,
         (SELECT COUNT(*) FROM vehicle_vault_history h WHERE h.vehicleId=d.id AND h.event='linked') usageCount,
         (SELECT COUNT(*) FROM vehicle_vault_pdf_files p WHERE p.vehicleId=d.id) pdfCount,
@@ -388,7 +392,7 @@ export const vehicleVaultRouter = router({
   details: adminProcedure.input(z.object({id:z.number().int().positive()})).query(async ({input})=>{
     const db=await database();
     const doc=rows(await db.execute(sql`SELECT id,plate,renavam,chassis,model,color,
-      manufactureYear,modelYear,category,exerciseYear,sourceText,inactive,createdAt,updatedAt
+      manufactureYear,modelYear,category,exerciseYear,approvalStatus,sourceText,inactive,createdAt,updatedAt
       FROM vehicle_vault_documents WHERE id=${input.id} LIMIT 1`))[0];
     if(!doc)throw new TRPCError({code:"NOT_FOUND",message:"Veículo não encontrado."});
     const [linked,history,pdfs]=await Promise.all([
@@ -450,6 +454,21 @@ export const vehicleVaultRouter = router({
     if(changed)await db.execute(sql`INSERT INTO vehicle_vault_history(vehicleId,customerId,event)
       VALUES (${input.vehicleId},${input.customerId},'unlinked')`);
     return {unlinked:changed};
+  }),
+  setApproval: adminProcedure.input(z.object({
+    id:z.number().int().positive(),
+    approvalStatus:z.enum(["pending","approved","rejected"]),
+  }).strict()).mutation(async ({input})=>{
+    const db=await database();
+    const document=rows(await db.execute(sql`SELECT id,approvalStatus,inactive FROM vehicle_vault_documents WHERE id=${input.id} LIMIT 1`))[0];
+    if(!document)throw new TRPCError({code:"NOT_FOUND",message:"Documento não encontrado."});
+    if(Number(document.inactive))throw new TRPCError({code:"CONFLICT",message:"Reative o documento para avaliar."});
+    if(document.approvalStatus===input.approvalStatus)return {success:true,unchanged:true};
+    const updated=await db.execute(sql`UPDATE vehicle_vault_documents SET approvalStatus=${input.approvalStatus} WHERE id=${input.id} AND inactive=0`);
+    if(!Number((updated[0] as any)?.affectedRows))throw new TRPCError({code:"CONFLICT",message:"Documento não disponível para avaliação."});
+    const event=input.approvalStatus==="approved"?"approved":input.approvalStatus==="rejected"?"rejected":"review_reset";
+    await db.execute(sql`INSERT INTO vehicle_vault_history(vehicleId,event) VALUES (${input.id},${event})`);
+    return {success:true,unchanged:false};
   }),
   setInactive: adminProcedure.input(z.object({
     id:z.number().int().positive(),inactive:z.boolean(),
