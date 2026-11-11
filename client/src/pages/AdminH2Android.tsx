@@ -1,5 +1,6 @@
 import { useState } from "react";
 import H2AndroidLiveManager from "@/components/H2AndroidLiveManager";
+import H2AndroidWebSimulator from "@/components/H2AndroidWebSimulator";
 import H2AndroidAdminShell, { type AndroidAdminSection } from "@/components/H2AndroidAdminShell";
 import { trpc } from "@/lib/trpc";
 import { toast } from "sonner";
@@ -89,6 +90,12 @@ export default function AdminH2Android() {
             <p className="text-[11px] text-slate-500">Computadores conectados</p>
           </div>
         </section>
+        )}
+
+        {activeSection === "web" && (
+        <div id="webphone" className="scroll-mt-6">
+          <H2AndroidWebSimulator />
+        </div>
         )}
 
         {activeSection === "activity" && (

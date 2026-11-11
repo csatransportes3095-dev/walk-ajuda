@@ -1,11 +1,12 @@
 import type { ReactNode } from "react";
-import { Activity, LayoutDashboard, Settings, Smartphone, type LucideIcon } from "lucide-react";
+import { Activity, Globe2, LayoutDashboard, Settings, Smartphone, type LucideIcon } from "lucide-react";
 
-export type AndroidAdminSection = "overview" | "devices" | "activity" | "settings";
+export type AndroidAdminSection = "overview" | "devices" | "web" | "activity" | "settings";
 
 const navigation: Array<{ id: AndroidAdminSection; label: string; icon: LucideIcon }> = [
   { id: "overview", label: "Visão geral", icon: LayoutDashboard },
   { id: "devices", label: "Aparelhos", icon: Smartphone },
+  { id: "web", label: "Celular HTML", icon: Globe2 },
   { id: "activity", label: "Atividade", icon: Activity },
   { id: "settings", label: "Configurações", icon: Settings },
 ];
@@ -13,6 +14,7 @@ const navigation: Array<{ id: AndroidAdminSection; label: string; icon: LucideIc
 const sectionTitles: Record<AndroidAdminSection, string> = {
   overview: "Visão geral",
   devices: "Aparelhos",
+  web: "Celular HTML",
   activity: "Atividade",
   settings: "Configurações",
 };
