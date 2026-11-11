@@ -64,7 +64,7 @@ export default function CompactOrderStatusPicker({
                   <span className="min-w-0">
                     <span className="block text-[11px] font-bold leading-tight">{group.icon} {group.label}</span>
                     <span className="mt-0.5 block text-[10px] opacity-70">
-                      {group.items.length} status{group.items.length === 1 ? "" : " ·"}
+                      {group.items.length} {group.items.length === 1 ? "status" : "status"}
                       {containsSelected ? " · atual" : ""}
                     </span>
                   </span>
