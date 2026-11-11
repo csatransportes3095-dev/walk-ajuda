@@ -28,6 +28,7 @@ import OrderH2AdsBrowserShortcut from "@/components/OrderH2AdsBrowserShortcut";
 import OrderPhotoConfirmation from "@/components/OrderPhotoConfirmation";
 import OrderPhotoMarkers from "@/components/OrderPhotoMarkers";
 import CompactOrderPhotoMarkers from "@/components/CompactOrderPhotoMarkers";
+import { matchesDeliveredOrderSearch } from "@/lib/deliveredOrderSearch";
 import { normalizePublicSiteLinks, normalizeWhatsAppTrackingLinks, publicSiteUrl, publicTrackingShareUrl } from "@shared/publicLinks";
 import { getOperationalBucket } from "@shared/orderBuckets";
 import { repairWhatsappReplacementIcons } from "@shared/whatsappMessageText";
@@ -736,7 +737,7 @@ export default function AdminOrders() {
   const [archivedSortDir, setArchivedSortDir] = useState<FolderSortDir>("asc");
   const [deliveredSortKey, setDeliveredSortKey] = useState<DeliveredSortKey>("notified");
   const [deliveredSortDir, setDeliveredSortDir] = useState<FolderSortDir>("desc");
-  const [deliveredPhoneFilter, setDeliveredPhoneFilter] = useState("");
+  const [deliveredSearch, setDeliveredSearch] = useState("");
   const [todosSortKey, setTodosSortKey] = useState<FolderSortKey>("date");
   const [todosSortDir, setTodosSortDir] = useState<FolderSortDir>("desc");
   const [todosQuickFilter, setTodosQuickFilter] = useState<"all" | "h2_novo" | "sem_status" | "agendamento_confirmado" | "agendamento" | "em_analise" | "foto_aprovada" | "doc_veiculo_teste" | "novo" | "aguardando_ativa" | "conta_ativa">("all");
@@ -2619,14 +2620,8 @@ export default function AdminOrders() {
   }
 
   // deliveredOrders: buscar diretamente de orders (não de sorted, pois filtered já exclui entregues)
-  const deliveredPhoneClean = deliveredPhoneFilter.replace(/\D/g, '');
   const deliveredOrders = sortDeliveredOrders(
-    orders.filter(o => {
-      if (!isDeliveredStatus(o.latestStatus)) return false;
-      if (!deliveredPhoneClean) return true;
-      const orderPhone = (o.phone || '').replace(/\D/g, '');
-      return orderPhone.includes(deliveredPhoneClean);
-    }),
+    orders.filter(o => isDeliveredStatus(o.latestStatus) && matchesDeliveredOrderSearch(o, deliveredSearch)),
     deliveredSortKey, deliveredSortDir
   );
 
@@ -5437,13 +5432,13 @@ export default function AdminOrders() {
                   <div className="flex items-center gap-2">
                     <input
                       type="text"
-                      value={deliveredPhoneFilter}
-                      onChange={e => setDeliveredPhoneFilter(e.target.value)}
-                      placeholder="Filtrar por telefone..."
+                      value={deliveredSearch}
+                      onChange={e => setDeliveredSearch(e.target.value)}
+                      placeholder="Buscar por *código, nome, e-mail ou telefone..."
                       className="flex-1 h-8 px-3 rounded-lg bg-black/30 border border-teal-500/30 text-white text-xs placeholder:text-white/30 focus:outline-none focus:border-teal-400/60"
                     />
-                    {deliveredPhoneFilter && (
-                      <button onClick={() => setDeliveredPhoneFilter('')} className="h-8 px-2 rounded-lg bg-teal-500/20 border border-teal-500/40 text-teal-300 text-xs hover:bg-teal-500/30">✕ Limpar</button>
+                    {deliveredSearch && (
+                      <button onClick={() => setDeliveredSearch('')} className="h-8 px-2 rounded-lg bg-teal-500/20 border border-teal-500/40 text-teal-300 text-xs hover:bg-teal-500/30">✕ Limpar</button>
                     )}
                   </div>
                   <div className="flex items-center gap-2 flex-wrap">
