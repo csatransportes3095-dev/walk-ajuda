@@ -2,14 +2,12 @@ import { useState } from "react";
 import { useLocation } from "wouter";
 import { trpc } from "@/lib/trpc";
 import { toast } from "sonner";
-import { Lock, User, Shield, KeyRound, AlertTriangle, MessageSquare, RefreshCw, Plus } from "lucide-react";
-import H2AndroidAdminShell from "@/components/H2AndroidAdminShell";
+import { Lock, User, Shield, KeyRound, AlertTriangle, MessageSquare } from "lucide-react";
 
 type Screen = "login" | "blocked";
 
 export default function AdminLogin() {
   const [, navigate] = useLocation();
-  const androidLogin = typeof window !== "undefined" && new URLSearchParams(window.location.search).get("returnTo") === "/adm/android";
   const [username, setUsername] = useState("");
   const [password, setPassword] = useState("");
   const [screen, setScreen] = useState<Screen>("login");
@@ -22,7 +20,7 @@ export default function AdminLogin() {
     onSuccess: async (data) => {
       if (data.success) {
         await utils.adminAuth.check.refetch();
-        navigate(androidLogin ? "/adm/android" : "/admin/codes");
+        navigate("/admin/codes");
       } else if (data.error === "IP_BLOCKED") {
         setScreen("blocked");
       } else {
@@ -161,81 +159,6 @@ export default function AdminLogin() {
           </button>
         </div>
       </div>
-    );
-  }
-
-  if (androidLogin) {
-    return (
-      <H2AndroidAdminShell activeSection="overview">
-        <div className="mx-auto flex min-h-[calc(100vh-8rem)] w-full max-w-[1400px] flex-col px-4 py-8 sm:px-6 lg:px-7">
-          <div className="mb-12 flex flex-col justify-between gap-5 md:flex-row md:items-start">
-            <div>
-              <p className="mb-2 text-[10px] font-bold uppercase tracking-[0.2em] text-[#8ce2bd]">H2 Android</p>
-              <h1 className="text-3xl font-bold tracking-tight text-[#e9edf2] sm:text-[34px]">Seus Androids, em um só lugar.</h1>
-              <p className="mt-2 text-sm text-[#92a0ad]">Controle os aparelhos e acompanhe cada operação.</p>
-            </div>
-            <div className="flex shrink-0 gap-2">
-              <button type="button" disabled className="inline-flex h-10 items-center gap-2 rounded-lg border border-[#2a3948] bg-[#14202c] px-3.5 text-xs font-semibold text-[#95a2af] opacity-70">
-                <RefreshCw className="h-3.5 w-3.5" /> Atualizar
-              </button>
-              <button type="button" disabled className="inline-flex h-10 items-center gap-2 rounded-lg bg-[#8ce2bd] px-3.5 text-xs font-bold text-[#123126] opacity-70">
-                <Plus className="h-3.5 w-3.5" /> Novo Android
-              </button>
-            </div>
-          </div>
-
-          <div className="grid flex-1 place-items-center pb-8">
-            <section className="w-full max-w-[420px] rounded-xl border border-[#2b3948] bg-[#121d29] p-5 shadow-[0_20px_60px_rgba(0,0,0,.18)] sm:p-6">
-              <p className="text-[10px] font-bold uppercase tracking-[0.18em] text-[#8ce2bd]">Área administrativa</p>
-              <h2 className="mt-3 text-[23px] font-bold tracking-tight text-[#e7edf3]">Acesse seu painel</h2>
-              <p className="mt-2 text-xs text-[#95a2af]">Entre com o usuário e a senha do ADM H2.</p>
-
-              {remainingAttempts !== null && remainingAttempts > 0 && (
-                <div className="mt-4 flex items-center gap-2 rounded-lg border border-red-400/25 bg-red-400/10 px-3 py-2.5 text-xs text-red-200">
-                  <AlertTriangle className="h-4 w-4 shrink-0" />
-                  <span><strong>{remainingAttempts} tentativa(s)</strong> antes do bloqueio.</span>
-                </div>
-              )}
-
-              <form onSubmit={handleSubmit} className="mt-5 space-y-3.5" autoComplete="off">
-                <div>
-                  <label htmlFor="android-admin-user" className="mb-1.5 block text-[11px] font-medium text-[#aab5c0]">Usuário</label>
-                  <input
-                    id="android-admin-user"
-                    type="text"
-                    value={username}
-                    onChange={(e) => setUsername(e.target.value)}
-                    placeholder="Usuário"
-                    autoComplete="off"
-                    name="admin-user"
-                    className="h-10 w-full rounded-md border border-[#334151] bg-[#0c1520] px-3 text-sm text-[#e6ebf1] outline-none placeholder:text-[#637180] focus:border-[#8ce2bd]/70"
-                  />
-                </div>
-                <div>
-                  <label htmlFor="android-admin-password" className="mb-1.5 block text-[11px] font-medium text-[#aab5c0]">Senha</label>
-                  <input
-                    id="android-admin-password"
-                    type="password"
-                    value={password}
-                    onChange={(e) => setPassword(e.target.value)}
-                    placeholder="Senha"
-                    autoComplete="new-password"
-                    name="admin-pwd"
-                    className="h-10 w-full rounded-md border border-[#334151] bg-[#0c1520] px-3 text-sm text-[#e6ebf1] outline-none placeholder:text-[#637180] focus:border-[#8ce2bd]/70"
-                  />
-                </div>
-                <button
-                  type="submit"
-                  disabled={loginMutation.isPending}
-                  className="mt-1 flex h-10 w-full items-center justify-center rounded-md bg-[#8ce2bd] px-4 text-xs font-bold text-[#122c24] transition hover:bg-[#9de9ca] disabled:cursor-not-allowed disabled:opacity-60"
-                >
-                  {loginMutation.isPending ? "Entrando..." : "Entrar no ADM →"}
-                </button>
-              </form>
-            </section>
-          </div>
-        </div>
-      </H2AndroidAdminShell>
     );
   }
 
