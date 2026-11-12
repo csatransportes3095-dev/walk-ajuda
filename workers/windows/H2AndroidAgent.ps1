@@ -6,7 +6,7 @@ param(
   [string]$PairCode = ""
 )
 $ErrorActionPreference = "Stop"
-$Version = "1.0.0"
+$Version = "1.0.2"
 $Base = Join-Path $env:LOCALAPPDATA "H2AndroidNative"
 $AvdHome = Join-Path $Base "avd"
 $TokenFile = Join-Path $Base "agent.secure"
@@ -46,12 +46,34 @@ function Avd-Name([string]$Id) {
   if ($Id -notmatch '^[a-fA-F0-9-]{36}$') { throw "Identificador Android inválido." }
   return "H2_" + $Id.Replace("-","")
 }
+# ADB writes non-fatal startup notices to stderr on port 5037.
+# Windows PowerShell 5.1 treats this as an exception when ErrorActionPreference=Stop.
+# The wrapper ignores informational stderr but checks the real process exit code.
+# Never kill or replace a shared ADB server used by other software.
+function Invoke-H2Adb {
+  param([string]$Executable,[string[]]$CommandArgs)
+  $OriginalPreference = $ErrorActionPreference
+  $ExitCode = -1
+  $Output = @()
+  try {
+    $ErrorActionPreference = "SilentlyContinue"
+    $Output = @(& $Executable @CommandArgs 2>$null)
+    $ExitCode = $LASTEXITCODE
+  } finally {
+    $ErrorActionPreference = $OriginalPreference
+  }
+  if ($ExitCode -ne 0) {
+    throw "ADB retornou codigo $ExitCode. Verifique o Android SDK e o servidor ADB."
+  }
+  return $Output
+}
+
 function Adb-Serial([string]$Adb,[string]$Name) {
-  $Lines = @(& $Adb devices 2>$null)
+  $Lines = @(Invoke-H2Adb -Executable $Adb -CommandArgs @("devices"))
   foreach ($line in $Lines) {
     if ($line -match '^(emulator-\d+)\s+device') {
       $serial = $Matches[1]
-      $found = @(& $Adb -s $serial emu avd name 2>$null)
+      $found = @(Invoke-H2Adb -Executable $Adb -CommandArgs @("-s",$serial,"emu","avd","name"))
       if ($found -contains $Name) { return $serial }
     }
   }
@@ -62,7 +84,7 @@ function Wait-Boot([string]$Adb,[string]$Name,[int]$TimeoutSeconds=180) {
   while ((Get-Date) -lt $Deadline) {
     $Serial = Adb-Serial $Adb $Name
     if ($Serial) {
-      $Booted = @(& $Adb -s $Serial shell getprop sys.boot_completed 2>$null)
+      $Booted = @(Invoke-H2Adb -Executable $Adb -CommandArgs @("-s",$Serial,"shell","getprop","sys.boot_completed"))
       if (($Booted | Out-String).Trim() -eq "1") { return $Serial }
     }
     Start-Sleep -Seconds 3
@@ -95,8 +117,16 @@ function Run-Job([object]$Job,[string]$Sdk) {
         # No clone: build fresh AVD with a unique writable userdata image.
         $PackageDir = Join-Path $Sdk "system-images\android-35\google_apis_playstore\x86_64"
         if (!(Test-Path $PackageDir)) { throw "Imagem Play Store Android 35 x86_64 não instalada no SDK." }
-        "no" | & $AvdManager create avd -n $Name -k $Image -d "pixel_6" -f | Out-Null
-        if ($LASTEXITCODE -ne 0 -or !(Test-Path (Join-Path $AvdHome "$Name.avd"))) {
+        $OriginalPreference = $ErrorActionPreference
+        $AvdExitCode = -1
+        try {
+          $ErrorActionPreference = "SilentlyContinue"
+          "no" | & $AvdManager create avd -n $Name -k $Image -d "pixel_6" -f 2>$null | Out-Null
+          $AvdExitCode = $LASTEXITCODE
+        } finally {
+          $ErrorActionPreference = $OriginalPreference
+        }
+        if ($AvdExitCode -ne 0 -or !(Test-Path (Join-Path $AvdHome "$Name.avd"))) {
           throw "Falha ao criar Android virtual individual."
         }
       }
@@ -120,7 +150,7 @@ function Run-Job([object]$Job,[string]$Sdk) {
     }
     "stop" {
       if ($Serial) {
-        & $Adb -s $Serial emu kill | Out-Null
+        Invoke-H2Adb -Executable $Adb -CommandArgs @("-s",$Serial,"emu","kill") | Out-Null
         $Deadline = (Get-Date).AddSeconds(45)
         while ((Get-Date) -lt $Deadline -and (Adb-Serial $Adb $Name)) { Start-Sleep -Seconds 2 }
         if (Adb-Serial $Adb $Name) { throw "Android continua aberto; não foi possível confirmar parada." }
@@ -129,7 +159,7 @@ function Run-Job([object]$Job,[string]$Sdk) {
     }
     "delete" {
       if ($Serial) {
-        & $Adb -s $Serial emu kill | Out-Null
+        Invoke-H2Adb -Executable $Adb -CommandArgs @("-s",$Serial,"emu","kill") | Out-Null
         $Deadline = (Get-Date).AddSeconds(45)
         while ((Get-Date) -lt $Deadline -and (Adb-Serial $Adb $Name)) { Start-Sleep -Seconds 2 }
         if (Adb-Serial $Adb $Name) { throw "Android ainda aberto. Exclusão bloqueada." }
