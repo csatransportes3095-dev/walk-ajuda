@@ -64,6 +64,13 @@ export function createSiteAccessGateway(deps: SiteGatewayDependencies = defaults
       if (!deps.enabled()) return next();
       const pathname = req.path;
       if (isTrustedAutomationRoute(req)) return next();
+      // H2 Android worker and installer paths have their own explicit authentication
+      // (single-use pairing code or revocable bearer token). No site cookies required.
+      if (pathname === "/api/h2-android/windows-agent.ps1" ||
+          pathname === "/api/h2-android/install-windows.ps1" ||
+          pathname === "/api/h2-android/agent/claim" ||
+          pathname === "/api/h2-android/agent/next" ||
+          pathname === "/api/h2-android/agent/complete") return next();
       // These are explicitly public or independently authenticated routes.
       if (isAdministrationPath(pathname) || isPublicFrontendAsset(pathname)) return next();
       const admin = deps.isAdmin(req);
