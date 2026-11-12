@@ -81,6 +81,9 @@ jobs:
               ''
             );
             if(p==='client/src/App.tsx')return source
+              .replace(/^import AdminH2Android from "\.\/pages\/AdminH2Android";\r?\n/m,'')
+              .replace(/^      <Route path=\{\"\/android\"\}><AdminGuard><AdminH2Android \/><\/AdminGuard><\/Route>\r?\n/m,'')
+              .replace(/^      <Route path=\{\"\/admin\/android\"\}><AdminGuard><AdminH2Android \/><\/AdminGuard><\/Route>\r?\n/m,'')
               .replace(/^import AdminChassisPage from "\.\/pages\/AdminChassisPage";\r?\n/m,'')
               .replace('<AdminGuard><AdminChassisPage /></AdminGuard>','<AdminGuard><GeradorChassiPublico /></AdminGuard>');
             if(p==='client/src/main.tsx')return source
