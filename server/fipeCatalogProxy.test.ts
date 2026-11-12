@@ -109,6 +109,54 @@ describe("FIPE isolated catalogue proxy", () => {
     await expect(badService.load(brand)).rejects.toMatchObject({ code: "FIPEX_INVALID" });
   });
 
+  it("uses GM - Chevrolet models when native Chevrolet models are empty for the selected year", async () => {
+    const chevroletId = "01988fb8-6018-7ad1-8c99-c70763fa578f";
+    const gmChevroletId = "01988fb8-609f-7bae-9741-4e15fb6e3bca";
+    const requested: string[] = [];
+    const service = createFipeCatalogService(async (url) => {
+      requested.push(url);
+      if (url.includes("make_id=" + chevroletId)) {
+        return ok({ data: [], pagination: { pages: 0 } });
+      }
+      if (url.includes("make_id=" + gmChevroletId)) {
+        return ok({
+          data: [{ id: "aaaaaaaa-bbbb-cccc-dddd-eeeeeeeeeeee", name: "ONIX" }],
+          pagination: { pages: 1 },
+        });
+      }
+      throw new Error("Unexpected URL");
+    });
+    const result = await service.load({ kind: "brandModels", brand: chevroletId, year: 2022 });
+    expect(result.data).toEqual([
+      { code: "aaaaaaaa-bbbb-cccc-dddd-eeeeeeeeeeee", name: "ONIX" },
+    ]);
+    expect(requested).toHaveLength(2);
+    expect(requested[0]).toContain("make_id=" + chevroletId);
+    expect(requested[0]).toContain("year=2022");
+    expect(requested[1]).toContain("make_id=" + gmChevroletId);
+    expect(requested[1]).toContain("year=2022");
+  });
+
+  it("allows zero-page FIPEX responses only for empty model catalogs", async () => {
+    const requested: string[] = [];
+    const emptyModelsService = createFipeCatalogService(async (url) => {
+      requested.push(url);
+      return ok({ data: [], pagination: { pages: 0 } });
+    });
+    const result = await emptyModelsService.load({ kind: "brandModels", brand: makeId, year: 2022 });
+    expect(result.data).toEqual([]);
+    expect(requested).toHaveLength(1);
+
+    const emptyMakesService = createFipeCatalogService(async () =>
+      ok({ data: [], pagination: { pages: 0 } }));
+    await expect(emptyMakesService.load(brand)).rejects.toMatchObject({ code: "FIPEX_INVALID" });
+
+    const inconsistentService = createFipeCatalogService(async () =>
+      ok({ data: [{ id: makeId, name: "VOLKSWAGEN" }], pagination: { pages: 0 } }));
+    await expect(inconsistentService.load({ kind: "brandModels", brand: makeId, year: 2022 }))
+      .rejects.toMatchObject({ code: "FIPEX_INVALID" });
+  });
+
   it("does not retry supplier errors or alter VIN generation", async () => {
     const fetcher = vi.fn(async () => new Response("", { status: 503 }));
     const service = createFipeCatalogService(fetcher);
