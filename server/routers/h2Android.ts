@@ -23,6 +23,10 @@ export async function androidDb() {
   const db = await getDb();
   if (!db) throw new TRPCError({ code: "INTERNAL_SERVER_ERROR", message: "Banco de dados indisponível." });
   if (!ready) ready = (async () => {
+    await db.execute(sql.raw(`CREATE TABLE IF NOT EXISTS h2_android_proxy_fingerprints (
+      fingerprint CHAR(64) NOT NULL PRIMARY KEY,
+      createdAt TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP
+    ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4`));
     await db.execute(sql.raw(`CREATE TABLE IF NOT EXISTS h2_android_proxies (
       id BIGINT UNSIGNED NOT NULL AUTO_INCREMENT PRIMARY KEY,
       fingerprint CHAR(64) NOT NULL UNIQUE,
@@ -142,10 +146,17 @@ export const h2AndroidRouter = router({
         const proxy = parseH2AdsProxyInput(line, "http");
         const fingerprint = hash([proxy.protocol, proxy.host, proxy.port, proxy.username, proxy.password].join("\u001f"));
         try {
-          const result = await db.execute(sql`INSERT INTO h2_android_proxies
-            (fingerprint, encryptedPayload, status) VALUES
-            (${fingerprint}, ${encryptH2AdsProxy(proxy, null)}, 'available')`);
-          if (affected(result) === 1) added++;
+          const inserted = await db.transaction(async tx => {
+            // Permanent fingerprint ledger: a deleted proxy can never be reimported.
+            const locked = await tx.execute(sql`INSERT IGNORE INTO h2_android_proxy_fingerprints (fingerprint)
+              VALUES (${fingerprint})`);
+            if (affected(locked) !== 1) return false;
+            await tx.execute(sql`INSERT INTO h2_android_proxies
+              (fingerprint, encryptedPayload, status)
+              VALUES (${fingerprint}, ${encryptH2AdsProxy(proxy, null)}, 'available')`);
+            return true;
+          });
+          if (inserted) added++; else duplicates++;
         } catch (error: any) {
           if (Number(error?.errno) === 1062 || /duplicate/i.test(String(error?.message))) duplicates++;
           else throw error;
