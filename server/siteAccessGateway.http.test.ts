@@ -86,7 +86,7 @@ describe("Segurança do Site - integration via isolated HTTP server",()=>{
   });
   it("Android command endpoints reach their own token authentication even when the site is restricted or blocked",async()=>{
     for(const mode of ["restricted","blocked"] as const) {
-      for(const path of ["/api/h2-android/agent/next","/api/h2-android/agent/complete"]) {
+      for(const path of ["/api/h2-android/agent/pull","/api/h2-android/agent/finish","/api/h2-android/agent/frame"]) {
         for(const authorization of [undefined,"Bearer invalid-agent-token"]) {
           const result=await probe(mode,path,{method:"POST",authorization});
           expect(result.status, mode+" "+path).toBe(401);
@@ -100,10 +100,7 @@ describe("Segurança do Site - integration via isolated HTTP server",()=>{
   it("Android exceptions do not expose screens, ADM controls, or arbitrary agent paths",async()=>{
     for(const mode of ["restricted","blocked"] as const) {
       for(const path of [
-        "/api/h2-android/agent/next/extra",
-        "/api/h2-android/agent/pull",
-        "/api/h2-android/agent/finish",
-        "/api/h2-android/agent/frame",
+        "/api/h2-android/agent/pull/extra",
         "/api/h2-android/agent/unknown",
         "/api/h2-android/screen/00000000-0000-4000-8000-000000000000/H2Android_01",
         "/api/trpc/h2Android.control",
