@@ -222,7 +222,7 @@ if (!$Token) {
   Save-Token $Token
   Write-Host "Agente H2 Android pareado com sucesso."
 }
-Write-Host "H2 Android $Version: verificando autenticacao com $Server..."
+Write-Host "H2 Android ${Version}: verificando autenticacao com $Server..."
 $Online = $false
 while ($true) {
   try {

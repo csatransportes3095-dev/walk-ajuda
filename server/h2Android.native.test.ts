@@ -4,6 +4,16 @@ import path from "node:path";
 const read = (file: string) => fs.readFileSync(path.resolve(process.cwd(), file), "utf8");
 
 describe("H2 Android native isolated architecture", () => {
+  it("shows underlying AVDManager failure and checks independent config.ini", () => {
+    const agent = read("workers/windows/H2AndroidAgent.ps1");
+    expect(agent).toContain("function New-H2NativeAvd");
+    expect(agent).toContain("AVDManager nao criou o Android");
+    expect(agent).toContain('Join-Path $AvdPath "config.ini"');
+    expect(agent).toContain('New-H2NativeAvd -AvdManager $AvdManager');
+    expect(agent).not.toContain('throw "Falha ao criar Android virtual individual."');
+    expect(agent).toContain('H2 Android ${Version}: verificando autenticacao');
+  });
+
   it("does not mistake ADB port 5037 startup messages for a failed creation", () => {
     const agent = read("workers/windows/H2AndroidAgent.ps1");
     expect(agent).toContain("function Invoke-H2Adb");
