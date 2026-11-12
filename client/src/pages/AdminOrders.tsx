@@ -26,6 +26,7 @@ import { AuthenticatorQrAdminField, type PendingQr } from "@/components/Authenti
 import { OrderLoginAuthenticatorCode } from "@/components/OrderLoginAuthenticatorCode";
 import OrderH2AdsBrowserShortcut from "@/components/OrderH2AdsBrowserShortcut";
 import OrderPhotoConfirmation from "@/components/OrderPhotoConfirmation";
+import OrderConfirmation from "@/components/OrderConfirmation";
 import OrderPhotoMarkers from "@/components/OrderPhotoMarkers";
 import CompactOrderPhotoMarkers from "@/components/CompactOrderPhotoMarkers";
 import { matchesDeliveredOrderSearch } from "@/lib/deliveredOrderSearch";
@@ -4797,6 +4798,13 @@ export default function AdminOrders() {
                                                       customerName={ar.customerName}
                                                       orderNumber={ar.orderNumber}
                                                     />
+<OrderConfirmation
+                                                      registrationId={ar.registrationId}
+                                                      subOrderIndex={0}
+                                                      customerPhone={ar.customerPhone || ""}
+                                                      customerName={ar.customerName}
+                                                      orderNumber={ar.orderNumber}
+                                                    />
                                                   </div>
                                                 </div>
                                               </div>
@@ -6318,6 +6326,13 @@ export default function AdminOrders() {
                           </button>
                           <OrderH2AdsBrowserShortcut registrationId={order.id} subOrderIndex={order.subOrderIndex ?? 0} customerNumber={order.customerNumber} serviceName={order.serviceName} serviceOption={order.serviceOption} />
                           <OrderPhotoConfirmation
+                            registrationId={order.id}
+                            subOrderIndex={order.subOrderIndex ?? 0}
+                            customerPhone={order.phone || ""}
+                            customerName={order.customerName || order.codeClientName}
+                            orderNumber={order.orderNumber}
+                          />
+<OrderConfirmation
                             registrationId={order.id}
                             subOrderIndex={order.subOrderIndex ?? 0}
                             customerPhone={order.phone || ""}
