@@ -4,7 +4,6 @@ import AdminHeader from "@/components/AdminHeader";
 import { trpc } from "@/lib/trpc";
 import { toast } from "sonner";
 import VehicleVaultPanel from "@/components/VehicleVaultPanel";
-import PlateSimilarityPanel from "@/components/PlateSimilarityPanel";
 
 type Kind = "placa" | "chassi";
 
@@ -60,7 +59,6 @@ export default function AdminVehicleUsage() {
         </div>}
       </div>
       <div className="relative mx-auto max-w-6xl px-4 pb-12">
-        <PlateSimilarityPanel/>
         <VehicleVaultPanel/>
       </div>
     </div>

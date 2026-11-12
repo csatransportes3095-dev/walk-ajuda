@@ -1,6 +1,5 @@
 import { TRPCError } from "@trpc/server";
 import { parseVehicleVaultClassification } from "../vehicleVaultClassification";
-import { plateSimilarityRouter } from "./plateSimilarity";
 import { z } from "zod";
 import { sql } from "drizzle-orm";
 import { router, adminProcedure } from "../_core/trpc";
@@ -281,7 +280,6 @@ function tokensFromQuery(value: string) {
     .slice(0, 8);
 }
 export const vehicleVaultRouter = router({
-  similarity: plateSimilarityRouter,
   previewText: adminProcedure.input(z.object({ text: z.string().min(5).max(120_000) }))
     .mutation(({ input }) => extractFields(input.text)),
   previewPdf: adminProcedure.input(z.object({ base64: z.string().min(30).max(PDF_BASE64_LIMIT) }))
