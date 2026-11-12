@@ -2,7 +2,7 @@
 # Requires Google SDK command-line tools + Android Emulator + a Play Store x86_64 image.
 # Scope: %LOCALAPPDATA%\H2AndroidNative. Does not touch H2ADS/other AVDs.
 param(
-  [string]$Server = "https://www.h2colombiano.com",
+  [string]$Server = "https://h2colombiano.com",
   [string]$PairCode = ""
 )
 $ErrorActionPreference = "Stop"
@@ -13,12 +13,14 @@ $TokenFile = Join-Path $Base "agent.secure"
 New-Item -ItemType Directory -Force -Path $Base,$AvdHome | Out-Null
 $env:ANDROID_AVD_HOME = $AvdHome
 $Server = $Server.TrimEnd("/")
-if ($Server -notmatch '^https://[a-z0-9.-]+$') { throw "A URL do servidor deve usar HTTPS." }
+# The www host redirects to the apex; PowerShell drops Authorization across it.
+if ($Server -ieq "https://www.h2colombiano.com") { $Server = "https://h2colombiano.com" }
+if ($Server -ine "https://h2colombiano.com") { throw "Servidor H2 Android nao autorizado." }
 
 function Api([string]$Endpoint, [object]$Body, [string]$Token = "") {
   $Headers = @{}
   if ($Token) { $Headers.Authorization = "Bearer $Token" }
-  return Invoke-RestMethod -Uri ($Server + $Endpoint) -Method Post -ContentType "application/json" -Headers $Headers -Body (ConvertTo-Json -InputObject $Body -Depth 8 -Compress) -TimeoutSec 45
+  return Invoke-RestMethod -Uri ($Server + $Endpoint) -Method Post -ContentType "application/json" -Headers $Headers -Body (ConvertTo-Json -InputObject $Body -Depth 8 -Compress) -TimeoutSec 45 -MaximumRedirection 0
 }
 function Read-Token {
   if (!(Test-Path $TokenFile)) { return "" }
@@ -155,12 +157,14 @@ if (!$Token) {
   Save-Token $Token
   Write-Host "Agente H2 Android pareado com sucesso."
 }
-Write-Host "H2 Android nativo: conectado a $Server. Ctrl+C para encerrar."
+Write-Host "H2 Android nativo: verificando autenticacao com $Server..."
+$Online = $false
 while ($true) {
   try {
     # Heartbeat must not depend on the Android SDK being installed. Pair first,
     # then report missing SDK components as a job error, never as "offline".
     $Result = Api "/api/h2-android/agent/next" @{computerName=$env:COMPUTERNAME;version=$Version} $Token
+    if (!$Online) { Write-Host "H2 Android: conexao autenticada, agente online."; $Online = $true }
     if ($Result.job) {
       $Job = $Result.job
       Write-Host "Comando $($Job.action) / $($Job.profileId)"
@@ -179,6 +183,7 @@ while ($true) {
       [void](Api "/api/h2-android/agent/complete" $Done $Token)
     } else { Start-Sleep -Seconds 4 }
   } catch {
+    $Online = $false
     Write-Warning ("H2 Android: " + $_.Exception.Message)
     Start-Sleep -Seconds 10
   }

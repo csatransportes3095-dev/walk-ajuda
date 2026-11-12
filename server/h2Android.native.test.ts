@@ -4,6 +4,17 @@ import path from "node:path";
 const read = (file: string) => fs.readFileSync(path.resolve(process.cwd(), file), "utf8");
 
 describe("H2 Android native isolated architecture", () => {
+  it("uses canonical hostname for authenticated API calls and repairs existing agent without new code", () => {
+    const agent = read("workers/windows/H2AndroidAgent.ps1");
+    const installer = read("workers/windows/Install-H2Android.ps1");
+    expect(agent).toContain('[string]$Server = "https://h2colombiano.com"');
+    expect(agent).toContain('if ($Server -ieq "https://www.h2colombiano.com")');
+    expect(agent).toContain("-MaximumRedirection 0");
+    expect(agent).toContain("conexao autenticada, agente online");
+    expect(installer).toContain('if ($HasPairedToken)');
+    expect(installer).toContain("Pareamento existente preservado");
+    expect(installer).toContain("Get-CimInstance -ClassName Win32_Process");
+  });
   it("isolates agent persistence from preexisting H2 Android legacy tables and logs no SQL parameters", () => {
     const routerCode = read("server/routers/h2Android.ts");
     const routeCode = read("server/h2AndroidAgentRoute.ts");
