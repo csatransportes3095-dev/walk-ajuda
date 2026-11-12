@@ -108,7 +108,10 @@ export const h2AndroidRouter = router({
         JOIN h2_android_native_agents_v2 a ON a.id = p.agentId
         JOIN h2_android_proxies x ON x.id = p.proxyId
         ORDER BY p.createdAt DESC`),
-      db.execute(sql`SELECT id, label, computerName, version, lastSeenAt, revoked
+      db.execute(sql`SELECT id, label, computerName, version, lastSeenAt, revoked,
+        CASE WHEN revoked = 0 AND lastSeenAt IS NOT NULL
+          AND lastSeenAt >= DATE_SUB(NOW(), INTERVAL 75 SECOND)
+          THEN 1 ELSE 0 END AS onlineFromDb
         FROM h2_android_native_agents_v2 ORDER BY createdAt DESC LIMIT 10`),
       db.execute(sql`SELECT status, COUNT(*) AS total FROM h2_android_proxies GROUP BY status`),
     ]);
@@ -124,8 +127,9 @@ export const h2AndroidRouter = router({
       })),
       agents: rows(agentsResult).map(a => ({
         id: String(a.id), label: String(a.label), computerName: a.computerName ? String(a.computerName) : null,
-        version: a.version ? String(a.version) : null, revoked: Boolean(a.revoked),
-        online: !a.revoked && !!a.lastSeenAt && Date.now() - new Date(a.lastSeenAt).getTime() < 75000,
+        version: a.version ? String(a.version) : null, revoked: Number(a.revoked) === 1,
+        // Match server-side agent selection: avoid DATETIME timezone parsing and "0" string truthiness.
+        online: Number(a.onlineFromDb) === 1,
       })),
       counts, maxSimultaneous: H2_ANDROID_MAX_RUNNING,
       encryptionReady: isH2AdsProxyEncryptionReady(),

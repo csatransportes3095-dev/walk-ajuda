@@ -4,6 +4,14 @@ import path from "node:path";
 const read = (file: string) => fs.readFileSync(path.resolve(process.cwd(), file), "utf8");
 
 describe("H2 Android native isolated architecture", () => {
+  it("uses database time for agent online status, not browser/server timezone parsing", () => {
+    const source = read("server/routers/h2Android.ts");
+    expect(source).toContain("END AS onlineFromDb");
+    expect(source).toContain("lastSeenAt >= DATE_SUB(NOW(), INTERVAL 75 SECOND)");
+    expect(source).toContain("online: Number(a.onlineFromDb) === 1");
+    expect(source).toContain("revoked: Number(a.revoked) === 1");
+    expect(source).not.toContain("Date.now() - new Date(a.lastSeenAt).getTime()");
+  });
   it("uses canonical hostname for authenticated API calls and repairs existing agent without new code", () => {
     const agent = read("workers/windows/H2AndroidAgent.ps1");
     const installer = read("workers/windows/Install-H2Android.ps1");
