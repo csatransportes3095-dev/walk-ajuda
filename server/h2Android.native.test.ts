@@ -4,6 +4,16 @@ import path from "node:path";
 const read = (file: string) => fs.readFileSync(path.resolve(process.cwd(), file), "utf8");
 
 describe("H2 Android native isolated architecture", () => {
+  it("does not mistake ADB port 5037 startup messages for a failed creation", () => {
+    const agent = read("workers/windows/H2AndroidAgent.ps1");
+    expect(agent).toContain("function Invoke-H2Adb");
+    expect(agent).toContain('Invoke-H2Adb -Executable $Adb -CommandArgs @("devices")');
+    expect(agent).toContain("if ($ExitCode -ne 0)");
+    expect(agent).toContain('$ErrorActionPreference = "SilentlyContinue"');
+    expect(agent).not.toContain('$Lines = @(& $Adb devices 2>$null)');
+    expect(agent).not.toContain("adb kill-server");
+  });
+
   it("uses database time for agent online status, not browser/server timezone parsing", () => {
     const source = read("server/routers/h2Android.ts");
     expect(source).toContain("END AS onlineFromDb");
