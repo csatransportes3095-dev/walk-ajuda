@@ -27,6 +27,7 @@ import { broadcastEmailHandler } from "../broadcastEmailHandler";
 import { registerPingRoute } from "./pingRoute";
 import { registerRaffleIntegrityRoutes } from "../raffleIntegrityRoutes";
 import { registerH2AdsWorkerRoute } from "../h2adsWorkerRoute";
+import { registerH2AndroidAgentRoutes } from "../h2AndroidAgentRoute";
 import { registerFipeCatalogRoutes } from "../fipeCatalogProxy";
 import { registerH2FaceRoutes } from "../h2FaceRoute";
 import { registerH2BicoPhotoRoutes } from "../h2bicoPhotoRoute";
@@ -443,6 +444,7 @@ async function startServer() {
   // ser apagada nem por uma aba antiga do painel administrativo.
   registerRaffleIntegrityRoutes(app);
   registerH2AdsWorkerRoute(app);
+  registerH2AndroidAgentRoutes(app);
   registerFipeCatalogRoutes(app);
   // Garantir charset UTF-8 em todas as respostas para evitar quebra de encoding
   app.use((_req, res, next) => {
