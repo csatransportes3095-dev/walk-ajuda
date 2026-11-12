@@ -34,6 +34,12 @@ function safe(handler: (req: Request, res: Response) => Promise<void>) {
 }
 
 export function registerH2AndroidAgentRoutes(app: Express) {
+  app.get("/api/h2-android/install-windows.ps1", (_req, res) => {
+    noStore(res);
+    res.download(path.resolve(process.cwd(), "workers", "windows", "Install-H2Android.ps1"), "Install-H2Android.ps1", error => {
+      if (error && !res.headersSent) res.status(404).json({ error: "Instalador não disponível." });
+    });
+  });
   app.get("/api/h2-android/windows-agent.ps1", (_req, res) => {
     noStore(res);
     res.download(path.resolve(process.cwd(), "workers", "windows", "H2AndroidAgent.ps1"), "H2AndroidAgent.ps1", error => {
