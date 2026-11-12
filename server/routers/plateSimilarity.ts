@@ -8,7 +8,7 @@ import { getSimilarPlateVariants, normalizeBrazilPlate, validBrazilPlate } from 
 
 const PROVIDER = "puxarplaca.com";
 const HOURLY_LIMIT = 60;
-const MIN_SECONDS_BETWEEN_CALLS = 60;
+const MIN_SECONDS_BETWEEN_CALLS = 61;
 const parsedRows = (r: any): any[] => Array.isArray(r?.[0]) ? r[0] : [];
 const idSchema = z.object({ id: z.number().int().positive() }).strict();
 
@@ -52,6 +52,12 @@ async function database() {
         calledAt TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP,
         KEY idx_plate_similarity_api_calls_time (calledAt)
       ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci`));
+      // Um slot compartilhado por todas as sequencias evita corridas entre abas.
+      await db.execute(sql.raw(`CREATE TABLE IF NOT EXISTS plate_similarity_rate_gate (
+        id TINYINT NOT NULL PRIMARY KEY,
+        nextAt TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP
+      ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci`));
+      await db.execute(sql`INSERT IGNORE INTO plate_similarity_rate_gate (id,nextAt) VALUES (1,NOW())`);
     })().catch(e => { initialized = null; throw e; });
   }
   await initialized;
@@ -104,6 +110,10 @@ function providerResult(payload: any, expectedPlate: string) {
 }
 
 async function getRun(db: any, id: number) {
+  // Recupera verificacoes interrompidas por queda do servidor, sem pular placas.
+  await db.execute(sql`UPDATE plate_similarity_runs SET status='paused_error'
+    WHERE id=${id} AND status IN ('checking','stop_requested')
+    AND updatedAt < DATE_SUB(NOW(), INTERVAL 2 MINUTE)`);
   const row = parsedRows(await db.execute(sql`SELECT id,basePlate,nextIndex,total,status,createdAt,updatedAt
     FROM plate_similarity_runs WHERE id=${id} LIMIT 1`))[0];
   if (!row) throw new TRPCError({ code: "NOT_FOUND", message: "Sequencia nao encontrada." });
@@ -126,13 +136,16 @@ async function quota(db: any) {
   const oldest = parsedRows(await db.execute(sql`SELECT TIMESTAMPDIFF(SECOND,calledAt,NOW()) AS secondsAgo
     FROM plate_similarity_api_calls WHERE calledAt >= DATE_SUB(NOW(), INTERVAL 1 HOUR)
     ORDER BY calledAt ASC LIMIT 1`))[0];
+  const gate = parsedRows(await db.execute(sql`SELECT GREATEST(0,
+    TIMESTAMPDIFF(SECOND,NOW(),nextAt)) AS waitSeconds FROM plate_similarity_rate_gate WHERE id=1`))[0];
+  const waitFromGate = Math.max(0,Number(gate?.waitSeconds || 0));
   const count = Number(used[0]?.used || 0);
   const waitFromHourly = count >= HOURLY_LIMIT
     ? Math.max(1, 3600 - Number(oldest?.secondsAgo || 0)) : 0;
   return {
     used: count,
     limit: HOURLY_LIMIT,
-    retryAfterSeconds: Math.max(waitFromHourly, MIN_SECONDS_BETWEEN_CALLS - secondsAgo, 0),
+    retryAfterSeconds: Math.max(waitFromHourly, MIN_SECONDS_BETWEEN_CALLS - secondsAgo, waitFromGate, 0),
   };
 }
 
@@ -184,8 +197,9 @@ export const plateSimilarityRouter = router({
   }),
   pause: adminProcedure.input(idSchema).mutation(async ({ input }) => {
     const db = await database();
-    await db.execute(sql`UPDATE plate_similarity_runs SET status='paused'
-      WHERE id=${input.id} AND status IN ('running','waiting','paused')`);
+    await db.execute(sql`UPDATE plate_similarity_runs
+      SET status=CASE WHEN status='checking' THEN 'stop_requested' ELSE 'paused' END
+      WHERE id=${input.id} AND status IN ('running','waiting','paused','checking','stop_requested')`);
     return getRun(db, input.id);
   }),
   resume: adminProcedure.input(idSchema).mutation(async ({ input }) => {
@@ -207,7 +221,7 @@ export const plateSimilarityRouter = router({
     if (!run.next || run.next.plate !== normalizeBrazilPlate(input.plate)) {
       throw new TRPCError({ code: "CONFLICT", message: "Atualize a sequencia: esta nao e a proxima placa." });
     }
-    if (run.status === "running" || run.status === "checking") {
+    if (run.status === "running" || run.status === "checking" || run.status === "stop_requested") {
       throw new TRPCError({ code: "CONFLICT", message: "Pause a consulta automatica antes de confirmar manualmente." });
     }
     try {
@@ -247,6 +261,17 @@ export const plateSimilarityRouter = router({
     if (Number((locked[0] as any)?.affectedRows || 0) !== 1) {
       return { action: "paused" as const, run: await getRun(db, input.id) };
     }
+    // Reserva global atomica: nao ultrapassa a cota em consultas simultaneas.
+    const gate = await db.execute(sql`UPDATE plate_similarity_rate_gate
+      SET nextAt=DATE_ADD(NOW(), INTERVAL 61 SECOND)
+      WHERE id=1 AND nextAt<=NOW()`);
+    if (Number((gate[0] as any)?.affectedRows || 0) !== 1) {
+      await db.execute(sql`UPDATE plate_similarity_runs SET status='waiting'
+        WHERE id=${input.id} AND status='checking'`);
+      const wait = await quota(db);
+      return { action: "waiting" as const, retryAfterSeconds: Math.max(2,wait.retryAfterSeconds),
+        run: await getRun(db,input.id) };
+    }
     let outcome: "found" | "not_found" | "inconclusive" = "inconclusive";
     let model = "", color = "", modelYear = "";
     try {
@@ -271,7 +296,7 @@ export const plateSimilarityRouter = router({
       modelYear = "modelYear" in parsed ? String(parsed.modelYear || "") : "";
       if (outcome === "inconclusive") throw new Error("Retorno da API nao confirma a situacao da placa.");
     } catch (e) {
-      await db.execute(sql`UPDATE plate_similarity_runs SET status='paused_error' WHERE id=${input.id} AND status='checking'`);
+      await db.execute(sql`UPDATE plate_similarity_runs SET status='paused_error' WHERE id=${input.id} AND status IN ('checking','stop_requested')`);
       return { action: "error" as const, message: e instanceof Error ? e.message : "Falha na consulta", run: await getRun(db, input.id) };
     }
     await db.execute(sql`INSERT INTO plate_similarity_results
@@ -282,8 +307,10 @@ export const plateSimilarityRouter = router({
     const nextIndex = run.nextIndex + 1;
     const status = outcome === "not_found" ? "paused_not_found" :
       nextIndex >= run.total ? "completed" : "running";
-    await db.execute(sql`UPDATE plate_similarity_runs SET nextIndex=${nextIndex},status=${status}
-      WHERE id=${input.id} AND status='checking'`);
+    await db.execute(sql`UPDATE plate_similarity_runs SET nextIndex=${nextIndex},
+      status=CASE WHEN status='stop_requested' AND ${outcome} <> 'not_found'
+        THEN 'paused' ELSE ${status} END
+      WHERE id=${input.id} AND status IN ('checking','stop_requested')`);
     return { action: "checked" as const, outcome, plate: run.next.plate, run: await getRun(db, input.id) };
   }),
 });
