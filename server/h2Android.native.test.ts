@@ -4,6 +4,18 @@ import path from "node:path";
 const read = (file: string) => fs.readFileSync(path.resolve(process.cwd(), file), "utf8");
 
 describe("H2 Android native isolated architecture", () => {
+  it("offers a Windows double-click installer, not a .ps1 Notepad association", () => {
+    const launcher = read("workers/windows/Install-H2Android.cmd");
+    const installer = read("workers/windows/Install-H2Android.ps1");
+    const endpoint = read("server/h2AndroidAgentRoute.ts");
+    const dashboard = read("client/src/pages/AdminH2Android.tsx");
+    expect(launcher).toContain("powershell.exe -NoProfile -ExecutionPolicy Bypass -File");
+    expect(launcher).toContain("/api/h2-android/install-windows.ps1");
+    expect(installer).toContain("/api/h2-android/agent/claim");
+    expect(installer).toContain("Pareamento confirmado no servidor");
+    expect(endpoint).toContain("/api/h2-android/install-windows.cmd");
+    expect(dashboard).toContain('href="/api/h2-android/install-windows.cmd"');
+  });
   it("recognizes /ADIMIN/ANDROID before the public customer invalid-route redirect", () => {
     const guard = read("client/public/route-fallback-guard-v1.js");
     const indexHtml = read("client/index.html");
