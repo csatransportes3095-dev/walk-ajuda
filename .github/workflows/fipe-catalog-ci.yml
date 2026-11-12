@@ -44,6 +44,28 @@ jobs:
           files="$(git diff --name-only "$BASE_SHA" "$HEAD_SHA")"
           echo "Files modified in this PR:"
           printf '%s\n' "$files"
+          # This CI is FIPE-only. Shared bootstrap files also trigger the workflow
+          # for unrelated modules; in that case do not apply the FIPE-only scope gate.
+          if ! printf '%s\n' "$files" | grep -Eq '^(server/fipeCatalogProxy(\.test)?\.ts|client/src/pages/GeradorChassiPublico\.tsx)
+            [ -z "$file" ] && continue
+            case "$file" in
+              server/fipeCatalogProxy.ts|server/fipeCatalogProxy.test.ts|server/_core/index.ts|client/src/pages/GeradorChassiPublico.tsx|.github/workflows/fipe-catalog-ci.yml|.github/workflows/customer-otp-migration.yml|server/customerRouteAudit.test.ts) ;;
+              *) echo "Non-FIPE file modified: $file" >&2; exit 1 ;;
+            esac
+          done <<< "$files"
+          # Never modify the VIN motor, registry, reservation, schema or database.
+          if git diff --name-only "$BASE_SHA" "$HEAD_SHA" | grep -Eq '(^client/src/lib/vinGenerator\.ts$|^server/routers/vinRegistry\.ts$|^server/vinRegistry|^drizzle/)'; then
+            echo 'VIN engine or database change detected' >&2
+            exit 1
+          fi
+      - name: Ensure direct FIPE browser dependency is removed
+        run: |
+          grep -Fq 'const FIPE_BASE = "/api/fipe/catalog"' client/src/pages/GeradorChassiPublico.tsx
+          ! grep -Fq 'https://fipe.parallelum.com.br' client/src/pages/GeradorChassiPublico.tsx
+; then
+            echo "No FIPE-specific file changed. FIPE tests passed; scope gate not applicable."
+            exit 0
+          fi
           while IFS= read -r file; do
             [ -z "$file" ] && continue
             case "$file" in
