@@ -20,23 +20,23 @@ export default function PlateSimilarityPanel() {
   const [busy,setBusy] = useState(false);
   const stepping = useRef(false);
   const utils = trpc.useUtils();
-  const provider = trpc.plateSimilarity.provider.useQuery(undefined,{retry:false,refetchInterval:15000});
-  const runs = trpc.plateSimilarity.recent.useQuery(undefined,{retry:false});
-  const details = trpc.plateSimilarity.details.useQuery({id:runId||1},
+  const provider = trpc.vehicleVault.similarity.provider.useQuery(undefined,{retry:false,refetchInterval:15000});
+  const runs = trpc.vehicleVault.similarity.recent.useQuery(undefined,{retry:false});
+  const details = trpc.vehicleVault.similarity.details.useQuery({id:runId||1},
     {enabled:!!runId,retry:false,refetchInterval:automatic?4000:false});
-  const create = trpc.plateSimilarity.create.useMutation();
-  const pause = trpc.plateSimilarity.pause.useMutation();
-  const resume = trpc.plateSimilarity.resume.useMutation();
-  const recordManual = trpc.plateSimilarity.recordManual.useMutation();
-  const step = trpc.plateSimilarity.step.useMutation();
+  const create = trpc.vehicleVault.similarity.create.useMutation();
+  const pause = trpc.vehicleVault.similarity.pause.useMutation();
+  const resume = trpc.vehicleVault.similarity.resume.useMutation();
+  const recordManual = trpc.vehicleVault.similarity.recordManual.useMutation();
+  const step = trpc.vehicleVault.similarity.step.useMutation();
   const current=details.data;
   const preview = validBrazilPlate(input) ? getSimilarPlateVariants(input) : [];
 
   const refresh = async () => {
     await Promise.all([
-      utils.plateSimilarity.details.invalidate(),
-      utils.plateSimilarity.recent.invalidate(),
-      utils.plateSimilarity.provider.invalidate(),
+      utils.vehicleVault.similarity.details.invalidate(),
+      utils.vehicleVault.similarity.recent.invalidate(),
+      utils.vehicleVault.similarity.provider.invalidate(),
     ]);
   };
   useEffect(() => {
