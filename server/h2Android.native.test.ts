@@ -14,7 +14,7 @@ describe("H2 Android native isolated architecture", () => {
     for (const mutation of ["overview", "importProxies", "createPairing", "createProfile", "renameProfile", "command", "revokeAgent"]) {
       expect(router).toMatch(new RegExp(mutation + ": adminProcedure"));
     }
-    expect(app).toContain('<Route path={"/android"}><AdminGuard><AdminH2Android /></AdminGuard></Route>');
+    expect(app).toContain('<Route path={"/ADIMIN/ANDROID"}><AdminGuard><AdminH2Android /></AdminGuard></Route>');
     expect(router).toContain("usedAt IS NULL AND expiresAt > NOW() FOR UPDATE");
     expect(transport).toContain("authenticateAndroidAgent");
   });
