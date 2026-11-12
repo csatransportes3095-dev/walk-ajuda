@@ -19,10 +19,21 @@ interface Props {
 }
 
 const DEFAULT_QUESTIONS: Question[] = [
-  { id: "service", text: "Você leu e entendeu qual serviço está contratando?", type: "check_cross", required: true },
-  { id: "payment", text: "Você entendeu as condições e a forma de pagamento do pedido?", type: "check_cross", required: true },
-  { id: "instructions", text: "Você leu e entendeu as orientações necessárias para realizar o serviço?", type: "check_cross", required: true },
-  { id: "terms", text: "Você leu e concorda com as condições informadas para este pedido?", type: "check_cross", required: true },
+  { id: "pedido_01", text: "Você leu e entendeu qual serviço está contratando?", type: "check_cross", required: true },
+  { id: "pedido_02", text: "Você entendeu as condições e a forma de pagamento do pedido?", type: "check_cross", required: true },
+  { id: "pedido_03", text: "Você sabe que poderá ser necessário preparar o aparelho conforme as orientações técnicas recebidas?", type: "check_cross", required: true },
+  { id: "pedido_04", text: "Você está ciente de que o aparelho deve atender aos requisitos informados para o serviço?", type: "check_cross", required: true },
+  { id: "pedido_05", text: "Você informou corretamente se o aparelho já teve contas bloqueadas ou restrições de acesso?", type: "check_cross", required: true },
+  { id: "pedido_06", text: "Você entende que as informações do veículo e da placa devem corresponder aos documentos oficiais?", type: "check_cross", required: true },
+  { id: "pedido_07", text: "Você confirma que seus documentos estão válidos e atualizados?", type: "check_cross", required: true },
+  { id: "pedido_08", text: "Você está ciente de que a plataforma pode exigir verificações adicionais de identidade?", type: "check_cross", required: true },
+  { id: "pedido_09", text: "Você compreendeu as orientações de preparação do ambiente para a fotografia?", type: "check_cross", required: true },
+  { id: "pedido_10", text: "Você está ciente de que deve seguir as instruções oficiais de verificação de identidade?", type: "check_cross", required: true },
+  { id: "pedido_11", text: "Você entendeu o prazo estimado de execução do serviço?", type: "check_cross", required: true },
+  { id: "pedido_12", text: "Você leu e compreendeu as condições de garantia?", type: "check_cross", required: true },
+  { id: "pedido_13", text: "Você sabe que pode acompanhar o andamento do pedido pelo site H2 Colombiano?", type: "check_cross", required: true },
+  { id: "pedido_14", text: "Você confirma que os dados fornecidos no cadastro são verdadeiros?", type: "check_cross", required: true },
+  { id: "pedido_15", text: "Você leu e concorda com as condições informadas para este pedido?", type: "check_cross", required: true },
 ];
 
 const TYPE_LABELS: Record<QuestionType,string> = {
