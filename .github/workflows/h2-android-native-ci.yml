@@ -1,0 +1,34 @@
+name: H2 Android native validation
+on:
+  push:
+    branches:
+      - feat/h2-android-native-proxy-20261112
+  pull_request:
+    paths:
+      - 'server/routers/h2Android.ts'
+      - 'server/h2AndroidAgentRoute.ts'
+      - 'workers/windows/H2AndroidAgent.ps1'
+      - 'client/src/pages/AdminH2Android.tsx'
+      - 'server/h2Android.native.test.ts'
+      - 'server/routers.ts'
+      - 'client/src/App.tsx'
+      - 'server/_core/index.ts'
+      - '.github/workflows/h2-android-native-ci.yml'
+jobs:
+  verify:
+    runs-on: ubuntu-latest
+    permissions:
+      contents: read
+    steps:
+      - uses: actions/checkout@v4
+      - uses: pnpm/action-setup@v4
+        with:
+          version: 10.4.1
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '22'
+          cache: pnpm
+      - run: pnpm install --frozen-lockfile
+      - run: pnpm exec vitest run server/h2Android.native.test.ts
+      - run: pnpm run check
+      - run: pnpm run build
