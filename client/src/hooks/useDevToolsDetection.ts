@@ -1,5 +1,6 @@
 import { useEffect, useRef, useState } from 'react';
 import { trpc } from '@/lib/trpc';
+import { hasHighConfidenceDevToolsViewportChange, type DevToolsViewportGaps } from './devToolsViewportSignal';
 
 export type DevToolsProtectionTarget = 'desktop' | 'mobile' | 'both';
 export type DevToolsDeviceClass = 'desktop' | 'mobile';
@@ -79,6 +80,7 @@ export function useDevToolsDetection(onDetected: () => void, enabled = true) {
   const callbackRef = useRef(onDetected);
   const enabledRef = useRef(effectiveEnabled);
   const consecutiveViewportHitsRef = useRef(0);
+  const baselineViewportRef = useRef<DevToolsViewportGaps | null>(null);
 
   callbackRef.current = onDetected;
   enabledRef.current = effectiveEnabled;
@@ -105,6 +107,7 @@ export function useDevToolsDetection(onDetected: () => void, enabled = true) {
       detectedRef.current = false;
       alertSentRef.current = false;
       consecutiveViewportHitsRef.current = 0;
+      baselineViewportRef.current = null;
       return;
     }
 
@@ -120,19 +123,28 @@ export function useDevToolsDetection(onDetected: () => void, enabled = true) {
       ? window.matchMedia('(hover: hover) and (pointer: fine)').matches
       : true;
 
+    const readGaps = (): DevToolsViewportGaps => ({
+      width: Math.max(0, window.outerWidth - window.innerWidth),
+      height: Math.max(0, window.outerHeight - window.innerHeight),
+    });
+
+    // Registre o tamanho normal da aba antes de iniciar a fiscalização.
+    // A diferença ABSOLUTA de viewport não pode bloquear clientes.
+    baselineViewportRef.current = readGaps();
+
     const checkDesktopViewport = () => {
       if (!enabledRef.current) return;
-      const widthDiff = Math.max(0, window.outerWidth - window.innerWidth);
-      const heightDiff = Math.max(0, window.outerHeight - window.innerHeight);
+      const current = readGaps();
       const normalDesktop = !mobileUa && finePointer;
       const desktopWithMobileEmulation =
-        window.outerWidth >= DESKTOP_SHELL_MIN_WIDTH && widthDiff >= VIEWPORT_THRESHOLD;
+        window.outerWidth >= DESKTOP_SHELL_MIN_WIDTH && current.width >= VIEWPORT_THRESHOLD;
       const canUseViewportSignal = normalDesktop || desktopWithMobileEmulation;
-      const hasLargeGap = widthDiff >= VIEWPORT_THRESHOLD || heightDiff >= VIEWPORT_THRESHOLD;
+      const hasSuspiciousChange = canUseViewportSignal &&
+        hasHighConfidenceDevToolsViewportChange(baselineViewportRef.current ?? current, current);
 
-      if (canUseViewportSignal && hasLargeGap) {
+      if (hasSuspiciousChange) {
         consecutiveViewportHitsRef.current += 1;
-        if (consecutiveViewportHitsRef.current >= 2) trigger();
+        if (consecutiveViewportHitsRef.current >= 3) trigger();
       } else {
         consecutiveViewportHitsRef.current = 0;
       }
