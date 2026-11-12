@@ -218,6 +218,11 @@ export default function OrderConfirmation({ registrationId, subOrderIndex, custo
             </div>
           </section>}
         </div>
+        {record?.status !== "completed" && <div className="sticky bottom-0 z-20 border-t border-cyan-500/30 bg-[#080b12] p-3 shadow-[0_-10px_30px_rgba(0,0,0,0.7)]">
+          <button type="button" onClick={saveQuestions} disabled={saveMut.isPending} className="flex min-h-12 w-full items-center justify-center gap-2 rounded-xl bg-cyan-400 px-4 text-sm font-black text-slate-950 hover:bg-cyan-300 disabled:opacity-50">
+            <Save className="h-5 w-5"/>{saveMut.isPending ? "SALVANDO..." : "SALVAR EDIÇÕES DAS PERGUNTAS"}
+          </button>
+        </div>}
       </div>
     </div>,
     document.body
