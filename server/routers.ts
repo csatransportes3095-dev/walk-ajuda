@@ -68,6 +68,7 @@ import { transportesRouter } from "./routers/transportes";
 import { locadoraRouter } from "./routers/locadora";
 import { h2AssistantRouter } from "./routers/h2Assistant";
 import { h2AdsRouter } from "./routers/h2ads";
+import { h2AndroidRouter } from "./routers/h2Android";
 import { adminAuthenticatorRouter } from "./routers/adminAuthenticator";
 import { h2bicoRouter } from "./routers/h2bico";
 import { photoConfirmationRouter } from "./routers/photoConfirmation";
@@ -471,6 +472,7 @@ export const appRouter = router({
   locadora: locadoraRouter,
   h2Assistant: h2AssistantRouter,
   h2Ads: h2AdsRouter,
+  h2Android: h2AndroidRouter,
   loans: loanRouter,
   apk: apkRouter,
   customerPassword: customerPasswordRouter,

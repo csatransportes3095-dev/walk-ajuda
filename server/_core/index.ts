@@ -27,6 +27,7 @@ import { broadcastEmailHandler } from "../broadcastEmailHandler";
 import { registerPingRoute } from "./pingRoute";
 import { registerRaffleIntegrityRoutes } from "../raffleIntegrityRoutes";
 import { registerH2AdsWorkerRoute } from "../h2adsWorkerRoute";
+import { registerH2AndroidAgentRoutes } from "../h2AndroidAgentRoute";
 import { registerFipeCatalogRoutes } from "../fipeCatalogProxy";
 import { registerH2FaceRoutes } from "../h2FaceRoute";
 import { registerH2BicoPhotoRoutes } from "../h2bicoPhotoRoute";
@@ -254,6 +255,10 @@ async function startServer() {
     next();
   });
   // Keep gate before uploads, worker routes, storage proxies, tRPC and HTML fallback.
+  // Only the independently authenticated H2 Android agent endpoints bypass the
+  // site-access screen. Every other site route still passes through the gateway.
+  app.use("/api/h2-android/agent", express.json({ limit: "24kb" }));
+  registerH2AndroidAgentRoutes(app);
   app.use(createSiteAccessGateway());
   const server = createServer(app);
   // Recuperação automática e idempotente do agendamento encerrado por engano.
