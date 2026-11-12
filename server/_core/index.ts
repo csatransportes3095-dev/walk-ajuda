@@ -255,6 +255,10 @@ async function startServer() {
     next();
   });
   // Keep gate before uploads, worker routes, storage proxies, tRPC and HTML fallback.
+  // Only the independently authenticated H2 Android agent endpoints bypass the
+  // site-access screen. Every other site route still passes through the gateway.
+  app.use("/api/h2-android/agent", express.json({ limit: "24kb" }));
+  registerH2AndroidAgentRoutes(app);
   app.use(createSiteAccessGateway());
   const server = createServer(app);
   // Recuperação automática e idempotente do agendamento encerrado por engano.
@@ -444,7 +448,6 @@ async function startServer() {
   // ser apagada nem por uma aba antiga do painel administrativo.
   registerRaffleIntegrityRoutes(app);
   registerH2AdsWorkerRoute(app);
-  registerH2AndroidAgentRoutes(app);
   registerFipeCatalogRoutes(app);
   // Garantir charset UTF-8 em todas as respostas para evitar quebra de encoding
   app.use((_req, res, next) => {
