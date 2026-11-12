@@ -37,7 +37,7 @@ export async function androidDb() {
       updatedAt TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP,
       INDEX idx_android_proxy_available (status, id)
     ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4`));
-    await db.execute(sql.raw(`CREATE TABLE IF NOT EXISTS h2_android_agents (
+    await db.execute(sql.raw(`CREATE TABLE IF NOT EXISTS h2_android_native_agents_v2 (
       id VARCHAR(36) NOT NULL PRIMARY KEY,
       label VARCHAR(80) NOT NULL,
       tokenHash CHAR(64) NOT NULL UNIQUE,
@@ -91,7 +91,7 @@ const idSchema = z.object({ id: z.string().uuid() }).strict();
 
 async function onlineAgent(db: Awaited<ReturnType<typeof androidDb>>) {
   const list = rows(await db.execute(sql`
-    SELECT id FROM h2_android_agents
+    SELECT id FROM h2_android_native_agents_v2
     WHERE revoked = 0 AND lastSeenAt >= DATE_SUB(NOW(), INTERVAL 75 SECOND)
     ORDER BY lastSeenAt DESC LIMIT 1
   `));
@@ -105,11 +105,11 @@ export const h2AndroidRouter = router({
       db.execute(sql`SELECT p.id, p.label, p.state, p.observedIp, p.lastError,
         p.createdAt, a.label AS agentLabel, x.id AS proxyId
         FROM h2_android_native_profiles p
-        JOIN h2_android_agents a ON a.id = p.agentId
+        JOIN h2_android_native_agents_v2 a ON a.id = p.agentId
         JOIN h2_android_proxies x ON x.id = p.proxyId
         ORDER BY p.createdAt DESC`),
       db.execute(sql`SELECT id, label, computerName, version, lastSeenAt, revoked
-        FROM h2_android_agents ORDER BY createdAt DESC LIMIT 10`),
+        FROM h2_android_native_agents_v2 ORDER BY createdAt DESC LIMIT 10`),
       db.execute(sql`SELECT status, COUNT(*) AS total FROM h2_android_proxies GROUP BY status`),
     ]);
     const counts = { available: 0, assigned: 0 };
@@ -184,7 +184,7 @@ export const h2AndroidRouter = router({
 
   revokeAgent: adminProcedure.input(idSchema).mutation(async ({ input }) => {
     const db = await androidDb();
-    await db.execute(sql`UPDATE h2_android_agents SET revoked=1 WHERE id=${input.id}`);
+    await db.execute(sql`UPDATE h2_android_native_agents_v2 SET revoked=1 WHERE id=${input.id}`);
     return { success: true };
   }),
 
@@ -198,7 +198,7 @@ export const h2AndroidRouter = router({
     const id = randomUUID();
     await db.transaction(async tx => {
       // Serialize commands per agent; enforce concurrency with no silent overbooking.
-      const agentLock = rows(await tx.execute(sql`SELECT id FROM h2_android_agents
+      const agentLock = rows(await tx.execute(sql`SELECT id FROM h2_android_native_agents_v2
         WHERE id=${agentId} AND revoked=0 FOR UPDATE`));
       if (!agentLock.length) throw new TRPCError({ code: "PRECONDITION_FAILED", message: "Agente desconectado ou revogado." });
       const active = rows(await tx.execute(sql`SELECT COUNT(*) AS total FROM h2_android_native_profiles
@@ -261,7 +261,7 @@ export const h2AndroidRouter = router({
         throw new TRPCError({ code: "CONFLICT", message: "O Android não consta como ligado." });
       }
       if (action === "start" || action === "create") {
-        const locked = rows(await tx.execute(sql`SELECT id FROM h2_android_agents
+        const locked = rows(await tx.execute(sql`SELECT id FROM h2_android_native_agents_v2
           WHERE id=${existing.agentId} AND revoked=0 FOR UPDATE`));
         if (!locked.length) throw new TRPCError({ code: "PRECONDITION_FAILED", message: "Agente revogado." });
         const running = rows(await tx.execute(sql`
@@ -293,7 +293,7 @@ export async function claimAndroidAgent(code: string, computerName: string, vers
     const used = await tx.execute(sql`UPDATE h2_android_pairings SET usedAt=NOW()
       WHERE codeHash=${hash(code)} AND usedAt IS NULL`);
     if (affected(used) !== 1) return null;
-    await tx.execute(sql`INSERT INTO h2_android_agents
+    await tx.execute(sql`INSERT INTO h2_android_native_agents_v2
       (id, label, tokenHash, computerName, version, lastSeenAt)
       VALUES (${id},${pairing.label},${hash(token)},
               ${computerName},${version},NOW())`);
@@ -305,7 +305,7 @@ export async function authenticateAndroidAgent(token: string) {
   if (!/^[a-f0-9]{64}$/.test(token)) return null;
   const db = await androidDb();
   const agents = rows(await db.execute(sql`
-    SELECT id FROM h2_android_agents WHERE tokenHash=${hash(token)} AND revoked=0 LIMIT 1
+    SELECT id FROM h2_android_native_agents_v2 WHERE tokenHash=${hash(token)} AND revoked=0 LIMIT 1
   `));
   return agents[0] ? String(agents[0].id) : null;
 }
@@ -313,7 +313,7 @@ export async function authenticateAndroidAgent(token: string) {
 export async function nextAndroidJob(agentId: string, computerName: string, version: string) {
   const db = await androidDb();
   return db.transaction(async tx => {
-    await tx.execute(sql`UPDATE h2_android_agents SET lastSeenAt=NOW(),
+    await tx.execute(sql`UPDATE h2_android_native_agents_v2 SET lastSeenAt=NOW(),
       computerName=${computerName}, version=${version}
       WHERE id=${agentId} AND revoked=0`);
     // At-least-once delivery. All agent operations must be idempotent.

@@ -27,7 +27,19 @@ function safe(handler: (req: Request, res: Response) => Promise<void>) {
   return (req: Request, res: Response) => {
     noStore(res);
     void handler(req, res).catch(error => {
-      console.error("[H2Android] worker:", error instanceof Error ? error.message : String(error));
+      // Never log raw SQL/parameters: token hashes and machine data can appear in ORM errors.
+      const info = (error && typeof error === "object") ? error as {
+        name?: string; code?: string; errno?: number;
+        cause?: { code?: string; errno?: number; sqlState?: string };
+      } : {};
+      const dbError = info.cause ?? {};
+      console.error("[H2Android] agent error", {
+        endpoint: req.path,
+        name: info.name || "UnknownError",
+        code: dbError.code || info.code || "UNKNOWN",
+        errno: dbError.errno ?? info.errno ?? null,
+        sqlState: dbError.sqlState || null,
+      });
       if (!res.headersSent) res.status(500).json({ error: "Falha interna no serviço H2 Android." });
     });
   };

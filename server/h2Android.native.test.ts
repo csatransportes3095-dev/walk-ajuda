@@ -4,6 +4,15 @@ import path from "node:path";
 const read = (file: string) => fs.readFileSync(path.resolve(process.cwd(), file), "utf8");
 
 describe("H2 Android native isolated architecture", () => {
+  it("isolates agent persistence from preexisting H2 Android legacy tables and logs no SQL parameters", () => {
+    const routerCode = read("server/routers/h2Android.ts");
+    const routeCode = read("server/h2AndroidAgentRoute.ts");
+    expect(routerCode).toContain("CREATE TABLE IF NOT EXISTS h2_android_native_agents_v2");
+    expect(routerCode).not.toMatch(/\bh2_android_agents\b/);
+    expect(routerCode).toContain("INSERT INTO h2_android_native_agents_v2");
+    expect(routeCode).toContain('console.error("[H2Android] agent error"');
+    expect(routeCode).not.toContain("error.message : String(error)");
+  });
   it("offers a Windows double-click installer, not a .ps1 Notepad association", () => {
     const launcher = read("workers/windows/Install-H2Android.cmd");
     const installer = read("workers/windows/Install-H2Android.ps1");
