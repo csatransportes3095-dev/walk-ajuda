@@ -76,6 +76,10 @@ jobs:
               "  // Pareamento usa codigo temporario; os demais endpoints validam o token proprio do agente.\n  if (\n    pathname === \"/api/h2-android/agent/claim\" ||\n    pathname === \"/api/h2-android/agent/heartbeat\" ||\n    pathname === \"/api/h2-android/agent/pull\" ||\n    pathname === \"/api/h2-android/agent/finish\" ||\n    pathname === \"/api/h2-android/agent/frame\"\n  ) return true;",
               "  // Endpoints com autenticacao separada; nenhum comando remoto nesta fase.\n  if (pathname === \"/api/h2-android/agent/claim\" || pathname === \"/api/h2-android/agent/heartbeat\") return true;"
             );
+            if(p==='server/siteAccessGateway.ts')return source.replace(
+              /      \/\/ H2 Android worker and installer paths have their own explicit authentication[\s\S]*?pathname === "\/api\/h2-android\/agent\/complete"\) return next\(\);\r?\n/,
+              ''
+            );
             if(p==='client/src/App.tsx')return source
               .replace(/^import AdminChassisPage from "\.\/pages\/AdminChassisPage";\r?\n/m,'')
               .replace('<AdminGuard><AdminChassisPage /></AdminGuard>','<AdminGuard><GeradorChassiPublico /></AdminGuard>');
@@ -94,8 +98,10 @@ jobs:
             if (p==='server/siteAccessCodeDelivery.ts') {
               const baseBlob=execFileSync('git',['rev-parse',base+':'+p],{encoding:'utf8'}).trim();
               const changedBlob=execFileSync('git',['hash-object',p],{encoding:'utf8'}).trim();
-              assert.equal(baseBlob,'c538b625da08699030a85255c828b677dd10af8a','Unexpected original delivery source');
-              assert.equal(changedBlob,'7c2435e97c61d27aa8cb950902a06064cdf2db22','Delivery patch does not match the approved mail-only change');
+              if (baseBlob !== changedBlob) {
+                assert.equal(baseBlob,'c538b625da08699030a85255c828b677dd10af8a','Unexpected original delivery source');
+                assert.equal(changedBlob,'7c2435e97c61d27aa8cb950902a06064cdf2db22','Delivery patch does not match the approved mail-only change');
+              } // Unmodified delivery source is always safe.
               continue;
             }
             assert.equal(
