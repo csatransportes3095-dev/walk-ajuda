@@ -75,8 +75,8 @@ export default function AdminH2Android() {
           <p className="text-xs text-slate-300">Código temporário, válido por 10 minutos:</p>
           <strong className="select-all break-all font-mono text-lg tracking-wider text-cyan-300">{pairCode}</strong>
         </div>}
-        <a href="/api/h2-android/windows-agent.ps1" download className="mt-3 inline-flex items-center gap-2 rounded-lg border border-cyan-500/40 px-4 py-2 text-sm font-bold text-cyan-200 hover:bg-cyan-500/10"><Download className="h-4 w-4"/> Baixar agente Windows (.ps1)</a>
-        <p className="mt-2 text-xs text-slate-400">Execute o agente PowerShell. A conexão permanece ativa enquanto o script estiver rodando.</p>
+        <a href="/api/h2-android/install-windows.ps1" download className="mt-3 inline-flex items-center gap-2 rounded-lg border border-cyan-500/40 px-4 py-2 text-sm font-bold text-cyan-200 hover:bg-cyan-500/10"><Download className="h-4 w-4"/> Baixar instalador automático Windows</a>
+        <p className="mt-2 text-xs text-slate-400">Execute o instalador PowerShell uma vez e informe o código. Ele prepara o agente e cria um atalho de inicialização automática no seu Windows.</p>
         <div className="mt-3 space-y-2">
           {(data?.agents ?? []).map(a=><div key={a.id} className="flex flex-wrap items-center justify-between gap-2 rounded-lg border border-white/10 p-3">
             <div><div className="font-semibold">{a.label} — {a.computerName || "Aguardando"}</div>
@@ -111,7 +111,7 @@ export default function AdminH2Android() {
             <button disabled={busy || !online || !["stopped","error"].includes(p.state)} onClick={()=>command.mutate({id:p.id,action:"start"})} className="flex items-center justify-center gap-1 rounded-lg border border-emerald-400/25 p-2 text-xs font-bold text-emerald-300 disabled:opacity-30"><Play className="h-4 w-4"/> Iniciar</button>
             <button disabled={busy || !online || p.state!=="running"} onClick={()=>command.mutate({id:p.id,action:"stop"})} className="flex items-center justify-center gap-1 rounded-lg border border-white/15 p-2 text-xs disabled:opacity-30"><Square className="h-4 w-4"/> Parar</button>
             <button disabled={busy || !online || p.state!=="error"} onClick={()=>command.mutate({id:p.id,action:"retry"})} className="rounded-lg border border-amber-400/25 p-2 text-xs text-amber-200 disabled:opacity-30">Repetir criação</button>
-            <button disabled={busy || !online || p.state==="deleting"} onClick={()=>setConfirmDelete(p.id)} className="flex items-center justify-center gap-1 rounded-lg border border-red-400/25 p-2 text-xs text-red-300 disabled:opacity-30"><Trash2 className="h-4 w-4"/> Excluir</button>
+            <button disabled={busy || !online} onClick={()=>setConfirmDelete(p.id)} className="flex items-center justify-center gap-1 rounded-lg border border-red-400/25 p-2 text-xs text-red-300 disabled:opacity-30"><Trash2 className="h-4 w-4"/> Excluir</button>
           </div>
           {confirmDelete===p.id && <div className="mt-3 rounded-xl border border-red-500/30 bg-red-500/10 p-3 text-xs">
             <p>Excluir definitivamente o aparelho, todos os dados e o proxy reservado? Esta operação não pode ser desfeita.</p>
