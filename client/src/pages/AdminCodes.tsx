@@ -31,6 +31,7 @@ const ADMIN_SHORTCUTS: AdminShortcut[] = [
   { id: "transportes", href: "/adm/transportes", label: "Transportes", icon: Truck, tone: "bg-cyan-600/20 border-cyan-500/40 hover:bg-cyan-600/30", iconTone: "text-cyan-300" },
   { id: "h2-auto", href: "/admin/h2-auto", label: "H2 AUTO", icon: Bot, tone: "bg-cyan-500/20 border-cyan-400/40 hover:bg-cyan-500/30", iconTone: "text-cyan-300" },
   { id: 'schedule', href: '/admin/schedule', label: 'Agendamentos', icon: CalendarClock, tone: 'bg-fuchsia-600/20 border-fuchsia-500/30 hover:bg-fuchsia-600/30', iconTone: 'text-fuchsia-400' },
+  { id: 'h2-android', href: '/android', label: 'H2 ANDROID', icon: Monitor, tone: 'bg-cyan-500/15 border-cyan-400/40 hover:bg-cyan-500/25', iconTone: 'text-cyan-300' },
   { id: 'h2ads', href: '/h2ads', label: 'H2 ADS', icon: Monitor, tone: 'bg-[#F5B800]/15 border-[#F5B800]/40 hover:bg-[#F5B800]/25', iconTone: 'text-[#FFE37A]' },
   { id: 'similaridade', href: '/similaridade', label: 'Similaridade', icon: ScanFace, tone: 'bg-cyan-600/20 border-cyan-500/35 hover:bg-cyan-600/30', iconTone: 'text-cyan-300' },
   { id: 'h2bico', href: '/admin/h2bico', label: 'H2BICO', icon: DatabaseZap, tone: 'bg-emerald-600/20 border-emerald-500/35 hover:bg-emerald-600/30', iconTone: 'text-emerald-300' },
