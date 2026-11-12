@@ -7,6 +7,8 @@
 import type { Express, Request, Response as ExpressResponse } from "express";
 
 const FIPE_CARS_BASE = "https://fipe.parallelum.com.br/api/v2/cars";
+const CHEVROLET_MAKE_ID = "01988fb8-6018-7ad1-8c99-c70763fa578f";
+const GM_CHEVROLET_MAKE_ID = "01988fb8-609f-7bae-9741-4e15fb6e3bca";
 const CACHE_FRESH_MS = 24 * 60 * 60 * 1000;
 const CACHE_STALE_MS = 7 * 24 * 60 * 60 * 1000;
 const MAX_CACHE_KEYS = 500;
@@ -175,8 +177,8 @@ export function createFipeCatalogService(
       const pagination = result.pagination as Record<string, unknown> | undefined;
       const rows = result.data;
       if (!pagination || typeof pagination.pages !== "number" ||
-          !Number.isInteger(pagination.pages) || pagination.pages < 1 ||
-          pagination.pages > 20 || !Array.isArray(rows) || rows.length > 50) {
+          !Number.isInteger(pagination.pages) || pagination.pages < (endpoint === "models" ? 0 : 1) ||
+          pagination.pages > 20 || !Array.isArray(rows) || rows.length > 50 || (pagination.pages === 0 && rows.length !== 0)) {
         throw new FipeCatalogError(502, "FIPEX_INVALID", "Paginacao FIPE invalida.");
       }
       totalPages = pagination.pages;
@@ -211,11 +213,19 @@ export function createFipeCatalogService(
         // Do not retry 429: respect provider quota; serve stale cache if available.
         const source: FipeCatalogSource =
           resource.kind === "brands" || resource.kind === "brandModels" ? "fipex" : "upstream";
-        const data = resource.kind === "brands"
+        let data = resource.kind === "brands"
           ? await fetchFipeXPages("makes", {})
           : resource.kind === "brandModels"
             ? await fetchFipeXPages("models", { make_id: resource.brand.toLowerCase(), year: String(resource.year) })
             : await fetchUpstream(path, resource.kind === "models");
+        if (resource.kind === "brandModels" &&
+            resource.brand.toLowerCase() === CHEVROLET_MAKE_ID &&
+            data.length === 0) {
+          data = await fetchFipeXPages("models", {
+            make_id: GM_CHEVROLET_MAKE_ID,
+            year: String(resource.year),
+          });
+        }
         const timestamp = now();
         cache.delete(path);
         cache.set(path, {
