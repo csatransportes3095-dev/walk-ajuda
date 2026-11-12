@@ -22,7 +22,7 @@ function Api([string]$Endpoint, [object]$Body, [string]$Token = "") {
 }
 function Read-Token {
   if (!(Test-Path $TokenFile)) { return "" }
-  $Secure = Get-Content -Raw -Path $TokenFile | ConvertTo-SecureString
+  $Secure = (Get-Content -Raw -Path $TokenFile).Trim() | ConvertTo-SecureString
   $Bstr = [Runtime.InteropServices.Marshal]::SecureStringToBSTR($Secure)
   try { return [Runtime.InteropServices.Marshal]::PtrToStringBSTR($Bstr) }
   finally { [Runtime.InteropServices.Marshal]::ZeroFreeBSTR($Bstr) }
