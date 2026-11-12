@@ -3,6 +3,7 @@ import { siteSecurityRouter } from "./siteSecurityRouter";
 import { vinRegistryRouter } from "./routers/vinRegistry";
 import { vehicleUsageRouter } from "./routers/vehicleUsage";
 import { vehicleVaultRouter } from "./routers/vehicleVault";
+import { plateSimilarityRouter } from "./routers/plateSimilarity";
 import { sql } from "drizzle-orm";
 import { cnhCodeSchema, globalOrderGroupSchema, resolveOrderGroupLink, loginOptionalFields, cleanLoginText, escapeLoginHtml } from '../shared/orderLoginPresentation';
 import { readOrderLoginDefaults, saveOrderGroupDefault, canReadOrderLoginExtras } from './orderLoginDefaults';
@@ -454,6 +455,7 @@ export const appRouter = router({
   vinRegistry: vinRegistryRouter,
   vehicleUsage: vehicleUsageRouter,
   vehicleVault: vehicleVaultRouter,
+  plateSimilarity: plateSimilarityRouter,
   system: systemRouter,
   optionPriceModels: optionPriceModelsRouter,
   globalPromotion: globalPromotionRouter,
