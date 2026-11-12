@@ -197,6 +197,15 @@ export const h2AndroidRouter = router({
     if (!agentId) throw new TRPCError({ code: "PRECONDITION_FAILED", message: "Conecte o agente H2 Android no computador antes de criar." });
     const id = randomUUID();
     await db.transaction(async tx => {
+      // Serialize commands per agent; enforce concurrency with no silent overbooking.
+      const agentLock = rows(await tx.execute(sql`SELECT id FROM h2_android_agents
+        WHERE id=${agentId} AND revoked=0 FOR UPDATE`));
+      if (!agentLock.length) throw new TRPCError({ code: "PRECONDITION_FAILED", message: "Agente desconectado ou revogado." });
+      const active = rows(await tx.execute(sql`SELECT COUNT(*) AS total FROM h2_android_profiles
+        WHERE agentId=${agentId} AND state IN ('queued','provisioning','starting','running')`));
+      if (Number(active[0]?.total || 0) >= H2_ANDROID_MAX_RUNNING) {
+        throw new TRPCError({ code: "PRECONDITION_FAILED", message: "Limite de cinco Androids em execução ou preparação." });
+      }
       const candidates = rows(await tx.execute(sql`
         SELECT id FROM h2_android_proxies WHERE status='available'
         ORDER BY id LIMIT 1 FOR UPDATE
@@ -252,8 +261,12 @@ export const h2AndroidRouter = router({
         throw new TRPCError({ code: "CONFLICT", message: "O Android não consta como ligado." });
       }
       if (action === "start" || action === "create") {
+        const locked = rows(await tx.execute(sql`SELECT id FROM h2_android_agents
+          WHERE id=${existing.agentId} AND revoked=0 FOR UPDATE`));
+        if (!locked.length) throw new TRPCError({ code: "PRECONDITION_FAILED", message: "Agente revogado." });
         const running = rows(await tx.execute(sql`
-          SELECT COUNT(*) AS total FROM h2_android_profiles WHERE state IN ('running','starting','provisioning')
+          SELECT COUNT(*) AS total FROM h2_android_profiles WHERE agentId=${existing.agentId}
+          AND state IN ('queued','running','starting','provisioning')
         `));
         if (Number(running[0]?.total || 0) >= H2_ANDROID_MAX_RUNNING) {
           throw new TRPCError({ code: "PRECONDITION_FAILED", message: "Limite de Androids simultâneos atingido." });
