@@ -70,8 +70,8 @@ function Wait-Boot([string]$Adb,[string]$Name,[int]$TimeoutSeconds=180) {
 function Check-Proxy([object]$Proxy) {
   if (!$Proxy -or $Proxy.protocol -ne "http") { throw "Somente proxy HTTP autenticado é aceito neste agente." }
   $Address = "http://$($Proxy.host):$($Proxy.port)"
-  $Credential = New-Object System.Management.Automation.PSCredential(
-    [string]$Proxy.username,(ConvertTo-SecureString ([string]$Proxy.password) -AsPlainText -Force))
+  $SecurePassword = ConvertTo-SecureString -String ([string]$Proxy.password) -AsPlainText -Force
+  $Credential = [System.Management.Automation.PSCredential]::new([string]$Proxy.username, $SecurePassword)
   # Explicitly test remote IP THROUGH the proxy before creating/starting an AVD.
   $Reply = Invoke-WebRequest -Uri "https://api.ipify.org?format=json" -Proxy $Address -ProxyCredential $Credential -TimeoutSec 25 -UseBasicParsing
   $Json = $Reply.Content | ConvertFrom-Json
@@ -158,7 +158,8 @@ if (!$Token) {
 Write-Host "H2 Android nativo: conectado a $Server. Ctrl+C para encerrar."
 while ($true) {
   try {
-    $Sdk = Android-Sdk
+    # Heartbeat must not depend on the Android SDK being installed. Pair first,
+    # then report missing SDK components as a job error, never as "offline".
     $Result = Api "/api/h2-android/agent/next" @{computerName=$env:COMPUTERNAME;version=$Version} $Token
     if ($Result.job) {
       $Job = $Result.job
@@ -167,6 +168,7 @@ while ($true) {
       $ErrorText = $null
       $ObservedIp = $null
       try {
+        $Sdk = Android-Sdk
         $ObservedIp = Run-Job $Job $Sdk
         $Success = $true
       } catch {
