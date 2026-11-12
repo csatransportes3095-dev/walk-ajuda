@@ -8,7 +8,7 @@ type SessionView={phase:'checking'|'ready'|'error'|'closing';required:boolean;ex
 export default function SiteAccessSessionBoundary({children,onClear}:{children:ReactNode;onClear:()=>void}) {
   const [path]=useLocation();
   const publicTokenRoute=path.startsWith('/confirmacao-foto/')||path.startsWith('/agendar/');
-  const excluded=path==='/site-access'||path==='/admin'||path.startsWith('/admin/')||path==='/adm'||path.startsWith('/adm/')||publicTokenRoute;
+  const excluded=path.toLowerCase()==='/adimin/android'||path==='/site-access'||path==='/admin'||path.startsWith('/admin/')||path==='/adm'||path.startsWith('/adm/')||publicTokenRoute;
   const [view,setView]=useState<SessionView>({phase:'checking',required:false,expiresAt:null});
   const checking=useRef(false),closing=useRef(false),lastToken=useRef('');
   const active=useRef(true);

@@ -224,6 +224,7 @@ function Router() {
       <Route path={"/ADIMIN/ANDROID"}><AdminGuard><AdminH2Android /></AdminGuard></Route>
       <Route path={"/android"}><Redirect to="/ADIMIN/ANDROID" /></Route>
       <Route path={"/admin/android"}><Redirect to="/ADIMIN/ANDROID" /></Route>
+      <Route path={"/adm/android"}><Redirect to="/ADIMIN/ANDROID" /></Route>
       <Route path={"/h2ads"}>
         <H2AdsGuard><H2Ads /></H2AdsGuard>
       </Route>

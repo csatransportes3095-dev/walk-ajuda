@@ -4,6 +4,19 @@ import path from "node:path";
 const read = (file: string) => fs.readFileSync(path.resolve(process.cwd(), file), "utf8");
 
 describe("H2 Android native isolated architecture", () => {
+  it("recognizes /ADIMIN/ANDROID before the public customer invalid-route redirect", () => {
+    const guard = read("client/public/route-fallback-guard-v1.js");
+    const indexHtml = read("client/index.html");
+    const root = read("client/src/main.tsx");
+    const boundary = read("client/src/components/SiteAccessSessionBoundary.tsx");
+    const app = read("client/src/App.tsx");
+    expect(guard).toContain("'/adimin/android'");
+    expect(guard).toContain("window.location.replace('/ADIMIN/ANDROID'");
+    expect(indexHtml).toContain("/route-fallback-guard-v1.js?v=20261112-adimin-android-canonical-v5");
+    expect(root).toContain('pathname === "/adimin/android"');
+    expect(boundary).toContain("path.toLowerCase()==='/adimin/android'");
+    expect(app).toContain('<Route path={"/ADIMIN/ANDROID"}><AdminGuard><AdminH2Android /></AdminGuard></Route>');
+  });
   const router = read("server/routers/h2Android.ts");
   const transport = read("server/h2AndroidAgentRoute.ts");
   const agent = read("workers/windows/H2AndroidAgent.ps1");
