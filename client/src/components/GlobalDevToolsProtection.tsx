@@ -7,7 +7,10 @@ import { isChassisAdminPath } from "@shared/chassisRoute";
 
 export default function GlobalDevToolsProtection() {
   const [location] = useLocation();
-  const excluded = location.startsWith("/admin") || isChassisAdminPath(location) || isH2AdsPath(location) || location === "/similaridade" || location === "/acompanhar";
+  // /adm/placa e uma rota protegida por AdminGuard, nao uma pagina publica.
+  // Evita falso bloqueio do Cofre sem alterar a protecao das demais rotas.
+  const isVehicleVaultAdminRoute = location.toLowerCase().replace(/\/+$/, "") === "/adm/placa";
+  const excluded = isVehicleVaultAdminRoute || location.startsWith("/admin") || isChassisAdminPath(location) || isH2AdsPath(location) || location === "/similaridade" || location === "/acompanhar";
   const settingsQuery = trpc.settings.getAll.useQuery(undefined, {
     enabled: !excluded,
     staleTime: 0,
