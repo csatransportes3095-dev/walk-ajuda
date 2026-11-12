@@ -54,7 +54,7 @@ export async function androidDb() {
       usedAt DATETIME NULL,
       createdAt TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP
     ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4`));
-    await db.execute(sql.raw(`CREATE TABLE IF NOT EXISTS h2_android_profiles (
+    await db.execute(sql.raw(`CREATE TABLE IF NOT EXISTS h2_android_native_profiles (
       id VARCHAR(36) NOT NULL PRIMARY KEY,
       label VARCHAR(80) NOT NULL,
       agentId VARCHAR(36) NOT NULL,
@@ -104,7 +104,7 @@ export const h2AndroidRouter = router({
     const [profilesResult, agentsResult, proxiesResult] = await Promise.all([
       db.execute(sql`SELECT p.id, p.label, p.state, p.observedIp, p.lastError,
         p.createdAt, a.label AS agentLabel, x.id AS proxyId
-        FROM h2_android_profiles p
+        FROM h2_android_native_profiles p
         JOIN h2_android_agents a ON a.id = p.agentId
         JOIN h2_android_proxies x ON x.id = p.proxyId
         ORDER BY p.createdAt DESC`),
@@ -201,7 +201,7 @@ export const h2AndroidRouter = router({
       const agentLock = rows(await tx.execute(sql`SELECT id FROM h2_android_agents
         WHERE id=${agentId} AND revoked=0 FOR UPDATE`));
       if (!agentLock.length) throw new TRPCError({ code: "PRECONDITION_FAILED", message: "Agente desconectado ou revogado." });
-      const active = rows(await tx.execute(sql`SELECT COUNT(*) AS total FROM h2_android_profiles
+      const active = rows(await tx.execute(sql`SELECT COUNT(*) AS total FROM h2_android_native_profiles
         WHERE agentId=${agentId} AND state IN ('queued','provisioning','starting','running')`));
       if (Number(active[0]?.total || 0) >= H2_ANDROID_MAX_RUNNING) {
         throw new TRPCError({ code: "PRECONDITION_FAILED", message: "Limite de cinco Androids em execução ou preparação." });
@@ -217,7 +217,7 @@ export const h2AndroidRouter = router({
         WHERE id=${proxyId} AND status='available'
       `);
       if (affected(update) !== 1) throw new TRPCError({ code: "CONFLICT", message: "Proxy reservado por outra operação." });
-      await tx.execute(sql`INSERT INTO h2_android_profiles (id,label,agentId,proxyId,state)
+      await tx.execute(sql`INSERT INTO h2_android_native_profiles (id,label,agentId,proxyId,state)
         VALUES (${id}, ${input.label}, ${agentId}, ${proxyId}, 'queued')`);
       await tx.execute(sql`INSERT INTO h2_android_jobs (profileId,agentId,action,state)
         VALUES (${id}, ${agentId}, 'create', 'queued')`);
@@ -229,7 +229,7 @@ export const h2AndroidRouter = router({
     label: z.string().trim().min(2).max(80),
   })).mutation(async ({ input }) => {
     const db = await androidDb();
-    await db.execute(sql`UPDATE h2_android_profiles SET label=${input.label} WHERE id=${input.id}`);
+    await db.execute(sql`UPDATE h2_android_native_profiles SET label=${input.label} WHERE id=${input.id}`);
     return { success: true };
   }),
 
@@ -239,7 +239,7 @@ export const h2AndroidRouter = router({
     const db = await androidDb();
     return db.transaction(async tx => {
       const existing = rows(await tx.execute(sql`
-        SELECT id, agentId, state FROM h2_android_profiles WHERE id=${input.id} FOR UPDATE
+        SELECT id, agentId, state FROM h2_android_native_profiles WHERE id=${input.id} FOR UPDATE
       `))[0];
       if (!existing) throw new TRPCError({ code: "NOT_FOUND", message: "Android não encontrado." });
       const pending = rows(await tx.execute(sql`
@@ -265,7 +265,7 @@ export const h2AndroidRouter = router({
           WHERE id=${existing.agentId} AND revoked=0 FOR UPDATE`));
         if (!locked.length) throw new TRPCError({ code: "PRECONDITION_FAILED", message: "Agente revogado." });
         const running = rows(await tx.execute(sql`
-          SELECT COUNT(*) AS total FROM h2_android_profiles WHERE agentId=${existing.agentId}
+          SELECT COUNT(*) AS total FROM h2_android_native_profiles WHERE agentId=${existing.agentId}
           AND state IN ('queued','running','starting','provisioning')
         `));
         if (Number(running[0]?.total || 0) >= H2_ANDROID_MAX_RUNNING) {
@@ -273,7 +273,7 @@ export const h2AndroidRouter = router({
         }
       }
       const state = action === "delete" ? "deleting" : action === "stop" ? "stopping" : action === "start" ? "starting" : "queued";
-      await tx.execute(sql`UPDATE h2_android_profiles SET state=${state}, lastError=NULL WHERE id=${input.id}`);
+      await tx.execute(sql`UPDATE h2_android_native_profiles SET state=${state}, lastError=NULL WHERE id=${input.id}`);
       await tx.execute(sql`INSERT INTO h2_android_jobs (profileId,agentId,action,state)
         VALUES (${input.id}, ${existing.agentId}, ${action}, 'queued')`);
       return { queued: true };
@@ -330,11 +330,11 @@ export async function nextAndroidJob(agentId: string, computerName: string, vers
       WHERE id=${job.id} AND state='queued'`);
     if (affected(claimed) !== 1) return { job: null };
     if (job.action === "create") {
-      await tx.execute(sql`UPDATE h2_android_profiles SET state='provisioning'
+      await tx.execute(sql`UPDATE h2_android_native_profiles SET state='provisioning'
         WHERE id=${job.profileId} AND state<>'deleting'`);
     }
     const proxyRow = rows(await tx.execute(sql`SELECT x.encryptedPayload FROM h2_android_proxies x
-      JOIN h2_android_profiles p ON p.proxyId=x.id
+      JOIN h2_android_native_profiles p ON p.proxyId=x.id
       WHERE p.id=${job.profileId} AND p.agentId=${agentId}
       LIMIT 1`))[0];
     if (!proxyRow) throw new Error("Proxy exclusivo da instância ausente.");
@@ -364,12 +364,12 @@ export async function finishAndroidJob(
       // Remove the proxy permanently ONLY after local AVD/data deletion succeeded.
       await tx.execute(sql`DELETE FROM h2_android_proxies WHERE profileId=${job.profileId}`);
       await tx.execute(sql`DELETE FROM h2_android_jobs WHERE profileId=${job.profileId}`);
-      await tx.execute(sql`DELETE FROM h2_android_profiles WHERE id=${job.profileId}`);
+      await tx.execute(sql`DELETE FROM h2_android_native_profiles WHERE id=${job.profileId}`);
       return { accepted: true };
     }
     const state = !input.success ? (job.action === "delete" ? "deleting" : "error") :
       job.action === "stop" ? "stopped" : "running";
-    await tx.execute(sql`UPDATE h2_android_profiles
+    await tx.execute(sql`UPDATE h2_android_native_profiles
       SET state=${state}, lastError=${error},
           observedIp=${input.observedIp?.slice(0,64) || null}
       WHERE id=${job.profileId} AND agentId=${agentId}`);
