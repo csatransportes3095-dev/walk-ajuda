@@ -6,7 +6,7 @@ param(
   [string]$PairCode = ""
 )
 $ErrorActionPreference = "Stop"
-$Version = "1.0.2"
+$Version = "1.0.3"
 $Base = Join-Path $env:LOCALAPPDATA "H2AndroidNative"
 $AvdHome = Join-Path $Base "avd"
 $TokenFile = Join-Path $Base "agent.secure"
@@ -102,6 +102,46 @@ function Check-Proxy([object]$Proxy) {
   if ([string]$Json.ip -notmatch '^[0-9a-fA-F:.]+$') { throw "O proxy não informou um IP válido." }
   return [string]$Json.ip
 }
+# This helper reports the real avdmanager failure instead of a generic error.
+# It changes only the fresh H2_<UUID> AVD and never removes preexisting profiles.
+function New-H2NativeAvd {
+  param(
+    [string]$AvdManager,
+    [string]$Name,
+    [string]$Image,
+    [string]$AvdPath
+  )
+  $StdErrFile = Join-Path $Base ("avdmanager-" + [guid]::NewGuid().ToString("N") + ".log")
+  $OldPreference = $ErrorActionPreference
+  $ExitCode = -1
+  $StdOutText = ""
+  $StdErrText = ""
+  try {
+    $ErrorActionPreference = "Continue"
+    # No fixed Pixel device ID: installed SDK packages vary by release.
+    # -p fixes the independent AVD data directory explicitly.
+    $StdOutText = ("no" | & $AvdManager create avd -n $Name -k $Image -p $AvdPath -f 2> $StdErrFile | Out-String)
+    $ExitCode = $LASTEXITCODE
+  } catch {
+    $StdErrText = $_.Exception.Message
+  } finally {
+    $ErrorActionPreference = $OldPreference
+    if (Test-Path -LiteralPath $StdErrFile) {
+      $StdErrText += " " + (Get-Content -LiteralPath $StdErrFile -Raw -ErrorAction SilentlyContinue)
+      Remove-Item -LiteralPath $StdErrFile -Force -ErrorAction SilentlyContinue
+    }
+  }
+  if ($ExitCode -ne 0) {
+    $Details = ($StdOutText + " " + $StdErrText).Trim() -replace '[\r\n]+',' | '
+    if ($Details.Length -gt 330) { $Details = $Details.Substring(0,330) }
+    if (!$Details) { $Details = "Consulte os componentes e permissoes do Android SDK." }
+    throw "AVDManager nao criou o Android (codigo $ExitCode): $Details"
+  }
+  if (!(Test-Path -LiteralPath (Join-Path $AvdPath "config.ini"))) {
+    throw "AVDManager terminou sem config.ini na pasta exclusiva da instancia. Verifique permissoes do Windows."
+  }
+}
+
 function Run-Job([object]$Job,[string]$Sdk) {
   $Name = Avd-Name ([string]$Job.profileId)
   $Adb = Join-Path $Sdk "platform-tools\adb.exe"
@@ -113,22 +153,17 @@ function Run-Job([object]$Job,[string]$Sdk) {
   $Serial = Adb-Serial $Adb $Name
   switch ([string]$Job.action) {
     "create" {
-      if (!(Test-Path (Join-Path $AvdHome "$Name.avd"))) {
-        # No clone: build fresh AVD with a unique writable userdata image.
+      $AvdPath = Join-Path $AvdHome "$Name.avd"
+      if (!(Test-Path -LiteralPath $AvdPath)) {
+        # No clone: create an AVD with a unique writable userdata directory.
         $PackageDir = Join-Path $Sdk "system-images\android-35\google_apis_playstore\x86_64"
-        if (!(Test-Path $PackageDir)) { throw "Imagem Play Store Android 35 x86_64 não instalada no SDK." }
-        $OriginalPreference = $ErrorActionPreference
-        $AvdExitCode = -1
-        try {
-          $ErrorActionPreference = "SilentlyContinue"
-          "no" | & $AvdManager create avd -n $Name -k $Image -d "pixel_6" -f 2>$null | Out-Null
-          $AvdExitCode = $LASTEXITCODE
-        } finally {
-          $ErrorActionPreference = $OriginalPreference
+        if (!(Test-Path -LiteralPath $PackageDir)) {
+          throw "Imagem Play Store Android 35 x86_64 ausente no SDK. Instale a imagem antes de repetir."
         }
-        if ($AvdExitCode -ne 0 -or !(Test-Path (Join-Path $AvdHome "$Name.avd"))) {
-          throw "Falha ao criar Android virtual individual."
-        }
+        New-H2NativeAvd -AvdManager $AvdManager -Name $Name -Image $Image -AvdPath $AvdPath
+      } elseif (!(Test-Path -LiteralPath (Join-Path $AvdPath "config.ini"))) {
+        # Do not overwrite/delete partial data automatically.
+        throw "Pasta parcial do teste1 encontrada sem config.ini. O agente preservou os dados; verifique o SDK."
       }
       if (!$Serial) {
         # Proxy credentials are passed to Android Emulator, not to the website.
@@ -187,7 +222,7 @@ if (!$Token) {
   Save-Token $Token
   Write-Host "Agente H2 Android pareado com sucesso."
 }
-Write-Host "H2 Android nativo: verificando autenticacao com $Server..."
+Write-Host "H2 Android $Version: verificando autenticacao com $Server..."
 $Online = $false
 while ($true) {
   try {
