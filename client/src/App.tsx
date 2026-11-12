@@ -221,8 +221,9 @@ function Router() {
       <Route path={"/transpostes"}><Redirect to="/adm/transportes" /></Route>
       <Route path={"/admin/transportes"}><Redirect to="/adm/transportes" /></Route>
       <Route path={"/recuperarsenha"} component={RecoveryRoute} />
-      <Route path={"/android"}><AdminGuard><AdminH2Android /></AdminGuard></Route>
-      <Route path={"/admin/android"}><AdminGuard><AdminH2Android /></AdminGuard></Route>
+      <Route path={"/ADIMIN/ANDROID"}><AdminGuard><AdminH2Android /></AdminGuard></Route>
+      <Route path={"/android"}><Redirect to="/ADIMIN/ANDROID" /></Route>
+      <Route path={"/admin/android"}><Redirect to="/ADIMIN/ANDROID" /></Route>
       <Route path={"/h2ads"}>
         <H2AdsGuard><H2Ads /></H2AdsGuard>
       </Route>
@@ -444,7 +445,7 @@ function AppContent() {
   const [location] = useLocation();
   const isGeradorChassiRoute = isChassisAdminPath(location);
   const isVehicleUsageAdminRoute = location.toLowerCase() === "/adm/placa";
-  const isAdminRoute = (location === "/android" || location === "/android/") || location.startsWith("/admin") || location.toLowerCase() === "/adm" || location.toLowerCase().startsWith("/adm/") || isGeradorChassiRoute || isVehicleUsageAdminRoute || location.toLowerCase() === "/transpostes";
+  const isAdminRoute = (location.toUpperCase() === "/ADIMIN/ANDROID" || location === "/android" || location === "/android/") || location.startsWith("/admin") || location.toLowerCase() === "/adm" || location.toLowerCase().startsWith("/adm/") || isGeradorChassiRoute || isVehicleUsageAdminRoute || location.toLowerCase() === "/transpostes";
   const isH2AdsRoute = isH2AdsPath(location);
   const isSimilarityRoute = location.toLowerCase() === "/similaridade";
   const isTrackingRoute = location === "/acompanhar";
