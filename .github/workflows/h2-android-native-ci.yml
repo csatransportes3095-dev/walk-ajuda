@@ -31,7 +31,7 @@ jobs:
       - name: Verify H2 Android TypeScript (baseline has unrelated errors)
         run: |
           pnpm run check > h2-android-tsc.log 2>&1 || {
-            if grep -E '^([^[:space:]]+/)?(AdminH2Android|h2Android|h2AndroidAgentRoute)\\.(tsx?|jsx?)\\([0-9]+,[0-9]+\\): error' h2-android-tsc.log; then
+            if grep -E '^([^[:space:]]+/)?(AdminH2Android|h2Android|h2AndroidAgentRoute)\.(tsx?|jsx?)\([0-9]+,[0-9]+\): error' h2-android-tsc.log; then
               echo "H2 Android TypeScript errors detected."
               exit 1
             fi
