@@ -95,7 +95,7 @@ export default function PlateSimilarityPanel() {
         new Date(r.checkedAt).toLocaleString("pt-BR")
       ])
     ];
-    const csv="\\uFEFF"+cells.map(row=>row.map(c=>'"'+String(c).replace(/"/g,'""')+'"').join(";")).join("\\r\\n");
+    const csv="\uFEFF"+cells.map(row=>row.map(c=>'"'+String(c).replace(/"/g,'""')+'"').join(";")).join("\r\n");
     const url=URL.createObjectURL(new Blob([csv],{type:"text/csv;charset=utf-8"}));
     const anchor=document.createElement("a");anchor.href=url;
     anchor.download="consultas-"+current.basePlate+"-"+current.id+".csv";
