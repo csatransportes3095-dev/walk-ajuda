@@ -79,7 +79,7 @@ if (!$HasToken) {
   if (!$PairCode) { $PairCode = Read-Host "Digite o codigo de pareamento do ADM H2 Android" }
   $PairCode = $PairCode.Trim()
   if ($PairCode -notmatch '^[a-fA-F0-9]{24}$') { throw "Codigo de pareamento invalido." }
-  $Body = @{ code=$PairCode;computerName=$env:COMPUTERNAME;version="1.2.0-single-avd" } | ConvertTo-Json -Compress
+  $Body = @{ code=$PairCode;computerName=$env:COMPUTERNAME;version="1.2.1-android-proxy-guard" } | ConvertTo-Json -Compress
   $Claim = Invoke-RestMethod -Uri ($Server + "/api/h2-android/agent/claim") -Method Post -ContentType "application/json" -Body $Body -TimeoutSec 35 -MaximumRedirection 0
   if ([string]$Claim.token -notmatch '^[a-f0-9]{64}$') { throw "Pareamento nao confirmado no servidor." }
   ConvertTo-SecureString -String ([string]$Claim.token) -AsPlainText -Force |

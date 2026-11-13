@@ -201,11 +201,12 @@ export default function AdminH2Android() {
           <div className="flex items-start justify-between gap-2">
             <div><h3 className="font-extrabold">{p.label}</h3><p className="mt-1 text-xs text-slate-400">Proxy #{p.proxyId} • {p.agentLabel}</p>
             <p className="mt-1 break-all text-xs font-medium text-violet-200">{p.proxyEndpoint ? `${p.proxyEndpoint.protocol} ${p.proxyEndpoint.host}:${p.proxyEndpoint.port}` : "Dados do proxy indisponíveis"}</p>
-            <p className="mt-1 text-xs text-slate-400">{p.state==="running" && p.observedIp ? "IP externo verificado pelo agente" : p.state==="error" ? "Falha de inicialização; proxy permanece reservado" : ["provisioning","queued","starting"].includes(p.state) ? "Proxy reservado • aguardando validação no Windows" : "Proxy reservado • sem verificação recente dentro do Android"}</p></div>
+            <p className="mt-1 text-xs text-amber-200">{p.state==="running" ? "Rede do Android NÃO validada. O teste do Windows não comprova o IP usado pelos aplicativos." : p.state==="error" ? "Falha de inicialização; proxy permanece reservado" : ["provisioning","queued","starting"].includes(p.state) ? "Proxy reservado • validação da rede do Android pendente" : "Proxy reservado • IP do Android não verificado"}</p></div>
             <MonitorSmartphone className="h-6 w-6 text-cyan-300"/>
           </div>
           <p className="mt-3 text-sm text-slate-300">Estado: <b>{({queued:"Na fila",provisioning:"Preparando",running:"Ligado",stopped:"Desligado",starting:"Iniciando",stopping:"Parando",deleting:"Excluindo",error:"Erro"} as Record<string,string>)[p.state] || p.state}</b></p>
-          {p.observedIp && <p className="mt-1 text-xs text-emerald-300">IP externo testado: {p.observedIp} (não garante tráfego dos aplicativos)</p>}
+          {p.observedIp && <p className="mt-1 text-xs text-amber-200">IP do teste no Windows: {p.observedIp} — não é o IP confirmado do Android.</p>}
+          {p.state==="running" && <div role="alert" className="mt-2 rounded-lg border border-amber-400/50 bg-amber-400/10 p-3 text-xs font-semibold text-amber-100">Atenção: o proxy não garante que o navegador ou outros apps usem esse IP. Confira o IP público DENTRO do Android antes de acessar contas. Se aparecer o IP da sua conexão, clique em Parar.</div>}
           {p.lastError && <p className="mt-2 rounded-lg border border-amber-500/30 bg-amber-500/5 p-2 text-xs text-amber-200">{p.lastError}</p>}
           <div className="mt-4 grid grid-cols-2 gap-2">
             <button disabled={busy || !online || p.state!=="stopped"} onClick={()=>command.mutate({id:p.id,action:"start"})} className="flex items-center justify-center gap-1 rounded-lg border border-emerald-400/25 p-2 text-xs font-bold text-emerald-300 disabled:opacity-30"><Play className="h-4 w-4"/> Iniciar</button>

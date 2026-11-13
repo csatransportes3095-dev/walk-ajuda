@@ -4,6 +4,32 @@ import path from "node:path";
 const read = (file: string) => fs.readFileSync(path.resolve(process.cwd(), file), "utf8");
 
 describe("H2 Android native isolated architecture", () => {
+  it("configures Android's own HTTP proxy and stops the emulator if it cannot be verified", () => {
+    const agent = read("workers/windows/H2AndroidAgent.ps1");
+    const installer = read("workers/windows/Install-H2Android.ps1");
+    expect(agent).toContain("function Set-H2AndroidGlobalProxy");
+    expect(agent).toContain("function Assert-H2AndroidProxyOrStop");
+    expect(agent).toContain('10.0.2.2:$RelayPort');
+    expect(agent).toContain('"settings","put","global","http_proxy",$Endpoint');
+    expect(agent).toContain('"settings","get","global","http_proxy"');
+    expect(agent).toContain('Invoke-H2Adb -Executable $Adb -CommandArgs @("-s",$Serial,"emu","kill")');
+    expect(agent.split("Assert-H2AndroidProxyOrStop -Adb $Adb -Serial $BootSerial -RelayPort $RelayPort").length - 1).toBe(2);
+    expect(agent).toContain('1.2.1-android-proxy-guard');
+    expect(installer).toContain('1.2.1-android-proxy-guard');
+  });
+
+
+  it("never labels a host-only SOCKS5 test as Android app traffic validation", () => {
+    const admin = read("client/src/pages/AdminH2Android.tsx");
+    expect(admin).toContain("Rede do Android NÃO validada.");
+    expect(admin).toContain("IP do teste no Windows:");
+    expect(admin).toContain("não é o IP confirmado do Android");
+    expect(admin).toContain("Confira o IP público DENTRO do Android");
+    expect(admin).not.toContain("IP externo verificado pelo agente");
+    expect(admin).not.toContain('text-emerald-300">IP externo testado:');
+  });
+
+
   it("accepts long emulator completion errors instead of leaving Android preparing", () => {
     const route = read("server/h2AndroidAgentRoute.ts");
     const agent = read("workers/windows/H2AndroidAgent.ps1");
