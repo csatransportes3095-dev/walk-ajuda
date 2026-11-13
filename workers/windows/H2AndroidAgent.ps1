@@ -348,9 +348,13 @@ function Get-H2EmulatorProcesses {
   $NamePattern = [regex]::Escape($Name)
   # PowerShell single-quoted strings use ONE backslash for regex whitespace.
   $Pattern = '(?i)(?:^|\s)-avd\s+"?' + $NamePattern + '"?(?=\s|$)'
+  $DataPathPattern = '(?i)(?:^|[\\/])' + $NamePattern + '\.avd(?:[\\/]|$)'
   try {
     $Processes = @(Get-CimInstance -ClassName Win32_Process -Filter "Name='emulator.exe' OR Name='qemu-system-x86_64.exe'" -ErrorAction Stop)
-    return @($Processes | Where-Object { [string]$_.CommandLine -match $Pattern })
+    return @($Processes | Where-Object {
+      $Cmd = [string]$_.CommandLine
+      $Cmd -match $Pattern -or $Cmd -match $DataPathPattern
+    })
   } catch {
     throw "Nao foi possivel verificar processos Android no Windows; inicio bloqueado para evitar duplicacao."
   }
@@ -411,6 +415,12 @@ function Start-H2Emulator {
       }
       [void]$Proc.WaitForExit(2000)
       $Proc.Refresh()
+      if (Test-H2EmulatorProcess -Name $Name) {
+        # Emulator launcher may exit after spawning its QEMU child.
+        # Never start a second copy or report an error while child is alive.
+        Write-H2Status ("Android iniciou via processo filho: " + $Name)
+        return
+      }
       $Code = [string]$Proc.ExitCode
       $Details = Get-H2EmulatorDiagnostic -ErrorLog $ErrLog -OutputLog $OutLog
       Write-H2Status ("Falha Android " + $Name + "; codigo " + $Code + ". Log: " + $ErrLog)
