@@ -4,6 +4,20 @@ import path from "node:path";
 const read = (file: string) => fs.readFileSync(path.resolve(process.cwd(), file), "utf8");
 
 describe("H2 Android native isolated architecture", () => {
+  it("prevents duplicate agent loops and verifies silent installer startup before replacing it", () => {
+    const agent = read("workers/windows/H2AndroidAgent.ps1");
+    const installer = read("workers/windows/Install-H2Android.ps1");
+    expect(agent.match(/^\$Token = Read-Token$/gm)?.length).toBe(1);
+    expect(agent.match(/^while \(\$true\) \{$/gm)?.length).toBe(1);
+    expect(agent.match(/^function Run-Job\(/gm)?.length).toBe(1);
+    expect(agent).toContain('Write-H2Status "ONLINE"');
+    expect(installer).toContain("[System.Management.Automation.Language.Parser]::ParseFile");
+    expect(installer).toContain("H2AndroidAgent.previous.ps1");
+    expect(installer).toContain("Versao anterior restaurada");
+    expect(installer).toContain("O agente nao confirmou conexao online em 15 segundos.");
+    expect(installer).toContain("-WindowStyle Hidden");
+  });
+
   it("uses pt-BR and physical keyboard in all new AVDs, with hidden command windows", () => {
     const agentCode = read("workers/windows/H2AndroidAgent.ps1");
     const installerCode = read("workers/windows/Install-H2Android.ps1");
