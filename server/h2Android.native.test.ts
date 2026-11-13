@@ -4,6 +4,17 @@ import path from "node:path";
 const read = (file: string) => fs.readFileSync(path.resolve(process.cwd(), file), "utf8");
 
 describe("H2 Android native isolated architecture", () => {
+  it("bootstraps isolated free JDK when Android Studio JBR is unavailable", () => {
+    const code = read("workers/windows/H2AndroidAgent.ps1");
+    expect(code).toContain("function Set-H2AndroidJava");
+    expect(code).toContain("Android\\Android Studio\\jbr");
+    expect(code).toContain("api.adoptium.net/v3/assets/latest/21/hotspot");
+    expect(code).toContain("Get-FileHash -LiteralPath $ZipFile -Algorithm SHA256");
+    expect(code).toContain('$env:JAVA_HOME = $Selected');
+    expect(code).toContain('if ($Job.action -in @("create","delete")) { Set-H2AndroidJava }');
+    expect(code).not.toContain("setx JAVA_HOME");
+  });
+
   it("shows underlying AVDManager failure and checks independent config.ini", () => {
     const agent = read("workers/windows/H2AndroidAgent.ps1");
     expect(agent).toContain("function New-H2NativeAvd");
