@@ -212,6 +212,19 @@ describe("H2 Android native isolated architecture", () => {
     expect(agent).not.toContain("-read-only");
     expect(agent).toContain("Log local:");
   });
+  it("recovers only orphaned processes of the explicitly rebuilt test", () => {
+    const agent = read("workers/windows/H2AndroidAgent.ps1");
+    expect(agent).toContain("function Stop-H2OwnedEmulatorForRebuild");
+    expect(agent).toContain("Stop-H2OwnedEmulatorForRebuild -Adb $Adb -Name $Name -Serial $Serial");
+    expect(agent).toContain("Get-H2EmulatorProcesses -Name $Name");
+    expect(agent).toContain("Stop-Process -Id $ProcessId -Force");
+    expect(agent).toContain("CreationDate -eq");
+    expect(agent).toContain("Nao recriei nem apaguei dados");
+    expect(agent).toContain("Stop-H2SocksRelay -Name $Name");
+    expect(agent).toContain("Check-Proxy -Proxy $Job.proxy -Name $Name -ProxyId ([string]$Job.proxyId)");
+    expect(agent).not.toContain("taskkill /F /IM emulator.exe");
+  });
+
   it("requires explicit confirmation before recreating a failed test and preserves the SOCKS5 proxy", () => {
     const agent = read("workers/windows/H2AndroidAgent.ps1");
     const router = read("server/routers/h2Android.ts");
