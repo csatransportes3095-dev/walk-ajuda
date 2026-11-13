@@ -7,6 +7,7 @@ import {
   authenticateAndroidAgent,
   claimAndroidAgent,
   finishAndroidJob,
+  heartbeatAndroidAgent,
   nextAndroidJob,
 } from "./routers/h2Android";
 
@@ -81,6 +82,15 @@ export function registerH2AndroidAgentRoutes(app: Express) {
     if (!computerName || !version) { res.status(400).json({ error: "Identificação inválida." }); return; }
     const result = await nextAndroidJob(agentId, computerName, version);
     res.status(200).json(result);
+  }));
+  app.post("/api/h2-android/agent/heartbeat", safe(async (req, res) => {
+    const agentId = await authorized(req, res);
+    if (!agentId) return;
+    const computerName = stringField(req.body?.computerName, 120);
+    const version = stringField(req.body?.version, 32);
+    if (!computerName || !version) { res.status(400).json({ error: "Identificação inválida." }); return; }
+    const result = await heartbeatAndroidAgent(agentId, computerName, version);
+    res.status(result.accepted ? 200 : 401).json(result);
   }));
   app.post("/api/h2-android/agent/complete", safe(async (req, res) => {
     const agentId = await authorized(req, res);

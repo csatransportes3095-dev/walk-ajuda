@@ -664,6 +664,26 @@ $LogPath = Join-Path $Base "agent-status.log"
 function Write-H2Status([string]$Message) {
   try { Add-Content -LiteralPath $LogPath -Encoding UTF8 -Value ((Get-Date).ToString("s") + " " + $Message) } catch {}
 }
+function Start-H2JobHeartbeat([string]$HeartbeatServer,[string]$HeartbeatToken,[string]$HeartbeatComputer,[string]$HeartbeatVersion) {
+  $HeartbeatScript = {
+    param($Server,$Token,$ComputerName,$Version)
+    $Headers = @{ Authorization = "Bearer $Token" }
+    $Body = @{ computerName=$ComputerName;version=$Version } | ConvertTo-Json -Compress
+    for (;;) {
+      try {
+        Invoke-RestMethod -Uri ($Server + "/api/h2-android/agent/heartbeat") -Method Post `
+          -ContentType "application/json" -Headers $Headers -Body $Body -TimeoutSec 20 -MaximumRedirection 0 | Out-Null
+      } catch {}
+      Start-Sleep -Seconds 20
+    }
+  }
+  return (Start-Job -ScriptBlock $HeartbeatScript -ArgumentList $HeartbeatServer,$HeartbeatToken,$HeartbeatComputer,$HeartbeatVersion)
+}
+function Stop-H2JobHeartbeat([object]$HeartbeatJob) {
+  if (!$HeartbeatJob) { return }
+  try { Stop-Job -Job $HeartbeatJob -ErrorAction SilentlyContinue } catch {}
+  try { Remove-Job -Job $HeartbeatJob -ErrorAction SilentlyContinue } catch {}
+}
 Write-H2Status ("START " + $Version)
 $Token = Read-Token
 if (!$Token) {
@@ -690,13 +710,18 @@ while ($true) {
       $Success = $false
       $ErrorText = $null
       $ObservedIp = $null
+      $HeartbeatJob = $null
       try {
+        $HeartbeatJob = Start-H2JobHeartbeat -HeartbeatServer $Server -HeartbeatToken $Token `
+          -HeartbeatComputer $env:COMPUTERNAME -HeartbeatVersion $Version
         $Sdk = Android-Sdk
         $ObservedIp = Run-Job $Job $Sdk
         $Success = $true
       } catch {
         $ErrorText = [string]$_.Exception.Message
         Write-Warning $ErrorText
+      } finally {
+        Stop-H2JobHeartbeat -HeartbeatJob $HeartbeatJob
       }
       $Done = @{jobId=[long]$Job.id;success=$Success;error=$ErrorText;observedIp=$ObservedIp}
       [void](Api "/api/h2-android/agent/complete" $Done $Token)

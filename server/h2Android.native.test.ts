@@ -124,6 +124,17 @@ describe("H2 Android native isolated architecture", () => {
     expect(source).toContain("revoked: Number(a.revoked) === 1");
     expect(source).not.toContain("Date.now() - new Date(a.lastSeenAt).getTime()");
   });
+  it("keeps the Windows agent online while a long Android job is running", () => {
+    const source = read("server/routers/h2Android.ts");
+    const transport = read("server/h2AndroidAgentRoute.ts");
+    const agent = read("workers/windows/H2AndroidAgent.ps1");
+    expect(source).toContain("heartbeatAndroidAgent");
+    expect(source).toContain("SET lastSeenAt=NOW()");
+    expect(transport).toContain("/api/h2-android/agent/heartbeat");
+    expect(agent).toContain("Start-H2JobHeartbeat");
+    expect(agent).toContain("Stop-H2JobHeartbeat");
+    expect(agent).toContain("/api/h2-android/agent/heartbeat");
+  });
   it("uses canonical hostname for authenticated API calls and repairs existing agent without new code", () => {
     const agent = read("workers/windows/H2AndroidAgent.ps1");
     const installer = read("workers/windows/Install-H2Android.ps1");

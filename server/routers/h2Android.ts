@@ -370,6 +370,16 @@ export async function authenticateAndroidAgent(token: string) {
   return agents[0] ? String(agents[0].id) : null;
 }
 
+export async function heartbeatAndroidAgent(agentId: string, computerName: string, version: string) {
+  const db = await androidDb();
+  const result = await db.execute(sql`
+    UPDATE h2_android_native_agents_v2
+    SET lastSeenAt=NOW(), computerName=${computerName}, version=${version}
+    WHERE id=${agentId} AND revoked=0
+  `);
+  return { accepted: affected(result) === 1 };
+}
+
 export async function nextAndroidJob(agentId: string, computerName: string, version: string) {
   const db = await androidDb();
   return db.transaction(async tx => {
