@@ -19,8 +19,8 @@ describe("H2 Android native isolated architecture", () => {
     const agent = read("workers/windows/H2AndroidAgent.ps1");
     expect(agent).toContain("-RedirectStandardOutput $OutLog -RedirectStandardError $ErrLog");
     expect(agent).toContain("-FilePath $Emulator");
-    expect(agent).toContain("Get-Content -LiteralPath $ErrLog -Tail 14");
-    expect(agent).toContain("Get-Content -LiteralPath $OutLog -Tail 8");
+    expect(agent).toContain("Get-Content -LiteralPath $File -Tail 500");
+    expect(agent).toContain("function Get-H2EmulatorDiagnostic");
     expect(agent).not.toContain("$Info.RedirectStandardOutput = $true");
     expect(agent).not.toContain("$Info.RedirectStandardError = $true");
     expect(agent).not.toContain("$Proc.StandardOutput.ReadToEnd()");
