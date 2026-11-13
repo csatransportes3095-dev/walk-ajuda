@@ -386,7 +386,7 @@ function Start-H2Emulator {
   param([string]$Emulator,[string]$Sdk,[string]$Name,[string]$ProxyUri)
   if ($Name -notmatch '^H2_[a-fA-F0-9]{32}$') { throw "Nome de AVD invalido." }
   # Named mutex prevents separate agents racing on the same AVD.
-  $Mutex = New-Object System.Threading.Mutex($false,("Local\H2AndroidStart_" + $Name))
+  $Mutex = [System.Threading.Mutex]::new($false,("Local\H2AndroidStart_" + $Name))
   $Locked = $false
   try {
     try { $Locked = $Mutex.WaitOne(20000) }
@@ -895,7 +895,7 @@ while ($true) {
         $Sdk = Android-Sdk
         # One job per AVD across multiple Windows agent processes.
         $JobLockName = "Local\H2AndroidJob_" + (Avd-Name ([string]$Job.profileId))
-        $JobMutex = New-Object System.Threading.Mutex($false,$JobLockName)
+        $JobMutex = [System.Threading.Mutex]::new($false,$JobLockName)
         $JobLocked = $false
         try {
           try { $JobLocked = $JobMutex.WaitOne(10000) }
