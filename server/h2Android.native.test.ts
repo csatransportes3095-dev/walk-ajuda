@@ -182,7 +182,7 @@ describe("H2 Android native isolated architecture", () => {
   });
   it("captures emulator startup errors and retries without hardware acceleration", () => {
     const agent = read("workers/windows/H2AndroidAgent.ps1");
-    expect(agent).toContain("RedirectStandardError = $true");
+    expect(agent).toContain("-RedirectStandardError $ErrLog");
     expect(agent).toContain("-no-accel -gpu swiftshader_indirect");
     expect(agent).toContain("Tentando Android sem aceleracao de hardware");
     expect(agent).toContain("Ultimas linhas:");
