@@ -19,8 +19,8 @@ describe("H2 Android native isolated architecture", () => {
     const agent = read("workers/windows/H2AndroidAgent.ps1");
     expect(agent).toContain("-RedirectStandardOutput $OutLog -RedirectStandardError $ErrLog");
     expect(agent).toContain("-FilePath $Emulator");
-    expect(agent).toContain("Get-Content -LiteralPath $ErrLog -Tail 14");
-    expect(agent).toContain("Get-Content -LiteralPath $OutLog -Tail 8");
+    expect(agent).toContain("Get-Content -LiteralPath $File -Tail 500");
+    expect(agent).toContain("function Get-H2EmulatorDiagnostic");
     expect(agent).not.toContain("$Info.RedirectStandardOutput = $true");
     expect(agent).not.toContain("$Info.RedirectStandardError = $true");
     expect(agent).not.toContain("$Proc.StandardOutput.ReadToEnd()");
@@ -191,13 +191,15 @@ describe("H2 Android native isolated architecture", () => {
     expect(agent).not.toContain('throw "Falha ao criar Android virtual individual."');
     expect(agent).toContain('H2 Android ${Version}: verificando autenticacao');
   });
-  it("captures emulator startup errors and retries without hardware acceleration", () => {
+  it("reports actual emulator failures and retries only with a supported software GPU", () => {
     const agent = read("workers/windows/H2AndroidAgent.ps1");
     expect(agent).toContain("-RedirectStandardError $ErrLog");
-    expect(agent).toContain("-no-accel -gpu swiftshader_indirect");
-    expect(agent).toContain("Tentando Android sem aceleracao de hardware");
-    expect(agent).toContain("Ultimas linhas:");
-    expect(agent).toContain("Select-Object -Last 14");
+    expect(agent).toContain('function Get-H2EmulatorDiagnostic');
+    expect(agent).toContain('Select-Object -Last 3');
+    expect(agent).toContain('FATAL|PANIC|ERROR');
+    expect(agent).toContain('$StartAttempt "-gpu software"');
+    expect(agent).not.toContain('$StartAttempt "-no-accel -gpu swiftshader_indirect"');
+    expect(agent).toContain("Causa:");
     expect(agent).toContain("-verbose");
     expect(agent).toContain("Log local:");
   });
