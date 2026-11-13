@@ -217,7 +217,7 @@ export default function AdminH2Android() {
               title={!['stopped', 'error'].includes(p.state) ? "Disponivel quando o Android estiver parado ou em erro" : (data?.counts.available ?? 0)<1 ? "Nao existem proxies livres no cofre H2 Android" : "Selecionar proximo proxy livre do cofre"}
               className="col-span-2 flex items-center justify-center gap-2 rounded-lg border border-violet-400/35 bg-violet-400/10 p-2 text-sm font-bold text-violet-200 disabled:cursor-not-allowed disabled:opacity-30"
             ><RefreshCcw className="h-4 w-4" /> Trocar proxy automatico</button>
-            <button disabled={busy || !online || p.state!=="error"} onClick={()=>command.mutate({id:p.id,action:"retry"})} className="rounded-lg border border-amber-400/25 p-2 text-xs text-amber-200 disabled:opacity-30">Repetir criação</button>
+            <button disabled={busy || !online || p.state!=="error"} onClick={()=>{if(window.confirm("Recriar este Android de teste do zero? Os dados locais anteriores deste aparelho serão apagados. O proxy SOCKS5 vinculado será mantido.")) command.mutate({id:p.id,action:"retry"});}} className="rounded-lg border border-amber-400/25 p-2 text-xs text-amber-200 disabled:opacity-30">Recriar teste do zero</button>
             <button disabled={busy || !online} onClick={()=>setConfirmDelete(p.id)} className="flex items-center justify-center gap-1 rounded-lg border border-red-400/25 p-2 text-xs text-red-300 disabled:opacity-30"><Trash2 className="h-4 w-4"/> Excluir</button>
           </div>
           {confirmDelete===p.id && <div className="mt-3 rounded-xl border border-red-500/30 bg-red-500/10 p-3 text-xs">

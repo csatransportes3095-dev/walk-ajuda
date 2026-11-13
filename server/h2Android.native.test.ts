@@ -178,7 +178,7 @@ describe("H2 Android native isolated architecture", () => {
     expect(code).toContain("api.adoptium.net/v3/assets/latest/21/hotspot");
     expect(code).toContain("Get-FileHash -LiteralPath $ZipFile -Algorithm SHA256");
     expect(code).toContain('$env:JAVA_HOME = $Selected');
-    expect(code).toContain('if ($Job.action -in @("create","delete")) { Set-H2AndroidJava }');
+    expect(code).toContain('if ($Job.action -in @("create","rebuild","delete")) { Set-H2AndroidJava }');
     expect(code).not.toContain("setx JAVA_HOME");
   });
 
@@ -191,17 +191,41 @@ describe("H2 Android native isolated architecture", () => {
     expect(agent).not.toContain('throw "Falha ao criar Android virtual individual."');
     expect(agent).toContain('H2 Android ${Version}: verificando autenticacao');
   });
-  it("reports actual emulator failures and retries only with a supported software GPU", () => {
+  it("boots an AVD only once using a Windows mutex and correct process command matching", () => {
     const agent = read("workers/windows/H2AndroidAgent.ps1");
+    expect(agent).toContain("function Get-H2EmulatorProcesses");
+    expect(agent).toContain("function Test-H2EmulatorProcess");
+    expect(agent).toContain("H2AndroidStart_");
+    expect(agent).toContain("H2AndroidJob_");
+    expect(agent).toContain("[System.Threading.Mutex]::new");
+    expect(agent).toContain("$JobMutex.WaitOne(10000)");
+    expect(agent).toContain("Get-H2EmulatorProcesses -Name $Name");
+    expect(agent).toContain("$DataPathPattern");
+    expect(agent).toContain("Android iniciou via processo filho");
     expect(agent).toContain("-RedirectStandardError $ErrLog");
-    expect(agent).toContain('function Get-H2EmulatorDiagnostic');
+    expect(agent).toContain("function Get-H2EmulatorDiagnostic");
     expect(agent).toContain('Select-Object -Last 3');
-    expect(agent).toContain('FATAL|PANIC|ERROR');
-    expect(agent).toContain('$StartAttempt "-gpu software"');
-    expect(agent).not.toContain('$StartAttempt "-no-accel -gpu swiftshader_indirect"');
-    expect(agent).toContain("Causa:");
-    expect(agent).toContain("-verbose");
+    expect(agent).toContain("FATAL|PANIC|ERROR");
+    expect(agent.split("Start-Process -FilePath $Emulator").length - 1).toBe(1);
+    expect(agent).not.toContain('$StartAttempt "-gpu software"');
+    expect(agent).not.toContain('-no-accel -gpu swiftshader_indirect');
+    expect(agent).not.toContain("-read-only");
     expect(agent).toContain("Log local:");
+  });
+  it("requires explicit confirmation before recreating a failed test and preserves the SOCKS5 proxy", () => {
+    const agent = read("workers/windows/H2AndroidAgent.ps1");
+    const router = read("server/routers/h2Android.ts");
+    const admin = read("client/src/pages/AdminH2Android.tsx");
+    expect(router).toContain('input.action === "retry" ? "rebuild"');
+    expect(router).toContain('["create","rebuild","start"]');
+    expect(router).toContain("('create','rebuild','start')");
+    expect(agent).toContain('$Job.action -eq "rebuild"');
+    expect(agent).toContain('switch ($EffectiveAction)');
+    expect(agent).toContain('Test-H2EmulatorProcess -Name $Name');
+    expect(agent).toContain('Join-Path $AvdHome "$Name.avd"');
+    expect(admin).toContain("Recriar teste do zero");
+    expect(admin).toContain("window.confirm");
+    expect(admin).toContain("O proxy SOCKS5 vinculado será mantido");
   });
 
   it("does not mistake ADB port 5037 startup messages for a failed creation", () => {
