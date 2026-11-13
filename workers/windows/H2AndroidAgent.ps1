@@ -6,7 +6,7 @@ param(
   [string]$PairCode = ""
 )
 $ErrorActionPreference = "Stop"
-$Version = "1.0.3"
+$Version = "1.0.4"
 $Base = Join-Path $env:LOCALAPPDATA "H2AndroidNative"
 $AvdHome = Join-Path $Base "avd"
 $TokenFile = Join-Path $Base "agent.secure"
@@ -42,6 +42,84 @@ function Android-Sdk {
   }
   throw "Android SDK incompleto. Instale Emulator, Platform Tools e Command-line Tools no Android Studio."
 }
+# Java auto-discovery / one-time free JDK bootstrap for H2 Android only.
+# JAVA_HOME and PATH modifications stay local to this PowerShell agent.
+function Set-H2AndroidJava {
+  $Dirs = New-Object "System.Collections.Generic.List[string]"
+  foreach ($root in @($env:ProgramFiles, [Environment]::GetFolderPath("ProgramFilesX86"))) {
+    if ($root) {
+      $Dirs.Add((Join-Path $root "Android\Android Studio\jbr"))
+      $Dirs.Add((Join-Path $root "Android\Android Studio\jre"))
+    }
+  }
+  if ($env:LOCALAPPDATA) {
+    $Dirs.Add((Join-Path $env:LOCALAPPDATA "Programs\Android Studio\jbr"))
+  }
+  $Dirs.Add((Join-Path $Base "jdk21"))
+  foreach ($root in @($env:STUDIO_JDK, $env:JAVA_HOME, $env:JDK_HOME)) {
+    if ($root) { $Dirs.Add($root) }
+  }
+  $Selected = $null
+  foreach ($d in $Dirs) {
+    if ((Test-Path -LiteralPath (Join-Path $d "bin\java.exe")) -and
+        (Test-Path -LiteralPath (Join-Path $d "bin\javac.exe"))) {
+      $Selected = $d
+      break
+    }
+  }
+  if (!$Selected) {
+    $Cmd = Get-Command java.exe -ErrorAction SilentlyContinue
+    if ($Cmd -and $Cmd.Source) {
+      $Candidate = Split-Path -Parent (Split-Path -Parent $Cmd.Source)
+      if (Test-Path -LiteralPath (Join-Path $Candidate "bin\javac.exe")) {
+        $Selected = $Candidate
+      }
+    }
+  }
+  if (!$Selected) {
+    if (![Environment]::Is64BitOperatingSystem) {
+      throw "Java e Android Emulator exigem Windows de 64 bits."
+    }
+    $JdkDir = Join-Path $Base "jdk21"
+    if (Test-Path -LiteralPath $JdkDir) {
+      throw "Java H2 Android incompleto em pasta propria. Nenhum arquivo antigo foi apagado."
+    }
+    Write-Host "H2 Android: preparando Java 21 gratuito (Temurin), sem administrador..."
+    $ApiUrl = "https://api.adoptium.net/v3/assets/latest/21/hotspot?architecture=x64&image_type=jdk&os=windows&vendor=eclipse"
+    $Assets = @(Invoke-RestMethod -Uri $ApiUrl -TimeoutSec 45)
+    $JdkAsset = $Assets | Where-Object {
+      $_.binary.package.link -match '^https://github[.]com/adoptium/temurin21-binaries/releases/download/' -and
+      $_.binary.package.name -match '[.]zip$' -and
+      $_.binary.package.checksum -match '^[0-9a-fA-F]{64}$'
+    } | Select-Object -First 1
+    if (!$JdkAsset) { throw "Nao foi possivel obter um pacote Java confiavel no Adoptium." }
+    $ZipFile = Join-Path $Base ("jdk21-" + [guid]::NewGuid().ToString("N") + ".zip")
+    $TempDir = Join-Path $Base ("jdk21-stage-" + [guid]::NewGuid().ToString("N"))
+    try {
+      Invoke-WebRequest -Uri ([string]$JdkAsset.binary.package.link) -UseBasicParsing -OutFile $ZipFile -TimeoutSec 600
+      $ActualHash = (Get-FileHash -LiteralPath $ZipFile -Algorithm SHA256).Hash
+      if ($ActualHash -ine [string]$JdkAsset.binary.package.checksum) {
+        throw "O arquivo Java nao passou na verificacao SHA-256."
+      }
+      Expand-Archive -LiteralPath $ZipFile -DestinationPath $TempDir -Force
+      $Folder = Get-ChildItem -LiteralPath $TempDir -Directory | Where-Object {
+        (Test-Path -LiteralPath (Join-Path $_.FullName "bin\java.exe")) -and
+        (Test-Path -LiteralPath (Join-Path $_.FullName "bin\javac.exe"))
+      } | Select-Object -First 1
+      if (!$Folder) { throw "Arquivo Java nao contem JDK valido." }
+      Move-Item -LiteralPath $Folder.FullName -Destination $JdkDir -ErrorAction Stop
+      $Selected = $JdkDir
+      Write-Host "H2 Android: Java 21 instalado apenas na pasta H2 Android."
+    } finally {
+      if (Test-Path -LiteralPath $ZipFile) { Remove-Item -LiteralPath $ZipFile -Force -ErrorAction SilentlyContinue }
+      if (Test-Path -LiteralPath $TempDir) { Remove-Item -LiteralPath $TempDir -Recurse -Force -ErrorAction SilentlyContinue }
+    }
+  }
+  $env:JAVA_HOME = $Selected
+  $env:PATH = (Join-Path $Selected "bin") + ";" + $env:PATH
+  Write-Host "H2 Android: Java pronto para criar a instancia."
+}
+
 function Avd-Name([string]$Id) {
   if ($Id -notmatch '^[a-fA-F0-9-]{36}$') { throw "Identificador Android inválido." }
   return "H2_" + $Id.Replace("-","")
@@ -143,6 +221,7 @@ function New-H2NativeAvd {
 }
 
 function Run-Job([object]$Job,[string]$Sdk) {
+  if ($Job.action -in @("create","delete")) { Set-H2AndroidJava }
   $Name = Avd-Name ([string]$Job.profileId)
   $Adb = Join-Path $Sdk "platform-tools\adb.exe"
   $Emulator = Join-Path $Sdk "emulator\emulator.exe"
