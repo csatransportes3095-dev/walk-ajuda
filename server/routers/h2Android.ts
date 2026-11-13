@@ -116,7 +116,7 @@ export const h2AndroidRouter = router({
     `);
     const [profilesResult, agentsResult, proxiesResult] = await Promise.all([
       db.execute(sql`SELECT p.id, p.label, p.state, p.observedIp, p.lastError,
-        p.createdAt, a.label AS agentLabel, x.id AS proxyId
+        p.createdAt, a.label AS agentLabel, x.id AS proxyId, x.encryptedPayload AS proxyPayload
         FROM h2_android_native_profiles p
         JOIN h2_android_native_agents_v2 a ON a.id = p.agentId
         JOIN h2_android_proxies x ON x.id = p.proxyId
@@ -137,6 +137,13 @@ export const h2AndroidRouter = router({
         lastError: p.lastError ? String(p.lastError) : null,
         agentLabel: String(p.agentLabel),
         proxyId: Number(p.proxyId),
+        // Admin sees destination and protocol only; never return usernames or passwords.
+        proxyEndpoint: (() => {
+          try {
+            const cfg = decryptH2AdsProxy(String(p.proxyPayload));
+            return { protocol: String(cfg.protocol).toUpperCase(), host: String(cfg.host), port: Number(cfg.port) };
+          } catch { return null; }
+        })(),
       })),
       agents: rows(agentsResult).map(a => ({
         id: String(a.id), label: String(a.label), computerName: a.computerName ? String(a.computerName) : null,
