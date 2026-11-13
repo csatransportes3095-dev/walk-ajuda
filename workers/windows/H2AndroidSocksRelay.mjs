@@ -188,7 +188,7 @@ const control = http.createServer((req, res) => {
   req.on('end', () => {
     try {
       const input = JSON.parse(payload);
-      if (!/^\\d+$/.test(String(input.proxyId)) ||
+      if (!/^\d+$/.test(String(input.proxyId)) ||
           typeof input.host !== 'string' || !input.host ||
           input.host.length > 255 || /[\\s]/.test(input.host) ||
           !Number.isInteger(input.port) || input.port < 1 || input.port > 65535 ||
