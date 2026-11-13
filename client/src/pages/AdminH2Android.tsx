@@ -2,7 +2,7 @@ import { useState } from "react";
 import AdminHeader from "@/components/AdminHeader";
 import { trpc } from "@/lib/trpc";
 import { toast } from "sonner";
-import { MonitorSmartphone, Plus, RefreshCw, Trash2, Play, Square, Download, Wifi, WifiOff } from "lucide-react";
+import { MonitorSmartphone, Plus, RefreshCw, Trash2, Play, Square, Download, Wifi, WifiOff, RefreshCcw } from "lucide-react";
 
 export default function AdminH2Android() {
   const utils = trpc.useUtils();
@@ -30,13 +30,20 @@ export default function AdminH2Android() {
     onSuccess: async () => { toast.success("Comando enviado ao Windows."); setConfirmDelete(null); await refresh(); },
     onError: messages,
   });
+  const rotateProxy = trpc.h2Android.rotateProxy.useMutation({
+    onSuccess: async result => {
+      toast.success("Proxy alterado para #" + String(result.proxyId) + ". Inicie o Android para validar a nova conexao.");
+      await refresh();
+    },
+    onError: messages,
+  });
   const revoke = trpc.h2Android.revokeAgent.useMutation({
     onSuccess: async () => { toast.success("Agente revogado."); await refresh(); },
     onError: messages,
   });
   const data = overview.data;
   const online = data?.agents.some(a => a.online) ?? false;
-  const busy = command.isPending || create.isPending;
+  const busy = command.isPending || create.isPending || rotateProxy.isPending;
 
   return <div className="min-h-screen bg-[#090d18] text-white">
     <AdminHeader title="H2 Android" icon={<MonitorSmartphone className="h-5 w-5" />} backTo="/admin/codes" />
@@ -111,6 +118,12 @@ export default function AdminH2Android() {
             <button disabled={busy || !online || p.state!=="stopped"} onClick={()=>command.mutate({id:p.id,action:"start"})} className="flex items-center justify-center gap-1 rounded-lg border border-emerald-400/25 p-2 text-xs font-bold text-emerald-300 disabled:opacity-30"><Play className="h-4 w-4"/> Iniciar</button>
             <button disabled={busy || !online || p.state!=="running"} onClick={()=>command.mutate({id:p.id,action:"stop"})} className="flex items-center justify-center gap-1 rounded-lg border border-white/15 p-2 text-xs disabled:opacity-30"><Square className="h-4 w-4"/> Parar</button>
             <button disabled={busy || !online || p.state!=="running"} onClick={()=>command.mutate({id:p.id,action:"configure"})} className="col-span-2 flex items-center justify-center gap-2 rounded-lg border border-cyan-400/35 bg-cyan-400/10 p-2 text-xs font-bold text-cyan-200 disabled:opacity-30">Ajustar idioma e visual do celular</button>
+            <button
+              disabled={busy || !online || p.state!=="stopped" || (data?.counts.available ?? 0)<1}
+              onClick={()=>{if(window.confirm("Trocar automaticamente o proxy desta instancia? O proxy atual sera aposentado e nao voltara ao cofre.")) rotateProxy.mutate({id:p.id});}}
+              title={p.state!=="stopped" ? "Disponivel somente quando o Android estiver parado" : (data?.counts.available ?? 0)<1 ? "Nao existem proxies livres no cofre H2 Android" : "Selecionar proximo proxy livre do cofre"}
+              className="col-span-2 flex items-center justify-center gap-2 rounded-lg border border-violet-400/35 bg-violet-400/10 p-2 text-sm font-bold text-violet-200 disabled:cursor-not-allowed disabled:opacity-30"
+            ><RefreshCcw className="h-4 w-4" /> Trocar proxy automatico</button>
             <button disabled={busy || !online || p.state!=="error"} onClick={()=>command.mutate({id:p.id,action:"retry"})} className="rounded-lg border border-amber-400/25 p-2 text-xs text-amber-200 disabled:opacity-30">Repetir criação</button>
             <button disabled={busy || !online} onClick={()=>setConfirmDelete(p.id)} className="flex items-center justify-center gap-1 rounded-lg border border-red-400/25 p-2 text-xs text-red-300 disabled:opacity-30"><Trash2 className="h-4 w-4"/> Excluir</button>
           </div>
