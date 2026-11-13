@@ -235,8 +235,28 @@ function Set-H2Keyboard {
   Set-Content -LiteralPath $Config -Value $Updated -Encoding Ascii -NoNewline
 }
 # Prevent a command-console window without hiding the actual Android GUI.
+# Detect only the H2-owned AVD by its exact command-line -avd argument.
+# ADB can temporarily report no device while the emulator process is booting.
+function Test-H2EmulatorProcess {
+  param([string]$Name)
+  $NamePattern = [regex]::Escape($Name)
+  $Pattern = '(?i)(?:^|\\s)-avd\\s+"?' + $NamePattern + '"?(?=\\s|$)'
+  try {
+    $Processes = @(Get-CimInstance -ClassName Win32_Process -Filter "Name='emulator.exe' OR Name='qemu-system-x86_64.exe'" -ErrorAction Stop)
+    foreach ($Process in $Processes) {
+      if ([string]$Process.CommandLine -match $Pattern) { return $true }
+    }
+  } catch {
+    Write-H2Status "Nao foi possivel confirmar processo Android pelo Windows"
+  }
+  return $false
+}
 function Start-H2Emulator {
   param([string]$Emulator,[string]$Sdk,[string]$Name,[string]$ProxyUri)
+  if (Test-H2EmulatorProcess -Name $Name) {
+    Write-H2Status ("Android ja inicializando no Windows: " + $Name)
+    return
+  }
   $Info = New-Object System.Diagnostics.ProcessStartInfo
   $Info.FileName = $Emulator
   $Info.Arguments = '-avd ' + $Name + ' -http-proxy "' + $ProxyUri + '" -no-boot-anim'
@@ -249,7 +269,12 @@ function Start-H2Emulator {
     if (!$Proc.Start()) { throw "O processo do Android nao iniciou." }
     Start-Sleep -Milliseconds 600
     if ($Proc.HasExited -and $Proc.ExitCode -ne 0) {
-      throw "Emulador terminou com codigo $($Proc.ExitCode)."
+      $Code = $Proc.ExitCode
+      if (Test-H2EmulatorProcess -Name $Name) {
+        Write-H2Status ("Android iniciado por processo existente: " + $Name)
+        return
+      }
+      throw ("Emulador terminou com codigo " + $Code + ". O Android nao iniciou; nao recrie a instancia. Verifique o log do emulador no Windows.")
     }
   } finally { $Proc.Dispose() }
 }
