@@ -893,8 +893,20 @@ while ($true) {
         $HeartbeatJob = Start-H2JobHeartbeat -HeartbeatServer $Server -HeartbeatToken $Token `
           -HeartbeatComputer $env:COMPUTERNAME -HeartbeatVersion $Version -HeartbeatJobId ([long]$Job.id)
         $Sdk = Android-Sdk
-        $ObservedIp = Run-Job $Job $Sdk
-        $Success = $true
+        # One job per AVD across multiple Windows agent processes.
+        $JobLockName = "Local\H2AndroidJob_" + (Avd-Name ([string]$Job.profileId))
+        $JobMutex = New-Object System.Threading.Mutex($false,$JobLockName)
+        $JobLocked = $false
+        try {
+          try { $JobLocked = $JobMutex.WaitOne(10000) }
+          catch [System.Threading.AbandonedMutexException] { $JobLocked = $true }
+          if (!$JobLocked) { throw "Outro agente ja opera esta instancia; comando duplicado bloqueado." }
+          $ObservedIp = Run-Job $Job $Sdk
+          $Success = $true
+        } finally {
+          if ($JobLocked) { $JobMutex.ReleaseMutex() }
+          $JobMutex.Dispose()
+        }
       } catch {
         $ErrorText = [string]$_.Exception.Message
         Write-Warning $ErrorText
