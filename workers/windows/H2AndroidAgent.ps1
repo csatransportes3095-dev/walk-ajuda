@@ -725,7 +725,7 @@ function Set-H2Presentation {
 
 
 function Run-Job([object]$Job,[string]$Sdk) {
-  if ($Job.action -in @("create","delete")) { Set-H2AndroidJava }
+  if ($Job.action -in @("create","rebuild","delete")) { Set-H2AndroidJava }
   $Name = Avd-Name ([string]$Job.profileId)
   $Adb = Join-Path $Sdk "platform-tools\adb.exe"
   $Emulator = Join-Path $Sdk "emulator\emulator.exe"
@@ -733,13 +733,38 @@ function Run-Job([object]$Job,[string]$Sdk) {
   $Image = "system-images;android-35;google_apis_playstore;x86_64"
   $ProxyIp = $null
   $RelayPort = $null
-  if ($Job.action -in @("create","start")) {
+  if ($Job.action -in @("create","rebuild","start")) {
     $ProxyCheck = Check-Proxy -Proxy $Job.proxy -Name $Name -ProxyId ([string]$Job.proxyId)
     $ProxyIp = [string]$ProxyCheck.ip
     $RelayPort = [int]$ProxyCheck.port
   }
   $Serial = Adb-Serial $Adb $Name
-  switch ([string]$Job.action) {
+  if ($Job.action -eq "rebuild") {
+    # User explicitly opted for a fresh test: remove ONLY the error-state
+    # instance's own AVD. Never delete proxies or other AVDs.
+    if ($Serial -or (Test-H2EmulatorProcess -Name $Name)) {
+      throw "Nao e seguro recriar: o Android ainda esta aberto. Encerre-o primeiro."
+    }
+    $OldAvd = Join-Path $AvdHome "$Name.avd"
+    if (Test-Path -LiteralPath $OldAvd) {
+      $OldPreference = $ErrorActionPreference
+      try {
+        $ErrorActionPreference = "SilentlyContinue"
+        & $AvdManager delete avd -n $Name 2>$null | Out-Null
+        $DeleteExitCode = $LASTEXITCODE
+      } finally { $ErrorActionPreference = $OldPreference }
+      if ($DeleteExitCode -ne 0 -or (Test-Path -LiteralPath $OldAvd)) {
+        throw "Nao foi possivel limpar o AVD de teste com seguranca; nenhum proxy foi alterado."
+      }
+      Write-H2Status ("AVD de teste removido para recriacao: " + $Name)
+    }
+    $OldIni = Join-Path $AvdHome "$Name.ini"
+    if (Test-Path -LiteralPath $OldIni) {
+      Remove-Item -LiteralPath $OldIni -Force
+    }
+  }
+  $EffectiveAction = if ($Job.action -eq "rebuild") { "create" } else { [string]$Job.action }
+  switch ($EffectiveAction) {
     "create" {
       $AvdPath = Join-Path $AvdHome "$Name.avd"
       if (!(Test-Path -LiteralPath $AvdPath)) {
@@ -877,7 +902,7 @@ while ($true) {
         Stop-H2JobHeartbeat -HeartbeatJob $HeartbeatJob
         # Do not stop the relay after a successful boot: Android still uses it.
         # On failure, preserve a relay if the native emulator is still alive.
-        if (!$Success -and $Job.action -in @("create","start")) {
+        if (!$Success -and $Job.action -in @("create","rebuild","start")) {
           try {
             $Avd = Avd-Name ([string]$Job.profileId)
             if (!(Test-H2EmulatorProcess -Name $Avd)) { Stop-H2SocksRelay -Name $Avd }
