@@ -200,6 +200,8 @@ describe("H2 Android native isolated architecture", () => {
     expect(agent).toContain("[System.Threading.Mutex]::new");
     expect(agent).toContain("$JobMutex.WaitOne(10000)");
     expect(agent).toContain("Get-H2EmulatorProcesses -Name $Name");
+    expect(agent).toContain("$DataPathPattern");
+    expect(agent).toContain("Android iniciou via processo filho");
     expect(agent).toContain("-RedirectStandardError $ErrLog");
     expect(agent).toContain("function Get-H2EmulatorDiagnostic");
     expect(agent).toContain('Select-Object -Last 3');
