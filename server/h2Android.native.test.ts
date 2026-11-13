@@ -4,6 +4,17 @@ import path from "node:path";
 const read = (file: string) => fs.readFileSync(path.resolve(process.cwd(), file), "utf8");
 
 describe("H2 Android native isolated architecture", () => {
+  it("never labels a host-only SOCKS5 test as Android app traffic validation", () => {
+    const admin = read("client/src/pages/AdminH2Android.tsx");
+    expect(admin).toContain("Rede do Android NÃO validada.");
+    expect(admin).toContain("IP do teste no Windows:");
+    expect(admin).toContain("não é o IP confirmado do Android");
+    expect(admin).toContain("Confira o IP público DENTRO do Android");
+    expect(admin).not.toContain("IP externo verificado pelo agente");
+    expect(admin).not.toContain('text-emerald-300">IP externo testado:');
+  });
+
+
   it("accepts long emulator completion errors instead of leaving Android preparing", () => {
     const route = read("server/h2AndroidAgentRoute.ts");
     const agent = read("workers/windows/H2AndroidAgent.ps1");
