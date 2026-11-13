@@ -108,11 +108,13 @@ export default function AdminH2Android() {
       <section className="grid grid-cols-1 gap-3 md:grid-cols-2 xl:grid-cols-3">
         {(data?.profiles ?? []).map(p=><article key={p.id} className="rounded-2xl border border-white/10 bg-[#111928] p-4">
           <div className="flex items-start justify-between gap-2">
-            <div><h3 className="font-extrabold">{p.label}</h3><p className="mt-1 text-xs text-slate-400">Proxy #{p.proxyId} • {p.agentLabel}</p></div>
+            <div><h3 className="font-extrabold">{p.label}</h3><p className="mt-1 text-xs text-slate-400">Proxy #{p.proxyId} • {p.agentLabel}</p>
+            <p className="mt-1 break-all text-xs font-medium text-violet-200">{p.proxyEndpoint ? `${p.proxyEndpoint.protocol} ${p.proxyEndpoint.host}:${p.proxyEndpoint.port}` : "Dados do proxy indisponíveis"}</p>
+            <p className="mt-1 text-xs text-slate-400">{p.state==="running" && p.observedIp ? "IP externo verificado pelo agente" : p.state==="error" ? "Falha de inicialização; proxy permanece reservado" : ["provisioning","queued","starting"].includes(p.state) ? "Proxy reservado • aguardando validação no Windows" : "Proxy reservado • sem verificação recente dentro do Android"}</p></div>
             <MonitorSmartphone className="h-6 w-6 text-cyan-300"/>
           </div>
           <p className="mt-3 text-sm text-slate-300">Estado: <b>{({queued:"Na fila",provisioning:"Preparando",running:"Ligado",stopped:"Desligado",starting:"Iniciando",stopping:"Parando",deleting:"Excluindo",error:"Erro"} as Record<string,string>)[p.state] || p.state}</b></p>
-          {p.observedIp && <p className="mt-1 text-xs text-emerald-300">IP testado pelo agente: {p.observedIp}</p>}
+          {p.observedIp && <p className="mt-1 text-xs text-emerald-300">IP externo testado: {p.observedIp} (não garante tráfego dos aplicativos)</p>}
           {p.lastError && <p className="mt-2 rounded-lg border border-amber-500/30 bg-amber-500/5 p-2 text-xs text-amber-200">{p.lastError}</p>}
           <div className="mt-4 grid grid-cols-2 gap-2">
             <button disabled={busy || !online || p.state!=="stopped"} onClick={()=>command.mutate({id:p.id,action:"start"})} className="flex items-center justify-center gap-1 rounded-lg border border-emerald-400/25 p-2 text-xs font-bold text-emerald-300 disabled:opacity-30"><Play className="h-4 w-4"/> Iniciar</button>
