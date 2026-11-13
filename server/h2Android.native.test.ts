@@ -10,9 +10,9 @@ describe("H2 Android native isolated architecture", () => {
     expect(agent).toContain("com\\.android\\.settings");
     expect(agent).toContain("Set-H2LocaleFromSettings -Adb $Adb -Serial $Serial");
     expect(agent).toContain("Get-H2LanguageUi");
-    expect(agent).not.toContain("am\\\",\\\"update-config");
+    expect(agent).not.toContain('"update-config"');
     expect(agent).not.toContain("setprop persist.sys.locale pt-BR");
-    expect(agent.match(/^while \\(\\$true\\) \\{$/gm)?.length).toBe(1);
+    expect(agent.match(/^while \(\$true\) \{$/gm)?.length).toBe(1);
   });
 
   it("configures running H2 Android devices without changing proxy or running state", () => {
