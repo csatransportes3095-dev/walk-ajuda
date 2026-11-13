@@ -959,13 +959,29 @@ function Run-Job([object]$Job,[string]$Sdk) {
       try {
         $CandidateCheck = Check-Proxy -Proxy $Job.proxy -Name $Candidate -ProxyId ([string]$Job.proxyId)
         $PreviousReady = Get-Content -LiteralPath (Get-H2RelayReadyFile -Name $Name) -Raw | ConvertFrom-Json
-        $OldProxyId = [string]$PreviousReady.proxyId
+        $OldProxyId = [string]$Job.previousProxyId
+        if (!$OldProxyId -or !$Job.previousProxy) { throw "Rota anterior ausente; troca cancelada." }
+        Clear-H2AndroidGlobalProxy -Adb $Adb -Serial $Serial
         $LivePort = Switch-H2RelayUpstream -Name $Name -OldProxyId $OldProxyId -NewProxyId ([string]$Job.proxyId) -Proxy $Job.proxy
-        # Revalidate with a TCP request from inside Android using the SAME
-        # emulator and the SAME listener port, without rebooting the AVD.
-        $AndroidIp = Test-H2AndroidTcpIp -Adb $Adb -Serial $Serial
-        Write-H2Status ("Novo IP Android apos troca: " + $AndroidIp)
-        return $AndroidIp
+        try {
+          # Request originates inside Android over same relay listener.
+          $AndroidIp = Test-H2AndroidTcpIp -Adb $Adb -Serial $Serial
+          Write-H2Status ("Novo IP Android apos troca: " + $AndroidIp)
+          return $AndroidIp
+        } catch {
+          $Reason = $_.Exception.Message
+          try {
+            # Restore old upstream on the SAME listener without closing Android.
+            [void](Switch-H2RelayUpstream -Name $Name -OldProxyId ([string]$Job.proxyId) -NewProxyId $OldProxyId -Proxy $Job.previousProxy)
+            Write-H2Status ("Falha no candidato; proxy antigo restaurado no Android.")
+          } catch {
+            # Cannot guarantee network route; shut down affected guest instead
+            # of leaving it online with the wrong proxy assignment.
+            try { Invoke-H2Adb -Executable $Adb -CommandArgs @("-s",$Serial,"emu","kill") | Out-Null } catch {}
+            throw ("CRITICAL: nao foi possivel restaurar o proxy anterior; Android encerrado. " + $Reason)
+          }
+          throw ("Proxy novo nao validado dentro do Android; anterior restaurado: " + $Reason)
+        }
       } finally {
         Stop-H2SocksRelay -Name $Candidate
       }
