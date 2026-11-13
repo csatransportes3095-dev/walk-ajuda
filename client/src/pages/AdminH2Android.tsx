@@ -6,7 +6,7 @@ import { MonitorSmartphone, Plus, RefreshCw, Trash2, Play, Square, Download, Wif
 
 export default function AdminH2Android() {
   const utils = trpc.useUtils();
-  const overview = trpc.h2Android.overview.useQuery(undefined, { refetchInterval: 5000, staleTime: 0, retry: false });
+  const overview = trpc.h2Android.overview.useQuery(undefined, { refetchInterval: 5000, refetchIntervalInBackground: true, refetchOnWindowFocus: true, staleTime: 0, retry: false });
   const [label, setLabel] = useState("");
   const [agentLabel, setAgentLabel] = useState("Meu computador");
   const [proxyList, setProxyList] = useState("");
@@ -19,7 +19,32 @@ export default function AdminH2Android() {
   const [selectedProxies, setSelectedProxies] = useState<number[]>([]);
   const [proxyDeletion, setProxyDeletion] = useState<{ mode: "selected" | "allAvailable"; ids: number[] } | null>(null);
   const [proxyDeleteConfirmText, setProxyDeleteConfirmText] = useState("");
+  const [manualRefreshing, setManualRefreshing] = useState(false);
+  const [lastManualRefresh, setLastManualRefresh] = useState<{ at: number; changed: boolean } | null>(null);
   const refresh = async () => { await Promise.all([utils.h2Android.overview.invalidate(), utils.h2Android.listProxies.invalidate()]); };
+  const refreshInstances = async () => {
+    if (manualRefreshing) return;
+    setManualRefreshing(true);
+    try {
+      const fingerprint = (profiles: NonNullable<typeof overview.data>["profiles"] | undefined) =>
+        (profiles ?? []).map(p => [p.id, p.state, p.proxyId, p.lastError, p.observedIp].join(":")).join("|");
+      const previous = fingerprint(overview.data?.profiles);
+      // Force a real request; cache invalidation alone gives no confirmation.
+      const response = await overview.refetch({ cancelRefetch: true });
+      if (response.error) throw response.error;
+      if (!response.data) throw new Error("Servidor não retornou as instâncias.");
+      const changed = fingerprint(response.data.profiles) !== previous;
+      setLastManualRefresh({ at: Date.now(), changed });
+      await utils.h2Android.listProxies.invalidate();
+      toast[changed ? "success" : "info"](changed
+        ? "Dados atualizados. Confira o novo status do Android."
+        : "Consulta concluída. O servidor ainda não informou mudança de status.");
+    } catch (error) {
+      toast.error(error instanceof Error ? error.message : "Não foi possível consultar o status do Android.");
+    } finally {
+      setManualRefreshing(false);
+    }
+  };
   const messages = (e: unknown) => toast.error(e instanceof Error ? e.message : "Falha na operação.");
   const vault = trpc.h2Android.listProxies.useQuery({ status: vaultStatus, cursor: vaultCursor }, { enabled: vaultOpen, staleTime: 0 });
   const deleteProxies = trpc.h2Android.deleteProxies.useMutation({
@@ -194,7 +219,10 @@ export default function AdminH2Android() {
       </section>
       <div className="flex items-center justify-between">
         <h2 className="text-lg font-extrabold">Instâncias ({data?.profiles.length ?? 0})</h2>
-        <button onClick={()=>void refresh()} className="rounded-lg border border-white/15 p-2"><RefreshCw className="h-4 w-4"/></button>
+        <div className="flex flex-col items-end gap-1">
+          <button type="button" aria-label="Atualizar status das instâncias" title="Consultar novamente o servidor" onClick={()=>void refreshInstances()} disabled={manualRefreshing} className="flex items-center gap-2 rounded-lg border border-white/15 px-3 py-2 text-xs font-bold disabled:opacity-50"><RefreshCw className={`h-4 w-4 ${manualRefreshing ? "animate-spin" : ""}`}/>{manualRefreshing ? "Atualizando..." : "Atualizar status"}</button>
+          {lastManualRefresh && <span className="text-right text-xs text-slate-400" role="status">Consultado às {new Date(lastManualRefresh.at).toLocaleTimeString("pt-BR")} • {lastManualRefresh.changed ? "Dados alterados" : "Sem mudança no servidor"}</span>}
+        </div>
       </div>
       {overview.isError && <p className="rounded-xl border border-red-400/40 p-4 text-red-200">Erro de consulta: {overview.error.message}</p>}
       <section className="grid grid-cols-1 gap-3 md:grid-cols-2 xl:grid-cols-3">
