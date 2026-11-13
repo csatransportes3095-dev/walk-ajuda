@@ -393,7 +393,8 @@ export const h2AndroidRouter = router({
       if (affected(reserved) !== 1) throw new TRPCError({ code: "CONFLICT", message: "Novo proxy ocupado; tente novamente." });
       const updated = await tx.execute(sql`
         UPDATE h2_android_native_profiles
-        SET proxyId=${nextId}, observedIp=NULL, lastError=NULL
+        SET proxyId=${nextId}, observedIp=NULL,
+          lastError=${profileState === "error" ? "Proxy alterado. O Android continua em erro e ainda não foi testado com o novo proxy. Use 'Recriar teste do zero' somente após confirmar a versão do agente." : null}
         WHERE id=${input.id} AND state=${profileState} AND proxyId=${oldId}
       `);
       if (affected(updated) !== 1) throw new TRPCError({ code: "CONFLICT", message: "Instância mudou de estado. Nenhuma troca realizada." });
