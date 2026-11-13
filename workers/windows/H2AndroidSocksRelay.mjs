@@ -190,7 +190,7 @@ const control = http.createServer((req, res) => {
       const input = JSON.parse(payload);
       if (!/^\d+$/.test(String(input.proxyId)) ||
           typeof input.host !== 'string' || !input.host ||
-          input.host.length > 255 || /[\\s]/.test(input.host) ||
+          input.host.length > 255 || /\s/.test(input.host) ||
           !Number.isInteger(input.port) || input.port < 1 || input.port > 65535 ||
           typeof input.username !== 'string' || typeof input.password !== 'string' ||
           Buffer.byteLength(input.username) > 255 || Buffer.byteLength(input.password) > 255) {
