@@ -6,7 +6,7 @@ param(
   [string]$PairCode = ""
 )
 $ErrorActionPreference = "Stop"
-$Version = "1.0.7"
+$Version = "1.0.8"
 $Base = Join-Path $env:LOCALAPPDATA "H2AndroidNative"
 $AvdHome = Join-Path $Base "avd"
 $TokenFile = Join-Path $Base "agent.secure"
@@ -253,32 +253,144 @@ function Start-H2Emulator {
     }
   } finally { $Proc.Dispose() }
 }
-# Verify the ACTIVE system configuration, not just persist.sys.locale.
-# Google Play images may reject system property writes or cache an older locale.
+# Google Play Android 15 is a production-style system image: adb shell cannot
+# reliably change global locale with setprop or am update-config. Instead automate
+# the standard Android Language Settings UI with accessibility XML and ADB input.
+# This does not need root, reset userdata, install an APK, or touch any other AVD.
 function Test-H2ActiveLocale {
   param([string]$Adb,[string]$Serial)
-  $Current = @(Invoke-H2Adb -Executable $Adb -CommandArgs @("-s",$Serial,"shell","am","get-config"))
-  $Output = ($Current | Out-String)
-  return ($Output -match '(?i)(?:pt-rBR|pt-BR)')
+  try {
+    $Config = (@(Invoke-H2Adb -Executable $Adb -CommandArgs @("-s",$Serial,"shell","am","get-config")) | Out-String)
+    $Primary = [regex]::Match($Config,'(?i)-(?<language>[a-z]{2,3})-r(?<region>[a-z]{2})(?=[^a-z]|$)')
+    if ($Primary.Success) {
+      return ($Primary.Groups["language"].Value -ieq "pt" -and $Primary.Groups["region"].Value -ieq "BR")
+    }
+    $UserLocales = (@(Invoke-H2Adb -Executable $Adb -CommandArgs @("-s",$Serial,"shell","settings","get","system","system_locales")) | Out-String).Trim()
+    return ($UserLocales -match '^(?i:pt[-_]BR)(?:,|$)')
+  } catch { return $false }
+}
+function Get-H2LanguageUi {
+  param([string]$Adb,[string]$Serial)
+  [void](Invoke-H2Adb -Executable $Adb -CommandArgs @("-s",$Serial,"shell","uiautomator","dump","/sdcard/h2-language-layout.xml"))
+  $XmlText = (@(Invoke-H2Adb -Executable $Adb -CommandArgs @("-s",$Serial,"shell","cat","/sdcard/h2-language-layout.xml")) | Out-String).Trim()
+  $Doc = New-Object System.Xml.XmlDocument
+  $Doc.LoadXml($XmlText)
+  foreach ($Element in $Doc.SelectNodes("//node")) {
+    $B = [regex]::Match($Element.GetAttribute("bounds"),'^\[(\d+),(\d+)\]\[(\d+),(\d+)\]$')
+    if (!$B.Success) { continue }
+    $X1 = [int]$B.Groups[1].Value
+    $Y1 = [int]$B.Groups[2].Value
+    $X2 = [int]$B.Groups[3].Value
+    $Y2 = [int]$B.Groups[4].Value
+    if ($X2 -le $X1 -or $Y2 -le $Y1) { continue }
+    [pscustomobject]@{
+      Text = [string]$Element.GetAttribute("text")
+      Description = [string]$Element.GetAttribute("content-desc")
+      X1=$X1;Y1=$Y1;X2=$X2;Y2=$Y2
+      X=[int](($X1+$X2)/2);Y=[int](($Y1+$Y2)/2)
+    }
+  }
+}
+function Find-H2LanguageUi {
+  param([object[]]$Nodes,[string[]]$Patterns)
+  foreach ($Pattern in $Patterns) {
+    $Found = $Nodes | Where-Object {
+      $_.Text -match $Pattern -or $_.Description -match $Pattern
+    } | Sort-Object Y | Select-Object -First 1
+    if ($Found) { return $Found }
+  }
+  return $null
+}
+function Tap-H2LanguageUi {
+  param([string]$Adb,[string]$Serial,[object]$Node)
+  Invoke-H2Adb -Executable $Adb -CommandArgs @("-s",$Serial,"shell","input","tap",([string]$Node.X),([string]$Node.Y)) | Out-Null
+  Start-Sleep -Milliseconds 850
+}
+function Set-H2LocaleFromSettings {
+  param([string]$Adb,[string]$Serial)
+  Write-H2Status "Abrindo configuracoes oficiais de idioma Android"
+  Invoke-H2Adb -Executable $Adb -CommandArgs @("-s",$Serial,"shell","am","start","-a","android.settings.LOCALE_SETTINGS") | Out-Null
+  Start-Sleep -Seconds 2
+  $PickRegion = $false
+  $ScrollCount = 0
+  for ($Step = 0; $Step -lt 24; $Step++) {
+    if (Test-H2ActiveLocale -Adb $Adb -Serial $Serial) { return $true }
+    try { $Nodes = @(Get-H2LanguageUi -Adb $Adb -Serial $Serial) }
+    catch {
+      if ($Step -ge 4) { break }
+      Start-Sleep -Seconds 2
+      continue
+    }
+    # Restrict touches to Android Settings language screens.
+    $Foreground = (@(Invoke-H2Adb -Executable $Adb -CommandArgs @("-s",$Serial,"shell","dumpsys","window","windows")) | Out-String)
+    if ($Foreground -notmatch 'com\.android\.settings') {
+      Write-H2Status "A tela de idiomas nao esta em primeiro plano; nenhuma interacao foi enviada"
+      break
+    }
+    $PortugueseBR = Find-H2LanguageUi -Nodes $Nodes -Patterns @('(?i)^Portugu.s\s*\(Brasil\)$','(?i)^Portuguese\s*\(Brazil\)$')
+    $English = Find-H2LanguageUi -Nodes $Nodes -Patterns @('(?i)^English\s*\(United States\)$','(?i)^English\s*\(US\)$')
+    $Add = Find-H2LanguageUi -Nodes $Nodes -Patterns @('(?i)^Add a language$','(?i)^Add language$','(?i)^Adicionar um idioma$','(?i)^Adicionar idioma$')
+    if ($PortugueseBR -and $English -and $PortugueseBR.Y -gt $English.Y) {
+      # Android 14/15 requires dragging the selected language to first place.
+      $X = [string]($PortugueseBR.X2 - 15)
+      $TargetY = [string]([math]::Max(85,$English.Y - 25))
+      Invoke-H2Adb -Executable $Adb -CommandArgs @("-s",$Serial,"shell","input","swipe",$X,([string]$PortugueseBR.Y),$X,$TargetY,"1100") | Out-Null
+      Start-Sleep -Seconds 2
+      continue
+    }
+    if ($PortugueseBR -and !$Add) {
+      Tap-H2LanguageUi -Adb $Adb -Serial $Serial -Node $PortugueseBR
+      Start-Sleep -Milliseconds 600
+      continue
+    }
+    if ($PickRegion) {
+      $Brazil = Find-H2LanguageUi -Nodes $Nodes -Patterns @('(?i)^Brasil$','(?i)^Brazil$')
+      if ($Brazil) {
+        Tap-H2LanguageUi -Adb $Adb -Serial $Serial -Node $Brazil
+        $PickRegion = $false
+        continue
+      }
+    }
+    if ($Add) {
+      Tap-H2LanguageUi -Adb $Adb -Serial $Serial -Node $Add
+      $ScrollCount = 0
+      continue
+    }
+    $SystemLanguages = Find-H2LanguageUi -Nodes $Nodes -Patterns @('(?i)^System languages$','(?i)^Preferred language$','(?i)^Idiomas do sistema$','(?i)^Idioma preferido$')
+    if ($SystemLanguages) {
+      Tap-H2LanguageUi -Adb $Adb -Serial $Serial -Node $SystemLanguages
+      continue
+    }
+    $Portuguese = Find-H2LanguageUi -Nodes $Nodes -Patterns @('(?i)^Portugu.s$','(?i)^Portuguese$')
+    if ($Portuguese) {
+      Tap-H2LanguageUi -Adb $Adb -Serial $Serial -Node $Portuguese
+      $PickRegion = $true
+      continue
+    }
+    $Languages = Find-H2LanguageUi -Nodes $Nodes -Patterns @('(?i)^Languages$','(?i)^Languages & input$','(?i)^Language & region$','(?i)^Idiomas$','(?i)^Idioma e regi.o$')
+    if ($Languages) {
+      Tap-H2LanguageUi -Adb $Adb -Serial $Serial -Node $Languages
+      continue
+    }
+    if ($ScrollCount -ge 9) { break }
+    # Scroll only within the Settings language picker; never click an unknown item.
+    Invoke-H2Adb -Executable $Adb -CommandArgs @("-s",$Serial,"shell","input","swipe","380","1400","380","490","380") | Out-Null
+    $ScrollCount++
+    Start-Sleep -Milliseconds 650
+  }
+  return (Test-H2ActiveLocale -Adb $Adb -Serial $Serial)
 }
 function Set-H2Locale {
-  param([string]$Adb,[string]$Name,[string]$Serial)
+  param([string]$Adb,[string]$Name,[string]$Serial,[bool]$UseSettings=$false)
   if (Test-H2ActiveLocale -Adb $Adb -Serial $Serial) { return $true }
-  try {
-    Invoke-H2Adb -Executable $Adb -CommandArgs @("-s",$Serial,"shell","am","update-config","--locale","pt-BR") | Out-Null
-    Start-Sleep -Seconds 2
-    if (Test-H2ActiveLocale -Adb $Adb -Serial $Serial) { return $true }
-  } catch {
-    Write-H2Status "ActivityManager nao aceitou a alteracao do idioma"
-  }
-  try {
-    Invoke-H2Adb -Executable $Adb -CommandArgs @("-s",$Serial,"shell","setprop persist.sys.locale pt-BR;stop;sleep 5;start") | Out-Null
-    [void](Wait-Boot $Adb $Name 240)
-    return (Test-H2ActiveLocale -Adb $Adb -Serial $Serial)
-  } catch {
+  if (!$UseSettings) { return $false }
+  try { return (Set-H2LocaleFromSettings -Adb $Adb -Serial $Serial) }
+  catch {
+    Write-H2Status ("Configuracao de idioma interrompida: " + $_.Exception.GetType().Name)
     return $false
   }
 }
+
 # Enable an actual phone skin ONLY if Android SDK already has valid skin files.
 # Otherwise keep a safe standard emulator screen and rounded Windows frame.
 function Set-H2DeviceSkin {
@@ -350,15 +462,15 @@ public static class H2WindowCorners {
   }
 }
 function Set-H2Presentation {
-  param([string]$Adb,[string]$Name,[string]$Serial,[string]$Sdk,[bool]$Strict=$false)
+  param([string]$Adb,[string]$Name,[string]$Serial,[string]$Sdk,[bool]$Strict=$false,[bool]$Fresh=$false)
   Set-H2Keyboard -Name $Name
   Set-H2DeviceSkin -Name $Name -Sdk $Sdk
   Set-H2RoundedWindow -Name $Name
   $NavError = $null
   try { Set-H2BottomNavigation -Adb $Adb -Serial $Serial }
   catch { $NavError = $_.Exception.Message }
-  $LocaleSet = Set-H2Locale -Adb $Adb -Name $Name -Serial $Serial
-  if ($Strict -and !$LocaleSet) { throw "Nao foi possivel aplicar o Portugues do Brasil nesta imagem Google Play. Configure em Android > Configuracoes > Sistema > Idiomas." }
+  $LocaleSet = Set-H2Locale -Adb $Adb -Name $Name -Serial $Serial -UseSettings ($Strict -or $Fresh)
+  if ($Strict -and !$LocaleSet) { throw "O Android nao confirmou Portugues (Brasil). A tela Configuracoes > Sistema > Idiomas foi aberta para ajuste. Instancia e proxy preservados." }
   if ($Strict -and $NavError) { throw ("Barra inferior nao suportada nesta imagem Android: " + $NavError) }
   if (!$LocaleSet) { Write-H2Status "Idioma pt-BR nao confirmado nesta imagem Google Play" }
 }
@@ -396,7 +508,7 @@ function Run-Job([object]$Job,[string]$Sdk) {
         Start-H2Emulator -Emulator $Emulator -Sdk $Sdk -Name $Name -ProxyUri $Uri
       }
       $BootSerial = Wait-Boot $Adb $Name
-      Set-H2Presentation -Adb $Adb -Name $Name -Serial $BootSerial -Sdk $Sdk
+      Set-H2Presentation -Adb $Adb -Name $Name -Serial $BootSerial -Sdk $Sdk -Fresh $true
       return $ProxyIp
     }
     "start" {
