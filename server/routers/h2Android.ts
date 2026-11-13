@@ -146,8 +146,9 @@ export const h2AndroidRouter = router({
     let added = 0, duplicates = 0, invalid = 0;
     for (const line of lines) {
       try {
-        // Native emulator supports HTTP proxies; reject SOCKS here, never silently fall back.
-        const proxy = parseH2AdsProxyInput(line, "http");
+        // The Emulator receives a local HTTP relay; the upstream credentials are SOCKS5.
+        // Never silently downgrade the user's SOCKS5 route to HTTP.
+        const proxy = parseH2AdsProxyInput(line, "socks5");
         const fingerprint = hash([proxy.protocol, proxy.host, proxy.port, proxy.username, proxy.password].join("\u001f"));
         try {
           const inserted = await db.transaction(async tx => {

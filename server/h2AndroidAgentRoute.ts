@@ -65,6 +65,12 @@ export function registerH2AndroidAgentRoutes(app: Express) {
       if (error && !res.headersSent) res.status(404).json({ error: "Agente não disponível." });
     });
   });
+  app.get("/api/h2-android/windows-socks-relay.mjs", (_req, res) => {
+    noStore(res);
+    res.download(path.resolve(process.cwd(), "workers", "windows", "H2AndroidSocksRelay.mjs"), "H2AndroidSocksRelay.mjs", error => {
+      if (error && !res.headersSent) res.status(404).json({ error: "Relay SOCKS5 não disponível." });
+    });
+  });
   app.post("/api/h2-android/agent/claim", safe(async (req, res) => {
     const code = stringField(req.body?.code, 24);
     const computerName = stringField(req.body?.computerName, 120);

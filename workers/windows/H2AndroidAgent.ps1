@@ -6,7 +6,7 @@ param(
   [string]$PairCode = ""
 )
 $ErrorActionPreference = "Stop"
-$Version = "1.0.8"
+$Version = "1.0.9-socks5-relay"
 $Base = Join-Path $env:LOCALAPPDATA "H2AndroidNative"
 $AvdHome = Join-Path $Base "avd"
 $TokenFile = Join-Path $Base "agent.secure"
@@ -169,13 +169,56 @@ function Wait-Boot([string]$Adb,[string]$Name,[int]$TimeoutSeconds=180) {
   }
   throw "Emulador não ficou pronto em $TimeoutSeconds segundos."
 }
+ $script:SocksRelayProcess = $null
+ $script:SocksRelayPort = $null
+function Start-H2SocksRelay([object]$Proxy) {
+  if (!$Proxy -or $Proxy.protocol -ne "socks5") { throw "O proxy desta instancia precisa ser SOCKS5." }
+  if ($script:SocksRelayProcess -and !$script:SocksRelayProcess.HasExited) { return [int]$script:SocksRelayPort }
+  $RelayScript = Join-Path $Base "H2AndroidSocksRelay.mjs"
+  if (!(Test-Path -LiteralPath $RelayScript)) { throw "Relay SOCKS5 do H2 Android ausente. Atualize o agente Windows." }
+  $Node = (Get-Command node.exe -ErrorAction SilentlyContinue).Source
+  if (!$Node) { throw "Node.js necessário para a ponte SOCKS5 não foi encontrado no agente Windows." }
+  $Info = New-Object System.Diagnostics.ProcessStartInfo
+  $Info.FileName = $Node
+  $Info.Arguments = '"' + $RelayScript + '"'
+  $Info.WorkingDirectory = $Base
+  $Info.UseShellExecute = $false
+  $Info.CreateNoWindow = $true
+  $Info.RedirectStandardOutput = $true
+  $Info.RedirectStandardError = $true
+  $Info.EnvironmentVariables["H2_SOCKS_HOST"] = [string]$Proxy.host
+  $Info.EnvironmentVariables["H2_SOCKS_PORT"] = [string]$Proxy.port
+  $Info.EnvironmentVariables["H2_SOCKS_USER"] = [string]$Proxy.username
+  $Info.EnvironmentVariables["H2_SOCKS_PASSWORD"] = [string]$Proxy.password
+  $Process = New-Object System.Diagnostics.Process
+  $Process.StartInfo = $Info
+  if (!$Process.Start()) { throw "Não foi possível iniciar a ponte SOCKS5 local." }
+  $Ready = $Process.StandardOutput.ReadLine()
+  if (!$Ready -or $Ready -notmatch '^READY:(\d+)$') {
+    $ErrorText = $Process.StandardError.ReadToEnd()
+    $Process.Kill(); $Process.Dispose()
+    throw "A ponte SOCKS5 não iniciou: $ErrorText"
+  }
+  $script:SocksRelayProcess = $Process
+  $script:SocksRelayPort = [int]$Matches[1]
+  return [int]$script:SocksRelayPort
+}
+function Stop-H2SocksRelay {
+  if ($script:SocksRelayProcess) {
+    try { if (!$script:SocksRelayProcess.HasExited) { $script:SocksRelayProcess.Kill() } } catch {}
+    try { $script:SocksRelayProcess.Dispose() } catch {}
+  }
+  $script:SocksRelayProcess = $null
+  $script:SocksRelayPort = $null
+}
 function Check-Proxy([object]$Proxy) {
-  if (!$Proxy -or $Proxy.protocol -ne "http") { throw "Somente proxy HTTP autenticado é aceito neste agente." }
-  $Address = "http://$($Proxy.host):$($Proxy.port)"
+  if (!$Proxy -or $Proxy.protocol -ne "socks5") { throw "Somente proxy SOCKS5 autenticado é aceito nesta instancia." }
+  $RelayPort = Start-H2SocksRelay -Proxy $Proxy
+  $Address = "http://127.0.0.1:$RelayPort"
   $SecurePassword = ConvertTo-SecureString -String ([string]$Proxy.password) -AsPlainText -Force
   $Credential = [System.Management.Automation.PSCredential]::new([string]$Proxy.username, $SecurePassword)
   # Explicitly test remote IP THROUGH the proxy before creating/starting an AVD.
-  $Reply = Invoke-WebRequest -Uri "https://api.ipify.org?format=json" -Proxy $Address -ProxyCredential $Credential -TimeoutSec 25 -UseBasicParsing
+  $Reply = Invoke-WebRequest -Uri "https://api.ipify.org?format=json" -Proxy $Address -TimeoutSec 25 -UseBasicParsing
   $Json = $Reply.Content | ConvertFrom-Json
   if ([string]$Json.ip -notmatch '^[0-9a-fA-F:.]+$') { throw "O proxy não informou um IP válido." }
   return [string]$Json.ip
@@ -625,9 +668,9 @@ function Run-Job([object]$Job,[string]$Sdk) {
         throw "Pasta parcial do teste1 encontrada sem config.ini. O agente preservou os dados; verifique o SDK."
       }
       if (!$Serial) {
-        # Proxy credentials are passed to Android Emulator, not to the website.
-        # Native proxy is HTTP/TCP only. Verify real app routing independently.
-        $Uri = "http://$([uri]::EscapeDataString([string]$Job.proxy.username)):$([uri]::EscapeDataString([string]$Job.proxy.password))@$($Job.proxy.host):$($Job.proxy.port)"
+        # The Emulator only receives the loopback HTTP endpoint. SOCKS5 credentials
+        # remain inside the local relay and never appear in the Emulator arguments.
+        $Uri = "http://127.0.0.1:$([int]$script:SocksRelayPort)"
         Set-H2Keyboard -Name $Name
         Start-H2Emulator -Emulator $Emulator -Sdk $Sdk -Name $Name -ProxyUri $Uri
       }
@@ -638,7 +681,7 @@ function Run-Job([object]$Job,[string]$Sdk) {
     "start" {
       if (!(Test-Path (Join-Path $AvdHome "$Name.avd"))) { throw "Este Android não está instalado no computador." }
       if (!$Serial) {
-        $Uri = "http://$([uri]::EscapeDataString([string]$Job.proxy.username)):$([uri]::EscapeDataString([string]$Job.proxy.password))@$($Job.proxy.host):$($Job.proxy.port)"
+        $Uri = "http://127.0.0.1:$([int]$script:SocksRelayPort)"
         Set-H2Keyboard -Name $Name
         Start-H2Emulator -Emulator $Emulator -Sdk $Sdk -Name $Name -ProxyUri $Uri
       }
@@ -741,6 +784,7 @@ while ($true) {
         Write-Warning $ErrorText
       } finally {
         Stop-H2JobHeartbeat -HeartbeatJob $HeartbeatJob
+        Stop-H2SocksRelay
       }
       $Done = @{jobId=[long]$Job.id;success=$Success;error=$ErrorText;observedIp=$ObservedIp}
       [void](Api "/api/h2-android/agent/complete" $Done $Token)

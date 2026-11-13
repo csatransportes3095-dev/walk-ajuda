@@ -11,6 +11,8 @@ if ($Server -ine "https://h2colombiano.com") { throw "Servidor oficial H2 Androi
 $Base = Join-Path $env:LOCALAPPDATA "H2AndroidNative"
 New-Item -ItemType Directory -Path $Base -Force | Out-Null
 $AgentPath = Join-Path $Base "H2AndroidAgent.ps1"
+$RelayPath = Join-Path $Base "H2AndroidSocksRelay.mjs"
+$RelayTempPath = Join-Path $Base ("H2AndroidSocksRelay-" + [guid]::NewGuid().ToString("N") + ".mjs")
 $BackupPath = Join-Path $Base "H2AndroidAgent.previous.ps1"
 $TempPath = Join-Path $Base ("H2AndroidAgent-" + [guid]::NewGuid().ToString("N") + ".ps1")
 $TokenFile = Join-Path $Base "agent.secure"
@@ -46,10 +48,13 @@ function Start-H2Agent {
 # Download to a separate file. Do not damage the working agent if the download fails.
 try {
   Invoke-WebRequest -Uri ($Server + "/api/h2-android/windows-agent.ps1") -OutFile $TempPath -TimeoutSec 45 -UseBasicParsing
+  Invoke-WebRequest -Uri ($Server + "/api/h2-android/windows-socks-relay.mjs") -OutFile $RelayTempPath -TimeoutSec 45 -UseBasicParsing
   if ((Get-Item -LiteralPath $TempPath).Length -lt 3000) { throw "Download incompleto." }
+  if ((Get-Item -LiteralPath $RelayTempPath).Length -lt 1000) { throw "Relay SOCKS5 incompleto." }
   Test-H2AgentSyntax $TempPath
 } catch {
   if (Test-Path -LiteralPath $TempPath) { Remove-Item -LiteralPath $TempPath -Force }
+  if (Test-Path -LiteralPath $RelayTempPath) { Remove-Item -LiteralPath $RelayTempPath -Force }
   throw
 }
 
@@ -69,7 +74,7 @@ if (!$HasToken) {
   if (!$PairCode) { $PairCode = Read-Host "Digite o codigo de pareamento do ADM H2 Android" }
   $PairCode = $PairCode.Trim()
   if ($PairCode -notmatch '^[a-fA-F0-9]{24}$') { throw "Codigo de pareamento invalido." }
-  $Body = @{ code=$PairCode;computerName=$env:COMPUTERNAME;version="1.0.6" } | ConvertTo-Json -Compress
+  $Body = @{ code=$PairCode;computerName=$env:COMPUTERNAME;version="1.0.9-socks5-relay" } | ConvertTo-Json -Compress
   $Claim = Invoke-RestMethod -Uri ($Server + "/api/h2-android/agent/claim") -Method Post -ContentType "application/json" -Body $Body -TimeoutSec 35 -MaximumRedirection 0
   if ([string]$Claim.token -notmatch '^[a-f0-9]{64}$') { throw "Pareamento nao confirmado no servidor." }
   ConvertTo-SecureString -String ([string]$Claim.token) -AsPlainText -Force |
@@ -83,7 +88,9 @@ foreach ($Old in $OldProcesses) {
   Stop-Process -Id $Old.ProcessId -Force -ErrorAction Stop
 }
 Copy-Item -LiteralPath $TempPath -Destination $AgentPath -Force
+Copy-Item -LiteralPath $RelayTempPath -Destination $RelayPath -Force
 Remove-Item -LiteralPath $TempPath -Force
+Remove-Item -LiteralPath $RelayTempPath -Force
 if (Test-Path -LiteralPath $LogPath) { Remove-Item -LiteralPath $LogPath -Force }
 
 Write-Host "H2 Android: verificando o agente atualizado (em segundo plano)..."

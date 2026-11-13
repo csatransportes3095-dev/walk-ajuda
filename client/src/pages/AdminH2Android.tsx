@@ -63,7 +63,7 @@ export default function AdminH2Android() {
       </section>
       <section className="rounded-2xl border border-white/10 bg-[#12192a] p-4 sm:p-5">
         <h2 className="text-lg font-bold">1. Cofre de proxies H2 Android</h2>
-        <p className="mt-1 text-xs text-slate-400">Proxy HTTP por linha: servidor:porta:usuário:senha. Este cofre é separado do H2ADS. Proxies usados não voltam à fila.</p>
+        <p className="mt-1 text-xs text-slate-400">Proxy SOCKS5 por linha: servidor:porta:usuário:senha. O Emulator usa uma ponte HTTP local 127.0.0.1; as credenciais SOCKS5 ficam protegidas. Este cofre é separado do H2ADS.</p>
         <textarea value={proxyList} onChange={e=>setProxyList(e.target.value)} rows={4} placeholder={"proxy.exemplo.com:1234:usuario:senha\nproxy2.exemplo.com:1234:usuario:senha"} className="mt-3 w-full rounded-xl border border-white/15 bg-[#080d17] p-3 text-sm outline-none focus:border-cyan-400" />
         <div className="mt-2 flex items-center justify-between gap-2">
           <span className="text-xs text-slate-400">Credenciais protegidas e ocultas após importação</span>
