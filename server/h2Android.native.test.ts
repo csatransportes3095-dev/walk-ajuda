@@ -98,7 +98,7 @@ describe("H2 Android native isolated architecture", () => {
     expect(agent).toContain("Switch-H2RelayUpstream");
     expect(agent).toContain("Job.previousProxyId");
     expect(agent).toContain("Job.previousProxy");
-    expect(agent).toContain("Proxy antigo restaurado");
+    expect(agent).toContain("proxy antigo restaurado no Android");
     expect(relay).toContain("const control = http.createServer");
     expect(relay).toContain("activeUpstream = next");
     expect(relay).toContain("control.listen(0, '127.0.0.1'");
@@ -158,7 +158,7 @@ describe("H2 Android native isolated architecture", () => {
     expect(router).toContain("O Android continua em erro e ainda não foi testado com o novo proxy.");
     expect(router).toContain('profileState === "error"');
     expect(admin).toContain("Versão do agente:");
-    expect(admin).toContain("A instância ainda não foi testada com esse proxy.");
+    expect(admin).toContain("É necessário iniciar o Android para validar.");
     expect(admin).toContain("O Android está em erro, mas o servidor não recebeu um diagnóstico.");
   });
 
@@ -292,7 +292,7 @@ describe("H2 Android native isolated architecture", () => {
     const router = read("server/routers/h2Android.ts");
     const admin = read("client/src/pages/AdminH2Android.tsx");
     expect(router).toContain('input.action === "retry" ? "rebuild"');
-    expect(router).toContain('["create","rebuild","start"]');
+    expect(router).toContain('["create","rebuild","start","rotate"]');
     expect(router).toContain("('create','rebuild','start')");
     expect(agent).toContain('$Job.action -eq "rebuild"');
     expect(agent).toContain('switch ($EffectiveAction)');
