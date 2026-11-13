@@ -126,6 +126,16 @@ describe("H2 Android native isolated architecture", () => {
     expect(agent.match(/^while \(\$true\) \{$/gm)?.length).toBe(1);
   });
 
+  it("keeps an explicit error notice after rotating a failed Android proxy", () => {
+    const router = read("server/routers/h2Android.ts");
+    const admin = read("client/src/pages/AdminH2Android.tsx");
+    expect(router).toContain("O Android continua em erro e ainda não foi testado com o novo proxy.");
+    expect(router).toContain('profileState === "error"');
+    expect(admin).toContain("Versão do agente:");
+    expect(admin).toContain("A instância ainda não foi testada com esse proxy.");
+    expect(admin).toContain("O Android está em erro, mas o servidor não recebeu um diagnóstico.");
+  });
+
   it("rotates a stopped or failed instance proxy atomically without reusing the previous proxy", () => {
     const routerCode = read("server/routers/h2Android.ts");
     const admin = read("client/src/pages/AdminH2Android.tsx");
