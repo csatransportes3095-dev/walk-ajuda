@@ -105,6 +105,13 @@ describe("H2 Android native isolated architecture", () => {
     expect(agent).not.toContain('throw "Falha ao criar Android virtual individual."');
     expect(agent).toContain('H2 Android ${Version}: verificando autenticacao');
   });
+  it("captures emulator startup errors and retries without hardware acceleration", () => {
+    const agent = read("workers/windows/H2AndroidAgent.ps1");
+    expect(agent).toContain("RedirectStandardError = $true");
+    expect(agent).toContain("-no-accel -gpu swiftshader_indirect");
+    expect(agent).toContain("Tentando Android sem aceleracao de hardware");
+    expect(agent).toContain("Diagnostico:");
+  });
 
   it("does not mistake ADB port 5037 startup messages for a failed creation", () => {
     const agent = read("workers/windows/H2AndroidAgent.ps1");
