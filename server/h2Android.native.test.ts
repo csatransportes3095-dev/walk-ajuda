@@ -4,6 +4,17 @@ import path from "node:path";
 const read = (file: string) => fs.readFileSync(path.resolve(process.cwd(), file), "utf8");
 
 describe("H2 Android native isolated architecture", () => {
+  it("accepts long emulator completion errors instead of leaving Android preparing", () => {
+    const route = read("server/h2AndroidAgentRoute.ts");
+    const agent = read("workers/windows/H2AndroidAgent.ps1");
+    expect(route).toContain('req.body.error.trim().slice(0, 500)');
+    expect(route).toContain("finishAndroidJob(agentId, { jobId, success");
+    expect(agent).toContain("$ErrorText.Substring(0,500)");
+    expect(agent).toContain("JOB_COMPLETE_RETRY");
+    expect(agent).toContain("$CompletionAttempt -le 3");
+    expect(agent).toContain("Servidor nao confirmou a conclusao");
+  });
+
   it("does not block Android boot on unread emulator diagnostics", () => {
     const agent = read("workers/windows/H2AndroidAgent.ps1");
     expect(agent).toContain("-RedirectStandardOutput $OutLog -RedirectStandardError $ErrLog");

@@ -864,8 +864,29 @@ while ($true) {
           } catch {}
         }
       }
+      # The completion endpoint stores at most 500 chars of diagnostics.
+      # Always send a bounded error so a long emulator log cannot cause HTTP 400.
+      if ($ErrorText -and $ErrorText.Length -gt 500) {
+        $ErrorText = $ErrorText.Substring(0,500)
+      }
+      if ($ObservedIp -and $ObservedIp.Length -gt 64) {
+        $ObservedIp = $ObservedIp.Substring(0,64)
+      }
       $Done = @{jobId=[long]$Job.id;success=$Success;error=$ErrorText;observedIp=$ObservedIp}
-      [void](Api "/api/h2-android/agent/complete" $Done $Token)
+      $CompletionAccepted = $false
+      for ($CompletionAttempt = 1; $CompletionAttempt -le 3; $CompletionAttempt++) {
+        try {
+          $Completed = Api "/api/h2-android/agent/complete" $Done $Token
+          if (!$Completed.accepted) { throw "Servidor recusou a conclusao do comando." }
+          $CompletionAccepted = $true
+          Write-H2Status ("JOB_COMPLETE " + [string]$Job.id + " " + [string]$Success)
+          break
+        } catch {
+          Write-H2Status ("JOB_COMPLETE_RETRY " + [string]$Job.id + " attempt " + $CompletionAttempt)
+          if ($CompletionAttempt -lt 3) { Start-Sleep -Seconds 3 }
+        }
+      }
+      if (!$CompletionAccepted) { throw "Servidor nao confirmou a conclusao do comando apos 3 tentativas." }
     } else { Start-Sleep -Seconds 4 }
   } catch {
     $Online = $false
