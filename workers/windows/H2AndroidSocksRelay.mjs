@@ -9,7 +9,8 @@ const port = Number(process.env.H2_SOCKS_PORT);
 const username = process.env.H2_SOCKS_USER || '';
 const password = process.env.H2_SOCKS_PASSWORD || '';
 const readyFile = process.env.H2_RELAY_READY_FILE;
-if (!host || !Number.isInteger(port) || port < 1 || port > 65535 || !readyFile) {
+const proxyId = process.env.H2_RELAY_PROXY_ID;
+if (!host || !Number.isInteger(port) || port < 1 || port > 65535 || !readyFile || !/^\d+$/.test(proxyId || '')) {
   process.stderr.write('invalid_relay_configuration\n');
   process.exit(2);
 }
@@ -155,7 +156,7 @@ server.listen(0, '127.0.0.1', () => {
   const port = server.address().port;
   try {
     const temp = readyFile + '.tmp';
-    fs.writeFileSync(temp, JSON.stringify({ port, pid: process.pid }), { mode: 0o600 });
+    fs.writeFileSync(temp, JSON.stringify({ port, pid: process.pid, proxyId }), { mode: 0o600 });
     fs.renameSync(temp, readyFile);
   } catch {
     server.close(() => process.exit(4));
