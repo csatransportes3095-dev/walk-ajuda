@@ -439,7 +439,7 @@ export const h2AndroidRouter = router({
       if (action === "configure" && existing.state !== "running") {
         throw new TRPCError({ code: "CONFLICT", message: "Ligue o Android antes de ajustar idioma e visual." });
       }
-      if (action === "start" || action === "create") {
+      if (action === "start" || action === "rebuild") {
         const locked = rows(await tx.execute(sql`SELECT id FROM h2_android_native_agents_v2
           WHERE id=${existing.agentId} AND revoked=0 FOR UPDATE`));
         if (!locked.length) throw new TRPCError({ code: "PRECONDITION_FAILED", message: "Agente revogado." });
