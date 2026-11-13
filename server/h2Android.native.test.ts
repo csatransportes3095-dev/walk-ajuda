@@ -4,6 +4,17 @@ import path from "node:path";
 const read = (file: string) => fs.readFileSync(path.resolve(process.cwd(), file), "utf8");
 
 describe("H2 Android native isolated architecture", () => {
+  it("keeps the H2-only language workflow bounded and avoids system-property hacks", () => {
+    const agent = read("workers/windows/H2AndroidAgent.ps1");
+    expect(agent).toContain("for ($Step = 0; $Step -lt 24; $Step++)");
+    expect(agent).toContain("com\\.android\\.settings");
+    expect(agent).toContain("Set-H2LocaleFromSettings -Adb $Adb -Serial $Serial");
+    expect(agent).toContain("Get-H2LanguageUi");
+    expect(agent).not.toContain("am\\\",\\\"update-config");
+    expect(agent).not.toContain("setprop persist.sys.locale pt-BR");
+    expect(agent.match(/^while \\(\\$true\\) \\{$/gm)?.length).toBe(1);
+  });
+
   it("configures running H2 Android devices without changing proxy or running state", () => {
     const routerCode = read("server/routers/h2Android.ts");
     const agent = read("workers/windows/H2AndroidAgent.ps1");
@@ -13,7 +24,12 @@ describe("H2 Android native isolated architecture", () => {
     expect(routerCode).toContain('action === "configure" ? existing.state');
     expect(routerCode).toContain('if (job.action === "configure")');
     expect(agent).toContain('"configure" {');
-    expect(agent).toContain("am\",\"update-config\",\"--locale\",\"pt-BR");
+    expect(agent).toContain("function Set-H2LocaleFromSettings");
+    expect(agent).toContain("android.settings.LOCALE_SETTINGS");
+    expect(agent).toContain("uiautomator");
+    expect(agent).toContain("Test-H2ActiveLocale -Adb $Adb -Serial $Serial");
+    expect(agent).toContain("Set as default");
+    expect(agent).toContain("Portuguese");
     expect(agent).toContain("com.android.internal.systemui.navbar.threebutton");
     expect(agent).toContain("DwmSetWindowAttribute");
     expect(agent).toContain("function Set-H2DeviceSkin");
@@ -47,7 +63,7 @@ describe("H2 Android native isolated architecture", () => {
     expect(agentCode).toContain("function Set-H2Keyboard");
     expect(agentCode).toContain("hw.keyboard=yes");
     expect(agentCode).toContain("function Set-H2Locale");
-    expect(agentCode).toContain("persist.sys.locale pt-BR");
+    expect(agentCode).toContain("android.settings.LOCALE_SETTINGS");
     expect(agentCode).toContain("function Start-H2Emulator");
     expect(agentCode).toContain("$Info.CreateNoWindow = $true");
     expect(installerCode).toContain("-WindowStyle Hidden");
