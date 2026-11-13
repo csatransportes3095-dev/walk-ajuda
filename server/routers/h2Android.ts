@@ -101,9 +101,22 @@ async function onlineAgent(db: Awaited<ReturnType<typeof androidDb>>) {
 export const h2AndroidRouter = router({
   overview: adminProcedure.query(async () => {
     const db = await androidDb();
+    // Recover an abandoned boot after a bounded duration. Never delete an
+    // AVD or release its reserved proxy while marking the command failed.
+    await db.execute(sql`
+      UPDATE h2_android_jobs j
+      JOIN h2_android_native_profiles p ON p.id=j.profileId
+      SET j.state='failed', j.completedAt=NOW(),
+          j.lastError='Inicializacao excedeu 30 minutos.',
+          p.state='error',
+          p.lastError='Inicializacao excedeu 30 minutos. Android e proxy preservados.'
+      WHERE j.state='claimed' AND j.action IN ('create','start')
+        AND j.createdAt < DATE_SUB(NOW(), INTERVAL 30 MINUTE)
+        AND p.state IN ('provisioning','starting','queued')
+    `);
     const [profilesResult, agentsResult, proxiesResult] = await Promise.all([
       db.execute(sql`SELECT p.id, p.label, p.state, p.observedIp, p.lastError,
-        p.createdAt, a.label AS agentLabel, x.id AS proxyId
+        p.createdAt, a.label AS agentLabel, x.id AS proxyId, x.encryptedPayload AS proxyPayload
         FROM h2_android_native_profiles p
         JOIN h2_android_native_agents_v2 a ON a.id = p.agentId
         JOIN h2_android_proxies x ON x.id = p.proxyId
@@ -124,6 +137,13 @@ export const h2AndroidRouter = router({
         lastError: p.lastError ? String(p.lastError) : null,
         agentLabel: String(p.agentLabel),
         proxyId: Number(p.proxyId),
+        // Admin sees destination and protocol only; never return usernames or passwords.
+        proxyEndpoint: (() => {
+          try {
+            const cfg = decryptH2AdsProxy(String(p.proxyPayload));
+            return { protocol: String(cfg.protocol).toUpperCase(), host: String(cfg.host), port: Number(cfg.port) };
+          } catch { return null; }
+        })(),
       })),
       agents: rows(agentsResult).map(a => ({
         id: String(a.id), label: String(a.label), computerName: a.computerName ? String(a.computerName) : null,
@@ -372,14 +392,24 @@ export async function authenticateAndroidAgent(token: string) {
   return agents[0] ? String(agents[0].id) : null;
 }
 
-export async function heartbeatAndroidAgent(agentId: string, computerName: string, version: string) {
+export async function heartbeatAndroidAgent(
+  agentId: string, computerName: string, version: string, jobId?: number,
+) {
   const db = await androidDb();
   const result = await db.execute(sql`
     UPDATE h2_android_native_agents_v2
     SET lastSeenAt=NOW(), computerName=${computerName}, version=${version}
     WHERE id=${agentId} AND revoked=0
   `);
-  return { accepted: affected(result) === 1 };
+  const accepted = affected(result) === 1;
+  if (accepted && jobId !== undefined) {
+    // Keep the claimed task leased while the Windows agent is still processing it.
+    await db.execute(sql`
+      UPDATE h2_android_jobs SET claimedAt=NOW()
+      WHERE id=${jobId} AND agentId=${agentId} AND state='claimed'
+    `);
+  }
+  return { accepted };
 }
 
 export async function nextAndroidJob(agentId: string, computerName: string, version: string) {
@@ -405,14 +435,14 @@ export async function nextAndroidJob(agentId: string, computerName: string, vers
       await tx.execute(sql`UPDATE h2_android_native_profiles SET state='provisioning'
         WHERE id=${job.profileId} AND state<>'deleting'`);
     }
-    const proxyRow = rows(await tx.execute(sql`SELECT x.encryptedPayload FROM h2_android_proxies x
+    const proxyRow = rows(await tx.execute(sql`SELECT x.id AS proxyId, x.encryptedPayload FROM h2_android_proxies x
       JOIN h2_android_native_profiles p ON p.proxyId=x.id
       WHERE p.id=${job.profileId} AND p.agentId=${agentId}
       LIMIT 1`))[0];
     if (!proxyRow) throw new Error("Proxy exclusivo da instância ausente.");
     const proxy = ["create","start"].includes(String(job.action))
       ? decryptH2AdsProxy(String(proxyRow.encryptedPayload)) : null;
-    return { job: { id: Number(job.id), profileId: String(job.profileId), action: String(job.action), proxy } };
+    return { job: { id: Number(job.id), profileId: String(job.profileId), proxyId: String(proxyRow.proxyId), action: String(job.action), proxy } };
   });
 }
 

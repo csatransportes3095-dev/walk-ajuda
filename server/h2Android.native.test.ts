@@ -4,6 +4,40 @@ import path from "node:path";
 const read = (file: string) => fs.readFileSync(path.resolve(process.cwd(), file), "utf8");
 
 describe("H2 Android native isolated architecture", () => {
+  it("keeps separate SOCKS5 relays alive while Android is running and verifies installer rollback", () => {
+    const agent = read("workers/windows/H2AndroidAgent.ps1");
+    const relay = read("workers/windows/H2AndroidSocksRelay.mjs");
+    const installer = read("workers/windows/Install-H2Android.ps1");
+    expect(agent).toContain("function Get-H2RelayReadyFile");
+    expect(agent).toContain("function Test-H2RelayProcess");
+    expect(agent).toContain("function Start-H2SocksRelay");
+    expect(agent).toContain("function Stop-H2SocksRelay");
+    expect(agent).toContain("H2_RELAY_PROXY_ID");
+    expect(agent).toContain("--h2-instance");
+    expect(agent).toContain("-ProxyId ([string]$Job.proxyId)");
+    expect(agent).toContain("-HeartbeatJobId ([long]$Job.id)");
+    expect(agent).not.toContain("$script:SocksRelayPort");
+    expect(relay).toContain("socket.read(size)");
+    expect(relay).toContain("H2_RELAY_READY_FILE");
+    expect(relay).toContain("H2_RELAY_PROXY_ID");
+    expect(relay).toContain("connectSocks");
+    expect(relay).toContain("client.pipe(upstream)");
+    expect(installer).toContain("H2AndroidSocksRelay.previous.mjs");
+    expect(installer).toContain("--check $RelayTempPath");
+  });
+
+  it("renews boot-job leases and marks abandoned provisioning without releasing proxy or AVD", () => {
+    const routerCode = read("server/routers/h2Android.ts");
+    const routeCode = read("server/h2AndroidAgentRoute.ts");
+    const admin = read("client/src/pages/AdminH2Android.tsx");
+    expect(routerCode).toContain("SET claimedAt=NOW()");
+    expect(routerCode).toContain("proxyId: String(proxyRow.proxyId)");
+    expect(routerCode).toContain("INTERVAL 30 MINUTE");
+    expect(routerCode).toContain("p.state IN ('provisioning','starting','queued')");
+    expect(routerCode).toContain("proxyEndpoint:");
+    expect(routeCode).toContain("heartbeatAndroidAgent(agentId, computerName, version, jobId)");
+    expect(admin).toContain("p.proxyEndpoint");
+  });
   it("keeps the H2-only language workflow bounded and avoids system-property hacks", () => {
     const agent = read("workers/windows/H2AndroidAgent.ps1");
     expect(agent).toContain("for ($Step = 0; $Step -lt 24; $Step++)");

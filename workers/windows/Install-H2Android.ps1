@@ -12,6 +12,7 @@ $Base = Join-Path $env:LOCALAPPDATA "H2AndroidNative"
 New-Item -ItemType Directory -Path $Base -Force | Out-Null
 $AgentPath = Join-Path $Base "H2AndroidAgent.ps1"
 $RelayPath = Join-Path $Base "H2AndroidSocksRelay.mjs"
+$RelayBackupPath = Join-Path $Base "H2AndroidSocksRelay.previous.mjs"
 $RelayTempPath = Join-Path $Base ("H2AndroidSocksRelay-" + [guid]::NewGuid().ToString("N") + ".mjs")
 $BackupPath = Join-Path $Base "H2AndroidAgent.previous.ps1"
 $TempPath = Join-Path $Base ("H2AndroidAgent-" + [guid]::NewGuid().ToString("N") + ".ps1")
@@ -52,6 +53,10 @@ try {
   if ((Get-Item -LiteralPath $TempPath).Length -lt 3000) { throw "Download incompleto." }
   if ((Get-Item -LiteralPath $RelayTempPath).Length -lt 1000) { throw "Relay SOCKS5 incompleto." }
   Test-H2AgentSyntax $TempPath
+  $Node = Get-Command node.exe -ErrorAction SilentlyContinue
+  if (!$Node) { throw "Node.js ausente. A ponte SOCKS5 precisa do Node.js no Windows." }
+  & $Node.Source --check $RelayTempPath 2>$null | Out-Null
+  if ($LASTEXITCODE -ne 0) { throw "Ponte SOCKS5 contem erro JavaScript. Agente anterior mantido." }
 } catch {
   if (Test-Path -LiteralPath $TempPath) { Remove-Item -LiteralPath $TempPath -Force }
   if (Test-Path -LiteralPath $RelayTempPath) { Remove-Item -LiteralPath $RelayTempPath -Force }
@@ -74,13 +79,15 @@ if (!$HasToken) {
   if (!$PairCode) { $PairCode = Read-Host "Digite o codigo de pareamento do ADM H2 Android" }
   $PairCode = $PairCode.Trim()
   if ($PairCode -notmatch '^[a-fA-F0-9]{24}$') { throw "Codigo de pareamento invalido." }
-  $Body = @{ code=$PairCode;computerName=$env:COMPUTERNAME;version="1.0.9-socks5-relay" } | ConvertTo-Json -Compress
+  $Body = @{ code=$PairCode;computerName=$env:COMPUTERNAME;version="1.1.0-socks5-stable" } | ConvertTo-Json -Compress
   $Claim = Invoke-RestMethod -Uri ($Server + "/api/h2-android/agent/claim") -Method Post -ContentType "application/json" -Body $Body -TimeoutSec 35 -MaximumRedirection 0
   if ([string]$Claim.token -notmatch '^[a-f0-9]{64}$') { throw "Pareamento nao confirmado no servidor." }
   ConvertTo-SecureString -String ([string]$Claim.token) -AsPlainText -Force |
     ConvertFrom-SecureString | Set-Content -LiteralPath $TokenFile -Encoding UTF8
 }
 
+$HadOldRelay = Test-Path -LiteralPath $RelayPath
+if ($HadOldRelay) { Copy-Item -LiteralPath $RelayPath -Destination $RelayBackupPath -Force }
 $HadOldAgent = Test-Path -LiteralPath $AgentPath
 if ($HadOldAgent) { Copy-Item -LiteralPath $AgentPath -Destination $BackupPath -Force }
 $OldProcesses = @(Find-H2AgentProcesses)
@@ -115,9 +122,13 @@ try {
   }
   if ($HadOldAgent -and (Test-Path -LiteralPath $BackupPath)) {
     Copy-Item -LiteralPath $BackupPath -Destination $AgentPath -Force
+    if ($HadOldRelay -and (Test-Path -LiteralPath $RelayBackupPath)) { Copy-Item -LiteralPath $RelayBackupPath -Destination $RelayPath -Force }
+    elseif (!$HadOldRelay) { Remove-Item -LiteralPath $RelayPath -Force -ErrorAction SilentlyContinue }
     try { [void](Start-H2Agent) } catch {}
     throw ("Falha na atualizacao: " + $Why + ". Versao anterior restaurada.")
   }
+  if ($HadOldRelay -and (Test-Path -LiteralPath $RelayBackupPath)) { Copy-Item -LiteralPath $RelayBackupPath -Destination $RelayPath -Force }
+  elseif (!$HadOldRelay) { Remove-Item -LiteralPath $RelayPath -Force -ErrorAction SilentlyContinue }
   throw ("Agente nao conectou: " + $Why)
 } finally {
   if ($NewProcess) { $NewProcess.Dispose() }

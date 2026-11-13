@@ -95,7 +95,11 @@ export function registerH2AndroidAgentRoutes(app: Express) {
     const computerName = stringField(req.body?.computerName, 120);
     const version = stringField(req.body?.version, 32);
     if (!computerName || !version) { res.status(400).json({ error: "Identificação inválida." }); return; }
-    const result = await heartbeatAndroidAgent(agentId, computerName, version);
+    const jobId = req.body?.jobId == null ? undefined : Number(req.body.jobId);
+    if (jobId !== undefined && (!Number.isSafeInteger(jobId) || jobId < 1)) {
+      res.status(400).json({ error: "Identificador de trabalho inválido." }); return;
+    }
+    const result = await heartbeatAndroidAgent(agentId, computerName, version, jobId);
     res.status(result.accepted ? 200 : 401).json(result);
   }));
   app.post("/api/h2-android/agent/complete", safe(async (req, res) => {
