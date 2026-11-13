@@ -26,8 +26,8 @@ describe("H2 Android native isolated architecture", () => {
     expect(agentCode).toContain("hw.keyboard=yes");
     expect(agentCode).toContain("function Set-H2Locale");
     expect(agentCode).toContain("persist.sys.locale pt-BR");
-    expect(agentCode).toContain("function Start-H2Gui");
-    expect(agentCode).toContain("$I.CreateNoWindow = $true");
+    expect(agentCode).toContain("function Start-H2Emulator");
+    expect(agentCode).toContain("$Info.CreateNoWindow = $true");
     expect(installerCode).toContain("-WindowStyle Hidden");
     expect(launcherCode).toContain("O agente executa em segundo plano.");
   });
@@ -78,8 +78,8 @@ describe("H2 Android native isolated architecture", () => {
     expect(agent).toContain('if ($Server -ieq "https://www.h2colombiano.com")');
     expect(agent).toContain("-MaximumRedirection 0");
     expect(agent).toContain("conexao autenticada, agente online");
-    expect(installer).toContain('if ($HasPairedToken)');
-    expect(installer).toContain("Pareamento existente preservado");
+    expect(installer).toContain('if (!$HasToken)');
+    expect(installer).toContain("H2AndroidAgent.previous.ps1");
     expect(installer).toContain("Get-CimInstance -ClassName Win32_Process");
   });
   it("isolates agent persistence from preexisting H2 Android legacy tables and logs no SQL parameters", () => {
@@ -99,7 +99,7 @@ describe("H2 Android native isolated architecture", () => {
     expect(launcher).toContain("powershell.exe -NoProfile -ExecutionPolicy Bypass -File");
     expect(launcher).toContain("/api/h2-android/install-windows.ps1");
     expect(installer).toContain("/api/h2-android/agent/claim");
-    expect(installer).toContain("Pareamento confirmado no servidor");
+    expect(installer).toContain("H2 Android: agente ONLINE e funcionando em segundo plano.");
     expect(endpoint).toContain("/api/h2-android/install-windows.cmd");
     expect(dashboard).toContain('href="/api/h2-android/install-windows.cmd"');
   });
