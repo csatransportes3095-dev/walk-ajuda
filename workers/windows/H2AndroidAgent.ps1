@@ -362,27 +362,28 @@ function Start-H2Emulator {
   }
   $StartAttempt = {
     param([string]$ExtraArguments)
-    $AttemptLog = Join-Path $Base ("emulator-" + $Name + "-" + [guid]::NewGuid().ToString("N") + ".log")
-    $Info = New-Object System.Diagnostics.ProcessStartInfo
-    $Info.FileName = $Emulator
-    $Info.Arguments = ('-avd "' + $Name + '" -http-proxy "' + $ProxyUri + '" -no-boot-anim -verbose ' + $ExtraArguments).Trim()
-    $Info.WorkingDirectory = Join-Path $Sdk "emulator"
-    $Info.UseShellExecute = $false
-    $Info.CreateNoWindow = $true
-    $Info.RedirectStandardOutput = $true
-    $Info.RedirectStandardError = $true
-    $Proc = New-Object System.Diagnostics.Process
-    $Proc.StartInfo = $Info
-    if (!$Proc.Start()) { throw "O processo do Android nao iniciou." }
-    Start-Sleep -Seconds 5
-    if (!$Proc.HasExited) { return @{ Process=$Proc; Running=$true; Details="" } }
-    $RawDetails = ($Proc.StandardOutput.ReadToEnd() + "`r`n" + $Proc.StandardError.ReadToEnd()).Trim()
-    $RawDetails | Set-Content -LiteralPath $AttemptLog -Encoding UTF8 -ErrorAction SilentlyContinue
-    $Lines = @($RawDetails -split '[\r\n]+' | Where-Object { $_.Trim() })
-    $Details = (($Lines | Select-Object -Last 12) -join " | ")
-    $Code = $Proc.ExitCode
-    $Proc.Dispose()
-    return @{ Process=$null; Running=$false; Code=$Code; Details=$Details; Log=$AttemptLog }
+    $LogId = "emulator-" + $Name + "-" + [guid]::NewGuid().ToString("N")
+    $OutLog = Join-Path $Base ($LogId + ".stdout.log")
+    $ErrLog = Join-Path $Base ($LogId + ".stderr.log")
+    $Arguments = ('-avd "' + $Name + '" -http-proxy "' + $ProxyUri + '" -no-boot-anim -verbose ' + $ExtraArguments).Trim()
+    # Writing to files instead of unread stdout/stderr pipes prevents
+    # the live emulator from freezing when its verbose output fills a pipe.
+    # Launch emulator.exe directly, never through a CMD window.
+    $Proc = Start-Process -FilePath $Emulator -ArgumentList $Arguments -WorkingDirectory (Join-Path $Sdk "emulator") -RedirectStandardOutput $OutLog -RedirectStandardError $ErrLog -WindowStyle Normal -PassThru -ErrorAction Stop
+    try {
+      Start-Sleep -Seconds 5
+      $Proc.Refresh()
+      if (!$Proc.HasExited) {
+        Write-H2Status ("Emulador executando: " + $Name + ". Diagnosticos gravados em disco.")
+        return @{ Running=$true; Details=""; Log=$ErrLog }
+      }
+      $Code = $Proc.ExitCode
+      $StdErr = if (Test-Path -LiteralPath $ErrLog) { @(Get-Content -LiteralPath $ErrLog -Tail 14 -ErrorAction SilentlyContinue) } else { @() }
+      $StdOut = if (Test-Path -LiteralPath $OutLog) { @(Get-Content -LiteralPath $OutLog -Tail 8 -ErrorAction SilentlyContinue) } else { @() }
+      $Details = ((@($StdErr) + @($StdOut) | Where-Object { $_ -and $_.Trim() }) | Select-Object -Last 14) -join " | "
+      if ($Details.Length -gt 850) { $Details = $Details.Substring($Details.Length - 850) }
+      return @{ Running=$false; Code=$Code; Details=$Details; Log=$ErrLog }
+    } finally { $Proc.Dispose() }
   }
   $Attempt = & $StartAttempt ""
   if ($Attempt.Running) { return }
