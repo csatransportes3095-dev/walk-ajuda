@@ -132,7 +132,7 @@ export const h2AndroidRouter = router({
           j.lastError='Inicializacao excedeu 30 minutos.',
           p.state='error',
           p.lastError='Inicializacao excedeu 30 minutos. Android e proxy preservados.'
-      WHERE j.state='claimed' AND j.action IN ('create','start')
+      WHERE j.state='claimed' AND j.action IN ('create','rebuild','start')
         AND j.createdAt < DATE_SUB(NOW(), INTERVAL 30 MINUTE)
         AND p.state IN ('provisioning','starting','queued')
     `);
@@ -423,7 +423,7 @@ export const h2AndroidRouter = router({
         AND state IN ('queued','claimed') LIMIT 1
       `));
       if (pending.length) throw new TRPCError({ code: "CONFLICT", message: "Já existe um comando pendente para este aparelho." });
-      const action = input.action === "retry" ? "create" : input.action;
+      const action = input.action === "retry" ? "rebuild" : input.action;
       if (existing.state === "deleting" && action !== "delete") {
         throw new TRPCError({ code: "CONFLICT", message: "Instância em exclusão." });
       }
@@ -529,7 +529,7 @@ export async function nextAndroidJob(agentId: string, computerName: string, vers
     const claimed = await tx.execute(sql`UPDATE h2_android_jobs SET state='claimed', claimedAt=NOW()
       WHERE id=${job.id} AND state='queued'`);
     if (affected(claimed) !== 1) return { job: null };
-    if (job.action === "create") {
+    if (["create", "rebuild"].includes(String(job.action))) {
       await tx.execute(sql`UPDATE h2_android_native_profiles SET state='provisioning'
         WHERE id=${job.profileId} AND state<>'deleting'`);
     }
@@ -538,7 +538,7 @@ export async function nextAndroidJob(agentId: string, computerName: string, vers
       WHERE p.id=${job.profileId} AND p.agentId=${agentId}
       LIMIT 1`))[0];
     if (!proxyRow) throw new Error("Proxy exclusivo da instância ausente.");
-    const proxy = ["create","start"].includes(String(job.action))
+    const proxy = ["create","rebuild","start"].includes(String(job.action))
       ? decryptH2AdsProxy(String(proxyRow.encryptedPayload)) : null;
     return { job: { id: Number(job.id), profileId: String(job.profileId), proxyId: String(proxyRow.proxyId), action: String(job.action), proxy } };
   });
