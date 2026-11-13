@@ -360,8 +360,8 @@ export const h2AndroidRouter = router({
     return { id, queued: true };
   }),
 
-  // Rotate a stopped or failed device to the next unused proxy without changing its AVD.
-  // Do not change a live proxy in the middle of Android traffic.
+  // Rotate on a running Android without changing the AVD or the listener port.
+  // Do not retire the old proxy until the new route is validated.
   rotateProxy: adminProcedure.input(idSchema).mutation(async ({ input }) => {
     const db = await androidDb();
     return db.transaction(async tx => {
@@ -413,6 +413,11 @@ export const h2AndroidRouter = router({
         await tx.execute(sql`
           INSERT INTO h2_android_proxy_rotations (jobId,profileId,oldProxyId,newProxyId)
           VALUES (${jobId},${input.id},${oldId},${nextId})
+        `);
+        await tx.execute(sql`
+          UPDATE h2_android_native_profiles
+          SET lastError='Troca de proxy em andamento. Android permanece aberto; proxy anterior preservado ate validar.'
+          WHERE id=${input.id} AND state='running' AND proxyId=${oldId}
         `);
         return { proxyId: nextId, previousProxyId: oldId, queued: true };
       }
