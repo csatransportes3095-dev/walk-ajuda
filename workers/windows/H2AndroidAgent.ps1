@@ -6,7 +6,7 @@ param(
   [string]$PairCode = ""
 )
 $ErrorActionPreference = "Stop"
-$Version = "1.0.6"
+$Version = "1.0.7"
 $Base = Join-Path $env:LOCALAPPDATA "H2AndroidNative"
 $AvdHome = Join-Path $Base "avd"
 $TokenFile = Join-Path $Base "agent.secure"
@@ -253,23 +253,83 @@ function Start-H2Emulator {
     }
   } finally { $Proc.Dispose() }
 }
-# Apply locale only to a running H2 virtual device, without resetting its data.
-# Some Android images restrict locale changes; this must not mark the entire AVD failed.
+# Android 15 Play Store images may reject writes to persist.sys.locale.
+# Try runtime ActivityManager locale configuration first, then Google's ADB method.
+# The configure action reports failures; regular start/create never destroys userdata.
 function Set-H2Locale {
   param([string]$Adb,[string]$Name,[string]$Serial)
+  $Before = (@(Invoke-H2Adb -Executable $Adb -CommandArgs @("-s",$Serial,"shell","getprop","persist.sys.locale")) | Out-String).Trim()
+  if ($Before -eq "pt-BR") { return $true }
   try {
-    $Current = @(Invoke-H2Adb -Executable $Adb -CommandArgs @("-s",$Serial,"shell","getprop","persist.sys.locale"))
-    if (($Current | Out-String).Trim() -eq "pt-BR") { return }
+    Invoke-H2Adb -Executable $Adb -CommandArgs @("-s",$Serial,"shell","am","update-config","--locale","pt-BR") | Out-Null
+    Write-Host "H2 Android: solicitado idioma pt-BR pelo ActivityManager."
+    return $true
+  } catch {
+    Write-H2Status "Locale ActivityManager indisponivel, tentando metodo ADB"
+  }
+  try {
     Invoke-H2Adb -Executable $Adb -CommandArgs @("-s",$Serial,"shell","setprop persist.sys.locale pt-BR;stop;sleep 5;start") | Out-Null
     [void](Wait-Boot $Adb $Name 240)
-    $After = @(Invoke-H2Adb -Executable $Adb -CommandArgs @("-s",$Serial,"shell","getprop","persist.sys.locale"))
-    if (($After | Out-String).Trim() -ne "pt-BR") {
-      Write-Warning "Idioma pt-BR nao confirmado nesta imagem Android; aparelho preservado."
-    }
+    $After = (@(Invoke-H2Adb -Executable $Adb -CommandArgs @("-s",$Serial,"shell","getprop","persist.sys.locale")) | Out-String).Trim()
+    return ($After -eq "pt-BR")
   } catch {
-    Write-Warning "Idioma pt-BR nao pode ser aplicado automaticamente. Android preservado."
+    return $false
   }
 }
+# Use Android's bottom navigation buttons rather than the emulator's side controls.
+function Set-H2BottomNavigation {
+  param([string]$Adb,[string]$Serial)
+  $Overlay = "com.android.internal.systemui.navbar.threebutton"
+  Invoke-H2Adb -Executable $Adb -CommandArgs @("-s",$Serial,"shell","cmd","overlay","enable","--user","0",$Overlay) | Out-Null
+}
+# Windows 11 rounded window corners (DWM): cosmetic, Android remains interactive.
+function Set-H2RoundedWindow {
+  param([string]$Name)
+  try {
+    if (-not ("H2WindowCorners" -as [type])) {
+      Add-Type -TypeDefinition @'
+using System;
+using System.Text;
+using System.Runtime.InteropServices;
+public static class H2WindowCorners {
+  public delegate bool EnumWindowsProc(IntPtr hwnd, IntPtr lparam);
+  [DllImport("user32.dll")] static extern bool EnumWindows(EnumWindowsProc cb, IntPtr lparam);
+  [DllImport("user32.dll", CharSet=CharSet.Unicode)] static extern int GetWindowText(IntPtr hwnd, StringBuilder text, int maxCount);
+  [DllImport("dwmapi.dll")] static extern int DwmSetWindowAttribute(IntPtr hwnd, int attribute, ref int value, int size);
+  public static int RoundEmulator(string name) {
+    int changed = 0;
+    EnumWindows((hwnd, lparam) => {
+      var sb = new StringBuilder(512);
+      GetWindowText(hwnd, sb, sb.Capacity);
+      if (sb.ToString().StartsWith("Android Emulator - " + name, StringComparison.OrdinalIgnoreCase)) {
+        int preference = 2;
+        if (DwmSetWindowAttribute(hwnd, 33, ref preference, sizeof(int)) == 0) changed++;
+      }
+      return true;
+    }, IntPtr.Zero);
+    return changed;
+  }
+}
+'@
+    }
+    [void][H2WindowCorners]::RoundEmulator($Name)
+  } catch {
+    Write-H2Status "Moldura arredondada nao suportada pelo Windows"
+  }
+}
+function Set-H2Presentation {
+  param([string]$Adb,[string]$Name,[string]$Serial,[bool]$Strict=$false)
+  Set-H2Keyboard -Name $Name
+  Set-H2RoundedWindow -Name $Name
+  $NavError = $null
+  try { Set-H2BottomNavigation -Adb $Adb -Serial $Serial }
+  catch { $NavError = $_.Exception.Message }
+  $LocaleSet = Set-H2Locale -Adb $Adb -Name $Name -Serial $Serial
+  if ($Strict -and !$LocaleSet) { throw "Nao foi possivel aplicar o Portugues do Brasil nesta imagem Google Play. Configure em Android > Configuracoes > Sistema > Idiomas." }
+  if ($Strict -and $NavError) { throw ("Barra inferior nao suportada nesta imagem Android: " + $NavError) }
+  if (!$LocaleSet) { Write-H2Status "Idioma pt-BR nao confirmado nesta imagem Google Play" }
+}
+
 
 function Run-Job([object]$Job,[string]$Sdk) {
   if ($Job.action -in @("create","delete")) { Set-H2AndroidJava }
@@ -303,7 +363,7 @@ function Run-Job([object]$Job,[string]$Sdk) {
         Start-H2Emulator -Emulator $Emulator -Sdk $Sdk -Name $Name -ProxyUri $Uri
       }
       $BootSerial = Wait-Boot $Adb $Name
-      Set-H2Locale -Adb $Adb -Name $Name -Serial $BootSerial
+      Set-H2Presentation -Adb $Adb -Name $Name -Serial $BootSerial
       return $ProxyIp
     }
     "start" {
@@ -314,8 +374,13 @@ function Run-Job([object]$Job,[string]$Sdk) {
         Start-H2Emulator -Emulator $Emulator -Sdk $Sdk -Name $Name -ProxyUri $Uri
       }
       $BootSerial = Wait-Boot $Adb $Name
-      Set-H2Locale -Adb $Adb -Name $Name -Serial $BootSerial
+      Set-H2Presentation -Adb $Adb -Name $Name -Serial $BootSerial
       return $ProxyIp
+    }
+    "configure" {
+      if (!$Serial) { throw "Abra a instancia antes de ajustar idioma e visual." }
+      Set-H2Presentation -Adb $Adb -Name $Name -Serial $Serial -Strict $true
+      return $null
     }
     "stop" {
       if ($Serial) {
