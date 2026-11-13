@@ -16,7 +16,10 @@ describe("H2 Android native isolated architecture", () => {
     expect(agent).toContain("am\",\"update-config\",\"--locale\",\"pt-BR");
     expect(agent).toContain("com.android.internal.systemui.navbar.threebutton");
     expect(agent).toContain("DwmSetWindowAttribute");
-    expect(agent).toContain("Set-H2Presentation -Adb $Adb -Name $Name -Serial $Serial -Strict $true");
+    expect(agent).toContain("function Set-H2DeviceSkin");
+    expect(agent).toContain("showDeviceFrame");
+    expect(agent).toContain("skin.dynamic");
+    expect(agent).toContain("Set-H2Presentation -Adb $Adb -Name $Name -Serial $Serial -Sdk $Sdk -Strict $true");
     expect(admin).toContain('action:"configure"');
     expect(admin).toContain("Ajustar idioma e visual do celular");
     expect(agent.match(/^while \(\$true\) \{$/gm)?.length).toBe(1);
