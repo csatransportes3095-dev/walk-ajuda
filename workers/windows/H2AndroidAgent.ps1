@@ -174,6 +174,23 @@ function Set-H2AndroidGlobalProxy {
   }
   Write-H2Status ("Proxy HTTP do Android confirmado em " + $Endpoint + " (apps e UDP ainda precisam de verificacao)")
 }
+# If Android refuses the proxy setting, shut down this exact emulator.
+# A job must not report failure while leaving a usable unproxied browser open.
+function Assert-H2AndroidProxyOrStop {
+  param([string]$Adb,[string]$Serial,[int]$RelayPort)
+  try {
+    Set-H2AndroidGlobalProxy -Adb $Adb -Serial $Serial -RelayPort $RelayPort
+  } catch {
+    $Reason = $_.Exception.Message
+    try {
+      Invoke-H2Adb -Executable $Adb -CommandArgs @("-s",$Serial,"emu","kill") | Out-Null
+      Write-H2Status ("Android interrompido: proxy interno nao confirmado no " + $Serial)
+    } catch {
+      Write-H2Status ("ALERTA: Nao foi possivel parar Android apos erro de proxy no " + $Serial)
+    }
+    throw ("Proxy Android nao confirmado. Inicializacao recusada: " + $Reason)
+  }
+}
 function Wait-Boot([string]$Adb,[string]$Name,[int]$TimeoutSeconds=180) {
   $Deadline = (Get-Date).AddSeconds($TimeoutSeconds)
   while ((Get-Date) -lt $Deadline) {
@@ -868,7 +885,7 @@ function Run-Job([object]$Job,[string]$Sdk) {
         Start-H2Emulator -Emulator $Emulator -Sdk $Sdk -Name $Name -ProxyUri $Uri
       }
       $BootSerial = Wait-Boot $Adb $Name
-      Set-H2AndroidGlobalProxy -Adb $Adb -Serial $BootSerial -RelayPort $RelayPort
+      Assert-H2AndroidProxyOrStop -Adb $Adb -Serial $BootSerial -RelayPort $RelayPort
       Set-H2Presentation -Adb $Adb -Name $Name -Serial $BootSerial -Sdk $Sdk -Fresh $true
       return $ProxyIp
     }
@@ -880,7 +897,7 @@ function Run-Job([object]$Job,[string]$Sdk) {
         Start-H2Emulator -Emulator $Emulator -Sdk $Sdk -Name $Name -ProxyUri $Uri
       }
       $BootSerial = Wait-Boot $Adb $Name
-      Set-H2AndroidGlobalProxy -Adb $Adb -Serial $BootSerial -RelayPort $RelayPort
+      Assert-H2AndroidProxyOrStop -Adb $Adb -Serial $BootSerial -RelayPort $RelayPort
       Set-H2Presentation -Adb $Adb -Name $Name -Serial $BootSerial -Sdk $Sdk
       return $ProxyIp
     }
