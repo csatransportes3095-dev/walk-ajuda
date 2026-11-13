@@ -89,6 +89,28 @@ const rows = (result: any): DBRow[] => (result?.[0] || []) as DBRow[];
 const affected = (result: any): number => Number(result?.[0]?.affectedRows || 0);
 const idSchema = z.object({ id: z.string().uuid() }).strict();
 
+// Do not allocate legacy HTTP entries when the Windows agent requires SOCKS5.
+// Keep row locks inside the caller's transaction to avoid duplicate reservations.
+async function findAvailableSocks5Proxy(tx: any): Promise<number | null> {
+  let afterId = 0;
+  for (let page = 0; page < 100; page++) {
+    const pool = rows(await tx.execute(sql`
+      SELECT id, encryptedPayload FROM h2_android_proxies
+      WHERE status='available' AND id > ${afterId}
+      ORDER BY id LIMIT 100 FOR UPDATE
+    `));
+    if (!pool.length) return null;
+    for (const row of pool) {
+      afterId = Number(row.id);
+      try {
+        const proxy = decryptH2AdsProxy(String(row.encryptedPayload));
+        if (String(proxy.protocol).toLowerCase() === 'socks5') return afterId;
+      } catch { /* Invalid legacy record: never allocate it. */ }
+    }
+    if (pool.length < 100) return null;
+  }
+  throw new TRPCError({ code: 'PRECONDITION_FAILED', message: 'Cofre muito grande para selecionar proxy SOCKS5 automaticamente.' });
+}
 async function onlineAgent(db: Awaited<ReturnType<typeof androidDb>>) {
   const list = rows(await db.execute(sql`
     SELECT id FROM h2_android_native_agents_v2
@@ -231,12 +253,8 @@ export const h2AndroidRouter = router({
       if (Number(active[0]?.total || 0) >= H2_ANDROID_MAX_RUNNING) {
         throw new TRPCError({ code: "PRECONDITION_FAILED", message: "Limite de cinco Androids em execução ou preparação." });
       }
-      const candidates = rows(await tx.execute(sql`
-        SELECT id FROM h2_android_proxies WHERE status='available'
-        ORDER BY id LIMIT 1 FOR UPDATE
-      `));
-      const proxyId = Number(candidates[0]?.id);
-      if (!proxyId) throw new TRPCError({ code: "PRECONDITION_FAILED", message: "Não existem proxies disponíveis no cofre H2 Android." });
+      const proxyId = await findAvailableSocks5Proxy(tx);
+      if (!proxyId) throw new TRPCError({ code: "PRECONDITION_FAILED", message: "Não existem proxies SOCKS5 livres no cofre H2 Android." });
       const update = await tx.execute(sql`
         UPDATE h2_android_proxies SET status='assigned', profileId=${id}
         WHERE id=${proxyId} AND status='available'
@@ -276,12 +294,8 @@ export const h2AndroidRouter = router({
       if (!oldProxy || String(oldProxy.profileId) !== input.id || String(oldProxy.status) !== "assigned") {
         throw new TRPCError({ code: "CONFLICT", message: "Reserva atual do proxy inconsistente. Nenhuma troca realizada." });
       }
-      const candidates = rows(await tx.execute(sql`
-        SELECT id FROM h2_android_proxies WHERE status='available'
-          ORDER BY id LIMIT 1 FOR UPDATE
-      `));
-      const nextId = Number(candidates[0]?.id);
-      if (!nextId) throw new TRPCError({ code: "PRECONDITION_FAILED", message: "Não há outro proxy livre no cofre H2 Android." });
+      const nextId = await findAvailableSocks5Proxy(tx);
+      if (!nextId) throw new TRPCError({ code: "PRECONDITION_FAILED", message: "Não há outro proxy SOCKS5 livre no cofre H2 Android." });
       // Enforce one proxy per profile; all changes roll back together on failure.
       const retired = await tx.execute(sql`
         UPDATE h2_android_proxies SET status='retired', profileId=NULL
