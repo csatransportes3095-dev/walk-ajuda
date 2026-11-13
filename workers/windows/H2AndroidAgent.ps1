@@ -259,9 +259,10 @@ function Start-H2Emulator {
   }
   $StartAttempt = {
     param([string]$ExtraArguments)
+    $AttemptLog = Join-Path $Base ("emulator-" + $Name + "-" + [guid]::NewGuid().ToString("N") + ".log")
     $Info = New-Object System.Diagnostics.ProcessStartInfo
     $Info.FileName = $Emulator
-    $Info.Arguments = ('-avd "' + $Name + '" -http-proxy "' + $ProxyUri + '" -no-boot-anim ' + $ExtraArguments).Trim()
+    $Info.Arguments = ('-avd "' + $Name + '" -http-proxy "' + $ProxyUri + '" -no-boot-anim -verbose ' + $ExtraArguments).Trim()
     $Info.WorkingDirectory = Join-Path $Sdk "emulator"
     $Info.UseShellExecute = $false
     $Info.CreateNoWindow = $true
@@ -270,12 +271,15 @@ function Start-H2Emulator {
     $Proc = New-Object System.Diagnostics.Process
     $Proc.StartInfo = $Info
     if (!$Proc.Start()) { throw "O processo do Android nao iniciou." }
-    Start-Sleep -Seconds 2
+    Start-Sleep -Seconds 5
     if (!$Proc.HasExited) { return @{ Process=$Proc; Running=$true; Details="" } }
-    $Details = (($Proc.StandardOutput.ReadToEnd() + " " + $Proc.StandardError.ReadToEnd()).Trim() -replace '[\r\n]+',' | ')
+    $RawDetails = ($Proc.StandardOutput.ReadToEnd() + "`r`n" + $Proc.StandardError.ReadToEnd()).Trim()
+    $RawDetails | Set-Content -LiteralPath $AttemptLog -Encoding UTF8 -ErrorAction SilentlyContinue
+    $Lines = @($RawDetails -split '[\r\n]+' | Where-Object { $_.Trim() })
+    $Details = (($Lines | Select-Object -Last 12) -join " | ")
     $Code = $Proc.ExitCode
     $Proc.Dispose()
-    return @{ Process=$null; Running=$false; Code=$Code; Details=$Details }
+    return @{ Process=$null; Running=$false; Code=$Code; Details=$Details; Log=$AttemptLog }
   }
   $Attempt = & $StartAttempt ""
   if ($Attempt.Running) { return }
@@ -284,14 +288,14 @@ function Start-H2Emulator {
     return
   }
   $FirstDetails = [string]$Attempt.Details
-  if ($FirstDetails.Length -gt 420) { $FirstDetails = $FirstDetails.Substring(0,420) }
-  Write-H2Status ("Emulador terminou com codigo " + $Attempt.Code + ": " + $FirstDetails)
+  if ($FirstDetails.Length -gt 900) { $FirstDetails = $FirstDetails.Substring($FirstDetails.Length - 900) }
+  Write-H2Status ("Emulador terminou com codigo " + $Attempt.Code + ". Ultimas linhas: " + $FirstDetails)
   Write-H2Status "Tentando Android sem aceleracao de hardware (virtualizacao do Windows indisponivel)"
   $Fallback = & $StartAttempt "-no-accel -gpu swiftshader_indirect"
   if ($Fallback.Running) { return }
   $Details = [string]$Fallback.Details
-  if ($Details.Length -gt 420) { $Details = $Details.Substring(0,420) }
-  throw ("Emulador terminou com codigo " + $Fallback.Code + ". Diagnostico: " + $Details)
+  if ($Details.Length -gt 900) { $Details = $Details.Substring($Details.Length - 900) }
+  throw ("Emulador terminou com codigo " + $Fallback.Code + ". Ultimas linhas: " + $Details + ". Log local: " + $Fallback.Log)
 }
 # Google Play Android 15 is a production-style system image: adb shell cannot
 # reliably change global locale with setprop or am update-config. Instead automate

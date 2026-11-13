@@ -110,7 +110,10 @@ describe("H2 Android native isolated architecture", () => {
     expect(agent).toContain("RedirectStandardError = $true");
     expect(agent).toContain("-no-accel -gpu swiftshader_indirect");
     expect(agent).toContain("Tentando Android sem aceleracao de hardware");
-    expect(agent).toContain("Diagnostico:");
+    expect(agent).toContain("Ultimas linhas:");
+    expect(agent).toContain("Select-Object -Last 12");
+    expect(agent).toContain("-verbose");
+    expect(agent).toContain("Log local:");
   });
 
   it("does not mistake ADB port 5037 startup messages for a failed creation", () => {
