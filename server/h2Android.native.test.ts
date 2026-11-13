@@ -178,7 +178,7 @@ describe("H2 Android native isolated architecture", () => {
     expect(code).toContain("api.adoptium.net/v3/assets/latest/21/hotspot");
     expect(code).toContain("Get-FileHash -LiteralPath $ZipFile -Algorithm SHA256");
     expect(code).toContain('$env:JAVA_HOME = $Selected');
-    expect(code).toContain('if ($Job.action -in @("create","delete")) { Set-H2AndroidJava }');
+    expect(code).toContain('if ($Job.action -in @("create","rebuild","delete")) { Set-H2AndroidJava }');
     expect(code).not.toContain("setx JAVA_HOME");
   });
 
