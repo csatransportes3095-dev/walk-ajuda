@@ -279,6 +279,35 @@ function Set-H2Locale {
     return $false
   }
 }
+# Enable an actual phone skin ONLY if Android SDK already has valid skin files.
+# Otherwise keep a safe standard emulator screen and rounded Windows frame.
+function Set-H2DeviceSkin {
+  param([string]$Name,[string]$Sdk)
+  $Cfg = Join-Path (Join-Path $AvdHome "$Name.avd") "config.ini"
+  if (!(Test-Path -LiteralPath $Cfg)) { return }
+  foreach ($SkinName in @("pixel_6","pixel_5","pixel_4")) {
+    $SkinPath = Join-Path $Sdk ("skins\" + $SkinName)
+    if (!(Test-Path -LiteralPath (Join-Path $SkinPath "layout"))) { continue }
+    $Text = Get-Content -LiteralPath $Cfg -Raw
+    $Pairs = @{
+      "showDeviceFrame" = "yes"
+      "skin.dynamic" = "yes"
+      "skin.name" = $SkinName
+      "skin.path" = $SkinPath.Replace("\","/")
+    }
+    foreach ($Key in $Pairs.Keys) {
+      $Line = $Key + "=" + $Pairs[$Key]
+      $Regex = '(?m)^' + [regex]::Escape($Key) + '\s*=.*$'
+      if ($Text -match $Regex) { $Text = [regex]::Replace($Text,$Regex,$Line) }
+      else { $Text = $Text.TrimEnd() + [Environment]::NewLine + $Line + [Environment]::NewLine }
+    }
+    Set-Content -LiteralPath $Cfg -Value $Text -Encoding Ascii -NoNewline
+    Write-H2Status ("Moldura de celular habilitada: " + $SkinName)
+    return
+  }
+  Write-H2Status "Skin de celular nao instalada no Android SDK; usada moldura Windows"
+}
+
 # Use Android's bottom navigation buttons rather than the emulator's side controls.
 function Set-H2BottomNavigation {
   param([string]$Adb,[string]$Serial)
@@ -321,8 +350,9 @@ public static class H2WindowCorners {
   }
 }
 function Set-H2Presentation {
-  param([string]$Adb,[string]$Name,[string]$Serial,[bool]$Strict=$false)
+  param([string]$Adb,[string]$Name,[string]$Serial,[string]$Sdk,[bool]$Strict=$false)
   Set-H2Keyboard -Name $Name
+  Set-H2DeviceSkin -Name $Name -Sdk $Sdk
   Set-H2RoundedWindow -Name $Name
   $NavError = $null
   try { Set-H2BottomNavigation -Adb $Adb -Serial $Serial }
@@ -366,7 +396,7 @@ function Run-Job([object]$Job,[string]$Sdk) {
         Start-H2Emulator -Emulator $Emulator -Sdk $Sdk -Name $Name -ProxyUri $Uri
       }
       $BootSerial = Wait-Boot $Adb $Name
-      Set-H2Presentation -Adb $Adb -Name $Name -Serial $BootSerial
+      Set-H2Presentation -Adb $Adb -Name $Name -Serial $BootSerial -Sdk $Sdk
       return $ProxyIp
     }
     "start" {
@@ -377,12 +407,12 @@ function Run-Job([object]$Job,[string]$Sdk) {
         Start-H2Emulator -Emulator $Emulator -Sdk $Sdk -Name $Name -ProxyUri $Uri
       }
       $BootSerial = Wait-Boot $Adb $Name
-      Set-H2Presentation -Adb $Adb -Name $Name -Serial $BootSerial
+      Set-H2Presentation -Adb $Adb -Name $Name -Serial $BootSerial -Sdk $Sdk
       return $ProxyIp
     }
     "configure" {
       if (!$Serial) { throw "Abra a instancia antes de ajustar idioma e visual." }
-      Set-H2Presentation -Adb $Adb -Name $Name -Serial $Serial -Strict $true
+      Set-H2Presentation -Adb $Adb -Name $Name -Serial $Serial -Sdk $Sdk -Strict $true
       return $null
     }
     "stop" {
