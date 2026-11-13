@@ -204,7 +204,7 @@ describe("H2 Android native isolated architecture", () => {
     expect(agent).toContain("function Get-H2EmulatorDiagnostic");
     expect(agent).toContain('Select-Object -Last 3');
     expect(agent).toContain("FATAL|PANIC|ERROR");
-    expect(agent.match(/Start-Process -FilePath \\$Emulator/g)?.length).toBe(1);
+    expect(agent.split("Start-Process -FilePath $Emulator").length - 1).toBe(1);
     expect(agent).not.toContain('$StartAttempt "-gpu software"');
     expect(agent).not.toContain('-no-accel -gpu swiftshader_indirect');
     expect(agent).not.toContain("-read-only");
