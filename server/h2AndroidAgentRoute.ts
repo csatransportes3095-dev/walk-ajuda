@@ -107,7 +107,11 @@ export function registerH2AndroidAgentRoutes(app: Express) {
     if (!agentId) return;
     const jobId = Number(req.body?.jobId);
     const success = req.body?.success;
-    const error = req.body?.error == null ? undefined : stringField(req.body.error, 500);
+    // Emulator diagnostic output can be much longer than 500 characters.
+    // Rejecting it with HTTP 400 leaves the claimed job stuck in "Preparando".
+    // Accept any nonblank string and cap it before storage, never drop completion.
+    const error = req.body?.error == null ? undefined :
+      typeof req.body.error === "string" ? req.body.error.trim().slice(0, 500) : null;
     const observedIp = req.body?.observedIp == null ? undefined : stringField(req.body.observedIp, 64);
     if (!Number.isSafeInteger(jobId) || jobId < 1 || typeof success !== "boolean" ||
         (req.body?.error != null && !error) || (req.body?.observedIp != null && !observedIp)) {
