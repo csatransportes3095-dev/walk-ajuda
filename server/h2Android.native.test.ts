@@ -4,6 +4,18 @@ import path from "node:path";
 const read = (file: string) => fs.readFileSync(path.resolve(process.cwd(), file), "utf8");
 
 describe("H2 Android native isolated architecture", () => {
+  it("does not block Android boot on unread emulator diagnostics", () => {
+    const agent = read("workers/windows/H2AndroidAgent.ps1");
+    expect(agent).toContain("-RedirectStandardOutput $OutLog -RedirectStandardError $ErrLog");
+    expect(agent).toContain("-FilePath $Emulator");
+    expect(agent).toContain("Get-Content -LiteralPath $ErrLog -Tail 14");
+    expect(agent).toContain("Get-Content -LiteralPath $OutLog -Tail 8");
+    expect(agent).not.toContain("$Info.RedirectStandardOutput = $true");
+    expect(agent).not.toContain("$Info.RedirectStandardError = $true");
+    expect(agent).not.toContain("$Proc.StandardOutput.ReadToEnd()");
+    expect(agent).not.toContain("$Proc.StandardError.ReadToEnd()");
+  });
+
   it("lets ADM browse proxies without exposing credentials and delete only unused available records", () => {
     const routerCode = read("server/routers/h2Android.ts");
     const dashboard = read("client/src/pages/AdminH2Android.tsx");
@@ -170,7 +182,7 @@ describe("H2 Android native isolated architecture", () => {
   });
   it("captures emulator startup errors and retries without hardware acceleration", () => {
     const agent = read("workers/windows/H2AndroidAgent.ps1");
-    expect(agent).toContain("RedirectStandardError = $true");
+    expect(agent).toContain("-RedirectStandardError $ErrLog");
     expect(agent).toContain("-no-accel -gpu swiftshader_indirect");
     expect(agent).toContain("Tentando Android sem aceleracao de hardware");
     expect(agent).toContain("Ultimas linhas:");
