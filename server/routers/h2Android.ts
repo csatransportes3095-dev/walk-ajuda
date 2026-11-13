@@ -229,6 +229,58 @@ export const h2AndroidRouter = router({
     return { id, queued: true };
   }),
 
+  // Rotate a stopped device to the next unused proxy without changing its AVD.
+  // Do not change a live proxy in the middle of Android traffic.
+  rotateProxy: adminProcedure.input(idSchema).mutation(async ({ input }) => {
+    const db = await androidDb();
+    return db.transaction(async tx => {
+      const profile = rows(await tx.execute(sql`
+        SELECT id, agentId, proxyId, state FROM h2_android_native_profiles
+        WHERE id=${input.id} FOR UPDATE
+      `))[0];
+      if (!profile) throw new TRPCError({ code: "NOT_FOUND", message: "Instância não encontrada." });
+      if (String(profile.state) !== "stopped") {
+        throw new TRPCError({ code: "CONFLICT", message: "Pare completamente o Android antes de trocar o proxy." });
+      }
+      const pending = rows(await tx.execute(sql`
+        SELECT id FROM h2_android_jobs WHERE profileId=${input.id}
+          AND state IN ('queued','claimed') LIMIT 1 FOR UPDATE
+      `));
+      if (pending.length) throw new TRPCError({ code: "CONFLICT", message: "Aguarde o comando pendente terminar." });
+      const oldId = Number(profile.proxyId);
+      const oldProxy = rows(await tx.execute(sql`
+        SELECT id, status, profileId FROM h2_android_proxies WHERE id=${oldId} FOR UPDATE
+      `))[0];
+      if (!oldProxy || String(oldProxy.profileId) !== input.id || String(oldProxy.status) !== "assigned") {
+        throw new TRPCError({ code: "CONFLICT", message: "Reserva atual do proxy inconsistente. Nenhuma troca realizada." });
+      }
+      const candidates = rows(await tx.execute(sql`
+        SELECT id FROM h2_android_proxies WHERE status='available'
+          ORDER BY id LIMIT 1 FOR UPDATE
+      `));
+      const nextId = Number(candidates[0]?.id);
+      if (!nextId) throw new TRPCError({ code: "PRECONDITION_FAILED", message: "Não há outro proxy livre no cofre H2 Android." });
+      // Enforce one proxy per profile; all changes roll back together on failure.
+      const retired = await tx.execute(sql`
+        UPDATE h2_android_proxies SET status='retired', profileId=NULL
+        WHERE id=${oldId} AND status='assigned' AND profileId=${input.id}
+      `);
+      if (affected(retired) !== 1) throw new TRPCError({ code: "CONFLICT", message: "Proxy anterior não foi liberado da instância." });
+      const reserved = await tx.execute(sql`
+        UPDATE h2_android_proxies SET status='assigned', profileId=${input.id}
+        WHERE id=${nextId} AND status='available'
+      `);
+      if (affected(reserved) !== 1) throw new TRPCError({ code: "CONFLICT", message: "Novo proxy ocupado; tente novamente." });
+      const updated = await tx.execute(sql`
+        UPDATE h2_android_native_profiles
+        SET proxyId=${nextId}, observedIp=NULL, lastError=NULL
+        WHERE id=${input.id} AND state='stopped' AND proxyId=${oldId}
+      `);
+      if (affected(updated) !== 1) throw new TRPCError({ code: "CONFLICT", message: "Instância mudou de estado. Nenhuma troca realizada." });
+      return { proxyId: nextId, previousProxyId: oldId };
+    });
+  }),
+
   renameProfile: adminProcedure.input(idSchema.extend({
     label: z.string().trim().min(2).max(80),
   })).mutation(async ({ input }) => {
