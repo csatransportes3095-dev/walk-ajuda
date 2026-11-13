@@ -253,25 +253,28 @@ function Start-H2Emulator {
     }
   } finally { $Proc.Dispose() }
 }
-# Android 15 Play Store images may reject writes to persist.sys.locale.
-# Try runtime ActivityManager locale configuration first, then Google's ADB method.
-# The configure action reports failures; regular start/create never destroys userdata.
+# Verify the ACTIVE system configuration, not just persist.sys.locale.
+# Google Play images may reject system property writes or cache an older locale.
+function Test-H2ActiveLocale {
+  param([string]$Adb,[string]$Serial)
+  $Current = @(Invoke-H2Adb -Executable $Adb -CommandArgs @("-s",$Serial,"shell","am","get-config"))
+  $Output = ($Current | Out-String)
+  return ($Output -match '(?i)(?:pt-rBR|pt-BR)')
+}
 function Set-H2Locale {
   param([string]$Adb,[string]$Name,[string]$Serial)
-  $Before = (@(Invoke-H2Adb -Executable $Adb -CommandArgs @("-s",$Serial,"shell","getprop","persist.sys.locale")) | Out-String).Trim()
-  if ($Before -eq "pt-BR") { return $true }
+  if (Test-H2ActiveLocale -Adb $Adb -Serial $Serial) { return $true }
   try {
     Invoke-H2Adb -Executable $Adb -CommandArgs @("-s",$Serial,"shell","am","update-config","--locale","pt-BR") | Out-Null
-    Write-Host "H2 Android: solicitado idioma pt-BR pelo ActivityManager."
-    return $true
+    Start-Sleep -Seconds 2
+    if (Test-H2ActiveLocale -Adb $Adb -Serial $Serial) { return $true }
   } catch {
-    Write-H2Status "Locale ActivityManager indisponivel, tentando metodo ADB"
+    Write-H2Status "ActivityManager nao aceitou a alteracao do idioma"
   }
   try {
     Invoke-H2Adb -Executable $Adb -CommandArgs @("-s",$Serial,"shell","setprop persist.sys.locale pt-BR;stop;sleep 5;start") | Out-Null
     [void](Wait-Boot $Adb $Name 240)
-    $After = (@(Invoke-H2Adb -Executable $Adb -CommandArgs @("-s",$Serial,"shell","getprop","persist.sys.locale")) | Out-String).Trim()
-    return ($After -eq "pt-BR")
+    return (Test-H2ActiveLocale -Adb $Adb -Serial $Serial)
   } catch {
     return $false
   }
