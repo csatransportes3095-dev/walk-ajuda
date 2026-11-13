@@ -6,7 +6,7 @@ param(
   [string]$PairCode = ""
 )
 $ErrorActionPreference = "Stop"
-$Version = "1.0.9-socks5-relay"
+$Version = "1.1.0-socks5-stable"
 $Base = Join-Path $env:LOCALAPPDATA "H2AndroidNative"
 $AvdHome = Join-Path $Base "avd"
 $TokenFile = Join-Path $Base "agent.secure"
@@ -777,6 +777,7 @@ function Run-Job([object]$Job,[string]$Sdk) {
         while ((Get-Date) -lt $Deadline -and (Adb-Serial $Adb $Name)) { Start-Sleep -Seconds 2 }
         if (Adb-Serial $Adb $Name) { throw "Android ainda aberto. Exclusão bloqueada." }
       }
+      if (Test-H2EmulatorProcess -Name $Name) { throw "O processo Android ainda esta aberto; exclusao bloqueada." }
       if (Test-Path (Join-Path $AvdHome "$Name.avd")) {
         & $AvdManager delete avd -n $Name | Out-Null
         if (Test-Path (Join-Path $AvdHome "$Name.avd")) { throw "Arquivos do Android não foram removidos." }
@@ -795,11 +796,11 @@ $LogPath = Join-Path $Base "agent-status.log"
 function Write-H2Status([string]$Message) {
   try { Add-Content -LiteralPath $LogPath -Encoding UTF8 -Value ((Get-Date).ToString("s") + " " + $Message) } catch {}
 }
-function Start-H2JobHeartbeat([string]$HeartbeatServer,[string]$HeartbeatToken,[string]$HeartbeatComputer,[string]$HeartbeatVersion) {
+function Start-H2JobHeartbeat([string]$HeartbeatServer,[string]$HeartbeatToken,[string]$HeartbeatComputer,[string]$HeartbeatVersion,[long]$HeartbeatJobId) {
   $HeartbeatScript = {
-    param($Server,$Token,$ComputerName,$Version)
+    param($Server,$Token,$ComputerName,$Version,$JobId)
     $Headers = @{ Authorization = "Bearer $Token" }
-    $Body = @{ computerName=$ComputerName;version=$Version } | ConvertTo-Json -Compress
+    $Body = @{ computerName=$ComputerName;version=$Version;jobId=$JobId } | ConvertTo-Json -Compress
     for (;;) {
       try {
         Invoke-RestMethod -Uri ($Server + "/api/h2-android/agent/heartbeat") -Method Post `
@@ -808,7 +809,7 @@ function Start-H2JobHeartbeat([string]$HeartbeatServer,[string]$HeartbeatToken,[
       Start-Sleep -Seconds 20
     }
   }
-  return (Start-Job -ScriptBlock $HeartbeatScript -ArgumentList $HeartbeatServer,$HeartbeatToken,$HeartbeatComputer,$HeartbeatVersion)
+  return (Start-Job -ScriptBlock $HeartbeatScript -ArgumentList $HeartbeatServer,$HeartbeatToken,$HeartbeatComputer,$HeartbeatVersion,$HeartbeatJobId)
 }
 function Stop-H2JobHeartbeat([object]$HeartbeatJob) {
   if (!$HeartbeatJob) { return }
@@ -844,7 +845,7 @@ while ($true) {
       $HeartbeatJob = $null
       try {
         $HeartbeatJob = Start-H2JobHeartbeat -HeartbeatServer $Server -HeartbeatToken $Token `
-          -HeartbeatComputer $env:COMPUTERNAME -HeartbeatVersion $Version
+          -HeartbeatComputer $env:COMPUTERNAME -HeartbeatVersion $Version -HeartbeatJobId ([long]$Job.id)
         $Sdk = Android-Sdk
         $ObservedIp = Run-Job $Job $Sdk
         $Success = $true
