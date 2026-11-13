@@ -4,26 +4,27 @@ import path from "node:path";
 const read = (file: string) => fs.readFileSync(path.resolve(process.cwd(), file), "utf8");
 
 describe("H2 Android native isolated architecture", () => {
-  it("configures Android's own HTTP proxy and stops the emulator if it cannot be verified", () => {
+  it("uses a single proxy mode and validates HTTP/TCP from inside the Android guest", () => {
     const agent = read("workers/windows/H2AndroidAgent.ps1");
     const installer = read("workers/windows/Install-H2Android.ps1");
-    expect(agent).toContain("function Set-H2AndroidGlobalProxy");
+    expect(agent).not.toContain("function Set-H2AndroidGlobalProxy");
+    expect(agent).toContain("function Clear-H2AndroidGlobalProxy");
     expect(agent).toContain("function Assert-H2AndroidProxyOrStop");
-    expect(agent).toContain('10.0.2.2:$RelayPort');
-    expect(agent).toContain('"settings","put","global","http_proxy",$Endpoint');
-    expect(agent).toContain('"settings","get","global","http_proxy"');
+    expect(agent).toContain("function Test-H2AndroidTcpIp");
+    expect(agent).toContain("toybox nc -w 12");
+    expect(agent).toContain('"settings","put","global","http_proxy",":0"');
     expect(agent).toContain('Invoke-H2Adb -Executable $Adb -CommandArgs @("-s",$Serial,"emu","kill")');
     expect(agent.split("Assert-H2AndroidProxyOrStop -Adb $Adb -Serial $BootSerial -RelayPort $RelayPort").length - 1).toBe(2);
-    expect(agent).toContain('1.2.1-android-proxy-guard');
-    expect(installer).toContain('1.2.1-android-proxy-guard');
+    expect(agent).toContain('1.3.0-live-socks-switch');
+    expect(installer).toContain('1.3.0-live-socks-switch');
   });
 
 
   it("never labels a host-only SOCKS5 test as Android app traffic validation", () => {
     const admin = read("client/src/pages/AdminH2Android.tsx");
-    expect(admin).toContain("Rede do Android NÃO validada.");
-    expect(admin).toContain("IP do teste no Windows:");
-    expect(admin).toContain("não é o IP confirmado do Android");
+    expect(admin).toContain("Teste TCP/HTTP do Android; confira o IP no navegador");
+    expect(admin).toContain("IP retornado no teste de rede:");
+    expect(admin).toContain("confira também no navegador do Android.");
     expect(admin).toContain("Confira o IP público DENTRO do Android");
     expect(admin).not.toContain("IP externo verificado pelo agente");
     expect(admin).not.toContain('text-emerald-300">IP externo testado:');
@@ -81,6 +82,31 @@ describe("H2 Android native isolated architecture", () => {
     expect(routerCode.match(/await findAvailableSocks5Proxy\(tx\)/g)?.length).toBe(2);
     expect(routerCode).toContain("Invalid legacy record: never allocate it.");
   });
+  it("rotates SOCKS5 upstream without rebooting and can rollback to original proxy", () => {
+    const agent = read("workers/windows/H2AndroidAgent.ps1");
+    const relay = read("workers/windows/H2AndroidSocksRelay.mjs");
+    const router = read("server/routers/h2Android.ts");
+    const admin = read("client/src/pages/AdminH2Android.tsx");
+    expect(router).toContain("CREATE TABLE IF NOT EXISTS h2_android_proxy_rotations");
+    expect(router).toContain('if (profileState === "running")');
+    expect(router).toContain("status='rotating'");
+    expect(router).toContain("'rotate','queued'");
+    expect(router).toContain('if (job.action === "rotate")');
+    expect(router).toContain("previousProxyId: rotation");
+    expect(router).toContain('previousProxy: rotation');
+    expect(agent).toContain('    "rotate" {');
+    expect(agent).toContain("Switch-H2RelayUpstream");
+    expect(agent).toContain("Job.previousProxyId");
+    expect(agent).toContain("Job.previousProxy");
+    expect(agent).toContain("proxy antigo restaurado no Android");
+    expect(relay).toContain("const control = http.createServer");
+    expect(relay).toContain("activeUpstream = next");
+    expect(relay).toContain("control.listen(0, '127.0.0.1'");
+    expect(relay).toContain("client.pipe(upstream)");
+    expect(admin).toContain('["stopped", "error", "running"].includes(p.state)');
+    expect(admin).toContain("Trocar proxy AGORA sem desligar o Android");
+  });
+
   it("keeps separate SOCKS5 relays alive while Android is running and verifies installer rollback", () => {
     const agent = read("workers/windows/H2AndroidAgent.ps1");
     const relay = read("workers/windows/H2AndroidSocksRelay.mjs");
@@ -132,7 +158,7 @@ describe("H2 Android native isolated architecture", () => {
     expect(router).toContain("O Android continua em erro e ainda não foi testado com o novo proxy.");
     expect(router).toContain('profileState === "error"');
     expect(admin).toContain("Versão do agente:");
-    expect(admin).toContain("A instância ainda não foi testada com esse proxy.");
+    expect(admin).toContain("É necessário iniciar o Android para validar.");
     expect(admin).toContain("O Android está em erro, mas o servidor não recebeu um diagnóstico.");
   });
 
@@ -140,8 +166,8 @@ describe("H2 Android native isolated architecture", () => {
     const routerCode = read("server/routers/h2Android.ts");
     const admin = read("client/src/pages/AdminH2Android.tsx");
     expect(routerCode).toContain("rotateProxy: adminProcedure");
-    expect(routerCode).toContain("['stopped', 'error'].includes(profileState)");
-    expect(routerCode).toContain("A troca automática só é permitida com o Android parado ou em erro.");
+    expect(routerCode).toContain("['stopped', 'error', 'running'].includes(profileState)");
+    expect(routerCode).toContain("Aguarde a inicializacao ou encerramento do Android.");
     expect(routerCode).toContain("Aguarde o comando pendente terminar.");
     expect(routerCode).toContain("SET status='retired', profileId=NULL");
     expect(routerCode).toContain("SET status='assigned', profileId=");
@@ -149,7 +175,7 @@ describe("H2 Android native isolated architecture", () => {
     expect(routerCode).toContain("observedIp=NULL");
     expect(admin).toContain("trpc.h2Android.rotateProxy.useMutation");
     expect(admin).toContain("Trocar proxy automatico");
-    expect(admin).toContain('["stopped", "error"].includes(p.state)');
+    expect(admin).toContain('["stopped", "error", "running"].includes(p.state)');
   });
 
   it("configures running H2 Android devices without changing proxy or running state", () => {
@@ -266,7 +292,7 @@ describe("H2 Android native isolated architecture", () => {
     const router = read("server/routers/h2Android.ts");
     const admin = read("client/src/pages/AdminH2Android.tsx");
     expect(router).toContain('input.action === "retry" ? "rebuild"');
-    expect(router).toContain('["create","rebuild","start"]');
+    expect(router).toContain('["create","rebuild","start","rotate"]');
     expect(router).toContain("('create','rebuild','start')");
     expect(agent).toContain('$Job.action -eq "rebuild"');
     expect(agent).toContain('switch ($EffectiveAction)');

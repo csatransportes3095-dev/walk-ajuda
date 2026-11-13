@@ -6,7 +6,7 @@ param(
   [string]$PairCode = ""
 )
 $ErrorActionPreference = "Stop"
-$Version = "1.2.1-android-proxy-guard"
+$Version = "1.3.0-live-socks-switch"
 $Base = Join-Path $env:LOCALAPPDATA "H2AndroidNative"
 $AvdHome = Join-Path $Base "avd"
 $TokenFile = Join-Path $Base "agent.secure"
@@ -157,39 +157,102 @@ function Adb-Serial([string]$Adb,[string]$Name) {
   }
   return $null
 }
-# Apply the loopback HTTP->SOCKS5 bridge inside Android as a second layer.
-# 10.0.2.2 is the Android Emulator's alias for the host loopback interface;
-# 127.0.0.1 inside Android would address Android itself, not the Windows relay.
-# This is an app-level HTTP proxy, not a VPN or a guarantee for UDP traffic.
-function Set-H2AndroidGlobalProxy {
-  param([string]$Adb,[string]$Serial,[int]$RelayPort)
-  if ($RelayPort -lt 1 -or $RelayPort -gt 65535) {
-    throw "Porta do proxy Android invalida; nao liberar a inicializacao."
+# Use one HTTP proxy mode only: the Emulator's -http-proxy.
+# Android global http_proxy conflicts with the emulator network proxy.
+function Clear-H2AndroidGlobalProxy {
+  param([string]$Adb,[string]$Serial)
+  Invoke-H2Adb -Executable $Adb -CommandArgs @("-s",$Serial,"shell","settings","put","global","http_proxy",":0") | Out-Null
+  $Value = (@(Invoke-H2Adb -Executable $Adb -CommandArgs @("-s",$Serial,"shell","settings","get","global","http_proxy")) | Out-String).Trim()
+  if ($Value -notin @(":0","null","")) {
+    throw "Proxy global Android nao foi desativado; nao conectar com duas configuracoes de rede."
   }
-  $Endpoint = "10.0.2.2:$RelayPort"
-  Invoke-H2Adb -Executable $Adb -CommandArgs @("-s",$Serial,"shell","settings","put","global","http_proxy",$Endpoint) | Out-Null
-  $Verified = (@(Invoke-H2Adb -Executable $Adb -CommandArgs @("-s",$Serial,"shell","settings","get","global","http_proxy")) | Out-String).Trim()
-  if ($Verified -ne $Endpoint) {
-    throw "O Android nao confirmou a configuracao do proxy HTTP interno; nao marcar como pronto."
-  }
-  Write-H2Status ("Proxy HTTP do Android confirmado em " + $Endpoint + " (apps e UDP ainda precisam de verificacao)")
 }
-# If Android refuses the proxy setting, shut down this exact emulator.
-# A job must not report failure while leaving a usable unproxied browser open.
+# Smoke test originates inside the guest, so it must traverse the Emulator TCP
+# proxy. This does NOT prove UDP support or that every app respects the proxy.
+function Test-H2AndroidTcpIp {
+  param([string]$Adb,[string]$Serial)
+  $Cmd = "printf 'GET / HTTP/1.0\r\nHost: checkip.amazonaws.com\r\nConnection: close\r\n\r\n' | toybox nc -w 12 checkip.amazonaws.com 80"
+  $Raw = (@(Invoke-H2Adb -Executable $Adb -CommandArgs @("-s",$Serial,"shell",$Cmd)) | Out-String)
+  if ($Raw -notmatch '(?m)^HTTP/1\.[01] 200\b') { throw "Android nao conseguiu acessar a Internet pelo proxy HTTP/TCP." }
+  $Match = [regex]::Match($Raw,'(?m)^\s*((?:[0-9]{1,3}\.){3}[0-9]{1,3})\s*$')
+  if (!$Match.Success) { throw "Android respondeu ao teste HTTP mas nao informou IP." }
+  return $Match.Groups[1].Value
+}
 function Assert-H2AndroidProxyOrStop {
   param([string]$Adb,[string]$Serial,[int]$RelayPort)
   try {
-    Set-H2AndroidGlobalProxy -Adb $Adb -Serial $Serial -RelayPort $RelayPort
+    if (!(Test-H2RelayPort -Port $RelayPort)) { throw "Ponte SOCKS5 nao esta disponivel." }
+    Clear-H2AndroidGlobalProxy -Adb $Adb -Serial $Serial
+    $Ip = Test-H2AndroidTcpIp -Adb $Adb -Serial $Serial
+    Write-H2Status ("HTTP/TCP confirmado de dentro do Android: " + $Ip)
+    return $Ip
   } catch {
-    $Reason = $_.Exception.Message
-    try {
-      Invoke-H2Adb -Executable $Adb -CommandArgs @("-s",$Serial,"emu","kill") | Out-Null
-      Write-H2Status ("Android interrompido: proxy interno nao confirmado no " + $Serial)
-    } catch {
-      Write-H2Status ("ALERTA: Nao foi possivel parar Android apos erro de proxy no " + $Serial)
-    }
-    throw ("Proxy Android nao confirmado. Inicializacao recusada: " + $Reason)
+    $Cause = $_.Exception.Message
+    try { Invoke-H2Adb -Executable $Adb -CommandArgs @("-s",$Serial,"emu","kill") | Out-Null }
+    catch { Write-H2Status ("Falha ao parar Android sem rede validada: " + $Serial) }
+    throw ("Internet dentro do Android nao validada. " + $Cause)
   }
+}
+function Switch-H2RelayUpstream {
+  param([string]$Name,[string]$OldProxyId,[string]$NewProxyId,[object]$Proxy,[object]$OldProxy)
+  $ReadyFile = Get-H2RelayReadyFile -Name $Name
+  if (!(Test-Path -LiteralPath $ReadyFile)) { throw "Ponte do Android nao encontrada; nenhuma troca foi efetuada." }
+  $Ready = Get-Content -LiteralPath $ReadyFile -Raw | ConvertFrom-Json
+  if (!(Test-H2RelayProcess -ProcessId ([int]$Ready.pid) -Name $Name) -or
+      !(Test-H2RelayPort -Port ([int]$Ready.port))) {
+    throw "Ponte do Android nao esta ativa; troca cancelada."
+  }
+  if ([string]$Ready.proxyId -eq $NewProxyId) {
+    return [int]$Ready.port
+  }
+  if ([string]$Ready.proxyId -ne $OldProxyId) {
+    throw "O proxy da ponte mudou durante a troca; nenhum novo proxy consumido."
+  }
+  if (![int]$Ready.controlPort -or ![string]$Ready.controlSecret) {
+    # First upgrade from relay 1.2.x: replace its process on the SAME TCP port.
+    # Android itself stays open and continues pointing to the same endpoint.
+    if (!$OldProxy) { throw "Proxy anterior ausente para migracao da ponte." }
+    $OldPort = [int]$Ready.port
+    Write-H2Status ("Atualizando a ponte de rede do Android em uso, sem desligar o AVD.")
+    Stop-H2SocksRelay -Name $Name
+    try {
+      $MigratedPort = Start-H2SocksRelay -Proxy $OldProxy -Name $Name -ProxyId $OldProxyId -ListenPort $OldPort
+      if ($MigratedPort -ne $OldPort) { throw "A nova ponte nao manteve a porta anterior." }
+      $Ready = Get-Content -LiteralPath $ReadyFile -Raw | ConvertFrom-Json
+    } catch {
+      throw ("CRITICAL: a ponte antiga foi encerrada e nao foi possivel restaurar a mesma porta: " + $_.Exception.Message)
+    }
+  }
+  $Body = @{
+    proxyId=$NewProxyId; host=[string]$Proxy.host; port=[int]$Proxy.port
+    username=[string]$Proxy.username; password=[string]$Proxy.password
+  } | ConvertTo-Json -Compress
+  $Request = [System.Net.HttpWebRequest][System.Net.WebRequest]::Create(
+    "http://127.0.0.1:$([int]$Ready.controlPort)/rotate"
+  )
+  $Request.Method = "POST"
+  $Request.Proxy = [System.Net.GlobalProxySelection]::GetEmptyWebProxy()
+  $Request.ContentType = "application/json"
+  $Request.Headers.Add("Authorization",("Bearer " + [string]$Ready.controlSecret))
+  $Request.Timeout = 15000
+  $Request.ReadWriteTimeout = 15000
+  $Payload = [System.Text.Encoding]::UTF8.GetBytes($Body)
+  $Request.ContentLength = $Payload.Length
+  $Stream = $Request.GetRequestStream()
+  try { $Stream.Write($Payload,0,$Payload.Length) }
+  finally { $Stream.Dispose() }
+  $Response = $Request.GetResponse()
+  try {
+    $Reader = New-Object System.IO.StreamReader($Response.GetResponseStream())
+    try { $Accepted = $Reader.ReadToEnd() | ConvertFrom-Json }
+    finally { $Reader.Dispose() }
+  } finally { $Response.Dispose() }
+  if (!$Accepted.accepted -or [string]$Accepted.proxyId -ne $NewProxyId -or
+      [int]$Accepted.port -ne [int]$Ready.port) {
+    throw "Ponte nao confirmou troca do proxy; Android preservado."
+  }
+  Write-H2Status ("SOCKS5 trocado sem fechar Android; proxy #" + $NewProxyId)
+  return [int]$Ready.port
 }
 function Wait-Boot([string]$Adb,[string]$Name,[int]$TimeoutSeconds=180) {
   $Deadline = (Get-Date).AddSeconds($TimeoutSeconds)
@@ -248,7 +311,7 @@ function Stop-H2SocksRelay {
   Remove-Item -LiteralPath $ReadyFile -Force -ErrorAction SilentlyContinue
 }
 function Start-H2SocksRelay {
-  param([object]$Proxy,[string]$Name,[string]$ProxyId)
+  param([object]$Proxy,[string]$Name,[string]$ProxyId,[int]$ListenPort=0)
   if (!$Proxy -or $Proxy.protocol -ne "socks5") { throw "O proxy desta instancia precisa ser SOCKS5." }
   if ($ProxyId -notmatch '^\d+$') { throw "Identificador de proxy ausente do comando." }
   $ReadyFile = Get-H2RelayReadyFile $Name
@@ -280,6 +343,7 @@ function Start-H2SocksRelay {
   $Info.EnvironmentVariables["H2_SOCKS_PASSWORD"] = [string]$Proxy.password
   $Info.EnvironmentVariables["H2_RELAY_READY_FILE"] = $ReadyFile
   $Info.EnvironmentVariables["H2_RELAY_PROXY_ID"] = $ProxyId
+  $Info.EnvironmentVariables["H2_RELAY_LISTEN_PORT"] = [string]$ListenPort
   $Process = New-Object System.Diagnostics.Process
   $Process.StartInfo = $Info
   try {
@@ -885,9 +949,9 @@ function Run-Job([object]$Job,[string]$Sdk) {
         Start-H2Emulator -Emulator $Emulator -Sdk $Sdk -Name $Name -ProxyUri $Uri
       }
       $BootSerial = Wait-Boot $Adb $Name
-      Assert-H2AndroidProxyOrStop -Adb $Adb -Serial $BootSerial -RelayPort $RelayPort
+      $AndroidIp = Assert-H2AndroidProxyOrStop -Adb $Adb -Serial $BootSerial -RelayPort $RelayPort
       Set-H2Presentation -Adb $Adb -Name $Name -Serial $BootSerial -Sdk $Sdk -Fresh $true
-      return $ProxyIp
+      return $AndroidIp
     }
     "start" {
       if (!(Test-Path (Join-Path $AvdHome "$Name.avd"))) { throw "Este Android não está instalado no computador." }
@@ -897,9 +961,53 @@ function Run-Job([object]$Job,[string]$Sdk) {
         Start-H2Emulator -Emulator $Emulator -Sdk $Sdk -Name $Name -ProxyUri $Uri
       }
       $BootSerial = Wait-Boot $Adb $Name
-      Assert-H2AndroidProxyOrStop -Adb $Adb -Serial $BootSerial -RelayPort $RelayPort
+      $AndroidIp = Assert-H2AndroidProxyOrStop -Adb $Adb -Serial $BootSerial -RelayPort $RelayPort
       Set-H2Presentation -Adb $Adb -Name $Name -Serial $BootSerial -Sdk $Sdk
-      return $ProxyIp
+      return $AndroidIp
+    }
+    "rotate" {
+      if (!$Serial -or !(Test-H2EmulatorProcess -Name $Name)) {
+        throw "O Android nao esta aberto; a troca ao vivo foi cancelada."
+      }
+      # Pre-flight the candidate separately, while the original relay and
+      # Android remain untouched. A bad candidate never consumes the old proxy.
+      $Candidate = $Name + "_probe"
+      try {
+        $CandidateCheck = Check-Proxy -Proxy $Job.proxy -Name $Candidate -ProxyId ([string]$Job.proxyId)
+        $PreviousReady = Get-Content -LiteralPath (Get-H2RelayReadyFile -Name $Name) -Raw | ConvertFrom-Json
+        $OldProxyId = [string]$Job.previousProxyId
+        if (!$OldProxyId -or !$Job.previousProxy) { throw "Rota anterior ausente; troca cancelada." }
+        Clear-H2AndroidGlobalProxy -Adb $Adb -Serial $Serial
+        try {
+          $LivePort = Switch-H2RelayUpstream -Name $Name -OldProxyId $OldProxyId -NewProxyId ([string]$Job.proxyId) -Proxy $Job.proxy -OldProxy $Job.previousProxy
+        } catch {
+          if ($_.Exception.Message -match "CRITICAL:") {
+            try { Invoke-H2Adb -Executable $Adb -CommandArgs @("-s",$Serial,"emu","kill") | Out-Null } catch {}
+          }
+          throw
+        }
+        try {
+          # Request originates inside Android over same relay listener.
+          $AndroidIp = Test-H2AndroidTcpIp -Adb $Adb -Serial $Serial
+          Write-H2Status ("Novo IP Android apos troca: " + $AndroidIp)
+          return $AndroidIp
+        } catch {
+          $Reason = $_.Exception.Message
+          try {
+            # Restore old upstream on the SAME listener without closing Android.
+            [void](Switch-H2RelayUpstream -Name $Name -OldProxyId ([string]$Job.proxyId) -NewProxyId $OldProxyId -Proxy $Job.previousProxy -OldProxy $Job.proxy)
+            Write-H2Status ("Falha no candidato; proxy antigo restaurado no Android.")
+          } catch {
+            # Cannot guarantee network route; shut down affected guest instead
+            # of leaving it online with the wrong proxy assignment.
+            try { Invoke-H2Adb -Executable $Adb -CommandArgs @("-s",$Serial,"emu","kill") | Out-Null } catch {}
+            throw ("CRITICAL: nao foi possivel restaurar o proxy anterior; Android encerrado. " + $Reason)
+          }
+          throw ("Proxy novo nao validado dentro do Android; anterior restaurado: " + $Reason)
+        }
+      } finally {
+        Stop-H2SocksRelay -Name $Candidate
+      }
     }
     "configure" {
       if (!$Serial) { throw "Abra a instancia antes de ajustar idioma e visual." }

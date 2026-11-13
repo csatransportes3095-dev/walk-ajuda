@@ -56,7 +56,7 @@ export default function AdminH2Android() {
   });
   const rotateProxy = trpc.h2Android.rotateProxy.useMutation({
     onSuccess: async result => {
-      toast.info("Proxy #" + String(result.proxyId) + " reservado. A instância ainda não foi testada com esse proxy.");
+      toast.info(result.queued ? "Troca do proxy #" + String(result.proxyId) + " enviada ao Android ligado. O proxy anterior segue ativo até a validação." : "Proxy #" + String(result.proxyId) + " reservado. É necessário iniciar o Android para validar.");
       await refresh();
     },
     onError: messages,
@@ -202,12 +202,12 @@ export default function AdminH2Android() {
           <div className="flex items-start justify-between gap-2">
             <div><h3 className="font-extrabold">{p.label}</h3><p className="mt-1 text-xs text-slate-400">Proxy #{p.proxyId} • {p.agentLabel}</p>
             <p className="mt-1 break-all text-xs font-medium text-violet-200">{p.proxyEndpoint ? `${p.proxyEndpoint.protocol} ${p.proxyEndpoint.host}:${p.proxyEndpoint.port}` : "Dados do proxy indisponíveis"}</p>
-            <p className="mt-1 text-xs text-amber-200">{p.state==="running" ? "Rede do Android NÃO validada. O teste do Windows não comprova o IP usado pelos aplicativos." : p.state==="error" ? "Falha de inicialização; proxy permanece reservado" : ["provisioning","queued","starting"].includes(p.state) ? "Proxy reservado • validação da rede do Android pendente" : "Proxy reservado • IP do Android não verificado"}</p></div>
+            <p className="mt-1 text-xs text-amber-200">{p.state==="running" ? "Teste TCP/HTTP do Android; confira o IP no navegador e a rede dos aplicativos." : p.state==="error" ? "Falha de inicialização; proxy permanece reservado" : ["provisioning","queued","starting"].includes(p.state) ? "Proxy reservado • validação da rede do Android pendente" : "Proxy reservado • IP do Android não verificado"}</p></div>
             <MonitorSmartphone className="h-6 w-6 text-cyan-300"/>
           </div>
           <p className="mt-3 text-sm text-slate-300">Estado: <b>{({queued:"Na fila",provisioning:"Preparando",running:"Ligado",stopped:"Desligado",starting:"Iniciando",stopping:"Parando",deleting:"Excluindo",error:"Erro"} as Record<string,string>)[p.state] || p.state}</b></p>
-          {p.observedIp && <p className="mt-1 text-xs text-amber-200">IP do teste no Windows: {p.observedIp} — não é o IP confirmado do Android.</p>}
-          {p.state==="running" && <div role="alert" className="mt-2 rounded-lg border border-amber-400/50 bg-amber-400/10 p-3 text-xs font-semibold text-amber-100">Atenção: o proxy não garante que o navegador ou outros apps usem esse IP. Confira o IP público DENTRO do Android antes de acessar contas. Se aparecer o IP da sua conexão, clique em Parar.</div>}
+          {p.observedIp && <p className="mt-1 text-xs text-amber-200">IP retornado no teste de rede: {p.observedIp} — confira também no navegador do Android.</p>}
+          {p.state==="running" && <div role="alert" className="mt-2 rounded-lg border border-amber-400/50 bg-amber-400/10 p-3 text-xs font-semibold text-amber-100">Atenção: o proxy TCP/HTTP não garante todo o tráfego dos aplicativos. Confira o IP público DENTRO do Android antes de acessar contas. Se aparecer o IP direto da sua conexão, clique em Parar.</div>}
           {p.lastError && <p className="mt-2 rounded-lg border border-amber-500/30 bg-amber-500/5 p-2 text-xs text-amber-200">{p.lastError}</p>}
           {p.state==="error" && !p.lastError && <p className="mt-2 rounded-lg border border-amber-500/30 bg-amber-500/5 p-2 text-xs text-amber-200">O Android está em erro, mas o servidor não recebeu um diagnóstico. A reserva do proxy não comprova conexão. Confira a versão do agente Windows.</p>}
           <div className="mt-4 grid grid-cols-2 gap-2">
@@ -215,11 +215,11 @@ export default function AdminH2Android() {
             <button disabled={busy || !online || p.state!=="running"} onClick={()=>command.mutate({id:p.id,action:"stop"})} className="flex items-center justify-center gap-1 rounded-lg border border-white/15 p-2 text-xs disabled:opacity-30"><Square className="h-4 w-4"/> Parar</button>
             <button disabled={busy || !online || p.state!=="running"} onClick={()=>command.mutate({id:p.id,action:"configure"})} className="col-span-2 flex items-center justify-center gap-2 rounded-lg border border-cyan-400/35 bg-cyan-400/10 p-2 text-xs font-bold text-cyan-200 disabled:opacity-30">Ajustar idioma e visual do celular</button>
             <button
-              disabled={busy || !online || !["stopped", "error"].includes(p.state) || (data?.counts.available ?? 0)<1}
-              onClick={()=>{if(window.confirm("Trocar automaticamente o proxy desta instancia? O proxy atual sera aposentado e nao voltara ao cofre.")) rotateProxy.mutate({id:p.id});}}
-              title={!['stopped', 'error'].includes(p.state) ? "Disponivel quando o Android estiver parado ou em erro" : (data?.counts.available ?? 0)<1 ? "Nao existem proxies livres no cofre H2 Android" : "Selecionar proximo proxy livre do cofre"}
+              disabled={busy || !online || !["stopped", "error", "running"].includes(p.state) || (data?.counts.available ?? 0)<1}
+              onClick={()=>{if(window.confirm(p.state==="running" ? "Trocar proxy AGORA sem desligar o Android? O proxy antigo sera preservado se a validacao falhar." : "Reservar outro proxy para esta instancia parada?")) rotateProxy.mutate({id:p.id});}}
+              title={!["stopped","error","running"].includes(p.state) ? "Aguarde o comando em andamento" : (data?.counts.available ?? 0)<1 ? "Nao existem proxies livres no cofre H2 Android" : p.state==="running" ? "Trocar proxy com Android aberto, sem reiniciar" : "Selecionar proximo proxy livre do cofre"}
               className="col-span-2 flex items-center justify-center gap-2 rounded-lg border border-violet-400/35 bg-violet-400/10 p-2 text-sm font-bold text-violet-200 disabled:cursor-not-allowed disabled:opacity-30"
-            ><RefreshCcw className="h-4 w-4" /> Trocar proxy automatico</button>
+            ><RefreshCcw className="h-4 w-4" /> Trocar proxy automatico {p.state==="running" ? "• Android ligado" : ""}</button>
             <button disabled={busy || !online || p.state!=="error"} onClick={()=>{if(window.confirm("Recriar este Android de teste do zero? Os dados locais anteriores deste aparelho serão apagados. O proxy SOCKS5 vinculado será mantido.")) command.mutate({id:p.id,action:"retry"});}} className="rounded-lg border border-amber-400/25 p-2 text-xs text-amber-200 disabled:opacity-30">Recriar teste do zero</button>
             <button disabled={busy || !online} onClick={()=>setConfirmDelete(p.id)} className="flex items-center justify-center gap-1 rounded-lg border border-red-400/25 p-2 text-xs text-red-300 disabled:opacity-30"><Trash2 className="h-4 w-4"/> Excluir</button>
           </div>
