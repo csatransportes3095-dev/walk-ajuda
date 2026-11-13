@@ -79,6 +79,14 @@ export async function androidDb() {
       INDEX idx_android_jobs_queue (agentId, state, id),
       INDEX idx_android_jobs_profile (profileId, state)
     ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4`));
+    await db.execute(sql.raw(`CREATE TABLE IF NOT EXISTS h2_android_proxy_rotations (
+      jobId BIGINT UNSIGNED NOT NULL PRIMARY KEY,
+      profileId VARCHAR(36) NOT NULL,
+      oldProxyId BIGINT UNSIGNED NOT NULL,
+      newProxyId BIGINT UNSIGNED NOT NULL,
+      createdAt TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP,
+      INDEX idx_android_rotate_profile (profileId)
+    ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4`));
   })().catch(error => { ready = undefined; throw error; });
   await ready;
   return db;
@@ -363,8 +371,8 @@ export const h2AndroidRouter = router({
       `))[0];
       if (!profile) throw new TRPCError({ code: "NOT_FOUND", message: "Instância não encontrada." });
       const profileState = String(profile.state);
-      if (!['stopped', 'error'].includes(profileState)) {
-        throw new TRPCError({ code: "CONFLICT", message: "A troca automática só é permitida com o Android parado ou em erro." });
+      if (!['stopped', 'error', 'running'].includes(profileState)) {
+        throw new TRPCError({ code: "CONFLICT", message: "Aguarde a inicializacao ou encerramento do Android." });
       }
       const pending = rows(await tx.execute(sql`
         SELECT id FROM h2_android_jobs WHERE profileId=${input.id}
@@ -380,6 +388,29 @@ export const h2AndroidRouter = router({
       }
       const nextId = await findAvailableSocks5Proxy(tx);
       if (!nextId) throw new TRPCError({ code: "PRECONDITION_FAILED", message: "Não há outro proxy SOCKS5 livre no cofre H2 Android." });
+      if (profileState === "running") {
+        // Do not retire the current route before the Windows agent has validated
+        // the candidate and switched its stable local relay listener.
+        const reserved = await tx.execute(sql`
+          UPDATE h2_android_proxies SET status='rotating', profileId=NULL
+          WHERE id=${nextId} AND status='available'
+        `);
+        if (affected(reserved) !== 1) throw new TRPCError({ code: "CONFLICT", message: "Novo proxy ocupado." });
+        const queued = await tx.execute(sql`
+          INSERT INTO h2_android_jobs (profileId,agentId,action,state)
+          VALUES (${input.id},${String(profile.agentId)},'rotate','queued')
+        `);
+        if (affected(queued) !== 1) throw new TRPCError({ code: "INTERNAL_SERVER_ERROR", message: "Falha ao enviar troca ao Windows." });
+        const inserted = rows(await tx.execute(sql`SELECT LAST_INSERT_ID() AS jobId`))[0];
+        const jobId = Number(inserted?.jobId);
+        if (!Number.isInteger(jobId) || jobId <= 0) throw new Error("Job de troca nao registrado.");
+        await tx.execute(sql`
+          INSERT INTO h2_android_proxy_rotations (jobId,profileId,oldProxyId,newProxyId)
+          VALUES (${jobId},${input.id},${oldId},${nextId})
+        `);
+        return { proxyId: nextId, previousProxyId: oldId, queued: true };
+      }
+      // For stopped/failed AVDs the old behavior remains offline-only.
       // Enforce one proxy per profile; all changes roll back together on failure.
       const retired = await tx.execute(sql`
         UPDATE h2_android_proxies SET status='retired', profileId=NULL
@@ -398,7 +429,7 @@ export const h2AndroidRouter = router({
         WHERE id=${input.id} AND state=${profileState} AND proxyId=${oldId}
       `);
       if (affected(updated) !== 1) throw new TRPCError({ code: "CONFLICT", message: "Instância mudou de estado. Nenhuma troca realizada." });
-      return { proxyId: nextId, previousProxyId: oldId };
+      return { proxyId: nextId, previousProxyId: oldId, queued: false };
     });
   }),
 
@@ -534,14 +565,32 @@ export async function nextAndroidJob(agentId: string, computerName: string, vers
       await tx.execute(sql`UPDATE h2_android_native_profiles SET state='provisioning'
         WHERE id=${job.profileId} AND state<>'deleting'`);
     }
-    const proxyRow = rows(await tx.execute(sql`SELECT x.id AS proxyId, x.encryptedPayload FROM h2_android_proxies x
+    const rotation = String(job.action) === "rotate"
+      ? rows(await tx.execute(sql`
+          SELECT r.oldProxyId, r.newProxyId, current.encryptedPayload AS previousPayload,
+                 candidate.encryptedPayload AS candidatePayload
+          FROM h2_android_proxy_rotations r
+          JOIN h2_android_proxies current ON current.id=r.oldProxyId
+          JOIN h2_android_proxies candidate ON candidate.id=r.newProxyId
+          WHERE r.jobId=${job.id} AND r.profileId=${job.profileId}
+          LIMIT 1
+        `))[0]
+      : null;
+    const proxyRow = rotation ? {
+      proxyId: rotation.newProxyId, encryptedPayload: rotation.candidatePayload,
+    } : rows(await tx.execute(sql`SELECT x.id AS proxyId, x.encryptedPayload FROM h2_android_proxies x
       JOIN h2_android_native_profiles p ON p.proxyId=x.id
       WHERE p.id=${job.profileId} AND p.agentId=${agentId}
       LIMIT 1`))[0];
     if (!proxyRow) throw new Error("Proxy exclusivo da instância ausente.");
-    const proxy = ["create","rebuild","start"].includes(String(job.action))
+    const proxy = ["create","rebuild","start","rotate"].includes(String(job.action))
       ? decryptH2AdsProxy(String(proxyRow.encryptedPayload)) : null;
-    return { job: { id: Number(job.id), profileId: String(job.profileId), proxyId: String(proxyRow.proxyId), action: String(job.action), proxy } };
+    return { job: {
+      id: Number(job.id), profileId: String(job.profileId), proxyId: String(proxyRow.proxyId),
+      action: String(job.action), proxy,
+      previousProxyId: rotation ? String(rotation.oldProxyId) : null,
+      previousProxy: rotation ? decryptH2AdsProxy(String(rotation.previousPayload)) : null,
+    } };
   });
 }
 
@@ -566,6 +615,41 @@ export async function finishAndroidJob(
       await tx.execute(sql`DELETE FROM h2_android_proxies WHERE profileId=${job.profileId}`);
       await tx.execute(sql`DELETE FROM h2_android_jobs WHERE profileId=${job.profileId}`);
       await tx.execute(sql`DELETE FROM h2_android_native_profiles WHERE id=${job.profileId}`);
+      return { accepted: true };
+    }
+    if (job.action === "rotate") {
+      const r = rows(await tx.execute(sql`
+        SELECT oldProxyId, newProxyId FROM h2_android_proxy_rotations
+        WHERE jobId=${input.jobId} AND profileId=${job.profileId} FOR UPDATE
+      `))[0];
+      if (!r) throw new Error("Reserva da troca ao vivo nao encontrada.");
+      const oldId = Number(r.oldProxyId), nextId = Number(r.newProxyId);
+      if (input.success) {
+        const oldUpdated = await tx.execute(sql`
+          UPDATE h2_android_proxies SET status='retired',profileId=NULL
+          WHERE id=${oldId} AND status='assigned' AND profileId=${job.profileId}
+        `);
+        const newUpdated = await tx.execute(sql`
+          UPDATE h2_android_proxies SET status='assigned',profileId=${job.profileId}
+          WHERE id=${nextId} AND status='rotating' AND profileId IS NULL
+        `);
+        if (affected(oldUpdated)!==1 || affected(newUpdated)!==1) throw new Error("Reserva proxy alterada durante a troca.");
+        await tx.execute(sql`
+          UPDATE h2_android_native_profiles SET proxyId=${nextId},
+            observedIp=${input.observedIp?.slice(0,64) || null},lastError=NULL,state='running'
+          WHERE id=${job.profileId} AND agentId=${agentId} AND proxyId=${oldId}
+        `);
+      } else {
+        await tx.execute(sql`
+          UPDATE h2_android_proxies SET status='available',profileId=NULL
+          WHERE id=${nextId} AND status='rotating'
+        `);
+        await tx.execute(sql`
+          UPDATE h2_android_native_profiles SET lastError=${"Troca nao concluida. Proxy anterior mantido: " + String(error || "falha")},state='running'
+          WHERE id=${job.profileId} AND agentId=${agentId} AND proxyId=${oldId}
+        `);
+      }
+      await tx.execute(sql`DELETE FROM h2_android_proxy_rotations WHERE jobId=${input.jobId}`);
       return { accepted: true };
     }
     if (job.action === "configure") {
