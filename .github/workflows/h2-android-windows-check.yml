@@ -1,0 +1,48 @@
+name: H2 Android Windows syntax checks
+on:
+  pull_request:
+    paths:
+      - 'workers/windows/**'
+      - 'server/routers/h2Android.ts'
+      - 'server/h2AndroidAgentRoute.ts'
+      - 'client/src/pages/AdminH2Android.tsx'
+      - 'server/h2Android.native.test.ts'
+  push:
+    branches:
+      - 'fix/h2-android-socks5-reliability-20261113'
+    paths:
+      - 'workers/windows/**'
+      - '.github/workflows/h2-android-windows-check.yml'
+jobs:
+  check-windows-agent:
+    runs-on: windows-latest
+    steps:
+      - uses: actions/checkout@v4
+      - name: Parse H2 Android PowerShell scripts
+        shell: pwsh
+        run: |
+          $files = @(
+            "workers/windows/H2AndroidAgent.ps1",
+            "workers/windows/Install-H2Android.ps1"
+          )
+          foreach ($file in $files) {
+            $tokens = $null
+            $errors = $null
+            [void][System.Management.Automation.Language.Parser]::ParseFile(
+              (Resolve-Path $file).Path, [ref]$tokens, [ref]$errors
+            )
+            if ($errors.Count -gt 0) {
+              foreach ($item in $errors) { Write-Error "$file : $($item.Message)" }
+              exit 1
+            }
+            Write-Host "PowerShell syntax OK: $file"
+          }
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '22'
+      - name: Check H2 Android SOCKS5 relay JavaScript
+        shell: pwsh
+        run: |
+          node --check workers/windows/H2AndroidSocksRelay.mjs
+          if ($LASTEXITCODE -ne 0) { exit 1 }
+          Write-Host "SOCKS5 relay syntax OK"
