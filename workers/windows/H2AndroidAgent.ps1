@@ -465,6 +465,226 @@ function Set-H2PortraitDisplay {
     throw "Nao foi possivel corrigir a orientacao do Android sem alterar a instancia: $($_.Exception.Message)"
   }
 }
+# Keep readable smartphone UI after a portrait size override.
+# 720 physical pixels at 320 dpi gives approximately 360 dp of usable width.
+# Only increase undersized density: never shrink existing text or resize AVD data.
+function Set-H2ReadableDensity {
+  param([string]$Adb,[string]$Serial)
+  $SizeOutput = (@(Invoke-H2Adb -Executable $Adb -CommandArgs @("-s",$Serial,"shell","wm","size")) | Out-String)
+  $OverrideSize = [regex]::Match($SizeOutput,'(?im)^Override size:\s*(\d+)x(\d+)')
+  $PhysicalSize = [regex]::Match($SizeOutput,'(?im)^Physical size:\s*(\d+)x(\d+)')
+  $SizeMatch = if ($OverrideSize.Success) { $OverrideSize } else { $PhysicalSize }
+  if (!$SizeMatch.Success) {
+    Write-H2Status "Densidade preservada: dimensoes do Android indisponiveis"
+    return
+  }
+  $Width = [int]$SizeMatch.Groups[1].Value
+  $Height = [int]$SizeMatch.Groups[2].Value
+  if ($Width -gt $Height -or $Width -lt 650 -or $Width -gt 800) {
+    Write-H2Status "Densidade preservada: tela fora do perfil vertical 720px"
+    return
+  }
+  $Raw = (@(Invoke-H2Adb -Executable $Adb -CommandArgs @("-s",$Serial,"shell","wm","density")) | Out-String)
+  $Override = [regex]::Match($Raw,'(?im)^Override density:\s*(\d+)')
+  $Physical = [regex]::Match($Raw,'(?im)^Physical density:\s*(\d+)')
+  $Actual = if ($Override.Success) { [int]$Override.Groups[1].Value } elseif ($Physical.Success) { [int]$Physical.Groups[1].Value } else { 0 }
+  if ($Actual -ge 320) {
+    Write-H2Status ("Fonte e icones preservados: densidade " + $Actual + " dpi")
+    return
+  }
+  # Do not perform a reset, restart, or modify the agent's proxy allocation.
+  Invoke-H2Adb -Executable $Adb -CommandArgs @("-s",$Serial,"shell","wm","density","320") | Out-Null
+  $Verified = (@(Invoke-H2Adb -Executable $Adb -CommandArgs @("-s",$Serial,"shell","wm","density")) | Out-String)
+  if ($Verified -notmatch '(?im)^Override density:\s*320\s*
+function Set-H2BottomNavigation {
+  param([string]$Adb,[string]$Serial)
+  $Overlay = "com.android.internal.systemui.navbar.threebutton"
+  Invoke-H2Adb -Executable $Adb -CommandArgs @("-s",$Serial,"shell","cmd","overlay","enable","--user","0",$Overlay) | Out-Null
+}
+# Windows 11 rounded window corners (DWM): cosmetic, Android remains interactive.
+function Set-H2RoundedWindow {
+  param([string]$Name)
+  try {
+    if (-not ("H2WindowCorners" -as [type])) {
+      Add-Type -TypeDefinition @'
+using System;
+using System.Text;
+using System.Runtime.InteropServices;
+public static class H2WindowCorners {
+  public delegate bool EnumWindowsProc(IntPtr hwnd, IntPtr lparam);
+  [DllImport("user32.dll")] static extern bool EnumWindows(EnumWindowsProc cb, IntPtr lparam);
+  [DllImport("user32.dll", CharSet=CharSet.Unicode)] static extern int GetWindowText(IntPtr hwnd, StringBuilder text, int maxCount);
+  [DllImport("dwmapi.dll")] static extern int DwmSetWindowAttribute(IntPtr hwnd, int attribute, ref int value, int size);
+  public static int RoundEmulator(string name) {
+    int changed = 0;
+    EnumWindows((hwnd, lparam) => {
+      var sb = new StringBuilder(512);
+      GetWindowText(hwnd, sb, sb.Capacity);
+      if (sb.ToString().StartsWith("Android Emulator - " + name, StringComparison.OrdinalIgnoreCase)) {
+        int preference = 2;
+        if (DwmSetWindowAttribute(hwnd, 33, ref preference, sizeof(int)) == 0) changed++;
+      }
+      return true;
+    }, IntPtr.Zero);
+    return changed;
+  }
+}
+'@
+    }
+    [void][H2WindowCorners]::RoundEmulator($Name)
+  } catch {
+    Write-H2Status "Moldura arredondada nao suportada pelo Windows"
+  }
+}
+function Set-H2Presentation {
+  param([string]$Adb,[string]$Name,[string]$Serial,[string]$Sdk,[bool]$Strict=$false,[bool]$Fresh=$false)
+  Set-H2Keyboard -Name $Name
+  Set-H2DeviceSkin -Name $Name -Sdk $Sdk
+  Set-H2PortraitDisplay -Adb $Adb -Serial $Serial
+  Set-H2ReadableDensity -Adb $Adb -Serial $Serial
+  Set-H2RoundedWindow -Name $Name
+  $NavError = $null
+  try { Set-H2BottomNavigation -Adb $Adb -Serial $Serial }
+  catch { $NavError = $_.Exception.Message }
+  $LocaleSet = Set-H2Locale -Adb $Adb -Name $Name -Serial $Serial -UseSettings ($Strict -or $Fresh)
+  if ($Strict -and !$LocaleSet) { throw "O Android nao confirmou Portugues (Brasil). A tela Configuracoes > Sistema > Idiomas foi aberta para ajuste. Instancia e proxy preservados." }
+  if ($Strict -and $NavError) { throw ("Barra inferior nao suportada nesta imagem Android: " + $NavError) }
+  if (!$LocaleSet) { Write-H2Status "Idioma pt-BR nao confirmado nesta imagem Google Play" }
+}
+
+
+function Run-Job([object]$Job,[string]$Sdk) {
+  if ($Job.action -in @("create","delete")) { Set-H2AndroidJava }
+  $Name = Avd-Name ([string]$Job.profileId)
+  $Adb = Join-Path $Sdk "platform-tools\adb.exe"
+  $Emulator = Join-Path $Sdk "emulator\emulator.exe"
+  $AvdManager = Join-Path $Sdk "cmdline-tools\latest\bin\avdmanager.bat"
+  $Image = "system-images;android-35;google_apis_playstore;x86_64"
+  $ProxyIp = $null
+  if ($Job.action -in @("create","start")) { $ProxyIp = Check-Proxy $Job.proxy }
+  $Serial = Adb-Serial $Adb $Name
+  switch ([string]$Job.action) {
+    "create" {
+      $AvdPath = Join-Path $AvdHome "$Name.avd"
+      if (!(Test-Path -LiteralPath $AvdPath)) {
+        # No clone: create an AVD with a unique writable userdata directory.
+        $PackageDir = Join-Path $Sdk "system-images\android-35\google_apis_playstore\x86_64"
+        if (!(Test-Path -LiteralPath $PackageDir)) {
+          throw "Imagem Play Store Android 35 x86_64 ausente no SDK. Instale a imagem antes de repetir."
+        }
+        New-H2NativeAvd -AvdManager $AvdManager -Name $Name -Image $Image -AvdPath $AvdPath
+      } elseif (!(Test-Path -LiteralPath (Join-Path $AvdPath "config.ini"))) {
+        # Do not overwrite/delete partial data automatically.
+        throw "Pasta parcial do teste1 encontrada sem config.ini. O agente preservou os dados; verifique o SDK."
+      }
+      if (!$Serial) {
+        # Proxy credentials are passed to Android Emulator, not to the website.
+        # Native proxy is HTTP/TCP only. Verify real app routing independently.
+        $Uri = "http://$([uri]::EscapeDataString([string]$Job.proxy.username)):$([uri]::EscapeDataString([string]$Job.proxy.password))@$($Job.proxy.host):$($Job.proxy.port)"
+        Set-H2Keyboard -Name $Name
+        Start-H2Emulator -Emulator $Emulator -Sdk $Sdk -Name $Name -ProxyUri $Uri
+      }
+      $BootSerial = Wait-Boot $Adb $Name
+      Set-H2Presentation -Adb $Adb -Name $Name -Serial $BootSerial -Sdk $Sdk -Fresh $true
+      return $ProxyIp
+    }
+    "start" {
+      if (!(Test-Path (Join-Path $AvdHome "$Name.avd"))) { throw "Este Android não está instalado no computador." }
+      if (!$Serial) {
+        $Uri = "http://$([uri]::EscapeDataString([string]$Job.proxy.username)):$([uri]::EscapeDataString([string]$Job.proxy.password))@$($Job.proxy.host):$($Job.proxy.port)"
+        Set-H2Keyboard -Name $Name
+        Start-H2Emulator -Emulator $Emulator -Sdk $Sdk -Name $Name -ProxyUri $Uri
+      }
+      $BootSerial = Wait-Boot $Adb $Name
+      Set-H2Presentation -Adb $Adb -Name $Name -Serial $BootSerial -Sdk $Sdk
+      return $ProxyIp
+    }
+    "configure" {
+      if (!$Serial) { throw "Abra a instancia antes de ajustar idioma e visual." }
+      Set-H2Presentation -Adb $Adb -Name $Name -Serial $Serial -Sdk $Sdk -Strict $true
+      return $null
+    }
+    "stop" {
+      if ($Serial) {
+        Invoke-H2Adb -Executable $Adb -CommandArgs @("-s",$Serial,"emu","kill") | Out-Null
+        $Deadline = (Get-Date).AddSeconds(45)
+        while ((Get-Date) -lt $Deadline -and (Adb-Serial $Adb $Name)) { Start-Sleep -Seconds 2 }
+        if (Adb-Serial $Adb $Name) { throw "Android continua aberto; não foi possível confirmar parada." }
+      }
+      return $null
+    }
+    "delete" {
+      if ($Serial) {
+        Invoke-H2Adb -Executable $Adb -CommandArgs @("-s",$Serial,"emu","kill") | Out-Null
+        $Deadline = (Get-Date).AddSeconds(45)
+        while ((Get-Date) -lt $Deadline -and (Adb-Serial $Adb $Name)) { Start-Sleep -Seconds 2 }
+        if (Adb-Serial $Adb $Name) { throw "Android ainda aberto. Exclusão bloqueada." }
+      }
+      if (Test-Path (Join-Path $AvdHome "$Name.avd")) {
+        & $AvdManager delete avd -n $Name | Out-Null
+        if (Test-Path (Join-Path $AvdHome "$Name.avd")) { throw "Arquivos do Android não foram removidos." }
+      }
+      $Ini = Join-Path $AvdHome "$Name.ini"
+      if (Test-Path $Ini) { Remove-Item -LiteralPath $Ini -Force }
+      return $null
+    }
+    default { throw "Comando desconhecido." }
+  }
+}
+
+$LogPath = Join-Path $Base "agent-status.log"
+function Write-H2Status([string]$Message) {
+  try { Add-Content -LiteralPath $LogPath -Encoding UTF8 -Value ((Get-Date).ToString("s") + " " + $Message) } catch {}
+}
+Write-H2Status ("START " + $Version)
+$Token = Read-Token
+if (!$Token) {
+  if (!$PairCode) { $PairCode = Read-Host "Digite o código temporário exibido no ADM H2 Android" }
+  $Claim = Api "/api/h2-android/agent/claim" @{
+    code=$PairCode;computerName=$env:COMPUTERNAME;version=$Version
+  }
+  $Token = [string]$Claim.token
+  if (!$Token) { throw "Pareamento não retornou credencial." }
+  Save-Token $Token
+  Write-Host "Agente H2 Android pareado com sucesso."
+}
+Write-Host "H2 Android ${Version}: verificando autenticacao com $Server..."
+$Online = $false
+while ($true) {
+  try {
+    # Heartbeat must not depend on the Android SDK being installed. Pair first,
+    # then report missing SDK components as a job error, never as "offline".
+    $Result = Api "/api/h2-android/agent/next" @{computerName=$env:COMPUTERNAME;version=$Version} $Token
+    if (!$Online) { Write-Host "H2 Android: conexao autenticada, agente online."; Write-H2Status "ONLINE"; $Online = $true }
+    if ($Result.job) {
+      $Job = $Result.job
+      Write-Host "Comando $($Job.action) / $($Job.profileId)"
+      $Success = $false
+      $ErrorText = $null
+      $ObservedIp = $null
+      try {
+        $Sdk = Android-Sdk
+        $ObservedIp = Run-Job $Job $Sdk
+        $Success = $true
+      } catch {
+        $ErrorText = [string]$_.Exception.Message
+        Write-Warning $ErrorText
+      }
+      $Done = @{jobId=[long]$Job.id;success=$Success;error=$ErrorText;observedIp=$ObservedIp}
+      [void](Api "/api/h2-android/agent/complete" $Done $Token)
+    } else { Start-Sleep -Seconds 4 }
+  } catch {
+    $Online = $false
+    Write-H2Status "RECONNECTING"
+    Write-Warning ("H2 Android: " + $_.Exception.Message)
+    Start-Sleep -Seconds 10
+  }
+}
+) {
+    throw "O Android nao confirmou o ajuste de fonte e icones para 320 dpi."
+  }
+  Write-H2Status "Fonte e icones ampliados no Android: 320 dpi (720px = 360dp)"
+}
 # Use Android's bottom navigation buttons rather than the emulator's side controls.
 function Set-H2BottomNavigation {
   param([string]$Adb,[string]$Serial)
