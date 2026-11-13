@@ -110,6 +110,7 @@ export default function AdminH2Android() {
           <div className="mt-4 grid grid-cols-2 gap-2">
             <button disabled={busy || !online || p.state!=="stopped"} onClick={()=>command.mutate({id:p.id,action:"start"})} className="flex items-center justify-center gap-1 rounded-lg border border-emerald-400/25 p-2 text-xs font-bold text-emerald-300 disabled:opacity-30"><Play className="h-4 w-4"/> Iniciar</button>
             <button disabled={busy || !online || p.state!=="running"} onClick={()=>command.mutate({id:p.id,action:"stop"})} className="flex items-center justify-center gap-1 rounded-lg border border-white/15 p-2 text-xs disabled:opacity-30"><Square className="h-4 w-4"/> Parar</button>
+            <button disabled={busy || !online || p.state!=="running"} onClick={()=>command.mutate({id:p.id,action:"configure"})} className="col-span-2 flex items-center justify-center gap-2 rounded-lg border border-cyan-400/35 bg-cyan-400/10 p-2 text-xs font-bold text-cyan-200 disabled:opacity-30">Ajustar idioma e visual do celular</button>
             <button disabled={busy || !online || p.state!=="error"} onClick={()=>command.mutate({id:p.id,action:"retry"})} className="rounded-lg border border-amber-400/25 p-2 text-xs text-amber-200 disabled:opacity-30">Repetir criação</button>
             <button disabled={busy || !online} onClick={()=>setConfirmDelete(p.id)} className="flex items-center justify-center gap-1 rounded-lg border border-red-400/25 p-2 text-xs text-red-300 disabled:opacity-30"><Trash2 className="h-4 w-4"/> Excluir</button>
           </div>

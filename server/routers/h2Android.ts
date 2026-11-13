@@ -238,7 +238,7 @@ export const h2AndroidRouter = router({
   }),
 
   command: adminProcedure.input(idSchema.extend({
-    action: z.enum(["start", "stop", "delete", "retry"]),
+    action: z.enum(["start", "stop", "delete", "retry", "configure"]),
   })).mutation(async ({ input }) => {
     const db = await androidDb();
     return db.transaction(async tx => {
@@ -264,6 +264,9 @@ export const h2AndroidRouter = router({
       if (action === "stop" && existing.state !== "running") {
         throw new TRPCError({ code: "CONFLICT", message: "O Android não consta como ligado." });
       }
+      if (action === "configure" && existing.state !== "running") {
+        throw new TRPCError({ code: "CONFLICT", message: "Ligue o Android antes de ajustar idioma e visual." });
+      }
       if (action === "start" || action === "create") {
         const locked = rows(await tx.execute(sql`SELECT id FROM h2_android_native_agents_v2
           WHERE id=${existing.agentId} AND revoked=0 FOR UPDATE`));
@@ -276,7 +279,8 @@ export const h2AndroidRouter = router({
           throw new TRPCError({ code: "PRECONDITION_FAILED", message: "Limite de Androids simultâneos atingido." });
         }
       }
-      const state = action === "delete" ? "deleting" : action === "stop" ? "stopping" : action === "start" ? "starting" : "queued";
+      const state = action === "configure" ? existing.state :
+        action === "delete" ? "deleting" : action === "stop" ? "stopping" : action === "start" ? "starting" : "queued";
       await tx.execute(sql`UPDATE h2_android_native_profiles SET state=${state}, lastError=NULL WHERE id=${input.id}`);
       await tx.execute(sql`INSERT INTO h2_android_jobs (profileId,agentId,action,state)
         VALUES (${input.id}, ${existing.agentId}, ${action}, 'queued')`);
@@ -369,6 +373,13 @@ export async function finishAndroidJob(
       await tx.execute(sql`DELETE FROM h2_android_proxies WHERE profileId=${job.profileId}`);
       await tx.execute(sql`DELETE FROM h2_android_jobs WHERE profileId=${job.profileId}`);
       await tx.execute(sql`DELETE FROM h2_android_native_profiles WHERE id=${job.profileId}`);
+      return { accepted: true };
+    }
+    if (job.action === "configure") {
+      // Cosmetic/language adjustment must not change a running Android to error,
+      // clear its verified proxy IP, or alter its reserved proxy.
+      await tx.execute(sql`UPDATE h2_android_native_profiles SET lastError=${error}
+        WHERE id=${job.profileId} AND agentId=${agentId}`);
       return { accepted: true };
     }
     const state = !input.success ? (job.action === "delete" ? "deleting" : "error") :
