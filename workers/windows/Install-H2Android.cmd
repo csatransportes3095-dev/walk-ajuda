@@ -22,9 +22,8 @@ del /q "%PSFILE%" >nul 2>&1
 if not "%INSTALL_RESULT%"=="0" goto install_error
 
 echo.
-echo Instalador concluido. Veja o status do agente no painel H2 Android.
+echo Instalador concluido. O agente executa em segundo plano.
 echo.
-pause
 exit /b 0
 
 :download_error

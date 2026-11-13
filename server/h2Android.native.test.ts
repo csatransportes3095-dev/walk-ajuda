@@ -4,6 +4,20 @@ import path from "node:path";
 const read = (file: string) => fs.readFileSync(path.resolve(process.cwd(), file), "utf8");
 
 describe("H2 Android native isolated architecture", () => {
+  it("uses pt-BR and physical keyboard in all new AVDs, with hidden command windows", () => {
+    const agentCode = read("workers/windows/H2AndroidAgent.ps1");
+    const installerCode = read("workers/windows/Install-H2Android.ps1");
+    const launcherCode = read("workers/windows/Install-H2Android.cmd");
+    expect(agentCode).toContain("function Set-H2Keyboard");
+    expect(agentCode).toContain("hw.keyboard=yes");
+    expect(agentCode).toContain("function Set-H2Locale");
+    expect(agentCode).toContain("persist.sys.locale pt-BR");
+    expect(agentCode).toContain("function Start-H2Gui");
+    expect(agentCode).toContain("$I.CreateNoWindow = $true");
+    expect(installerCode).toContain("-WindowStyle Hidden");
+    expect(launcherCode).toContain("O agente executa em segundo plano.");
+  });
+
   it("bootstraps isolated free JDK when Android Studio JBR is unavailable", () => {
     const code = read("workers/windows/H2AndroidAgent.ps1");
     expect(code).toContain("function Set-H2AndroidJava");

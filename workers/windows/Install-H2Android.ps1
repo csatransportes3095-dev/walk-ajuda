@@ -49,7 +49,7 @@ $Startup = [Environment]::GetFolderPath("Startup")
 $ShortcutPath = Join-Path $Startup "H2 Android Nativo.lnk"
 $Shortcut = (New-Object -ComObject WScript.Shell).CreateShortcut($ShortcutPath)
 $Shortcut.TargetPath = $Powershell
-$Shortcut.Arguments = '-NoProfile -ExecutionPolicy Bypass -WindowStyle Minimized -File "' + $AgentPath + '" -Server "' + $Server + '"'
+$Shortcut.Arguments = '-NoProfile -ExecutionPolicy Bypass -WindowStyle Hidden -File "' + $AgentPath + '" -Server "' + $Server + '"'
 $Shortcut.WorkingDirectory = $Base
 $Shortcut.Description = "H2 Android nativo - conecta automaticamente ao Windows"
 $Shortcut.Save()
@@ -65,6 +65,6 @@ Write-Host "Agente atualizado. Iniciando nova conexao..."
 Start-Process -FilePath $Powershell -ArgumentList @(
   "-NoProfile","-ExecutionPolicy","Bypass","-File",('"' + $AgentPath + '"'),
   "-Server",('"' + $Server + '"')
-) -WorkingDirectory $Base -WindowStyle Normal
+) -WorkingDirectory $Base -WindowStyle Hidden
 Write-Host "Atalho H2 Android atualizado na pasta Inicializar do Windows."
 Write-Host "H2ADS e outros agentes nao foram alterados."
