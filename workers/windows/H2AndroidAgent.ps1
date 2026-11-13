@@ -6,7 +6,7 @@ param(
   [string]$PairCode = ""
 )
 $ErrorActionPreference = "Stop"
-$Version = "1.1.0-socks5-stable"
+$Version = "1.2.0-single-avd"
 $Base = Join-Path $env:LOCALAPPDATA "H2AndroidNative"
 $AvdHome = Join-Path $Base "avd"
 $TokenFile = Join-Path $Base "agent.secure"
