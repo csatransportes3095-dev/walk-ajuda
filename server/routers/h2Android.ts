@@ -389,6 +389,12 @@ export const h2AndroidRouter = router({
       const nextId = await findAvailableSocks5Proxy(tx);
       if (!nextId) throw new TRPCError({ code: "PRECONDITION_FAILED", message: "Não há outro proxy SOCKS5 livre no cofre H2 Android." });
       if (profileState === "running") {
+        const agentVersion = rows(await tx.execute(sql`
+          SELECT version FROM h2_android_native_agents_v2 WHERE id=${String(profile.agentId)} AND revoked=0 LIMIT 1
+        `))[0];
+        if (!String(agentVersion?.version || "").startsWith("1.3.0-live-socks-switch")) {
+          throw new TRPCError({ code: "PRECONDITION_FAILED", message: "Atualize o agente H2 Android para 1.3.0 antes da troca com o aparelho aberto." });
+        }
         // Do not retire the current route before the Windows agent has validated
         // the candidate and switched its stable local relay listener.
         const reserved = await tx.execute(sql`
@@ -634,18 +640,22 @@ export async function finishAndroidJob(
           WHERE id=${nextId} AND status='rotating' AND profileId IS NULL
         `);
         if (affected(oldUpdated)!==1 || affected(newUpdated)!==1) throw new Error("Reserva proxy alterada durante a troca.");
-        await tx.execute(sql`
+        const profileUpdated = await tx.execute(sql`
           UPDATE h2_android_native_profiles SET proxyId=${nextId},
             observedIp=${input.observedIp?.slice(0,64) || null},lastError=NULL,state='running'
           WHERE id=${job.profileId} AND agentId=${agentId} AND proxyId=${oldId}
         `);
+        if (affected(profileUpdated)!==1) throw new Error("Instancia mudou durante a troca; transacao revertida.");
       } else {
         await tx.execute(sql`
           UPDATE h2_android_proxies SET status='available',profileId=NULL
           WHERE id=${nextId} AND status='rotating'
         `);
+        const unrecoverable = String(error || "").includes("CRITICAL:");
         await tx.execute(sql`
-          UPDATE h2_android_native_profiles SET lastError=${"Troca nao concluida. Proxy anterior mantido: " + String(error || "falha")},state='running'
+          UPDATE h2_android_native_profiles
+          SET lastError=${"Troca nao concluida. " + String(error || "Proxy anterior preservado.")},
+              state=${unrecoverable ? "error" : "running"}
           WHERE id=${job.profileId} AND agentId=${agentId} AND proxyId=${oldId}
         `);
       }
