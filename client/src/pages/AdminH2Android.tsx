@@ -12,8 +12,32 @@ export default function AdminH2Android() {
   const [proxyList, setProxyList] = useState("");
   const [pairCode, setPairCode] = useState("");
   const [confirmDelete, setConfirmDelete] = useState<string | null>(null);
-  const refresh = async () => { await utils.h2Android.overview.invalidate(); };
+  const [vaultOpen, setVaultOpen] = useState(false);
+  const [vaultStatus, setVaultStatus] = useState<"all" | "available" | "assigned" | "retired">("available");
+  const [vaultCursor, setVaultCursor] = useState(0);
+  const [vaultHistory, setVaultHistory] = useState<number[]>([]);
+  const [selectedProxies, setSelectedProxies] = useState<number[]>([]);
+  const [proxyDeletion, setProxyDeletion] = useState<{ mode: "selected" | "allAvailable"; ids: number[] } | null>(null);
+  const [proxyDeleteConfirmText, setProxyDeleteConfirmText] = useState("");
+  const refresh = async () => { await Promise.all([utils.h2Android.overview.invalidate(), utils.h2Android.listProxies.invalidate()]); };
   const messages = (e: unknown) => toast.error(e instanceof Error ? e.message : "Falha na operação.");
+  const vault = trpc.h2Android.listProxies.useQuery({ status: vaultStatus, cursor: vaultCursor }, { enabled: vaultOpen, staleTime: 0 });
+  const deleteProxies = trpc.h2Android.deleteProxies.useMutation({
+    onSuccess: async result => {
+      toast.success(`${result.deleted} proxy(s) disponível(is) excluído(s).`);
+      setProxyDeletion(null); setProxyDeleteConfirmText(""); setSelectedProxies([]);
+      setVaultCursor(0); setVaultHistory([]);
+      await Promise.all([utils.h2Android.overview.invalidate(), utils.h2Android.listProxies.invalidate()]);
+    },
+    onError: messages,
+  });
+  const changeVaultStatus = (status: "all" | "available" | "assigned" | "retired") => {
+    setVaultStatus(status); setVaultCursor(0); setVaultHistory([]); setSelectedProxies([]);
+  };
+  const openProxyDeletion = (mode: "selected" | "allAvailable", ids: number[] = []) => {
+    setProxyDeletion({ mode, ids }); setProxyDeleteConfirmText("");
+  };
+  const toggleProxy = (id: number) => setSelectedProxies(old => old.includes(id) ? old.filter(x => x !== id) : [...old, id]);
   const importProxy = trpc.h2Android.importProxies.useMutation({
     onSuccess: async r => { toast.success(String(r.added) + " importados, " + String(r.duplicates) + " duplicados, " + String(r.invalid) + " inválidos."); setProxyList(""); await refresh(); },
     onError: messages,
@@ -70,6 +94,73 @@ export default function AdminH2Android() {
           <button disabled={importProxy.isPending || !proxyList.trim() || !data?.encryptionReady} onClick={()=>importProxy.mutate({proxies:proxyList})} className="rounded-lg bg-cyan-400 px-4 py-2 text-sm font-bold text-slate-950 disabled:opacity-40">Importar proxies</button>
         </div>
         {data && !data.encryptionReady && <p className="mt-2 text-sm text-amber-300">Chave de criptografia indisponível no servidor.</p>}
+
+        <div className="mt-4 border-t border-white/10 pt-4">
+          <div className="flex flex-wrap items-center justify-between gap-2">
+            <div>
+              <h3 className="text-base font-bold">Gerenciar proxies cadastrados</h3>
+              <p className="text-xs text-slate-400">Listar e excluir somente proxies livres. Proxies reservados por Androids não podem ser excluídos.</p>
+            </div>
+            <button onClick={()=>setVaultOpen(v=>!v)} className="rounded-lg border border-cyan-400/35 px-4 py-2 text-sm font-bold text-cyan-200">{vaultOpen ? "Ocultar cofre" : "Ver proxies e opções de exclusão"}</button>
+          </div>
+          {vaultOpen && <div className="mt-4 space-y-3">
+            <div className="flex flex-wrap items-center gap-2">
+              <label className="text-sm text-slate-300" htmlFor="h2-proxy-filter">Filtrar por status:</label>
+              <select id="h2-proxy-filter" value={vaultStatus} onChange={e=>changeVaultStatus(e.target.value as "all" | "available" | "assigned" | "retired")} className="rounded-lg border border-white/20 bg-[#080d17] p-2 text-sm">
+                <option value="available">Disponíveis</option>
+                <option value="assigned">Reservados</option>
+                <option value="retired">Aposentados</option>
+                <option value="all">Todos</option>
+              </select>
+              <button onClick={()=>void utils.h2Android.listProxies.invalidate()} className="rounded-lg border border-white/15 p-2" aria-label="Atualizar lista de proxies"><RefreshCw className="h-4 w-4"/></button>
+              <span className="text-xs text-slate-400">Até 80 proxies por página</span>
+            </div>
+            {vault.isLoading && <p className="text-sm text-slate-400">Carregando proxies...</p>}
+            {vault.isError && <p className="text-sm text-red-300">{vault.error.message}</p>}
+            {!!vault.data?.proxies.length && <div className="flex flex-wrap items-center gap-2">
+              <button disabled={deleteProxies.isPending || !vault.data.proxies.some(p=>p.status==="available")} onClick={()=>{
+                const pageIds = vault.data.proxies.filter(p=>p.status==="available").map(p=>p.id);
+                setSelectedProxies(old=>Array.from(new Set([...old, ...pageIds])));
+              }} className="rounded-lg border border-white/20 px-3 py-2 text-xs disabled:opacity-40">Selecionar livres desta página</button>
+              <button disabled={!selectedProxies.length || deleteProxies.isPending} onClick={()=>setSelectedProxies([])} className="rounded-lg border border-white/20 px-3 py-2 text-xs disabled:opacity-40">Limpar seleção</button>
+              <button disabled={!selectedProxies.length || deleteProxies.isPending} onClick={()=>openProxyDeletion("selected",selectedProxies)} className="rounded-lg border border-red-400/35 px-3 py-2 text-xs font-bold text-red-300 disabled:opacity-40">Excluir selecionados ({selectedProxies.length})</button>
+            </div>}
+            <div className="max-h-80 space-y-2 overflow-y-auto">
+              {vault.data?.proxies.map(p=><div key={p.id} className="flex flex-wrap items-center gap-3 rounded-lg border border-white/10 bg-[#080d17] p-3">
+                <input type="checkbox" aria-label={`Selecionar proxy #${p.id}`} checked={selectedProxies.includes(p.id)} disabled={p.status!=="available" || deleteProxies.isPending} onChange={()=>toggleProxy(p.id)} className="h-4 w-4 accent-cyan-400" />
+                <div className="min-w-0 flex-1">
+                  <div className="text-sm font-semibold">Proxy #{p.id} <span className={p.status==="available"?"text-emerald-300":p.status==="assigned"?"text-amber-300":"text-slate-400"}>• {p.status==="available"?"Disponível":p.status==="assigned"?"Reservado":"Aposentado"}</span></div>
+                  <p className="break-all text-xs text-slate-400">{p.endpoint ? `${p.endpoint.protocol} ${p.endpoint.host}:${p.endpoint.port}` : "Dados protegidos ou indisponíveis"}{p.instanceLabel ? ` • Instância ${p.instanceLabel}` : ""}</p>
+                </div>
+                <button disabled={p.status!=="available" || deleteProxies.isPending} onClick={()=>openProxyDeletion("selected",[p.id])} className="rounded-lg border border-red-400/30 px-3 py-2 text-xs font-bold text-red-300 disabled:opacity-30"><Trash2 className="mr-1 inline h-4 w-4"/>Excluir</button>
+              </div>)}
+              {vault.data && !vault.data.proxies.length && <p className="text-sm text-slate-400">Nenhum proxy encontrado neste filtro.</p>}
+            </div>
+            {vault.data && <div className="flex items-center justify-between gap-2">
+              <button disabled={!vaultHistory.length || deleteProxies.isPending} onClick={()=>{
+                const previous = vaultHistory[vaultHistory.length-1];
+                setVaultHistory(x=>x.slice(0,-1)); setVaultCursor(previous); setSelectedProxies([]);
+              }} className="rounded-lg border border-white/20 px-3 py-2 text-xs disabled:opacity-30">Anterior</button>
+              <button disabled={!vault.data.nextCursor || deleteProxies.isPending} onClick={()=>{
+                if(vault.data?.nextCursor) {setVaultHistory(x=>[...x,vaultCursor]);setVaultCursor(vault.data.nextCursor);setSelectedProxies([]);}
+              }} className="rounded-lg border border-white/20 px-3 py-2 text-xs disabled:opacity-30">Próxima página</button>
+            </div>}
+            <div className="flex flex-wrap items-center justify-between gap-2 rounded-lg border border-red-500/20 p-3">
+              <p className="text-xs text-slate-400">Limpar apenas proxies livres, de todas as páginas, sem mexer nos reservados.</p>
+              <button disabled={deleteProxies.isPending || !(data?.counts.available ?? 0)} onClick={()=>openProxyDeletion("allAvailable")} className="rounded-lg border border-red-400/40 px-3 py-2 text-xs font-bold text-red-300 disabled:opacity-30">Limpar todos os disponíveis ({data?.counts.available ?? 0})</button>
+            </div>
+            {proxyDeletion && <div className="rounded-xl border border-red-400/50 bg-red-500/10 p-4">
+              <h4 className="text-sm font-bold text-red-200">Confirmar exclusão permanente</h4>
+              <p className="mt-1 text-xs text-slate-300">{proxyDeletion.mode==="allAvailable" ? "Você excluirá TODOS os proxies atualmente disponíveis no cofre H2 Android." : `Você excluirá ${proxyDeletion.ids.length} proxy(s) selecionado(s).`} Proxies reservados não serão removidos. Esta ação não pode ser desfeita e os proxies usados não voltarão à fila.</p>
+              <label htmlFor="h2-confirm-proxy-delete" className="mt-3 block text-xs text-slate-200">Digite EXCLUIR para confirmar:</label>
+              <input id="h2-confirm-proxy-delete" value={proxyDeleteConfirmText} onChange={e=>setProxyDeleteConfirmText(e.target.value)} className="mt-1 w-full max-w-xs rounded-lg border border-red-400/40 bg-[#080d17] p-2 text-sm" placeholder="EXCLUIR" />
+              <div className="mt-3 flex flex-wrap gap-2">
+                <button disabled={proxyDeleteConfirmText!=="EXCLUIR" || deleteProxies.isPending} onClick={()=>deleteProxies.mutate({mode:proxyDeletion.mode, ids:proxyDeletion.ids, confirmed:true})} className="rounded-lg bg-red-600 px-4 py-2 text-sm font-bold text-white disabled:opacity-30">Confirmar exclusão</button>
+                <button disabled={deleteProxies.isPending} onClick={()=>{setProxyDeletion(null);setProxyDeleteConfirmText("");}} className="rounded-lg border border-white/25 px-4 py-2 text-sm">Cancelar</button>
+              </div>
+            </div>}
+          </div>}
+        </div>
       </section>
       <section className="rounded-2xl border border-white/10 bg-[#12192a] p-4 sm:p-5">
         <h2 className="text-lg font-bold">2. Conectar o Windows</h2>

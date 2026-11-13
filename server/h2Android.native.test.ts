@@ -4,6 +4,27 @@ import path from "node:path";
 const read = (file: string) => fs.readFileSync(path.resolve(process.cwd(), file), "utf8");
 
 describe("H2 Android native isolated architecture", () => {
+  it("lets ADM browse proxies without exposing credentials and delete only unused available records", () => {
+    const routerCode = read("server/routers/h2Android.ts");
+    const dashboard = read("client/src/pages/AdminH2Android.tsx");
+    expect(routerCode).toContain("listProxies: adminProcedure");
+    expect(routerCode).toContain("deleteProxies: adminProcedure");
+    expect(routerCode).toContain('confirmed: z.literal(true)');
+    expect(routerCode).toContain('mode: z.enum(["selected", "allAvailable"])');
+    expect(routerCode).toContain("status='available' AND profileId IS NULL");
+    expect(routerCode.match(/NOT EXISTS \(/g)?.length).toBeGreaterThanOrEqual(2);
+    expect(routerCode).toContain("h2_android_native_profiles p");
+    expect(routerCode).toContain("Existe proxy ocupado, protegido ou já excluído.");
+    expect(routerCode).toContain("ORDER BY x.id LIMIT 81");
+    expect(routerCode).toContain("return { deleted: affected(result) }");
+    expect(dashboard).toContain("trpc.h2Android.listProxies.useQuery");
+    expect(dashboard).toContain("trpc.h2Android.deleteProxies.useMutation");
+    expect(dashboard).toContain("Excluir selecionados");
+    expect(dashboard).toContain("Limpar todos os disponíveis");
+    expect(dashboard).toContain('proxyDeleteConfirmText!=="EXCLUIR"');
+    expect(dashboard).toContain('disabled={p.status!=="available" || deleteProxies.isPending}');
+  });
+
   it("skips legacy HTTP proxies during both creation and rotation", () => {
     const routerCode = read("server/routers/h2Android.ts");
     expect(routerCode).toContain("async function findAvailableSocks5Proxy");

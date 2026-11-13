@@ -218,6 +218,90 @@ export const h2AndroidRouter = router({
     return { added, duplicates, invalid, total: lines.length };
   }),
 
+  // Read-only vault browsing for ADM. Never return usernames/passwords to the browser.
+  listProxies: adminProcedure.input(z.object({
+    status: z.enum(["available", "assigned", "retired", "all"]),
+    cursor: z.number().int().nonnegative().default(0),
+  }).strict()).query(async ({ input }) => {
+    const db = await androidDb();
+    const result = rows(await db.execute(sql`
+      SELECT x.id, x.status, x.encryptedPayload, p.label AS instanceLabel
+      FROM h2_android_proxies x
+      LEFT JOIN h2_android_native_profiles p ON p.proxyId = x.id
+      WHERE x.id > ${input.cursor}
+        AND (${input.status}='all' OR x.status=${input.status})
+      ORDER BY x.id LIMIT 81
+    `));
+    const hasMore = result.length > 80;
+    const page = result.slice(0, 80);
+    return {
+      proxies: page.map(p => {
+        let endpoint: { protocol: string; host: string; port: number } | null = null;
+        try {
+          const proxy = decryptH2AdsProxy(String(p.encryptedPayload));
+          endpoint = { protocol: String(proxy.protocol).toUpperCase(), host: String(proxy.host), port: Number(proxy.port) };
+        } catch { /* Keep encrypted credentials on the server. */ }
+        return {
+          id: Number(p.id), status: String(p.status),
+          instanceLabel: p.instanceLabel ? String(p.instanceLabel) : null,
+          endpoint,
+        };
+      }),
+      nextCursor: hasMore ? Number(page[page.length - 1]?.id) : null,
+      hasMore,
+    };
+  }),
+
+  // Deletion is explicitly requested by ADM. A proxy attached to ANY AVD is
+  // protected, even if its status/assignment field is inconsistent.
+  deleteProxies: adminProcedure.input(z.object({
+    mode: z.enum(["selected", "allAvailable"]),
+    ids: z.array(z.number().int().positive()).max(80).default([]),
+    confirmed: z.literal(true),
+  }).strict()).mutation(async ({ input }) => {
+    const ids = Array.from(new Set(input.ids));
+    if (input.mode === "selected" && (ids.length === 0 || ids.length !== input.ids.length)) {
+      throw new TRPCError({ code: "BAD_REQUEST", message: "Selecione proxies únicos para excluir." });
+    }
+    if (input.mode === "allAvailable" && ids.length) {
+      throw new TRPCError({ code: "BAD_REQUEST", message: "Limpar disponíveis não aceita seleção de IDs." });
+    }
+    const db = await androidDb();
+    return db.transaction(async tx => {
+      if (input.mode === "allAvailable") {
+        const result = await tx.execute(sql`
+          DELETE FROM h2_android_proxies
+          WHERE status='available' AND profileId IS NULL
+          AND NOT EXISTS (
+            SELECT 1 FROM h2_android_native_profiles p
+            WHERE p.proxyId = h2_android_proxies.id
+          )
+        `);
+        return { deleted: affected(result) };
+      }
+      let deleted = 0;
+      // Each row is checked and deleted in the same transaction. Any conflict
+      // rolls back the entire selection; no partial deletion is committed.
+      for (const id of ids) {
+        const result = await tx.execute(sql`
+          DELETE FROM h2_android_proxies
+          WHERE id=${id} AND status='available' AND profileId IS NULL
+          AND NOT EXISTS (
+            SELECT 1 FROM h2_android_native_profiles p
+            WHERE p.proxyId = h2_android_proxies.id
+          )
+        `);
+        if (affected(result) !== 1) {
+          throw new TRPCError({
+            code: "CONFLICT",
+            message: "Existe proxy ocupado, protegido ou já excluído. Nenhum item da seleção foi removido.",
+          });
+        }
+        deleted++;
+      }
+      return { deleted };
+    });
+  }),
   createPairing: adminProcedure.input(z.object({
     label: z.string().trim().min(2).max(80),
   }).strict()).mutation(async ({ input }) => {
