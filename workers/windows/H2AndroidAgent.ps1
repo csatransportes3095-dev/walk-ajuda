@@ -363,6 +363,57 @@ function Test-H2EmulatorProcess {
   param([string]$Name)
   return (@(Get-H2EmulatorProcesses -Name $Name).Count -gt 0)
 }
+# Explicit test rebuild can recover a stopped/stuck AVD process even if the
+# web status is 'error'. Only exact processes owned by this named AVD are touched.
+function Stop-H2OwnedEmulatorForRebuild {
+  param([string]$Adb,[string]$Name,[string]$Serial)
+  $Before = @(Get-H2EmulatorProcesses -Name $Name)
+  if (!$Serial -and !$Before.Count) { return }
+  if ($Serial) {
+    Write-H2Status ("Encerrando AVD por ADB para recriacao: " + $Name)
+    try {
+      Invoke-H2Adb -Executable $Adb -CommandArgs @("-s",$Serial,"emu","kill") | Out-Null
+    } catch {
+      Write-H2Status ("Comando ADB de encerramento nao respondeu; verificando processo do proprio AVD: " + $Name)
+    }
+  }
+  $Deadline = (Get-Date).AddSeconds(15)
+  while ((Get-Date) -lt $Deadline) {
+    if (!(Test-H2EmulatorProcess -Name $Name)) { return }
+    Start-Sleep -Seconds 1
+  }
+  # An orphaned emulator must not block explicit reconstruction forever.
+  # Recheck AVD identity and process creation time immediately before killing.
+  $Remaining = @(Get-H2EmulatorProcesses -Name $Name)
+  if ($Remaining.Count -gt 8) {
+    throw "Quantidade inesperada de processos Android; encerramento automatico bloqueado."
+  }
+  foreach ($Owned in $Remaining) {
+    $ProcessId = [int]$Owned.ProcessId
+    $Verified = @(Get-H2EmulatorProcesses -Name $Name | Where-Object {
+      [int]$_.ProcessId -eq $ProcessId -and
+      [string]$_.CreationDate -eq [string]$Owned.CreationDate
+    })
+    if (!$Verified.Count) { continue }
+    try {
+      Stop-Process -Id $ProcessId -Force -ErrorAction Stop
+      Write-H2Status ("Processo preso encerrado somente no AVD " + $Name + "; PID " + $ProcessId)
+    } catch {
+      # The process may have ended between lookup and termination.
+      if (@(Get-H2EmulatorProcesses -Name $Name | Where-Object {
+        [int]$_.ProcessId -eq $ProcessId
+      }).Count -gt 0) {
+        throw ("Falha ao encerrar processo do Android de teste PID " + $ProcessId + ": " + $_.Exception.Message)
+      }
+    }
+  }
+  $Deadline = (Get-Date).AddSeconds(10)
+  while ((Get-Date) -lt $Deadline) {
+    if (!(Test-H2EmulatorProcess -Name $Name)) { return }
+    Start-Sleep -Seconds 1
+  }
+  throw "Processo do proprio AVD continua ativo. Nao recriei nem apaguei dados para evitar conflito."
+}
 function Get-H2EmulatorDiagnostic {
   param([string]$ErrorLog,[string]$OutputLog)
   $Lines = @()
@@ -752,9 +803,13 @@ function Run-Job([object]$Job,[string]$Sdk) {
   if ($Job.action -eq "rebuild") {
     # User explicitly opted for a fresh test: remove ONLY the error-state
     # instance's own AVD. Never delete proxies or other AVDs.
-    if ($Serial -or (Test-H2EmulatorProcess -Name $Name)) {
-      throw "Nao e seguro recriar: o Android ainda esta aberto. Encerre-o primeiro."
-    }
+    Stop-H2OwnedEmulatorForRebuild -Adb $Adb -Name $Name -Serial $Serial
+    # The AVD is now stopped; release only its own relay for a clean reconnect.
+    Stop-H2SocksRelay -Name $Name
+    $ProxyCheck = Check-Proxy -Proxy $Job.proxy -Name $Name -ProxyId ([string]$Job.proxyId)
+    $ProxyIp = [string]$ProxyCheck.ip
+    $RelayPort = [int]$ProxyCheck.port
+    $Serial = $null
     $OldAvd = Join-Path $AvdHome "$Name.avd"
     if (Test-Path -LiteralPath $OldAvd) {
       $OldPreference = $ErrorActionPreference
