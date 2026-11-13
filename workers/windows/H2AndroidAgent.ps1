@@ -354,6 +354,30 @@ function Test-H2EmulatorProcess {
   }
   return $false
 }
+# Read the actual error instead of flooding the ADM with verbose QEMU argv DEBUG.
+# Full diagnostic logs remain local and scoped to this AVD.
+function Get-H2EmulatorDiagnostic {
+  param([string]$ErrorLog,[string]$OutputLog)
+  $Lines = @()
+  foreach ($File in @($ErrorLog,$OutputLog)) {
+    if (Test-Path -LiteralPath $File) {
+      $Lines += @(Get-Content -LiteralPath $File -Tail 500 -ErrorAction SilentlyContinue)
+    }
+  }
+  $Relevant = @($Lines | Where-Object {
+    $_ -and $_ -match '(?i)(FATAL|PANIC|ERROR|failed|failure|unsupported|cannot|unable|requires|missing|hypervisor|WHPX|virtualization|acceleration|not available|not found|invalid|permission denied)' -and
+    $_ -notmatch '(?i)DEBUG\s*\|?\s*qemu backend|Concatenated backend parameters|argv\[[0-9]+\]'
+  } | Select-Object -Last 3)
+  if (!$Relevant.Count) {
+    $Relevant = @($Lines | Where-Object {
+      $_ -and $_.Trim() -and $_ -notmatch '(?i)^\s*DEBUG\b|Concatenated backend parameters|argv\[[0-9]+\]'
+    } | Select-Object -Last 3)
+  }
+  $Text = (($Relevant | ForEach-Object { $_.Trim() }) -join " | ").Trim()
+  if (!$Text) { $Text = "Emulador encerrou sem mensagem de erro clara; consulte o arquivo de log local." }
+  if ($Text.Length -gt 340) { $Text = $Text.Substring(0,340) }
+  return $Text
+}
 function Start-H2Emulator {
   param([string]$Emulator,[string]$Sdk,[string]$Name,[string]$ProxyUri)
   if (Test-H2EmulatorProcess -Name $Name) {
@@ -377,11 +401,10 @@ function Start-H2Emulator {
         Write-H2Status ("Emulador executando: " + $Name + ". Diagnosticos gravados em disco.")
         return @{ Running=$true; Details=""; Log=$ErrLog }
       }
-      $Code = $Proc.ExitCode
-      $StdErr = if (Test-Path -LiteralPath $ErrLog) { @(Get-Content -LiteralPath $ErrLog -Tail 14 -ErrorAction SilentlyContinue) } else { @() }
-      $StdOut = if (Test-Path -LiteralPath $OutLog) { @(Get-Content -LiteralPath $OutLog -Tail 8 -ErrorAction SilentlyContinue) } else { @() }
-      $Details = ((@($StdErr) + @($StdOut) | Where-Object { $_ -and $_.Trim() }) | Select-Object -Last 14) -join " | "
-      if ($Details.Length -gt 850) { $Details = $Details.Substring($Details.Length - 850) }
+      [void]$Proc.WaitForExit(2000)
+      $Proc.Refresh()
+      $Code = if ($null -eq $Proc.ExitCode) { "indisponivel" } else { [string]$Proc.ExitCode }
+      $Details = Get-H2EmulatorDiagnostic -ErrorLog $ErrLog -OutputLog $OutLog
       return @{ Running=$false; Code=$Code; Details=$Details; Log=$ErrLog }
     } finally { $Proc.Dispose() }
   }
@@ -392,14 +415,17 @@ function Start-H2Emulator {
     return
   }
   $FirstDetails = [string]$Attempt.Details
-  if ($FirstDetails.Length -gt 900) { $FirstDetails = $FirstDetails.Substring($FirstDetails.Length - 900) }
-  Write-H2Status ("Emulador terminou com codigo " + $Attempt.Code + ". Ultimas linhas: " + $FirstDetails)
-  Write-H2Status "Tentando Android sem aceleracao de hardware (virtualizacao do Windows indisponivel)"
-  $Fallback = & $StartAttempt "-no-accel -gpu swiftshader_indirect"
+  Write-H2Status ("Emulador terminou com codigo " + $Attempt.Code + ". Causa: " + $FirstDetails + ". Log local: " + $Attempt.Log)
+  # Keep WHPX/VM acceleration unchanged. -no-accel and swiftshader_indirect
+  # are deprecated; try only a supported software GPU before reporting failure.
+  Write-H2Status "Tentando novamente com GPU software e aceleracao de VM automatica."
+  $Fallback = & $StartAttempt "-gpu software"
   if ($Fallback.Running) { return }
-  $Details = [string]$Fallback.Details
-  if ($Details.Length -gt 900) { $Details = $Details.Substring($Details.Length - 900) }
-  throw ("Emulador terminou com codigo " + $Fallback.Code + ". Ultimas linhas: " + $Details + ". Log local: " + $Fallback.Log)
+  Write-H2Status ("Fallback GPU software terminou com codigo " + $Fallback.Code + ". Causa: " + $Fallback.Details + ". Log local: " + $Fallback.Log)
+  # Keep the message below the server's 500-char completion limit.
+  $PrimaryShort = if ($FirstDetails.Length -gt 105) { $FirstDetails.Substring(0,105) } else { $FirstDetails }
+  $FailureDetails = [string]$Fallback.Details
+  throw ("Android nao iniciou (codigo " + $Fallback.Code + "). GPU software: " + $FailureDetails + ". Primeira tentativa: " + $PrimaryShort)
 }
 # Google Play Android 15 is a production-style system image: adb shell cannot
 # reliably change global locale with setprop or am update-config. Instead automate
