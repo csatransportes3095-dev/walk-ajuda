@@ -169,59 +169,119 @@ function Wait-Boot([string]$Adb,[string]$Name,[int]$TimeoutSeconds=180) {
   }
   throw "Emulador não ficou pronto em $TimeoutSeconds segundos."
 }
- $script:SocksRelayProcess = $null
- $script:SocksRelayPort = $null
-function Start-H2SocksRelay([object]$Proxy) {
+# A dedicated, persistent local relay per Android instance. The ready file
+# contains only process metadata and proxy ID, never SOCKS5 credentials.
+function Get-H2RelayReadyFile([string]$Name) {
+  $RelayDir = Join-Path $Base "relays"
+  if (!(Test-Path -LiteralPath $RelayDir)) { New-Item -Path $RelayDir -ItemType Directory -Force | Out-Null }
+  return (Join-Path $RelayDir ($Name + ".json"))
+}
+function Test-H2RelayProcess {
+  param([int]$ProcessId,[string]$Name)
+  if ($ProcessId -le 0) { return $false }
+  try {
+    $P = Get-CimInstance -ClassName Win32_Process -Filter ("ProcessId=" + $ProcessId) -ErrorAction Stop
+    if (!$P) { return $false }
+    $CommandLine = [string]$P.CommandLine
+    return ($CommandLine -match '(?i)H2AndroidSocksRelay\.mjs' -and
+      $CommandLine -match ('(?i)--h2-instance\s+' + [regex]::Escape($Name) + '(?:\s|$)'))
+  } catch { return $false }
+}
+function Test-H2RelayPort {
+  param([int]$Port)
+  if ($Port -lt 1 -or $Port -gt 65535) { return $false }
+  $Client = New-Object System.Net.Sockets.TcpClient
+  try {
+    $Task = $Client.ConnectAsync("127.0.0.1", $Port)
+    if (!$Task.Wait(1000)) { return $false }
+    return $Client.Connected
+  } catch { return $false }
+  finally { $Client.Dispose() }
+}
+function Stop-H2SocksRelay {
+  param([string]$Name)
+  $ReadyFile = Get-H2RelayReadyFile $Name
+  if (!(Test-Path -LiteralPath $ReadyFile)) { return }
+  try {
+    $Ready = Get-Content -LiteralPath $ReadyFile -Raw | ConvertFrom-Json
+    $PidValue = [int]$Ready.pid
+    if (Test-H2RelayProcess -ProcessId $PidValue -Name $Name) {
+      Stop-Process -Id $PidValue -Force -ErrorAction Stop
+    }
+  } catch {
+    Write-H2Status ("Falha ao encerrar a ponte SOCKS5 do Android: " + $Name)
+  }
+  Remove-Item -LiteralPath $ReadyFile -Force -ErrorAction SilentlyContinue
+}
+function Start-H2SocksRelay {
+  param([object]$Proxy,[string]$Name,[string]$ProxyId)
   if (!$Proxy -or $Proxy.protocol -ne "socks5") { throw "O proxy desta instancia precisa ser SOCKS5." }
-  if ($script:SocksRelayProcess -and !$script:SocksRelayProcess.HasExited) { return [int]$script:SocksRelayPort }
+  if ($ProxyId -notmatch '^\d+$') { throw "Identificador de proxy ausente do comando." }
+  $ReadyFile = Get-H2RelayReadyFile $Name
+  if (Test-Path -LiteralPath $ReadyFile) {
+    try {
+      $Ready = Get-Content -LiteralPath $ReadyFile -Raw | ConvertFrom-Json
+      if ([string]$Ready.proxyId -eq $ProxyId -and
+          (Test-H2RelayProcess -ProcessId ([int]$Ready.pid) -Name $Name) -and
+          (Test-H2RelayPort -Port ([int]$Ready.port))) {
+        Write-H2Status ("Ponte SOCKS5 existente reutilizada para " + $Name)
+        return [int]$Ready.port
+      }
+    } catch {}
+    Stop-H2SocksRelay -Name $Name
+  }
   $RelayScript = Join-Path $Base "H2AndroidSocksRelay.mjs"
-  if (!(Test-Path -LiteralPath $RelayScript)) { throw "Relay SOCKS5 do H2 Android ausente. Atualize o agente Windows." }
-  $Node = (Get-Command node.exe -ErrorAction SilentlyContinue).Source
-  if (!$Node) { throw "Node.js necessário para a ponte SOCKS5 não foi encontrado no agente Windows." }
+  if (!(Test-Path -LiteralPath $RelayScript)) { throw "Ponte SOCKS5 ausente. Atualize o agente Windows." }
+  $NodeCommand = Get-Command node.exe -ErrorAction SilentlyContinue
+  if (!$NodeCommand) { throw "Node.js nao foi encontrado no Windows para o proxy SOCKS5." }
   $Info = New-Object System.Diagnostics.ProcessStartInfo
-  $Info.FileName = $Node
-  $Info.Arguments = '"' + $RelayScript + '"'
+  $Info.FileName = $NodeCommand.Source
+  $Info.Arguments = '"' + $RelayScript + '" --h2-instance ' + $Name
   $Info.WorkingDirectory = $Base
   $Info.UseShellExecute = $false
   $Info.CreateNoWindow = $true
-  $Info.RedirectStandardOutput = $true
-  $Info.RedirectStandardError = $true
   $Info.EnvironmentVariables["H2_SOCKS_HOST"] = [string]$Proxy.host
   $Info.EnvironmentVariables["H2_SOCKS_PORT"] = [string]$Proxy.port
   $Info.EnvironmentVariables["H2_SOCKS_USER"] = [string]$Proxy.username
   $Info.EnvironmentVariables["H2_SOCKS_PASSWORD"] = [string]$Proxy.password
+  $Info.EnvironmentVariables["H2_RELAY_READY_FILE"] = $ReadyFile
+  $Info.EnvironmentVariables["H2_RELAY_PROXY_ID"] = $ProxyId
   $Process = New-Object System.Diagnostics.Process
   $Process.StartInfo = $Info
-  if (!$Process.Start()) { throw "Não foi possível iniciar a ponte SOCKS5 local." }
-  $Ready = $Process.StandardOutput.ReadLine()
-  if (!$Ready -or $Ready -notmatch '^READY:(\d+)$') {
-    $ErrorText = $Process.StandardError.ReadToEnd()
-    $Process.Kill(); $Process.Dispose()
-    throw "A ponte SOCKS5 não iniciou: $ErrorText"
-  }
-  $script:SocksRelayProcess = $Process
-  $script:SocksRelayPort = [int]$Matches[1]
-  return [int]$script:SocksRelayPort
+  try {
+    if (!$Process.Start()) { throw "Ponte SOCKS5 local nao iniciou." }
+    $Deadline = (Get-Date).AddSeconds(12)
+    while ((Get-Date) -lt $Deadline) {
+      Start-Sleep -Milliseconds 200
+      $Process.Refresh()
+      if ($Process.HasExited) { throw "Ponte SOCKS5 encerrou antes de conectar (codigo $($Process.ExitCode))." }
+      if (!(Test-Path -LiteralPath $ReadyFile)) { continue }
+      try {
+        $Ready = Get-Content -LiteralPath $ReadyFile -Raw | ConvertFrom-Json
+        if ([int]$Ready.pid -eq $Process.Id -and [string]$Ready.proxyId -eq $ProxyId -and
+            (Test-H2RelayPort -Port ([int]$Ready.port))) {
+          Write-H2Status ("Ponte SOCKS5 pronta: " + $Name)
+          return [int]$Ready.port
+        }
+      } catch {}
+    }
+    throw "Ponte SOCKS5 nao ficou pronta em 12 segundos; Android preservado."
+  } catch {
+    try { if (!$Process.HasExited) { $Process.Kill() } } catch {}
+    Remove-Item -LiteralPath $ReadyFile -Force -ErrorAction SilentlyContinue
+    throw
+  } finally { $Process.Dispose() }
 }
-function Stop-H2SocksRelay {
-  if ($script:SocksRelayProcess) {
-    try { if (!$script:SocksRelayProcess.HasExited) { $script:SocksRelayProcess.Kill() } } catch {}
-    try { $script:SocksRelayProcess.Dispose() } catch {}
-  }
-  $script:SocksRelayProcess = $null
-  $script:SocksRelayPort = $null
-}
-function Check-Proxy([object]$Proxy) {
-  if (!$Proxy -or $Proxy.protocol -ne "socks5") { throw "Somente proxy SOCKS5 autenticado é aceito nesta instancia." }
-  $RelayPort = Start-H2SocksRelay -Proxy $Proxy
+function Check-Proxy {
+  param([object]$Proxy,[string]$Name,[string]$ProxyId)
+  $RelayPort = Start-H2SocksRelay -Proxy $Proxy -Name $Name -ProxyId $ProxyId
   $Address = "http://127.0.0.1:$RelayPort"
-  $SecurePassword = ConvertTo-SecureString -String ([string]$Proxy.password) -AsPlainText -Force
-  $Credential = [System.Management.Automation.PSCredential]::new([string]$Proxy.username, $SecurePassword)
-  # Explicitly test remote IP THROUGH the proxy before creating/starting an AVD.
+  # IP must be obtained through the same per-instance SOCKS5 relay used by Android.
   $Reply = Invoke-WebRequest -Uri "https://api.ipify.org?format=json" -Proxy $Address -TimeoutSec 25 -UseBasicParsing
   $Json = $Reply.Content | ConvertFrom-Json
-  if ([string]$Json.ip -notmatch '^[0-9a-fA-F:.]+$') { throw "O proxy não informou um IP válido." }
-  return [string]$Json.ip
+  if ([string]$Json.ip -notmatch '^[0-9a-fA-F:.]+$') { throw "O proxy nao informou um IP valido." }
+  Write-H2Status ("IP SOCKS5 validado: " + $Name)
+  return @{ ip=[string]$Json.ip; port=$RelayPort }
 }
 # This helper reports the real avdmanager failure instead of a generic error.
 # It changes only the fresh H2_<UUID> AVD and never removes preexisting profiles.
@@ -651,7 +711,12 @@ function Run-Job([object]$Job,[string]$Sdk) {
   $AvdManager = Join-Path $Sdk "cmdline-tools\latest\bin\avdmanager.bat"
   $Image = "system-images;android-35;google_apis_playstore;x86_64"
   $ProxyIp = $null
-  if ($Job.action -in @("create","start")) { $ProxyIp = Check-Proxy $Job.proxy }
+  $RelayPort = $null
+  if ($Job.action -in @("create","start")) {
+    $ProxyCheck = Check-Proxy -Proxy $Job.proxy -Name $Name -ProxyId ([string]$Job.proxyId)
+    $ProxyIp = [string]$ProxyCheck.ip
+    $RelayPort = [int]$ProxyCheck.port
+  }
   $Serial = Adb-Serial $Adb $Name
   switch ([string]$Job.action) {
     "create" {
@@ -670,7 +735,7 @@ function Run-Job([object]$Job,[string]$Sdk) {
       if (!$Serial) {
         # The Emulator only receives the loopback HTTP endpoint. SOCKS5 credentials
         # remain inside the local relay and never appear in the Emulator arguments.
-        $Uri = "http://127.0.0.1:$([int]$script:SocksRelayPort)"
+        $Uri = "http://127.0.0.1:$RelayPort"
         Set-H2Keyboard -Name $Name
         Start-H2Emulator -Emulator $Emulator -Sdk $Sdk -Name $Name -ProxyUri $Uri
       }
@@ -681,7 +746,7 @@ function Run-Job([object]$Job,[string]$Sdk) {
     "start" {
       if (!(Test-Path (Join-Path $AvdHome "$Name.avd"))) { throw "Este Android não está instalado no computador." }
       if (!$Serial) {
-        $Uri = "http://127.0.0.1:$([int]$script:SocksRelayPort)"
+        $Uri = "http://127.0.0.1:$RelayPort"
         Set-H2Keyboard -Name $Name
         Start-H2Emulator -Emulator $Emulator -Sdk $Sdk -Name $Name -ProxyUri $Uri
       }
@@ -701,6 +766,8 @@ function Run-Job([object]$Job,[string]$Sdk) {
         while ((Get-Date) -lt $Deadline -and (Adb-Serial $Adb $Name)) { Start-Sleep -Seconds 2 }
         if (Adb-Serial $Adb $Name) { throw "Android continua aberto; não foi possível confirmar parada." }
       }
+      if (Test-H2EmulatorProcess -Name $Name) { throw "O processo Android ainda esta aberto; proxy mantido." }
+      Stop-H2SocksRelay -Name $Name
       return $null
     }
     "delete" {
@@ -716,6 +783,8 @@ function Run-Job([object]$Job,[string]$Sdk) {
       }
       $Ini = Join-Path $AvdHome "$Name.ini"
       if (Test-Path $Ini) { Remove-Item -LiteralPath $Ini -Force }
+      if (Test-H2EmulatorProcess -Name $Name) { throw "O processo Android ainda esta aberto; proxy mantido." }
+      Stop-H2SocksRelay -Name $Name
       return $null
     }
     default { throw "Comando desconhecido." }
@@ -784,7 +853,14 @@ while ($true) {
         Write-Warning $ErrorText
       } finally {
         Stop-H2JobHeartbeat -HeartbeatJob $HeartbeatJob
-        Stop-H2SocksRelay
+        # Do not stop the relay after a successful boot: Android still uses it.
+        # On failure, preserve a relay if the native emulator is still alive.
+        if (!$Success -and $Job.action -in @("create","start")) {
+          try {
+            $Avd = Avd-Name ([string]$Job.profileId)
+            if (!(Test-H2EmulatorProcess -Name $Avd)) { Stop-H2SocksRelay -Name $Avd }
+          } catch {}
+        }
       }
       $Done = @{jobId=[long]$Job.id;success=$Success;error=$ErrorText;observedIp=$ObservedIp}
       [void](Api "/api/h2-android/agent/complete" $Done $Token)
