@@ -1,0 +1,25 @@
+name: H2 Android proxy vault tests
+on:
+  pull_request:
+    paths:
+      - 'server/routers/h2Android.ts'
+      - 'server/h2Android.native.test.ts'
+      - 'client/src/pages/AdminH2Android.tsx'
+      - '.github/workflows/h2-android-proxy-vault-check.yml'
+jobs:
+  test-vault:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: pnpm/action-setup@v4
+        with:
+          version: '10.4.1'
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '22'
+          cache: 'pnpm'
+      - run: pnpm install --frozen-lockfile
+      - name: Validate H2 Android security guards and UI
+        run: pnpm exec vitest run server/h2Android.native.test.ts
+      - name: TypeScript type check
+        run: pnpm exec tsc --noEmit
