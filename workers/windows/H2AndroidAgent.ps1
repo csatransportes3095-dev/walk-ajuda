@@ -6,7 +6,7 @@ param(
   [string]$PairCode = ""
 )
 $ErrorActionPreference = "Stop"
-$Version = "1.0.5"
+$Version = "1.0.6"
 $Base = Join-Path $env:LOCALAPPDATA "H2AndroidNative"
 $AvdHome = Join-Path $Base "avd"
 $TokenFile = Join-Path $Base "agent.secure"
@@ -220,281 +220,54 @@ function New-H2NativeAvd {
   }
 }
 
-# Per-device preferences for H2 Android only.
-function Set-H2Keyboard([string]$Name) {
-  $Cfg = Join-Path (Join-Path $AvdHome "$Name.avd") "config.ini"
-  if (!(Test-Path -LiteralPath $Cfg)) { throw "config.ini nao encontrado." }
-  $Text = Get-Content -LiteralPath $Cfg -Raw
-  if ($Text -match '(?m)^hw\.keyboard\s*=\s*yes\s*
-  if ($Job.action -in @("create","delete")) { Set-H2AndroidJava }
-  $Name = Avd-Name ([string]$Job.profileId)
-  $Adb = Join-Path $Sdk "platform-tools\adb.exe"
-  $Emulator = Join-Path $Sdk "emulator\emulator.exe"
-  $AvdManager = Join-Path $Sdk "cmdline-tools\latest\bin\avdmanager.bat"
-  $Image = "system-images;android-35;google_apis_playstore;x86_64"
-  $ProxyIp = $null
-  if ($Job.action -in @("create","start")) { $ProxyIp = Check-Proxy $Job.proxy }
-  $Serial = Adb-Serial $Adb $Name
-  switch ([string]$Job.action) {
-    "create" {
-      $AvdPath = Join-Path $AvdHome "$Name.avd"
-      if (!(Test-Path -LiteralPath $AvdPath)) {
-        # No clone: create an AVD with a unique writable userdata directory.
-        $PackageDir = Join-Path $Sdk "system-images\android-35\google_apis_playstore\x86_64"
-        if (!(Test-Path -LiteralPath $PackageDir)) {
-          throw "Imagem Play Store Android 35 x86_64 ausente no SDK. Instale a imagem antes de repetir."
-        }
-        New-H2NativeAvd -AvdManager $AvdManager -Name $Name -Image $Image -AvdPath $AvdPath
-      } elseif (!(Test-Path -LiteralPath (Join-Path $AvdPath "config.ini"))) {
-        # Do not overwrite/delete partial data automatically.
-        throw "Pasta parcial do teste1 encontrada sem config.ini. O agente preservou os dados; verifique o SDK."
-      }
-      if (!$Serial) {
-        # Proxy credentials are passed to Android Emulator, not to the website.
-        # Native proxy is HTTP/TCP only. Verify real app routing independently.
-        $Uri = "http://$([uri]::EscapeDataString([string]$Job.proxy.username)):$([uri]::EscapeDataString([string]$Job.proxy.password))@$($Job.proxy.host):$($Job.proxy.port)"
-        Set-H2Keyboard -Name $Name
-        Start-H2Gui -Exe $Emulator -Sdk $Sdk -Name $Name -ProxyUri $Uri
-      }
-      $BootSerial = Wait-Boot $Adb $Name
-      Set-H2Locale -Adb $Adb -Name $Name -Serial $BootSerial
-      return $ProxyIp
-    }
-    "start" {
-      if (!(Test-Path (Join-Path $AvdHome "$Name.avd"))) { throw "Este Android não está instalado no computador." }
-      if (!$Serial) {
-        $Uri = "http://$([uri]::EscapeDataString([string]$Job.proxy.username)):$([uri]::EscapeDataString([string]$Job.proxy.password))@$($Job.proxy.host):$($Job.proxy.port)"
-        Set-H2Keyboard -Name $Name
-        Start-H2Gui -Exe $Emulator -Sdk $Sdk -Name $Name -ProxyUri $Uri
-      }
-      $BootSerial = Wait-Boot $Adb $Name
-      Set-H2Locale -Adb $Adb -Name $Name -Serial $BootSerial
-      return $ProxyIp
-    }
-    "stop" {
-      if ($Serial) {
-        Invoke-H2Adb -Executable $Adb -CommandArgs @("-s",$Serial,"emu","kill") | Out-Null
-        $Deadline = (Get-Date).AddSeconds(45)
-        while ((Get-Date) -lt $Deadline -and (Adb-Serial $Adb $Name)) { Start-Sleep -Seconds 2 }
-        if (Adb-Serial $Adb $Name) { throw "Android continua aberto; não foi possível confirmar parada." }
-      }
-      return $null
-    }
-    "delete" {
-      if ($Serial) {
-        Invoke-H2Adb -Executable $Adb -CommandArgs @("-s",$Serial,"emu","kill") | Out-Null
-        $Deadline = (Get-Date).AddSeconds(45)
-        while ((Get-Date) -lt $Deadline -and (Adb-Serial $Adb $Name)) { Start-Sleep -Seconds 2 }
-        if (Adb-Serial $Adb $Name) { throw "Android ainda aberto. Exclusão bloqueada." }
-      }
-      if (Test-Path (Join-Path $AvdHome "$Name.avd")) {
-        & $AvdManager delete avd -n $Name | Out-Null
-        if (Test-Path (Join-Path $AvdHome "$Name.avd")) { throw "Arquivos do Android não foram removidos." }
-      }
-      $Ini = Join-Path $AvdHome "$Name.ini"
-      if (Test-Path $Ini) { Remove-Item -LiteralPath $Ini -Force }
-      return $null
-    }
-    default { throw "Comando desconhecido." }
-  }
-}
-
-$Token = Read-Token
-if (!$Token) {
-  if (!$PairCode) { $PairCode = Read-Host "Digite o código temporário exibido no ADM H2 Android" }
-  $Claim = Api "/api/h2-android/agent/claim" @{
-    code=$PairCode;computerName=$env:COMPUTERNAME;version=$Version
-  }
-  $Token = [string]$Claim.token
-  if (!$Token) { throw "Pareamento não retornou credencial." }
-  Save-Token $Token
-  Write-Host "Agente H2 Android pareado com sucesso."
-}
-Write-Host "H2 Android ${Version}: verificando autenticacao com $Server..."
-$Online = $false
-while ($true) {
-  try {
-    # Heartbeat must not depend on the Android SDK being installed. Pair first,
-    # then report missing SDK components as a job error, never as "offline".
-    $Result = Api "/api/h2-android/agent/next" @{computerName=$env:COMPUTERNAME;version=$Version} $Token
-    if (!$Online) { Write-Host "H2 Android: conexao autenticada, agente online."; $Online = $true }
-    if ($Result.job) {
-      $Job = $Result.job
-      Write-Host "Comando $($Job.action) / $($Job.profileId)"
-      $Success = $false
-      $ErrorText = $null
-      $ObservedIp = $null
-      try {
-        $Sdk = Android-Sdk
-        $ObservedIp = Run-Job $Job $Sdk
-        $Success = $true
-      } catch {
-        $ErrorText = [string]$_.Exception.Message
-        Write-Warning $ErrorText
-      }
-      $Done = @{jobId=[long]$Job.id;success=$Success;error=$ErrorText;observedIp=$ObservedIp}
-      [void](Api "/api/h2-android/agent/complete" $Done $Token)
-    } else { Start-Sleep -Seconds 4 }
-  } catch {
-    $Online = $false
-    Write-Warning ("H2 Android: " + $_.Exception.Message)
-    Start-Sleep -Seconds 10
-  }
-}
-) { return }
-  if ($Text -match '(?m)^hw\.keyboard\s*=') {
-    $Text = [regex]::Replace($Text, '(?m)^hw\.keyboard\s*=.*
-  if ($Job.action -in @("create","delete")) { Set-H2AndroidJava }
-  $Name = Avd-Name ([string]$Job.profileId)
-  $Adb = Join-Path $Sdk "platform-tools\adb.exe"
-  $Emulator = Join-Path $Sdk "emulator\emulator.exe"
-  $AvdManager = Join-Path $Sdk "cmdline-tools\latest\bin\avdmanager.bat"
-  $Image = "system-images;android-35;google_apis_playstore;x86_64"
-  $ProxyIp = $null
-  if ($Job.action -in @("create","start")) { $ProxyIp = Check-Proxy $Job.proxy }
-  $Serial = Adb-Serial $Adb $Name
-  switch ([string]$Job.action) {
-    "create" {
-      $AvdPath = Join-Path $AvdHome "$Name.avd"
-      if (!(Test-Path -LiteralPath $AvdPath)) {
-        # No clone: create an AVD with a unique writable userdata directory.
-        $PackageDir = Join-Path $Sdk "system-images\android-35\google_apis_playstore\x86_64"
-        if (!(Test-Path -LiteralPath $PackageDir)) {
-          throw "Imagem Play Store Android 35 x86_64 ausente no SDK. Instale a imagem antes de repetir."
-        }
-        New-H2NativeAvd -AvdManager $AvdManager -Name $Name -Image $Image -AvdPath $AvdPath
-      } elseif (!(Test-Path -LiteralPath (Join-Path $AvdPath "config.ini"))) {
-        # Do not overwrite/delete partial data automatically.
-        throw "Pasta parcial do teste1 encontrada sem config.ini. O agente preservou os dados; verifique o SDK."
-      }
-      if (!$Serial) {
-        # Proxy credentials are passed to Android Emulator, not to the website.
-        # Native proxy is HTTP/TCP only. Verify real app routing independently.
-        $Uri = "http://$([uri]::EscapeDataString([string]$Job.proxy.username)):$([uri]::EscapeDataString([string]$Job.proxy.password))@$($Job.proxy.host):$($Job.proxy.port)"
-        Set-H2Keyboard -Name $Name
-        Start-H2Gui -Exe $Emulator -Sdk $Sdk -Name $Name -ProxyUri $Uri
-      }
-      $BootSerial = Wait-Boot $Adb $Name
-      Set-H2Locale -Adb $Adb -Name $Name -Serial $BootSerial
-      return $ProxyIp
-    }
-    "start" {
-      if (!(Test-Path (Join-Path $AvdHome "$Name.avd"))) { throw "Este Android não está instalado no computador." }
-      if (!$Serial) {
-        $Uri = "http://$([uri]::EscapeDataString([string]$Job.proxy.username)):$([uri]::EscapeDataString([string]$Job.proxy.password))@$($Job.proxy.host):$($Job.proxy.port)"
-        Set-H2Keyboard -Name $Name
-        Start-H2Gui -Exe $Emulator -Sdk $Sdk -Name $Name -ProxyUri $Uri
-      }
-      $BootSerial = Wait-Boot $Adb $Name
-      Set-H2Locale -Adb $Adb -Name $Name -Serial $BootSerial
-      return $ProxyIp
-    }
-    "stop" {
-      if ($Serial) {
-        Invoke-H2Adb -Executable $Adb -CommandArgs @("-s",$Serial,"emu","kill") | Out-Null
-        $Deadline = (Get-Date).AddSeconds(45)
-        while ((Get-Date) -lt $Deadline -and (Adb-Serial $Adb $Name)) { Start-Sleep -Seconds 2 }
-        if (Adb-Serial $Adb $Name) { throw "Android continua aberto; não foi possível confirmar parada." }
-      }
-      return $null
-    }
-    "delete" {
-      if ($Serial) {
-        Invoke-H2Adb -Executable $Adb -CommandArgs @("-s",$Serial,"emu","kill") | Out-Null
-        $Deadline = (Get-Date).AddSeconds(45)
-        while ((Get-Date) -lt $Deadline -and (Adb-Serial $Adb $Name)) { Start-Sleep -Seconds 2 }
-        if (Adb-Serial $Adb $Name) { throw "Android ainda aberto. Exclusão bloqueada." }
-      }
-      if (Test-Path (Join-Path $AvdHome "$Name.avd")) {
-        & $AvdManager delete avd -n $Name | Out-Null
-        if (Test-Path (Join-Path $AvdHome "$Name.avd")) { throw "Arquivos do Android não foram removidos." }
-      }
-      $Ini = Join-Path $AvdHome "$Name.ini"
-      if (Test-Path $Ini) { Remove-Item -LiteralPath $Ini -Force }
-      return $null
-    }
-    default { throw "Comando desconhecido." }
-  }
-}
-
-$Token = Read-Token
-if (!$Token) {
-  if (!$PairCode) { $PairCode = Read-Host "Digite o código temporário exibido no ADM H2 Android" }
-  $Claim = Api "/api/h2-android/agent/claim" @{
-    code=$PairCode;computerName=$env:COMPUTERNAME;version=$Version
-  }
-  $Token = [string]$Claim.token
-  if (!$Token) { throw "Pareamento não retornou credencial." }
-  Save-Token $Token
-  Write-Host "Agente H2 Android pareado com sucesso."
-}
-Write-Host "H2 Android ${Version}: verificando autenticacao com $Server..."
-$Online = $false
-while ($true) {
-  try {
-    # Heartbeat must not depend on the Android SDK being installed. Pair first,
-    # then report missing SDK components as a job error, never as "offline".
-    $Result = Api "/api/h2-android/agent/next" @{computerName=$env:COMPUTERNAME;version=$Version} $Token
-    if (!$Online) { Write-Host "H2 Android: conexao autenticada, agente online."; $Online = $true }
-    if ($Result.job) {
-      $Job = $Result.job
-      Write-Host "Comando $($Job.action) / $($Job.profileId)"
-      $Success = $false
-      $ErrorText = $null
-      $ObservedIp = $null
-      try {
-        $Sdk = Android-Sdk
-        $ObservedIp = Run-Job $Job $Sdk
-        $Success = $true
-      } catch {
-        $ErrorText = [string]$_.Exception.Message
-        Write-Warning $ErrorText
-      }
-      $Done = @{jobId=[long]$Job.id;success=$Success;error=$ErrorText;observedIp=$ObservedIp}
-      [void](Api "/api/h2-android/agent/complete" $Done $Token)
-    } else { Start-Sleep -Seconds 4 }
-  } catch {
-    $Online = $false
-    Write-Warning ("H2 Android: " + $_.Exception.Message)
-    Start-Sleep -Seconds 10
-  }
-}
-, 'hw.keyboard=yes')
+# H2-only AVD preferences. No changes to H2ADS, other AVDs or the Windows registry.
+function Set-H2Keyboard {
+  param([string]$Name)
+  $Config = Join-Path (Join-Path $AvdHome "$Name.avd") "config.ini"
+  if (!(Test-Path -LiteralPath $Config)) { throw "config.ini da instancia H2 nao encontrado." }
+  $Current = Get-Content -LiteralPath $Config -Raw
+  if ($Current -match '(?m)^hw\.keyboard\s*=\s*yes\s*$') { return }
+  if ($Current -match '(?m)^hw\.keyboard\s*=') {
+    $Updated = [regex]::Replace($Current,'(?m)^hw\.keyboard\s*=.*$','hw.keyboard=yes')
   } else {
-    $Text = $Text.TrimEnd() + [Environment]::NewLine + "hw.keyboard=yes" + [Environment]::NewLine
+    $Updated = $Current.TrimEnd() + [Environment]::NewLine + "hw.keyboard=yes" + [Environment]::NewLine
   }
-  Set-Content -LiteralPath $Cfg -Value $Text -Encoding Ascii -NoNewline
+  Set-Content -LiteralPath $Config -Value $Updated -Encoding Ascii -NoNewline
 }
-# Run emulator GUI without its extra command console.
-function Start-H2Gui([string]$Exe,[string]$Sdk,[string]$Name,[string]$ProxyUri) {
-  $I = New-Object System.Diagnostics.ProcessStartInfo
-  $I.FileName = $Exe
-  $I.Arguments = '-avd ' + $Name + ' -http-proxy "' + $ProxyUri + '" -no-boot-anim'
-  $I.WorkingDirectory = Join-Path $Sdk "emulator"
-  $I.UseShellExecute = $false
-  $I.CreateNoWindow = $true
-  $P = New-Object System.Diagnostics.Process
-  $P.StartInfo = $I
+# Prevent a command-console window without hiding the actual Android GUI.
+function Start-H2Emulator {
+  param([string]$Emulator,[string]$Sdk,[string]$Name,[string]$ProxyUri)
+  $Info = New-Object System.Diagnostics.ProcessStartInfo
+  $Info.FileName = $Emulator
+  $Info.Arguments = '-avd ' + $Name + ' -http-proxy "' + $ProxyUri + '" -no-boot-anim'
+  $Info.WorkingDirectory = Join-Path $Sdk "emulator"
+  $Info.UseShellExecute = $false
+  $Info.CreateNoWindow = $true
+  $Proc = New-Object System.Diagnostics.Process
+  $Proc.StartInfo = $Info
   try {
-    if (!$P.Start()) { throw "Falha ao abrir o emulador." }
-    Start-Sleep -Milliseconds 500
-    if ($P.HasExited -and $P.ExitCode -ne 0) { throw "Emulador encerrou com codigo $($P.ExitCode)." }
-  } finally { $P.Dispose() }
+    if (!$Proc.Start()) { throw "O processo do Android nao iniciou." }
+    Start-Sleep -Milliseconds 600
+    if ($Proc.HasExited -and $Proc.ExitCode -ne 0) {
+      throw "Emulador terminou com codigo $($Proc.ExitCode)."
+    }
+  } finally { $Proc.Dispose() }
 }
-# Change the virtual device's locale, without altering Windows.
-function Set-H2Locale([string]$Adb,[string]$Name,[string]$Serial) {
-  $Before = @(Invoke-H2Adb -Executable $Adb -CommandArgs @("-s",$Serial,"shell","getprop","persist.sys.locale"))
-  if (($Before | Out-String).Trim() -eq "pt-BR") { return }
+# Apply locale only to a running H2 virtual device, without resetting its data.
+# Some Android images restrict locale changes; this must not mark the entire AVD failed.
+function Set-H2Locale {
+  param([string]$Adb,[string]$Name,[string]$Serial)
   try {
+    $Current = @(Invoke-H2Adb -Executable $Adb -CommandArgs @("-s",$Serial,"shell","getprop","persist.sys.locale"))
+    if (($Current | Out-String).Trim() -eq "pt-BR") { return }
     Invoke-H2Adb -Executable $Adb -CommandArgs @("-s",$Serial,"shell","setprop persist.sys.locale pt-BR;stop;sleep 5;start") | Out-Null
+    [void](Wait-Boot $Adb $Name 240)
+    $After = @(Invoke-H2Adb -Executable $Adb -CommandArgs @("-s",$Serial,"shell","getprop","persist.sys.locale"))
+    if (($After | Out-String).Trim() -ne "pt-BR") {
+      Write-Warning "Idioma pt-BR nao confirmado nesta imagem Android; aparelho preservado."
+    }
   } catch {
-    # ADB may disconnect while restarting the Android framework.
-    Write-Host "H2 Android: atualizando idioma pt-BR..."
-  }
-  [void](Wait-Boot $Adb $Name 240)
-  $After = @(Invoke-H2Adb -Executable $Adb -CommandArgs @("-s",$Serial,"shell","getprop","persist.sys.locale"))
-  if (($After | Out-String).Trim() -ne "pt-BR") {
-    throw "Idioma pt-BR nao confirmado; dados da instancia preservados."
+    Write-Warning "Idioma pt-BR nao pode ser aplicado automaticamente. Android preservado."
   }
 }
 
@@ -527,7 +300,7 @@ function Run-Job([object]$Job,[string]$Sdk) {
         # Native proxy is HTTP/TCP only. Verify real app routing independently.
         $Uri = "http://$([uri]::EscapeDataString([string]$Job.proxy.username)):$([uri]::EscapeDataString([string]$Job.proxy.password))@$($Job.proxy.host):$($Job.proxy.port)"
         Set-H2Keyboard -Name $Name
-        Start-H2Gui -Exe $Emulator -Sdk $Sdk -Name $Name -ProxyUri $Uri
+        Start-H2Emulator -Emulator $Emulator -Sdk $Sdk -Name $Name -ProxyUri $Uri
       }
       $BootSerial = Wait-Boot $Adb $Name
       Set-H2Locale -Adb $Adb -Name $Name -Serial $BootSerial
@@ -538,7 +311,7 @@ function Run-Job([object]$Job,[string]$Sdk) {
       if (!$Serial) {
         $Uri = "http://$([uri]::EscapeDataString([string]$Job.proxy.username)):$([uri]::EscapeDataString([string]$Job.proxy.password))@$($Job.proxy.host):$($Job.proxy.port)"
         Set-H2Keyboard -Name $Name
-        Start-H2Gui -Exe $Emulator -Sdk $Sdk -Name $Name -ProxyUri $Uri
+        Start-H2Emulator -Emulator $Emulator -Sdk $Sdk -Name $Name -ProxyUri $Uri
       }
       $BootSerial = Wait-Boot $Adb $Name
       Set-H2Locale -Adb $Adb -Name $Name -Serial $BootSerial
@@ -572,6 +345,11 @@ function Run-Job([object]$Job,[string]$Sdk) {
   }
 }
 
+$LogPath = Join-Path $Base "agent-status.log"
+function Write-H2Status([string]$Message) {
+  try { Add-Content -LiteralPath $LogPath -Encoding UTF8 -Value ((Get-Date).ToString("s") + " " + $Message) } catch {}
+}
+Write-H2Status ("START " + $Version)
 $Token = Read-Token
 if (!$Token) {
   if (!$PairCode) { $PairCode = Read-Host "Digite o código temporário exibido no ADM H2 Android" }
@@ -590,7 +368,7 @@ while ($true) {
     # Heartbeat must not depend on the Android SDK being installed. Pair first,
     # then report missing SDK components as a job error, never as "offline".
     $Result = Api "/api/h2-android/agent/next" @{computerName=$env:COMPUTERNAME;version=$Version} $Token
-    if (!$Online) { Write-Host "H2 Android: conexao autenticada, agente online."; $Online = $true }
+    if (!$Online) { Write-Host "H2 Android: conexao autenticada, agente online."; Write-H2Status "ONLINE"; $Online = $true }
     if ($Result.job) {
       $Job = $Result.job
       Write-Host "Comando $($Job.action) / $($Job.profileId)"
@@ -610,6 +388,7 @@ while ($true) {
     } else { Start-Sleep -Seconds 4 }
   } catch {
     $Online = $false
+    Write-H2Status "RECONNECTING"
     Write-Warning ("H2 Android: " + $_.Exception.Message)
     Start-Sleep -Seconds 10
   }
