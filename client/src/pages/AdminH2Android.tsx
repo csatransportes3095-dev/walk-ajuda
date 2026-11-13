@@ -56,7 +56,7 @@ export default function AdminH2Android() {
   });
   const rotateProxy = trpc.h2Android.rotateProxy.useMutation({
     onSuccess: async result => {
-      toast.success("Proxy alterado para #" + String(result.proxyId) + ". Inicie o Android para validar a nova conexao.");
+      toast.info("Proxy #" + String(result.proxyId) + " reservado. A instância ainda não foi testada com esse proxy.");
       await refresh();
     },
     onError: messages,
@@ -178,7 +178,8 @@ export default function AdminH2Android() {
         <div className="mt-3 space-y-2">
           {(data?.agents ?? []).map(a=><div key={a.id} className="flex flex-wrap items-center justify-between gap-2 rounded-lg border border-white/10 p-3">
             <div><div className="font-semibold">{a.label} — {a.computerName || "Aguardando"}</div>
-            <span className={a.online?"text-xs text-emerald-300":"text-xs text-slate-400"}>{a.revoked?"Revogado":a.online?"Online":"Offline"}</span></div>
+            <span className={a.online?"text-xs text-emerald-300":"text-xs text-slate-400"}>{a.revoked?"Revogado":a.online?"Online":"Offline"}</span>
+            <span className="ml-2 text-xs text-slate-400">Versão do agente: {a.version || "Não informada"}</span></div>
             {!a.revoked && <button onClick={()=>{if(window.confirm("Revogar acesso deste computador?")) revoke.mutate({id:a.id});}} className="rounded-lg border border-red-400/30 px-3 py-2 text-xs text-red-300">Revogar</button>}
           </div>)}
         </div>
@@ -208,6 +209,7 @@ export default function AdminH2Android() {
           {p.observedIp && <p className="mt-1 text-xs text-amber-200">IP do teste no Windows: {p.observedIp} — não é o IP confirmado do Android.</p>}
           {p.state==="running" && <div role="alert" className="mt-2 rounded-lg border border-amber-400/50 bg-amber-400/10 p-3 text-xs font-semibold text-amber-100">Atenção: o proxy não garante que o navegador ou outros apps usem esse IP. Confira o IP público DENTRO do Android antes de acessar contas. Se aparecer o IP da sua conexão, clique em Parar.</div>}
           {p.lastError && <p className="mt-2 rounded-lg border border-amber-500/30 bg-amber-500/5 p-2 text-xs text-amber-200">{p.lastError}</p>}
+          {p.state==="error" && !p.lastError && <p className="mt-2 rounded-lg border border-amber-500/30 bg-amber-500/5 p-2 text-xs text-amber-200">O Android está em erro, mas o servidor não recebeu um diagnóstico. A reserva do proxy não comprova conexão. Confira a versão do agente Windows.</p>}
           <div className="mt-4 grid grid-cols-2 gap-2">
             <button disabled={busy || !online || p.state!=="stopped"} onClick={()=>command.mutate({id:p.id,action:"start"})} className="flex items-center justify-center gap-1 rounded-lg border border-emerald-400/25 p-2 text-xs font-bold text-emerald-300 disabled:opacity-30"><Play className="h-4 w-4"/> Iniciar</button>
             <button disabled={busy || !online || p.state!=="running"} onClick={()=>command.mutate({id:p.id,action:"stop"})} className="flex items-center justify-center gap-1 rounded-lg border border-white/15 p-2 text-xs disabled:opacity-30"><Square className="h-4 w-4"/> Parar</button>
