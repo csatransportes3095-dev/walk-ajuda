@@ -194,7 +194,7 @@ function Assert-H2AndroidProxyOrStop {
   }
 }
 function Switch-H2RelayUpstream {
-  param([string]$Name,[string]$OldProxyId,[string]$NewProxyId,[object]$Proxy)
+  param([string]$Name,[string]$OldProxyId,[string]$NewProxyId,[object]$Proxy,[object]$OldProxy)
   $ReadyFile = Get-H2RelayReadyFile -Name $Name
   if (!(Test-Path -LiteralPath $ReadyFile)) { throw "Ponte do Android nao encontrada; nenhuma troca foi efetuada." }
   $Ready = Get-Content -LiteralPath $ReadyFile -Raw | ConvertFrom-Json
@@ -207,6 +207,21 @@ function Switch-H2RelayUpstream {
   }
   if ([string]$Ready.proxyId -ne $OldProxyId) {
     throw "O proxy da ponte mudou durante a troca; nenhum novo proxy consumido."
+  }
+  if (![int]$Ready.controlPort -or ![string]$Ready.controlSecret) {
+    # First upgrade from relay 1.2.x: replace its process on the SAME TCP port.
+    # Android itself stays open and continues pointing to the same endpoint.
+    if (!$OldProxy) { throw "Proxy anterior ausente para migracao da ponte." }
+    $OldPort = [int]$Ready.port
+    Write-H2Status ("Atualizando a ponte de rede do Android em uso, sem desligar o AVD.")
+    Stop-H2SocksRelay -Name $Name
+    try {
+      $MigratedPort = Start-H2SocksRelay -Proxy $OldProxy -Name $Name -ProxyId $OldProxyId -ListenPort $OldPort
+      if ($MigratedPort -ne $OldPort) { throw "A nova ponte nao manteve a porta anterior." }
+      $Ready = Get-Content -LiteralPath $ReadyFile -Raw | ConvertFrom-Json
+    } catch {
+      throw ("CRITICAL: a ponte antiga foi encerrada e nao foi possivel restaurar a mesma porta: " + $_.Exception.Message)
+    }
   }
   $Body = @{
     proxyId=$NewProxyId; host=[string]$Proxy.host; port=[int]$Proxy.port
@@ -296,7 +311,7 @@ function Stop-H2SocksRelay {
   Remove-Item -LiteralPath $ReadyFile -Force -ErrorAction SilentlyContinue
 }
 function Start-H2SocksRelay {
-  param([object]$Proxy,[string]$Name,[string]$ProxyId)
+  param([object]$Proxy,[string]$Name,[string]$ProxyId,[int]$ListenPort=0)
   if (!$Proxy -or $Proxy.protocol -ne "socks5") { throw "O proxy desta instancia precisa ser SOCKS5." }
   if ($ProxyId -notmatch '^\d+$') { throw "Identificador de proxy ausente do comando." }
   $ReadyFile = Get-H2RelayReadyFile $Name
@@ -328,6 +343,7 @@ function Start-H2SocksRelay {
   $Info.EnvironmentVariables["H2_SOCKS_PASSWORD"] = [string]$Proxy.password
   $Info.EnvironmentVariables["H2_RELAY_READY_FILE"] = $ReadyFile
   $Info.EnvironmentVariables["H2_RELAY_PROXY_ID"] = $ProxyId
+  $Info.EnvironmentVariables["H2_RELAY_LISTEN_PORT"] = [string]$ListenPort
   $Process = New-Object System.Diagnostics.Process
   $Process.StartInfo = $Info
   try {
@@ -962,7 +978,14 @@ function Run-Job([object]$Job,[string]$Sdk) {
         $OldProxyId = [string]$Job.previousProxyId
         if (!$OldProxyId -or !$Job.previousProxy) { throw "Rota anterior ausente; troca cancelada." }
         Clear-H2AndroidGlobalProxy -Adb $Adb -Serial $Serial
-        $LivePort = Switch-H2RelayUpstream -Name $Name -OldProxyId $OldProxyId -NewProxyId ([string]$Job.proxyId) -Proxy $Job.proxy
+        try {
+          $LivePort = Switch-H2RelayUpstream -Name $Name -OldProxyId $OldProxyId -NewProxyId ([string]$Job.proxyId) -Proxy $Job.proxy -OldProxy $Job.previousProxy
+        } catch {
+          if ($_.Exception.Message -match "CRITICAL:") {
+            try { Invoke-H2Adb -Executable $Adb -CommandArgs @("-s",$Serial,"emu","kill") | Out-Null } catch {}
+          }
+          throw
+        }
         try {
           # Request originates inside Android over same relay listener.
           $AndroidIp = Test-H2AndroidTcpIp -Adb $Adb -Serial $Serial
@@ -972,7 +995,7 @@ function Run-Job([object]$Job,[string]$Sdk) {
           $Reason = $_.Exception.Message
           try {
             # Restore old upstream on the SAME listener without closing Android.
-            [void](Switch-H2RelayUpstream -Name $Name -OldProxyId ([string]$Job.proxyId) -NewProxyId $OldProxyId -Proxy $Job.previousProxy)
+            [void](Switch-H2RelayUpstream -Name $Name -OldProxyId ([string]$Job.proxyId) -NewProxyId $OldProxyId -Proxy $Job.previousProxy -OldProxy $Job.proxy)
             Write-H2Status ("Falha no candidato; proxy antigo restaurado no Android.")
           } catch {
             # Cannot guarantee network route; shut down affected guest instead
