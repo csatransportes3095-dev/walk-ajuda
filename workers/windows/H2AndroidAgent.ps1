@@ -404,35 +404,67 @@ function Set-H2Locale {
   }
 }
 
-# Enable an actual phone skin ONLY if Android SDK already has valid skin files.
-# Otherwise keep a safe standard emulator screen and rounded Windows frame.
+# Avoid incompatible Pixel skins: a skin may exist on disk but be designed
+# for a different display size, causing cropped edges and black sidebars.
+# Keep the emulator's native, correctly scaled display; Windows rounds its frame.
+# Only H2-owned AVD config.ini is edited. Never restart, reset, or change proxy.
 function Set-H2DeviceSkin {
   param([string]$Name,[string]$Sdk)
   $Cfg = Join-Path (Join-Path $AvdHome "$Name.avd") "config.ini"
   if (!(Test-Path -LiteralPath $Cfg)) { return }
-  foreach ($SkinName in @("pixel_6","pixel_5","pixel_4")) {
-    $SkinPath = Join-Path $Sdk ("skins\" + $SkinName)
-    if (!(Test-Path -LiteralPath (Join-Path $SkinPath "layout"))) { continue }
-    $Text = Get-Content -LiteralPath $Cfg -Raw
-    $Pairs = @{
-      "showDeviceFrame" = "yes"
-      "skin.dynamic" = "yes"
-      "skin.name" = $SkinName
-      "skin.path" = $SkinPath.Replace("\","/")
+  $Text = Get-Content -LiteralPath $Cfg -Raw
+  $Pairs = @{
+    "showDeviceFrame" = "no"
+    "skin.dynamic" = "no"
+    "skin.name" = "_no_skin"
+    "skin.path" = "_no_skin"
+  }
+  $Changed = $false
+  foreach ($Key in $Pairs.Keys) {
+    $Line = $Key + "=" + $Pairs[$Key]
+    $Regex = '(?m)^' + [regex]::Escape($Key) + '\s*=.*$'
+    if ($Text -match $Regex) {
+      $Next = [regex]::Replace($Text,$Regex,$Line)
+      if ($Next -ne $Text) { $Changed = $true }
+      $Text = $Next
+    } else {
+      $Text = $Text.TrimEnd() + [Environment]::NewLine + $Line + [Environment]::NewLine
+      $Changed = $true
     }
-    foreach ($Key in $Pairs.Keys) {
-      $Line = $Key + "=" + $Pairs[$Key]
-      $Regex = '(?m)^' + [regex]::Escape($Key) + '\s*=.*$'
-      if ($Text -match $Regex) { $Text = [regex]::Replace($Text,$Regex,$Line) }
-      else { $Text = $Text.TrimEnd() + [Environment]::NewLine + $Line + [Environment]::NewLine }
-    }
+  }
+  if ($Changed) {
     Set-Content -LiteralPath $Cfg -Value $Text -Encoding Ascii -NoNewline
-    Write-H2Status ("Moldura de celular habilitada: " + $SkinName)
+    Write-H2Status "Skin Pixel incompatível desativada. O Android mantém a tela nativa; mudança na moldura ao reabrir a instância."
+  }
+}
+# Correct a landscape Android display at runtime, without restarting the emulator.
+# Read the real display first; do not stretch or rotate an existing portrait screen.
+function Set-H2PortraitDisplay {
+  param([string]$Adb,[string]$Serial)
+  $RawSize = (@(Invoke-H2Adb -Executable $Adb -CommandArgs @("-s",$Serial,"shell","wm","size")) | Out-String)
+  $Found = [regex]::Match($RawSize,'(?m)(?:Physical|Override) size:\s*(\d+)x(\d+)')
+  if (!$Found.Success) {
+    Write-H2Status "Dimensoes da tela indisponiveis; visual preservado sem alterar resolucao"
     return
   }
-  Write-H2Status "Skin de celular nao instalada no Android SDK; usada moldura Windows"
+  $Width = [int]$Found.Groups[1].Value
+  $Height = [int]$Found.Groups[2].Value
+  if ($Width -le $Height) {
+    Write-H2Status ("Tela vertical preservada: " + $Width + "x" + $Height)
+    return
+  }
+  # 720x1280 is a portrait Android display; Android keeps touch mapping internally.
+  try {
+    Invoke-H2Adb -Executable $Adb -CommandArgs @("-s",$Serial,"shell","wm","size","720x1280") | Out-Null
+    $Check = (@(Invoke-H2Adb -Executable $Adb -CommandArgs @("-s",$Serial,"shell","wm","size")) | Out-String)
+    if ($Check -notmatch '720x1280') { throw "Android nao confirmou a tela vertical" }
+    Write-H2Status "Tela vertical Android 720x1280 confirmada, sem reiniciar a instancia"
+  } catch {
+    # Restore the previous display override or physical dimensions if correction failed.
+    try { Invoke-H2Adb -Executable $Adb -CommandArgs @("-s",$Serial,"shell","wm","size","reset") | Out-Null } catch {}
+    throw "Nao foi possivel corrigir a orientacao do Android sem alterar a instancia: $($_.Exception.Message)"
+  }
 }
-
 # Use Android's bottom navigation buttons rather than the emulator's side controls.
 function Set-H2BottomNavigation {
   param([string]$Adb,[string]$Serial)
@@ -478,6 +510,7 @@ function Set-H2Presentation {
   param([string]$Adb,[string]$Name,[string]$Serial,[string]$Sdk,[bool]$Strict=$false,[bool]$Fresh=$false)
   Set-H2Keyboard -Name $Name
   Set-H2DeviceSkin -Name $Name -Sdk $Sdk
+  Set-H2PortraitDisplay -Adb $Adb -Serial $Serial
   Set-H2RoundedWindow -Name $Name
   $NavError = $null
   try { Set-H2BottomNavigation -Adb $Adb -Serial $Serial }
