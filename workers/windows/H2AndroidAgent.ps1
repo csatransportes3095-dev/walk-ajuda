@@ -322,14 +322,21 @@ function Set-H2LocaleFromSettings {
       continue
     }
     # Restrict touches to Android Settings language screens.
-    $Foreground = (@(Invoke-H2Adb -Executable $Adb -CommandArgs @("-s",$Serial,"shell","dumpsys","window","windows")) | Out-String)
-    if ($Foreground -notmatch 'com\.android\.settings') {
+    $Windows = (@(Invoke-H2Adb -Executable $Adb -CommandArgs @("-s",$Serial,"shell","dumpsys","window","windows")) | Out-String)
+    $Focus = [regex]::Match($Windows,'(?m)^\s*(?:mCurrentFocus|mFocusedApp)=[^\r\n]+').Value
+    if ($Focus -notmatch 'com\.android\.settings') {
       Write-H2Status "A tela de idiomas nao esta em primeiro plano; nenhuma interacao foi enviada"
       break
     }
     $PortugueseBR = Find-H2LanguageUi -Nodes $Nodes -Patterns @('(?i)^Portugu.s\s*\(Brasil\)$','(?i)^Portuguese\s*\(Brazil\)$')
     $English = Find-H2LanguageUi -Nodes $Nodes -Patterns @('(?i)^English\s*\(United States\)$','(?i)^English\s*\(US\)$')
     $Add = Find-H2LanguageUi -Nodes $Nodes -Patterns @('(?i)^Add a language$','(?i)^Add language$','(?i)^Adicionar um idioma$','(?i)^Adicionar idioma$')
+    $Confirm = Find-H2LanguageUi -Nodes $Nodes -Patterns @('(?i)^Set as default$','(?i)^Set as primary$','(?i)^Definir como padr.o$','(?i)^Definir como principal$')
+    if ($Confirm) {
+      Tap-H2LanguageUi -Adb $Adb -Serial $Serial -Node $Confirm
+      Start-Sleep -Seconds 2
+      continue
+    }
     if ($PortugueseBR -and $English -and $PortugueseBR.Y -gt $English.Y) {
       # Android 14/15 requires dragging the selected language to first place.
       $X = [string]($PortugueseBR.X2 - 15)
@@ -338,7 +345,7 @@ function Set-H2LocaleFromSettings {
       Start-Sleep -Seconds 2
       continue
     }
-    if ($PortugueseBR -and !$Add) {
+    if ($PortugueseBR -and !$Add -and !$English) {
       Tap-H2LanguageUi -Adb $Adb -Serial $Serial -Node $PortugueseBR
       Start-Sleep -Milliseconds 600
       continue
@@ -373,8 +380,14 @@ function Set-H2LocaleFromSettings {
       continue
     }
     if ($ScrollCount -ge 9) { break }
-    # Scroll only within the Settings language picker; never click an unknown item.
-    Invoke-H2Adb -Executable $Adb -CommandArgs @("-s",$Serial,"shell","input","swipe","380","1400","380","490","380") | Out-Null
+    # Use the actual emulator screen size, never fixed display coordinates.
+    $SizeText = (@(Invoke-H2Adb -Executable $Adb -CommandArgs @("-s",$Serial,"shell","wm","size")) | Out-String)
+    $Match = [regex]::Match($SizeText,'(\d+)x(\d+)')
+    if (!$Match.Success) { break }
+    $W=[int]$Match.Groups[1].Value; $H=[int]$Match.Groups[2].Value
+    if ($W -lt 240 -or $H -lt 480) { break }
+    $M=[string]([int]($W/2)); $StartY=[string]([int]($H*0.78)); $EndY=[string]([int]($H*0.32))
+    Invoke-H2Adb -Executable $Adb -CommandArgs @("-s",$Serial,"shell","input","swipe",$M,$StartY,$M,$EndY,"380") | Out-Null
     $ScrollCount++
     Start-Sleep -Milliseconds 650
   }
