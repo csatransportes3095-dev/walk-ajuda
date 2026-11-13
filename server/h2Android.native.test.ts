@@ -4,6 +4,25 @@ import path from "node:path";
 const read = (file: string) => fs.readFileSync(path.resolve(process.cwd(), file), "utf8");
 
 describe("H2 Android native isolated architecture", () => {
+  it("configures running H2 Android devices without changing proxy or running state", () => {
+    const routerCode = read("server/routers/h2Android.ts");
+    const agent = read("workers/windows/H2AndroidAgent.ps1");
+    const admin = read("client/src/pages/AdminH2Android.tsx");
+    expect(routerCode).toContain('"configure"');
+    expect(routerCode).toContain('if (action === "configure" && existing.state !== "running")');
+    expect(routerCode).toContain('action === "configure" ? existing.state');
+    expect(routerCode).toContain('if (job.action === "configure")');
+    expect(agent).toContain('"configure" {');
+    expect(agent).toContain("am\",\"update-config\",\"--locale\",\"pt-BR");
+    expect(agent).toContain("com.android.internal.systemui.navbar.threebutton");
+    expect(agent).toContain("DwmSetWindowAttribute");
+    expect(agent).toContain("Set-H2Presentation -Adb $Adb -Name $Name -Serial $Serial -Strict $true");
+    expect(admin).toContain('action:"configure"');
+    expect(admin).toContain("Ajustar idioma e visual do celular");
+    expect(agent.match(/^while \(\$true\) \{$/gm)?.length).toBe(1);
+    expect(agent.match(/^function Run-Job\(/gm)?.length).toBe(1);
+  });
+
   it("prevents duplicate agent loops and verifies silent installer startup before replacing it", () => {
     const agent = read("workers/windows/H2AndroidAgent.ps1");
     const installer = read("workers/windows/Install-H2Android.ps1");
