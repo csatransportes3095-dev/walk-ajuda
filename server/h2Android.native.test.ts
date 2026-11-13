@@ -15,11 +15,12 @@ describe("H2 Android native isolated architecture", () => {
     expect(agent.match(/^while \(\$true\) \{$/gm)?.length).toBe(1);
   });
 
-  it("rotates a stopped instance proxy atomically without reusing the previous proxy", () => {
+  it("rotates a stopped or failed instance proxy atomically without reusing the previous proxy", () => {
     const routerCode = read("server/routers/h2Android.ts");
     const admin = read("client/src/pages/AdminH2Android.tsx");
     expect(routerCode).toContain("rotateProxy: adminProcedure");
-    expect(routerCode).toContain('String(profile.state) !== "stopped"');
+    expect(routerCode).toContain("['stopped', 'error'].includes(profileState)");
+    expect(routerCode).toContain("A troca automática só é permitida com o Android parado ou em erro.");
     expect(routerCode).toContain("Aguarde o comando pendente terminar.");
     expect(routerCode).toContain("SET status='retired', profileId=NULL");
     expect(routerCode).toContain("SET status='assigned', profileId=");
@@ -27,7 +28,7 @@ describe("H2 Android native isolated architecture", () => {
     expect(routerCode).toContain("observedIp=NULL");
     expect(admin).toContain("trpc.h2Android.rotateProxy.useMutation");
     expect(admin).toContain("Trocar proxy automatico");
-    expect(admin).toContain('p.state!=="stopped"');
+    expect(admin).toContain('["stopped", "error"].includes(p.state)');
   });
 
   it("configures running H2 Android devices without changing proxy or running state", () => {

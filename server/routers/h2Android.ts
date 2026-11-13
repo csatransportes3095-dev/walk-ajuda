@@ -229,7 +229,7 @@ export const h2AndroidRouter = router({
     return { id, queued: true };
   }),
 
-  // Rotate a stopped device to the next unused proxy without changing its AVD.
+  // Rotate a stopped or failed device to the next unused proxy without changing its AVD.
   // Do not change a live proxy in the middle of Android traffic.
   rotateProxy: adminProcedure.input(idSchema).mutation(async ({ input }) => {
     const db = await androidDb();
@@ -239,8 +239,9 @@ export const h2AndroidRouter = router({
         WHERE id=${input.id} FOR UPDATE
       `))[0];
       if (!profile) throw new TRPCError({ code: "NOT_FOUND", message: "Instância não encontrada." });
-      if (String(profile.state) !== "stopped") {
-        throw new TRPCError({ code: "CONFLICT", message: "Pare completamente o Android antes de trocar o proxy." });
+      const profileState = String(profile.state);
+      if (!['stopped', 'error'].includes(profileState)) {
+        throw new TRPCError({ code: "CONFLICT", message: "A troca automática só é permitida com o Android parado ou em erro." });
       }
       const pending = rows(await tx.execute(sql`
         SELECT id FROM h2_android_jobs WHERE profileId=${input.id}
@@ -274,7 +275,7 @@ export const h2AndroidRouter = router({
       const updated = await tx.execute(sql`
         UPDATE h2_android_native_profiles
         SET proxyId=${nextId}, observedIp=NULL, lastError=NULL
-        WHERE id=${input.id} AND state='stopped' AND proxyId=${oldId}
+        WHERE id=${input.id} AND state=${profileState} AND proxyId=${oldId}
       `);
       if (affected(updated) !== 1) throw new TRPCError({ code: "CONFLICT", message: "Instância mudou de estado. Nenhuma troca realizada." });
       return { proxyId: nextId, previousProxyId: oldId };
