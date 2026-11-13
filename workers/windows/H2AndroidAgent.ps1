@@ -6,7 +6,7 @@ param(
   [string]$PairCode = ""
 )
 $ErrorActionPreference = "Stop"
-$Version = "1.2.0-single-avd"
+$Version = "1.2.1-android-proxy-guard"
 $Base = Join-Path $env:LOCALAPPDATA "H2AndroidNative"
 $AvdHome = Join-Path $Base "avd"
 $TokenFile = Join-Path $Base "agent.secure"
@@ -156,6 +156,23 @@ function Adb-Serial([string]$Adb,[string]$Name) {
     }
   }
   return $null
+}
+# Apply the loopback HTTP->SOCKS5 bridge inside Android as a second layer.
+# 10.0.2.2 is the Android Emulator's alias for the host loopback interface;
+# 127.0.0.1 inside Android would address Android itself, not the Windows relay.
+# This is an app-level HTTP proxy, not a VPN or a guarantee for UDP traffic.
+function Set-H2AndroidGlobalProxy {
+  param([string]$Adb,[string]$Serial,[int]$RelayPort)
+  if ($RelayPort -lt 1 -or $RelayPort -gt 65535) {
+    throw "Porta do proxy Android invalida; nao liberar a inicializacao."
+  }
+  $Endpoint = "10.0.2.2:$RelayPort"
+  Invoke-H2Adb -Executable $Adb -CommandArgs @("-s",$Serial,"shell","settings","put","global","http_proxy",$Endpoint) | Out-Null
+  $Verified = (@(Invoke-H2Adb -Executable $Adb -CommandArgs @("-s",$Serial,"shell","settings","get","global","http_proxy")) | Out-String).Trim()
+  if ($Verified -ne $Endpoint) {
+    throw "O Android nao confirmou a configuracao do proxy HTTP interno; nao marcar como pronto."
+  }
+  Write-H2Status ("Proxy HTTP do Android confirmado em " + $Endpoint + " (apps e UDP ainda precisam de verificacao)")
 }
 function Wait-Boot([string]$Adb,[string]$Name,[int]$TimeoutSeconds=180) {
   $Deadline = (Get-Date).AddSeconds($TimeoutSeconds)
@@ -851,6 +868,7 @@ function Run-Job([object]$Job,[string]$Sdk) {
         Start-H2Emulator -Emulator $Emulator -Sdk $Sdk -Name $Name -ProxyUri $Uri
       }
       $BootSerial = Wait-Boot $Adb $Name
+      Set-H2AndroidGlobalProxy -Adb $Adb -Serial $BootSerial -RelayPort $RelayPort
       Set-H2Presentation -Adb $Adb -Name $Name -Serial $BootSerial -Sdk $Sdk -Fresh $true
       return $ProxyIp
     }
@@ -862,6 +880,7 @@ function Run-Job([object]$Job,[string]$Sdk) {
         Start-H2Emulator -Emulator $Emulator -Sdk $Sdk -Name $Name -ProxyUri $Uri
       }
       $BootSerial = Wait-Boot $Adb $Name
+      Set-H2AndroidGlobalProxy -Adb $Adb -Serial $BootSerial -RelayPort $RelayPort
       Set-H2Presentation -Adb $Adb -Name $Name -Serial $BootSerial -Sdk $Sdk
       return $ProxyIp
     }
