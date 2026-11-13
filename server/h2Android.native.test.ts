@@ -4,6 +4,13 @@ import path from "node:path";
 const read = (file: string) => fs.readFileSync(path.resolve(process.cwd(), file), "utf8");
 
 describe("H2 Android native isolated architecture", () => {
+  it("skips legacy HTTP proxies during both creation and rotation", () => {
+    const routerCode = read("server/routers/h2Android.ts");
+    expect(routerCode).toContain("async function findAvailableSocks5Proxy");
+    expect(routerCode).toContain("String(proxy.protocol).toLowerCase() === 'socks5'");
+    expect(routerCode.match(/await findAvailableSocks5Proxy\(tx\)/g)?.length).toBe(2);
+    expect(routerCode).toContain("Invalid legacy record: never allocate it.");
+  });
   it("keeps separate SOCKS5 relays alive while Android is running and verifies installer rollback", () => {
     const agent = read("workers/windows/H2AndroidAgent.ps1");
     const relay = read("workers/windows/H2AndroidSocksRelay.mjs");
