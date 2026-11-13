@@ -340,22 +340,25 @@ function Set-H2Keyboard {
 # Prevent a command-console window without hiding the actual Android GUI.
 # Detect only the H2-owned AVD by its exact command-line -avd argument.
 # ADB can temporarily report no device while the emulator process is booting.
-function Test-H2EmulatorProcess {
+# Single-instance lifecycle for H2-owned Android AVDs. Never create a second
+# emulator process as a fallback. A VM must boot once and be diagnosed from its
+# own stdout/stderr when that attempt fails.
+function Get-H2EmulatorProcesses {
   param([string]$Name)
   $NamePattern = [regex]::Escape($Name)
-  $Pattern = '(?i)(?:^|\\s)-avd\\s+"?' + $NamePattern + '"?(?=\\s|$)'
+  # PowerShell single-quoted strings use ONE backslash for regex whitespace.
+  $Pattern = '(?i)(?:^|\s)-avd\s+"?' + $NamePattern + '"?(?=\s|$)'
   try {
     $Processes = @(Get-CimInstance -ClassName Win32_Process -Filter "Name='emulator.exe' OR Name='qemu-system-x86_64.exe'" -ErrorAction Stop)
-    foreach ($Process in $Processes) {
-      if ([string]$Process.CommandLine -match $Pattern) { return $true }
-    }
+    return @($Processes | Where-Object { [string]$_.CommandLine -match $Pattern })
   } catch {
-    Write-H2Status "Nao foi possivel confirmar processo Android pelo Windows"
+    throw "Nao foi possivel verificar processos Android no Windows; inicio bloqueado para evitar duplicacao."
   }
-  return $false
 }
-# Read the actual error instead of flooding the ADM with verbose QEMU argv DEBUG.
-# Full diagnostic logs remain local and scoped to this AVD.
+function Test-H2EmulatorProcess {
+  param([string]$Name)
+  return (@(Get-H2EmulatorProcesses -Name $Name).Count -gt 0)
+}
 function Get-H2EmulatorDiagnostic {
   param([string]$ErrorLog,[string]$OutputLog)
   $Lines = @()
@@ -374,58 +377,49 @@ function Get-H2EmulatorDiagnostic {
     } | Select-Object -Last 3)
   }
   $Text = (($Relevant | ForEach-Object { $_.Trim() }) -join " | ").Trim()
-  if (!$Text) { $Text = "Emulador encerrou sem mensagem de erro clara; consulte o arquivo de log local." }
-  if ($Text.Length -gt 340) { $Text = $Text.Substring(0,340) }
+  if (!$Text) { $Text = "Emulador encerrou sem diagnostico; consulte o log local." }
+  $Text = $Text -replace '(?i)https?://[^\s|]+','[URL ocultada]'
+  if ($Text.Length -gt 300) { $Text = $Text.Substring(0,300) }
   return $Text
 }
 function Start-H2Emulator {
   param([string]$Emulator,[string]$Sdk,[string]$Name,[string]$ProxyUri)
-  if (Test-H2EmulatorProcess -Name $Name) {
-    Write-H2Status ("Android ja inicializando no Windows: " + $Name)
-    return
-  }
-  $StartAttempt = {
-    param([string]$ExtraArguments)
+  if ($Name -notmatch '^H2_[a-fA-F0-9]{32}$') { throw "Nome de AVD invalido." }
+  # Named mutex prevents separate agents racing on the same AVD.
+  $Mutex = New-Object System.Threading.Mutex($false,("Local\H2AndroidStart_" + $Name))
+  $Locked = $false
+  try {
+    try { $Locked = $Mutex.WaitOne(20000) }
+    catch [System.Threading.AbandonedMutexException] { $Locked = $true }
+    if (!$Locked) { throw "Outra inicializacao deste Android em andamento; processo duplicado bloqueado." }
+    if (Test-H2EmulatorProcess -Name $Name) {
+      Write-H2Status ("Android ja esta aberto ou inicializando: " + $Name)
+      return
+    }
     $LogId = "emulator-" + $Name + "-" + [guid]::NewGuid().ToString("N")
     $OutLog = Join-Path $Base ($LogId + ".stdout.log")
     $ErrLog = Join-Path $Base ($LogId + ".stderr.log")
-    $Arguments = ('-avd "' + $Name + '" -http-proxy "' + $ProxyUri + '" -no-boot-anim -verbose ' + $ExtraArguments).Trim()
-    # Writing to files instead of unread stdout/stderr pipes prevents
-    # the live emulator from freezing when its verbose output fills a pipe.
-    # Launch emulator.exe directly, never through a CMD window.
+    $Arguments = ('-avd "' + $Name + '" -http-proxy "' + $ProxyUri + '" -no-boot-anim -verbose')
+    # Redirect directly to disk; prevent stderr/stdout pipe deadlocks.
     $Proc = Start-Process -FilePath $Emulator -ArgumentList $Arguments -WorkingDirectory (Join-Path $Sdk "emulator") -RedirectStandardOutput $OutLog -RedirectStandardError $ErrLog -WindowStyle Normal -PassThru -ErrorAction Stop
     try {
       Start-Sleep -Seconds 5
       $Proc.Refresh()
       if (!$Proc.HasExited) {
-        Write-H2Status ("Emulador executando: " + $Name + ". Diagnosticos gravados em disco.")
-        return @{ Running=$true; Details=""; Log=$ErrLog }
+        Write-H2Status ("Processo Android iniciado uma unica vez: " + $Name)
+        return
       }
       [void]$Proc.WaitForExit(2000)
       $Proc.Refresh()
-      $Code = if ($null -eq $Proc.ExitCode) { "indisponivel" } else { [string]$Proc.ExitCode }
+      $Code = [string]$Proc.ExitCode
       $Details = Get-H2EmulatorDiagnostic -ErrorLog $ErrLog -OutputLog $OutLog
-      return @{ Running=$false; Code=$Code; Details=$Details; Log=$ErrLog }
+      Write-H2Status ("Falha Android " + $Name + "; codigo " + $Code + ". Log: " + $ErrLog)
+      throw ("Android nao iniciou (codigo " + $Code + "). " + $Details + ". Log local: " + $ErrLog)
     } finally { $Proc.Dispose() }
+  } finally {
+    if ($Locked) { $Mutex.ReleaseMutex() }
+    $Mutex.Dispose()
   }
-  $Attempt = & $StartAttempt ""
-  if ($Attempt.Running) { return }
-  if (Test-H2EmulatorProcess -Name $Name) {
-    Write-H2Status ("Android iniciado por processo existente: " + $Name)
-    return
-  }
-  $FirstDetails = [string]$Attempt.Details
-  Write-H2Status ("Emulador terminou com codigo " + $Attempt.Code + ". Causa: " + $FirstDetails + ". Log local: " + $Attempt.Log)
-  # Keep WHPX/VM acceleration unchanged. -no-accel and swiftshader_indirect
-  # are deprecated; try only a supported software GPU before reporting failure.
-  Write-H2Status "Tentando novamente com GPU software e aceleracao de VM automatica."
-  $Fallback = & $StartAttempt "-gpu software"
-  if ($Fallback.Running) { return }
-  Write-H2Status ("Fallback GPU software terminou com codigo " + $Fallback.Code + ". Causa: " + $Fallback.Details + ". Log local: " + $Fallback.Log)
-  # Keep the message below the server's 500-char completion limit.
-  $PrimaryShort = if ($FirstDetails.Length -gt 105) { $FirstDetails.Substring(0,105) } else { $FirstDetails }
-  $FailureDetails = [string]$Fallback.Details
-  throw ("Android nao iniciou (codigo " + $Fallback.Code + "). GPU software: " + $FailureDetails + ". Primeira tentativa: " + $PrimaryShort)
 }
 # Google Play Android 15 is a production-style system image: adb shell cannot
 # reliably change global locale with setprop or am update-config. Instead automate
