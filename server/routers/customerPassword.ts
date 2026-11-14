@@ -5,6 +5,7 @@ import { deliverIncompleteCustomerLoginCode } from "../incompleteCustomerLoginDe
 import { createHash, randomBytes, randomInt, timingSafeEqual } from "crypto";
 import { issueLoginEmailProof, assertLoginEmailProof } from "../customerLoginEmailProof";
 import { requestCustomerCode, verifyCustomerCode, redeemNewRegistrationProof, isCustomerOtpModeEnabled, getVerifiedCustomerOtpSession, revokeCustomerOtpSession, ensureCustomerOtpTables } from "../customerOtpAccess";
+import { isH2AutoApkOtpConfigured } from "../h2-auto-otp-apk";
 import { validSiteCode } from "../../shared/siteAccessCodePolicy";
 import { getAdminJwtSecret } from "../adminJwt";
 import { canCustomerRecoverPassword, passwordRecoveryCodeHash } from "../customerPasswordRecoveryPolicy";
@@ -208,9 +209,15 @@ export const customerPasswordRouter = router({
     return {ready:Object.values(checks).every(Boolean),checks,enabled:isCustomerOtpModeEnabled()};
   }),
 
+  h2AutoOtpAvailable: publicProcedure.query(() => ({
+    available: isH2AutoApkOtpConfigured(),
+  })),
   requestCustomerCode: publicProcedure
-    .input(z.object({ phone: z.string().min(10).max(32) }))
-    .mutation(async ({ input, ctx }) => requestCustomerCode(input.phone, ctx.req)),
+    .input(z.object({
+      phone: z.string().min(10).max(32),
+      viaH2Auto: z.boolean().optional().default(false),
+    }))
+    .mutation(async ({ input, ctx }) => requestCustomerCode(input.phone, ctx.req, input.viaH2Auto)),
   verifyCustomerCode: publicProcedure
     .input(z.object({ phone: z.string().min(10).max(32), code: z.string().regex(/^\d{6}$/) }))
     .mutation(async ({ input }) => verifyCustomerCode(input.phone, input.code)),
