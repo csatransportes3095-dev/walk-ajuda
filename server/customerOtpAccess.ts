@@ -150,13 +150,12 @@ export async function requestCustomerCode(phoneInput: string, request: Request, 
   const email = normalizeCustomerEmail(customer.email);
   const phoneKey = digest("phone",phone), emailKey = digest("email",email);
   // Only the newly issued code can be reused for WhatsApp; never retrieve OTP plaintext from storage.
-  let issuedCode: string | null = null;
-  await db.transaction(async (tx: any) => {
+  const issuedCode: string | null = await db.transaction(async (tx: any): Promise<string | null> => {
     await tx.execute(sql`INSERT IGNORE INTO customerOtpChallenges
       (phoneKey,customerId,emailKey,codeDigest,expiresAt,resendAfter,attempts,createdAt)
       VALUES (${phoneKey},${Number(customer.id)},${emailKey},'',0,0,0,${now})`);
     const [current] = await rows(tx,sql`SELECT resendAfter FROM customerOtpChallenges WHERE phoneKey=${phoneKey} FOR UPDATE`);
-    if (Number(current?.resendAfter || 0) > now) return;
+    if (Number(current?.resendAfter || 0) > now) return null;
     // Reuse the existing H2 site code generator; do not invent a second OTP system.
     const code = generateOwnSiteCode();
     const codeHash = digest("code:"+phoneKey,code);
@@ -167,7 +166,7 @@ export async function requestCustomerCode(phoneInput: string, request: Request, 
       WHERE phoneKey=${phoneKey}`);
     // Delivery inside the transaction: delivery failure rolls the challenge back.
     await deliverOwnSiteCode(email,code);
-    issuedCode = code;
+    return code;
   });
   // The DB transaction and mandatory email delivery must complete first. An optional
   // WhatsApp failure must not roll back or regenerate the existing challenge.
