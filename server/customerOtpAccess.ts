@@ -8,6 +8,7 @@ import { normalizeCustomerPhone, normalizeCustomerEmail } from "./customerAccess
 import { emailBelongsToAnotherCustomer } from "./customerEmailOwnership";
 import { deliverOwnSiteCode } from "./siteAccessCodeDelivery";
 import { enqueueIncomingWhatsappOtp } from "./h2-auto-incoming-otp";
+import { isH2AutoApkOtpReady } from "./h2-auto-otp-apk";
 import { generateOwnSiteCode } from "./siteAccessOwnCodes";
 import { getMissingCustomerProfileFields } from "./customerProfileRequirements";
 import { assertLoginEmailProof } from "./customerLoginEmailProof";
@@ -136,6 +137,8 @@ export async function requestCustomerCode(phoneInput: string, request: Request, 
   requireOtpMigrationEnabled();
   const phone = normalizeCustomerPhone(phoneInput);
   if (!phone || phone.length !== 11) return { success:true, message:GENERIC };
+  if (channel === "whatsapp" && !(await isH2AutoApkOtpReady()))
+    throw new TRPCError({code:"SERVICE_UNAVAILABLE",message:"WhatsApp temporariamente indisponível. Use o e-mail."});
   const db = await getDb() as any;
   if (!db) throw new TRPCError({ code:"SERVICE_UNAVAILABLE", message:"Serviço indisponível." });
   await ensureCustomerOtpTables(db);
