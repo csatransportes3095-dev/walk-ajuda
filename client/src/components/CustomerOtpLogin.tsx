@@ -1,5 +1,26 @@
 import { encodeWhatsappMessage } from "@shared/whatsappMessageText";
 import { useState } from "react";
+
+const OTP_DRAFT_KEY = "h2_customer_otp_login_draft";
+const OTP_DRAFT_TTL_MS = 10 * 60 * 1000;
+function readOtpDraft(): {phone: string; step: "phone" | "code"} | null {
+  try {
+    const raw = sessionStorage.getItem(OTP_DRAFT_KEY);
+    if (!raw) return null;
+    const draft = JSON.parse(raw);
+    if (typeof draft.phone === "string" && /^\\d{11}$/.test(draft.phone) &&
+        Number.isFinite(draft.expiresAt) && draft.expiresAt > Date.now() &&
+        draft.expiresAt <= Date.now() + OTP_DRAFT_TTL_MS) {
+      return {phone: draft.phone, step: draft.step === "code" ? "code" : "phone"};
+    }
+    sessionStorage.removeItem(OTP_DRAFT_KEY);
+  } catch { /* Ignore malformed browser draft. */ }
+  return null;
+}
+function saveOtpDraft(phone: string, step: "phone" | "code") {
+  try { sessionStorage.setItem(OTP_DRAFT_KEY, JSON.stringify({phone, step, expiresAt: Date.now() + OTP_DRAFT_TTL_MS})); } catch {}
+}
+function clearOtpDraft() { try { sessionStorage.removeItem(OTP_DRAFT_KEY); } catch {} }
 import { trpc } from "@/lib/trpc";
 import { toast } from "sonner";
 import { CheckCircle2, Mail, Phone, ShieldCheck } from "lucide-react";
@@ -27,8 +48,9 @@ export function normalizeOtpPhone(input: string): string {
 }
 
 export function CustomerOtpLogin({ title = "Acesso H2 Colombiano", initialPhone = "", onAuthenticated, onRegister }: Props) {
-  const [phone, setPhone] = useState(() => normalizeOtpPhone(initialPhone));
-  const [step, setStep] = useState<"phone" | "code">("phone");
+  const [draft] = useState(() => readOtpDraft());
+  const [phone, setPhone] = useState(() => normalizeOtpPhone(initialPhone) || draft?.phone || "");
+  const [step, setStep] = useState<"phone" | "code">(() => draft?.step || "phone");
   const [code, setCode] = useState("");
   const [busy, setBusy] = useState(false);
   const checkCustomer = trpc.customers.checkByPhoneMutation.useMutation();
@@ -41,6 +63,7 @@ export function CustomerOtpLogin({ title = "Acesso H2 Colombiano", initialPhone 
   const supportHref = `https://wa.me/${supportNumber}?text=${encodeWhatsappMessage("Olá! Sou cliente do H2 Colombiano. Estou tentando acessar o site, mas não recebi o código de confirmação por e-mail. Preciso de ajuda para continuar meu pedido.")}`;
 
   function startRegistration() {
+    clearOtpDraft();
     // Reuse the existing complete H2 customer registration, not /pre-cadastro.
     // The phone is only a draft field, never an authorization credential.
     if (cleanPhone.length === 11) {
@@ -86,6 +109,7 @@ export function CustomerOtpLogin({ title = "Acesso H2 Colombiano", initialPhone 
       const result = await requestCode.mutateAsync({ phone: cleanPhone });
       setCode("");
       setStep("code");
+      saveOtpDraft(cleanPhone, "code");
       toast.success(result.message || "Confira o e-mail cadastrado.");
     } catch (err: any) {
       toast.error(err?.message || "Não foi possível solicitar o código.");
@@ -126,6 +150,7 @@ export function CustomerOtpLogin({ title = "Acesso H2 Colombiano", initialPhone 
       // Order, raffle, appointments and old site modules still read the
       // canonical phone. It is NOT an authorization credential.
       localStorage.setItem("walk_client_phone", cleanPhone);
+      clearOtpDraft();
       toast.success("Identidade confirmada!");
     } catch (err: any) {
       toast.error(err?.message || "Falha ao verificar o código.");
@@ -158,7 +183,7 @@ export function CustomerOtpLogin({ title = "Acesso H2 Colombiano", initialPhone 
               className="w-full rounded-xl border border-white/20 bg-slate-900 p-4 text-center text-xl font-bold outline-none focus:border-cyan-400"
               placeholder="(11) 99999-9999"
               value={phone}
-              onChange={e => setPhone(normalizeOtpPhone(e.target.value))}
+              onChange={e => { const next = normalizeOtpPhone(e.target.value); setPhone(next); saveOtpDraft(next, "phone"); }}
               disabled={busy}
               maxLength={11}
               required
@@ -194,7 +219,7 @@ export function CustomerOtpLogin({ title = "Acesso H2 Colombiano", initialPhone 
               💬 NÃO RECEBI O CÓDIGO — PEDIR AJUDA NO WHATSAPP
             </a>
             <button type="button" className="w-full py-2 text-sm text-cyan-300" disabled={busy}
-              onClick={() => { setStep("phone"); setCode(""); }}>
+              onClick={() => { setStep("phone"); setCode(""); saveOtpDraft(cleanPhone, "phone"); }}>
               Alterar telefone / solicitar outro código
             </button>
           </form>
