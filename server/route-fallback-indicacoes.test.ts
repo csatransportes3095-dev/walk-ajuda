@@ -30,7 +30,7 @@ describe("H2 public SPA route allowlist",()=>{
   it("permite abrir /android e /admin/android sem aplicar o login do cliente",()=>{
     expect(visit("/ADIMIN/ANDROID")).toEqual([]);
     expect(visit("/adm/android")).toEqual(["/ADIMIN/ANDROID"]);
-    expect(visit("/adm/android/")).toEqual([]);
+    expect(visit("/adm/android/")).toEqual(["/ADIMIN/ANDROID"]);
     expect(visit("/android")).toEqual(["/ADIMIN/ANDROID"]);
     expect(visit("/android/")).toEqual(["/ADIMIN/ANDROID"]);
     expect(visit("/admin/android")).toEqual(["/ADIMIN/ANDROID"]);
