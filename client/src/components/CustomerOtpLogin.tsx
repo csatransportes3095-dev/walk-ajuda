@@ -1,8 +1,22 @@
 import { encodeWhatsappMessage } from "@shared/whatsappMessageText";
-import { useState } from "react";
+import { useEffect, useState } from "react";
 
 const OTP_DRAFT_KEY = "h2_customer_otp_login_draft";
 const OTP_DRAFT_TTL_MS = 10 * 60 * 1000;
+const OTP_RESEND_COOLDOWN_MS = 60 * 1000;
+type OtpChannel = "email" | "whatsapp";
+function cooldownKey(phone: string, channel: OtpChannel): string { return "h2_otp_cooldown_" + phone + "_" + channel; }
+function savedCooldown(phone: string, channel: OtpChannel): number {
+  if (!/^\d{11}$/.test(phone)) return 0;
+  try { const until = Number(localStorage.getItem(cooldownKey(phone, channel)) || "0");
+    return Number.isFinite(until) && until > Date.now() && until < Date.now() + OTP_RESEND_COOLDOWN_MS + 1000 ? until : 0;
+  } catch { return 0; }
+}
+function storeCooldown(phone: string, channel: OtpChannel, until: number): void {
+  if (!/^\d{11}$/.test(phone)) return;
+  try { localStorage.setItem(cooldownKey(phone, channel), String(until)); } catch {}
+}
+function remainingSeconds(until: number, now: number): number { return Math.max(0, Math.ceil((until - now) / 1000)); }
 function readOtpDraft(): {phone: string; step: "phone" | "code"; channel: "email" | "whatsapp"} | null {
   try {
     const raw = sessionStorage.getItem(OTP_DRAFT_KEY);
@@ -54,11 +68,19 @@ export function CustomerOtpLogin({ title = "Acesso H2 Colombiano", initialPhone 
   const [deliveryChannel, setDeliveryChannel] = useState<"email" | "whatsapp">(() => draft?.channel || "email");
   const [code, setCode] = useState("");
   const [busy, setBusy] = useState(false);
+  const [clockNow, setClockNow] = useState(() => Date.now());
+  const [cooldowns, setCooldowns] = useState<{email:number;whatsapp:number}>(() => {
+    const selectedPhone = normalizeOtpPhone(initialPhone) || draft?.phone || "";
+    return {email:savedCooldown(selectedPhone,"email"),whatsapp:savedCooldown(selectedPhone,"whatsapp")};
+  });
+  useEffect(() => { const id = window.setInterval(() => setClockNow(Date.now()), 250); return () => window.clearInterval(id); }, []);
   const checkCustomer = trpc.customers.checkByPhoneMutation.useMutation();
   const requestCode = trpc.customerPassword.requestCustomerCode.useMutation();
   const {data: h2AutoDelivery} = trpc.customerPassword.h2AutoOtpAvailable.useQuery();
   const verifyCode = trpc.customerPassword.verifyCustomerCode.useMutation();
   const cleanPhone = normalizeOtpPhone(phone);
+  const remainingEmail = remainingSeconds(Math.max(cooldowns.email,savedCooldown(cleanPhone,"email")),clockNow);
+  const remainingWhatsapp = remainingSeconds(Math.max(cooldowns.whatsapp,savedCooldown(cleanPhone,"whatsapp")),clockNow);
   const { data: supportSettings } = trpc.settings.getAll.useQuery();
   const loginSettings = supportSettings;
   const supportNumber = String(supportSettings?.whatsapp_number || "5511978307371").replace(/\D/g, "");
@@ -79,7 +101,9 @@ export function CustomerOtpLogin({ title = "Acesso H2 Colombiano", initialPhone 
     else window.location.assign("/cadastro");
   }
 
-  async function send(channel: "email" | "whatsapp") {
+  async function send(channel: OtpChannel) {
+    const remaining = channel === "email" ? remainingEmail : remainingWhatsapp;
+    if (remaining > 0) { toast.info("Aguarde " + remaining + "s para solicitar outro código por " + (channel === "email" ? "e-mail" : "WhatsApp") + "."); return; }
     if (cleanPhone.length !== 11) {
       toast.error("Informe um telefone com DDD e 11 números.");
       return;
@@ -112,6 +136,15 @@ export function CustomerOtpLogin({ title = "Acesso H2 Colombiano", initialPhone 
         return;
       }
       const result = await requestCode.mutateAsync({phone: cleanPhone, channel});
+      if (result.resendBlocked) {
+        const wait = Math.max(0,result.retryAfterSeconds || 0);
+        if (wait > 0 && wait <= 60) { const until = Date.now() + wait * 1000;
+          setCooldowns(prev => ({...prev,[channel]:until})); storeCooldown(cleanPhone,channel,until); }
+        toast.info(result.message || "Aguarde para solicitar outro código.");
+        return;
+      }
+      const until = Date.now() + (result.retryAfterSeconds || 60) * 1000;
+      setCooldowns(prev => ({...prev,[channel]:until})); storeCooldown(cleanPhone,channel,until); setClockNow(Date.now());
       setCode("");
       setDeliveryChannel(channel);
       setStep("code");
@@ -196,22 +229,22 @@ export function CustomerOtpLogin({ title = "Acesso H2 Colombiano", initialPhone 
               className="w-full rounded-xl border border-white/20 bg-slate-900 p-4 text-center text-xl font-bold outline-none focus:border-cyan-400"
               placeholder="(11) 99999-9999"
               value={phone}
-              onChange={e => { const next = normalizeOtpPhone(e.target.value); setPhone(next); saveOtpDraft(next, "phone", deliveryChannel); }}
+              onChange={e => { const next = normalizeOtpPhone(e.target.value); setPhone(next); setCooldowns({email:savedCooldown(next,"email"),whatsapp:savedCooldown(next,"whatsapp")}); saveOtpDraft(next, "phone", deliveryChannel); }}
               disabled={busy}
               maxLength={11}
               required
             />
             <div className="space-y-3" aria-label="Escolha como receber o código">
-              <button type="submit" disabled={busy || cleanPhone.length !== 11}
+              <button type="submit" disabled={busy || cleanPhone.length !== 11 || remainingEmail > 0}
                 className="flex min-h-14 w-full items-center justify-center gap-2 rounded-xl bg-cyan-500 p-4 font-black text-slate-950 transition-colors hover:bg-cyan-400 disabled:opacity-50">
                 <Mail className="h-5 w-5" />
-                {busy ? "Solicitando..." : "RECEBER POR E-MAIL"}
+                {remainingEmail > 0 ? "E-MAIL · AGUARDE 00:" + String(remainingEmail).padStart(2,"0") : busy ? "Solicitando..." : "RECEBER POR E-MAIL"}
               </button>
-              <button type="button" disabled={busy || cleanPhone.length !== 11 || h2AutoDelivery?.available !== true}
+              <button type="button" disabled={busy || cleanPhone.length !== 11 || h2AutoDelivery?.available !== true || remainingWhatsapp > 0}
                 onClick={() => void send("whatsapp")}
                 className="flex min-h-14 w-full items-center justify-center gap-2 rounded-xl border border-[#c62828] bg-[#8B0000] p-4 font-black text-white shadow-[0_4px_18px_rgba(139,0,0,0.35)] transition-colors hover:bg-[#a30000] disabled:cursor-not-allowed disabled:opacity-50">
                 <MessageCircle className="h-5 w-5" />
-                RECEBER PELO WHATSAPP
+                {remainingWhatsapp > 0 ? "WHATSAPP · AGUARDE 00:" + String(remainingWhatsapp).padStart(2,"0") : "RECEBER PELO WHATSAPP"}
               </button>
               {h2AutoDelivery?.available !== true && (
                 <p className="text-center text-xs text-slate-400">WhatsApp temporariamente indisponível. O e-mail continua funcionando.</p>
@@ -254,7 +287,7 @@ export function CustomerOtpLogin({ title = "Acesso H2 Colombiano", initialPhone 
             )}
             <button type="button" className="w-full py-2 text-sm text-cyan-300" disabled={busy}
               onClick={() => { setStep("phone"); setCode(""); saveOtpDraft(cleanPhone, "phone", deliveryChannel); }}>
-              Alterar telefone / solicitar outro código
+              Alterar telefone
             </button>
           </form>
         )}
