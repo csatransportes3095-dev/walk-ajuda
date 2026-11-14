@@ -42,6 +42,17 @@ describe("isolated WhatsApp OTP transport", () => {
     expect(send).not.toHaveBeenCalled();
   });
 
+  it("refuses to send when provider rejects the request", async () => {
+    vi.stubEnv("H2_WHATSAPP_OTP_ENABLED", "true");
+    vi.stubEnv("H2_WHATSAPP_PHONE_NUMBER_ID", "1234567890");
+    vi.stubEnv("H2_WHATSAPP_ACCESS_TOKEN", "test-only-token");
+    vi.stubEnv("H2_WHATSAPP_AUTH_TEMPLATE", "codigo_acesso_h2");
+    vi.stubGlobal("fetch", vi.fn().mockResolvedValue({ ok: false, status: 403 }));
+    expect(await deliverSiteOtpWhatsApp("11999999999", "123456", true)).toEqual({
+      status: "failed", reason: "PROVIDER",
+    });
+  });
+
   it("sends only an approved template payload to the registered destination", async () => {
     vi.stubEnv("H2_WHATSAPP_OTP_ENABLED", "true");
     vi.stubEnv("H2_WHATSAPP_PHONE_NUMBER_ID", "1234567890");
