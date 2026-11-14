@@ -17,19 +17,24 @@ describe("H2 Auto APK OTP bridge security checks", () => {
 
   it("reuses the single OTP generated for email", () => {
     expect((access.match(/generateOwnSiteCode\(\)/g) || []).length).toBe(1);
-    expect(access).toContain("await deliverOwnSiteCode(email,code)");
+    expect(access).toContain('if (channel === "email") await deliverOwnSiteCode(email,code)');
     expect(access).toContain("codeDigest: newlyIssued.codeDigest");
-    expect(access.indexOf("await enqueueH2AutoApkOtp(")).toBeGreaterThan(access.indexOf("await deliverOwnSiteCode(email,code)"));
+    expect(access.indexOf("await enqueueIncomingWhatsappOtp(")).toBeGreaterThan(access.indexOf("await deliverOwnSiteCode(email,code)"));
   });
 
-  it("requests H2 Auto handoff without a customer checkbox, preserving email fallback", () => {
-    expect(access).toContain("if (viaH2Auto && newlyIssued)");
-    expect(router).toContain("viaH2Auto: z.boolean().optional().default(false)");
-    expect(login).toContain("viaH2Auto: true");
-    expect(login).not.toContain("setViaH2Auto");
-    expect(login).toContain("Código enviado por e-mail e WhatsApp.");
-    expect(login).toContain("Código enviado ao e-mail cadastrado.");
-    expect(login).toContain("RECEBER CÓDIGO");
+  it("keeps email blue and WhatsApp blood-red as independent choices", () => {
+    expect(access).toContain('if (channel === "email") await deliverOwnSiteCode(email,code)');
+    expect(access).toContain('if (channel === "whatsapp" && newlyIssued)');
+    expect(access).toContain("await enqueueIncomingWhatsappOtp({");
+    expect(router).toContain('channel: z.enum(["email","whatsapp"]).optional().default("email")');
+    expect(login).toContain('void send("email")');
+    expect(login).toContain('void send("whatsapp")');
+    expect(login).toContain("RECEBER POR E-MAIL");
+    expect(login).toContain("RECEBER PELO WHATSAPP");
+    expect(login).toContain("bg-cyan-500");
+    expect(login).toContain("bg-[#8B0000]");
+    expect(login).toContain('encodeWhatsappMessage("Preciso receber meu código")');
+    expect(login).not.toContain("Código enviado por e-mail e WhatsApp.");
   });
 
   it("requires configured paired device and short-lived encrypted queue", () => {

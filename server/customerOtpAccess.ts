@@ -7,7 +7,8 @@ import { getRegistrationReviewStatus } from "./customerRegistrationReview";
 import { normalizeCustomerPhone, normalizeCustomerEmail } from "./customerAccess";
 import { emailBelongsToAnotherCustomer } from "./customerEmailOwnership";
 import { deliverOwnSiteCode } from "./siteAccessCodeDelivery";
-import { enqueueH2AutoApkOtp } from "./h2-auto-otp-apk";
+import { enqueueIncomingWhatsappOtp } from "./h2-auto-incoming-otp";
+import { isH2AutoApkOtpReady } from "./h2-auto-otp-apk";
 import { generateOwnSiteCode } from "./siteAccessOwnCodes";
 import { getMissingCustomerProfileFields } from "./customerProfileRequirements";
 import { assertLoginEmailProof } from "./customerLoginEmailProof";
@@ -132,10 +133,12 @@ async function issueSession(tx: any, customer: any, now: number) {
   return { success: true as const, token, profileUpdateRequired: profileUpdateFields.length > 0, profileUpdateFields };
 }
 
-export async function requestCustomerCode(phoneInput: string, request: Request, viaH2Auto = false): Promise<{success:true;message:string}> {
+export async function requestCustomerCode(phoneInput: string, request: Request, channel: "email" | "whatsapp" = "email"): Promise<{success:true;message:string}> {
   requireOtpMigrationEnabled();
   const phone = normalizeCustomerPhone(phoneInput);
   if (!phone || phone.length !== 11) return { success:true, message:GENERIC };
+  if (channel === "whatsapp" && !(await isH2AutoApkOtpReady()))
+    throw new TRPCError({code:"SERVICE_UNAVAILABLE",message:"WhatsApp temporariamente indisponível. Use o e-mail."});
   const db = await getDb() as any;
   if (!db) throw new TRPCError({ code:"SERVICE_UNAVAILABLE", message:"Serviço indisponível." });
   await ensureCustomerOtpTables(db);
@@ -165,19 +168,20 @@ export async function requestCustomerCode(phoneInput: string, request: Request, 
       attempts=0,usedAt=NULL,createdAt=${now}
       WHERE phoneKey=${phoneKey}`);
     // Delivery inside the transaction: delivery failure rolls the challenge back.
-    await deliverOwnSiteCode(email,code);
+    if (channel === "email") await deliverOwnSiteCode(email,code);
     return {code,codeDigest:codeHash};
   });
-  // The email transaction is committed before scheduling the optional H2 Auto handoff.
-  // A device that is offline never blocks the customer from using the email code.
-  if (viaH2Auto && newlyIssued) {
+  // WhatsApp is an explicitly selected channel, not an unsolicited send.
+  // Never dispatch a code to the chat until a matching inbound message arrives.
+  if (channel === "whatsapp" && newlyIssued) {
     try {
-      await enqueueH2AutoApkOtp({
+      await enqueueIncomingWhatsappOtp({
         customerPhone: phone, code: newlyIssued.code, phoneKey,
         codeDigest: newlyIssued.codeDigest, expiresAt: now + CUSTOMER_CODE_MS,
       });
     } catch {
-      console.warn("[CustomerOtp] H2 Auto APK delivery handoff unavailable");
+      console.warn("[CustomerOtp] Incoming WhatsApp OTP queue unavailable");
+      throw new TRPCError({code:"SERVICE_UNAVAILABLE",message:"WhatsApp indisponível. Solicite o código por e-mail."});
     }
   }
   return { success:true, message:GENERIC };

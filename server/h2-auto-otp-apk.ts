@@ -18,13 +18,13 @@ function key(): Buffer {
   if (!secret || secret.length < 32) throw Error("OTP_QUEUE_KEY_UNAVAILABLE");
   return createHash("sha256").update("h2-auto-otp-apk:v1:" + secret).digest();
 }
-function encrypt(value: string): string {
+export function encrypt(value: string): string {
   const iv = randomBytes(12);
   const cipher = createCipheriv("aes-256-gcm", key(), iv);
   const ciphertext = Buffer.concat([cipher.update(value, "utf8"), cipher.final()]);
   return [iv.toString("hex"), cipher.getAuthTag().toString("hex"), ciphertext.toString("hex")].join(".");
 }
-function decrypt(value: string): string {
+export function decrypt(value: string): string {
   const [iv, tag, payload] = value.split(".");
   if (!iv || !tag || !payload) throw Error("INVALID_ENCRYPTED_PAYLOAD");
   const decipher = createDecipheriv("aes-256-gcm", key(), Buffer.from(iv, "hex"));
@@ -84,7 +84,7 @@ export async function enqueueH2AutoApkOtp(input: {
 }
 const send = (res: Response, status: number, body: object) =>
   res.status(status).set("Cache-Control", "no-store").json(body);
-async function authorized(req: Request): Promise<string | null> {
+export async function authorizedOtpDevice(req: Request): Promise<string | null> {
   const id = String(req.header("x-h2-device-id") || "");
   const token = String(req.header("x-h2-device-token") || "");
   if (!isH2AutoApkOtpConfigured() || id !== process.env[DEVICE]
@@ -99,7 +99,7 @@ async function authorized(req: Request): Promise<string | null> {
 export function registerH2AutoOtpApkRoutes(app: Express): void {
   app.get("/api/h2-auto/otp/pending", async (req, res) => {
     try {
-      const deviceId = await authorized(req);
+      const deviceId = await authorizedOtpDevice(req);
       if (!deviceId) return send(res, 401, { error: "unauthorized" });
       const db: any = await getDb();
       await ensure(db);
@@ -121,7 +121,7 @@ export function registerH2AutoOtpApkRoutes(app: Express): void {
   });
   app.post("/api/h2-auto/otp/ack", async (req, res) => {
     try {
-      const deviceId = await authorized(req);
+      const deviceId = await authorizedOtpDevice(req);
       if (!deviceId) return send(res, 401, { error: "unauthorized" });
       const id = String(req.body?.id || "");
       if (!/^[a-f0-9]{32}$/.test(id)) return send(res, 400, { error: "invalid_request" });

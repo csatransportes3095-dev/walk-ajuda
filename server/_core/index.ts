@@ -15,6 +15,7 @@ import { registerUploadRoute } from "../uploadRoute";
 import { registerApkDownloadRoute, ensureApkTable } from "../routers/apk";
 import { registerH2AutoDeviceRoutes } from "../h2-auto-remote";
 import { registerH2AutoOtpApkRoutes } from "../h2-auto-otp-apk";
+import { registerH2AutoIncomingOtpRoutes } from "../h2-auto-incoming-otp";
 import { registerH2AutoOrdersRoutes } from "../h2-auto-orders";
 import { registerH2AutoAccessRoutes } from "../h2-auto-access";
 import { registerH2AutoCodeJobRoutes } from "../h2-auto-code-jobs";
@@ -463,6 +464,7 @@ async function startServer() {
   registerPingRoute(app);
   registerH2AutoDeviceRoutes(app);
   registerH2AutoOtpApkRoutes(app);
+  registerH2AutoIncomingOtpRoutes(app);
   registerH2AutoOrdersRoutes(app);
   registerH2AutoAccessRoutes(app);
   registerH2AutoCodeJobRoutes(app);

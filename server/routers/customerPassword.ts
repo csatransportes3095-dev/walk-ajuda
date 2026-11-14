@@ -215,9 +215,9 @@ export const customerPasswordRouter = router({
   requestCustomerCode: publicProcedure
     .input(z.object({
       phone: z.string().min(10).max(32),
-      viaH2Auto: z.boolean().optional().default(false),
+      channel: z.enum(["email","whatsapp"]).optional().default("email"),
     }))
-    .mutation(async ({ input, ctx }) => requestCustomerCode(input.phone, ctx.req, input.viaH2Auto)),
+    .mutation(async ({ input, ctx }) => requestCustomerCode(input.phone, ctx.req, input.channel)),
   verifyCustomerCode: publicProcedure
     .input(z.object({ phone: z.string().min(10).max(32), code: z.string().regex(/^\d{6}$/) }))
     .mutation(async ({ input }) => verifyCustomerCode(input.phone, input.code)),

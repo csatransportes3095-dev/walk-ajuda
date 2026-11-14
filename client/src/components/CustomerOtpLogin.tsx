@@ -3,7 +3,7 @@ import { useState } from "react";
 
 const OTP_DRAFT_KEY = "h2_customer_otp_login_draft";
 const OTP_DRAFT_TTL_MS = 10 * 60 * 1000;
-function readOtpDraft(): {phone: string; step: "phone" | "code"} | null {
+function readOtpDraft(): {phone: string; step: "phone" | "code"; channel: "email" | "whatsapp"} | null {
   try {
     const raw = sessionStorage.getItem(OTP_DRAFT_KEY);
     if (!raw) return null;
@@ -11,19 +11,19 @@ function readOtpDraft(): {phone: string; step: "phone" | "code"} | null {
     if (typeof draft.phone === "string" && /^\d{11}$/.test(draft.phone) &&
         Number.isFinite(draft.expiresAt) && draft.expiresAt > Date.now() &&
         draft.expiresAt <= Date.now() + OTP_DRAFT_TTL_MS) {
-      return {phone: draft.phone, step: draft.step === "code" ? "code" : "phone"};
+      return {phone: draft.phone, step: draft.step === "code" ? "code" : "phone", channel: draft.channel === "whatsapp" ? "whatsapp" : "email"};
     }
     sessionStorage.removeItem(OTP_DRAFT_KEY);
   } catch { /* Ignore malformed browser draft. */ }
   return null;
 }
-function saveOtpDraft(phone: string, step: "phone" | "code") {
-  try { sessionStorage.setItem(OTP_DRAFT_KEY, JSON.stringify({phone, step, expiresAt: Date.now() + OTP_DRAFT_TTL_MS})); } catch {}
+function saveOtpDraft(phone: string, step: "phone" | "code", channel: "email" | "whatsapp" = "email") {
+  try { sessionStorage.setItem(OTP_DRAFT_KEY, JSON.stringify({phone, step, channel, expiresAt: Date.now() + OTP_DRAFT_TTL_MS})); } catch {}
 }
 function clearOtpDraft() { try { sessionStorage.removeItem(OTP_DRAFT_KEY); } catch {} }
 import { trpc } from "@/lib/trpc";
 import { toast } from "sonner";
-import { CheckCircle2, Mail, Phone, ShieldCheck } from "lucide-react";
+import { CheckCircle2, Mail, MessageCircle, Phone, ShieldCheck } from "lucide-react";
 
 export type CustomerOtpResult = {
   token: string;
@@ -51,6 +51,7 @@ export function CustomerOtpLogin({ title = "Acesso H2 Colombiano", initialPhone 
   const [draft] = useState(() => readOtpDraft());
   const [phone, setPhone] = useState(() => normalizeOtpPhone(initialPhone) || draft?.phone || "");
   const [step, setStep] = useState<"phone" | "code">(() => draft?.step || "phone");
+  const [deliveryChannel, setDeliveryChannel] = useState<"email" | "whatsapp">(() => draft?.channel || "email");
   const [code, setCode] = useState("");
   const [busy, setBusy] = useState(false);
   const checkCustomer = trpc.customers.checkByPhoneMutation.useMutation();
@@ -78,15 +79,18 @@ export function CustomerOtpLogin({ title = "Acesso H2 Colombiano", initialPhone 
     else window.location.assign("/cadastro");
   }
 
-  async function send(event: React.FormEvent) {
-    event.preventDefault();
+  async function send(channel: "email" | "whatsapp") {
     if (cleanPhone.length !== 11) {
       toast.error("Informe um telefone com DDD e 11 números.");
       return;
     }
+    if (channel === "whatsapp" && h2AutoDelivery?.available !== true) {
+      toast.error("Recebimento pelo WhatsApp indisponível. Use o botão azul do e-mail.");
+      return;
+    }
     setBusy(true);
     try {
-      // Check before requesting an e-mail code; the current OTP endpoint
+      // Check before requesting a code; the current OTP endpoint
       // intentionally returns a generic response for unknown numbers.
       const account = await checkCustomer.mutateAsync({ phone: cleanPhone });
       if (account.blocked || account.customerBlocked) {
@@ -107,11 +111,19 @@ export function CustomerOtpLogin({ title = "Acesso H2 Colombiano", initialPhone 
         toast.error("Seu cadastro está sem e-mail. Entre em contato com o atendimento.");
         return;
       }
-      const result = await requestCode.mutateAsync({phone: cleanPhone, viaH2Auto: true});
+      const result = await requestCode.mutateAsync({phone: cleanPhone, channel});
       setCode("");
+      setDeliveryChannel(channel);
       setStep("code");
-      saveOtpDraft(cleanPhone, "code");
-      toast.success(h2AutoDelivery?.available === true ? "Confira e-mail e WhatsApp." : (result.message || "Confira o e-mail cadastrado."));
+      saveOtpDraft(cleanPhone, "code", channel);
+      if (channel === "whatsapp") {
+        // The customer must actually send the prepared message; merely
+        // opening this link never authorizes the APK to deliver a code.
+        const message = encodeWhatsappMessage("Preciso receber meu código");
+        window.location.assign(`https://wa.me/${supportNumber}?text=${message}`);
+      } else {
+        toast.success(result.message || "Confira o e-mail cadastrado.");
+      }
     } catch (err: any) {
       toast.error(err?.message || "Não foi possível solicitar o código.");
     } finally {
@@ -172,7 +184,7 @@ export function CustomerOtpLogin({ title = "Acesso H2 Colombiano", initialPhone 
         </p>}
 
         {step === "phone" ? (
-          <form onSubmit={send} className="mt-7 space-y-4">
+          <form onSubmit={event => { event.preventDefault(); void send("email"); }} className="mt-7 space-y-4">
             <label htmlFor="h2-otp-phone" className="flex items-center gap-2 text-sm font-semibold">
               <Phone className="h-4 w-4" /> Telefone com DDD
             </label>
@@ -184,18 +196,27 @@ export function CustomerOtpLogin({ title = "Acesso H2 Colombiano", initialPhone 
               className="w-full rounded-xl border border-white/20 bg-slate-900 p-4 text-center text-xl font-bold outline-none focus:border-cyan-400"
               placeholder="(11) 99999-9999"
               value={phone}
-              onChange={e => { const next = normalizeOtpPhone(e.target.value); setPhone(next); saveOtpDraft(next, "phone"); }}
+              onChange={e => { const next = normalizeOtpPhone(e.target.value); setPhone(next); saveOtpDraft(next, "phone", deliveryChannel); }}
               disabled={busy}
               maxLength={11}
               required
             />
-            {h2AutoDelivery?.available === true && (
-              <p className="text-center text-sm text-slate-300">Código por e-mail e WhatsApp.</p>
-            )}
-            <button type="submit" disabled={busy || cleanPhone.length !== 11}
-              className="w-full rounded-xl bg-cyan-500 p-4 font-black text-slate-950 disabled:opacity-50">
-              {busy ? "Solicitando..." : "RECEBER CÓDIGO"}
-            </button>
+            <div className="space-y-3" aria-label="Escolha como receber o código">
+              <button type="submit" disabled={busy || cleanPhone.length !== 11}
+                className="flex min-h-14 w-full items-center justify-center gap-2 rounded-xl bg-cyan-500 p-4 font-black text-slate-950 transition-colors hover:bg-cyan-400 disabled:opacity-50">
+                <Mail className="h-5 w-5" />
+                {busy ? "Solicitando..." : "RECEBER POR E-MAIL"}
+              </button>
+              <button type="button" disabled={busy || cleanPhone.length !== 11 || h2AutoDelivery?.available !== true}
+                onClick={() => void send("whatsapp")}
+                className="flex min-h-14 w-full items-center justify-center gap-2 rounded-xl border border-[#c62828] bg-[#8B0000] p-4 font-black text-white shadow-[0_4px_18px_rgba(139,0,0,0.35)] transition-colors hover:bg-[#a30000] disabled:cursor-not-allowed disabled:opacity-50">
+                <MessageCircle className="h-5 w-5" />
+                RECEBER PELO WHATSAPP
+              </button>
+              {h2AutoDelivery?.available !== true && (
+                <p className="text-center text-xs text-slate-400">WhatsApp temporariamente indisponível. O e-mail continua funcionando.</p>
+              )}
+            </div>
             {onRegister && (
               <button type="button" className="flex min-h-12 w-full items-center justify-center rounded-xl border border-cyan-400/40 bg-cyan-400/10 px-4 py-3 text-center text-sm font-black text-cyan-200 transition-colors hover:bg-cyan-400/20" onClick={startRegistration}>
                 Ainda não tenho cadastro
@@ -205,8 +226,10 @@ export function CustomerOtpLogin({ title = "Acesso H2 Colombiano", initialPhone 
         ) : (
           <form onSubmit={confirm} className="mt-7 space-y-4">
             <div className="flex items-center gap-2 text-sm text-cyan-100">
-              <Mail className="h-5 w-5" />
-              <span>{h2AutoDelivery?.available === true ? "Código enviado por e-mail e WhatsApp." : "Código enviado ao e-mail cadastrado."}</span>
+              {deliveryChannel === "whatsapp" ? <MessageCircle className="h-5 w-5 text-[#ff6060]" /> : <Mail className="h-5 w-5" />}
+              <span>{deliveryChannel === "whatsapp"
+                ? "Envie a mensagem preparada no WhatsApp. O código será respondido lá."
+                : "Código solicitado ao e-mail cadastrado."}</span>
             </div>
             <label htmlFor="h2-otp-code" className="block text-sm font-semibold">Código de 6 números</label>
             <input id="h2-otp-code" type="text" inputMode="numeric" autoComplete="one-time-code"
@@ -219,11 +242,18 @@ export function CustomerOtpLogin({ title = "Acesso H2 Colombiano", initialPhone 
               className="flex w-full items-center justify-center gap-2 rounded-xl bg-emerald-500 p-4 font-black text-slate-950 disabled:opacity-50">
               <CheckCircle2 className="h-5 w-5" /> {busy ? "Validando..." : "CONFIRMAR E ACESSAR"}
             </button>
-            <a href={supportHref} target="_blank" rel="noopener noreferrer" className="flex min-h-12 w-full items-center justify-center gap-2 rounded-xl border border-emerald-400/50 bg-emerald-500/15 px-4 py-3 text-center text-sm font-black text-emerald-200 hover:bg-emerald-500/25">
-              💬 NÃO RECEBI O CÓDIGO — PEDIR AJUDA NO WHATSAPP
-            </a>
+            {deliveryChannel === "email" ? (
+              <a href={supportHref} target="_blank" rel="noopener noreferrer" className="flex min-h-12 w-full items-center justify-center gap-2 rounded-xl border border-emerald-400/50 bg-emerald-500/15 px-4 py-3 text-center text-sm font-black text-emerald-200 hover:bg-emerald-500/25">
+                💬 NÃO RECEBI O CÓDIGO — PEDIR AJUDA NO WHATSAPP
+              </a>
+            ) : (
+              <a href={`https://wa.me/${supportNumber}?text=${encodeWhatsappMessage("Preciso receber meu código")}`}
+                className="flex min-h-12 w-full items-center justify-center gap-2 rounded-xl bg-[#8B0000] px-4 py-3 text-center text-sm font-black text-white hover:bg-[#a30000]">
+                <MessageCircle className="h-5 w-5" /> VOLTAR AO WHATSAPP
+              </a>
+            )}
             <button type="button" className="w-full py-2 text-sm text-cyan-300" disabled={busy}
-              onClick={() => { setStep("phone"); setCode(""); saveOtpDraft(cleanPhone, "phone"); }}>
+              onClick={() => { setStep("phone"); setCode(""); saveOtpDraft(cleanPhone, "phone", deliveryChannel); }}>
               Alterar telefone / solicitar outro código
             </button>
           </form>
