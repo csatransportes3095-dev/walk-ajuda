@@ -22,11 +22,14 @@ describe("H2 Auto APK OTP bridge security checks", () => {
     expect(access.indexOf("await enqueueH2AutoApkOtp(")).toBeGreaterThan(access.indexOf("await deliverOwnSiteCode(email,code)"));
   });
 
-  it("never sends unrequested OTP tasks", () => {
+  it("requests H2 Auto handoff without a customer checkbox, preserving email fallback", () => {
     expect(access).toContain("if (viaH2Auto && newlyIssued)");
     expect(router).toContain("viaH2Auto: z.boolean().optional().default(false)");
-    expect(login).toContain("const [viaH2Auto, setViaH2Auto] = useState(false)");
-    expect(login).toContain("h2AutoDelivery?.available === true && (");
+    expect(login).toContain("viaH2Auto: true");
+    expect(login).not.toContain("setViaH2Auto");
+    expect(login).toContain("Código enviado por e-mail e WhatsApp.");
+    expect(login).toContain("Código enviado ao e-mail cadastrado.");
+    expect(login).toContain("RECEBER CÓDIGO");
   });
 
   it("requires configured paired device and short-lived encrypted queue", () => {

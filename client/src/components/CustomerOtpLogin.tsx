@@ -53,7 +53,6 @@ export function CustomerOtpLogin({ title = "Acesso H2 Colombiano", initialPhone 
   const [step, setStep] = useState<"phone" | "code">(() => draft?.step || "phone");
   const [code, setCode] = useState("");
   const [busy, setBusy] = useState(false);
-  const [viaH2Auto, setViaH2Auto] = useState(false);
   const checkCustomer = trpc.customers.checkByPhoneMutation.useMutation();
   const requestCode = trpc.customerPassword.requestCustomerCode.useMutation();
   const {data: h2AutoDelivery} = trpc.customerPassword.h2AutoOtpAvailable.useQuery();
@@ -108,11 +107,11 @@ export function CustomerOtpLogin({ title = "Acesso H2 Colombiano", initialPhone 
         toast.error("Seu cadastro está sem e-mail. Entre em contato com o atendimento.");
         return;
       }
-      const result = await requestCode.mutateAsync({phone: cleanPhone, viaH2Auto: h2AutoDelivery?.available === true && viaH2Auto});
+      const result = await requestCode.mutateAsync({phone: cleanPhone, viaH2Auto: true});
       setCode("");
       setStep("code");
       saveOtpDraft(cleanPhone, "code");
-      toast.success(result.message || "Confira o e-mail cadastrado.");
+      toast.success(h2AutoDelivery?.available === true ? "Confira e-mail e WhatsApp." : (result.message || "Confira o e-mail cadastrado."));
     } catch (err: any) {
       toast.error(err?.message || "Não foi possível solicitar o código.");
     } finally {
@@ -124,7 +123,7 @@ export function CustomerOtpLogin({ title = "Acesso H2 Colombiano", initialPhone 
     event.preventDefault();
     const digits = code.replace(/\D/g, "").slice(0, 6);
     if (digits.length !== 6) {
-      toast.error("Informe os 6 números enviados ao seu e-mail.");
+      toast.error("Informe os 6 números do código.");
       return;
     }
     setBusy(true);
@@ -169,7 +168,7 @@ export function CustomerOtpLogin({ title = "Acesso H2 Colombiano", initialPhone 
         </div>}
         {loginSettings?.login_show_title !== "0" && <h1 className="text-center text-2xl font-black">{loginSettings?.login_title?.trim() || title}</h1>}
         {loginSettings?.login_show_subtitle !== "0" && <p className="mt-2 whitespace-pre-line text-center text-sm text-slate-300">
-          {loginSettings?.login_subtitle?.trim() || "Acesso seguro com telefone e código do e-mail cadastrado. Nenhuma senha é necessária."}
+          {loginSettings?.login_subtitle?.trim() || "Acesso seguro com telefone e código. Nenhuma senha é necessária."}
         </p>}
 
         {step === "phone" ? (
@@ -191,15 +190,11 @@ export function CustomerOtpLogin({ title = "Acesso H2 Colombiano", initialPhone 
               required
             />
             {h2AutoDelivery?.available === true && (
-              <label className="flex items-start gap-3 rounded-xl border border-emerald-400/30 bg-emerald-500/10 p-3 text-sm text-emerald-100">
-                <input type="checkbox" className="mt-1 h-4 w-4 accent-emerald-400"
-                  checked={viaH2Auto} onChange={e => setViaH2Auto(e.target.checked)} disabled={busy} />
-                <span>Também solicito o código pelo WhatsApp, enviado pelo APK H2 Auto ao meu número cadastrado. Autorizo este envio.</span>
-              </label>
+              <p className="text-center text-sm text-slate-300">Código por e-mail e WhatsApp.</p>
             )}
             <button type="submit" disabled={busy || cleanPhone.length !== 11}
               className="w-full rounded-xl bg-cyan-500 p-4 font-black text-slate-950 disabled:opacity-50">
-              {busy ? "Solicitando..." : "RECEBER CÓDIGO NO E-MAIL"}
+              {busy ? "Solicitando..." : "RECEBER CÓDIGO"}
             </button>
             {onRegister && (
               <button type="button" className="flex min-h-12 w-full items-center justify-center rounded-xl border border-cyan-400/40 bg-cyan-400/10 px-4 py-3 text-center text-sm font-black text-cyan-200 transition-colors hover:bg-cyan-400/20" onClick={startRegistration}>
@@ -211,7 +206,7 @@ export function CustomerOtpLogin({ title = "Acesso H2 Colombiano", initialPhone 
           <form onSubmit={confirm} className="mt-7 space-y-4">
             <div className="flex items-center gap-2 text-sm text-cyan-100">
               <Mail className="h-5 w-5" />
-              <span>Código enviado ao e-mail cadastrado para o telefone informado.</span>
+              <span>{h2AutoDelivery?.available === true ? "Código enviado por e-mail e WhatsApp." : "Código enviado ao e-mail cadastrado."}</span>
             </div>
             <label htmlFor="h2-otp-code" className="block text-sm font-semibold">Código de 6 números</label>
             <input id="h2-otp-code" type="text" inputMode="numeric" autoComplete="one-time-code"
