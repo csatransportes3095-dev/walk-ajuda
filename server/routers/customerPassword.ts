@@ -5,7 +5,7 @@ import { deliverIncompleteCustomerLoginCode } from "../incompleteCustomerLoginDe
 import { createHash, randomBytes, randomInt, timingSafeEqual } from "crypto";
 import { issueLoginEmailProof, assertLoginEmailProof } from "../customerLoginEmailProof";
 import { requestCustomerCode, verifyCustomerCode, redeemNewRegistrationProof, isCustomerOtpModeEnabled, getVerifiedCustomerOtpSession, revokeCustomerOtpSession, ensureCustomerOtpTables } from "../customerOtpAccess";
-import { isH2AutoApkOtpConfigured } from "../h2-auto-otp-apk";
+import { isH2AutoApkOtpReady } from "../h2-auto-otp-apk";
 import { validSiteCode } from "../../shared/siteAccessCodePolicy";
 import { getAdminJwtSecret } from "../adminJwt";
 import { canCustomerRecoverPassword, passwordRecoveryCodeHash } from "../customerPasswordRecoveryPolicy";
@@ -209,8 +209,8 @@ export const customerPasswordRouter = router({
     return {ready:Object.values(checks).every(Boolean),checks,enabled:isCustomerOtpModeEnabled()};
   }),
 
-  h2AutoOtpAvailable: publicProcedure.query(() => ({
-    available: isH2AutoApkOtpConfigured(),
+  h2AutoOtpAvailable: publicProcedure.query(async () => ({
+    available: await isH2AutoApkOtpReady(),
   })),
   requestCustomerCode: publicProcedure
     .input(z.object({
