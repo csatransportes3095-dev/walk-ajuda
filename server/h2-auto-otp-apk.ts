@@ -108,7 +108,7 @@ export function registerH2AutoOtpApkRoutes(app: Express): void {
       if (!/^[a-f0-9]{32}$/.test(id)) return send(res, 400, { error: "invalid_request" });
       const db: any = await getDb();
       await ensure(db);
-      await db.execute(sql`UPDATE h2_auto_otp_apk_queue SET notified_at=${Date.now()}
+      await db.execute(sql`UPDATE h2_auto_otp_apk_queue SET notified_at=${Date.now()}, payload_encrypted=''
         WHERE id=${id} AND device_id=${deviceId} AND expires_at>${Date.now()} AND notified_at IS NULL`);
       return send(res, 200, { success: true });
     } catch {
