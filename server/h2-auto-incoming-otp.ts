@@ -17,9 +17,13 @@ const normalize = (raw: string) => {
   const withoutCountry = digits.startsWith("55") && digits.length === 13 ? digits.slice(2) : digits;
   return /^\d{11}$/.test(withoutCountry) ? withoutCountry : "";
 };
-const phoneToken = (phone: string) => createHmac(
-  "sha256", process.env.H2_SITE_ACCESS_SECRET || process.env.H2_AUTO_OTP_ENCRYPTION_SECRET || getAdminJwtSecret()
-).update("h2-otp-incoming-phone:" + phone).digest("hex");
+const phoneToken = (phone: string) => {
+  const secret = process.env.H2_SITE_ACCESS_SECRET ||
+    process.env.H2_AUTO_OTP_ENCRYPTION_SECRET || getAdminJwtSecret();
+  if (!secret || secret.length < 32) throw Error("OTP_PHONE_KEY_UNAVAILABLE");
+  return createHmac("sha256", secret)
+    .update("h2-otp-incoming-phone:" + phone).digest("hex");
+};
 let schema: Promise<void> | null = null;
 async function ensure(db: any) {
   if (!schema) schema = db.execute(sql`CREATE TABLE IF NOT EXISTS h2_auto_otp_incoming_queue (
