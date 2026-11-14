@@ -33,7 +33,9 @@ export async function deliverOwnSiteCode(email: string, code: string, purpose: '
   // Outlook/Hotmail may bounce an SMTP-accepted message later with 550 5.7.1.
   // Prefer the existing Resend transport for these recipients, never generate
   // a new code or change its validity, bindings, or authentication.
-  // Gmail may accept SMTP but silently classify or delay the message later.\n  // Prefer the HTTPS provider for Gmail/Googlemail too; retain SMTP as fallback.\n  const preferResend=/^(?:(?:outlook|hotmail|live|msn)\.(?:com(?:\.br|\.au)?|co\.uk|fr|de|it|es|ca)|(?:gmail|googlemail)\.com)$/i.test(domain);
+  // Gmail may accept SMTP but silently classify or delay the message later.
+  // Prefer the HTTPS provider for Gmail/Googlemail too; retain SMTP as fallback.
+  const preferResend=/^(?:(?:outlook|hotmail|live|msn)\.(?:com(?:\.br|\.au)?|co\.uk|fr|de|it|es|ca)|(?:gmail|googlemail)\.com)$/i.test(domain);
 
   async function trySmtp(): Promise<SiteCodeDelivery|null> {
     if (!pass) return null;
