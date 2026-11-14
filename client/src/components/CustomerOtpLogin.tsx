@@ -190,7 +190,7 @@ export function CustomerOtpLogin({ title = "Acesso H2 Colombiano", initialPhone 
               required
             />
             {h2AutoDelivery?.available === true && (
-              <p className="text-center text-sm text-slate-300">Código por e-mail e WhatsApp.</p>
+              <div className="rounded-xl border border-[#b30000] bg-[#7a0000] px-4 py-3 text-center text-sm font-bold text-white shadow-[0_0_16px_rgba(122,0,0,0.45)]">Código por e-mail e WhatsApp.</div>
             )}
             <button type="submit" disabled={busy || cleanPhone.length !== 11}
               className="w-full rounded-xl bg-cyan-500 p-4 font-black text-slate-950 disabled:opacity-50">
