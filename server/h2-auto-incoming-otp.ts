@@ -66,11 +66,11 @@ export async function enqueueIncomingWhatsappOtp(input: {
     VALUES (${id},${deviceId},${recipientKey},${input.phoneKey},${input.codeDigest},${payload},${input.expiresAt},${now})`);
 }
 export function registerH2AutoIncomingOtpRoutes(app: Express): void {
-  app.get("/api/h2-auto/otp/incoming", async (req, res) => {
+  app.post("/api/h2-auto/otp/incoming", async (req, res) => {
     try {
       const deviceId = await authorizedOtpDevice(req);
       if (!deviceId) return response(res,401,{error:"unauthorized"});
-      const phone = normalize(String(req.query.phone || ""));
+      const phone = normalize(String(req.body?.phone || ""));
       if (!phone) return response(res,400,{error:"invalid_phone"});
       const db: any = await getDb();
       if (!db) throw Error("DB_UNAVAILABLE");
