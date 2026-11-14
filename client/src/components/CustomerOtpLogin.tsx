@@ -285,6 +285,21 @@ export function CustomerOtpLogin({ title = "Acesso H2 Colombiano", initialPhone 
                 <MessageCircle className="h-5 w-5" /> VOLTAR AO WHATSAPP
               </a>
             )}
+            <div className="space-y-2 rounded-xl border border-white/10 p-3" aria-label="Solicitar outro código">
+              <p className="text-center text-xs text-slate-300">Precisa de outro código? Escolha como receber:</p>
+              <button type="button" disabled={busy || remainingEmail > 0}
+                onClick={() => void send("email")}
+                className="flex min-h-12 w-full items-center justify-center gap-2 rounded-xl bg-cyan-500 p-3 font-bold text-slate-950 disabled:opacity-50">
+                <Mail className="h-4 w-4" />
+                {remainingEmail > 0 ? "E-MAIL · AGUARDE 00:" + String(remainingEmail).padStart(2,"0") : "PEDIR OUTRO POR E-MAIL"}
+              </button>
+              <button type="button" disabled={busy || remainingWhatsapp > 0 || h2AutoDelivery?.available !== true}
+                onClick={() => void send("whatsapp")}
+                className="flex min-h-12 w-full items-center justify-center gap-2 rounded-xl bg-[#8B0000] p-3 font-bold text-white disabled:opacity-50">
+                <MessageCircle className="h-4 w-4" />
+                {remainingWhatsapp > 0 ? "WHATSAPP · AGUARDE 00:" + String(remainingWhatsapp).padStart(2,"0") : "PEDIR OUTRO PELO WHATSAPP"}
+              </button>
+            </div>
             <button type="button" className="w-full py-2 text-sm text-cyan-300" disabled={busy}
               onClick={() => { setStep("phone"); setCode(""); saveOtpDraft(cleanPhone, "phone", deliveryChannel); }}>
               Alterar telefone
