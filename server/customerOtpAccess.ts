@@ -7,6 +7,7 @@ import { getRegistrationReviewStatus } from "./customerRegistrationReview";
 import { normalizeCustomerPhone, normalizeCustomerEmail } from "./customerAccess";
 import { emailBelongsToAnotherCustomer } from "./customerEmailOwnership";
 import { deliverOwnSiteCode } from "./siteAccessCodeDelivery";
+import { deliverSiteOtpWhatsApp } from "./siteOtpWhatsAppDelivery";
 import { generateOwnSiteCode } from "./siteAccessOwnCodes";
 import { getMissingCustomerProfileFields } from "./customerProfileRequirements";
 import { assertLoginEmailProof } from "./customerLoginEmailProof";
@@ -131,7 +132,7 @@ async function issueSession(tx: any, customer: any, now: number) {
   return { success: true as const, token, profileUpdateRequired: profileUpdateFields.length > 0, profileUpdateFields };
 }
 
-export async function requestCustomerCode(phoneInput: string, request: Request): Promise<{success:true;message:string}> {
+export async function requestCustomerCode(phoneInput: string, request: Request, whatsappConsent = false): Promise<{success:true;message:string}> {
   requireOtpMigrationEnabled();
   const phone = normalizeCustomerPhone(phoneInput);
   if (!phone || phone.length !== 11) return { success:true, message:GENERIC };
@@ -148,6 +149,8 @@ export async function requestCustomerCode(phoneInput: string, request: Request):
   if (!customer) return { success:true, message:GENERIC };
   const email = normalizeCustomerEmail(customer.email);
   const phoneKey = digest("phone",phone), emailKey = digest("email",email);
+  // Only the newly issued code can be reused for WhatsApp; never retrieve OTP plaintext from storage.
+  let issuedCode: string | null = null;
   await db.transaction(async (tx: any) => {
     await tx.execute(sql`INSERT IGNORE INTO customerOtpChallenges
       (phoneKey,customerId,emailKey,codeDigest,expiresAt,resendAfter,attempts,createdAt)
@@ -164,7 +167,18 @@ export async function requestCustomerCode(phoneInput: string, request: Request):
       WHERE phoneKey=${phoneKey}`);
     // Delivery inside the transaction: delivery failure rolls the challenge back.
     await deliverOwnSiteCode(email,code);
+    issuedCode = code;
   });
+  // The DB transaction and mandatory email delivery must complete first. An optional
+  // WhatsApp failure must not roll back or regenerate the existing challenge.
+  if (issuedCode !== null && whatsappConsent === true) {
+    try {
+      const delivery = await deliverSiteOtpWhatsApp(normalizeCustomerPhone(customer.phone), issuedCode, true);
+      if (delivery.status === "failed") console.warn("[CustomerOtp] WhatsApp optional delivery failed: " + delivery.reason);
+    } catch {
+      console.warn("[CustomerOtp] WhatsApp optional delivery failed");
+    }
+  }
   return { success:true, message:GENERIC };
 }
 
