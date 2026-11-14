@@ -26,6 +26,7 @@ import { accessCodePhones, accessCodes, uploadSessions } from "../drizzle/schema
 import { and, eq, sql } from "drizzle-orm";
 import { ENV } from "./_core/env";
 import { getAdminJwtSecret } from "./adminJwt";
+import { isValidH2AutoApkVersionName } from "./h2-auto-apk-release";
 import { getCustomerSessionTokenFromRequest, requireCustomerSession } from "./customerSession";
 
 const jsonParser = express.json({ limit: "2mb" });
@@ -2572,7 +2573,7 @@ export function registerUploadRoute(app: Express) {
       const expectedHash = String(req.body?.sha256 || "").trim().toLowerCase();
       if (!file || !file.originalname.toLowerCase().endsWith(".apk") ||
           file.size < 32768 || file.buffer.subarray(0, 4).toString("hex") !== "504b0304" ||
-          !/^1\.[0-9]{1,3}$/.test(versionName) ||
+          !isValidH2AutoApkVersionName(versionName) ||
           !Number.isInteger(versionCode) || versionCode < 61 ||
           !/^[0-9a-f]{64}$/.test(expectedHash)) {
         res.status(400).json({ error: "Arquivo ou metadados de APK inválidos." });
@@ -2627,7 +2628,7 @@ export function registerUploadRoute(app: Express) {
           file.size < 32768 || file.buffer.subarray(0, 4).toString("hex") !== "504b0304") {
         res.status(400).json({ error: "Selecione um arquivo APK íntegro (.apk)." }); return;
       }
-      if (!/^1\.[0-9]{1,3}$/.test(versionName) ||
+      if (!isValidH2AutoApkVersionName(versionName) ||
           !Number.isInteger(versionCode) || versionCode < 61 ||
           !/^[a-f0-9]{64}$/.test(expectedSha256)) {
         res.status(400).json({ error: "Informe versão, código e SHA-256 oficial válidos." }); return;
