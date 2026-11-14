@@ -133,7 +133,9 @@ async function issueSession(tx: any, customer: any, now: number) {
   return { success: true as const, token, profileUpdateRequired: profileUpdateFields.length > 0, profileUpdateFields };
 }
 
-export async function requestCustomerCode(phoneInput: string, request: Request, channel: "email" | "whatsapp" = "email"): Promise<{success:true;message:string}> {
+export async function requestCustomerCode(phoneInput: string, request: Request, channel: "email" | "whatsapp" = "email"): Promise<{
+  success: true; message: string; resendBlocked?: boolean; retryAfterSeconds?: number;
+}> {
   requireOtpMigrationEnabled();
   const phone = normalizeCustomerPhone(phoneInput);
   if (!phone || phone.length !== 11) return { success:true, message:GENERIC };
@@ -147,18 +149,37 @@ export async function requestCustomerCode(phoneInput: string, request: Request, 
   // Persistent atomic per-number and per-source counters, including unknown phones.
   const phoneAllowed = await takeLimit(db, "phone:"+phone, 6, now);
   const ipAllowed = await takeLimit(db, "ip:"+ip, 40, now);
-  if (!phoneAllowed || !ipAllowed) return { success:true, message:GENERIC };
+  if (!phoneAllowed || !ipAllowed) {
+    // A blocked request must not direct the customer to WhatsApp as though
+    // a new challenge had been generated. This shared hourly safety limit is
+    // separate from the independent 60-second channel countdowns.
+    return {success:true, message:"Limite de solicitações atingido. Tente novamente mais tarde.",
+      resendBlocked:true, retryAfterSeconds:3600};
+  }
   const customer = await uniqueCustomer(db, phone);
   if (!customer) return { success:true, message:GENERIC };
   const email = normalizeCustomerEmail(customer.email);
   const phoneKey = digest("phone",phone), emailKey = digest("email",email);
-  // Return the plaintext code only from the issuing transaction; never retrieve it from DB.
+  // Each channel has its own persistent cooldown, while a single code per
+  // customer is always authoritative. A new code invalidates the previous one.
+  const channelKey = digest("otp-resend:" + channel, phone);
+  let retryAfterSeconds = 0;
+  // The challenge row is locked FIRST so simultaneous channels cannot race.
   const newlyIssued = await db.transaction(async (tx: any): Promise<{code:string;codeDigest:string}|null> => {
     await tx.execute(sql`INSERT IGNORE INTO customerOtpChallenges
       (phoneKey,customerId,emailKey,codeDigest,expiresAt,resendAfter,attempts,createdAt)
       VALUES (${phoneKey},${Number(customer.id)},${emailKey},'',0,0,0,${now})`);
-    const [current] = await rows(tx,sql`SELECT resendAfter FROM customerOtpChallenges WHERE phoneKey=${phoneKey} FOR UPDATE`);
-    if (Number(current?.resendAfter || 0) > now) return null;
+    await rows(tx,sql`SELECT resendAfter FROM customerOtpChallenges WHERE phoneKey=${phoneKey} FOR UPDATE`);
+    // Reuse the existing durable limits table for per-channel timestamps:
+    // no new migration, no unrelated login changes.
+    await tx.execute(sql`INSERT IGNORE INTO customerOtpLimits (limitKey,windowStart,hits)
+      VALUES (${channelKey},0,0)`);
+    const [channelCooldown] = await rows(tx,sql`SELECT windowStart FROM customerOtpLimits
+      WHERE limitKey=${channelKey} FOR UPDATE`);
+    retryAfterSeconds = Math.max(0, Math.ceil(
+      (Number(channelCooldown?.windowStart || 0) + RESEND_MS - now) / 1000
+    ));
+    if (retryAfterSeconds > 0) return null;
     // Reuse the existing H2 site code generator; do not invent a second OTP system.
     const code = generateOwnSiteCode();
     const codeHash = digest("code:"+phoneKey,code);
@@ -169,8 +190,16 @@ export async function requestCustomerCode(phoneInput: string, request: Request, 
       WHERE phoneKey=${phoneKey}`);
     // Delivery inside the transaction: delivery failure rolls the challenge back.
     if (channel === "email") await deliverOwnSiteCode(email,code);
+    await tx.execute(sql`UPDATE customerOtpLimits SET windowStart=${now},hits=hits+1
+      WHERE limitKey=${channelKey}`);
     return {code,codeDigest:codeHash};
   });
+  // A cooldown request does not issue a code. Never open WhatsApp if no new
+  // queue task will exist; the current 10-minute code remains usable.
+  if (!newlyIssued) return {
+    success:true, message:"Aguarde para solicitar outro código.",
+    resendBlocked:true, retryAfterSeconds:Math.max(1,retryAfterSeconds),
+  };
   // WhatsApp is an explicitly selected channel, not an unsolicited send.
   // Never dispatch a code to the chat until a matching inbound message arrives.
   if (channel === "whatsapp" && newlyIssued) {
@@ -184,7 +213,7 @@ export async function requestCustomerCode(phoneInput: string, request: Request, 
       throw new TRPCError({code:"SERVICE_UNAVAILABLE",message:"WhatsApp indisponível. Solicite o código por e-mail."});
     }
   }
-  return { success:true, message:GENERIC };
+  return { success:true, message:GENERIC, resendBlocked:false, retryAfterSeconds:60 };
 }
 
 export async function verifyCustomerCode(phoneInput: string, code: string) {
