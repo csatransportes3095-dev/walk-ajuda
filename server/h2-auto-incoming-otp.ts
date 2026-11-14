@@ -7,6 +7,7 @@ import type { Express, Response } from "express";
 import { createHmac } from "node:crypto";
 import { sql } from "drizzle-orm";
 import { getDb } from "./db";
+import { getAdminJwtSecret } from "./adminJwt";
 import { authorizedOtpDevice, encrypt, decrypt, isH2AutoApkOtpConfigured } from "./h2-auto-otp-apk";
 
 const response = (res: Response, status: number, body: object) =>
@@ -17,7 +18,7 @@ const normalize = (raw: string) => {
   return /^\d{11}$/.test(withoutCountry) ? withoutCountry : "";
 };
 const phoneToken = (phone: string) => createHmac(
-  "sha256", process.env.H2_SITE_ACCESS_SECRET || process.env.H2_AUTO_OTP_ENCRYPTION_SECRET || ""
+  "sha256", process.env.H2_SITE_ACCESS_SECRET || process.env.H2_AUTO_OTP_ENCRYPTION_SECRET || getAdminJwtSecret()
 ).update("h2-otp-incoming-phone:" + phone).digest("hex");
 let schema: Promise<void> | null = null;
 async function ensure(db: any) {
