@@ -8,7 +8,7 @@ function readOtpDraft(): {phone: string; step: "phone" | "code"} | null {
     const raw = sessionStorage.getItem(OTP_DRAFT_KEY);
     if (!raw) return null;
     const draft = JSON.parse(raw);
-    if (typeof draft.phone === "string" && /^\\d{11}$/.test(draft.phone) &&
+    if (typeof draft.phone === "string" && /^\d{11}$/.test(draft.phone) &&
         Number.isFinite(draft.expiresAt) && draft.expiresAt > Date.now() &&
         draft.expiresAt <= Date.now() + OTP_DRAFT_TTL_MS) {
       return {phone: draft.phone, step: draft.step === "code" ? "code" : "phone"};
