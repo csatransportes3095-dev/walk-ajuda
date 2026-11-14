@@ -1,0 +1,26 @@
+name: H2 AUTO - ACK 2.02 status compatibility
+on:
+  pull_request:
+    branches:
+      - recovery/organizar-salvos-2026-08-24
+    paths:
+      - server/h2-auto-diagnostics.ts
+      - server/h2-auto-media-safety.test.ts
+      - .github/workflows/h2-auto-ack-202.yml
+  workflow_dispatch:
+permissions:
+  contents: read
+jobs:
+  ack-contract:
+    runs-on: ubuntu-latest
+    timeout-minutes: 12
+    steps:
+      - uses: actions/checkout@v4
+      - uses: pnpm/action-setup@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '22'
+          cache: pnpm
+      - run: pnpm install --frozen-lockfile
+      - name: Verify H2 AUTO authenticated ACK and privacy contract
+        run: pnpm exec vitest run server/h2-auto-media-safety.test.ts

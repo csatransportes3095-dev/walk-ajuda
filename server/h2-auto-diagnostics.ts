@@ -37,9 +37,9 @@ export const H2_AUTO_REPLY_STATUS_CODES = [
 ] as const;
 
 /**
- * H2 Auto 1.95 adds status-only OTP handoff diagnostics. Keep this allowlist
- * narrow: no phone number, OTP body, chat text or Android exception strings.
- * Older APK versions omit both fields and must continue to sync normally.
+ * H2 Auto 1.95-2.02 reports only fixed OTP stage identifiers. Match the APK
+ * stage constants exactly: unknown codes, phone numbers, chat text, OTP bodies
+ * and Android exception messages remain rejected. Older APKs remain valid.
  */
 export const H2_AUTO_OTP_STATUS_CODES = [
   "NOT_CHECKED",
@@ -55,6 +55,22 @@ export const H2_AUTO_OTP_STATUS_CODES = [
   "OTP_BACKGROUND_LAUNCH_BLOCKED",
   "OTP_WHATSAPP_OPEN_REQUESTED",
   "OTP_WHATSAPP_OPEN_FAILED",
+  // H2 AUTO 2.00-2.02 statuses emitted by H2OtpAutoSend / H2OtpHandoff
+  // and by the new inbound-message-only H2OtpIncomingReply.
+  "OTP_WHATSAPP_WINDOW_VISIBLE",
+  "OTP_RECIPIENT_VERIFIED",
+  "OTP_RECIPIENT_NOT_VERIFIED",
+  "OTP_COMPOSER_FILLED",
+  "OTP_COMPOSER_FILL_FAILED",
+  "OTP_SEND_BUTTON_NOT_READY",
+  "OTP_SEND_BUTTON_VERIFIED",
+  "OTP_WHATSAPP_WINDOW_NOT_SEEN",
+  "OTP_CHAT_NOT_VERIFIED",
+  "OTP_SEND_NOT_CONFIRMED",
+  "OTP_FAILURE_NOTIFICATION_UNAVAILABLE",
+  "OTP_INCOMING_REPLY_UNAVAILABLE",
+  "OTP_INCOMING_LOOKUP_FAILED",
+  "OTP_INCOMING_ACK_PENDING",
 ] as const;
 
 /** The largest timestamp accepted by the JavaScript Date specification. */
