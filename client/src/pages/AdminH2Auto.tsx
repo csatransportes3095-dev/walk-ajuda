@@ -83,6 +83,22 @@ const replyLabels: Record<string, string> = {
   SEND_FAILED: "Falha ao enviar resposta",
   SKIPPED: "Ignorado",
 };
+// OTP-only diagnostics already uploaded by APK 1.95+: never a delivery receipt.
+const otpDeliveryLabels: Record<string, string> = {
+  NOT_CHECKED: "Nenhuma tentativa de código registrada.",
+  OTP_PICKUP_FAILED: "O APK não conseguiu consultar a fila de códigos.",
+  OTP_INVALID_OR_EXPIRED_TASK: "Código ou tarefa inválidos/expirados.",
+  OTP_WHATSAPP_MODE_UNAVAILABLE: "A conta WhatsApp configurada não está disponível para OTP.",
+  OTP_WHATSAPP_APP_UNAVAILABLE: "O APK não conseguiu localizar o aplicativo WhatsApp escolhido.",
+  OTP_NOTIFICATIONS_DISABLED: "Notificação de recuperação desativada.",
+  OTP_FALLBACK_AVAILABLE: "A notificação de recuperação foi criada; envio não confirmado.",
+  OTP_AUTO_OPEN_REQUESTED: "O APK tentou abrir a tela do WhatsApp; abertura ainda não comprovada.",
+  OTP_BACKGROUND_LAUNCH_BLOCKED: "O Android recusou a tentativa de abrir a conversa.",
+  OTP_WHATSAPP_OPEN_REQUESTED: "A tela interna solicitou a abertura da conversa; mensagem não confirmada.",
+  OTP_WHATSAPP_OPEN_FAILED: "Falhou ao solicitar a abertura do WhatsApp.",
+  OTP_SEND_ACTION_ACCEPTED: "O Android aceitou a ação Enviar; entrega ao cliente ainda não comprovada.",
+  OTP_ACK_RETRY_PENDING: "A ação foi aceita, mas o servidor ainda aguarda a confirmação.",
+};
 const field =
   "w-full rounded-xl border border-cyan-500/30 bg-slate-950 px-3 py-2 text-white";
 const dateLabel = (value: number | null | undefined) =>
@@ -1048,6 +1064,20 @@ export default function AdminH2Auto() {
                             : "desconectado"}
                         </strong>
                       </p>
+                      <div className="sm:col-span-2 rounded-xl border border-cyan-500/30 bg-slate-950/60 p-3 space-y-1" data-testid="h2-auto-otp-diagnostic">
+                        <p className="font-black text-cyan-200">CÓDIGO DE LOGIN — ÚLTIMA ETAPA NO APK</p>
+                        <p className="text-slate-100">
+                          {otpDeliveryLabels[diagnostic.otpDeliveryStatusCode || "NOT_CHECKED"]
+                            || "Estado técnico desconhecido; envio não confirmado."}
+                        </p>
+                        <p className="text-slate-400">
+                          Estado: <code>{diagnostic.otpDeliveryStatusCode || "NOT_CHECKED"}</code>
+                          {" · "}Horário: {dateLabel(diagnostic.otpDeliveryStatusAt)}
+                        </p>
+                        <p className="text-slate-400">
+                          O status é somente diagnóstico do aparelho. Abertura da conversa ou clique não garantem entrega pelo WhatsApp.
+                        </p>
+                      </div>
                       <p>
                         Último estado:{" "}
                         <strong>
