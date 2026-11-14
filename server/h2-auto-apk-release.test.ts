@@ -3,7 +3,7 @@ import fs from "node:fs";
 import os from "node:os";
 import path from "node:path";
 import { createHash } from "node:crypto";
-import { H2_AUTO_FIXED_CERTIFICATE, resolveH2AutoInstaller } from "./h2-auto-apk-release";
+import { H2_AUTO_FIXED_CERTIFICATE, resolveH2AutoInstaller, isValidH2AutoApkVersionName } from "./h2-auto-apk-release";
 
 const directories: string[] = [];
 function fixture(overrides: Record<string, unknown> = {}) {
@@ -38,5 +38,16 @@ describe("H2 AUTO promoted installer", () => {
     fs.unlinkSync(path.join(downloads, "h2-auto-release.json"));
     fs.writeFileSync(path.join(downloads, "H2_AUTO_1_9_INSTALAR.apk"), Buffer.alloc(40000));
     expect(() => resolveH2AutoInstaller(root)).toThrow();
+  });
+});
+
+describe("H2 AUTO APK version validation", () => {
+  it("keeps 1.xx compatibility and accepts signed 2.00", () => {
+    for (const name of ["1.61", "1.98", "1.99", "2.00", "2.01", "2.99"])
+      expect(isValidH2AutoApkVersionName(name)).toBe(true);
+  });
+  it("rejects invalid or unsupported version names", () => {
+    for (const name of ["", "0.99", "2", "2.0", "2.001", "2.00-dev", "3.00", "../2.00"])
+      expect(isValidH2AutoApkVersionName(name)).toBe(false);
   });
 });

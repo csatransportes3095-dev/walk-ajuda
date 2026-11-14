@@ -12,6 +12,7 @@ import { z } from "zod";
 import { buildR2PublicUrl } from "../r2Storage";
 import type { Express, Request, Response } from "express";
 import { createHash } from "node:crypto";
+import { isValidH2AutoApkVersionName } from "../h2-auto-apk-release";
 
 // ─── Migração automática ──────────────────────────────────────────────────────
 let _migrated = false;
@@ -117,7 +118,7 @@ export async function getH2AutoApkRelease(): Promise<H2AutoApkRelease | null> {
 export async function saveH2AutoApkRelease(input: H2AutoApkRelease) {
   if (!/^app\/h2-auto\/[0-9]+-[a-f0-9]{64}\.apk$/.test(input.r2Key) ||
       !/^[a-f0-9]{64}$/.test(input.sha256) ||
-      !/^1\.[0-9]{1,3}$/.test(input.versionName) ||
+      !isValidH2AutoApkVersionName(input.versionName) ||
       !Number.isInteger(input.versionCode) || input.versionCode < 61 ||
       !Number.isInteger(input.fileSize) || input.fileSize < 32768) {
     throw new Error("Metadados do APK H2 AUTO inválidos");

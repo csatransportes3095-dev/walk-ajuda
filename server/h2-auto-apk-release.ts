@@ -3,6 +3,15 @@ import path from "node:path";
 import { createHash } from "node:crypto";
 
 export const H2_AUTO_FIXED_CERTIFICATE = "3215b6d6b643ae6b57ffaf6e4854a40be267d4816166255872410c696384b393";
+
+/**
+ * Accept the legacy H2 AUTO 1.x release names and the new signed 2.xx series.
+ * Do not weaken the separate APK magic, SHA-256, OIDC or versionCode checks.
+ */
+export function isValidH2AutoApkVersionName(value: string): boolean {
+  return /^(?:1\.[0-9]{1,3}|2\.[0-9]{2})$/.test(value);
+}
+
 export type H2AutoApkRelease = {
   packageName: "com.h2colombiano.auto";
   apkFile: string;
