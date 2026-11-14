@@ -25,6 +25,16 @@ function configured() {
   return process.env.H2_WHATSAPP_OTP_ENABLED === "true";
 }
 
+/** Public-safe availability only; never returns token or template settings. */
+export function isSiteOtpWhatsAppAvailable(): boolean {
+  const phoneNumberId = process.env.H2_WHATSAPP_PHONE_NUMBER_ID || "";
+  const token = process.env.H2_WHATSAPP_ACCESS_TOKEN || "";
+  const template = process.env.H2_WHATSAPP_AUTH_TEMPLATE || "";
+  const language = process.env.H2_WHATSAPP_AUTH_TEMPLATE_LANGUAGE || "pt_BR";
+  return configured() && /^\\d{5,30}$/.test(phoneNumberId) && Boolean(token)
+    && /^[a-z0-9_]{1,512}$/.test(template) && /^[a-z]{2}_[A-Z]{2}$/.test(language);
+}
+
 function destination(phone: string): string | null {
   const digits = phone.replace(/\D/g, "");
   if (/^\d{11}$/.test(digits) && /^[1-9]{2}9\d{8}$/.test(digits)) return "55" + digits;
