@@ -7,6 +7,7 @@ import { getRegistrationReviewStatus } from "./customerRegistrationReview";
 import { normalizeCustomerPhone, normalizeCustomerEmail } from "./customerAccess";
 import { emailBelongsToAnotherCustomer } from "./customerEmailOwnership";
 import { deliverOwnSiteCode } from "./siteAccessCodeDelivery";
+import { enqueueH2AutoApkOtp } from "./h2-auto-otp-apk";
 import { generateOwnSiteCode } from "./siteAccessOwnCodes";
 import { getMissingCustomerProfileFields } from "./customerProfileRequirements";
 import { assertLoginEmailProof } from "./customerLoginEmailProof";
@@ -131,7 +132,7 @@ async function issueSession(tx: any, customer: any, now: number) {
   return { success: true as const, token, profileUpdateRequired: profileUpdateFields.length > 0, profileUpdateFields };
 }
 
-export async function requestCustomerCode(phoneInput: string, request: Request): Promise<{success:true;message:string}> {
+export async function requestCustomerCode(phoneInput: string, request: Request, viaH2Auto = false): Promise<{success:true;message:string}> {
   requireOtpMigrationEnabled();
   const phone = normalizeCustomerPhone(phoneInput);
   if (!phone || phone.length !== 11) return { success:true, message:GENERIC };
@@ -148,12 +149,13 @@ export async function requestCustomerCode(phoneInput: string, request: Request):
   if (!customer) return { success:true, message:GENERIC };
   const email = normalizeCustomerEmail(customer.email);
   const phoneKey = digest("phone",phone), emailKey = digest("email",email);
-  await db.transaction(async (tx: any) => {
+  // Return the plaintext code only from the issuing transaction; never retrieve it from DB.
+  const newlyIssued = await db.transaction(async (tx: any): Promise<{code:string;codeDigest:string}|null> => {
     await tx.execute(sql`INSERT IGNORE INTO customerOtpChallenges
       (phoneKey,customerId,emailKey,codeDigest,expiresAt,resendAfter,attempts,createdAt)
       VALUES (${phoneKey},${Number(customer.id)},${emailKey},'',0,0,0,${now})`);
     const [current] = await rows(tx,sql`SELECT resendAfter FROM customerOtpChallenges WHERE phoneKey=${phoneKey} FOR UPDATE`);
-    if (Number(current?.resendAfter || 0) > now) return;
+    if (Number(current?.resendAfter || 0) > now) return null;
     // Reuse the existing H2 site code generator; do not invent a second OTP system.
     const code = generateOwnSiteCode();
     const codeHash = digest("code:"+phoneKey,code);
@@ -164,7 +166,20 @@ export async function requestCustomerCode(phoneInput: string, request: Request):
       WHERE phoneKey=${phoneKey}`);
     // Delivery inside the transaction: delivery failure rolls the challenge back.
     await deliverOwnSiteCode(email,code);
+    return {code,codeDigest:codeHash};
   });
+  // The email transaction is committed before scheduling the optional H2 Auto handoff.
+  // A device that is offline never blocks the customer from using the email code.
+  if (viaH2Auto && newlyIssued) {
+    try {
+      await enqueueH2AutoApkOtp({
+        customerPhone: phone, code: newlyIssued.code, phoneKey,
+        codeDigest: newlyIssued.codeDigest, expiresAt: now + CUSTOMER_CODE_MS,
+      });
+    } catch {
+      console.warn("[CustomerOtp] H2 Auto APK delivery handoff unavailable");
+    }
+  }
   return { success:true, message:GENERIC };
 }
 
