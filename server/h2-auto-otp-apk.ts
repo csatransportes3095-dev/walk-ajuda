@@ -45,6 +45,23 @@ async function ensure(db: any): Promise<void> {
 export function isH2AutoApkOtpConfigured(): boolean {
   return process.env[FLAG] === "true" && /^[a-f0-9]{24}$/.test(process.env[DEVICE] || "");
 }
+/** Only advertise the optional channel when its actual paired device exists.
+ * Never expose the device identifier or token to the public login screen.
+ */
+export async function isH2AutoApkOtpReady(): Promise<boolean> {
+  if (!isH2AutoApkOtpConfigured()) return false;
+  try {
+    const db: any = await getDb();
+    if (!db) return false;
+    const deviceId = process.env[DEVICE]!;
+    const result = await db.execute(sql`SELECT token_hash FROM h2_auto_devices
+      WHERE id=${deviceId} LIMIT 1`);
+    return /^[a-f0-9]{64}$/.test(String(result[0]?.[0]?.token_hash || ""));
+  } catch {
+    return false;
+  }
+}
+
 export async function enqueueH2AutoApkOtp(input: {
   customerPhone: string; code: string; phoneKey: string; codeDigest: string; expiresAt: number;
 }): Promise<void> {
@@ -56,7 +73,7 @@ export async function enqueueH2AutoApkOtp(input: {
   await ensure(db);
   const deviceId = process.env[DEVICE]!;
   const d: any = await db.execute(sql`SELECT token_hash FROM h2_auto_devices WHERE id=${deviceId} LIMIT 1`);
-  if (!d[0]?.[0]?.token_hash) return; // no paired phone; email remains the primary channel
+  if (!/^[a-f0-9]{64}$/.test(String(d[0]?.[0]?.token_hash || ""))) return; // no paired phone; email remains the primary channel
   const id = randomBytes(16).toString("hex");
   const payload = encrypt(JSON.stringify({ phone: "55" + input.customerPhone, code: input.code }));
   await db.execute(sql`DELETE FROM h2_auto_otp_apk_queue
@@ -65,7 +82,8 @@ export async function enqueueH2AutoApkOtp(input: {
     (id, device_id, phone_key, code_digest, payload_encrypted, expires_at, created_at)
     VALUES (${id},${deviceId},${input.phoneKey},${input.codeDigest},${payload},${input.expiresAt},${Date.now()})`);
 }
-const send = (res: Response, status: number, body: object) => res.status(status).json(body);
+const send = (res: Response, status: number, body: object) =>
+  res.status(status).set("Cache-Control", "no-store").json(body);
 async function authorized(req: Request): Promise<string | null> {
   const id = String(req.header("x-h2-device-id") || "");
   const token = String(req.header("x-h2-device-token") || "");
@@ -90,7 +108,8 @@ export function registerH2AutoOtpApkRoutes(app: Express): void {
         FROM h2_auto_otp_apk_queue q JOIN customerOtpChallenges c
         ON c.phoneKey=q.phone_key AND c.codeDigest=q.code_digest
         WHERE q.device_id=${deviceId} AND q.expires_at>${now}
-          AND c.expiresAt>${now} AND c.usedAt IS NULL AND q.notified_at IS NULL
+          AND c.expiresAt>${now} AND c.usedAt IS NULL
+          AND c.attempts<5 AND q.notified_at IS NULL
         ORDER BY q.created_at ASC LIMIT 1`);
       const task = result[0]?.[0];
       if (!task) return send(res, 200, { task: null });
