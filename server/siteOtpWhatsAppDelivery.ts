@@ -62,7 +62,7 @@ export async function deliverSiteOtpWhatsApp(
   }
   try {
     const response = await fetch(
-      `https://graph.facebook.com/v22.0/${phoneNumberId}/messages`,
+      `https://graph.facebook.com/v26.0/${phoneNumberId}/messages`,
       {
         method: "POST",
         signal: AbortSignal.timeout(8000),
