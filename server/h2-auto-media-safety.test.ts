@@ -224,6 +224,43 @@ describe("H2 Auto mídia e ACK privacy-safe", () => {
     expect(state.diagnosticInserts).toBe(1);
   });
 
+  it("aceita todos os estados OTP técnicos realmente emitidos pelo APK 2.02, sem expor dados privados", async () => {
+    const stages = [
+      "OTP_WHATSAPP_WINDOW_VISIBLE",
+      "OTP_RECIPIENT_VERIFIED",
+      "OTP_RECIPIENT_NOT_VERIFIED",
+      "OTP_COMPOSER_FILLED",
+      "OTP_COMPOSER_FILL_FAILED",
+      "OTP_SEND_BUTTON_NOT_READY",
+      "OTP_SEND_BUTTON_VERIFIED",
+      "OTP_WHATSAPP_WINDOW_NOT_SEEN",
+      "OTP_CHAT_NOT_VERIFIED",
+      "OTP_SEND_NOT_CONFIRMED",
+      "OTP_FAILURE_NOTIFICATION_UNAVAILABLE",
+      "OTP_INCOMING_REPLY_UNAVAILABLE",
+      "OTP_INCOMING_LOOKUP_FAILED",
+      "OTP_INCOMING_ACK_PENDING",
+    ];
+    for (const stage of stages) {
+      const response = await request("/api/h2-auto/ack", {
+        method: "POST",
+        headers: headers(),
+        body: JSON.stringify({
+          revision: 1,
+          diagnostics: {
+            ...validDiagnostics,
+            apkVersion: "2.02-otp-incoming-reply",
+            apkVersionCode: 102,
+            otpDeliveryStatusCode: stage,
+            otpDeliveryStatusAt: 1_700_000_000_000,
+          },
+        }),
+      });
+      expect(response.status, stage).toBe(200);
+    }
+    expect(state.diagnosticInserts).toBe(stages.length);
+  });
+
   it("rejeita códigos OTP desconhecidos, timestamps inválidos e dados privados", async () => {
     for (const extra of [
       { otpDeliveryStatusCode: "OTP_UNKNOWN", otpDeliveryStatusAt: 1_700_000_000_000 },
