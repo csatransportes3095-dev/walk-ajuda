@@ -36,6 +36,27 @@ export const H2_AUTO_REPLY_STATUS_CODES = [
   "SKIPPED",
 ] as const;
 
+/**
+ * H2 Auto 1.95 adds status-only OTP handoff diagnostics. Keep this allowlist
+ * narrow: no phone number, OTP body, chat text or Android exception strings.
+ * Older APK versions omit both fields and must continue to sync normally.
+ */
+export const H2_AUTO_OTP_STATUS_CODES = [
+  "NOT_CHECKED",
+  "OTP_PICKUP_FAILED",
+  "OTP_SEND_ACTION_ACCEPTED",
+  "OTP_ACK_RETRY_PENDING",
+  "OTP_NOTIFICATIONS_DISABLED",
+  "OTP_FALLBACK_AVAILABLE",
+  "OTP_INVALID_OR_EXPIRED_TASK",
+  "OTP_WHATSAPP_MODE_UNAVAILABLE",
+  "OTP_WHATSAPP_APP_UNAVAILABLE",
+  "OTP_AUTO_OPEN_REQUESTED",
+  "OTP_BACKGROUND_LAUNCH_BLOCKED",
+  "OTP_WHATSAPP_OPEN_REQUESTED",
+  "OTP_WHATSAPP_OPEN_FAILED",
+] as const;
+
 /** The largest timestamp accepted by the JavaScript Date specification. */
 export const H2_AUTO_MAX_TIMESTAMP = 8_640_000_000_000_000;
 
@@ -65,6 +86,8 @@ export const h2AutoDiagnosticsSchema = z
     androidErrorCode: z.number().int().min(-1).max(100),
     replyStatusCode: z.enum(H2_AUTO_REPLY_STATUS_CODES),
     replyStatusAt: z.number().int().min(0).max(H2_AUTO_MAX_TIMESTAMP),
+    otpDeliveryStatusCode: z.enum(H2_AUTO_OTP_STATUS_CODES).optional(),
+    otpDeliveryStatusAt: z.number().int().min(0).max(H2_AUTO_MAX_TIMESTAMP).optional(),
   })
   .strict();
 

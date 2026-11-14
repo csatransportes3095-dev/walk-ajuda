@@ -205,6 +205,46 @@ describe("H2 Auto mídia e ACK privacy-safe", () => {
     expect(state.diagnosticInserts).toBe(1);
   });
 
+  it("aceita o ACK da versão 1.95 com somente estado e horário de OTP", async () => {
+    const response = await request("/api/h2-auto/ack", {
+      method: "POST",
+      headers: headers(),
+      body: JSON.stringify({
+        revision: 1,
+        diagnostics: {
+          ...validDiagnostics,
+          apkVersion: "1.95-auto-otp-fallback",
+          apkVersionCode: 95,
+          otpDeliveryStatusCode: "OTP_FALLBACK_AVAILABLE",
+          otpDeliveryStatusAt: 1_700_000_000_000,
+        },
+      }),
+    });
+    expect(response.status).toBe(200);
+    expect(state.diagnosticInserts).toBe(1);
+  });
+
+  it("rejeita códigos OTP desconhecidos, timestamps inválidos e dados privados", async () => {
+    for (const extra of [
+      { otpDeliveryStatusCode: "OTP_UNKNOWN", otpDeliveryStatusAt: 1_700_000_000_000 },
+      { otpDeliveryStatusCode: "OTP_AUTO_OPEN_REQUESTED", otpDeliveryStatusAt: -1 },
+      { otpDeliveryStatusCode: "OTP_AUTO_OPEN_REQUESTED", otpDeliveryStatusAt: "17:15" },
+      { otpDeliveryStatusCode: "OTP_AUTO_OPEN_REQUESTED", otpDeliveryStatusAt: 1_700_000_000_000, code: "123456" },
+      { otpDeliveryStatusCode: "OTP_AUTO_OPEN_REQUESTED", otpDeliveryStatusAt: 1_700_000_000_000, phone: "5511999999999" },
+    ]) {
+      const response = await request("/api/h2-auto/ack", {
+        method: "POST",
+        headers: headers(),
+        body: JSON.stringify({
+          revision: 1,
+          diagnostics: { ...validDiagnostics, ...extra },
+        }),
+      });
+      expect(response.status).toBe(400);
+    }
+    expect(state.diagnosticInserts).toBe(0);
+  });
+
   it("não expõe endpoint amplo e mantém a mídia protegida por token e revisão", async () => {
     const extra = await request("/api/h2-auto/media/extra", {
       method: "POST",
