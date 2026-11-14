@@ -53,8 +53,10 @@ export function CustomerOtpLogin({ title = "Acesso H2 Colombiano", initialPhone 
   const [step, setStep] = useState<"phone" | "code">(() => draft?.step || "phone");
   const [code, setCode] = useState("");
   const [busy, setBusy] = useState(false);
+  const [whatsappConsent, setWhatsappConsent] = useState(false);
   const checkCustomer = trpc.customers.checkByPhoneMutation.useMutation();
   const requestCode = trpc.customerPassword.requestCustomerCode.useMutation();
+  const { data: whatsappOtpStatus } = trpc.customerPassword.whatsappOtpAvailable.useQuery();
   const verifyCode = trpc.customerPassword.verifyCustomerCode.useMutation();
   const cleanPhone = normalizeOtpPhone(phone);
   const { data: supportSettings } = trpc.settings.getAll.useQuery();
@@ -106,7 +108,7 @@ export function CustomerOtpLogin({ title = "Acesso H2 Colombiano", initialPhone 
         toast.error("Seu cadastro está sem e-mail. Entre em contato com o atendimento.");
         return;
       }
-      const result = await requestCode.mutateAsync({ phone: cleanPhone });
+      const result = await requestCode.mutateAsync({ phone: cleanPhone, whatsappConsent: whatsappOtpStatus?.available === true && whatsappConsent });
       setCode("");
       setStep("code");
       saveOtpDraft(cleanPhone, "code");
@@ -188,9 +190,16 @@ export function CustomerOtpLogin({ title = "Acesso H2 Colombiano", initialPhone 
               maxLength={11}
               required
             />
+            {whatsappOtpStatus?.available === true && (
+              <label className="flex items-start gap-3 rounded-xl border border-emerald-400/30 bg-emerald-500/10 p-3 text-sm text-emerald-100">
+                <input type="checkbox" className="mt-1 h-4 w-4 accent-emerald-400" checked={whatsappConsent}
+                  onChange={e => setWhatsappConsent(e.target.checked)} disabled={busy} />
+                <span>Também quero receber meu código de acesso pelo WhatsApp cadastrado. Autorizo este envio específico.</span>
+              </label>
+            )}
             <button type="submit" disabled={busy || cleanPhone.length !== 11}
               className="w-full rounded-xl bg-cyan-500 p-4 font-black text-slate-950 disabled:opacity-50">
-              {busy ? "Solicitando..." : "RECEBER CÓDIGO NO E-MAIL"}
+              {busy ? "Solicitando..." : "RECEBER CÓDIGO DE ACESSO"}
             </button>
             {onRegister && (
               <button type="button" className="flex min-h-12 w-full items-center justify-center rounded-xl border border-cyan-400/40 bg-cyan-400/10 px-4 py-3 text-center text-sm font-black text-cyan-200 transition-colors hover:bg-cyan-400/20" onClick={startRegistration}>
