@@ -53,8 +53,10 @@ export function CustomerOtpLogin({ title = "Acesso H2 Colombiano", initialPhone 
   const [step, setStep] = useState<"phone" | "code">(() => draft?.step || "phone");
   const [code, setCode] = useState("");
   const [busy, setBusy] = useState(false);
+  const [viaH2Auto, setViaH2Auto] = useState(false);
   const checkCustomer = trpc.customers.checkByPhoneMutation.useMutation();
   const requestCode = trpc.customerPassword.requestCustomerCode.useMutation();
+  const {data: h2AutoDelivery} = trpc.customerPassword.h2AutoOtpAvailable.useQuery();
   const verifyCode = trpc.customerPassword.verifyCustomerCode.useMutation();
   const cleanPhone = normalizeOtpPhone(phone);
   const { data: supportSettings } = trpc.settings.getAll.useQuery();
@@ -106,7 +108,7 @@ export function CustomerOtpLogin({ title = "Acesso H2 Colombiano", initialPhone 
         toast.error("Seu cadastro está sem e-mail. Entre em contato com o atendimento.");
         return;
       }
-      const result = await requestCode.mutateAsync({ phone: cleanPhone });
+      const result = await requestCode.mutateAsync({phone: cleanPhone, viaH2Auto: h2AutoDelivery?.available === true && viaH2Auto});
       setCode("");
       setStep("code");
       saveOtpDraft(cleanPhone, "code");
@@ -188,6 +190,13 @@ export function CustomerOtpLogin({ title = "Acesso H2 Colombiano", initialPhone 
               maxLength={11}
               required
             />
+            {h2AutoDelivery?.available === true && (
+              <label className="flex items-start gap-3 rounded-xl border border-emerald-400/30 bg-emerald-500/10 p-3 text-sm text-emerald-100">
+                <input type="checkbox" className="mt-1 h-4 w-4 accent-emerald-400"
+                  checked={viaH2Auto} onChange={e => setViaH2Auto(e.target.checked)} disabled={busy} />
+                <span>Também solicito o código pelo WhatsApp, enviado pelo APK H2 Auto ao meu número cadastrado. Autorizo este envio.</span>
+              </label>
+            )}
             <button type="submit" disabled={busy || cleanPhone.length !== 11}
               className="w-full rounded-xl bg-cyan-500 p-4 font-black text-slate-950 disabled:opacity-50">
               {busy ? "Solicitando..." : "RECEBER CÓDIGO NO E-MAIL"}
