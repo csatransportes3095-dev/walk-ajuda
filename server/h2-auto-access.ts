@@ -14,6 +14,7 @@ import { h2AutoConfirmationSchema } from "../shared/h2AutoConfirmation";
 import { h2AutoPersonalizationSchema, H2_AUTO_PERSONALIZATION_DEFAULT, getH2AutoPersonalizedReply } from "../shared/h2AutoPersonalization";
 import { h2AutoCustomerNeedsProfileUpdate, selectH2AutoCustomerByPhone } from "./h2-auto-customer-profile-guidance";
 import { recordH2AutoUnknownQuestion, safeH2AutoUnknownQuestion } from "./h2-auto-learning";
+import { enqueueH2AutoCodeJob } from "./h2-auto-code-jobs";
 
 /**
  * WhatsApp first-contact gate. State is server-side and bound to a paired device
@@ -536,6 +537,16 @@ export function registerH2AutoAccessRoutes(app: Express): void {
             code_hash=NULL,code_expires=NULL,updated_at=${Date.now()}
             WHERE id=${sessionId} AND code_hash=${codeHash}`);
           return respond(res, 200, { state: "customer_phone", message: confirmation.codeSendFailed });
+        }
+        try {
+          await enqueueH2AutoCodeJob({
+            deviceId, targetPhone: String(customer.phone),
+            message: "Seu código H2 AUTO é: " + code + ". Válido por 10 minutos.",
+            source: typeof req.body?.source === "string" ? req.body.source : undefined,
+            ttlMs: otpLifetime,
+          });
+        } catch (queueError) {
+          console.warn("[H2Auto] code delivery queue unavailable", queueError);
         }
         await clearH2AutoPhoneFailures(deviceId,sessionId);
         return respond(res, 200, { state: referralEntry ? "referrals_code" : "customer_code",

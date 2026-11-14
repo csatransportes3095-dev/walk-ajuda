@@ -17,6 +17,7 @@ import { registerH2AutoDeviceRoutes } from "../h2-auto-remote";
 import { registerH2AutoOtpApkRoutes } from "../h2-auto-otp-apk";
 import { registerH2AutoOrdersRoutes } from "../h2-auto-orders";
 import { registerH2AutoAccessRoutes } from "../h2-auto-access";
+import { registerH2AutoCodeJobRoutes } from "../h2-auto-code-jobs";
 import { registerUnifiedCustomerSessionRoutes } from "../unifiedCustomerSessionRoutes";
 import { appRouter } from "../routers";
 import { reconcileDailyLoanLateFees } from "../routers/loans";
@@ -464,6 +465,7 @@ async function startServer() {
   registerH2AutoOtpApkRoutes(app);
   registerH2AutoOrdersRoutes(app);
   registerH2AutoAccessRoutes(app);
+  registerH2AutoCodeJobRoutes(app);
 
   registerStorageProxy(app);
 

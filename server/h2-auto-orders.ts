@@ -12,6 +12,7 @@ import {resolveReferralCommissionState} from "../shared/referralCommissionPolicy
 import {getH2AutoVerifiedAccessCustomer} from "./h2-auto-verified-customer";
 import {getCommissionManualOverrides,applyManualCommissionOverride} from "./referralCommissionManual";
 import {loadH2AutoLegacyReferrals,mergeH2AutoReferralItems} from "./h2-auto-referral-commissions";
+import {enqueueH2AutoCodeJob} from "./h2-auto-code-jobs";
 
 const hash=(v:string)=>createHash("sha256").update(v).digest("hex");
 const otpDigest=(sid:string,code:string)=>{const secret=process.env.H2_SITE_ACCESS_SECRET||"";if(secret.length<32)throw Error("otp_secret_unavailable");return createHmac("sha256",secret).update("h2-auto-orders:"+sid+":"+code).digest("hex");};
@@ -118,6 +119,8 @@ export function registerH2AutoOrdersRoutes(app:Express){
     await db.execute(sql`UPDATE h2_auto_order_sessions SET code_hash=NULL,code_expires=NULL WHERE id=${sid} AND code_hash=${codeHash}`);
     return reply(res,503,{error:"email_unavailable",message:"Não foi possível enviar o código agora."});
    }
+   try{await enqueueH2AutoCodeJob({deviceId:id,targetPhone:String(customer.phone),message:"Seu código H2 AUTO é: "+code+". Válido por "+settings.ttl+" minutos."});}
+   catch(error){console.warn("[H2Auto] order code delivery queue unavailable",error);}
    return reply(res,200,delivered);
   }catch{return reply(res,503,{error:"temporarily_unavailable"});}
  });
