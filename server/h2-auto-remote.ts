@@ -9,6 +9,7 @@ import { listActiveValidationBlocks, releaseValidationBlock, releaseAllValidatio
 import { changeSilencedPhone, manualSilencedPhones, legacySilencedEntries, releaseLegacySilencedEntry } from "./h2-auto-silenced-contacts";
 import { h2AutoTreeSchema, H2_AUTO_TREE_DEFAULT } from "../shared/h2AutoTree";
 import { h2AutoPersonalizationSchema, h2AutoFaqVariationsSchema, H2_AUTO_PERSONALIZATION_DEFAULT, getH2AutoPersonalizedReply } from "../shared/h2AutoPersonalization";
+import { H2_AUTO_UNKNOWN_REPLY_DEFAULT } from "../shared/h2AutoUnknownReply";
 import { mergeH2AutoExpandedFaq } from "../shared/h2AutoFaqPresets";
 import { listH2AutoUnknownQuestions, deleteH2AutoUnknownQuestion, ensureH2AutoLearningTable } from "./h2-auto-learning";
 import { H2_AUTO_SHORT_MEDIA, H2_AUTO_SHORT_ORDER_NOT_FOUND, applyH2AutoShortCopy } from "../shared/h2AutoShortReplies";
@@ -79,6 +80,7 @@ const configSchema = z.object({
   enabled: z.boolean(),
   desktopReadOnly: z.boolean().default(true),
   quickReplyText: z.string().max(500).default("Em que posso ajudar?"),
+  unknownReplyText: z.string().trim().min(3).max(1200).default(H2_AUTO_UNKNOWN_REPLY_DEFAULT),
   identificationEnabled: z.boolean().default(true),
   identificationSessionHours: z.number().int().min(1).max(720).default(24),
   ordersEnabled: z.boolean().default(false),
@@ -132,6 +134,7 @@ const initial: RemoteConfig = {
   enabled: false,
   desktopReadOnly: true,
   quickReplyText: "Em que posso ajudar?",
+  unknownReplyText: H2_AUTO_UNKNOWN_REPLY_DEFAULT,
   identificationEnabled: true,
   identificationSessionHours: 24,
   welcome: "",
@@ -368,6 +371,7 @@ function mergeWithoutDeleting(
       identificationSessionHours: remote.identificationSessionHours,
       desktopReadOnly: remote.desktopReadOnly,
       quickReplyText: remote.quickReplyText,
+      unknownReplyText: remote.unknownReplyText,
       ordersEnabled: remote.ordersEnabled,
       orderSessionHours: remote.orderSessionHours,
       orderCodeTtlMinutes: remote.orderCodeTtlMinutes,
@@ -610,6 +614,7 @@ export const h2AutoAdminRouter = router({
         manualControls: saved.manualControls,
         blocked: saved.blocked,
         quickReplyText: saved.quickReplyText,
+        unknownReplyText: saved.unknownReplyText,
       };
       const result: any = await db.execute(
         sql`UPDATE h2_auto_devices SET config_json=${JSON.stringify(preserved)},revision=revision+1 WHERE id=${input.id} AND revision=${input.expectedRevision}`
@@ -642,6 +647,28 @@ export const h2AutoAdminRouter = router({
       `);
       if(!result[0]?.affectedRows)
         throw new TRPCError({code:"CONFLICT",message:"Configuração atualizada por outro processo. Recarregue antes de salvar a resposta rápida."});
+      return {success:true,revision:input.expectedRevision+1};
+    }),
+  // Editable message used after all approved FAQs and local rules were checked.
+  // This mutation updates only the one JSON key and protects concurrent edits.
+  saveUnknownReplyText: adminProcedure
+    .input(z.object({
+      id: z.string().regex(/^[a-f0-9]{24}$/),
+      expectedRevision: z.number().int().min(0),
+      text: z.string().trim().min(3).max(1200),
+    }))
+    .mutation(async ({input}) => {
+      await ensure();
+      const db=await getDb();
+      if(!db) throw new TRPCError({code:"INTERNAL_SERVER_ERROR",message:"Banco indisponível."});
+      const result:any=await db.execute(sql`
+        UPDATE h2_auto_devices
+        SET config_json=JSON_SET(config_json,'$.unknownReplyText',CAST(${JSON.stringify(input.text)} AS JSON)),
+            revision=revision+1
+        WHERE id=${input.id} AND revision=${input.expectedRevision}
+      `);
+      if(!result[0]?.affectedRows)
+        throw new TRPCError({code:"CONFLICT",message:"Configuração alterada. Recarregue antes de salvar a mensagem sem resposta."});
       return {success:true,revision:input.expectedRevision+1};
     }),
   saveReplyRules: adminProcedure
