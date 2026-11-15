@@ -6,7 +6,7 @@ import { TRPCError } from "@trpc/server";
 import { adminProcedure, router } from "./_core/trpc";
 import { getDb } from "./db";
 import { listActiveValidationBlocks, releaseValidationBlock, releaseAllValidationBlocks } from "./h2-auto-validation-blocks";
-import { changeSilencedPhone, manualSilencedPhones } from "./h2-auto-silenced-contacts";
+import { changeSilencedPhone, manualSilencedPhones, legacySilencedEntries, releaseLegacySilencedEntry } from "./h2-auto-silenced-contacts";
 import { h2AutoTreeSchema, H2_AUTO_TREE_DEFAULT } from "../shared/h2AutoTree";
 import { h2AutoPersonalizationSchema, h2AutoFaqVariationsSchema, H2_AUTO_PERSONALIZATION_DEFAULT, getH2AutoPersonalizedReply } from "../shared/h2AutoPersonalization";
 import { mergeH2AutoExpandedFaq } from "../shared/h2AutoFaqPresets";
@@ -481,7 +481,7 @@ export const h2AutoAdminRouter = router({
       const data=await rows(sql`SELECT config_json,revision,applied_revision FROM h2_auto_devices WHERE id=${input.id} LIMIT 1`);
       if(!data.length) throw new TRPCError({code:"NOT_FOUND",message:"Aparelho não encontrado."});
       const cfg=decodeConfig(data[0].config_json);
-      return {phones:manualSilencedPhones(cfg.blocked),revision:Number(data[0].revision),
+      return {phones:manualSilencedPhones(cfg.blocked),legacyNames:legacySilencedEntries(cfg.blocked),revision:Number(data[0].revision),
         appliedRevision:Number(data[0].applied_revision||0)};
     }),
   setSilencedContact: adminProcedure
@@ -509,6 +509,30 @@ export const h2AutoAdminRouter = router({
       throw new TRPCError({code:"CONFLICT",message:"Configuração alterada. Tente novamente."});
     }),
 
+  releaseLegacySilencedContact: adminProcedure
+    .input(z.object({
+      id:z.string().regex(/^[a-f0-9]{24}$/),
+      legacyEntry:z.string().trim().min(1).max(1000),
+    }))
+    .mutation(async({input})=>{
+      await ensure();
+      const db=await getDb();
+      if(!db) throw new TRPCError({code:"INTERNAL_SERVER_ERROR",message:"Banco indisponível."});
+      // Exact-match optimistic update: never clear other names or phone numbers.
+      for(let attempt=0;attempt<3;attempt++){
+        const data=await rows(sql`SELECT config_json,revision FROM h2_auto_devices WHERE id=${input.id} LIMIT 1`);
+        if(!data.length) throw new TRPCError({code:"NOT_FOUND",message:"Aparelho não encontrado."});
+        const cfg=decodeConfig(data[0].config_json);
+        let blocked:string;
+        try { blocked=releaseLegacySilencedEntry(cfg.blocked,input.legacyEntry); }
+        catch(e) { throw new TRPCError({code:"BAD_REQUEST",message:e instanceof Error?e.message:"Bloqueio antigo inválido."}); }
+        const changed:any=await db.execute(sql`UPDATE h2_auto_devices
+          SET config_json=JSON_SET(config_json,'$.blocked',${blocked}),revision=revision+1
+          WHERE id=${input.id} AND revision=${Number(data[0].revision)}`);
+        if(changed[0]?.affectedRows) return {success:true,revision:Number(data[0].revision)+1};
+      }
+      throw new TRPCError({code:"CONFLICT",message:"Configuração alterada. Atualize e tente novamente."});
+    }),
   validationBlocks: adminProcedure
     .input(z.object({id:z.string().regex(/^[a-f0-9]{24}$/)}))
     .query(async ({input}) => listActiveValidationBlocks(input.id)),
@@ -584,6 +608,7 @@ export const h2AutoAdminRouter = router({
         menu: saved.menu,
         rules: saved.rules,
         manualControls: saved.manualControls,
+        blocked: saved.blocked,
         quickReplyText: saved.quickReplyText,
       };
       const result: any = await db.execute(
