@@ -24,6 +24,7 @@ import H2AutoWhatsAppPreview from "@/components/H2AutoWhatsAppPreview";
 import { H2_AUTO_CONFIRMATION_DEFAULTS as confirmationDefaults, H2_AUTO_CONFIRMATION_GROUPS as confirmationGroups, type H2AutoConfirmation } from "@shared/h2AutoConfirmation";
 import { H2_AUTO_SHORT_MEDIA, H2_AUTO_SHORT_ORDER_NOT_FOUND } from "@shared/h2AutoShortReplies";
 import { H2_AUTO_PERSONALIZATION_DEFAULT, H2_AUTO_FAQ_MAX_VARIATION_CHARS, H2_AUTO_FAQ_MAX_VARIATION_LINES, h2AutoFaqVariationLineCount, type H2AutoPersonalization } from "@shared/h2AutoPersonalization";
+import { H2_AUTO_UNKNOWN_REPLY_DEFAULT } from "@shared/h2AutoUnknownReply";
 import { prepareH2AutoCommonFaq, H2_AUTO_FAQ_SUGGESTIONS } from "@shared/h2AutoFaqPresets";
 import { displayH2AutoFaqWithDraftFirst } from "@/lib/h2AutoFaqEditorOrder";
 
@@ -315,6 +316,15 @@ export default function AdminH2Auto() {
       void utils.h2AutoAdmin.list.invalidate();
     },
     onError: error => toast.error(error.message || "Falha ao salvar mensagens fixas."),
+  });
+  const [unknownReplyDrafts,setUnknownReplyDrafts] = useState<Record<string,string>>({});
+  const saveUnknownReply = trpc.h2AutoAdmin.saveUnknownReplyText.useMutation({
+    onSuccess: (_result,input) => {
+      setUnknownReplyDrafts(old=>{const next={...old};delete next[input.id];return next;});
+      toast.success("Mensagem sem resposta salva no ADM.");
+      void utils.h2AutoAdmin.list.invalidate();
+    },
+    onError: error=>toast.error(error.message||"Não foi possível salvar a mensagem sem resposta."),
   });
   const [quickReplyDrafts,setQuickReplyDrafts] = useState<Record<string,string>>({});
   const saveQuickReply = trpc.h2AutoAdmin.saveQuickReplyText.useMutation({
@@ -908,6 +918,35 @@ export default function AdminH2Auto() {
                   <button type="button" onClick={() => setSection("fixed")}
                     className="rounded-xl bg-amber-300 px-4 py-3 text-xs font-black text-slate-950">ABRIR FORMULÁRIO DE MENSAGENS FIXAS</button>
                 </div>
+              <section className="rounded-2xl border border-cyan-400/35 bg-slate-950 p-4 space-y-3">
+                <div>
+                  <h4 className="font-black text-cyan-200">🤖 MENSAGEM AUTOMÁTICA — SEM RESPOSTA CADASTRADA</h4>
+                  <p className="text-xs text-slate-300">
+                    Texto editável no ADM, usado somente quando nenhuma pergunta aprovada ou regra local corresponde.
+                    Não altera identificação, códigos, bloqueios, pausas ou respostas existentes.
+                  </p>
+                </div>
+                <textarea className={field+" min-h-40 resize-y"} rows={6} maxLength={1200}
+                  aria-label="Editar mensagem automática sem resposta cadastrada"
+                  value={unknownReplyDrafts[d.id]??d.config.unknownReplyText??H2_AUTO_UNKNOWN_REPLY_DEFAULT}
+                  onChange={e=>setUnknownReplyDrafts(old=>({...old,[d.id]:e.target.value}))}/>
+                <p className="text-xs text-amber-200">
+                  A linha “Sua pergunta foi registrada para análise” será mostrada somente se a coleta estiver
+                  ativa e a pergunta for realmente salva na Central Inteligente.
+                </p>
+                <button type="button" className="rounded-xl bg-cyan-500 px-5 py-3 font-black text-slate-950 disabled:opacity-40"
+                  disabled={saveUnknownReply.isPending ||
+                    !(unknownReplyDrafts[d.id]??"").trim() ||
+                    (unknownReplyDrafts[d.id]??"").trim().length<3 ||
+                    (unknownReplyDrafts[d.id]??"").length>1200 ||
+                    (unknownReplyDrafts[d.id]??d.config.unknownReplyText??H2_AUTO_UNKNOWN_REPLY_DEFAULT)===(d.config.unknownReplyText??H2_AUTO_UNKNOWN_REPLY_DEFAULT)}
+                  onClick={()=>saveUnknownReply.mutate({
+                    id:d.id,expectedRevision:d.revision,
+                    text:(unknownReplyDrafts[d.id]??H2_AUTO_UNKNOWN_REPLY_DEFAULT).trim()
+                  })}>
+                  {saveUnknownReply.isPending?"SALVANDO...":"SALVAR MENSAGEM AUTOMÁTICA"}
+                </button>
+              </section>
               <H2AutoLearningPanel deviceId={d.id} enabled={Boolean(d.config.questionCollectionEnabled)} />
               <section className="rounded-2xl border border-violet-400/45 bg-gradient-to-br from-violet-950/30 to-slate-950 p-4 space-y-4">
                 <h4 className="text-lg font-black text-violet-200">🧠 ATENDIMENTO PERSONALIZADO — SEM CUSTO DE IA</h4>
