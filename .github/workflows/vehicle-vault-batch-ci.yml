@@ -8,6 +8,10 @@ on:
       - "client/src/components/VehicleVaultPanel.tsx"
       - "client/src/components/VehicleVaultBatchPanel.tsx"
       - "client/src/components/vehicleVaultBatchUtils.ts"
+      - "client/src/components/VehicleVaultPlateLookupPanel.tsx"
+      - "client/src/components/vehicleVaultPlateBatchUtils.ts"
+      - "server/routers/vehicleVault.ts"
+      - "server/vehicleVaultPlateLookup.test.ts"
       - "server/vehicleVaultBatch.test.ts"
       - ".github/workflows/vehicle-vault-batch-ci.yml"
   workflow_dispatch:
@@ -29,6 +33,6 @@ jobs:
       - name: Install dependencies
         run: pnpm install --no-frozen-lockfile
       - name: Testar extrator em lote
-        run: pnpm exec vitest run server/vehicleVaultBatch.test.ts
+        run: pnpm exec vitest run server/vehicleVaultBatch.test.ts server/vehicleVaultPlateLookup.test.ts
       - name: Build de producao
         run: pnpm build

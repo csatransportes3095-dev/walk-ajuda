@@ -4,6 +4,7 @@ import { Archive, ClipboardPaste, FileSearch, FileText, FolderOpen, Loader2, Pen
 import { toast } from "sonner";
 import { trpc } from "@/lib/trpc";
 import VehicleVaultBatchPanel from "./VehicleVaultBatchPanel";
+import VehicleVaultPlateLookupPanel from "./VehicleVaultPlateLookupPanel";
 
 type ApprovalStatus = "pending" | "approved" | "rejected";
 type ApprovalFilter = "all" | ApprovalStatus;
@@ -95,7 +96,8 @@ function downloadPdf(base64:string,name:string,print:boolean){
 export default function VehicleVaultPanel(){
   const utils=trpc.useUtils();
   const [mode,setMode]=useState<"search"|"extract">("search");
-  const [editorTab,setEditorTab]=useState<"single"|"batch">("single");
+  const [editorTab,setEditorTab]=useState<"single"|"batch"|"lookup">("single");
+  const [draftApproval,setDraftApproval]=useState<ApprovalStatus>("pending");
   const [text,setText]=useState("");
   const [pendingText,setPendingText]=useState<string|null>(null);
   const [autoTextStatus,setAutoTextStatus]=useState<"idle"|"pending"|"reading"|"done"|"error">("idle");
@@ -213,7 +215,7 @@ export default function VehicleVaultPanel(){
   const reset=()=>{
     setEditorTab("single");
     setPendingText(null);setAutoTextStatus("idle");
-    setFields({...EMPTY});setEditId(null);setText("");setPdfName("");setPdfBase64("");
+    setFields({...EMPTY});setDraftApproval("pending");setEditId(null);setText("");setPdfName("");setPdfBase64("");
     setMissing([]);setMode("extract");
   };
   const saveVehicle=async()=>{
@@ -234,13 +236,14 @@ export default function VehicleVaultPanel(){
         model:fields.model,color:fields.color,
         manufactureYear:Number(fields.manufactureYear),modelYear:Number(fields.modelYear),
         category:category || null,exerciseYear:exerciseYear?Number(exerciseYear):null,
+        approvalStatus:draftApproval,
         sourceText:text,pdfBase64:pdfBase64||undefined,pdfFilename:pdfName||undefined,
       });
       toast.success("Documento guardado! Pode adicionar o próximo.");
       // Manter o popup aberto; começar um cadastro limpo após cada salvamento.
       setSelected(data.id);
       setPendingText(null);setAutoTextStatus("idle");
-      setText("");setFields({...EMPTY});setMissing([]);
+      setText("");setFields({...EMPTY});setDraftApproval("pending");setMissing([]);
       setPdfBase64("");setPdfName("");setEditId(null);setEditorTab("single");
       await utils.vehicleVault.invalidate();
     }catch(error){toast.error(error instanceof Error?error.message:"Falha ao salvar documento.");}
@@ -255,7 +258,7 @@ export default function VehicleVaultPanel(){
     setPendingText(null);setAutoTextStatus("idle");
     setText(d.sourceText||"");setPdfBase64("");setPdfName("");
     setEditorTab("single");
-    setEditId(d.id);setMissing([]);setMode("extract");
+    setEditId(d.id);setDraftApproval((d.approvalStatus||"pending") as ApprovalStatus);setMissing([]);setMode("extract");
   };
   const linkCustomer=async(customerId:number)=>{
     if(!selected)return;
@@ -331,7 +334,7 @@ export default function VehicleVaultPanel(){
               aria-label="Fechar janela" title="Fechar"><X className="h-5 w-5"/></button>
           </header>
           {!editId&&<div role="tablist" aria-label="Modo de cadastro"
-            className="grid shrink-0 grid-cols-2 gap-2 border-b border-white/10 bg-slate-900/70 p-3 sm:px-5">
+            className="grid shrink-0 grid-cols-3 gap-2 border-b border-white/10 bg-slate-900/70 p-3 sm:px-5">
             <button type="button" role="tab" aria-selected={editorTab==="single"} onClick={()=>setEditorTab("single")}
               className={"flex items-center justify-center gap-2 rounded-xl border px-3 py-2.5 text-xs font-black sm:text-sm "+(editorTab==="single"?"border-amber-300/60 bg-amber-400/15 text-amber-200":"border-white/10 bg-black/20 text-slate-400 hover:text-white")}>
               <FileText className="h-4 w-4"/> PDF OU TEXTO
@@ -340,9 +343,15 @@ export default function VehicleVaultPanel(){
               className={"flex items-center justify-center gap-2 rounded-xl border px-3 py-2.5 text-xs font-black sm:text-sm "+(editorTab==="batch"?"border-cyan-300/60 bg-cyan-400/15 text-cyan-200":"border-white/10 bg-black/20 text-slate-400 hover:text-white")}>
               <FolderOpen className="h-4 w-4"/> PDFs EM LOTE
             </button>
+            <button type="button" role="tab" aria-selected={editorTab==="lookup"} onClick={()=>setEditorTab("lookup")}
+              className={"flex items-center justify-center gap-2 rounded-xl border px-2 py-2.5 text-[10px] font-black sm:px-3 sm:text-sm "+(editorTab==="lookup"?"border-emerald-300/60 bg-emerald-400/15 text-emerald-200":"border-white/10 bg-black/20 text-slate-400 hover:text-white")}>
+              <Search className="h-4 w-4"/> CONSULTAR PLACAS
+            </button>
           </div>}
           <div className="min-h-0 flex-1 overflow-y-auto overscroll-contain p-3 sm:p-5">
-            {!editId&&editorTab==="batch"?
+            {!editId&&editorTab==="lookup"?
+              <VehicleVaultPlateLookupPanel/>:
+              !editId&&editorTab==="batch"?
               <VehicleVaultBatchPanel onSaved={async()=>{await utils.vehicleVault.invalidate();}}/>:
               <div className="grid gap-4 lg:grid-cols-[minmax(0,0.9fr)_minmax(0,1.1fr)]">
                 <div className="space-y-3 rounded-2xl border border-amber-400/20 bg-amber-500/[.04] p-3 sm:p-4">
@@ -378,11 +387,26 @@ export default function VehicleVaultPanel(){
                     <span className="text-[11px] text-white/45">Campos editáveis</span>
                   </div>
                   <div className="grid grid-cols-2 gap-2 sm:gap-3">
-                    {NAMES.map(([key,label])=><label key={key} className={"min-w-0 text-[11px] font-bold text-slate-300 "+(key==="chassis"||key==="model"?"col-span-2 sm:col-span-1":"")}>
-                      {label}<input className="mt-1 w-full min-w-0 rounded-lg border border-white/20 bg-black/55 px-2.5 py-2.5 text-sm font-semibold text-white outline-none focus:border-cyan-300/50"
-                        value={fields[key]} onChange={e=>setFields(v=>({...v,[key]:e.target.value}))} placeholder={label}/>
+                    {NAMES.map(([key,label])=><div key={key} className={"min-w-0 "+(key==="chassis"||key==="model"?"col-span-2 sm:col-span-1":"")}>
+                      <label className="block text-[11px] font-bold text-slate-300">{label}<input className="mt-1 w-full min-w-0 rounded-lg border border-white/20 bg-black/55 px-2.5 py-2.5 text-sm font-semibold text-white outline-none focus:border-cyan-300/50"
+                        value={fields[key]} onChange={e=>setFields(v=>({...v,[key]:e.target.value}))} placeholder={label}/></label>
                       {key==="color"&&fields.color.trim()&&<span className="mt-1 block"><VehicleColorBadge color={fields.color} compact/></span>}
-                    </label>)}
+                      {key==="category"&&<div className="mt-2 space-y-2" role="group" aria-label="Avaliar documento durante a extração">
+                        <span className="block text-[10px] font-black text-slate-300">AVALIAÇÃO DO DOCUMENTO</span>
+                        <div className="grid grid-cols-2 gap-2">
+                          {(["approved","rejected"] as const).map(value=><button type="button" key={value}
+                            aria-pressed={draftApproval===value}
+                            onClick={()=>setDraftApproval(current=>current===value?"pending":value)}
+                            className={"min-h-10 rounded-lg border-2 px-1 py-2 text-[11px] font-black transition "+(
+                              draftApproval===value
+                                ? value==="approved"?"border-emerald-300 bg-emerald-600 text-white":"border-rose-300 bg-red-600 text-white"
+                                : value==="approved"?"border-emerald-400/40 bg-emerald-500/10 text-emerald-200":"border-rose-400/40 bg-rose-500/10 text-rose-200")}>
+                            {value==="approved"?"APROVADO":"REPROVADO"}
+                          </button>)}
+                        </div>
+                        <p className="text-[10px] text-slate-400">{draftApproval==="pending"?"Não avaliado · selecione uma opção":draftApproval==="approved"?"Aprovado ao guardar":"Reprovado ao guardar"} · toque novamente para retirar</p>
+                      </div>}
+                    </div>)}
                   </div>
                 </div>
               </div>}

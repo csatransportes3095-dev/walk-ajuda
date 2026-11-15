@@ -51,7 +51,7 @@ describe("Extrator PDF em lote - Cofre da Frota", () => {
     const server = readFileSync(resolve(process.cwd(), "server/routers/vehicleVault.ts"), "utf8");
     expect(old).toContain("VehicleVaultBatchPanel");
     expect(old).toContain("extractPdf=async(file:File)");
-    expect(old).toContain("CONFERIR E GUARDAR DOCUMENTO");
+    expect(old).toContain("GUARDAR E ADICIONAR OUTRO");
     expect(batch).toContain("multiple className");
     expect(batch).toContain("previewPdf.mutateAsync");
     expect(batch).toContain("save.mutateAsync");
