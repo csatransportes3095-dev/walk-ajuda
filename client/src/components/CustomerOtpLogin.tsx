@@ -5,17 +5,6 @@ const OTP_DRAFT_KEY = "h2_customer_otp_login_draft";
 const OTP_DRAFT_TTL_MS = 10 * 60 * 1000;
 const OTP_RESEND_COOLDOWN_MS = 60 * 1000;
 type OtpChannel = "email" | "whatsapp";
-type WhatsappVariant = "normal" | "business";
-
-// Android Chrome can open the requested installed WhatsApp package directly
-// after the customer's explicit tap, without relying on link defaults.
-// Other browsers retain the original wa.me click-to-chat behavior.
-export function whatsappLoginHref(phone: string, app: WhatsappVariant, android: boolean): string {
-  const message = encodeWhatsappMessage("Preciso receber meu código");
-  if (!android) return `https://wa.me/${phone}?text=${message}`;
-  const packageName = app === "normal" ? "com.whatsapp" : "com.whatsapp.w4b";
-  return `intent://send?phone=${phone}&text=${message}#Intent;scheme=whatsapp;package=${packageName};end`;
-}
 function cooldownKey(phone: string, channel: OtpChannel): string { return "h2_otp_cooldown_" + phone + "_" + channel; }
 function savedCooldown(phone: string, channel: OtpChannel): number {
   if (!/^\d{11}$/.test(phone)) return 0;
@@ -79,7 +68,6 @@ export function CustomerOtpLogin({ title = "Acesso H2 Colombiano", initialPhone 
   const [deliveryChannel, setDeliveryChannel] = useState<"email" | "whatsapp">(() => draft?.channel || "email");
   const [code, setCode] = useState("");
   const [busy, setBusy] = useState(false);
-  const [isAndroid] = useState(() => typeof navigator !== "undefined" && /Android/i.test(navigator.userAgent));
   const [clockNow, setClockNow] = useState(() => Date.now());
   const [cooldowns, setCooldowns] = useState<{email:number;whatsapp:number}>(() => {
     const selectedPhone = normalizeOtpPhone(initialPhone) || draft?.phone || "";
@@ -162,10 +150,10 @@ export function CustomerOtpLogin({ title = "Acesso H2 Colombiano", initialPhone 
       setStep("code");
       saveOtpDraft(cleanPhone, "code", channel);
       if (channel === "whatsapp") {
-        // The site has already created the pending OTP. The two direct links
-        // below let the customer choose their installed WhatsApp app before
-        // sending the same phrase; never auto-open a default app here.
-        toast.info("Escolha WhatsApp Normal ou Business abaixo e envie a mensagem preparada.");
+        // The customer must actually send the prepared message; merely
+        // opening this link never authorizes the APK to deliver a code.
+        const message = encodeWhatsappMessage("Preciso receber meu código");
+        window.location.assign(`https://wa.me/${supportNumber}?text=${message}`);
       } else {
         toast.success(result.message || "Confira o e-mail cadastrado.");
       }
@@ -292,18 +280,10 @@ export function CustomerOtpLogin({ title = "Acesso H2 Colombiano", initialPhone 
                 💬 NÃO RECEBI O CÓDIGO — PEDIR AJUDA NO WHATSAPP
               </a>
             ) : (
-              <div className="space-y-2" aria-label="Escolha seu aplicativo WhatsApp">
-                <p className="text-center text-xs text-slate-300">Escolha o WhatsApp do número cadastrado para enviar a mensagem:</p>
-                <a href={whatsappLoginHref(supportNumber, "normal", isAndroid)}
-                  className="flex min-h-12 w-full items-center justify-center gap-2 rounded-xl bg-[#147D4B] px-4 py-3 text-center text-sm font-black text-white hover:bg-[#188c56]">
-                  <MessageCircle className="h-5 w-5" /> ABRIR WHATSAPP NORMAL
-                </a>
-                <a href={whatsappLoginHref(supportNumber, "business", isAndroid)}
-                  className="flex min-h-12 w-full items-center justify-center gap-2 rounded-xl bg-[#085E41] px-4 py-3 text-center text-sm font-black text-white hover:bg-[#0b7150]">
-                  <MessageCircle className="h-5 w-5" /> ABRIR WHATSAPP BUSINESS
-                </a>
-                {!isAndroid && <p className="text-center text-xs text-slate-400">Neste dispositivo, os dois links usam o WhatsApp disponível.</p>}
-              </div>
+              <a href={`https://wa.me/${supportNumber}?text=${encodeWhatsappMessage("Preciso receber meu código")}`}
+                className="flex min-h-12 w-full items-center justify-center gap-2 rounded-xl bg-[#8B0000] px-4 py-3 text-center text-sm font-black text-white hover:bg-[#a30000]">
+                <MessageCircle className="h-5 w-5" /> VOLTAR AO WHATSAPP
+              </a>
             )}
             <div className="space-y-2 rounded-xl border border-white/10 p-3" aria-label="Solicitar outro código">
               <p className="text-center text-xs text-slate-300">Precisa de outro código? Escolha como receber:</p>
