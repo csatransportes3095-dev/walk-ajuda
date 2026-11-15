@@ -16,6 +16,14 @@ export default function H2AutoSilencedContacts({deviceId,deviceLabel}:{deviceId:
     if(!window.confirm("LIBERAR "+number+" para receber respostas automáticas?"))return;
     update.mutate({id:deviceId,phone:number,action:"release"});
   };
+  const releaseLegacy=trpc.h2AutoAdmin.releaseLegacySilencedContact.useMutation({
+    onSuccess:async()=>{
+      await utils.h2AutoAdmin.silencedContacts.invalidate({id:deviceId});
+      await utils.h2AutoAdmin.list.invalidate();
+      toast.success("Bloqueio antigo liberado no ADM. Aguarde sincronização do APK.");
+    },
+    onError:e=>toast.error(e.message),
+  });
   const synced=list.data?.appliedRevision===list.data?.revision;
   return <section className="rounded-2xl border border-fuchsia-400/35 bg-gradient-to-br from-[#121530] via-[#140e28] to-[#070c1a] p-4 shadow-[0_0_25px_rgba(217,70,239,.12)] sm:p-6">
     <div className="mb-4 flex items-start gap-3">
@@ -41,6 +49,17 @@ export default function H2AutoSilencedContacts({deviceId,deviceLabel}:{deviceId:
       <div className="flex items-center gap-2"><ShieldCheck className="h-4 w-4 text-rose-300"/><div><p className="font-bold text-white">{number}</p><p className="text-xs font-semibold text-rose-300">Silenciado até liberação manual</p></div></div>
       <button type="button" onClick={()=>release(number)} disabled={update.isPending} className="inline-flex min-h-10 items-center gap-1.5 rounded-lg border border-emerald-400/40 bg-emerald-500/10 px-4 text-xs font-black text-emerald-300 disabled:opacity-40"><UnlockKeyhole className="h-4 w-4"/> LIBERAR</button>
     </div>)}
+      {(list.data?.legacyNames?.length ?? 0)>0 && <div className="mt-5 space-y-3 border-t border-amber-400/30 pt-4">
+        <h4 className="text-sm font-black text-amber-200">BLOQUEIOS ANTIGOS POR NOME ({list.data?.legacyNames?.length ?? 0})</h4>
+        <p className="text-xs text-amber-100">Esses nomes também impedem respostas e antes ficavam ocultos no ADM. Confira cada entrada antes de liberar. Números e outros bloqueios não são alterados.</p>
+        {list.data?.legacyNames?.map(name=><div key={name} className="flex flex-wrap items-center justify-between gap-3 rounded-xl border border-amber-400/25 bg-amber-500/5 p-3">
+          <div className="min-w-0 break-words text-sm font-semibold text-white">{name}</div>
+          <button type="button" disabled={releaseLegacy.isPending} onClick={()=>{
+            if(!window.confirm("Liberar somente o bloqueio antigo: "+name+"?"))return;
+            releaseLegacy.mutate({id:deviceId,legacyEntry:name});
+          }} className="rounded-lg border border-emerald-400/40 px-4 py-2 text-xs font-black text-emerald-200 disabled:opacity-40">LIBERAR NOME</button>
+        </div>)}
+      </div>}
     </div>
   </section>;
 }
