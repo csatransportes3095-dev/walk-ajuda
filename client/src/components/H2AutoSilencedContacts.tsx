@@ -43,7 +43,7 @@ export default function H2AutoSilencedContacts({deviceId,deviceLabel}:{deviceId:
     </div>
     {list.isLoading?<p className="mt-4 text-xs text-slate-300">Carregando lista...</p>:null}
     {list.isError?<p role="alert" className="mt-4 text-sm text-rose-300">Não foi possível consultar os contatos.</p>:null}
-    {list.data?.phones.length===0?<p className="mt-4 rounded-xl bg-slate-950/50 p-4 text-sm text-slate-400">Nenhum telefone silenciado neste aparelho.</p>:null}
+    {list.data?.phones.length===0 && (list.data?.legacyNames?.length ?? 0)===0?<p className="mt-4 rounded-xl bg-slate-950/50 p-4 text-sm text-slate-400">Nenhum telefone silenciado neste aparelho.</p>:null}
     <div className="mt-3 space-y-2">
     {list.data?.phones.map(number=><div key={number} className="flex flex-wrap items-center justify-between gap-3 rounded-xl border border-rose-400/20 bg-rose-500/5 p-3">
       <div className="flex items-center gap-2"><ShieldCheck className="h-4 w-4 text-rose-300"/><div><p className="font-bold text-white">{number}</p><p className="text-xs font-semibold text-rose-300">Silenciado até liberação manual</p></div></div>
