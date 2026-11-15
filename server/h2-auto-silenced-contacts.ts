@@ -12,6 +12,20 @@ export function normalizeSilencedPhone(raw: string): string | null {
 export function silencedEntries(blocked: string): string[] {
   return blocked.split(/[\n;,]/).map(s=>s.trim()).filter(Boolean);
 }
+/** The phone-only ADM view previously hid these still-effective legacy name blocks. */
+export function legacySilencedEntries(blocked: string): string[] {
+  return [...new Set(silencedEntries(blocked).filter(entry => normalizeSilencedPhone(entry) === null))];
+}
+
+/** Release only the exact legacy entry an admin saw; never broaden matching to names. */
+export function releaseLegacySilencedEntry(blocked: string, legacyEntry: string): string {
+  const target = legacyEntry.trim();
+  if (!target || /[\n;,]/.test(target) || normalizeSilencedPhone(target) !== null ||
+      !silencedEntries(blocked).includes(target))
+    throw new Error("Bloqueio antigo não encontrado ou inválido. Atualize a lista.");
+  return silencedEntries(blocked).filter(entry => entry !== target).join("\n");
+}
+
 export function manualSilencedPhones(blocked: string): string[] {
   return [...new Set(silencedEntries(blocked).map(s=>normalizeSilencedPhone(s)).filter((s):s is string=>!!s))];
 }

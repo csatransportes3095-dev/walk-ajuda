@@ -19,6 +19,7 @@ import { toast } from "sonner";
 import H2AutoHistoryPanel from "@/components/H2AutoHistoryPanel";
 import H2AutoValidationBlocks from "@/components/H2AutoValidationBlocks";
 import H2AutoSilencedContacts from "@/components/H2AutoSilencedContacts";
+import H2AutoManualControls from "@/components/H2AutoManualControls";
 import H2AutoWhatsAppPreview from "@/components/H2AutoWhatsAppPreview";
 import { H2_AUTO_CONFIRMATION_DEFAULTS as confirmationDefaults, H2_AUTO_CONFIRMATION_GROUPS as confirmationGroups, type H2AutoConfirmation } from "@shared/h2AutoConfirmation";
 import { H2_AUTO_SHORT_MEDIA, H2_AUTO_SHORT_ORDER_NOT_FOUND } from "@shared/h2AutoShortReplies";
@@ -1006,6 +1007,7 @@ export default function AdminH2Auto() {
               <div className={section==="diagnostics"?"space-y-4":"hidden"}>
               <H2AutoValidationBlocks deviceId={d.id} deviceLabel={d.label} />
               <H2AutoSilencedContacts deviceId={d.id} deviceLabel={d.label} />
+              <H2AutoManualControls deviceId={d.id} deviceLabel={d.label} />
               <H2AutoHistoryPanel
                 deviceId={d.id}
                 label={d.label}
