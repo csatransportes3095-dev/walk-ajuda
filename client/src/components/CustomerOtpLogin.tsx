@@ -5,16 +5,6 @@ const OTP_DRAFT_KEY = "h2_customer_otp_login_draft";
 const OTP_DRAFT_TTL_MS = 10 * 60 * 1000;
 const OTP_RESEND_COOLDOWN_MS = 60 * 1000;
 type OtpChannel = "email" | "whatsapp";
-type WhatsappApp = "normal" | "business";
-
-// Only used by the explicit app-selection links on Android; no APK or
-// server change is necessary. Chrome targets the chosen installed package.
-function whatsappOtpAppHref(phone: string, app: WhatsappApp, android: boolean): string {
-  const message = encodeWhatsappMessage("Preciso receber meu código");
-  if (!android) return `https://wa.me/${phone}?text=${message}`;
-  const pkg = app === "normal" ? "com.whatsapp" : "com.whatsapp.w4b";
-  return `intent://send?phone=${phone}&text=${message}#Intent;scheme=whatsapp;package=${pkg};end`;
-}
 function cooldownKey(phone: string, channel: OtpChannel): string { return "h2_otp_cooldown_" + phone + "_" + channel; }
 function savedCooldown(phone: string, channel: OtpChannel): number {
   if (!/^\d{11}$/.test(phone)) return 0;
@@ -78,8 +68,6 @@ export function CustomerOtpLogin({ title = "Acesso H2 Colombiano", initialPhone 
   const [deliveryChannel, setDeliveryChannel] = useState<"email" | "whatsapp">(() => draft?.channel || "email");
   const [code, setCode] = useState("");
   const [busy, setBusy] = useState(false);
-  const [chooseWhatsappApp, setChooseWhatsappApp] = useState(false);
-  const [isAndroid] = useState(() => typeof navigator !== "undefined" && /Android/i.test(navigator.userAgent));
   const [clockNow, setClockNow] = useState(() => Date.now());
   const [cooldowns, setCooldowns] = useState<{email:number;whatsapp:number}>(() => {
     const selectedPhone = normalizeOtpPhone(initialPhone) || draft?.phone || "";
@@ -162,10 +150,10 @@ export function CustomerOtpLogin({ title = "Acesso H2 Colombiano", initialPhone 
       setStep("code");
       saveOtpDraft(cleanPhone, "code", channel);
       if (channel === "whatsapp") {
-        // Only the way the customer opens WhatsApp changes. The request,
-        // phone, generated OTP and cooldown are already saved above.
-        // User must explicitly choose an app and tap Send in that chat.
-        setChooseWhatsappApp(true);
+        // The customer must actually send the prepared message; merely
+        // opening this link never authorizes the APK to deliver a code.
+        const message = encodeWhatsappMessage("Preciso receber meu código");
+        window.location.assign(`https://wa.me/${supportNumber}?text=${message}`);
       } else {
         toast.success(result.message || "Confira o e-mail cadastrado.");
       }
@@ -292,10 +280,10 @@ export function CustomerOtpLogin({ title = "Acesso H2 Colombiano", initialPhone 
                 💬 NÃO RECEBI O CÓDIGO — PEDIR AJUDA NO WHATSAPP
               </a>
             ) : (
-              <button type="button" onClick={() => setChooseWhatsappApp(true)}
+              <a href={`https://wa.me/${supportNumber}?text=${encodeWhatsappMessage("Preciso receber meu código")}`}
                 className="flex min-h-12 w-full items-center justify-center gap-2 rounded-xl bg-[#8B0000] px-4 py-3 text-center text-sm font-black text-white hover:bg-[#a30000]">
                 <MessageCircle className="h-5 w-5" /> VOLTAR AO WHATSAPP
-              </button>
+              </a>
             )}
             <div className="space-y-2 rounded-xl border border-white/10 p-3" aria-label="Solicitar outro código">
               <p className="text-center text-xs text-slate-300">Precisa de outro código? Escolha como receber:</p>
@@ -345,41 +333,6 @@ export function CustomerOtpLogin({ title = "Acesso H2 Colombiano", initialPhone 
           )}
         </div>
       </footer>
-      {chooseWhatsappApp && (
-        <div className="fixed inset-0 z-[100] flex items-center justify-center bg-black/80 px-4 py-6">
-          <div role="dialog" aria-modal="true" aria-labelledby="h2-whatsapp-app-title"
-            className="w-full max-w-sm space-y-3 rounded-2xl border border-white/20 bg-slate-950 p-5 text-white shadow-2xl">
-            <h2 id="h2-whatsapp-app-title" className="text-center text-lg font-black">Escolha o WhatsApp</h2>
-            <p className="text-center text-sm text-slate-300">
-              Use o WhatsApp do número cadastrado. Depois, envie a mensagem já preenchida para receber o código.
-            </p>
-            {isAndroid ? (
-              <div className="space-y-3">
-                <a href={whatsappOtpAppHref(supportNumber, "normal", true)}
-                  onClick={() => setChooseWhatsappApp(false)}
-                  className="flex min-h-14 w-full items-center justify-center gap-2 rounded-xl bg-[#147D4B] px-4 py-3 text-center font-black text-white">
-                  <MessageCircle className="h-5 w-5" /> WHATSAPP NORMAL
-                </a>
-                <a href={whatsappOtpAppHref(supportNumber, "business", true)}
-                  onClick={() => setChooseWhatsappApp(false)}
-                  className="flex min-h-14 w-full items-center justify-center gap-2 rounded-xl bg-[#085E41] px-4 py-3 text-center font-black text-white">
-                  <MessageCircle className="h-5 w-5" /> WHATSAPP BUSINESS
-                </a>
-              </div>
-            ) : (
-              <a href={whatsappOtpAppHref(supportNumber, "normal", false)}
-                onClick={() => setChooseWhatsappApp(false)}
-                className="flex min-h-14 w-full items-center justify-center gap-2 rounded-xl bg-[#147D4B] px-4 py-3 text-center font-black text-white">
-                <MessageCircle className="h-5 w-5" /> ABRIR WHATSAPP
-              </a>
-            )}
-            <button type="button" onClick={() => setChooseWhatsappApp(false)}
-              className="min-h-11 w-full rounded-xl border border-white/20 px-4 py-2 text-sm font-bold text-slate-200">
-              CANCELAR
-            </button>
-          </div>
-        </div>
-      )}
     </main>
   );
 }
