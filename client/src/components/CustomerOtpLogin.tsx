@@ -1,4 +1,5 @@
 import { encodeWhatsappMessage } from "@shared/whatsappMessageText";
+import { buildWhatsappMessageUrl } from "@shared/whatsappUrl";
 import { useEffect, useState } from "react";
 
 const OTP_DRAFT_KEY = "h2_customer_otp_login_draft";
@@ -152,8 +153,9 @@ export function CustomerOtpLogin({ title = "Acesso H2 Colombiano", initialPhone 
       if (channel === "whatsapp") {
         // The customer must actually send the prepared message; merely
         // opening this link never authorizes the APK to deliver a code.
-        const message = encodeWhatsappMessage("Preciso receber meu código");
-        window.location.assign(`https://wa.me/${supportNumber}?text=${message}`);
+        // Reuse the working order resend URL format; keep the OTP,
+        // destination number and exact customer message unchanged.
+        window.location.assign(buildWhatsappMessageUrl(supportNumber, "Preciso receber meu código"));
       } else {
         toast.success(result.message || "Confira o e-mail cadastrado.");
       }
@@ -280,7 +282,7 @@ export function CustomerOtpLogin({ title = "Acesso H2 Colombiano", initialPhone 
                 💬 NÃO RECEBI O CÓDIGO — PEDIR AJUDA NO WHATSAPP
               </a>
             ) : (
-              <a href={`https://wa.me/${supportNumber}?text=${encodeWhatsappMessage("Preciso receber meu código")}`}
+              <a href={buildWhatsappMessageUrl(supportNumber, "Preciso receber meu código")}
                 className="flex min-h-12 w-full items-center justify-center gap-2 rounded-xl bg-[#8B0000] px-4 py-3 text-center text-sm font-black text-white hover:bg-[#a30000]">
                 <MessageCircle className="h-5 w-5" /> VOLTAR AO WHATSAPP
               </a>
