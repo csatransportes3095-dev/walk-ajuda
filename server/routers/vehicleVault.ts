@@ -266,6 +266,7 @@ const fieldSchema = z.object({
   modelYear: z.number().int().min(1900).max(2100),
   category: z.enum(["PARTICULAR", "ALUGUEL"]).nullable().optional(),
   exerciseYear: z.number().int().min(1900).max(2100).nullable().optional(),
+  approvalStatus: z.enum(["pending","approved","rejected"]).optional(),
   sourceText: z.string().max(120_000).default(""),
   pdfBase64: z.string().min(30).max(PDF_BASE64_LIMIT).optional(),
   pdfFilename: z.string().max(220).optional(),
@@ -288,6 +289,28 @@ export const vehicleVaultRouter = router({
     const db=await database();
     const result=rows(await db.execute(sql`SELECT COUNT(*) AS total FROM vehicle_vault_documents`));
     return {total:Number(result[0]?.total??0)};
+  }),
+  // Check every submitted plate against the entire Cofre, including inactive documents.
+  // Never use the 150-row interactive search or reveal unrelated vehicle details.
+  checkPlates: adminProcedure.input(z.object({
+    plates:z.array(z.string().regex(/^[A-Z]{3}[0-9][A-Z0-9][0-9]{2}$/)).min(1).max(2000),
+  }).strict()).mutation(async ({input})=>{
+    const db=await database();
+    const unique=[...new Set(input.plates)];
+    const registered=new Map<string,boolean>();
+    for(let i=0;i<unique.length;i+=250){
+      const chunk=unique.slice(i,i+250);
+      const result=rows(await db.execute(sql`SELECT plate,inactive FROM vehicle_vault_documents
+        WHERE plate IN (${sql.join(chunk.map(plate=>sql`${plate}`),sql`, `)})`));
+      for(const row of result)registered.set(String(row.plate).toUpperCase(),Boolean(row.inactive));
+    }
+    return {
+      total:unique.length,
+      available:unique.filter(plate=>!registered.has(plate)),
+      registered:unique.filter(plate=>registered.has(plate)).map(plate=>({
+        plate,inactive:registered.get(plate)===true,
+      })),
+    };
   }),
   search: adminProcedure.input(z.object({
     query:z.string().max(160).default(""),
@@ -363,20 +386,31 @@ export const vehicleVaultRouter = router({
         key=stored.storageKey;
       }
       let id=input.id||0;
+      let previousApproval="pending";
       if(id){
+        const before=rows(await db.execute(sql`SELECT approvalStatus FROM vehicle_vault_documents WHERE id=${id} LIMIT 1`))[0];
+        previousApproval=String(before?.approvalStatus||"pending");
         await db.execute(sql`UPDATE vehicle_vault_documents SET
           plate=${plate},renavam=${renavam},chassis=${chassis},model=${model},color=${color},
-          manufactureYear=${input.manufactureYear},modelYear=${input.modelYear},category=${input.category ?? null},exerciseYear=${input.exerciseYear ?? null},sourceText=${input.sourceText}
+          manufactureYear=${input.manufactureYear},modelYear=${input.modelYear},category=${input.category ?? null},exerciseYear=${input.exerciseYear ?? null},approvalStatus=${input.approvalStatus ?? previousApproval},sourceText=${input.sourceText}
           WHERE id=${id}`);
       }else{
         const created=await db.execute(sql`INSERT INTO vehicle_vault_documents
-          (plate,renavam,chassis,model,color,manufactureYear,modelYear,category,exerciseYear,sourceText)
+          (plate,renavam,chassis,model,color,manufactureYear,modelYear,category,exerciseYear,approvalStatus,sourceText)
           VALUES (${plate},${renavam},${chassis},${model},${color},
-          ${input.manufactureYear},${input.modelYear},${input.category ?? null},${input.exerciseYear ?? null},${input.sourceText})`);
+          ${input.manufactureYear},${input.modelYear},${input.category ?? null},${input.exerciseYear ?? null},${input.approvalStatus ?? "pending"},${input.sourceText})`);
         id=Number((created[0] as any)?.insertId||0);
       }
       if(!id)throw new TRPCError({code:"INTERNAL_SERVER_ERROR",message:"Falha ao guardar veículo."});
       await db.execute(sql`INSERT INTO vehicle_vault_history(vehicleId,event) VALUES (${id},${input.id?"edited":"created"})`);
+      if(input.approvalStatus && input.approvalStatus!=="pending" &&
+          (!input.id || input.approvalStatus!==previousApproval)){
+        await db.execute(sql`INSERT INTO vehicle_vault_history(vehicleId,event) VALUES
+          (${id},${input.approvalStatus==="approved"?"approved":"rejected"})`);
+      }
+      if(input.id && input.approvalStatus==="pending" && previousApproval!=="pending"){
+        await db.execute(sql`INSERT INTO vehicle_vault_history(vehicleId,event) VALUES (${id},"review_reset")`);
+      }
       if(key){
         const filename=(input.pdfFilename||plate+".pdf").replace(/[\\/:*?"<>|\u0000-\u001f]/g,"_").slice(0,220);
         await db.execute(sql`INSERT INTO vehicle_vault_pdf_files(vehicleId,storageKey,filename)
