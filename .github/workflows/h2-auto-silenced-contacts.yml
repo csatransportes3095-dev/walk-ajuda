@@ -19,7 +19,7 @@ jobs:
           cache: pnpm
       - run: pnpm install --frozen-lockfile
       - name: Exact phone silencing regressions
-        run: pnpm exec vitest run server/h2-auto-silenced-contacts.test.ts server/h2-auto-validation-policy.test.ts
+        run: pnpm exec vitest run server/h2-auto-silenced-contacts.test.ts server/h2-auto-validation-policy.test.ts server/h2AutoLegacyPauseVisibility.test.ts
       - name: Verify changed files types
         run: |
           pnpm exec tsc --noEmit > /tmp/h2-silence-tsc.log 2>&1 && exit 0
