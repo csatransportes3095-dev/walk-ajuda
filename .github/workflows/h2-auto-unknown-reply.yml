@@ -1,0 +1,25 @@
+name: H2 AUTO - Mensagem sem resposta editavel
+on:
+  pull_request:
+    paths:
+      - 'shared/h2AutoUnknownReply.ts'
+      - 'server/h2-auto-access.ts'
+      - 'server/h2-auto-remote.ts'
+      - 'server/h2-auto-unknown-reply.test.ts'
+      - 'client/src/pages/AdminH2Auto.tsx'
+      - '.github/workflows/h2-auto-unknown-reply.yml'
+jobs:
+  isolated-regression:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: pnpm/action-setup@v4
+        with:
+          version: 10.4.1
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '22'
+          cache: pnpm
+      - run: pnpm install --frozen-lockfile
+      - name: Testar mensagem sem resposta e configuracao do ADM
+        run: pnpm exec vitest run server/h2-auto-unknown-reply.test.ts
