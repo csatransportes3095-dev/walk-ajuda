@@ -14,6 +14,7 @@ import { h2AutoConfirmationSchema } from "../shared/h2AutoConfirmation";
 import { h2AutoPersonalizationSchema, H2_AUTO_PERSONALIZATION_DEFAULT, getH2AutoPersonalizedReply } from "../shared/h2AutoPersonalization";
 import { h2AutoCustomerNeedsProfileUpdate, selectH2AutoCustomerByPhone } from "./h2-auto-customer-profile-guidance";
 import { recordH2AutoUnknownQuestion, safeH2AutoUnknownQuestion } from "./h2-auto-learning";
+import { H2_AUTO_UNKNOWN_REPLY_DEFAULT, renderH2AutoUnknownReply, isH2AutoUnknownTextEligible, matchesH2AutoLocalReply, type H2AutoLocalTextRule } from "../shared/h2AutoUnknownReply";
 import { enqueueH2AutoCodeJob } from "./h2-auto-code-jobs";
 
 /**
@@ -182,6 +183,8 @@ export function registerH2AutoAccessRoutes(app: Express): void {
       // A árvore foi desativada definitivamente nesta reformulação.
       const treeEnabled = false;
       let questionCollectionEnabled = false;
+      let unknownReplyText = H2_AUTO_UNKNOWN_REPLY_DEFAULT;
+      let configuredLocalRules: H2AutoLocalTextRule[] = [];
       let confirmation = h2AutoConfirmationSchema.parse({});
       let personalization = { ...H2_AUTO_PERSONALIZATION_DEFAULT };
       if (deviceId) {
@@ -191,7 +194,9 @@ export function registerH2AutoAccessRoutes(app: Express): void {
         const live = await rows(sql`SELECT JSON_EXTRACT(config_json,'$.confirmation') AS confirmation_json, JSON_EXTRACT(config_json,'$.personalization') AS personalization_json, JSON_UNQUOTE(JSON_EXTRACT(config_json,'$.tree.enabled')) AS tree_on, JSON_UNQUOTE(JSON_EXTRACT(config_json,'$.questionCollectionEnabled')) AS collection_on, JSON_UNQUOTE(JSON_EXTRACT(config_json,'$.enabled')) AS bot_on,
           CAST(JSON_UNQUOTE(JSON_EXTRACT(config_json,'$.identificationSessionHours')) AS UNSIGNED) AS session_hours,
           JSON_UNQUOTE(JSON_EXTRACT(config_json,'$.identificationEnabled')) AS identity_on,
-          JSON_UNQUOTE(JSON_EXTRACT(config_json,'$.blocked')) AS blocked_phones
+          JSON_UNQUOTE(JSON_EXTRACT(config_json,'$.blocked')) AS blocked_phones,
+           JSON_UNQUOTE(JSON_EXTRACT(config_json,'$.unknownReplyText')) AS unknown_reply,
+           JSON_EXTRACT(config_json,'$.rules') AS local_rules
           FROM h2_auto_devices WHERE id=${deviceId} LIMIT 1`);
         liveConfig = live[0] as any;
         if (liveConfig?.bot_on !== "true") return respond(res,200,{state:"disabled"});
@@ -205,6 +210,15 @@ export function registerH2AutoAccessRoutes(app: Express): void {
           personalization = h2AutoPersonalizationSchema.parse(typeof rawPersonalization === "string" ? JSON.parse(rawPersonalization) : rawPersonalization || {});
         } catch { personalization = { ...H2_AUTO_PERSONALIZATION_DEFAULT }; }
         questionCollectionEnabled = liveConfig?.collection_on === "true";
+        if (typeof liveConfig?.unknown_reply === "string" &&
+            liveConfig.unknown_reply.trim().length >= 3 &&
+            liveConfig.unknown_reply.length <= 1200)
+          unknownReplyText = liveConfig.unknown_reply;
+        try {
+          const parsedRules = typeof liveConfig?.local_rules === "string"
+            ? JSON.parse(liveConfig.local_rules) : liveConfig?.local_rules;
+          if (Array.isArray(parsedRules)) configuredLocalRules = parsedRules;
+        } catch { configuredLocalRules = []; }
       }
       if (!deviceId) return respond(res, 401, { error: "unauthorized" });
       // O texto de boas-vindas pertence ao ADM: números, emojis e frases
@@ -226,19 +240,20 @@ export function registerH2AutoAccessRoutes(app: Express): void {
       const sessionId = digest(deviceId + "|" + conversation);
       const now = Date.now();
       const unansweredResponse = async () => {
-        // A fila só recebe texto público de pergunta; nunca dados pessoais,
-        // códigos, telefones, comandos ou histórico da conversa.
-        if (!safeH2AutoUnknownQuestion(input)) return null;
+        // Never steal a locally configured answer or a protected command.
+        // The existing Android response engine still owns these messages.
+        if (!isH2AutoUnknownTextEligible(input) ||
+            matchesH2AutoLocalReply(input, configuredLocalRules)) return null;
+        // A pergunta só é registrada quando a coleta aprovada está ativa,
+        // o conteúdo é seguro e o banco confirma a gravação.
         let captured = false;
-        if (questionCollectionEnabled) {
+        if (questionCollectionEnabled && safeH2AutoUnknownQuestion(input)) {
           try { captured = await recordH2AutoUnknownQuestion(deviceId, input); }
           catch (error) { console.error("[H2Auto] coleta de pergunta indisponível", error); }
         }
         return {
           state: "choice",
-          message: "⚡ *H2 COLOMBIANO* 🇨🇴\n\n🤖 Ainda não tenho uma resposta cadastrada para essa pergunta." +
-            (captured ? "\n\n📝 Sua pergunta foi registrada para análise." : "") +
-            "\n\n💬 Pode enviar outra pergunta. Continuamos por aqui.",
+          message: renderH2AutoUnknownReply(unknownReplyText, captured),
         };
       };
       const existing = await rows(sql`SELECT * FROM h2_auto_access_sessions WHERE id=${sessionId} AND device_id=${deviceId} LIMIT 1`);
