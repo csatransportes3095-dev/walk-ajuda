@@ -33,7 +33,7 @@ describe("H2 Auto APK OTP bridge security checks", () => {
     expect(login).toContain("RECEBER PELO WHATSAPP");
     expect(login).toContain("bg-cyan-500");
     expect(login).toContain("bg-[#8B0000]");
-    expect(login).toContain('encodeWhatsappMessage("Preciso receber meu código")');
+    expect(login).toContain('buildWhatsappMessageUrl(supportNumber, "Preciso receber meu código")');
     expect(login).not.toContain("Código enviado por e-mail e WhatsApp.");
   });
 
