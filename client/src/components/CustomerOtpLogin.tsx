@@ -113,6 +113,15 @@ export function CustomerOtpLogin({ title = "Acesso H2 Colombiano", initialPhone 
       toast.error("Recebimento pelo WhatsApp indisponível. Use o botão azul do e-mail.");
       return;
     }
+    // Orders launch WhatsApp from a direct tap in a new tab, not through a
+    // delayed same-tab redirect. Reserve that tab synchronously, while the
+    // Android click still has browser user activation. Never pre-send the
+    // message or queue an OTP solely because the tab was reserved.
+    let whatsappTab: Window | null = null;
+    let whatsappNavigationStarted = false;
+    if (channel === "whatsapp" && typeof navigator !== "undefined" && /Android/i.test(navigator.userAgent)) {
+      try { whatsappTab = window.open("about:blank", "_blank"); } catch { /* blocked by browser */ }
+    }
     setBusy(true);
     try {
       // Check before requesting a code; the current OTP endpoint
@@ -153,15 +162,36 @@ export function CustomerOtpLogin({ title = "Acesso H2 Colombiano", initialPhone 
       if (channel === "whatsapp") {
         // The customer must actually send the prepared message; merely
         // opening this link never authorizes the APK to deliver a code.
-        // Reuse the working order resend URL format; keep the OTP,
-        // destination number and exact customer message unchanged.
-        window.location.assign(buildWhatsappMessageUrl(supportNumber, "Preciso receber meu código"));
+        // Same URL AND new-tab navigation pattern as the working order
+        // resend action. This avoids relying on a same-tab redirect after
+        // two awaited requests, which can lose the original user gesture.
+        const whatsappUrl = buildWhatsappMessageUrl(supportNumber, "Preciso receber meu código");
+        if (whatsappTab && !whatsappTab.closed) {
+          try {
+            whatsappTab.opener = null;
+            whatsappTab.location.replace(whatsappUrl);
+            whatsappNavigationStarted = true;
+          } catch {
+            window.location.assign(whatsappUrl);
+            whatsappNavigationStarted = true;
+          }
+        } else {
+          // Embedded browsers or popup blockers may refuse a reserved tab.
+          // Preserve the former behavior in those environments.
+          window.location.assign(whatsappUrl);
+          whatsappNavigationStarted = true;
+        }
       } else {
         toast.success(result.message || "Confira o e-mail cadastrado.");
       }
     } catch (err: any) {
       toast.error(err?.message || "Não foi possível solicitar o código.");
     } finally {
+      // Invalid phone, unavailable customer, email error, cooldown or
+      // rejected OTP must never leave an unwanted blank WhatsApp tab.
+      if (whatsappTab && !whatsappNavigationStarted) {
+        try { whatsappTab.close(); } catch {}
+      }
       setBusy(false);
     }
   }
@@ -283,6 +313,7 @@ export function CustomerOtpLogin({ title = "Acesso H2 Colombiano", initialPhone 
               </a>
             ) : (
               <a href={buildWhatsappMessageUrl(supportNumber, "Preciso receber meu código")}
+                target="_blank" rel="noopener noreferrer"
                 className="flex min-h-12 w-full items-center justify-center gap-2 rounded-xl bg-[#8B0000] px-4 py-3 text-center text-sm font-black text-white hover:bg-[#a30000]">
                 <MessageCircle className="h-5 w-5" /> VOLTAR AO WHATSAPP
               </a>

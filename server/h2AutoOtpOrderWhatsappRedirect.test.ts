@@ -9,7 +9,11 @@ describe("Login WhatsApp redirect matches the proven orders implementation", () 
   it("uses the same shared URL builder as order resend, including type and app_absent", () => {
     expect(orders).toContain("buildWhatsappMessageUrl(");
     expect(login).toContain('import { buildWhatsappMessageUrl } from "@shared/whatsappUrl"');
-    expect(login).toContain('window.location.assign(buildWhatsappMessageUrl(supportNumber, "Preciso receber meu código"))');
+    expect(login).toContain('const whatsappUrl = buildWhatsappMessageUrl(supportNumber, "Preciso receber meu código")');
+    expect(login).toContain('window.open("about:blank", "_blank")');
+    expect(login).toContain("whatsappTab.location.replace(whatsappUrl)");
+    expect(login).toContain("whatsappTab.close()");
+    expect(login).toContain('target="_blank" rel="noopener noreferrer"');
     expect(login).toContain('<a href={buildWhatsappMessageUrl(supportNumber, "Preciso receber meu código")}');
     const url = new URL(buildWhatsappMessageUrl("5511999999999", "Preciso receber meu código"));
     expect(url.origin).toBe("https://api.whatsapp.com");
