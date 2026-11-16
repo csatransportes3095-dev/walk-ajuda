@@ -1,0 +1,21 @@
+name: H2 AUTO - Pausas locais no diagnostico
+on:
+  pull_request:
+    paths:
+      - 'server/h2-auto-diagnostics.ts'
+      - 'server/h2-auto-local-pause-diagnostics.test.ts'
+      - 'client/src/pages/AdminH2Auto.tsx'
+      - '.github/workflows/h2-auto-local-pause-diagnostics.yml'
+jobs:
+  isolated-regression:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: pnpm/action-setup@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '22'
+          cache: pnpm
+      - run: pnpm install --frozen-lockfile
+      - name: Validate diagnostic fields, privacy and compatibility
+        run: pnpm exec vitest run server/h2-auto-local-pause-diagnostics.test.ts

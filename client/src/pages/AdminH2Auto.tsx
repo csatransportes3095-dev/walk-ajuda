@@ -1105,6 +1105,24 @@ export default function AdminH2Auto() {
                             : "desconectado"}
                         </strong>
                       </p>
+                      <div className="sm:col-span-2 rounded-xl border border-amber-400/30 bg-slate-950/60 p-3 space-y-2" data-testid="h2-auto-local-pauses">
+                        <p className="font-black text-amber-200">⏱ PAUSAS LOCAIS DO APK — SINCRONIZAÇÃO COM ADM</p>
+                        {diagnostic.localPauseActiveRecords === undefined ||
+                          diagnostic.localPauseTemporaryRecords === undefined ||
+                          diagnostic.localPausePermanentRecords === undefined ? (
+                          <p className="text-amber-200">Ainda não informado pelo APK. Versões anteriores à 2.06 não enviam estes contadores.</p>
+                        ) : (
+                          <>
+                            <div className="grid gap-2 sm:grid-cols-3">
+                              <p className="rounded-lg border border-amber-400/20 p-2">Ativas: <strong>{diagnostic.localPauseActiveRecords}</strong></p>
+                              <p className="rounded-lg border border-amber-400/20 p-2">Temporárias: <strong>{diagnostic.localPauseTemporaryRecords}</strong></p>
+                              <p className="rounded-lg border border-amber-400/20 p-2">Permanentes: <strong>{diagnostic.localPausePermanentRecords}</strong></p>
+                            </div>
+                            <p className="text-xs text-slate-400">Último relatório: {dateLabel(d.diagnosticsReceivedAt)}{diagnosticsStale?" · relatório antigo":""}. Contagem de registros locais protegidos, não de telefones únicos.</p>
+                          </>
+                        )}
+                        <p className="text-xs text-slate-400">Somente leitura: não libera contatos, não altera pausas e não revela nomes, telefones ou identificadores.</p>
+                      </div>
                       <div className="sm:col-span-2 rounded-xl border border-cyan-500/30 bg-slate-950/60 p-3 space-y-1" data-testid="h2-auto-otp-diagnostic">
                         <p className="font-black text-cyan-200">CÓDIGO DE LOGIN — ÚLTIMA ETAPA NO APK</p>
                         <p className="text-slate-100">
