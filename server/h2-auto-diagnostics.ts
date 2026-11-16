@@ -109,6 +109,16 @@ export const h2AutoDiagnosticsSchema = z
     localPauseActiveRecords: z.number().int().min(0).max(100000).optional(),
     localPauseTemporaryRecords: z.number().int().min(0).max(100000).optional(),
     localPausePermanentRecords: z.number().int().min(0).max(100000).optional(),
+    localPauseEntries: z.array(z.object({
+      id:z.string().regex(/^[a-f0-9]{32}$/),
+      name:z.string().max(70),
+      phone:z.string().regex(/^[0-9]{10,11}$/).optional(),
+      identitySource:z.enum(["contacts","history","unknown","ambiguous"]),
+      mode:z.enum(["permanent","temporary"]),
+      origin:z.enum(["operator","automatic"]),
+      until:z.number().int().min(0).max(H2_AUTO_MAX_TIMESTAMP),
+    }).strict()).max(100).optional(),
+    localPauseLastReleaseId: z.string().regex(/^[a-f0-9]{32}$/).optional(),
   })
   .strict();
 

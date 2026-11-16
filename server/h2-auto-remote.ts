@@ -97,6 +97,11 @@ const configSchema = z.object({
   menu: z.array(z.string().max(6000)).length(9),
   whatsappMode: z.number().int().min(-1).max(1),
   pauseMinutes: z.number().int().min(1).max(1440),
+  localPauseRelease: z.object({
+    requestId:z.string().regex(/^[a-f0-9]{32}$/),
+    scope:z.enum(["all","one"]),
+    target:z.string().regex(/^[a-f0-9]{32}$/).default(""),
+  }).strict().optional(),
   manualControls: z.array(z.object({
     phone: z.string().regex(/^[0-9]{11}$/),
     mode: z.enum(["paused","silenced","active"]),
@@ -366,6 +371,7 @@ function mergeWithoutDeleting(
       tree: remote.tree ?? local.tree,
       media: remote.media,
       manualControls: remote.manualControls,
+      localPauseRelease: remote.localPauseRelease,
       confirmation: remote.confirmation,
       personalization: remote.personalization,
       identificationSessionHours: remote.identificationSessionHours,
@@ -404,6 +410,7 @@ function mergeWithoutDeleting(
     media: remote.media,
     ordersEnabled: remote.ordersEnabled,
     manualControls: remote.manualControls,
+    localPauseRelease: remote.localPauseRelease,
     desktopReadOnly: remote.desktopReadOnly,
     welcome: remote.welcome.trim() ? remote.welcome : local.welcome,
     menu: remote.menu.map((v, i) => (v.trim() ? v : local.menu[i])),
@@ -439,6 +446,47 @@ async function clearH2AutoCustomerSessions(
   }
 }
 export const h2AutoAdminRouter = router({
+  // Each pause-release request is explicit, revision-bound and scoped to one device.
+  // A target must be in the most recently authenticated APK diagnostic snapshot.
+  releaseLocalPause: adminProcedure
+    .input(z.object({
+      id:z.string().regex(/^[a-f0-9]{24}$/),
+      expectedRevision:z.number().int().min(1),
+      scope:z.enum(["one","all"]),
+      target:z.string().regex(/^[a-f0-9]{32}$/).optional(),
+    }).strict())
+    .mutation(async ({input})=>{
+      await ensure();
+      const db=await getDb();
+      if(!db)throw new TRPCError({code:"INTERNAL_SERVER_ERROR",message:"Banco indisponível."});
+      if(input.scope==="one"&&!input.target)
+        throw new TRPCError({code:"BAD_REQUEST",message:"Selecione uma pausa válida."});
+      const rowsFound=await rows(sql`SELECT d.config_json,d.revision,x.diagnostics_json
+        FROM h2_auto_devices d
+        LEFT JOIN h2_auto_diagnostics x ON x.device_id=d.id
+        WHERE d.id=${input.id} LIMIT 1`);
+      const current=rowsFound[0];
+      if(!current)throw new TRPCError({code:"NOT_FOUND",message:"Aparelho não encontrado."});
+      if(Number(current.revision)!==input.expectedRevision)
+        throw new TRPCError({code:"CONFLICT",message:"Configuração mudou. Atualize o painel."});
+      const reported=decodeH2AutoDiagnostics(current.diagnostics_json);
+      const entries=reported?.localPauseEntries||[];
+      if(reported?.apkVersionCode == null || reported.apkVersionCode<107)
+        throw new TRPCError({code:"PRECONDITION_FAILED",message:"Instale o APK 2.07 para liberar pausas locais."});
+      if(input.scope==="one" && !entries.some(x=>x.id===input.target))
+        throw new TRPCError({code:"BAD_REQUEST",message:"Registro não encontrado no último relatório do APK."});
+      if(input.scope==="all" && entries.length===0 && (reported.localPauseActiveRecords||0)===0)
+        throw new TRPCError({code:"BAD_REQUEST",message:"Não há pausas locais relatadas para liberar."});
+      const requestId=randomBytes(16).toString("hex");
+      const command={requestId,scope:input.scope,target:input.scope==="one"?input.target!:""};
+      const changed:any=await db.execute(sql`UPDATE h2_auto_devices
+        SET config_json=JSON_SET(config_json,'$.localPauseRelease',CAST(${JSON.stringify(command)} AS JSON)),
+        revision=revision+1
+        WHERE id=${input.id} AND revision=${input.expectedRevision}`);
+      if(!changed[0]?.affectedRows)
+        throw new TRPCError({code:"CONFLICT",message:"Configuração mudou. Recarregue."});
+      return {success:true,requestId,revision:input.expectedRevision+1};
+    }),
   manualControls: adminProcedure
     .input(z.object({id:z.string().regex(/^[a-f0-9]{24}$/)}))
     .query(async ({input})=>{
@@ -612,6 +660,7 @@ export const h2AutoAdminRouter = router({
         menu: saved.menu,
         rules: saved.rules,
         manualControls: saved.manualControls,
+        localPauseRelease: saved.localPauseRelease,
         blocked: saved.blocked,
         quickReplyText: saved.quickReplyText,
         unknownReplyText: saved.unknownReplyText,

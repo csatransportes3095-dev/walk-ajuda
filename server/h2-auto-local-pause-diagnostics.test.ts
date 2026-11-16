@@ -29,6 +29,27 @@ describe("ADM H2 AUTO: contador de pausas locais em diagnostico",()=>{
     expect(h2AutoDiagnosticsSchema.safeParse({...minimal,localPauseActiveRecords:1,phone:"11900000000"}).success).toBe(false);
     expect(schema).toContain(".strict()");
   });
+  it("recebe registros individuais e identificações seguras, sem hash",()=>{
+    const entries=[
+      {id:"a".repeat(32),name:"Cliente identificado",phone:"11999999999",identitySource:"contacts",
+       mode:"permanent",origin:"operator",until:0},
+      {id:"b".repeat(32),name:"",identitySource:"unknown",mode:"permanent",origin:"operator",until:0},
+    ];
+    expect(h2AutoDiagnosticsSchema.safeParse({...minimal,localPauseEntries:entries}).success).toBe(true);
+    expect(h2AutoDiagnosticsSchema.safeParse({...minimal,localPauseEntries:[{...entries[0],key:"manual_handoff_abcdef"}]}).success).toBe(false);
+    expect(h2AutoDiagnosticsSchema.safeParse({...minimal,localPauseEntries:[{...entries[0],phone:"123"}]}).success).toBe(false);
+    expect(h2AutoDiagnosticsSchema.safeParse({...minimal,localPauseEntries:entries,localPauseLastReleaseId:"f".repeat(32)}).success).toBe(true);
+  });
+  it("ADM exige liberação individual explícita, confirmação e mostra pendências",()=>{
+    expect(remote).toContain("releaseLocalPause: adminProcedure");
+    expect(remote).toContain("revision=revision+1");
+    expect(remote).toContain("reported?.localPauseEntries");
+    expect(remote).toContain("scope:z.enum");
+    expect(adm).toContain("LIBERAR ESTE REGISTRO");
+    expect(adm).toContain("LIBERAR TODAS AS PAUSAS LOCAIS");
+    expect(adm).toContain("window.confirm");
+    expect(adm).toContain("localPauseLastReleaseId");
+  });
   it("mantém envio via ACK autenticado existente e apenas mostra relatório",()=>{
     expect(remote).toContain("diagnostics: h2AutoDiagnosticsSchema.optional()");
     expect(adm).toContain("PAUSAS LOCAIS DO APK — SINCRONIZAÇÃO COM ADM");
