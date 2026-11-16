@@ -104,6 +104,13 @@ export const h2AutoDiagnosticsSchema = z
     replyStatusAt: z.number().int().min(0).max(H2_AUTO_MAX_TIMESTAMP),
     otpDeliveryStatusCode: z.enum(H2_AUTO_OTP_STATUS_CODES).optional(),
     otpDeliveryStatusAt: z.number().int().min(0).max(H2_AUTO_MAX_TIMESTAMP).optional(),
+    // H2 AUTO 2.08 reports ONLY OTP continuity timestamps/status.
+    // Optional to preserve compatibility with older APKs.
+    otpPollLastSuccessAt: z.number().int().min(0).max(H2_AUTO_MAX_TIMESTAMP).optional(),
+    otpPollLastFailureAt: z.number().int().min(0).max(H2_AUTO_MAX_TIMESTAMP).optional(),
+    otpMonitorRunning: z.boolean().optional(),
+    otpMonitorHeartbeatAt: z.number().int().min(0).max(H2_AUTO_MAX_TIMESTAMP).optional(),
+    otpMonitorStartFailedAt: z.number().int().min(0).max(H2_AUTO_MAX_TIMESTAMP).optional(),
     // H2 AUTO 2.06: aggregated local pause records, never phone/name/hash.
     // Optional: APK 2.05 and older continue to ACK without these counters.
     localPauseActiveRecords: z.number().int().min(0).max(100000).optional(),
