@@ -100,6 +100,9 @@ const otpDeliveryLabels: Record<string, string> = {
   OTP_WHATSAPP_OPEN_FAILED: "Falhou ao solicitar a abertura do WhatsApp.",
   OTP_SEND_ACTION_ACCEPTED: "O Android aceitou a ação Enviar; entrega ao cliente ainda não comprovada.",
   OTP_ACK_RETRY_PENDING: "A ação foi aceita, mas o servidor ainda aguarda a confirmação.",
+  OTP_INCOMING_RETRY_SCHEDULED: "O APK está tentando novamente após falha antes da aceitação pelo Android.",
+  OTP_INCOMING_RETRY_EXHAUSTED: "A tentativa de envio não foi aceita após as tentativas seguras. Verifique a notificação WhatsApp.",
+  OTP_INCOMING_ANDROID_ACCEPTED_UNVERIFIED: "A resposta foi aceita pelo Android; entrega no WhatsApp NÃO confirmada.",
 };
 const field =
   "w-full rounded-xl border border-cyan-500/30 bg-slate-950 px-3 py-2 text-white";
