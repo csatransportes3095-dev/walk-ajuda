@@ -97,13 +97,20 @@ export function registerH2AutoIncomingOtpRoutes(app: Express): void {
       const deviceId=await authorizedOtpDevice(req);
       if (!deviceId) return response(res,401,{error:"unauthorized"});
       const id=String(req.body?.id||"");
-      if (!/^[a-f0-9]{32}$/.test(id)) return response(res,400,{error:"invalid_request"});
+      // Older paired APKs send only id. Newer versions explicitly identify
+      // that Android accepted RemoteInput, NOT that WhatsApp delivered it.
+      const handoffState=String(req.body?.handoffState||"legacy_android_action_accepted");
+      if (!/^[a-f0-9]{32}$/.test(id)
+        || !["android_action_accepted","legacy_android_action_accepted"].includes(handoffState))
+        return response(res,400,{error:"invalid_request"});
       const db: any=await getDb(); if(!db)throw Error("DB_UNAVAILABLE");
       await ensure(db);
+      // Legacy sent_at names the one-shot Android handoff, not a WhatsApp
+      // delivery receipt. Consume the code to avoid duplicate customer texts.
       await db.execute(sql`UPDATE h2_auto_otp_incoming_queue
         SET sent_at=${Date.now()},payload_encrypted=''
         WHERE id=${id} AND device_id=${deviceId} AND sent_at IS NULL`);
-      return response(res,200,{success:true});
+      return response(res,200,{success:true,handoffState,deliveryConfirmed:false});
     }catch{return response(res,503,{error:"temporarily_unavailable"});}
   });
 }
