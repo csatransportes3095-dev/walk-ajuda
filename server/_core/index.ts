@@ -632,6 +632,7 @@ async function startServer() {
       const { adminMediaFiles } = await import('../../drizzle/schema');
       const { eq: eqOp } = await import('drizzle-orm');
       const { Readable } = await import('node:stream');
+      const { pipeline } = await import('node:stream/promises');
       const db = await getDb();
       if (!db) { res.status(503).end(); return; }
       const rows = await db.select().from(adminMediaFiles).where(eqOp(adminMediaFiles.videoSlug, slug)).limit(1);
@@ -659,7 +660,10 @@ async function startServer() {
         const value = upstream.headers.get(name);
         if (value) res.setHeader(name, value);
       }
-      Readable.fromWeb(upstream.body as any).pipe(res);
+      // Await pipeline: both upstream and client disconnect errors are handled
+      // within this route instead of becoming an uncaught stream exception that
+      // terminates the entire Node process (502 on all unrelated routes).
+      await pipeline(Readable.fromWeb(upstream.body as any), res);
     } catch (err) {
       const message = err instanceof Error ? err.message : String(err);
       console.error('[PublicVideo] falha', slug, message);
