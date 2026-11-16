@@ -18,6 +18,12 @@ describe("H2 AUTO 2.08: diagnóstico do monitor independente de códigos",()=>{
     expect(result.otpMonitorRunning).toBe(true);
     expect(result.otpPollLastSuccessAt).toBe(1794800000000);
   });
+  it("códigos de estado do envio iniciado por notificação são estritamente limitados",()=>{
+    for (const state of ["OTP_INCOMING_RETRY_SCHEDULED","OTP_INCOMING_RETRY_EXHAUSTED","OTP_INCOMING_ANDROID_ACCEPTED_UNVERIFIED"]) {
+      expect(h2AutoDiagnosticsSchema.safeParse({...minimal,otpDeliveryStatusCode:state}).success).toBe(true);
+      expect(adm).toContain(state);
+    }
+  });
   it("APK 2.07 e versões anteriores continuam aceitos",()=>{
     expect(h2AutoDiagnosticsSchema.safeParse({...minimal,apkVersion:"2.07-local-pause-release",apkVersionCode:107}).success).toBe(true);
   });
