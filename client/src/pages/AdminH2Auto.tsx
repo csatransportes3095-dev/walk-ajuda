@@ -1175,6 +1175,25 @@ export default function AdminH2Auto() {
                         )}
                         <p className="text-xs text-slate-400">Somente leitura: não libera contatos, não altera pausas e não revela nomes, telefones ou identificadores.</p>
                       </div>
+                      <div className="sm:col-span-2 rounded-xl border border-cyan-400/40 bg-slate-950/70 p-3 space-y-2" data-testid="h2-auto-otp-continuity">
+                        <p className="font-black text-cyan-200">📡 CONSULTA AUTOMÁTICA DE CÓDIGOS — STATUS DO APK</p>
+                        {diagnostic.otpPollLastSuccessAt===undefined ? (
+                          <p className="text-amber-200">Esta versão do APK ainda não informa o monitoramento de códigos. Atualize para 2.08.</p>
+                        ) : (
+                          <>
+                            <p className={diagnosticsStale || !diagnostic.otpPollLastSuccessAt || Date.now()-diagnostic.otpPollLastSuccessAt>120000 ? "text-rose-300 font-bold" : "text-emerald-200 font-bold"}>
+                              {diagnosticsStale || !diagnostic.otpPollLastSuccessAt || Date.now()-diagnostic.otpPollLastSuccessAt>120000
+                                ? "⚠️ SEM CONSULTA RECENTE — envio de códigos pode estar interrompido"
+                                : "✅ CONSULTA DE CÓDIGOS ATIVA"}
+                            </p>
+                            <p className="text-slate-300">Última consulta com sucesso: {diagnostic.otpPollLastSuccessAt?dateLabel(diagnostic.otpPollLastSuccessAt):"Nunca registrada"}</p>
+                            <p className="text-slate-300">Última falha de consulta: {diagnostic.otpPollLastFailureAt?dateLabel(diagnostic.otpPollLastFailureAt):"Nenhuma falha registrada"}</p>
+                            <p className="text-slate-300">Monitor em primeiro plano: <strong>{diagnostic.otpMonitorRunning?"ATIVO":"INATIVO"}</strong> · Último sinal: {diagnostic.otpMonitorHeartbeatAt?dateLabel(diagnostic.otpMonitorHeartbeatAt):"Não recebido"}</p>
+                            {diagnostic.otpMonitorStartFailedAt && <p className="text-amber-200">O Android restringiu uma tentativa de iniciar o monitor: {dateLabel(diagnostic.otpMonitorStartFailedAt)}</p>}
+                          </>
+                        )}
+                        <p className="text-xs text-slate-400">Consulta ativa não comprova que o WhatsApp enviou o código. O envio depende da confirmação segura do destinatário e da interface do Android.</p>
+                      </div>
                       <div className="sm:col-span-2 rounded-xl border border-cyan-500/30 bg-slate-950/60 p-3 space-y-1" data-testid="h2-auto-otp-diagnostic">
                         <p className="font-black text-cyan-200">CÓDIGO DE LOGIN — ÚLTIMA ETAPA NO APK</p>
                         <p className="text-slate-100">
