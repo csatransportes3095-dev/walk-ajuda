@@ -17,6 +17,9 @@ describe("Customer-initiated WhatsApp OTP", () => {
     expect(server).toContain("c.attempts<5");
     expect(server).toContain("payload_encrypted");
     expect(server).toContain("otp/incoming");
+    expect(server).toContain('const handoffState=String(req.body?.handoffState||"legacy_android_action_accepted")');
+    expect(server).toContain("deliveryConfirmed:false");
+    expect(server).toContain("Legacy sent_at names the one-shot Android handoff");
     expect(routes).toContain("registerH2AutoIncomingOtpRoutes(app)");
   });
   it("does not send WhatsApp code when customer selects email", () => {
