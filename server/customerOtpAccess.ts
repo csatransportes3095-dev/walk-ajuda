@@ -134,11 +134,11 @@ async function issueSession(tx: any, customer: any, now: number) {
 }
 
 export async function requestCustomerCode(phoneInput: string, request: Request, channel: "email" | "whatsapp" = "email"): Promise<{
-  success: true; message: string; resendBlocked?: boolean; retryAfterSeconds?: number;
+  success: true; message: string; prepared: boolean; resendBlocked?: boolean; retryAfterSeconds?: number;
 }> {
   requireOtpMigrationEnabled();
   const phone = normalizeCustomerPhone(phoneInput);
-  if (!phone || phone.length !== 11) return { success:true, message:GENERIC };
+  if (!phone || phone.length !== 11) return { success:true, message:GENERIC, prepared:false };
   if (channel === "whatsapp" && !(await isH2AutoApkOtpReady()))
     throw new TRPCError({code:"SERVICE_UNAVAILABLE",message:"WhatsApp temporariamente indisponível. Use o e-mail."});
   const db = await getDb() as any;
@@ -154,10 +154,15 @@ export async function requestCustomerCode(phoneInput: string, request: Request, 
     // a new challenge had been generated. This shared hourly safety limit is
     // separate from the independent 60-second channel countdowns.
     return {success:true, message:"Limite de solicitações atingido. Tente novamente mais tarde.",
-      resendBlocked:true, retryAfterSeconds:3600};
+      prepared:false, resendBlocked:true, retryAfterSeconds:3600};
   }
   const customer = await uniqueCustomer(db, phone);
-  if (!customer) return { success:true, message:GENERIC };
+  if (!customer) {
+    // Public response stays generic; never pretend a missing/ambiguous profile
+    // produced a code or let the browser open a WhatsApp conversation.
+    console.warn("[CustomerOtp] challenge_not_prepared customer_lookup_rejected");
+    return { success:true, message:GENERIC, prepared:false };
+  }
   const email = normalizeCustomerEmail(customer.email);
   const phoneKey = digest("phone",phone), emailKey = digest("email",email);
   // Each channel has its own persistent cooldown, while a single code per
@@ -197,7 +202,7 @@ export async function requestCustomerCode(phoneInput: string, request: Request, 
   // A cooldown request does not issue a code. Never open WhatsApp if no new
   // queue task will exist; the current 10-minute code remains usable.
   if (!newlyIssued) return {
-    success:true, message:"Aguarde para solicitar outro código.",
+    success:true, message:"Aguarde para solicitar outro código.", prepared:false,
     resendBlocked:true, retryAfterSeconds:Math.max(1,retryAfterSeconds),
   };
   // WhatsApp is an explicitly selected channel, not an unsolicited send.
@@ -213,7 +218,7 @@ export async function requestCustomerCode(phoneInput: string, request: Request, 
       throw new TRPCError({code:"SERVICE_UNAVAILABLE",message:"WhatsApp indisponível. Solicite o código por e-mail."});
     }
   }
-  return { success:true, message:GENERIC, resendBlocked:false, retryAfterSeconds:60 };
+  return { success:true, message:GENERIC, prepared:true, resendBlocked:false, retryAfterSeconds:60 };
 }
 
 export async function verifyCustomerCode(phoneInput: string, code: string) {
