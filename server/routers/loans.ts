@@ -11,6 +11,7 @@ import { spreadsheetSessions } from "../../drizzle/schema";
 import { eq, sql as drizzleSql } from "drizzle-orm";
 import { applyH2ScoreEventFromSubmission, approveH2ScoreSubmission, backfillLegacyH2ScoreEvents, getClientH2ScoreSummary, getCustomerH2ScoreHistory, getCustomerH2ScoreSummary, getH2ScoreCustomerDirectory, getH2ScoreSubmissionMap, getLoanH2ScoreConfig, registerH2ScoreSubmission, refuseH2ScoreSubmission, setCustomerH2ScoreExact } from "../loans/h2Score";
 import { calculateLateFeeDetailsForInstallment, calculateLateFeeForInstallment } from "../loans/lateFee";
+import { summarizeLoanDashboard } from "../loans/dashboardAccounting";
 import { isSystemRestoreLocked } from "../backupRestoreService";
 import { calculateParceladoFromAdminPlan } from "../loans/parcelado";
 import PDFDocument from "pdfkit";
@@ -2205,18 +2206,41 @@ export const loanRouter = router({
       received: parseFloat(receivedByMonth.find((r: any) => r.month === month)?.received || 0),
     }));
 
+    // Read-only reconciliation: open installments alone form the collectible balance.
+    // Interest-only rollover history is preserved but does not form a second debt.
+    const ledgerRows = await qRows(db, drizzleSql`
+      SELECT
+        l.id AS loanId, l.status AS loanStatus,
+        l.amount AS loanPrincipal, l.totalAmount AS loanTotal,
+        l.pixSentAt AS pixSentAt,
+        li.id AS installmentId, li.amount AS installmentAmount,
+        li.status AS installmentStatus,
+        li.feeApplied AS installmentFee,
+        li.originalAmount AS installmentOriginalAmount
+      FROM loans l
+      LEFT JOIN loanInstallments li ON li.loanId = l.id
+      WHERE l.status NOT IN ('cancelado', 'reprovado')
+      ORDER BY l.id, li.id
+    `);
+    const receivables = summarizeLoanDashboard(ledgerRows);
+
     return {
       ...totals,
       totalExpected,
       totalReceived,
-      valorEmAberto,
+      valorEmAberto: receivables.valorEmAberto,
+      capitalAReceber: receivables.capitalAReceber,
+      lucroAReceber: receivables.lucroAReceber,
+      taxasAReceber: receivables.taxasAReceber,
+      semPixConfirmado: receivables.semPixConfirmado,
+      semPixValorPendente: receivables.semPixValorPendente,
+      inconsistenciasFinanceiras: receivables.inconsistencias,
       totalOverdue,
       totalInterestReceived,
       profit: totalInterestReceived,
       totalExpectedProfit,
       capitalRecovered,
       rentabilidade,
-      lucroAReceber,
       pendingApproval: parseInt(pendingRows[0]?.cnt || 0),
       pendingProof: parseInt(proofRows[0]?.cnt || 0),
       overdueClientsCount: parseInt(inadRows[0]?.cnt || 0),
