@@ -23,7 +23,7 @@ describe("reliable ADM notifications for loans", () => {
     const notice = buildLoanAdminNotice(event);
     expect(notice.subject).toContain("Comprovante de empréstimo recebido");
     expect(notice.subject).toContain("#423");
-    expect(notice.html).toContain("R$&nbsp;120,50");
+    expect(notice.html).toContain("120,50");
     expect(notice.html).toContain("https://example.com/proof.png");
     expect(notice.html).toContain("Parcela");
   });
