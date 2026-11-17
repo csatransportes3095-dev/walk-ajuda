@@ -33,7 +33,7 @@ describe("H2 ADS opt-in per-instance refresh timer",()=>{
   });
   it("keeps local timer separate from proxy, Chrome and current stopwatch",()=>{
     expect(chrome).toContain('h2ads-auto-refresh-policy.json');
-    expect(chrome).toContain('"auto-refresh/" + instanceId');
+    expect(chrome).toContain('"/api/h2ads/worker/auto-refresh/" + instanceId');
     expect(chrome).toContain('"-RefreshPolicyPath", refreshPolicyPath');
     expect(chrome).toContain("if (refreshPolicyTimer) clearInterval(refreshPolicyTimer)");
     expect(phone).toContain("function Change-H2AdsRefresh");
