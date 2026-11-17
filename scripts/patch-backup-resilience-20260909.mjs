@@ -120,10 +120,19 @@ const newReconcile = `export async function reconcileBackupsAfterRestart(): Prom
   return restartedBackups + interruptedVerifications;
 }`;
 
-if (!source.includes(oldReconcile)) {
-  throw new Error('Bloco reconcileBackupsAfterRestart esperado não encontrado; patch abortado para evitar alteração incorreta.');
+if (source.includes(oldReconcile)) {
+  source = source.replace(oldReconcile, newReconcile);
+} else if (
+  source.includes('async function failOnlyStaleBackupRuns(') &&
+  source.includes('lte(systemBackups.updatedAt, cutoff)') &&
+  source.includes('export async function reconcileBackupsAfterRestart(): Promise<number>')
+) {
+  // The repository already has a safer multi-instance reconciliation:
+  // never replace it with the old unconditional queue/restart logic.
+  console.log('[backup-patch] reconciliação multinstância protegida preservada.');
+} else {
+  throw new Error('Bloco reconcileBackupsAfterRestart desconhecido; patch abortado sem alterar o backup.');
 }
-source = source.replace(oldReconcile, newReconcile);
 
 const oldWorkspace = `    getEncryptionKey();
     throwIfBackupAborted(signal);
