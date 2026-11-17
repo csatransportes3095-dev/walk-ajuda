@@ -525,8 +525,8 @@ export const h2AutoAdminRouter = router({
           throw new TRPCError({code:"BAD_REQUEST",message:"Limite de contatos atingido."});
         // Keep legacy saved display-name entries: no safe name -> number mapping
         // exists on the server. Remove numeric entries only for this phone.
-        const retainedBlocked=cfg.blocked.split(/[\\n;,]/).map(x=>x.trim()).filter(x=>
-          x.length>0 && normalizeSilencedPhone(x)!==input.phone).join("\\n");
+        const retainedBlocked=cfg.blocked.split(/[\n;,]/).map(x=>x.trim()).filter(x=>
+          x.length>0 && normalizeSilencedPhone(x)!==input.phone).join("\n");
         const sync={requestId:randomBytes(16).toString("hex"),phone:input.phone,mode:input.mode};
         const changed:any=await db.execute(sql`UPDATE h2_auto_devices SET
           config_json=JSON_SET(config_json,
