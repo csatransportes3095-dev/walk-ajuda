@@ -831,7 +831,7 @@ async function startNativePhoneVisual(pid) {
     );
     if (response.ok) {
       const contents = await response.text();
-      if (contents.length >= 2000 && contents.length <= 45000 &&
+      if (contents.length >= 2000 && contents.length <= 75000 &&
           contents.includes("H2PhoneWindowNative")) {
         // Isolated per instance: do not overwrite a script used by another Chrome.
         writeFileSync(currentVisualScript, contents, { encoding: "utf8", mode: 0o600 });

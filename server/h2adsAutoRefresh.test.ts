@@ -54,11 +54,27 @@ describe("H2 ADS opt-in per-instance refresh timer",()=>{
     expect(phone).not.toContain("SendKeys.Send");
     expect(phone).not.toContain("SetForegroundWindow");
   });
-  it("shows a dedicated per-instance ADM control with disabling action",()=>{
-    expect(adm).toContain("function H2AdsAutoRefreshControl");
-    expect(adm).toContain("trpc.h2Ads.setAutoRefreshPolicy.useMutation");
-    expect(adm).toContain("<H2AdsAutoRefreshControl instanceId={instance.id}");
-    expect(adm).toContain("Desativar");
-    expect(adm).toContain("Não troca proxy, perfil ou aba.");
+  it("configures the interval only from the open instance, never from ADM",()=>{
+    expect(adm).not.toContain("function H2AdsAutoRefreshControl");
+    expect(adm).not.toContain("<H2AdsAutoRefreshControl");
+    expect(phone).toContain("function Set-H2AdsRefreshSettings");
+    expect(phone).toContain("function Change-H2AdsRefresh");
+    expect(phone).toContain('SALVAR E INICIAR');
+    expect(phone).toContain('SALVAR PAUSADO');
+    expect(phone).toContain('DESATIVAR');
+    expect(phone).toContain('$dialog.ShowDialog($frame)');
+    expect(phone).toContain('intervalSeconds=[int]$script:refreshSeconds');
+    expect(phone).toContain('$script:refreshConfiguredLocally=$true');
+    expect(phone).toContain('if($script:refreshConfiguredLocally){return}');
+    expect(phone).toContain('if($script:refreshDialogOpen){$script:refreshNextAtMs=0;return}');
+  });
+  it("keeps each interval in its own local instance file and persists with atomic save",()=>{
+    expect(phone).toContain('("instance-{0}-auto-refresh.json" -f $InstanceId)');
+    expect(phone).toContain("Save-H2AdsRefreshToggle");
+    expect(phone).toContain("[System.IO.File]::Replace");
+    expect(phone).toContain("[System.IO.File]::Move");
+    expect(phone).toContain('if($localSeconds -eq 0){$script:refreshEnabled=$false}');
+    expect(phone).toContain('if($seconds -ne 0 -and ($seconds -lt 30 -or $seconds -gt 86400))');
+    expect(chrome).toContain('contents.length <= 75000');
   });
 });
