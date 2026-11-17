@@ -136,3 +136,4 @@ export default function H2AutoManualControls({
       </div>)}
     </div>}
   </section>;
+}
