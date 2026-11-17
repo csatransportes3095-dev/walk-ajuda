@@ -843,11 +843,14 @@ async function startNativePhoneVisual(pid) {
   }
   if (!existsSync(script) || browserExitHandled || !browser || browser.exitCode !== null) return;
   try {
+    // A cached visual-only script from an older Worker must continue opening
+    // even if the optional refresh configuration is not supported yet.
+    const supportsAutoRefresh = readFileSync(script, "utf8").includes("[string]$RefreshPolicyPath");
     phoneWindowProcess = spawn("powershell.exe", [
       "-NoProfile", "-NonInteractive", "-ExecutionPolicy", "Bypass",
       "-WindowStyle", "Hidden", "-File", script,
       "-BrowserPid", String(pid), "-InstanceId", String(instanceId), "-InstanceName", instanceName,
-      "-RefreshPolicyPath", refreshPolicyPath,
+      ...(supportsAutoRefresh ? ["-RefreshPolicyPath", refreshPolicyPath] : []),
     ], { windowsHide: true, stdio: "ignore" });
     phoneWindowProcess.on("error", () => { phoneWindowProcess = null; });
   } catch {
