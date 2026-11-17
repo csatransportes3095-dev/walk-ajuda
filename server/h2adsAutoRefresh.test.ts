@@ -58,6 +58,17 @@ describe("H2 ADS opt-in per-instance refresh timer",()=>{
     expect(phone).not.toContain("SendKeys.Send");
     expect(phone).not.toContain("SetForegroundWindow");
   });
+  it("pins refresh to the selected Chrome tab and never reloads another tab",()=>{
+    expect(phone).toContain("using System.Windows.Automation;");
+    expect(phone).toContain("SelectedChromeTabIdentity(IntPtr chrome)");
+    expect(phone).toContain("SelectionItemPattern.Pattern");
+    expect(phone).toContain("GetRuntimeId()");
+    expect(phone).toContain("$script:refreshTabIdentity=$tabId");
+    expect(phone).toContain("$currentlySelected -ceq $script:refreshTabIdentity");
+    expect(phone).toContain("if([string]::IsNullOrWhiteSpace($script:refreshTabIdentity))");
+    expect(phone).toContain('"UIAutomationClient","UIAutomationTypes"');
+    expect(phone).not.toContain("SetForegroundWindow");
+  });
   it("configures the interval only from the open instance, never from ADM",()=>{
     expect(adm).not.toContain("function H2AdsAutoRefreshControl");
     expect(adm).not.toContain("<H2AdsAutoRefreshControl");
