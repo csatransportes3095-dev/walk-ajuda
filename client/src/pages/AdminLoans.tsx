@@ -160,7 +160,8 @@ function DashboardTab() {
   };
 
   const lucroAReceber = data.lucroAReceber ?? 0;
-  const capitalAReceber = Math.max(0, data.valorEmAberto - lucroAReceber);
+  const capitalAReceber = data.capitalAReceber ?? 0;
+  const taxasAReceber = data.taxasAReceber ?? 0;
   const temAtraso = data.totalOverdue > 0;
   const temVenceHoje = (data.totalDueToday ?? 0) > 0;
 
@@ -169,6 +170,18 @@ function DashboardTab() {
       {isError && (
         <div className="rounded-lg border border-amber-500/25 bg-amber-500/5 px-4 py-2 text-xs text-amber-300">
           Dados financeiros indisponíveis no momento. Os visores permanecem zerados até a estrutura de Empréstimos estar disponível.
+        </div>
+      )}
+
+      {(data.semPixConfirmado > 0 || data.inconsistenciasFinanceiras > 0) && (
+        <div className="rounded-lg border border-amber-500/25 bg-amber-500/5 px-4 py-3 text-xs text-amber-300 space-y-1">
+          <p className="font-semibold">Conferência financeira necessária</p>
+          {data.semPixConfirmado > 0 && (
+            <p>{data.semPixConfirmado} empréstimo(s) sem confirmação de liberação PIX e sem pagamento registrado; {fmt(data.semPixValorPendente ?? 0)} não incluídos no saldo até conferência.</p>
+          )}
+          {data.inconsistenciasFinanceiras > 0 && (
+            <p>{data.inconsistenciasFinanceiras} registro(s) financeiro(s) inconsistentes ou não reconhecidos, excluídos do saldo até conferência.</p>
+          )}
         </div>
       )}
 
@@ -192,6 +205,11 @@ function DashboardTab() {
             <p className="text-xs text-muted-foreground mb-1">Lucro a Receber</p>
             <p className="text-2xl font-bold text-emerald-400">{fmt(lucroAReceber)}</p>
             <p className="text-xs text-muted-foreground/50 mt-1">Lucro futuro dos empréstimos ativos</p>
+          </div>
+          <div>
+            <p className="text-xs text-muted-foreground mb-1">Taxas a Receber</p>
+            <p className="text-2xl font-bold text-orange-400">{fmt(taxasAReceber)}</p>
+            <p className="text-xs text-muted-foreground/50 mt-1">Taxas de atraso separadas dos juros</p>
           </div>
           <div>
             <p className="text-xs text-muted-foreground mb-1">Vence Hoje</p>
