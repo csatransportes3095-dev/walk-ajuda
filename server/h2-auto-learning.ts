@@ -23,6 +23,15 @@ export async function ensureH2AutoLearningTable(): Promise<void> {
       PRIMARY KEY(device_id, question_hash),
       INDEX idx_h2auto_unknown_latest (device_id, last_seen_at)
     ) ENGINE=InnoDB`);
+    // One event per verified inbound notification: retries must not inflate
+    // the occurrence counter or leak any sender/phone/message metadata.
+    await db.execute(sql`CREATE TABLE IF NOT EXISTS h2_auto_unanswered_events (
+      device_id VARCHAR(32) NOT NULL,
+      event_id CHAR(64) NOT NULL,
+      created_at BIGINT NOT NULL,
+      PRIMARY KEY(device_id, event_id),
+      INDEX idx_h2auto_event_created (created_at)
+    ) ENGINE=InnoDB`);
   })().catch(error => { prepared = undefined; throw error; });
   return prepared;
 }
@@ -58,20 +67,36 @@ export function safeH2AutoUnknownQuestion(input: unknown): { question: string; h
   return { question, hash };
 }
 
-export async function recordH2AutoUnknownQuestion(deviceId: string, input: string): Promise<boolean> {
-  if (!/^[a-f0-9]{24}$/.test(deviceId)) return false;
+export async function recordH2AutoUnknownQuestion(
+  deviceId: string, input: string, eventId?: string
+): Promise<boolean> {
+  if (!/^[a-f0-9]{24}$/.test(deviceId) ||
+      (eventId !== undefined && !/^[a-f0-9]{64}$/.test(eventId))) return false;
   const candidate = safeH2AutoUnknownQuestion(input);
   if (!candidate) return false;
   await ensureH2AutoLearningTable();
   const db = await getDb();
-  if (!db) return false;
+  if (!db) throw new Error("h2_auto_learning_database_unavailable");
   const now = Date.now();
-  await db.execute(sql`INSERT INTO h2_auto_unanswered_questions
+  const upsert = (tx: any) => tx.execute(sql`INSERT INTO h2_auto_unanswered_questions
     (device_id, question_hash, question, occurrences, first_seen_at, last_seen_at)
     VALUES (${deviceId}, ${candidate.hash}, ${candidate.question}, 1, ${now}, ${now})
     ON DUPLICATE KEY UPDATE occurrences=LEAST(occurrences+1,2147483647),
       last_seen_at=VALUES(last_seen_at)`);
-  return true;
+  if (!eventId) {
+    // Keep the original trusted internal API backward compatible.
+    await upsert(db);
+    return true;
+  }
+  if (typeof (db as any).transaction !== "function")
+    throw new Error("h2_auto_learning_transaction_required");
+  return await (db as any).transaction(async (tx: any) => {
+    const inserted: any = await tx.execute(sql`INSERT IGNORE INTO h2_auto_unanswered_events
+      (device_id, event_id, created_at) VALUES (${deviceId}, ${eventId}, ${now})`);
+    if (!inserted[0]?.affectedRows) return false;
+    await upsert(tx);
+    return true;
+  });
 }
 
 export async function listH2AutoUnknownQuestions(deviceId: string, limit = 50) {
