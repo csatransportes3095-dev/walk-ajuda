@@ -1,4 +1,4 @@
-import { type FormEvent, type ReactNode, useEffect, useMemo, useState } from "react";
+import { type FormEvent, type ReactNode, useMemo, useState } from "react";
 import { Link, useLocation } from "wouter";
 import { toast } from "sonner";
 import { Activity, ArrowDown, ArrowLeft, ArrowUp, ArrowUpDown, CheckCircle2, ChevronDown, ChevronRight, Copy, Eye, EyeOff, FolderPlus, KeyRound, Layers3, LockKeyhole, Monitor, Network, Pencil, Play, Plus, RefreshCw, Search, ShieldCheck, Square, Trash2, Wifi, WifiOff, X } from "lucide-react";
@@ -713,73 +713,6 @@ function GroupSection({ group, instances, profileByInstance, credentialByInstanc
   </section>;
 }
 
-function H2AdsAutoRefreshControl({ instanceId, browserOpen }: { instanceId: number; browserOpen: boolean }) {
-  const settings = trpc.h2Ads.autoRefreshPolicy.useQuery({ instanceId }, {
-    retry: false, staleTime: 10_000, refetchOnWindowFocus: true,
-  });
-  const save = trpc.h2Ads.setAutoRefreshPolicy.useMutation();
-  const [seconds, setSeconds] = useState("60");
-  useEffect(() => {
-    if (settings.data) setSeconds(String(settings.data.intervalSeconds || 60));
-  }, [settings.data?.intervalSeconds]);
-
-  async function update(value: number) {
-    if (!Number.isInteger(value) || (value !== 0 && (value < 30 || value > 86_400))) {
-      toast.error("Informe 0 para desativar ou um intervalo entre 30 segundos e 24 horas.");
-      return;
-    }
-    try {
-      await save.mutateAsync({ instanceId, intervalSeconds: value });
-      await settings.refetch();
-      toast.success(value === 0
-        ? "Atualização automática desativada nesta instância."
-        : "Intervalo salvo. Use AUTO na moldura do celular para iniciar ou pausar.");
-    } catch (error) {
-      toast.error(errorText(error, "Não foi possível salvar o intervalo."));
-    }
-  }
-
-  const configured = settings.data?.intervalSeconds ?? 0;
-  return <div className="mt-3 rounded-xl border border-[#148CFF]/25 bg-[#148CFF]/[0.05] p-3">
-    <p className="text-[10px] font-black uppercase tracking-[0.12em] text-[#8CC8FF]">
-      Atualização automática da página
-    </p>
-    <p className="mt-1.5 text-xs leading-5 text-slate-300">
-      Intervalo exclusivo desta instância. O botão AUTO na moldura inicia ou pausa
-      a recarga da aba ativa, sem mexer no cronômetro.
-    </p>
-    <form className="mt-2 flex flex-wrap items-end gap-2" onSubmit={event => {
-      event.preventDefault();
-      void update(Number(seconds));
-    }}>
-      <label className="min-w-[130px] flex-1 text-[11px] font-bold text-slate-300">
-        Intervalo em segundos
-        <input type="number" min={30} max={86400} step={1} value={seconds}
-          onChange={e => setSeconds(e.target.value)}
-          className="mt-1 h-9 w-full rounded-lg border border-white/15 bg-[#070B13] px-2 text-sm text-white"
-          aria-label="Intervalo de atualização automática em segundos" />
-      </label>
-      <button type="submit" disabled={save.isPending || settings.isLoading}
-        className="h-9 rounded-lg bg-[#148CFF] px-3 text-xs font-black text-white disabled:opacity-50">
-        Salvar intervalo
-      </button>
-      <button type="button" disabled={save.isPending || configured === 0}
-        onClick={() => void update(0)}
-        className="h-9 rounded-lg border border-rose-400/30 px-3 text-xs font-bold text-rose-200 disabled:opacity-40">
-        Desativar
-      </button>
-    </form>
-    <p className="mt-2 text-[11px] text-slate-400">
-      {settings.isError ? "Configuração indisponível; nenhuma atualização será ativada automaticamente."
-        : configured === 0 ? "Desativado por padrão."
-        : `Configurado: a cada ${configured} segundos. ${browserOpen ? "Abra o botão AUTO na moldura." : "Será disponibilizado quando o Chrome abrir."}`}
-    </p>
-    <p className="mt-1 text-[10px] leading-4 text-amber-200">
-      A recarga pode descartar formulários não enviados. Não troca proxy, perfil ou aba.
-    </p>
-  </div>;
-}
-
 function InstanceCard({ instance, profile, hasCredential, assignment, browserRun, worker, workers, groups, busy, visualColor, actionState, onAssignWorker, onPrepareBrowser, onRotateProxy, onLaunchBrowser, onCloseBrowser, onMoveGroup, onDelete, onEditInstance, onEditRoute }: { instance: { id: number; groupId: number; name: string; notes: string | null; status: "draft" | "paused" | "archived" }; profile?: NetworkProfile; hasCredential: boolean; assignment?: WorkerAssignment; browserRun?: BrowserRun; worker?: BrowserWorker; workers: BrowserWorker[]; groups: { id: number; name: string; status: "active" | "archived" }[]; busy: boolean; visualColor: string; actionState?: string; onAssignWorker: (instanceId: number, workerId: string) => void; onPrepareBrowser: (instanceId: number) => void; onRotateProxy: (instanceId: number) => void; onLaunchBrowser: (instanceId: number) => void; onCloseBrowser: (instanceId: number) => void; onMoveGroup: (instanceId: number, targetGroupId: number) => void; onDelete: () => void; onEditInstance: () => void; onEditRoute: () => void }) {
   const observedLocation = [profile?.observedCountryCode, profile?.observedCity].filter(Boolean).join(" · ");
   const isArchived = instance.status === "archived";
@@ -797,7 +730,6 @@ function InstanceCard({ instance, profile, hasCredential, assignment, browserRun
     <div className="flex items-start justify-between gap-2"><div className="min-w-0"><div className="flex flex-wrap items-center gap-2"><h5 className="max-w-full break-words rounded-lg border px-2.5 py-1 text-base font-black tracking-tight text-white" style={{ borderColor: visualColor, backgroundColor: colorBackground(visualColor) }}>{instance.name}</h5><span className="rounded-full border border-[#148CFF]/25 bg-[#148CFF]/10 px-2 py-0.5 text-[10px] font-black uppercase text-[#8CC8FF]">{statusName(instance.status)}</span></div><p className="mt-1.5 text-xs leading-5 text-slate-400">{instance.notes || "Rota individual desta instância."}</p></div><button type="button" disabled={isArchived} onClick={onEditRoute} className="inline-flex shrink-0 items-center gap-1 rounded-lg bg-[#F5B800] px-2.5 py-2 text-xs font-black text-[#171003] disabled:opacity-40"><KeyRound className="h-3.5 w-3.5" />{hasCredential ? "Proxy" : "Configurar"}</button></div>
     <div className="mt-4 grid grid-cols-2 gap-3 rounded-xl border border-white/8 bg-black/20 p-3 text-xs"><div><p className="font-semibold text-slate-400">Rota</p><p className={`mt-1 font-black ${hasCredential ? "text-emerald-200" : "text-slate-400"}`}>{hasCredential ? "Vinculada" : "Não configurada"}</p></div><div><p className="font-semibold text-slate-400">Último teste</p><p className={`mt-1 font-black ${healthClass(profile?.healthStatus ?? "not_checked")}`}>{healthName(profile?.healthStatus ?? "not_checked")}</p></div>{profile?.observedIp && <div className="col-span-2 border-t border-white/8 pt-2"><p className="font-semibold text-slate-400">Resultado</p><p className="mt-1 break-words font-bold text-slate-100">IP {profile.observedIp}{observedLocation ? ` · ${observedLocation}` : ""}{profile.latencyMs !== null ? ` · ${profile.latencyMs} ms` : ""}</p></div>}</div>
     <H2AdsOrderLinkControl instanceId={instance.id} currentGroupId={instance.groupId} groups={groups} onMoveGroup={targetGroupId => onMoveGroup(instance.id, targetGroupId)} />
-    <H2AdsAutoRefreshControl instanceId={instance.id} browserOpen={browserRun?.state === "browser_open"} />
     <div className="mt-3 rounded-xl border border-[#148CFF]/15 bg-[#148CFF]/[0.04] p-3"><div className="flex items-center justify-between gap-2"><p className="text-[10px] font-black uppercase tracking-[0.12em] text-[#8CC8FF]">Worker</p>{worker && <WorkerPresence worker={worker} />}</div><select disabled={busy || isArchived} value={assignment?.workerId ? String(assignment.workerId) : ""} onChange={event => onAssignWorker(instance.id, event.target.value)} className="mt-2 h-9 w-full rounded-lg border border-white/10 bg-black/20 px-2 text-xs font-bold text-slate-100 disabled:opacity-50"><option value="">{workers.length ? "Selecione um Worker" : "Cadastre um Worker"}</option>{workers.filter(item => item.status === "active").map(item => <option key={item.id} value={item.id}>{item.name} · {item.connectionStatus === "online" ? "online" : "offline"}</option>)}</select><p className="mt-2 text-[10px] font-medium text-slate-400">{assignment ? `Perfil: ${assignment.profileState.replace("_", " ")} · v${assignment.profileVersion}` : "Sem Worker atribuído."}</p>{worker && <p className={`mt-1 text-[10px] font-bold ${workerVersionOk ? "text-emerald-200" : "text-rose-200"}`}>{workerVersionOk ? `Worker ${worker.agentVersion ?? ""} · compatível` : `Worker ${worker.agentVersion ?? "sem versão"} · atualizar para 1.4.3+`}</p>}</div>
     <div className="mt-3 rounded-xl border border-emerald-400/15 bg-emerald-400/[0.035] p-3"><p className="text-[10px] font-black uppercase tracking-[0.12em] text-emerald-200">Sessão local</p><p className={`mt-1 text-xs font-semibold leading-5 ${browserRun?.state === "blocked" ? "text-rose-200" : browserRun?.state === "browser_open" ? "text-emerald-100" : "text-slate-400"}`}>{visibleActionState || browserState}{browserRun?.observedIp ? ` · IP ${browserRun.observedIp}` : ""}</p>{(browserRun?.state === "proxy_verified" || browserRun?.state === "browser_open" || browserRun?.state === "closed") && <div className="mt-2 grid grid-cols-2 gap-1.5 text-[10px] font-bold"><span className="rounded-md border border-emerald-400/20 bg-emerald-400/10 px-2 py-1 text-emerald-100">IPv4 direto bloqueado</span><span className="rounded-md border border-emerald-400/20 bg-emerald-400/10 px-2 py-1 text-emerald-100">IPv6 direto bloqueado</span><span className="rounded-md border border-emerald-400/20 bg-emerald-400/10 px-2 py-1 text-emerald-100">WebRTC protegido</span><span className="rounded-md border border-emerald-400/20 bg-emerald-400/10 px-2 py-1 text-emerald-100">Proxy/relay confirmado</span></div>}<div className="mt-2 flex flex-wrap gap-1.5"><button type="button" disabled={instanceBusy || !canPrepare || browserRun?.state === "queued" || browserRun?.state === "preparing" || browserRun?.state === "browser_open"} onClick={() => onPrepareBrowser(instance.id)} title={browserRun?.state === "browser_open" ? "Com Chrome aberto, use Trocar proxy sem fechar" : "Preparar o perfil e validar a rota"} className="inline-flex items-center gap-1 rounded-lg border border-emerald-400/30 bg-emerald-400/10 px-2 py-1.5 text-[11px] font-black text-emerald-100 disabled:cursor-not-allowed disabled:opacity-45"><ShieldCheck className="h-3 w-3" />Preparar</button><button type="button" disabled={instanceBusy || !canSwapProxy} onClick={() => onRotateProxy(instance.id)} className="inline-flex items-center gap-1 rounded-lg border border-cyan-400/40 bg-cyan-400/10 px-2 py-1.5 text-[11px] font-black text-cyan-200 disabled:cursor-not-allowed disabled:opacity-45" title="Trocar por proxy validado da fila mantendo o Chrome aberto"><RefreshCw className="h-3 w-3" />Trocar proxy</button><button type="button" disabled={instanceBusy || !canLaunch} onClick={() => onLaunchBrowser(instance.id)} className="inline-flex items-center gap-1 rounded-lg bg-[#F5B800] px-2 py-1.5 text-[11px] font-black text-[#171003] disabled:cursor-not-allowed disabled:opacity-45"><Play className="h-3 w-3" />Abrir</button><button type="button" disabled={instanceBusy || !canClose} onClick={() => onCloseBrowser(instance.id)} className="inline-flex items-center gap-1 rounded-lg border border-rose-400/30 bg-rose-400/10 px-2 py-1.5 text-[11px] font-black text-rose-100 disabled:cursor-not-allowed disabled:opacity-45"><Square className="h-3 w-3" />Fechar</button></div></div>
     <div className="mt-3 flex items-center justify-between gap-2"><p className="min-w-0 truncate text-[10px] font-medium text-slate-400">{profile?.lastCheckMessage || "Nenhuma validação executada."}</p><div className="flex shrink-0 items-center gap-2"><button type="button" onClick={onEditInstance} className="text-xs font-bold text-slate-300 hover:text-white">Editar</button><button type="button" disabled={instanceBusy || browserRun?.state === "browser_open"} onClick={onDelete} className="inline-flex items-center gap-1 text-xs font-bold text-rose-300 hover:text-rose-200 disabled:cursor-not-allowed disabled:opacity-35" title={browserRun?.state === "browser_open" ? "Encerre o browser antes de excluir" : "Excluir instância"}><Trash2 className="h-3 w-3" />Excluir</button></div></div>
