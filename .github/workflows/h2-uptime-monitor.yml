@@ -1,0 +1,53 @@
+name: H2 Colombiano - monitor de disponibilidade
+
+# This workflow lives on GitHub's default branch; Render deploys from
+# recovery/organizar-salvos-2026-08-24 and is NOT changed by this monitor.
+on:
+  push:
+    branches: [main]
+    paths:
+      - '.github/workflows/h2-uptime-monitor.yml'
+  schedule:
+    - cron: '*/5 * * * *'
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+concurrency:
+  group: h2-colombiano-uptime-monitor
+  cancel-in-progress: true
+
+jobs:
+  public-health:
+    name: Verificar /api/ping (sem alterar producao)
+    runs-on: ubuntu-latest
+    timeout-minutes: 4
+    steps:
+      - name: Conferir retorno HTTP e corpo JSON de saude
+        shell: bash
+        run: |
+          set -uo pipefail
+          # External probe: never perform authenticated or state-changing requests.
+          url="https://h2colombiano.com/api/ping"
+          for attempt in 1 2 3; do
+            rm -f /tmp/h2-public-health.json
+            status="$(curl --silent --show-error --location \
+              --connect-timeout 6 --max-time 12 \
+              --header 'Accept: application/json' \
+              --header 'Cache-Control: no-cache' \
+              --output /tmp/h2-public-health.json \
+              --write-out '%{http_code}' \
+              "$url" || true)"
+            if [ "$status" = "200" ] && \
+               [ -f /tmp/h2-public-health.json ] && \
+               jq -e '.ok == true and (.ts | type == "number")' \
+                 /tmp/h2-public-health.json >/dev/null 2>&1; then
+              echo "H2 Colombiano saudavel: HTTP 200, JSON ok=true."
+              exit 0
+            fi
+            echo "::warning::Tentativa $attempt falhou: HTTP ${status:-sem_resposta}."
+            if [ "$attempt" -lt 3 ]; then sleep 10; fi
+          done
+          echo "::error::H2 Colombiano indisponivel: abra https://dashboard.render.com/web/srv-d9k6ieijobas7384h4v0"
+          exit 1
