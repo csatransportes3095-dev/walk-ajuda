@@ -11,7 +11,7 @@ import { h2AutoTreeSchema, H2_AUTO_TREE_DEFAULT } from "../shared/h2AutoTree";
 import { h2AutoPersonalizationSchema, h2AutoFaqVariationsSchema, H2_AUTO_PERSONALIZATION_DEFAULT, getH2AutoPersonalizedReply } from "../shared/h2AutoPersonalization";
 import { H2_AUTO_UNKNOWN_REPLY_DEFAULT } from "../shared/h2AutoUnknownReply";
 import { mergeH2AutoExpandedFaq } from "../shared/h2AutoFaqPresets";
-import { listH2AutoUnknownQuestions, deleteH2AutoUnknownQuestion, ensureH2AutoLearningTable } from "./h2-auto-learning";
+import { listH2AutoUnknownQuestions, deleteH2AutoUnknownQuestion, ensureH2AutoLearningTable, recordH2AutoUnknownQuestion } from "./h2-auto-learning";
 import { H2_AUTO_SHORT_MEDIA, H2_AUTO_SHORT_ORDER_NOT_FOUND, applyH2AutoShortCopy } from "../shared/h2AutoShortReplies";
 import { h2AutoConfirmationSchema as confirmationSchema } from "../shared/h2AutoConfirmation";
 import {
@@ -1302,6 +1302,36 @@ export function registerH2AutoDeviceRoutes(app: Express) {
         error instanceof Error ? error.message : String(error)
       );
       return respond(res, 500, { error: "temporary_error" });
+    }
+  });
+  // Privacy-filtered questions from the paired APK only, never public/anonymous.
+  // Capture is allowed only when the operator enabled collection for this device.
+  app.post("/api/h2-auto/learning/unknown", async (req: Request, res: Response) => {
+    try {
+      const id=String(req.header("x-h2-device-id")||"");
+      const token=String(req.header("x-h2-device-token")||"");
+      if(!/^[a-f0-9]{24}$/.test(id)||!/^[a-f0-9]{64}$/.test(token))
+        return respond(res,401,{error:"unauthorized"});
+      const payload=z.object({
+        eventId:z.string().regex(/^[a-f0-9]{64}$/),
+        question:z.string().min(1).max(160),
+      }).strict().safeParse(req.body);
+      if(!payload.success)return respond(res,400,{error:"invalid_question"});
+      await ensure();
+      const data=await rows(sql`SELECT token_hash,config_json FROM h2_auto_devices WHERE id=${id} LIMIT 1`);
+      const device=data[0];
+      if(!device?.token_hash||!matchesHash(device.token_hash,token))
+        return respond(res,401,{error:"unauthorized"});
+      const cfg=decodeConfig(device.config_json);
+      if(!cfg.questionCollectionEnabled)
+        return respond(res,200,{success:true,disabled:true});
+      // The server is the final authority for content filtering and dedupe.
+      const accepted=await recordH2AutoUnknownQuestion(id,payload.data.question,payload.data.eventId);
+      return respond(res,200,{success:true,accepted});
+    }catch(error){
+      console.error("[H2AutoLearning] ingestion unavailable",
+        error instanceof Error?error.message:String(error));
+      return respond(res,503,{error:"temporary_error"});
     }
   });
   app.post("/api/h2-auto/ack", async (req: Request, res: Response) => {
