@@ -593,8 +593,9 @@ $status.add_Paint({
     $align.LineAlignment=[System.Drawing.StringAlignment]::Center
     $align.FormatFlags=[System.Drawing.StringFormatFlags]::NoWrap
     $align.Trimming=[System.Drawing.StringTrimming]::None
+    $autoColor=if($script:refreshEnabled -and $script:refreshSeconds -gt 0){RGB 28 130 84}else{RGB 55 62 75}
     $actions=@(
-      @{x=$watchLayout.autoX;w=$watchLayout.autoW;label="AUTO";active=$script:refreshEnabled;color=(if($script:refreshEnabled -and $script:refreshSeconds -gt 0){RGB 28 130 84}else{RGB 55 62 75})}
+      @{x=$watchLayout.autoX;w=$watchLayout.autoW;label="AUTO";active=$script:refreshEnabled;color=$autoColor}
       @{x=$watchLayout.startX;w=$watchLayout.startW;label="INICIAR";active=(-not $script:watchRunning);color=(RGB 31 92 67)}
       @{x=$watchLayout.pauseX;w=$watchLayout.pauseW;label="PAUSAR";active=$script:watchRunning;color=(RGB 45 76 118)}
       @{x=$watchLayout.resetX;w=$watchLayout.resetW;label="ZERAR";active=$true;color=(RGB 46 52 65)}
