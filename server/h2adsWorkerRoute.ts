@@ -1,3 +1,4 @@
+import { getH2AdsAutoRefreshPolicy } from "./h2adsAutoRefreshPolicy";
 import { listH2AdsStartupSites } from "./h2adsGlobalStartupSites";
 import type { Express, Request, Response } from "express";
 import { safeH2AdsWorkerRoute } from "./h2adsWorkerErrorGuard";
@@ -111,6 +112,24 @@ async function requeueStaleWorkerCommands(workerId: number): Promise<void> {
 }
 
 export function registerH2AdsWorkerRoute(app: Express): void {
+  // Read-only optional timer policy for the ONE worker that owns this browser.
+  // Independent of proxy routes, mobile remote leases and browser commands.
+  app.get("/api/h2ads/worker/auto-refresh/:instanceId", safeH2AdsWorkerRoute(async (req: Request, res: Response) => {
+    noStore(res);
+    const worker = await authenticateRequest(req, res);
+    if (!worker) return;
+    const instanceId = Number(req.params.instanceId);
+    if (!Number.isSafeInteger(instanceId) || instanceId < 1) {
+      res.status(400).json({ error: "Instância inválida." }); return;
+    }
+    const owner = await h2AdsRemoteOwnerForOpenInstance(instanceId);
+    if (owner !== worker.id) {
+      res.status(403).json({ error: "Instância não pertence a este Worker." }); return;
+    }
+    const policy = await getH2AdsAutoRefreshPolicy(instanceId);
+    res.status(200).json(policy);
+  }));
+
   app.get("/api/h2ads/worker/startup-sites", safeH2AdsWorkerRoute(async (req: Request, res: Response) => {
     noStore(res);
     const worker = await authenticateRequest(req, res);
