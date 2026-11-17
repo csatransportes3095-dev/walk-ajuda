@@ -727,6 +727,32 @@ async function startServer() {
       }, 30_000);
       auditDelay.unref?.();
     }
+    // Old loan photo repair queries R2 and is not needed for the listener to
+    // become ready. The financial phase already completed before this point.
+    // Give the server time to accept traffic first, and supervise any failure.
+    if (process.env.NODE_ENV === "production" && process.env.H2_LOAN_PHOTO_REPAIR_ON_BOOT !== "false") {
+      const photoRepairDelay = setTimeout(() => {
+        void import("node:child_process").then(({ spawn }) => {
+          const child = spawn("pnpm", [
+            "exec", "tsx", "scripts/apply-loans-recovery-20260822-fix.ts", "--photos-only",
+          ], {
+            cwd: process.cwd(),
+            env: process.env,
+            stdio: "inherit",
+          });
+          child.on("error", (error) => {
+            console.warn("[LOAN-PHOTO-REPAIR] post-listen spawn failed:", error.message);
+          });
+          child.on("close", (code) => {
+            if (code !== 0) console.warn("[LOAN-PHOTO-REPAIR] post-listen repair ended:", code);
+          });
+          child.unref();
+        }).catch((error) => {
+          console.warn("[LOAN-PHOTO-REPAIR] post-listen launch failed:", error instanceof Error ? error.message : String(error));
+        });
+      }, 60_000);
+      photoRepairDelay.unref?.();
+    }
     // Empréstimos: reconcilia multas sem depender do ADM aberto.
     // Reutiliza a rotina do painel e os bloqueios de concorrência do MySQL.
     const reconcileLateFees = () => {
