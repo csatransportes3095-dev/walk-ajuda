@@ -129,6 +129,7 @@ export const h2AutoDiagnosticsSchema = z
       until:z.number().int().min(0).max(H2_AUTO_MAX_TIMESTAMP),
     }).strict()).max(100).optional(),
     localPauseLastReleaseId: z.string().regex(/^[a-f0-9]{32}$/).optional(),
+    localPauseLastSyncId: z.string().regex(/^[a-f0-9]{32}$/).optional(),
   })
   .strict();
 

@@ -6,7 +6,7 @@ import { TRPCError } from "@trpc/server";
 import { adminProcedure, router } from "./_core/trpc";
 import { getDb } from "./db";
 import { listActiveValidationBlocks, releaseValidationBlock, releaseAllValidationBlocks } from "./h2-auto-validation-blocks";
-import { changeSilencedPhone, manualSilencedPhones, legacySilencedEntries, releaseLegacySilencedEntry } from "./h2-auto-silenced-contacts";
+import { changeSilencedPhone, manualSilencedPhones, legacySilencedEntries, releaseLegacySilencedEntry, normalizeSilencedPhone } from "./h2-auto-silenced-contacts";
 import { h2AutoTreeSchema, H2_AUTO_TREE_DEFAULT } from "../shared/h2AutoTree";
 import { h2AutoPersonalizationSchema, h2AutoFaqVariationsSchema, H2_AUTO_PERSONALIZATION_DEFAULT, getH2AutoPersonalizedReply } from "../shared/h2AutoPersonalization";
 import { H2_AUTO_UNKNOWN_REPLY_DEFAULT } from "../shared/h2AutoUnknownReply";
@@ -97,6 +97,13 @@ const configSchema = z.object({
   menu: z.array(z.string().max(6000)).length(9),
   whatsappMode: z.number().int().min(-1).max(1),
   pauseMinutes: z.number().int().min(1).max(1440),
+  // One authoritative phone-scoped control, optional for older APKs.
+  // The legacy release command remains supported for targeted opaque entries.
+  pauseSync: z.object({
+    requestId: z.string().regex(/^[a-f0-9]{32}$/),
+    phone: z.string().regex(/^[0-9]{11}$/),
+    mode: z.enum(["active","paused","silenced"]),
+  }).strict().optional(),
   localPauseRelease: z.object({
     requestId:z.string().regex(/^[a-f0-9]{32}$/),
     scope:z.enum(["all","one"]),
@@ -445,6 +452,44 @@ async function clearH2AutoCustomerSessions(
     if (!isMissingH2AutoSessionTable(error)) throw error;
   }
 }
+type H2PauseMode = "active"|"paused"|"silenced";
+async function writeUnifiedPause(deviceId:string,phone:string,mode:H2PauseMode,minutes?:number) {
+  const input={id:deviceId,phone,mode,minutes};
+  await ensure();
+  const db=await getDb();
+  if(!db)throw new TRPCError({code:"INTERNAL_SERVER_ERROR",message:"Banco indisponível."});
+      if(input.mode==="paused"&&!input.minutes)
+        throw new TRPCError({code:"BAD_REQUEST",message:"Informe a duração da pausa."});
+      for(let attempt=0;attempt<3;attempt++){
+        const data=await rows(sql`SELECT config_json,revision FROM h2_auto_devices WHERE id=${input.id} LIMIT 1`);
+        if(!data.length)throw new TRPCError({code:"NOT_FOUND",message:"Aparelho não encontrado."});
+        const cfg=decodeConfig(data[0].config_json);
+        const now=Date.now();
+        const nextControls=cfg.manualControls.filter(c=>c.phone!==input.phone);
+        nextControls.push({
+          phone:input.phone,
+          mode:input.mode,
+          until:input.mode==="paused"?now+input.minutes!*60000:0,
+        });
+        if(nextControls.length>500)
+          throw new TRPCError({code:"BAD_REQUEST",message:"Limite de contatos atingido."});
+        // Keep legacy saved display-name entries: no safe name -> number mapping
+        // exists on the server. Remove numeric entries only for this phone.
+        const retainedBlocked=cfg.blocked.split(/[\n;,]/).map(x=>x.trim()).filter(x=>
+          x.length>0 && normalizeSilencedPhone(x)!==input.phone).join("\n");
+        const sync={requestId:randomBytes(16).toString("hex"),phone:input.phone,mode:input.mode};
+        const changed:any=await db.execute(sql`UPDATE h2_auto_devices SET
+          config_json=JSON_SET(config_json,
+            '$.manualControls',CAST(${JSON.stringify(nextControls)} AS JSON),
+            '$.blocked',${retainedBlocked},
+            '$.pauseSync',CAST(${JSON.stringify(sync)} AS JSON)),
+          revision=revision+1
+          WHERE id=${input.id} AND revision=${Number(data[0].revision)}`);
+        if(changed[0]?.affectedRows) return {success:true,revision:Number(data[0].revision)+1,requestId:sync.requestId};
+      }
+      throw new TRPCError({code:"CONFLICT",message:"Outra alteração foi salva. Atualize e tente novamente."});
+}
+
 export const h2AutoAdminRouter = router({
   // Each pause-release request is explicit, revision-bound and scoped to one device.
   // A target must be in the most recently authenticated APK diagnostic snapshot.
@@ -486,6 +531,22 @@ export const h2AutoAdminRouter = router({
       if(!changed[0]?.affectedRows)
         throw new TRPCError({code:"CONFLICT",message:"Configuração mudou. Recarregue."});
       return {success:true,requestId,revision:input.expectedRevision+1};
+    }),
+  // Canonical ADM pause control writes both legacy sources in one revision.
+  // This prevents a "released" phone from remaining in the old blocked list.
+  // Saved-name blocks with ambiguous ownership remain independent and visible.
+  setUnifiedPause: adminProcedure
+    .input(z.object({
+      id:z.string().regex(/^[a-f0-9]{24}$/),
+      phone:z.string().regex(/^[0-9]{11}$/),
+      mode:z.enum(["active","paused","silenced"]),
+      minutes:z.number().int().min(1).max(1440).optional(),
+    }).strict())
+    .mutation(async ({input})=>{
+      await ensure();
+      const db=await getDb();
+      if(!db)throw new TRPCError({code:"INTERNAL_SERVER_ERROR",message:"Banco indisponível."});
+      return writeUnifiedPause(input.id,input.phone,input.mode,input.minutes);
     }),
   manualControls: adminProcedure
     .input(z.object({id:z.string().regex(/^[a-f0-9]{24}$/)}))
@@ -661,6 +722,7 @@ export const h2AutoAdminRouter = router({
         rules: saved.rules,
         manualControls: saved.manualControls,
         localPauseRelease: saved.localPauseRelease,
+        pauseSync: saved.pauseSync,
         blocked: saved.blocked,
         quickReplyText: saved.quickReplyText,
         unknownReplyText: saved.unknownReplyText,
@@ -1109,6 +1171,31 @@ export function registerH2AutoDeviceRoutes(app: Express) {
       });
     } catch {
       return respond(res, 500, { error: "temporary_error" });
+    }
+  });
+  // Signed, paired-APK operator commands use the same canonical ADM mutation.
+  // No customer or public request can write pause state.
+  app.post("/api/h2-auto/pause-action", async (req: Request, res: Response) => {
+    try {
+      const id=String(req.header("x-h2-device-id")||"");
+      const token=String(req.header("x-h2-device-token")||"");
+      if(!/^[a-f0-9]{24}$/.test(id)||!/^[a-f0-9]{64}$/.test(token))
+        return respond(res,401,{error:"unauthorized"});
+      const parsed=z.object({
+        phone:z.string().regex(/^[0-9]{11}$/),
+        mode:z.enum(["active","paused","silenced"]),
+        minutes:z.number().int().min(1).max(1440).optional(),
+      }).strict().safeParse(req.body);
+      if(!parsed.success)return respond(res,400,{error:"invalid_request"});
+      await ensure();
+      const data=await rows(sql`SELECT token_hash FROM h2_auto_devices WHERE id=${id} LIMIT 1`);
+      if(!data[0]?.token_hash||!matchesHash(data[0].token_hash,token))
+        return respond(res,401,{error:"unauthorized"});
+      const result=await writeUnifiedPause(id,parsed.data.phone,parsed.data.mode,parsed.data.minutes);
+      return respond(res,200,result);
+    }catch(error){
+      console.error("[H2AutoPause] operator action:",error instanceof Error?error.message:String(error));
+      return respond(res,503,{error:"temporary_error"});
     }
   });
   // A paired phone uploads its LOCAL snapshot before applying remote changes.

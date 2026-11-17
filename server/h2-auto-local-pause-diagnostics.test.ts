@@ -1,61 +1,48 @@
 import {describe,it,expect} from "vitest";
 import {readFileSync} from "node:fs";
 import {h2AutoDiagnosticsSchema} from "./h2-auto-diagnostics";
-
 const adm=readFileSync("client/src/pages/AdminH2Auto.tsx","utf8");
+const controls=readFileSync("client/src/components/H2AutoManualControls.tsx","utf8");
 const schema=readFileSync("server/h2-auto-diagnostics.ts","utf8");
 const remote=readFileSync("server/h2-auto-remote.ts","utf8");
-
 const minimal={
-  apkVersion:"2.06-local-pause-diagnostics",apkVersionCode:106,
+  apkVersion:"2.11-unified-pause-state",apkVersionCode:111,
   mediaEnabled:true,transcribeConfigured:true,recordAudioPermission:true,listenerConnected:true,
   statusCode:"NOT_CHECKED",statusAt:0,androidErrorCode:-1,
   replyStatusCode:"NOT_CHECKED",replyStatusAt:0,
 };
-
-describe("ADM H2 AUTO: contador de pausas locais em diagnostico",()=>{
-  it("aceita os tres contadores sem identificar contatos",()=>{
+describe("ADM H2 AUTO unified pause diagnostics",()=>{
+  it("accepts aggregate counts and exact sync receipt",()=>{
     const result=h2AutoDiagnosticsSchema.parse({...minimal,
-      localPauseActiveRecords:3,localPauseTemporaryRecords:2,localPausePermanentRecords:1});
+      localPauseActiveRecords:3,localPauseTemporaryRecords:2,localPausePermanentRecords:1,
+      localPauseLastSyncId:"f".repeat(32)});
     expect(result.localPauseActiveRecords).toBe(3);
-    expect(result.localPauseTemporaryRecords).toBe(2);
-    expect(result.localPausePermanentRecords).toBe(1);
+    expect(result.localPauseLastSyncId).toBe("f".repeat(32));
   });
-  it("aceita diagnósticos do APK antigo sem campos novos",()=>{
-    expect(h2AutoDiagnosticsSchema.safeParse({...minimal,apkVersion:"2.05-legacy-phone-otp",apkVersionCode:105}).success).toBe(true);
-  });
-  it("rejeita contagem negativa ou dados de contato não previstos",()=>{
-    expect(h2AutoDiagnosticsSchema.safeParse({...minimal,localPauseActiveRecords:-1}).success).toBe(false);
-    expect(h2AutoDiagnosticsSchema.safeParse({...minimal,localPauseActiveRecords:1,phone:"11900000000"}).success).toBe(false);
+  it("keeps older APKs backward compatible without accepting arbitrary phone fields",()=>{
+    expect(h2AutoDiagnosticsSchema.safeParse({...minimal,apkVersion:"2.05",apkVersionCode:105}).success).toBe(true);
+    expect(h2AutoDiagnosticsSchema.safeParse({...minimal,phone:"11999999999"}).success).toBe(false);
+    expect(h2AutoDiagnosticsSchema.safeParse({...minimal,localPauseLastSyncId:"bad"}).success).toBe(false);
     expect(schema).toContain(".strict()");
   });
-  it("recebe registros individuais e identificações seguras, sem hash",()=>{
-    const entries=[
-      {id:"a".repeat(32),name:"Cliente identificado",phone:"11999999999",identitySource:"contacts",
-       mode:"permanent",origin:"operator",until:0},
-      {id:"b".repeat(32),name:"",identitySource:"unknown",mode:"permanent",origin:"operator",until:0},
-    ];
+  it("keeps opaque local records without exposing hashed keys",()=>{
+    const entries=[{id:"a".repeat(32),name:"",identitySource:"unknown",mode:"permanent",origin:"operator",until:0}];
     expect(h2AutoDiagnosticsSchema.safeParse({...minimal,localPauseEntries:entries}).success).toBe(true);
-    expect(h2AutoDiagnosticsSchema.safeParse({...minimal,localPauseEntries:[{...entries[0],key:"manual_handoff_abcdef"}]}).success).toBe(false);
-    expect(h2AutoDiagnosticsSchema.safeParse({...minimal,localPauseEntries:[{...entries[0],phone:"123"}]}).success).toBe(false);
-    expect(h2AutoDiagnosticsSchema.safeParse({...minimal,localPauseEntries:entries,localPauseLastReleaseId:"f".repeat(32)}).success).toBe(true);
+    expect(h2AutoDiagnosticsSchema.safeParse({...minimal,localPauseEntries:[{...entries[0],key:"manual_handoff_a"}]}).success).toBe(false);
   });
-  it("ADM exige liberação individual explícita, confirmação e mostra pendências",()=>{
+  it("shows one pause center with explicit recovery and pending APK sync",()=>{
+    expect(adm).toContain("<H2AutoManualControls");
     expect(remote).toContain("releaseLocalPause: adminProcedure");
-    expect(remote).toContain("revision=revision+1");
-    expect(remote).toContain("reported?.localPauseEntries");
-    expect(remote).toContain("scope:z.enum");
-    expect(adm).toContain("LIBERAR ESTE REGISTRO");
-    expect(adm).toContain("LIBERAR TODAS AS PAUSAS LOCAIS");
-    expect(adm).toContain("window.confirm");
-    expect(adm).toContain("localPauseLastReleaseId");
+    expect(controls).toContain("releaseLocalPause.useMutation");
+    expect(controls).toContain("localPauseLastSyncId");
+    expect(controls).toContain("Limpeza das pausas locais ainda não confirmada");
+    expect(controls).toContain("window.confirm");
+    expect(remote).toContain("setUnifiedPause: adminProcedure");
   });
-  it("mantém envio via ACK autenticado existente e apenas mostra relatório",()=>{
+  it("retains authenticated APK diagnostic ACK and independent security blocks",()=>{
     expect(remote).toContain("diagnostics: h2AutoDiagnosticsSchema.optional()");
-    expect(adm).toContain("PAUSAS LOCAIS DO APK — SINCRONIZAÇÃO COM ADM");
-    expect(adm).toContain("localPauseTemporaryRecords");
-    expect(adm).toContain("localPausePermanentRecords");
-    expect(adm).toContain("Ainda não informado pelo APK");
-    expect(adm).toContain("Somente leitura");
+    expect(controls).toContain("Pausas locais do APK");
+    expect(controls).toContain("Bloqueios antigos por nome");
+    expect(adm).toContain("<H2AutoValidationBlocks");
   });
 });

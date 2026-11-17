@@ -193,13 +193,6 @@ export default function AdminH2Auto() {
   const [label, setLabel] = useState("Celular principal");
   const [section, setSection] = useState<"intelligence" | "fixed" | "responses" | "operations" | "diagnostics" | "devices">("intelligence");
   const [selectedDeviceId, setSelectedDeviceId] = useState<string>("");
-  const releaseLocalPause=trpc.h2AutoAdmin.releaseLocalPause.useMutation({
-    onSuccess:async ()=> {
-      toast.success("Liberação solicitada ao APK. Aguarde a confirmação de sincronização.");
-      await utils.h2AutoAdmin.list.invalidate();
-    },
-    onError:error=>toast.error(error.message),
-  });
   const { data: h2AutoApk, refetch: refreshH2AutoApk, isLoading: loadingH2AutoApk } =
     trpc.apk.getH2AutoRelease.useQuery(undefined, { refetchOnWindowFocus: true });
   const [h2AutoFile, setH2AutoFile] = useState<File | null>(null);
@@ -1055,8 +1048,13 @@ export default function AdminH2Auto() {
               </div>
               <div className={section==="diagnostics"?"space-y-4":"hidden"}>
               <H2AutoValidationBlocks deviceId={d.id} deviceLabel={d.label} />
-              <H2AutoSilencedContacts deviceId={d.id} deviceLabel={d.label} />
-              <H2AutoManualControls deviceId={d.id} deviceLabel={d.label} />
+              <H2AutoManualControls
+                deviceId={d.id} deviceLabel={d.label} revision={d.revision}
+                appliedRevision={d.appliedRevision}
+                diagnostics={d.diagnostics}
+                localPauseRelease={d.config.localPauseRelease}
+                pauseSync={d.config.pauseSync}
+              />
               <H2AutoHistoryPanel
                 deviceId={d.id}
                 label={d.label}
@@ -1115,69 +1113,6 @@ export default function AdminH2Auto() {
                             : "desconectado"}
                         </strong>
                       </p>
-                      {diagnostic.apkVersionCode>=107 && diagnostic.localPauseEntries && (
-                        <div className="sm:col-span-2 rounded-xl border border-violet-400/40 bg-slate-950/70 p-3 space-y-3" data-testid="h2-auto-local-pause-manager">
-                          <p className="font-black text-violet-200">🔓 GERENCIAR PAUSAS OCULTAS PELO ADM</p>
-                          <p className="text-xs text-slate-300">O APK tenta identificar pelo histórico de atendimentos e pelos contatos do celular. Registros antigos sem correspondência aparecem como desconhecidos e também podem ser liberados individualmente.</p>
-                          {d.config.localPauseRelease?.requestId && diagnostic.localPauseLastReleaseId!==d.config.localPauseRelease.requestId && (
-                            <p className="rounded-lg border border-amber-400/40 p-2 text-amber-200 text-xs">Comando de liberação pendente de confirmação pelo APK. Não significa que o contato já foi liberado.</p>
-                          )}
-                          {d.config.localPauseRelease?.requestId && diagnostic.localPauseLastReleaseId===d.config.localPauseRelease.requestId && (
-                            <p className="rounded-lg border border-emerald-400/40 p-2 text-emerald-200 text-xs">APK confirmou o processamento da última liberação. Confira a nova contagem.</p>
-                          )}
-                          {diagnostic.localPauseEntries.length===0 ? (
-                            <p className="text-emerald-200">Nenhum registro de pausa local listado pelo APK.</p>
-                          ) : (
-                            <div className="space-y-2">
-                              {diagnostic.localPauseEntries.map((item,index)=>(
-                                <div key={item.id} className="flex flex-wrap items-center justify-between gap-2 rounded-lg border border-violet-400/20 bg-slate-900/70 p-3">
-                                  <div className="space-y-1">
-                                    <p className="font-bold text-white">{item.name || item.phone || `Contato não identificado #${index+1}`}</p>
-                                    {item.phone && item.name && <p className="text-sky-200 text-xs">{item.phone}</p>}
-                                    <p className="text-xs text-slate-300">{item.mode==="permanent"?"Pausa permanente":"Pausa temporária"} · {item.origin==="operator"?"Comando manual":"Pausa automática"}{item.mode==="temporary"?" · até "+dateLabel(item.until):""}</p>
-                                    {item.identitySource==="ambiguous" && <p className="text-amber-200 text-xs">Identificação ambígua: contato não associado.</p>}
-                                  </div>
-                                  <button type="button" className="rounded-lg border border-emerald-400/50 px-4 py-2 text-xs font-bold text-emerald-200 disabled:opacity-40"
-                                    disabled={releaseLocalPause.isPending||diagnosticsStale||Boolean(d.config.localPauseRelease?.requestId && diagnostic.localPauseLastReleaseId!==d.config.localPauseRelease.requestId)}
-                                    onClick={()=>{
-                                      if(!window.confirm("Liberar somente este registro de pausa local no APK?"))return;
-                                      releaseLocalPause.mutate({id:d.id,expectedRevision:d.revision,scope:"one",target:item.id});
-                                    }}>LIBERAR ESTE REGISTRO</button>
-                                </div>
-                              ))}
-                            </div>
-                          )}
-                          {diagnostic.localPauseActiveRecords!==undefined && diagnostic.localPauseActiveRecords>0 && (
-                            <div className="space-y-2 border-t border-violet-400/20 pt-3">
-                              <p className="text-xs text-amber-200">A liberação geral remove somente pausas locais deste aparelho. Não altera contatos silenciados, bloqueios e pausas cadastradas no ADM.</p>
-                              <button type="button" className="rounded-lg border border-rose-400/60 bg-rose-950/20 px-4 py-2 text-xs font-black text-rose-200 disabled:opacity-40"
-                                disabled={releaseLocalPause.isPending||diagnosticsStale||Boolean(d.config.localPauseRelease?.requestId && diagnostic.localPauseLastReleaseId!==d.config.localPauseRelease.requestId)}
-                                onClick={()=>{
-                                  if(!window.confirm("CONFIRMA liberar TODAS as pausas locais ativas do APK? Não altera os bloqueios do ADM."))return;
-                                  releaseLocalPause.mutate({id:d.id,expectedRevision:d.revision,scope:"all"});
-                                }}>LIBERAR TODAS AS PAUSAS LOCAIS</button>
-                            </div>
-                          )}
-                        </div>
-                      )}
-                      <div className="sm:col-span-2 rounded-xl border border-amber-400/30 bg-slate-950/60 p-3 space-y-2" data-testid="h2-auto-local-pauses">
-                        <p className="font-black text-amber-200">⏱ PAUSAS LOCAIS DO APK — SINCRONIZAÇÃO COM ADM</p>
-                        {diagnostic.localPauseActiveRecords === undefined ||
-                          diagnostic.localPauseTemporaryRecords === undefined ||
-                          diagnostic.localPausePermanentRecords === undefined ? (
-                          <p className="text-amber-200">Ainda não informado pelo APK. Versões anteriores à 2.06 não enviam estes contadores.</p>
-                        ) : (
-                          <>
-                            <div className="grid gap-2 sm:grid-cols-3">
-                              <p className="rounded-lg border border-amber-400/20 p-2">Ativas: <strong>{diagnostic.localPauseActiveRecords}</strong></p>
-                              <p className="rounded-lg border border-amber-400/20 p-2">Temporárias: <strong>{diagnostic.localPauseTemporaryRecords}</strong></p>
-                              <p className="rounded-lg border border-amber-400/20 p-2">Permanentes: <strong>{diagnostic.localPausePermanentRecords}</strong></p>
-                            </div>
-                            <p className="text-xs text-slate-400">Último relatório: {dateLabel(d.diagnosticsReceivedAt)}{diagnosticsStale?" · relatório antigo":""}. Contagem de registros locais protegidos, não de telefones únicos.</p>
-                          </>
-                        )}
-                        <p className="text-xs text-slate-400">Somente leitura: não libera contatos, não altera pausas e não revela nomes, telefones ou identificadores.</p>
-                      </div>
                       <div className="sm:col-span-2 rounded-xl border border-cyan-400/40 bg-slate-950/70 p-3 space-y-2" data-testid="h2-auto-otp-continuity">
                         <p className="font-black text-cyan-200">📡 CONSULTA AUTOMÁTICA DE CÓDIGOS — STATUS DO APK</p>
                         {diagnostic.otpPollLastSuccessAt===undefined ? (
@@ -1427,31 +1362,10 @@ export default function AdminH2Auto() {
                     />
                   </label>
                 </div>
-                <div className="rounded-xl border border-cyan-500/30 bg-cyan-500/5 p-3 text-xs space-y-1">
-                  <p className="font-bold text-cyan-200">PAUSA DO ATENDENTE — 24 HORAS</p>
-                  <p>Tempo configurado no ADM: <strong>{d.config.pauseMinutes} min</strong>{draft && value.pauseMinutes !== d.config.pauseMinutes ? ` · Novo valor ainda não salvo: ${value.pauseMinutes} min` : ""}</p>
-                  <p className={d.paired && d.appliedRevision === d.revision ? "text-emerald-300" : "text-amber-300"}>
-                    {d.paired && d.appliedRevision === d.revision
-                      ? `Revisão ${d.appliedRevision} confirmada pelo APK`
-                      : !d.paired ? "Celular não vinculado — tempo ainda não aplicado"
-                        : `Sincronização pendente: servidor ${d.revision}, APK ${d.appliedRevision}`}
-                  </p>
-                  <p className="text-muted-foreground">A pausa não depende dos horários ativos. A confirmação da revisão não garante que o WhatsApp tenha informado a resposta manual.</p>
-                </div>
-                <label className="flex items-center gap-2">
-                  <Clock className="h-4 w-4" />
-                  Pausa atendente (min)
-                  <input
-                    type="number"
-                    min={1}
-                    max={1440}
-                    className={field}
-                    value={value.pauseMinutes}
-                    onChange={e =>
-                      change("pauseMinutes", Number(e.target.value))
-                    }
-                  />
-                </label>
+                <p className="text-xs text-cyan-200">
+                  Duração de pausas automáticas do atendente: {d.config.pauseMinutes} minutos.
+                  As alterações de pausa por contato ficam na Central Única, na aba Diagnóstico.
+                </p>
                 <label className="flex items-center gap-2">
                   <input
                     type="checkbox"
@@ -1567,15 +1481,10 @@ export default function AdminH2Auto() {
               </section>
               </div>
               <div className={section==="operations"?"space-y-4":"hidden"}>
-              <label className="block text-xs">
-                CONTATOS BLOQUEADOS (um por linha)
-                <textarea
-                  className={field}
-                  rows={2}
-                  value={value.blocked}
-                  onChange={e => change("blocked", e.target.value)}
-                />
-              </label>
+              <p className="text-xs text-amber-200">
+                Pausas e bloqueios de contato são controlados exclusivamente na aba Diagnóstico,
+                pela Central Única de Pausas. O salvamento geral não substitui esse controle.
+              </p>
               <button
                 className="w-full rounded-xl bg-emerald-400 p-3 text-slate-950 font-black disabled:opacity-40"
                 disabled={needsRefresh || save.isPending || mediaDirty}
