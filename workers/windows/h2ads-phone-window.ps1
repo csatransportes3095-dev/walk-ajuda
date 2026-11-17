@@ -16,6 +16,7 @@ using System;
 using System.Collections.Generic;
 using System.Runtime.InteropServices;
 using System.Text;
+using System.Windows.Automation;
 public static class H2PhoneWindowNative {
   public delegate bool EnumWindowsDelegate(IntPtr hwnd, IntPtr param);
   [DllImport("user32.dll")] public static extern bool EnumWindows(EnumWindowsDelegate callback, IntPtr param);
@@ -34,12 +35,36 @@ public static class H2PhoneWindowNative {
   [DllImport("user32.dll")] public static extern bool ShowWindow(IntPtr hwnd,int command);
   [DllImport("user32.dll", SetLastError=true)] public static extern IntPtr SendMessageTimeout(
     IntPtr hwnd, uint message, IntPtr wParam, IntPtr lParam, uint flags, uint timeoutMs, out IntPtr result);
+  // Winuser.h: APPCOMMAND_BROWSER_REFRESH = 3; 15 is LAUNCH_MAIL and
+  // incorrectly opens Outlook. Keep the symbolic name to prevent regression.
+  private const int APPCOMMAND_BROWSER_REFRESH = 3;
+  // Capture the selected tab's UIA RuntimeId, not its URL or page title.
+  // This distinguishes two open tabs showing the same website.
+  public static string SelectedChromeTabIdentity(IntPtr chrome) {
+    if(chrome==IntPtr.Zero || !IsWindowVisible(chrome) || IsIconic(chrome))return null;
+    try {
+      var root=AutomationElement.FromHandle(chrome);
+      if(root==null)return null;
+      var condition=new PropertyCondition(AutomationElement.ControlTypeProperty,ControlType.TabItem);
+      var tabs=root.FindAll(TreeScope.Descendants,condition);
+      string selected=null;
+      for(int i=0;i<tabs.Count;i++) {
+        object pattern;
+        if(!tabs[i].TryGetCurrentPattern(SelectionItemPattern.Pattern,out pattern))continue;
+        if(!((SelectionItemPattern)pattern).Current.IsSelected)continue;
+        int[] id=tabs[i].GetRuntimeId();
+        if(id==null || id.Length==0 || selected!=null)return null;
+        selected=string.Join(".",id);
+      }
+      return selected;
+    } catch { return null; }
+  }
   public static bool RefreshBrowserPage(IntPtr chrome) {
     if (chrome==IntPtr.Zero || !IsWindowVisible(chrome) || IsIconic(chrome)) return false;
-    // WM_APPCOMMAND + APPCOMMAND_BROWSER_REFRESH (15): browser-native
-    // refresh, not synthetic keystrokes; leaves keyboard focus alone.
+    // WM_APPCOMMAND browser refresh. Never activate another app, synthesize
+    // keyboard keys, modify browser settings, or steal Chrome input focus.
     IntPtr result;
-    return SendMessageTimeout(chrome, 0x0319, chrome, new IntPtr(15 << 16),
+    return SendMessageTimeout(chrome, 0x0319, chrome, new IntPtr(APPCOMMAND_BROWSER_REFRESH << 16),
       0x0002, 1000, out result) != IntPtr.Zero;
   }
   [DllImport("user32.dll")] public static extern bool ReleaseCapture();
@@ -258,7 +283,7 @@ public sealed class H2PhoneDisplayForm : System.Windows.Forms.Form {
     }
   }
 }
-'@ -ReferencedAssemblies "System.Drawing","System.Windows.Forms"
+'@ -ReferencedAssemblies "System.Drawing","System.Windows.Forms","UIAutomationClient","UIAutomationTypes"
 
 # Phone appearance: no cross-process parent change; Chrome owns the cosmetic frame.
 # Chrome process, cookies, proxy, profiles and browser commands stay intact.
@@ -364,6 +389,7 @@ $script:refreshNextAtMs=[long]0
 $script:refreshPolicyReadAtMs=[long]0
 $script:refreshConfiguredLocally=$false
 $script:refreshDialogOpen=$false
+$script:refreshTabIdentity=$null
 $script:refreshToggleFile=Join-Path (Join-Path $env:LOCALAPPDATA "H2AdsWorker\stopwatches") ("instance-{0}-auto-refresh.json" -f $InstanceId)
 if(Test-Path -LiteralPath $script:refreshToggleFile) {
   try {
@@ -445,11 +471,27 @@ function Read-H2AdsRefreshPolicy {
 }
 function Set-H2AdsRefreshSettings([int]$seconds,[bool]$enabled) {
   if($seconds -ne 0 -and ($seconds -lt 30 -or $seconds -gt 86400)){return $false}
+  # Bind to the selected Chrome tab at the EXACT moment of configuration.
+  $tabId=$null
+  if($seconds -gt 0){
+    $tabId=[H2PhoneWindowNative]::SelectedChromeTabIdentity($chrome)
+    if([string]::IsNullOrWhiteSpace($tabId)){
+      [System.Windows.Forms.MessageBox]::Show(
+        "Nao foi possivel identificar a aba selecionada do Chrome. Nada sera atualizado. Selecione a aba desejada e configure novamente.",
+        "H2ADS - Selecao da aba",
+        [System.Windows.Forms.MessageBoxButtons]::OK,
+        [System.Windows.Forms.MessageBoxIcon]::Warning
+      )|Out-Null
+      return $false
+    }
+  }
   $oldSeconds=$script:refreshSeconds
   $oldEnabled=$script:refreshEnabled
   $oldLocal=$script:refreshConfiguredLocally
   $oldNext=$script:refreshNextAtMs
+  $oldTab=$script:refreshTabIdentity
   try {
+    $script:refreshTabIdentity=$tabId
     $script:refreshSeconds=$seconds
     $script:refreshEnabled=($enabled -and $seconds -gt 0)
     $script:refreshConfiguredLocally=$true
@@ -462,6 +504,7 @@ function Set-H2AdsRefreshSettings([int]$seconds,[bool]$enabled) {
     $script:refreshEnabled=$oldEnabled
     $script:refreshConfiguredLocally=$oldLocal
     $script:refreshNextAtMs=$oldNext
+    $script:refreshTabIdentity=$oldTab
     [System.Windows.Forms.MessageBox]::Show(
       ("Nao foi possivel salvar a atualizacao automatica desta instancia." + [Environment]::NewLine + $message),
       "H2ADS - Atualizacao automatica",
@@ -503,15 +546,17 @@ function Change-H2AdsRefresh {
   $inputSeconds.TextAlign=[System.Windows.Forms.HorizontalAlignment]::Center
   $dialog.Controls.Add($inputSeconds)
   $hint=New-Object System.Windows.Forms.Label
-  $hint.Text="Exemplo: 60 = 1 minuto; 300 = 5 minutos. Minimo 30 segundos."
+  $hint.Text="Somente a aba selecionada AGORA. Se mudar de aba, a recarga pausa."
   $hint.Location=[System.Drawing.Point]::new(15,87)
   $hint.Size=[System.Drawing.Size]::new(386,35)
   $hint.Font=New-Object System.Drawing.Font -ArgumentList "Segoe UI",8.5
   $hint.ForeColor=RGB 177 192 215
   $dialog.Controls.Add($hint)
   $current=New-Object System.Windows.Forms.Label
-  $current.Text=if($script:refreshEnabled) {
-    "Ativo: atualiza a cada $($script:refreshSeconds) segundos."
+  $current.Text=if($script:refreshEnabled -and $script:refreshTabIdentity) {
+    "Ativo: aba selecionada, a cada $($script:refreshSeconds) segundos."
+  } elseif($script:refreshEnabled) {
+    "Selecione novamente a aba e clique em SALVAR E INICIAR."
   } elseif($script:refreshSeconds -gt 0) {
     "Pausado: intervalo de $($script:refreshSeconds) segundos."
   } else {
@@ -582,6 +627,10 @@ function Tick-H2AdsRefresh([IntPtr]$chromeWindow) {
   if(-not $script:refreshEnabled -or $script:refreshSeconds -eq 0) {
     $script:refreshNextAtMs=0;return
   }
+  # Never automatically bind a saved timer to a different tab after restart.
+  if([string]::IsNullOrWhiteSpace($script:refreshTabIdentity)){
+    $script:refreshNextAtMs=0;return
+  }
   if($script:refreshNextAtMs -eq 0) {
     $script:refreshNextAtMs=$now+[long]($script:refreshSeconds*1000);return
   }
@@ -591,7 +640,12 @@ function Tick-H2AdsRefresh([IntPtr]$chromeWindow) {
   $script:refreshNextAtMs=$now+[long]($script:refreshSeconds*1000)
   if([H2PhoneWindowNative]::IsWindowVisible($chromeWindow) -and
      -not [H2PhoneWindowNative]::IsIconic($chromeWindow)){
-    [H2PhoneWindowNative]::RefreshBrowserPage($chromeWindow)|Out-Null
+    $currentlySelected=[H2PhoneWindowNative]::SelectedChromeTabIdentity($chromeWindow)
+    if(-not [string]::IsNullOrWhiteSpace($currentlySelected) -and
+       $currentlySelected -ceq $script:refreshTabIdentity){
+      [H2PhoneWindowNative]::RefreshBrowserPage($chromeWindow)|Out-Null
+    }
+    # A different active tab is never reloaded.
   }
 }
 Read-H2AdsRefreshPolicy
