@@ -7,7 +7,7 @@ import { PassThrough, Readable, Transform, type TransformCallback } from "node:s
 import { pipeline } from "node:stream/promises";
 import { createConnection } from "mysql2/promise";
 import { monitorEventLoopDelay, type IntervalHistogram } from "node:perf_hooks";
-import { and, desc, eq, inArray } from "drizzle-orm";
+import { and, desc, eq, inArray, lte } from "drizzle-orm";
 import { getDb } from "./db";
 import { r2GetObjectStream, r2HeadObject, r2ListObjectsPage, r2PutObjectStream, type R2ObjectInfo } from "./r2Storage";
 import { systemBackups, type InsertSystemBackup } from "../drizzle/schema";
@@ -753,24 +753,47 @@ export function isBackupStale(updatedAt: Date | string | number | null | undefin
   return Number.isFinite(timestamp) && now - timestamp >= BACKUP_STALE_AFTER_MS;
 }
 
-export async function reconcileStaleSystemBackups(now = new Date()): Promise<number> {
-  const db = await getDb();
-  if (!db) return 0;
+/**
+ * A Render rollout can have two healthy instances simultaneously. Only fail
+ * backups whose shared MySQL heartbeat is stale; never assume that a process
+ * started by another instance has stopped. The database WHERE condition
+ * repeats the freshness check so a concurrent heartbeat wins the race.
+ */
+async function failOnlyStaleBackupRuns(db: any, now: number, reason: string): Promise<number> {
+  const cutoff = new Date(now - BACKUP_STALE_AFTER_MS);
   const activeRows = await db
-    .select({ id: systemBackups.id, status: systemBackups.status, stage: systemBackups.stage, progress: systemBackups.progress, updatedAt: systemBackups.updatedAt })
+    .select({
+      id: systemBackups.id,
+      stage: systemBackups.stage,
+      progress: systemBackups.progress,
+      updatedAt: systemBackups.updatedAt,
+    })
     .from(systemBackups)
     .where(inArray(systemBackups.status, ["queued", "running"]));
-  const staleRows = activeRows.filter((row) => isBackupStale(row.updatedAt, now.getTime()));
-  for (const row of staleRows) {
-    activeBackupControllers.get(row.id)?.abort();
-    await db.update(systemBackups).set({
+  let reconciled = 0;
+  for (const row of activeRows) {
+    if (!isBackupStale(row.updatedAt, now)) continue;
+    const [result]: any = await db.update(systemBackups).set({
       status: "failed",
       stage: "failed",
       progress: 0,
-      errorMessage: `Execução encerrada por falta de atualização. Último estágio persistido: ${row.stage}. Último progresso persistido: ${row.progress}%. Causa do encerramento não determinada pelo processo recuperado; nenhum artefato foi validado.`,
-    }).where(eq(systemBackups.id, row.id));
+      errorMessage: `${reason} Último estágio persistido: ${row.stage}. Último progresso persistido: ${row.progress}%. Sem sinal de atividade por pelo menos 10 minutos; nenhum artefato foi validado.`,
+    }).where(and(
+      eq(systemBackups.id, row.id),
+      inArray(systemBackups.status, ["queued", "running"]),
+      lte(systemBackups.updatedAt, cutoff),
+    ));
+    if (Number(result?.affectedRows || 0) !== 1) continue;
+    activeBackupControllers.get(row.id)?.abort();
+    reconciled += 1;
   }
-  return staleRows.length;
+  return reconciled;
+}
+
+export async function reconcileStaleSystemBackups(now = new Date()): Promise<number> {
+  const db = await getDb();
+  if (!db) return 0;
+  return failOnlyStaleBackupRuns(db, now.getTime(), "Execução encerrada por falta de atualização.");
 }
 
 export async function cancelSystemBackup(id: string): Promise<boolean> {
@@ -791,35 +814,46 @@ export async function cancelSystemBackup(id: string): Promise<boolean> {
 export async function reconcileBackupsAfterRestart(): Promise<number> {
   const db = await getDb();
   if (!db) return 0;
-  const activeRows = await db
-    .select({ id: systemBackups.id, stage: systemBackups.stage, progress: systemBackups.progress })
-    .from(systemBackups)
-    .where(inArray(systemBackups.status, ["queued", "running"]));
-  for (const row of activeRows) {
-    await db.update(systemBackups).set({
-      status: "failed",
-      stage: "failed",
-      progress: 0,
-      errorMessage: `Execução interrompida após reinício do serviço. Último estágio persistido: ${row.stage}. Último progresso persistido: ${row.progress}%. Causa do encerramento da instância não determinada pelo processo recuperado; nenhum artefato foi validado.`,
-    }).where(eq(systemBackups.id, row.id));
-  }
+  const now = Date.now();
+  const cutoff = new Date(now - BACKUP_STALE_AFTER_MS);
+  const staleRuns = await failOnlyStaleBackupRuns(
+    db, now, "Execução sem atividade após reinício ou substituição de instância.",
+  );
+
+  // Deep verification can be running on another Render instance. The verifier
+  // refreshes updatedAt every 30s; on startup, only a stale verification may
+  // be marked interrupted. Recheck the status, manifest and timestamp in SQL
+  // to avoid replacing a successful verification completed concurrently.
   const completedRows = await db
-    .select({ id: systemBackups.id, manifestJson: systemBackups.manifestJson })
+    .select({
+      id: systemBackups.id,
+      manifestJson: systemBackups.manifestJson,
+      updatedAt: systemBackups.updatedAt,
+    })
     .from(systemBackups)
     .where(eq(systemBackups.status, "completed"));
-  let interruptedVerifications = 0;
+  let staleVerifications = 0;
   for (const row of completedRows) {
-    if (getBackupRemoteVerification(row.manifestJson).status !== "verifying") continue;
-    interruptedVerifications += 1;
-    await updateStoredBackupVerification(row.id, {
+    if (getBackupRemoteVerification(row.manifestJson).status !== "verifying" ||
+        !isBackupStale(row.updatedAt, now) || !row.manifestJson) continue;
+    const nextManifest = withBackupRemoteVerification(row.manifestJson, {
       status: "failed",
       verifiedAt: null,
       bytes: null,
       sha256: null,
-      error: "Verificação profunda interrompida após reinício do serviço. Execute a verificação novamente.",
+      error: "Verificação sem atividade por pelo menos 10 minutos. Refaça a verificação do arquivo.",
     });
+    const [result]: any = await db.update(systemBackups).set({
+      manifestJson: nextManifest,
+    }).where(and(
+      eq(systemBackups.id, row.id),
+      eq(systemBackups.status, "completed"),
+      eq(systemBackups.manifestJson, row.manifestJson),
+      lte(systemBackups.updatedAt, cutoff),
+    ));
+    if (Number(result?.affectedRows || 0) === 1) staleVerifications++;
   }
-  return activeRows.length + interruptedVerifications;
+  return staleRuns + staleVerifications;
 }
 
 async function listAllR2Objects(): Promise<R2ObjectInfo[]> {
@@ -1318,6 +1352,14 @@ export async function startStoredSystemBackupVerification(id: string) {
     sha256: null,
     error: null,
   });
+  // Reconciliation must distinguish an active verifier on another instance
+  // from one abandoned after a crash. This is a liveness signal only.
+  const verificationHeartbeat = setInterval(() => {
+    void db.update(systemBackups).set({ updatedAt: new Date() })
+      .where(and(eq(systemBackups.id, id), eq(systemBackups.status, "completed")))
+      .catch(() => undefined);
+  }, BACKUP_HEARTBEAT_INTERVAL_MS);
+  verificationHeartbeat.unref?.();
   void (async () => {
     try {
       const verified = await verifyStoredBackupObject(row.artifactKey!, Number(row.fileSize), row.archiveSha256!);
@@ -1338,6 +1380,7 @@ export async function startStoredSystemBackupVerification(id: string) {
         error: message.slice(0, 1000),
       }).catch(() => undefined);
     } finally {
+      clearInterval(verificationHeartbeat);
       activeStoredBackupVerifications.delete(id);
     }
   })();
