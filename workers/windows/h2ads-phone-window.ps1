@@ -496,7 +496,8 @@ function Change-H2AdsRefresh {
   $inputSeconds.Minimum=[decimal]30
   $inputSeconds.Maximum=[decimal]86400
   $inputSeconds.Increment=[decimal]10
-  $inputSeconds.Value=[decimal](if($script:refreshSeconds -ge 30){$script:refreshSeconds}else{60})
+  $initialSeconds=if($script:refreshSeconds -ge 30){$script:refreshSeconds}else{60}
+  $inputSeconds.Value=[decimal]$initialSeconds
   $inputSeconds.Location=[System.Drawing.Point]::new(15,49)
   $inputSeconds.Size=[System.Drawing.Size]::new(180,31)
   $inputSeconds.TextAlign=[System.Windows.Forms.HorizontalAlignment]::Center
