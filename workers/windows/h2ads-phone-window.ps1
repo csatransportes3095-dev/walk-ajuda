@@ -2,6 +2,7 @@ param(
   [Parameter(Mandatory=$true)][int]$BrowserPid,
   [int]$InstanceId = 0,
   [string]$InstanceName = "H2ADS",
+  [string]$RefreshPolicyPath = "",
   [switch]$VisualSelfTest
 )
 # Native WinForms smartphone appearance around the REAL Chrome window.
@@ -31,6 +32,16 @@ public static class H2PhoneWindowNative {
   [DllImport("user32.dll", EntryPoint="GetWindowLongPtrW", SetLastError=true)] public static extern IntPtr GetWindowLongPtr(IntPtr hwnd,int index);
   [DllImport("user32.dll", EntryPoint="SetWindowLongPtrW", SetLastError=true)] public static extern IntPtr SetWindowLongPtr(IntPtr hwnd,int index,IntPtr value);
   [DllImport("user32.dll")] public static extern bool ShowWindow(IntPtr hwnd,int command);
+  [DllImport("user32.dll", SetLastError=true)] public static extern IntPtr SendMessageTimeout(
+    IntPtr hwnd, uint message, IntPtr wParam, IntPtr lParam, uint flags, uint timeoutMs, out IntPtr result);
+  public static bool RefreshBrowserPage(IntPtr chrome) {
+    if (chrome==IntPtr.Zero || !IsWindowVisible(chrome) || IsIconic(chrome)) return false;
+    // WM_APPCOMMAND + APPCOMMAND_BROWSER_REFRESH (15): browser-native
+    // refresh, not synthetic keystrokes; leaves keyboard focus alone.
+    IntPtr result;
+    return SendMessageTimeout(chrome, 0x0319, chrome, new IntPtr(15 << 16),
+      0x0002, 1000, out result) != IntPtr.Zero;
+  }
   [DllImport("user32.dll")] public static extern bool ReleaseCapture();
   [DllImport("user32.dll", CharSet=CharSet.Auto)] public static extern IntPtr SendMessage(IntPtr hwnd,int message,IntPtr wParam,IntPtr lParam);
   public const int WM_NCLBUTTONDOWN=0x00A1;
@@ -344,6 +355,92 @@ if(Test-Path -LiteralPath $script:watchFile) {
   }
 }
 function Get-H2AdsWatchNowMs { return [long]([DateTimeOffset]::UtcNow.ToUnixTimeMilliseconds()) }
+# Automatic refresh is opt-in and independent of the existing stopwatch.
+# ADM only sets an interval; the local button controls whether it runs.
+$script:refreshEnabled=$false
+$script:refreshSeconds=0
+$script:refreshNextAtMs=[long]0
+$script:refreshPolicyReadAtMs=[long]0
+$script:refreshToggleFile=Join-Path (Join-Path $env:LOCALAPPDATA "H2AdsWorker\\stopwatches") ("instance-{0}-auto-refresh.json" -f $InstanceId)
+if(Test-Path -LiteralPath $script:refreshToggleFile) {
+  try {
+    $toggle=Get-Content -LiteralPath $script:refreshToggleFile -Raw | ConvertFrom-Json
+    $script:refreshEnabled=($toggle.enabled -eq $true)
+  } catch { $script:refreshEnabled=$false }
+}
+function Save-H2AdsRefreshToggle {
+  $directory=[System.IO.Path]::GetDirectoryName($script:refreshToggleFile)
+  if(-not (Test-Path -LiteralPath $directory)) {
+    New-Item -ItemType Directory -Path $directory -Force | Out-Null
+  }
+  # A separate toggle file cannot alter the existing stopwatch JSON.
+  $payload=([ordered]@{enabled=[bool]$script:refreshEnabled} | ConvertTo-Json -Compress)
+  [System.IO.File]::WriteAllText($script:refreshToggleFile,$payload,([System.Text.UTF8Encoding]::new($false)))
+}
+function Read-H2AdsRefreshPolicy {
+  if([string]::IsNullOrWhiteSpace($RefreshPolicyPath)){return}
+  try {
+    if(-not (Test-Path -LiteralPath $RefreshPolicyPath)){return}
+    $policy=Get-Content -LiteralPath $RefreshPolicyPath -Raw | ConvertFrom-Json
+    if([int]$policy.instanceId -ne $InstanceId){return}
+    $seconds=[int]$policy.intervalSeconds
+    if($seconds -ne 0 -and ($seconds -lt 30 -or $seconds -gt 86400)){return}
+    if($seconds -ne $script:refreshSeconds) {
+      $script:refreshSeconds=$seconds
+      $script:refreshNextAtMs=0
+    }
+    if($seconds -eq 0 -and $script:refreshEnabled) {
+      $script:refreshEnabled=$false
+      try { Save-H2AdsRefreshToggle } catch { }
+    }
+  } catch {
+    # Invalid/partial settings do not interrupt Chrome or reset timers.
+  }
+}
+function Change-H2AdsRefresh {
+  if($script:refreshSeconds -eq 0) {
+    [System.Windows.Forms.MessageBox]::Show("Configure o intervalo desta instancia no ADM H2 ADS antes de iniciar.",
+      "H2ADS - Atualizacao automatica",
+      [System.Windows.Forms.MessageBoxButtons]::OK,
+      [System.Windows.Forms.MessageBoxIcon]::Information)|Out-Null
+    return
+  }
+  $before=$script:refreshEnabled
+  $script:refreshEnabled=-not $script:refreshEnabled
+  try { Save-H2AdsRefreshToggle }
+  catch {
+    $script:refreshEnabled=$before
+    [System.Windows.Forms.MessageBox]::Show("Nao foi possivel salvar o estado AUTO nesta instancia.",
+      "H2ADS - Atualizacao automatica",
+      [System.Windows.Forms.MessageBoxButtons]::OK,
+      [System.Windows.Forms.MessageBoxIcon]::Warning)|Out-Null
+    return
+  }
+  $script:refreshNextAtMs=0
+}
+function Tick-H2AdsRefresh([IntPtr]$chromeWindow) {
+  $now=Get-H2AdsWatchNowMs
+  if(($now-$script:refreshPolicyReadAtMs) -ge 4000) {
+    $script:refreshPolicyReadAtMs=$now
+    Read-H2AdsRefreshPolicy
+  }
+  if(-not $script:refreshEnabled -or $script:refreshSeconds -eq 0) {
+    $script:refreshNextAtMs=0;return
+  }
+  if($script:refreshNextAtMs -eq 0) {
+    $script:refreshNextAtMs=$now+[long]($script:refreshSeconds*1000);return
+  }
+  if($now -lt $script:refreshNextAtMs){return}
+  # Never accumulate missed refreshes while minimized/closed and never
+  # move focus away from the user's active text input.
+  $script:refreshNextAtMs=$now+[long]($script:refreshSeconds*1000)
+  if([H2PhoneWindowNative]::IsWindowVisible($chromeWindow) -and
+     -not [H2PhoneWindowNative]::IsIconic($chromeWindow)){
+    [H2PhoneWindowNative]::RefreshBrowserPage($chromeWindow)|Out-Null
+  }
+}
+Read-H2AdsRefreshPolicy
+
 function Get-H2AdsWatchElapsedMs {
   $base=[long]$script:watchElapsedMs
   if(-not $script:watchRunning){return $base}
@@ -425,14 +522,16 @@ function Get-H2AdsWatchLayout([int]$width) {
   # Dedicated, equal-sized action slots. Keep the 00:00:00 readout at left.
   # Even at the minimum supported instance width (310px Chrome), every label
   # stays on a SINGLE line and each button has its own click target.
-  $gap=7
-  $actionW=[Math]::Max(54,[Math]::Min(68,[Math]::Floor(($width-112-2*$gap)/3)))
-  $resetW=$actionW; $pauseW=$actionW; $startW=$actionW
+  $gap=6
+  $actionW=[Math]::Max(46,[Math]::Min(58,[Math]::Floor(($width-112-3*$gap)/4)))
+  $resetW=$actionW; $pauseW=$actionW; $startW=$actionW; $autoW=$actionW
   $resetX=$width-12-$resetW
   $pauseX=$resetX-$gap-$pauseW
   $startX=$pauseX-$gap-$startW
+  $autoX=$startX-$gap-$autoW
   return @{
     clockY=6; textX=16; textY=46
+    autoX=$autoX; autoW=$autoW
     startX=$startX; startW=$startW
     pauseX=$pauseX; pauseW=$pauseW
     resetX=$resetX; resetW=$resetW
@@ -481,7 +580,7 @@ $status.add_Paint({
     $divider=New-Object System.Drawing.Pen -ArgumentList (RGB 26 29 35),1
     try { $g.DrawLine($divider,16,39,($w-16),39) } finally { $divider.Dispose() }
     $watchText=Format-H2AdsWatchElapsed
-    $maxTextWidth=[single][Math]::Max(35,$watchLayout.startX-$watchLayout.textX-6)
+    $maxTextWidth=[single][Math]::Max(35,$watchLayout.autoX-$watchLayout.textX-6)
     $watchFont=$font
     $measured=$g.MeasureString($watchText,$font).Width
     if($measured -gt $maxTextWidth) {
@@ -497,7 +596,9 @@ $status.add_Paint({
     $align.LineAlignment=[System.Drawing.StringAlignment]::Center
     $align.FormatFlags=[System.Drawing.StringFormatFlags]::NoWrap
     $align.Trimming=[System.Drawing.StringTrimming]::None
+    $autoColor=if($script:refreshEnabled -and $script:refreshSeconds -gt 0){RGB 28 130 84}else{RGB 55 62 75}
     $actions=@(
+      @{x=$watchLayout.autoX;w=$watchLayout.autoW;label="AUTO";active=$script:refreshEnabled;color=$autoColor}
       @{x=$watchLayout.startX;w=$watchLayout.startW;label="INICIAR";active=(-not $script:watchRunning);color=(RGB 31 92 67)}
       @{x=$watchLayout.pauseX;w=$watchLayout.pauseW;label="PAUSAR";active=$script:watchRunning;color=(RGB 45 76 118)}
       @{x=$watchLayout.resetX;w=$watchLayout.resetW;label="ZERAR";active=$true;color=(RGB 46 52 65)}
@@ -562,7 +663,7 @@ $status.add_MouseDown({
   if($e.Button -ne [System.Windows.Forms.MouseButtons]::Left){return}
   $layout=Get-H2AdsWatchLayout $status.ClientSize.Width
   if($e.Y -ge $layout.hitTop -and $e.Y -le $layout.hitBottom -and
-     $e.X -ge $layout.startX -and $e.X -le ($layout.resetX+$layout.resetW)){return}
+     $e.X -ge $layout.autoX -and $e.X -le ($layout.resetX+$layout.resetW)){return}
   if($e.X -ge ($status.ClientSize.Width-135)){return}
   [H2PhoneWindowNative]::ReleaseCapture()|Out-Null
   [H2PhoneWindowNative]::SendMessage($frame.Handle,
@@ -574,6 +675,9 @@ $status.add_MouseClick({
   if($e.Button -ne [System.Windows.Forms.MouseButtons]::Left){return}
   $layout=Get-H2AdsWatchLayout $status.ClientSize.Width
   if($e.Y -ge $layout.hitTop -and $e.Y -le $layout.hitBottom) {
+    if($e.X -ge $layout.autoX -and $e.X -le ($layout.autoX+$layout.autoW)){
+      Change-H2AdsRefresh;$status.Invalidate();return
+    }
     if($e.X -ge $layout.resetX -and $e.X -le ($layout.resetX+$layout.resetW)){
       Change-H2AdsWatch "reset";$status.Invalidate();return
     }
@@ -746,6 +850,7 @@ $timer.add_Tick({
     # 175%-DPI feedback loop. Only move Chrome when geometry actually changes.
     [H2PhoneWindowNative]::FitHostedChrome($chrome,$frame.Handle,$bezel,$topPad,$bottomPad)|Out-Null
     if(-not $frame.Visible){$frame.Show()}
+    Tick-H2AdsRefresh $chrome
     $status.Invalidate()
     $frame.Invalidate()
   } catch {}

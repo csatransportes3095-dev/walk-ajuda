@@ -1,0 +1,50 @@
+name: H2ADS Native Auto Refresh Safety
+on:
+  pull_request:
+    branches:
+      - recovery/organizar-salvos-2026-08-24
+    paths:
+      - 'server/h2adsAutoRefreshPolicy.ts'
+      - 'server/h2adsAutoRefresh.test.ts'
+      - 'server/h2adsWorkerRoute.ts'
+      - 'server/routers/h2ads.ts'
+      - 'client/src/pages/H2Ads.tsx'
+      - 'workers/windows/h2ads-phone-window.ps1'
+      - 'workers/windows/browser-session.mjs'
+      - '.github/workflows/h2ads-native-auto-refresh-safety.yml'
+permissions:
+  contents: read
+jobs:
+  verify:
+    runs-on: ubuntu-latest
+    timeout-minutes: 25
+    steps:
+      - uses: actions/checkout@v4
+      - uses: pnpm/action-setup@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+          cache: pnpm
+      - run: pnpm install --frozen-lockfile
+      - run: pnpm exec vitest run server/h2adsAutoRefresh.test.ts server/h2adsWorkerRoute.test.ts server/h2adsWorkerFoundation.test.ts
+      - run: node --check workers/windows/browser-session.mjs
+      - name: PowerShell parser
+        shell: pwsh
+        run: |
+          $errors = $null
+          $tokens = $null
+          [void][System.Management.Automation.Language.Parser]::ParseFile(
+            (Join-Path $PWD 'workers/windows/h2ads-phone-window.ps1'), [ref]$tokens, [ref]$errors
+          )
+          if ($errors.Count -gt 0) {
+            $errors | ForEach-Object { Write-Error $_.ToString() }
+            exit 1
+          }
+      - name: TypeScript errors in modified H2ADS files
+        run: |
+          pnpm exec tsc --noEmit > /tmp/h2ads-tsc.log 2>&1 || true
+          if grep -E '^((server/h2adsAutoRefreshPolicy.ts)|(server/h2adsWorkerRoute.ts)|(server/routers/h2ads.ts)|(client/src/pages/H2Ads.tsx))\\(' /tmp/h2ads-tsc.log; then
+            exit 1
+          fi
+      - run: node scripts/patch-media-local-export-20260910.mjs
+      - run: pnpm build
