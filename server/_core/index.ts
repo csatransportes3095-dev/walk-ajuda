@@ -22,6 +22,7 @@ import { registerH2AutoCodeJobRoutes } from "../h2-auto-code-jobs";
 import { registerUnifiedCustomerSessionRoutes } from "../unifiedCustomerSessionRoutes";
 import { appRouter } from "../routers";
 import { reconcileDailyLoanLateFees } from "../routers/loans";
+import { startLoanAdminEmailWorker } from "../loans/adminEmailOutbox";
 import { createContext } from "./context";
 import { isAdminJwtValid } from "./trpc";
 import { serveStatic, setupVite } from "./vite";
@@ -753,6 +754,8 @@ async function startServer() {
       }, 60_000);
       photoRepairDelay.unref?.();
     }
+    // Notificações de empréstimos: filas persistentes e reenvio sem alterar pagamentos.
+    startLoanAdminEmailWorker();
     // Empréstimos: reconcilia multas sem depender do ADM aberto.
     // Reutiliza a rotina do painel e os bloqueios de concorrência do MySQL.
     const reconcileLateFees = () => {
