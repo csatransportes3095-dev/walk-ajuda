@@ -153,6 +153,12 @@ export function CustomerOtpLogin({ title = "Acesso H2 Colombiano", initialPhone 
         toast.info(result.message || "Aguarde para solicitar outro código.");
         return;
       }
+      // Never open WhatsApp or claim delivery unless the server actually
+      // created a challenge (and queued the WhatsApp handoff when selected).
+      if (result.prepared !== true) {
+        toast.error("Não foi possível preparar seu código. Confira seu cadastro com o atendimento.");
+        return;
+      }
       const until = Date.now() + (result.retryAfterSeconds || 60) * 1000;
       setCooldowns(prev => ({...prev,[channel]:until})); storeCooldown(cleanPhone,channel,until); setClockNow(Date.now());
       setCode("");
