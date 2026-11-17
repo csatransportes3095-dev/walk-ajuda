@@ -47,7 +47,7 @@ const STOP = new Set([
 export function safeH2AutoUnknownQuestion(input: unknown): { question: string; hash: string } | null {
   if (typeof input !== "string") return null;
   const question = input.replace(/\s+/g, " ").trim();
-  if (question.length > 160 || (question.length < 8 && !/\b99\b/.test(question))) return null;
+  if (question.length < 3 || question.length > 160) return null;
   // Permitir apenas "99" como identificador público de serviço.
   // Nenhum outro número, sequência de telefone, código, CPF ou contato entra na fila.
   const withoutPublicService99 = question.replace(/\b99\b/g, "");
@@ -58,9 +58,11 @@ export function safeH2AutoUnknownQuestion(input: unknown): { question: string; h
     .toLowerCase().replace(/[^a-z0-9\s]/g, " ").replace(/\s+/g, " ").trim();
   if (/^(?:menu|inicio|voltar|oi|ola|bom dia|boa tarde|boa noite|obrigado|obrigada|ok|sim|nao)$/.test(normalized))
     return null;
-  const isQuestion = question.includes("?") ||
-    /^(?:como|quando|onde|qual|quais|porque|por que|quanto|quantos|posso|pode|tem|faz|fazem|vende|trabalha|preciso|quero|queria|gostaria|nao consigo|não consigo|tenho uma duvida|tenho uma dúvida|me explica|me ajuda)\b/i.test(question);
-  if (!isQuestion) return null;
+  // Capture safe unknown messages, not only grammatical questions.
+  // The caller already established that no approved response matched.
+  if (!/[a-z]/.test(normalized)) return null;
+  // Reject lone short names? No: the operator explicitly requested these
+  // unknown replies to appear for manual review, e.g. "Justino".
   const keywords = [...new Set(normalized.split(" ").filter(word => (word.length > 2 && !STOP.has(word)) || word === "99"))];
   const canonical = keywords.length >= 2 ? keywords.sort().join(" ") : normalized;
   const hash = createHash("sha256").update(canonical).digest("hex");
