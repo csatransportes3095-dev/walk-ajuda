@@ -48,7 +48,11 @@ describe("H2 ADS opt-in per-instance refresh timer",()=>{
   it("refreshes only the owned, visible Chrome without stealing keyboard focus",()=>{
     expect(phone).toContain("RefreshBrowserPage(IntPtr chrome)");
     expect(phone).toContain("SendMessageTimeout(chrome, 0x0319");
-    expect(phone).toContain("new IntPtr(15 << 16)");
+    // Windows APPCOMMAND_BROWSER_REFRESH is 3. 15 launches the mail app.
+    expect(phone).toContain("private const int APPCOMMAND_BROWSER_REFRESH = 3;");
+    expect(phone).toContain("new IntPtr(APPCOMMAND_BROWSER_REFRESH << 16)");
+    expect(phone).not.toContain("new IntPtr(15 << 16)");
+    expect(phone).not.toContain("APPCOMMAND_BROWSER_REFRESH (15)");
     expect(phone).toContain("IsWindowVisible($chromeWindow)");
     expect(phone).toContain("IsIconic($chromeWindow)");
     expect(phone).not.toContain("SendKeys.Send");
