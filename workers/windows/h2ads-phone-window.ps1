@@ -34,12 +34,15 @@ public static class H2PhoneWindowNative {
   [DllImport("user32.dll")] public static extern bool ShowWindow(IntPtr hwnd,int command);
   [DllImport("user32.dll", SetLastError=true)] public static extern IntPtr SendMessageTimeout(
     IntPtr hwnd, uint message, IntPtr wParam, IntPtr lParam, uint flags, uint timeoutMs, out IntPtr result);
+  // Winuser.h: APPCOMMAND_BROWSER_REFRESH = 3; 15 is LAUNCH_MAIL and
+  // incorrectly opens Outlook. Keep the symbolic name to prevent regression.
+  private const int APPCOMMAND_BROWSER_REFRESH = 3;
   public static bool RefreshBrowserPage(IntPtr chrome) {
     if (chrome==IntPtr.Zero || !IsWindowVisible(chrome) || IsIconic(chrome)) return false;
-    // WM_APPCOMMAND + APPCOMMAND_BROWSER_REFRESH (15): browser-native
-    // refresh, not synthetic keystrokes; leaves keyboard focus alone.
+    // WM_APPCOMMAND browser refresh. Never activate another app, synthesize
+    // keyboard keys, modify browser settings, or steal Chrome input focus.
     IntPtr result;
-    return SendMessageTimeout(chrome, 0x0319, chrome, new IntPtr(15 << 16),
+    return SendMessageTimeout(chrome, 0x0319, chrome, new IntPtr(APPCOMMAND_BROWSER_REFRESH << 16),
       0x0002, 1000, out result) != IntPtr.Zero;
   }
   [DllImport("user32.dll")] public static extern bool ReleaseCapture();
