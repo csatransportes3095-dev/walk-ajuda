@@ -703,6 +703,30 @@ async function startServer() {
   });
   server.listen(port, "0.0.0.0", () => {
     console.log(`Server running on http://0.0.0.0:${port}/`);
+    // Diagnostic audit is read-only (SELECT + external HEAD) and must not
+    // delay Render's HTTP health check or block essential migrations.
+    // It runs only after the server is bound; failure never takes down the API.
+    if (process.env.NODE_ENV === "production" && process.env.H2_PROFILE_AUDIT_ON_BOOT !== "false") {
+      const auditDelay = setTimeout(() => {
+        void import("node:child_process").then(({ spawn }) => {
+          const child = spawn("pnpm", ["exec", "tsx", "scripts/audit-customer-profile-integrity.ts"], {
+            cwd: process.cwd(),
+            env: process.env,
+            stdio: "inherit",
+          });
+          child.on("error", (error) => {
+            console.warn("[PROFILE-AUDIT] post-listen spawn failed:", error.message);
+          });
+          child.on("close", (code) => {
+            if (code !== 0) console.warn("[PROFILE-AUDIT] post-listen read-only audit ended:", code);
+          });
+          child.unref();
+        }).catch((error) => {
+          console.warn("[PROFILE-AUDIT] post-listen launch failed:", error instanceof Error ? error.message : String(error));
+        });
+      }, 30_000);
+      auditDelay.unref?.();
+    }
     // Empréstimos: reconcilia multas sem depender do ADM aberto.
     // Reutiliza a rotina do painel e os bloqueios de concorrência do MySQL.
     const reconcileLateFees = () => {
