@@ -1920,7 +1920,7 @@ export const loanRouter = router({
       }
     }
     try {
-      await queueLoanAdminNotice("manual-payment:" + input.installmentId, {
+      await queueLoanAdminNotice("manual-payment:" + input.installmentId + ":" + Date.now(), {
         kind: "manual_payment", loanId: Number(paymentRow.loanId),
         clientName: String(paymentRow.clientName || "Cliente"),
         clientPhone: String(paymentRow.clientPhone || ""),
@@ -2623,7 +2623,7 @@ export const loanRouter = router({
       submittedAt: receivedAt,
     });
     try {
-      await queueLoanAdminNotice("proof:" + input.installmentId, {
+      await queueLoanAdminNotice("proof:" + input.installmentId + ":" + receivedAt.getTime(), {
         kind: "proof", loanId: Number(row.loanId),
         clientName: String(client.name || "Cliente"), clientPhone: String(client.phone || ""),
         amount: Number(row.amount || 0), installmentId: input.installmentId,
@@ -3320,7 +3320,7 @@ export const loanRouter = router({
     try {
       const interestedClientRows = await qRows(db, drizzleSql`SELECT name, phone FROM loanClients WHERE id=${loan.clientId} LIMIT 1`);
       const interestedClient = interestedClientRows[0] || {};
-      await queueLoanAdminNotice("interest-payment:" + input.installmentId, {
+      await queueLoanAdminNotice("interest-payment:" + input.installmentId + ":" + Date.now(), {
         kind: "interest_payment", loanId: Number(input.loanId),
         clientName: String(interestedClient.name || "Cliente"),
         clientPhone: String(interestedClient.phone || ""),
@@ -3488,7 +3488,7 @@ export const loanRouter = router({
       }
     }
     try {
-      await queueLoanAdminNotice("manual-payment:" + input.installmentId, {
+      await queueLoanAdminNotice("manual-payment:" + input.installmentId + ":" + Date.now(), {
         kind: "manual_payment", loanId: Number(inst.loanId),
         clientName: String(inst.clientName || "Cliente"),
         clientPhone: String(inst.clientPhone || ""),
