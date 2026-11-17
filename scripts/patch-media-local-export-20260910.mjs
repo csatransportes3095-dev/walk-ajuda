@@ -36,10 +36,14 @@ if (!indexSource.includes('/api/admin/media-backup-local/manifest')) {
       if (artifact.fileSize !== null && artifact.fileSize !== undefined) {
         res.setHeader("Content-Length", String(artifact.fileSize));
       }
-      artifact.body.pipe(res);
+      // Streams can fail after the route handler returns. Awaiting pipeline
+      // confines R2 and browser disconnect errors to this download.
+      const { pipeline } = await import("node:stream/promises");
+      await pipeline(artifact.body, res);
     } catch (error) {
       console.error("[Backup] falha no download administrativo:", error instanceof Error ? error.message : String(error));
       if (!res.headersSent) res.status(500).json({ error: "Não foi possível baixar o backup." });
+      else if (!res.destroyed) res.destroy();
     }
   });`,
 `  app.get("/api/admin/backups/:id/download", async (req, res) => {
@@ -55,10 +59,14 @@ if (!indexSource.includes('/api/admin/media-backup-local/manifest')) {
       if (artifact.fileSize !== null && artifact.fileSize !== undefined) {
         res.setHeader("Content-Length", String(artifact.fileSize));
       }
-      artifact.body.pipe(res);
+      // Streams can fail after the route handler returns. Awaiting pipeline
+      // confines R2 and browser disconnect errors to this download.
+      const { pipeline } = await import("node:stream/promises");
+      await pipeline(artifact.body, res);
     } catch (error) {
       console.error("[Backup] falha no download administrativo:", error instanceof Error ? error.message : String(error));
       if (!res.headersSent) res.status(500).json({ error: "Não foi possível baixar o backup." });
+      else if (!res.destroyed) res.destroy();
     }
   });
 
