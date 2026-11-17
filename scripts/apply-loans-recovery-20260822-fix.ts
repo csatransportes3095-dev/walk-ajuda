@@ -88,6 +88,7 @@ async function repairLoanCustomerPhotos(db: any) {
   let repaired = 0;
   let foundExistingR2 = 0;
   let noR2Object = 0;
+  let skippedConcurrentUpdates = 0;
 
   for (const loanClient of loanRows) {
     const customer = customers.find((row: any) => sameIdentity(row, loanClient));
@@ -114,33 +115,72 @@ async function repairLoanCustomerPhotos(db: any) {
       foundExistingR2++;
       const newUrl = buildR2PublicUrl(key);
       if (newUrl !== currentUrl) {
-        await db.execute("UPDATE customers SET profilePhotoUrl=?, updatedAt=NOW() WHERE id=?", [newUrl, customer.id]);
-        repaired++;
+        // The site may now be serving customers while this noncritical repair runs.
+        // Never overwrite a photo that another request updated after the SELECT above.
+        const [update]: any = await db.execute(
+          "UPDATE customers SET profilePhotoUrl=?, updatedAt=NOW() WHERE id=? AND deletedAt IS NULL AND profilePhotoUrl <=> ?",
+          [newUrl, customer.id, customer.profilePhotoUrl ?? null],
+        );
+        if (Number(update?.affectedRows || 0) > 0) repaired++;
+        else skippedConcurrentUpdates++;
       }
     } catch (error) {
       console.warn(`[loans-20260822-fix] foto não localizada no R2 para customer ${customer.id}:`, error instanceof Error ? error.message : String(error));
     }
   }
 
-  const result = { repaired, foundExistingR2, noR2Object };
+  const result = { repaired, foundExistingR2, noR2Object, skippedConcurrentUpdates };
   console.log("[loans-20260822-fix] fotos:", JSON.stringify(result));
   return result;
 }
 
+// Default behavior (no flag) remains both steps, for manual recovery use.
+// At Render startup: financial only; after the HTTP listener is ready: photos only.
+const PHOTO_REPAIR_LOCK = "h2-loans-photo-repair-20260822";
+
 async function run() {
+  const args = process.argv.slice(2);
+  if (args.length > 1 || (args.length === 1 && !["--financial-only", "--photos-only"].includes(args[0]))) {
+    console.error("[loans-20260822-fix] invalid execution phase");
+    process.exitCode = 2;
+    return;
+  }
+  const financialOnly = args[0] === "--financial-only";
+  const photosOnly = args[0] === "--photos-only";
+
   if (!process.env.DATABASE_URL) {
     console.log("[loans-20260822-fix] DATABASE_URL ausente; pulando.");
     return;
   }
 
   const db = await createConnection(process.env.DATABASE_URL);
+  let photoLockAcquired = false;
   try {
-    await repairFinancialState(db);
-    await repairLoanCustomerPhotos(db);
+    if (!photosOnly) await repairFinancialState(db);
+
+    if (!financialOnly) {
+      // Render can briefly run old and new instances during a deployment.
+      // Ensure the photo pass cannot run concurrently in either instance.
+      const [lockRows]: any = await db.query(
+        "SELECT GET_LOCK(?, 0) AS acquired", [PHOTO_REPAIR_LOCK],
+      );
+      photoLockAcquired = Number(lockRows?.[0]?.acquired) === 1;
+      if (!photoLockAcquired) {
+        console.warn("[loans-20260822-fix] photo repair already running; skipping duplicate");
+        return;
+      }
+      await repairLoanCustomerPhotos(db);
+    }
   } catch (error) {
     console.error("[loans-20260822-fix] falha:", error instanceof Error ? error.message : String(error));
-    // Não derruba o site. A correção pode ser repetida no próximo deploy.
+    // Preserve existing financial recovery error policy. Noncritical photo
+    // errors must be visible to the post-listen worker without stopping HTTP.
+    if (photosOnly) process.exitCode = 1;
   } finally {
+    if (photoLockAcquired) {
+      try { await db.query("SELECT RELEASE_LOCK(?) AS released", [PHOTO_REPAIR_LOCK]); }
+      catch (error) { console.warn("[loans-20260822-fix] photo lock release failed:", error instanceof Error ? error.message : String(error)); }
+    }
     await db.end();
   }
 }
