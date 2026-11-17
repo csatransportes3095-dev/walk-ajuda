@@ -21,5 +21,10 @@ jobs:
           cache: pnpm
       - run: pnpm install --frozen-lockfile
       - run: pnpm exec vitest run server/backupMultiInstanceRestartSafety.test.ts server/backupService.test.ts server/backupRestoreService.test.ts
+      - name: Verify legacy Render backup patch preserves guarded reconciliation
+        run: |
+          node scripts/patch-backup-resilience-20260909.mjs
+          grep -q 'async function failOnlyStaleBackupRuns(' server/backupService.ts
+          grep -q 'lte(systemBackups.updatedAt, cutoff)' server/backupService.ts
       - run: node scripts/patch-media-local-export-20260910.mjs
       - run: pnpm build
