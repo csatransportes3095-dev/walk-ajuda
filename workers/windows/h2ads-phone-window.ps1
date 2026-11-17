@@ -355,29 +355,75 @@ if(Test-Path -LiteralPath $script:watchFile) {
   }
 }
 function Get-H2AdsWatchNowMs { return [long]([DateTimeOffset]::UtcNow.ToUnixTimeMilliseconds()) }
-# Automatic refresh is opt-in and independent of the existing stopwatch.
-# ADM only sets an interval; the local button controls whether it runs.
+# AUTO is configured and activated DIRECTLY in this open phone instance.
+# Existing ADM policy is only a fallback for older local preferences. Local
+# settings are saved by InstanceId and never touch the Chrome/proxy profile.
 $script:refreshEnabled=$false
 $script:refreshSeconds=0
 $script:refreshNextAtMs=[long]0
 $script:refreshPolicyReadAtMs=[long]0
-$script:refreshToggleFile=Join-Path (Join-Path $env:LOCALAPPDATA "H2AdsWorker\\stopwatches") ("instance-{0}-auto-refresh.json" -f $InstanceId)
+$script:refreshConfiguredLocally=$false
+$script:refreshDialogOpen=$false
+$script:refreshToggleFile=Join-Path (Join-Path $env:LOCALAPPDATA "H2AdsWorker\stopwatches") ("instance-{0}-auto-refresh.json" -f $InstanceId)
 if(Test-Path -LiteralPath $script:refreshToggleFile) {
   try {
-    $toggle=Get-Content -LiteralPath $script:refreshToggleFile -Raw | ConvertFrom-Json
-    $script:refreshEnabled=($toggle.enabled -eq $true)
-  } catch { $script:refreshEnabled=$false }
+    $saved=Get-Content -LiteralPath $script:refreshToggleFile -Raw | ConvertFrom-Json
+    $script:refreshEnabled=($saved.enabled -eq $true)
+    # The legacy file contained only "enabled". In that case the existing
+    # remote policy can still seed the old configured interval once.
+    if($null -ne $saved.intervalSeconds) {
+      $rawSeconds=([string]$saved.intervalSeconds).Trim()
+      if($rawSeconds -notmatch '^\d+$'){throw "invalid_auto_refresh_interval"}
+      $localSeconds=[int]$rawSeconds
+      if($localSeconds -ne 0 -and ($localSeconds -lt 30 -or $localSeconds -gt 86400)){
+        throw "invalid_auto_refresh_interval"
+      }
+      $script:refreshSeconds=$localSeconds
+      $script:refreshConfiguredLocally=$true
+      if($localSeconds -eq 0){$script:refreshEnabled=$false}
+    }
+  } catch {
+    # Invalid local settings never start background refreshes by accident.
+    $script:refreshEnabled=$false
+    $script:refreshSeconds=0
+    $script:refreshConfiguredLocally=$false
+  }
 }
 function Save-H2AdsRefreshToggle {
   $directory=[System.IO.Path]::GetDirectoryName($script:refreshToggleFile)
-  if(-not (Test-Path -LiteralPath $directory)) {
+  if(-not (Test-Path -LiteralPath $directory)){
     New-Item -ItemType Directory -Path $directory -Force | Out-Null
   }
-  # A separate toggle file cannot alter the existing stopwatch JSON.
-  $payload=([ordered]@{enabled=[bool]$script:refreshEnabled} | ConvertTo-Json -Compress)
-  [System.IO.File]::WriteAllText($script:refreshToggleFile,$payload,([System.Text.UTF8Encoding]::new($false)))
+  # Local override has priority over the read-only ADM fallback. Keep this
+  # separate from the existing stopwatch JSON to protect that timer.
+  $payload=([ordered]@{
+    enabled=[bool]$script:refreshEnabled
+    intervalSeconds=[int]$script:refreshSeconds
+    source="instance-window"
+  } | ConvertTo-Json -Compress)
+  $temporary="$($script:refreshToggleFile).$PID.tmp"
+  try {
+    [System.IO.File]::WriteAllText($temporary,$payload,([System.Text.UTF8Encoding]::new($false)))
+    if(Test-Path -LiteralPath $script:refreshToggleFile){
+      try {
+        [System.IO.File]::Replace($temporary,$script:refreshToggleFile,$null)
+      } catch {
+        [System.IO.File]::Copy($temporary,$script:refreshToggleFile,$true)
+        [System.IO.File]::Delete($temporary)
+      }
+    } else {
+      [System.IO.File]::Move($temporary,$script:refreshToggleFile)
+    }
+  } finally {
+    if(Test-Path -LiteralPath $temporary){
+      Remove-Item -LiteralPath $temporary -Force -ErrorAction SilentlyContinue
+    }
+  }
 }
 function Read-H2AdsRefreshPolicy {
+  # A time edited inside the open phone must NOT be overwritten by the
+  # background worker's 10-second ADM synchronization.
+  if($script:refreshConfiguredLocally){return}
   if([string]::IsNullOrWhiteSpace($RefreshPolicyPath)){return}
   try {
     if(-not (Test-Path -LiteralPath $RefreshPolicyPath)){return}
@@ -385,40 +431,148 @@ function Read-H2AdsRefreshPolicy {
     if([int]$policy.instanceId -ne $InstanceId){return}
     $seconds=[int]$policy.intervalSeconds
     if($seconds -ne 0 -and ($seconds -lt 30 -or $seconds -gt 86400)){return}
-    if($seconds -ne $script:refreshSeconds) {
+    if($seconds -ne $script:refreshSeconds){
       $script:refreshSeconds=$seconds
       $script:refreshNextAtMs=0
     }
-    if($seconds -eq 0 -and $script:refreshEnabled) {
+    if($seconds -eq 0 -and $script:refreshEnabled){
       $script:refreshEnabled=$false
-      try { Save-H2AdsRefreshToggle } catch { }
+      # Do not persist a remote policy as a local override.
     }
   } catch {
-    # Invalid/partial settings do not interrupt Chrome or reset timers.
+    # Invalid/partial worker settings do not interrupt Chrome.
+  }
+}
+function Set-H2AdsRefreshSettings([int]$seconds,[bool]$enabled) {
+  if($seconds -ne 0 -and ($seconds -lt 30 -or $seconds -gt 86400)){return $false}
+  $oldSeconds=$script:refreshSeconds
+  $oldEnabled=$script:refreshEnabled
+  $oldLocal=$script:refreshConfiguredLocally
+  $oldNext=$script:refreshNextAtMs
+  try {
+    $script:refreshSeconds=$seconds
+    $script:refreshEnabled=($enabled -and $seconds -gt 0)
+    $script:refreshConfiguredLocally=$true
+    $script:refreshNextAtMs=0
+    Save-H2AdsRefreshToggle
+    return $true
+  } catch {
+    $message=$_.Exception.Message
+    $script:refreshSeconds=$oldSeconds
+    $script:refreshEnabled=$oldEnabled
+    $script:refreshConfiguredLocally=$oldLocal
+    $script:refreshNextAtMs=$oldNext
+    [System.Windows.Forms.MessageBox]::Show(
+      ("Nao foi possivel salvar a atualizacao automatica desta instancia." + [Environment]::NewLine + $message),
+      "H2ADS - Atualizacao automatica",
+      [System.Windows.Forms.MessageBoxButtons]::OK,
+      [System.Windows.Forms.MessageBoxIcon]::Warning
+    )|Out-Null
+    return $false
   }
 }
 function Change-H2AdsRefresh {
-  if($script:refreshSeconds -eq 0) {
-    [System.Windows.Forms.MessageBox]::Show("Configure o intervalo desta instancia no ADM H2 ADS antes de iniciar.",
-      "H2ADS - Atualizacao automatica",
-      [System.Windows.Forms.MessageBoxButtons]::OK,
-      [System.Windows.Forms.MessageBoxIcon]::Information)|Out-Null
-    return
+  # The existing AUTO button now opens a native editor on THIS instance.
+  # Do not add a fifth button to the cramped stopwatch row (min 310px).
+  $dialog=New-Object System.Windows.Forms.Form
+  $dialog.Text=("H2ADS - AUTO - " + $InstanceName)
+  $dialog.FormBorderStyle=[System.Windows.Forms.FormBorderStyle]::FixedDialog
+  $dialog.StartPosition=[System.Windows.Forms.FormStartPosition]::CenterParent
+  $dialog.ShowInTaskbar=$false
+  $dialog.MaximizeBox=$false
+  $dialog.MinimizeBox=$false
+  $dialog.AutoScaleMode=[System.Windows.Forms.AutoScaleMode]::None
+  $dialog.ClientSize=[System.Drawing.Size]::new(410,218)
+  $dialog.BackColor=RGB 13 18 28
+  $dialog.ForeColor=RGB 245 248 255
+  $dialog.Font=New-Object System.Drawing.Font -ArgumentList "Segoe UI",10
+  $label=New-Object System.Windows.Forms.Label
+  $label.Text="Atualizar esta pagina a cada (segundos)"
+  $label.Location=[System.Drawing.Point]::new(15,18)
+  $label.Size=[System.Drawing.Size]::new(374,27)
+  $label.ForeColor=RGB 226 237 255
+  $dialog.Controls.Add($label)
+  $inputSeconds=New-Object System.Windows.Forms.NumericUpDown
+  $inputSeconds.Minimum=[decimal]30
+  $inputSeconds.Maximum=[decimal]86400
+  $inputSeconds.Increment=[decimal]10
+  $inputSeconds.Value=[decimal](if($script:refreshSeconds -ge 30){$script:refreshSeconds}else{60})
+  $inputSeconds.Location=[System.Drawing.Point]::new(15,49)
+  $inputSeconds.Size=[System.Drawing.Size]::new(180,31)
+  $inputSeconds.TextAlign=[System.Windows.Forms.HorizontalAlignment]::Center
+  $dialog.Controls.Add($inputSeconds)
+  $hint=New-Object System.Windows.Forms.Label
+  $hint.Text="Exemplo: 60 = 1 minuto; 300 = 5 minutos. Minimo 30 segundos."
+  $hint.Location=[System.Drawing.Point]::new(15,87)
+  $hint.Size=[System.Drawing.Size]::new(386,35)
+  $hint.Font=New-Object System.Drawing.Font -ArgumentList "Segoe UI",8.5
+  $hint.ForeColor=RGB 177 192 215
+  $dialog.Controls.Add($hint)
+  $current=New-Object System.Windows.Forms.Label
+  $current.Text=if($script:refreshEnabled) {
+    "Ativo: atualiza a cada $($script:refreshSeconds) segundos."
+  } elseif($script:refreshSeconds -gt 0) {
+    "Pausado: intervalo de $($script:refreshSeconds) segundos."
+  } else {
+    "Desativado. O navegador permanece sem recarga automatica."
   }
-  $before=$script:refreshEnabled
-  $script:refreshEnabled=-not $script:refreshEnabled
-  try { Save-H2AdsRefreshToggle }
-  catch {
-    $script:refreshEnabled=$before
-    [System.Windows.Forms.MessageBox]::Show("Nao foi possivel salvar o estado AUTO nesta instancia.",
-      "H2ADS - Atualizacao automatica",
-      [System.Windows.Forms.MessageBoxButtons]::OK,
-      [System.Windows.Forms.MessageBoxIcon]::Warning)|Out-Null
-    return
+  $current.Location=[System.Drawing.Point]::new(15,122)
+  $current.Size=[System.Drawing.Size]::new(385,25)
+  $current.ForeColor=RGB 124 224 190
+  $dialog.Controls.Add($current)
+  $start=New-Object System.Windows.Forms.Button
+  $start.Text="SALVAR E INICIAR"
+  $start.Location=[System.Drawing.Point]::new(12,159)
+  $start.Size=[System.Drawing.Size]::new(133,43)
+  $start.BackColor=RGB 24 119 82
+  $start.ForeColor=RGB 255 255 255
+  $start.FlatStyle=[System.Windows.Forms.FlatStyle]::Flat
+  $start.Add_Click({
+    if(Set-H2AdsRefreshSettings ([int]$inputSeconds.Value) $true){
+      $dialog.DialogResult=[System.Windows.Forms.DialogResult]::OK
+      $dialog.Close()
+    }
+  }.GetNewClosure())
+  $dialog.Controls.Add($start)
+  $pause=New-Object System.Windows.Forms.Button
+  $pause.Text="SALVAR PAUSADO"
+  $pause.Location=[System.Drawing.Point]::new(151,159)
+  $pause.Size=[System.Drawing.Size]::new(133,43)
+  $pause.BackColor=RGB 45 76 118
+  $pause.ForeColor=RGB 255 255 255
+  $pause.FlatStyle=[System.Windows.Forms.FlatStyle]::Flat
+  $pause.Add_Click({
+    if(Set-H2AdsRefreshSettings ([int]$inputSeconds.Value) $false){
+      $dialog.DialogResult=[System.Windows.Forms.DialogResult]::OK
+      $dialog.Close()
+    }
+  }.GetNewClosure())
+  $dialog.Controls.Add($pause)
+  $disable=New-Object System.Windows.Forms.Button
+  $disable.Text="DESATIVAR"
+  $disable.Location=[System.Drawing.Point]::new(290,159)
+  $disable.Size=[System.Drawing.Size]::new(108,43)
+  $disable.BackColor=RGB 94 49 58
+  $disable.ForeColor=RGB 255 255 255
+  $disable.FlatStyle=[System.Windows.Forms.FlatStyle]::Flat
+  $disable.Add_Click({
+    if(Set-H2AdsRefreshSettings 0 $false){
+      $dialog.DialogResult=[System.Windows.Forms.DialogResult]::OK
+      $dialog.Close()
+    }
+  }.GetNewClosure())
+  $dialog.Controls.Add($disable)
+  $script:refreshDialogOpen=$true
+  try {
+    [void]$dialog.ShowDialog($frame)
+  } finally {
+    $script:refreshDialogOpen=$false
+    $script:refreshNextAtMs=0
+    $dialog.Dispose()
   }
-  $script:refreshNextAtMs=0
 }
 function Tick-H2AdsRefresh([IntPtr]$chromeWindow) {
+  if($script:refreshDialogOpen){$script:refreshNextAtMs=0;return}
   $now=Get-H2AdsWatchNowMs
   if(($now-$script:refreshPolicyReadAtMs) -ge 4000) {
     $script:refreshPolicyReadAtMs=$now
@@ -559,6 +713,8 @@ $status.Width=$frame.Width-44
 $status.Location=New-Object System.Drawing.Point(22,8)
 $status.BackColor=RGB 0 0 2
 $status.Cursor=[System.Windows.Forms.Cursors]::Hand
+$script:autoHelp=New-Object System.Windows.Forms.ToolTip
+$script:autoHelp.SetToolTip($status,"AUTO: clique para definir o tempo, iniciar, pausar ou desativar nesta instancia.")
 Set-RoundedPanelRegion $status 24
 $status.add_Paint({
   param($sender,$e)
