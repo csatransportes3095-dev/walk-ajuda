@@ -1,3 +1,4 @@
+import { getH2AdsAutoRefreshPolicy, saveH2AdsAutoRefreshPolicy, H2ADS_AUTO_REFRESH_MIN_SECONDS, H2ADS_AUTO_REFRESH_MAX_SECONDS } from "../h2adsAutoRefreshPolicy";
 import { addH2AdsStartupSite, listH2AdsStartupSites, toggleH2AdsStartupSite, removeH2AdsStartupSite } from "../h2adsGlobalStartupSites";
 import { TRPCError } from "@trpc/server";
 import { addH2AdsGlobalExtension, listH2AdsGlobalExtensions, removeH2AdsGlobalExtension, setH2AdsGlobalExtension } from "../h2adsGlobalExtensions";
@@ -182,6 +183,23 @@ async function requireConfigurableInstance(instanceId: number) {
 export const h2AdsRouter = {
   ...h2AdsOrderLinkRouterPart,
   listDashboard: adminProcedure.query(async () => listH2AdsDashboard()),
+  autoRefreshPolicy: adminProcedure
+    .input(z.object({ instanceId: z.number().int().positive() }).strict())
+    .query(async ({ input }) => {
+      await requireConfigurableInstance(input.instanceId);
+      return getH2AdsAutoRefreshPolicy(input.instanceId);
+    }),
+  setAutoRefreshPolicy: adminProcedure
+    .input(z.object({
+      instanceId: z.number().int().positive(),
+      intervalSeconds: z.number().int().refine(v => v === 0 ||
+        (v >= H2ADS_AUTO_REFRESH_MIN_SECONDS && v <= H2ADS_AUTO_REFRESH_MAX_SECONDS),
+        "Use 0 (desativado) ou de 30 segundos a 24 horas."),
+    }).strict())
+    .mutation(async ({ input }) => {
+      await requireConfigurableInstance(input.instanceId);
+      return saveH2AdsAutoRefreshPolicy(input.instanceId, input.intervalSeconds);
+    }),
   startupSites: adminProcedure.query(async () => listH2AdsStartupSites()),
   addStartupSite: adminProcedure.input(z.object({ url: z.string().max(500), name: z.string().trim().min(1).max(90) }).strict()).mutation(async ({ input }) => addH2AdsStartupSite(input.url, input.name)),
   toggleStartupSite: adminProcedure.input(z.object({ id: z.string().uuid(), enabled: z.boolean() }).strict()).mutation(async ({ input }) => toggleH2AdsStartupSite(input.id, input.enabled)),
