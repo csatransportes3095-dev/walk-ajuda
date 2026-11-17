@@ -47,13 +47,13 @@ describe("reliable ADM notifications for loans", () => {
 
   it("wires both customer loan request paths and the proof upload path", () => {
     expect(router).toContain('queueLoanAdminNotice("request:" + loanId');
-    expect(router).toContain('queueLoanAdminNotice("proof:" + input.installmentId');
+    expect(router).toContain('queueLoanAdminNotice("proof:" + input.installmentId + ":" + receivedAt.getTime()');
     expect(router).not.toContain("notifyAdminProofReceived(");
   });
 
   it("wires both manual payment paths and interest-only payments", () => {
-    expect(router.match(/queueLoanAdminNotice\("manual-payment:" \+ input.installmentId/g)?.length).toBe(2);
-    expect(router).toContain('queueLoanAdminNotice("interest-payment:" + input.installmentId');
+    expect(router.match(/queueLoanAdminNotice\("manual-payment:" \+ input.installmentId \+ ":" \+ Date.now\(\)/g)?.length).toBe(2);
+    expect(router).toContain('queueLoanAdminNotice("interest-payment:" + input.installmentId + ":" + Date.now()');
   });
 
   it("persists, deduplicates and retries failed notifications independently of finance", () => {
