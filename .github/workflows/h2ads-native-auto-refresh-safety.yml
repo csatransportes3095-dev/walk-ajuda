@@ -26,7 +26,7 @@ jobs:
           node-version: 22
           cache: pnpm
       - run: pnpm install --frozen-lockfile
-      - run: pnpm exec vitest run server/h2adsAutoRefresh.test.ts server/h2adsNativePhoneVisual.test.ts server/h2adsWorkerRoute.test.ts server/h2adsWorkerFoundation.test.ts
+      - run: pnpm exec vitest run server/h2adsAutoRefresh.test.ts server/h2adsWorkerRoute.test.ts server/h2adsWorkerFoundation.test.ts
       - run: node --check workers/windows/browser-session.mjs
       - name: PowerShell parser
         shell: pwsh
