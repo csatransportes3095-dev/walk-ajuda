@@ -1,0 +1,25 @@
+name: H2 Backup Rolling Restart Safety
+on:
+  pull_request:
+    branches: [recovery/organizar-salvos-2026-08-24]
+    paths:
+      - 'server/backupService.ts'
+      - 'server/backupMultiInstanceRestartSafety.test.ts'
+      - '.github/workflows/h2-backup-rolling-restart-safety.yml'
+permissions:
+  contents: read
+jobs:
+  safety:
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+    steps:
+      - uses: actions/checkout@v4
+      - uses: pnpm/action-setup@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+          cache: pnpm
+      - run: pnpm install --frozen-lockfile
+      - run: pnpm exec vitest run server/backupMultiInstanceRestartSafety.test.ts server/backupService.test.ts server/backupRestoreService.test.ts
+      - run: node scripts/patch-media-local-export-20260910.mjs
+      - run: pnpm build
