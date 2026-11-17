@@ -16,6 +16,7 @@ import { isSystemRestoreLocked } from "../backupRestoreService";
 import { calculateParceladoFromAdminPlan } from "../loans/parcelado";
 import PDFDocument from "pdfkit";
 import { sendMailDirect } from "../_core/sendMailDirect";
+import { queueLoanAdminNotice } from "../loans/adminEmailOutbox";
 import sharp from "sharp";
 import * as fs from "fs";
 import * as path from "path";
@@ -320,22 +321,6 @@ function brazilDateTime(value: Date): string {
   return new Intl.DateTimeFormat('pt-BR', {
     timeZone: 'America/Sao_Paulo', dateStyle: 'short', timeStyle: 'medium',
   }).format(value);
-}
-
-async function notifyAdminProofReceived(opts: {
-  clientName: string; clientPhone: string; clientEmail?: string | null;
-  loanId: number; installmentId: number; installmentNumber: number; amount: number;
-  proofUrl: string; fileName: string; fileBuffer: Buffer; mimeType: string; submittedAt: Date;
-}): Promise<void> {
-  const to = (await getSetting('contact_email')) || (await getSetting('email_to')) || 'h2@h2colombiano.com';
-  const amount = Number(opts.amount || 0).toLocaleString('pt-BR', { style: 'currency', currency: 'BRL' });
-  const submittedAt = brazilDateTime(opts.submittedAt);
-  await sendMailDirect({
-    from: '"H2 COLOMBIANO" <h2@h2colombiano.com>', to,
-    subject: `Comprovante recebido para conferência — ${opts.clientName} — Parcela #${opts.installmentNumber}`,
-    html: `<div style="font-family:Arial,sans-serif;max-width:620px;margin:0 auto;color:#172033;"><h2 style="background:#0f172a;color:#22c55e;padding:20px;margin:0;">Comprovante recebido para conferência</h2><div style="padding:22px;border:1px solid #e2e8f0;"><p>O cliente <strong>${opts.clientName}</strong> enviou um comprovante para conferência.</p><p><strong>Empréstimo:</strong> #${opts.loanId}<br><strong>Parcela:</strong> #${opts.installmentNumber}<br><strong>Identificação da parcela:</strong> #${opts.installmentId}<br><strong>Valor:</strong> ${amount}<br><strong>Enviado em:</strong> ${submittedAt}<br><strong>Telefone:</strong> ${opts.clientPhone || 'não informado'}<br><strong>E-mail:</strong> ${opts.clientEmail || 'não informado'}</p><p><a href="${opts.proofUrl}">Abrir comprovante recebido</a></p><p style="font-size:12px;color:#64748b;">Confira o comprovante no ADM e aprove ou recuse o pagamento.</p></div></div>`,
-    attachments: [{ filename: opts.fileName || `comprovante-parcela-${opts.installmentNumber}`, content: opts.fileBuffer, contentType: opts.mimeType || 'application/octet-stream' }],
-  });
 }
 
 async function notifyClientPaymentApproved(opts: {
@@ -917,6 +902,16 @@ export const loanRouter = router({
       const loanId = (result[0] as any).insertId;
       for (const inst of schedule) {
         await db.execute(drizzleSql`INSERT INTO loanInstallments (loanId, installmentNumber, dueDate, amount) VALUES (${loanId}, ${inst.installmentNumber}, ${inst.dueDate}, ${inst.amount})`);
+      }
+      try {
+        await queueLoanAdminNotice("request:" + loanId, {
+          kind: "request", loanId: Number(loanId), clientName: String(client.name || "Cliente"),
+          clientPhone: String(client.phone || ""), amount: Number(input.amount),
+          paymentType: "parcelado", submittedAt: new Date().toISOString(),
+        });
+      } catch (notifyError: any) {
+        // The saved loan must not be falsely presented as rejected by an email outage.
+        console.error("[requestParcelado] Notificacao pendente de registro:", String(notifyError?.message || notifyError));
       }
       return { id: loanId, parcelas: input.parcelas, valorParcela: calc.perInstallment, valorTotal: total, primeiroVencimento: schedule[0].dueDate, frequencia: 'mensal' as const };
     } catch (err: any) {
@@ -1924,6 +1919,19 @@ export const loanRouter = router({
         console.error('[confirmInstallmentPayment] Falha ao notificar cliente:', error?.message || error);
       }
     }
+    try {
+      await queueLoanAdminNotice("manual-payment:" + input.installmentId, {
+        kind: "manual_payment", loanId: Number(paymentRow.loanId),
+        clientName: String(paymentRow.clientName || "Cliente"),
+        clientPhone: String(paymentRow.clientPhone || ""),
+        installmentId: input.installmentId,
+        installmentNumber: Number(paymentRow.installmentNumber || 0),
+        amount: Number(paymentRow.amount || 0), submittedAt: new Date().toISOString(),
+      });
+    } catch (notifyError: any) {
+      console.error("[confirmInstallmentPayment] Notificacao pendente de registro:",
+        String(notifyError?.message || notifyError));
+    }
     return { ok: true, alreadyPaid: false, h2ScoreApproval, permanentH2Score, clientEmailNotified };
   }),
 
@@ -2615,23 +2623,19 @@ export const loanRouter = router({
       submittedAt: receivedAt,
     });
     try {
-      await notifyAdminProofReceived({
-        clientName: String(client.name || 'Cliente'),
-        clientPhone: String(client.phone || ''),
-        clientEmail: String(client.email || ''),
-        loanId: Number(row.loanId),
-        installmentId: input.installmentId,
+      await queueLoanAdminNotice("proof:" + input.installmentId, {
+        kind: "proof", loanId: Number(row.loanId),
+        clientName: String(client.name || "Cliente"), clientPhone: String(client.phone || ""),
+        amount: Number(row.amount || 0), installmentId: input.installmentId,
         installmentNumber: Number(row.installmentNumber || 0),
-        amount: Number(row.amount || 0),
-        proofUrl: url,
-        fileName: input.fileName,
-        fileBuffer: buffer,
-        mimeType: input.mimeType,
-        submittedAt: receivedAt,
+        proofUrl: url, submittedAt: receivedAt.toISOString(),
+      }, {
+        filename: input.fileName, content: buffer, contentType: input.mimeType,
       });
-    } catch (error: any) {
-      // O comprovante já está salvo; uma falha de e-mail não pode desfazer o envio do cliente.
-      console.error('[submitInstallmentProof] Falha ao notificar ADM:', error?.message || error);
+    } catch (notifyError: any) {
+      // Payment proof and loan status remain authoritative even on an email error.
+      console.error("[submitInstallmentProof] Notificacao pendente de registro:",
+        String(notifyError?.message || notifyError));
     }
     return { ok: true, url, appliedFee: effectiveFee, h2ScoreSubmission };
   }),
@@ -2735,6 +2739,15 @@ export const loanRouter = router({
       await db.execute(drizzleSql`INSERT INTO loanInstallments (loanId, installmentNumber, dueDate, amount) VALUES (${loanId}, ${inst.installmentNumber}, ${inst.dueDate}, ${inst.amount})`);
     }
 
+    try {
+      await queueLoanAdminNotice("request:" + loanId, {
+        kind: "request", loanId: Number(loanId), clientName: String(client.name || "Cliente"),
+        clientPhone: String(client.phone || ""), amount: Number(input.amount),
+        paymentType: input.paymentType, submittedAt: new Date().toISOString(),
+      });
+    } catch (notifyError: any) {
+      console.error("[requestLoan] Notificacao pendente de registro:", String(notifyError?.message || notifyError));
+    }
     return { id: loanId, totalAmount: sim.totalAmount, installments: sim.installments, perInstallment: sim.perInstallment };
   }),
 
@@ -3304,6 +3317,21 @@ export const loanRouter = router({
       }
     } catch (e) { console.error('[Recibo Juros] Erro ao enviar recibo:', e); }
 
+    try {
+      const interestedClientRows = await qRows(db, drizzleSql`SELECT name, phone FROM loanClients WHERE id=${loan.clientId} LIMIT 1`);
+      const interestedClient = interestedClientRows[0] || {};
+      await queueLoanAdminNotice("interest-payment:" + input.installmentId, {
+        kind: "interest_payment", loanId: Number(input.loanId),
+        clientName: String(interestedClient.name || "Cliente"),
+        clientPhone: String(interestedClient.phone || ""),
+        installmentId: input.installmentId,
+        installmentNumber: Number(inst.installmentNumber || 0),
+        amount: Number(totalJuros), submittedAt: new Date().toISOString(),
+      });
+    } catch (notifyError: any) {
+      console.error("[payInterestOnly] Notificacao pendente de registro:",
+        String(notifyError?.message || notifyError));
+    }
     return { ok: true, cycleInterest: totalJuros, newDueDate, renewDays, principalPerInstallment, interestOnPrincipal, feeApplied };
   }),
 
@@ -3458,6 +3486,19 @@ export const loanRouter = router({
       } catch (error: any) {
         console.error('[confirmInstallmentPaymentWithProof] Falha ao notificar cliente:', error?.message || error);
       }
+    }
+    try {
+      await queueLoanAdminNotice("manual-payment:" + input.installmentId, {
+        kind: "manual_payment", loanId: Number(inst.loanId),
+        clientName: String(inst.clientName || "Cliente"),
+        clientPhone: String(inst.clientPhone || ""),
+        installmentId: input.installmentId,
+        installmentNumber: Number(inst.installmentNumber || 0),
+        amount: Number(input.amountPaid || 0), submittedAt: paidAtDate.toISOString(),
+      });
+    } catch (notifyError: any) {
+      console.error("[confirmInstallmentPaymentWithProof] Notificacao pendente de registro:",
+        String(notifyError?.message || notifyError));
     }
     return { ok: true, alreadyPaid: false, hasProof: !!hasProof, fileUrl, h2ScoreApproval, permanentH2Score, clientEmailNotified };
   }),
