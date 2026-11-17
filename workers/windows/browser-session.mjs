@@ -278,7 +278,7 @@ async function syncRefreshPolicy() {
   refreshPolicyBusy = true;
   try {
     const response = await fetch(
-      panelUrl.replace(/\\/$/, "") + "/api/h2ads/worker/auto-refresh/" + instanceId,
+      panelUrl.replace(/\/$/, "") + "/api/h2ads/worker/auto-refresh/" + instanceId,
       { headers: headers(), signal: AbortSignal.timeout(4000), cache: "no-store" },
     );
     if (!response.ok) return;
