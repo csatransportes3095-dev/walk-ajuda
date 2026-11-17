@@ -22,4 +22,6 @@ jobs:
           cache: pnpm
       - run: pnpm install --frozen-lockfile
       - run: pnpm exec vitest run server/publicVideoStreamSafety.test.ts
+      - name: Verify Docker media-export patch recognizes protected backup route
+        run: node scripts/patch-media-local-export-20260910.mjs
       - run: pnpm build
