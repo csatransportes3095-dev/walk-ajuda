@@ -1,0 +1,37 @@
+name: Loan Admin Notifications Reliability
+on:
+  pull_request:
+    branches:
+      - recovery/organizar-salvos-2026-08-24
+    paths:
+      - "server/routers/loans.ts"
+      - "server/loans/adminEmailOutbox.ts"
+      - "server/loans/adminEmailOutbox.test.ts"
+      - "server/_core/index.ts"
+      - ".github/workflows/loan-admin-notices-ci.yml"
+permissions:
+  contents: read
+jobs:
+  verify:
+    runs-on: ubuntu-latest
+    timeout-minutes: 25
+    steps:
+      - uses: actions/checkout@v4
+      - uses: pnpm/action-setup@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+          cache: pnpm
+      - run: pnpm install --frozen-lockfile
+      - name: Loan notification regression tests
+        run: pnpm exec vitest run server/loans/adminEmailOutbox.test.ts
+      - name: Check TypeScript for newly edited files
+        run: |
+          pnpm exec tsc --noEmit > /tmp/loan-admin-notices-tsc.log 2>&1 || true
+          if grep -E '^((server/loans/adminEmailOutbox.ts)|(server/loans/adminEmailOutbox.test.ts)|(server/routers/loans.ts)|(server/_core/index.ts))\(' /tmp/loan-admin-notices-tsc.log; then
+            exit 1
+          fi
+      - name: Production build
+        run: |
+          node scripts/patch-media-local-export-20260910.mjs
+          pnpm build
