@@ -112,7 +112,7 @@ const isStale = (value: number | null | undefined) =>
   value != null && Date.now() - value > 24 * 60 * 60 * 1000;
 
 
-function H2AutoLearningPanel({deviceId, enabled}:{deviceId:string,enabled:boolean}) {
+function H2AutoLearningPanel({deviceId, enabled, revision, appliedRevision, apkVersionCode}:{deviceId:string,enabled:boolean,revision:number,appliedRevision:number,apkVersionCode?:number}) {
   const utils = trpc.useUtils();
   const {data, isLoading, refetch} = trpc.h2AutoAdmin.learningQuestions.useQuery(
     {id:deviceId,limit:100}, {refetchInterval:30000}
@@ -150,6 +150,12 @@ function H2AutoLearningPanel({deviceId, enabled}:{deviceId:string,enabled:boolea
         {enabled?"⛔ DESATIVAR COLETA":"✅ ATIVAR COLETA"}
       </button>
     </div>
+    <p className={"text-xs font-semibold "+(!enabled?"text-amber-300":appliedRevision!==revision?"text-amber-300":"text-emerald-300")}>
+      {!enabled?"Coleta DESATIVADA: novas dúvidas não entram na fila até você clicar em ATIVAR COLETA."
+        :appliedRevision!==revision?"Coleta habilitada no ADM. O APK ainda não confirmou a última sincronização."
+        : (apkVersionCode||0)<112?"Coleta habilitada. Atualize o APK para 2.12 para capturar também perguntas sem regra diretamente pelo aplicativo."
+        :"Coleta habilitada e sincronização confirmada. Perguntas válidas sem resposta entram na fila automaticamente."}
+    </p>
     <div className="flex gap-2 flex-wrap items-center justify-between">
       <p className="text-sm font-bold text-cyan-200">{data?.pending??0} perguntas agrupadas · {data?.received??0} ocorrências</p>
       <div className="flex gap-2">
@@ -950,7 +956,7 @@ export default function AdminH2Auto() {
                   {saveUnknownReply.isPending?"SALVANDO...":"SALVAR MENSAGEM AUTOMÁTICA"}
                 </button>
               </section>
-              <H2AutoLearningPanel deviceId={d.id} enabled={Boolean(d.config.questionCollectionEnabled)} />
+              <H2AutoLearningPanel deviceId={d.id} enabled={Boolean(d.config.questionCollectionEnabled)} revision={d.revision} appliedRevision={d.appliedRevision} apkVersionCode={d.diagnostics?.apkVersionCode} />
               <section className="rounded-2xl border border-violet-400/45 bg-gradient-to-br from-violet-950/30 to-slate-950 p-4 space-y-4">
                 <h4 className="text-lg font-black text-violet-200">🧠 ATENDIMENTO PERSONALIZADO — SEM CUSTO DE IA</h4>
                 <p className="text-sm text-slate-300">Reconhece perguntas livres sobre pedidos, códigos, fotos, valores, indicações e atendimento. Responde com orientação pública e tom escolhido; só usa o primeiro nome após validação do cliente. Não consulta status sem autenticação nem faz promessas de atendimento. Nenhum serviço de IA pago será contratado.</p>
