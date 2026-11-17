@@ -58,7 +58,8 @@ run_boot_step "loans-recovery-20260822-fix" pnpm exec tsx scripts/apply-loans-re
 run_boot_step "ensure-diamond-loan-profile" pnpm exec tsx scripts/ensure-diamond-loan-profile.ts
 run_boot_step "normalize-product-manifests-portuguese" pnpm exec tsx scripts/normalize-product-manifests-portuguese.ts
 run_boot_step "bulk-activate-all-main-customers" pnpm exec tsx scripts/activate-all-main-customers-20260905.ts
-run_boot_step "audit-customer-profile-integrity" pnpm exec tsx scripts/audit-customer-profile-integrity.ts
+# Auditoria somente leitura: executada apos server.listen; nao bloqueia recuperacao HTTP.
+# Todas as migracoes e recuperacoes de dados permanecem obrigatorias antes de iniciar a API.
 
 run_boot_step "faq-guidelines-20261020" pnpm exec tsx scripts/apply-faq-guidelines-20261020.ts
 run_boot_step "db-migrate-third-party-phone-20261020" pnpm exec tsx scripts/apply-third-party-phone-migration-20261020.ts
