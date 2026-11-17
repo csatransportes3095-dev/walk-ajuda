@@ -389,7 +389,10 @@ function Read-H2AdsRefreshPolicy {
       $script:refreshSeconds=$seconds
       $script:refreshNextAtMs=0
     }
-    if($seconds -eq 0){$script:refreshEnabled=$false}
+    if($seconds -eq 0 -and $script:refreshEnabled) {
+      $script:refreshEnabled=$false
+      try { Save-H2AdsRefreshToggle } catch { }
+    }
   } catch {
     # Invalid/partial settings do not interrupt Chrome or reset timers.
   }
