@@ -1,6 +1,7 @@
 // storageProxy v2 - proxy real com Range requests para streaming de vídeo
 import type { Express } from "express";
 import { Readable } from "stream";
+import { pipeline } from "node:stream/promises";
 import { ENV } from "./env";
 
 export function registerStorageProxy(app: Express) {
@@ -84,8 +85,9 @@ export function registerStorageProxy(app: Express) {
         // Stream do body para o cliente
         if (upstream.body) {
           const nodeReadable = Readable.fromWeb(upstream.body as Parameters<typeof Readable.fromWeb>[0]);
-          req.on("close", () => nodeReadable.destroy());
-          nodeReadable.pipe(res);
+          // Pipeline waits for the full transfer and traps upstream/client disconnects.
+          // Do not use req.close: it can fire after a normal GET request is read.
+          await pipeline(nodeReadable, res);
         } else {
           res.end();
         }
@@ -96,8 +98,14 @@ export function registerStorageProxy(app: Express) {
       res.set("Cache-Control", "no-store");
       res.redirect(307, url);
     } catch (err) {
-      console.error("[StorageProxy] failed:", err);
-      res.status(502).send("Storage proxy error");
+      // A disconnected media stream must fail this request only, not Node itself.
+      const message = err instanceof Error ? err.message : String(err);
+      console.warn("[StorageProxy] failed:", message);
+      if (!res.headersSent) {
+        res.status(502).send("Storage proxy error");
+      } else if (!res.destroyed) {
+        res.destroy();
+      }
     }
   });
 }
