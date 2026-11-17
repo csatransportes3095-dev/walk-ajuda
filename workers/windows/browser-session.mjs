@@ -24,6 +24,10 @@ const profileDirectory = process.env.H2ADS_PROFILE_DIRECTORY;
 const browserExecutable = process.env.H2ADS_BROWSER_EXECUTABLE;
 let proxy = JSON.parse(process.env.H2ADS_PROXY_JSON);
 const sessionPath = join(profileDirectory, "h2ads-browser-session.json");
+const refreshPolicyPath = join(profileDirectory, "h2ads-auto-refresh-policy.json");
+let lastRefreshIntervalSeconds = null;
+let refreshPolicyBusy = false;
+let refreshPolicyTimer;
 const runnerLockPath = join(profileDirectory, "h2ads-session-runner.lock");
 const snapshotQueueDirectory = join(profileDirectory, "..", "..", "snapshot-queue");
 const labelPagePath = join(profileDirectory, "h2ads-instance-label.html");
@@ -267,12 +271,39 @@ async function verifyChromeProxyAfterLaunch(executable, expectedIp) {
   }
 }
 
+// Optional display-only timer policy, synced to this instance's local
+// profile directory. No browser/CDP commands and no proxy state modifications.
+async function syncRefreshPolicy() {
+  if (refreshPolicyBusy || browserExitHandled || !browser || browser.exitCode !== null) return;
+  refreshPolicyBusy = true;
+  try {
+    const response = await fetch(
+      panelUrl.replace(/\\/$/, "") + "/api/h2ads/worker/auto-refresh/" + instanceId,
+      { headers: headers(), signal: AbortSignal.timeout(4000), cache: "no-store" },
+    );
+    if (!response.ok) return;
+    const data = await response.json();
+    const seconds = data?.intervalSeconds;
+    if (!Number.isInteger(seconds) ||
+        (seconds !== 0 && (seconds < 30 || seconds > 86400))) return;
+    if (seconds === lastRefreshIntervalSeconds) return;
+    // Local per-instance file: never writes a shared Chrome/proxy configuration.
+    writeFileSync(refreshPolicyPath, JSON.stringify({
+      instanceId, intervalSeconds: seconds,
+    }), { encoding: "utf8", mode: 0o600 });
+    lastRefreshIntervalSeconds = seconds;
+  } catch {
+    // Offline ADM must not interrupt Chrome; policy stays at last known value.
+  } finally { refreshPolicyBusy = false; }
+}
+
 function stopSessionTimers() {
   if (rotationTimer) clearInterval(rotationTimer);
   if (ipTimer) clearInterval(ipTimer);
   if (killSwitchTimer) clearInterval(killSwitchTimer);
   if (panelSyncTimer) clearInterval(panelSyncTimer);
   if (proxySyncTimer) clearInterval(proxySyncTimer);
+  if (refreshPolicyTimer) clearInterval(refreshPolicyTimer);
   if (stopMobileRemote) { stopMobileRemote(); stopMobileRemote = null; }
 }
 
@@ -816,6 +847,7 @@ async function startNativePhoneVisual(pid) {
       "-NoProfile", "-NonInteractive", "-ExecutionPolicy", "Bypass",
       "-WindowStyle", "Hidden", "-File", script,
       "-BrowserPid", String(pid), "-InstanceId", String(instanceId), "-InstanceName", instanceName,
+      "-RefreshPolicyPath", refreshPolicyPath,
     ], { windowsHide: true, stdio: "ignore" });
     phoneWindowProcess.on("error", () => { phoneWindowProcess = null; });
   } catch {
@@ -881,6 +913,7 @@ async function run() {
     browser.once("exit", (code, signal) => { void finalizeBrowserExit("browser_exit", code, signal); });
     // The same local launch runs for the ADM and for orders.
     // Never wait for the decorative companion before opening the real browser.
+    void syncRefreshPolicy();
     void startNativePhoneVisual(browser.pid).catch(() => undefined);
     // Do not make the user wait for a second headless Chrome before seeing the real window.
     // Direct egress remains blocked by Windows Firewall; verification runs asynchronously.
@@ -903,6 +936,8 @@ async function run() {
     panelSyncTimer.unref?.();
     proxySyncTimer = setInterval(() => { void syncCurrentProxyCredential(); }, 5_000);
     proxySyncTimer.unref?.();
+    refreshPolicyTimer = setInterval(() => { void syncRefreshPolicy(); }, 10_000);
+    refreshPolicyTimer.unref?.();
     // A queda do proxy não encerra o Chrome. O relay local permanece como barreira;
     // a conexão só volta depois que o upstream e o Chrome de prova validarem o mesmo IP.
     try {
