@@ -112,7 +112,7 @@ const isStale = (value: number | null | undefined) =>
   value != null && Date.now() - value > 24 * 60 * 60 * 1000;
 
 
-function H2AutoLearningPanel({deviceId, enabled, revision, appliedRevision, apkVersionCode}:{deviceId:string,enabled:boolean,revision:number,appliedRevision:number,apkVersionCode?:number}) {
+function H2AutoLearningPanel({deviceId, enabled, revision, appliedRevision, apkVersionCode, diagnostics}:{deviceId:string,enabled:boolean,revision:number,appliedRevision:number,apkVersionCode?:number, diagnostics?:{learningQueuePending?:number;learningQueueFull?:number;learningWorkerFull?:number}|null}) {
   const utils = trpc.useUtils();
   const {data, isLoading, refetch} = trpc.h2AutoAdmin.learningQuestions.useQuery(
     {id:deviceId,limit:100}, {refetchInterval:30000}
@@ -156,6 +156,11 @@ function H2AutoLearningPanel({deviceId, enabled, revision, appliedRevision, apkV
         : (apkVersionCode||0)<112?"Coleta habilitada. Atualize o APK para 2.12 para capturar também perguntas sem regra diretamente pelo aplicativo."
         :"Coleta habilitada e sincronização confirmada. Perguntas válidas sem resposta entram na fila automaticamente."}
     </p>
+    <div className="rounded-xl border border-cyan-700/40 bg-slate-900/80 p-3 text-xs space-y-1">
+      <p>Fila pendente no APK: <strong>{diagnostics?.learningQueuePending ?? "Sem diagnóstico do APK"}</strong></p>
+      <p>Fila local cheia: <strong>{diagnostics?.learningQueueFull ?? "Sem diagnóstico"}</strong> · Trabalhador ocupado: <strong>{diagnostics?.learningWorkerFull ?? "Sem diagnóstico"}</strong></p>
+      <p className="text-amber-200">Mensagens com dados sensíveis, comandos e saudações são excluídas da coleta. O robô não deve prometer registro antes da confirmação do servidor.</p>
+    </div>
     <div className="flex gap-2 flex-wrap items-center justify-between">
       <p className="text-sm font-bold text-cyan-200">{data?.pending??0} perguntas agrupadas · {data?.received??0} ocorrências</p>
       <div className="flex gap-2">
@@ -956,7 +961,7 @@ export default function AdminH2Auto() {
                   {saveUnknownReply.isPending?"SALVANDO...":"SALVAR MENSAGEM AUTOMÁTICA"}
                 </button>
               </section>
-              <H2AutoLearningPanel deviceId={d.id} enabled={Boolean(d.config.questionCollectionEnabled)} revision={d.revision} appliedRevision={d.appliedRevision} apkVersionCode={d.diagnostics?.apkVersionCode} />
+              <H2AutoLearningPanel deviceId={d.id} enabled={Boolean(d.config.questionCollectionEnabled)} revision={d.revision} appliedRevision={d.appliedRevision} apkVersionCode={d.diagnostics?.apkVersionCode} diagnostics={d.diagnostics} />
               <section className="rounded-2xl border border-violet-400/45 bg-gradient-to-br from-violet-950/30 to-slate-950 p-4 space-y-4">
                 <h4 className="text-lg font-black text-violet-200">🧠 ATENDIMENTO PERSONALIZADO — SEM CUSTO DE IA</h4>
                 <p className="text-sm text-slate-300">Reconhece perguntas livres sobre pedidos, códigos, fotos, valores, indicações e atendimento. Responde com orientação pública e tom escolhido; só usa o primeiro nome após validação do cliente. Não consulta status sem autenticação nem faz promessas de atendimento. Nenhum serviço de IA pago será contratado.</p>
