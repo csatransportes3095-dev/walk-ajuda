@@ -34,7 +34,7 @@ import { h2AdsOrderLinkRouterPart } from "../h2adsOrderLinkRouter";
 import { setH2AdsOrderLink } from "../h2adsOrderLink";
 import { assignH2AdsInstanceWorkerPortable } from "../h2adsProfilePortability";
 import { autoProvisionH2AdsInstance, getH2AdsAutoWorkerStatus, rotateH2AdsInstanceProxy } from "../h2adsAutoProvisioning";
-import { importH2AdsProxyPool, listH2AdsProxyPool } from "../h2adsProxyPool";
+import { deleteUnusedH2AdsProxyPool, importH2AdsProxyPool, listH2AdsProxyPool } from "../h2adsProxyPool";
 import { h2AdsMobileBridge, h2AdsMobileRemoteEnabled } from "../h2adsMobileRemoteBridge";
 import { h2AdsRemoteOwnerForOpenInstance } from "../h2adsMobileRemoteOwner";
 
@@ -270,6 +270,16 @@ export const h2AdsRouter = {
     ...(await listH2AdsProxyPool()),
     autoWorker: await getH2AdsAutoWorkerStatus(),
   })),
+  deleteUnusedProxyPool: adminProcedure.mutation(async () => {
+    try {
+      const result = await deleteUnusedH2AdsProxyPool();
+      return { success: true, ...result };
+    } catch (error) {
+      // Never return decrypted credentials, even on failure.
+      console.error("[H2ADS proxy cleanup] Erro ao excluir proxies sem uso:", error instanceof Error ? error.name : "unknown");
+      throw new TRPCError({ code: "PRECONDITION_FAILED", message: "Não foi possível conferir com segurança quais proxies estão livres. Nenhuma proxy deve ser excluída. Verifique o serviço e tente novamente." });
+    }
+  }),
   importProxyPool: adminProcedure.input(h2AdsProxyPoolImportSchema).mutation(async ({ input }) => {
     if (!isH2AdsProxyEncryptionReady()) {
       throw new TRPCError({ code: "PRECONDITION_FAILED", message: "A chave segura de proxy não está disponível no ambiente." });
