@@ -85,8 +85,8 @@ describe("H2 ADS opt-in per-instance refresh timer",()=>{
   });
   it("renders three independent horizontal AUTO / TEMPO / CICLOS cards",()=>{
     expect(phone).toContain("function Get-H2AdsWatchLayout");
-    expect(phone).toContain("cardY=83; cardH=34");
-    expect(phone).toContain('$status.Height=128');
+    expect(phone).toContain("cardY=77; cardH=52");
+    expect(phone).toContain('$status.Height=136');
     expect(phone).toContain('$topPad=144');
     expect(phone).toContain('label="AUTO";value=$autoState');
     expect(phone).toContain('label="TEMPO";value=(Format-H2AdsRefreshRemaining)');
@@ -100,6 +100,13 @@ describe("H2 ADS opt-in per-instance refresh timer",()=>{
     expect(phone).toContain("Tick-H2AdsRefresh $chrome");
     expect(phone).not.toContain("$actionFont.Dispose();$align.Dispose()");
     expect(phone).toContain("$cardLabelFont.Dispose();$cardValueFont.Dispose();$align.Dispose()");
+    // 144px phone header and Windows screen cutout must start at the SAME point;
+    // a stale 104px cutout crops the AUTO card labels/values and exposes desktop.
+    expect(phone).toContain("outline.AddRectangle(new System.Drawing.RectangleF(20f,144f,Width-40f,Height-206f))");
+    expect(phone).toContain("using(var screen=Rounded(20f,144f,w-40f,h-206f,28f))");
+    expect(phone).not.toContain("RectangleF(20f,104f,Width-40f,Height-166f)");
+    expect(phone).toContain("$valueRect=New-Object System.Drawing.RectangleF -ArgumentList $card.x,($watchLayout.cardY+23),$card.w,21");
+    expect(phone).toContain("$labelRect=New-Object System.Drawing.RectangleF -ArgumentList $card.x,($watchLayout.cardY+5),$card.w,15");
   });
   it("keeps the AUTO card clickable, while TEMPO and CICLOS are read only",()=>{
     expect(phone).toContain("$e.Y -ge $layout.cardTop -and $e.Y -le $layout.cardBottom");
