@@ -83,6 +83,20 @@ describe("H2 ADS opt-in per-instance refresh timer",()=>{
     expect(phone).toContain('if($script:refreshConfiguredLocally){return}');
     expect(phone).toContain('if($script:refreshDialogOpen){$script:refreshNextAtMs=0;return}');
   });
+  it("displays an AUTO countdown in the existing button without changing the stopwatch or refresh scheduler",()=>{
+    expect(phone).toContain("function Format-H2AdsRefreshRemaining");
+    expect(phone).toContain("$remainingMs=[long]($script:refreshNextAtMs-(Get-H2AdsWatchNowMs))");
+    expect(phone).toContain("$remainingSeconds=[long][Math]::Ceiling($remainingMs/1000.0)");
+    expect(phone).toContain('return "OFF"');
+    expect(phone).toContain('return "PAUSA"');
+    expect(phone).toContain('return "ABA"');
+    expect(phone).toContain("$item.label -eq \"AUTO\"");
+    expect(phone).toContain("$remainingText=Format-H2AdsRefreshRemaining");
+    expect(phone).toContain("$status.Height=88");
+    expect(phone).toContain("Format-H2AdsWatchElapsed");
+    expect(phone).toContain("Tick-H2AdsRefresh $chrome");
+    expect(phone).toContain("$status.Invalidate()");
+  });
   it("keeps each interval in its own local instance file and persists with atomic save",()=>{
     expect(phone).toContain('("instance-{0}-auto-refresh.json" -f $InstanceId)');
     expect(phone).toContain("Save-H2AdsRefreshToggle");
