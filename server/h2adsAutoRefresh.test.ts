@@ -98,6 +98,10 @@ describe("H2 ADS opt-in per-instance refresh timer",()=>{
     expect(phone).toContain('label="PAUSAR"');
     expect(phone).toContain('label="ZERAR"');
     expect(phone).toContain("Tick-H2AdsRefresh $chrome");
+    // The cards share the alignment object of the stopwatch controls.
+    // Disposing it before painting the card row makes every card go blank.
+    expect(phone).not.toContain("$actionFont.Dispose();$align.Dispose()");
+    expect(phone).toContain("$cardLabelFont.Dispose();$cardValueFont.Dispose();$align.Dispose()");
   });
   it("keeps the AUTO card clickable, while TEMPO and CICLOS are read only",()=>{
     expect(phone).toContain("$e.Y -ge $layout.cardTop -and $e.Y -le $layout.cardBottom");
