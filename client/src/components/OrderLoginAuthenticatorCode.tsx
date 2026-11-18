@@ -213,7 +213,7 @@ export function OrderLoginAuthenticatorCode({
                   <span className="min-w-0"><span className="block break-words text-sm font-black text-white">{entry.label}</span><span className="block text-xs text-slate-300">{entry.issuer || "Conta vinculada a este pedido"}</span></span>
                   {entry.code ? (
                     <span className="flex shrink-0 flex-col items-end gap-1">
-                      <span className="flex items-center gap-2 font-mono text-xl font-black tracking-[0.18em] text-cyan-100">
+                      <span className="flex shrink-0 items-center gap-2 font-mono text-xl font-black tracking-[0.18em] text-cyan-100">
                         <span>{expired ? "------" : entry.code}</span>
                         <Copy className="h-4 w-4 text-red-300" />
                         {copiedEntryId === entry.entryId && <span className="text-[10px] font-sans tracking-normal text-emerald-300">Copiado</span>}
