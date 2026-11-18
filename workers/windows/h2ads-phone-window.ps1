@@ -885,8 +885,9 @@ $status.add_Paint({
 
     # Three separated horizontal cards, never stacked in the AUTO button.
     $autoColor=if($script:refreshEnabled -and $script:refreshSeconds -gt 0){RGB 28 130 84}else{RGB 55 62 75}
+    $autoState=if($script:refreshEnabled){"LIGADO"}else{"OFF"}
     $cards=@(
-      @{x=$watchLayout.autoX;w=$watchLayout.autoW;label="AUTO";value=(if($script:refreshEnabled){"LIGADO"}else{"OFF"});color=$autoColor}
+      @{x=$watchLayout.autoX;w=$watchLayout.autoW;label="AUTO";value=$autoState;color=$autoColor}
       @{x=$watchLayout.timeX;w=$watchLayout.timeW;label="TEMPO";value=(Format-H2AdsRefreshRemaining);color=(RGB 35 61 91)}
       @{x=$watchLayout.cyclesX;w=$watchLayout.cyclesW;label="CICLOS";value=([string]$script:refreshCycles);color=(RGB 51 56 75)}
     )
