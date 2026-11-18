@@ -108,6 +108,21 @@ describe("H2 ADS opt-in per-instance refresh timer",()=>{
     expect(phone).toContain("$valueRect=New-Object System.Drawing.RectangleF -ArgumentList $card.x,($watchLayout.cardY+23),$card.w,21");
     expect(phone).toContain("$labelRect=New-Object System.Drawing.RectangleF -ArgumentList $card.x,($watchLayout.cardY+5),$card.w,15");
   });
+  it("prevents top panel flicker while preserving live stopwatch and AUTO count",()=>{
+    expect(phone).toContain("public sealed class H2PhoneStatusPanel");
+    expect(phone).toContain("System.Windows.Forms.ControlStyles.OptimizedDoubleBuffer");
+    expect(phone).toContain("$status=New-Object H2PhoneStatusPanel");
+    expect(phone).toContain("function Get-H2AdsStatusSnapshot");
+    expect(phone).toContain("Format-H2AdsWatchElapsed");
+    expect(phone).toContain("Format-H2AdsRefreshRemaining");
+    expect(phone).toContain("$($script:refreshCycles)");
+    expect(phone).toContain("$currentStatusSnapshot=Get-H2AdsStatusSnapshot");
+    expect(phone).toContain("if($script:lastStatusSnapshot -cne $currentStatusSnapshot)");
+    expect(phone).toContain("Tick-H2AdsRefresh $chrome");
+    expect(phone).toContain("$timer.Interval=500");
+    expect(phone).not.toContain("    $frame.Invalidate()\n  } catch {}");
+    expect(phone).not.toContain("    $status.Invalidate()\n    $frame.Invalidate()");
+  });
   it("keeps the AUTO card clickable, while TEMPO and CICLOS are read only",()=>{
     expect(phone).toContain("$e.Y -ge $layout.cardTop -and $e.Y -le $layout.cardBottom");
     expect(phone).toContain("Change-H2AdsRefresh;$status.Invalidate();return");
