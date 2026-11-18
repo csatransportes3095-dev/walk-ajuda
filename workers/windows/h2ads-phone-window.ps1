@@ -881,11 +881,11 @@ $status.add_Paint({
           finally {if($labelFont -ne $actionFont){$labelFont.Dispose()}}
         } finally {$fill.Dispose();$path.Dispose()}
       }
-    } finally {$actionFont.Dispose();$align.Dispose()}
+    } finally {$actionFont.Dispose()}
 
     # Three separated horizontal cards, never stacked in the AUTO button.
     $autoColor=if($script:refreshEnabled -and $script:refreshSeconds -gt 0){RGB 28 130 84}else{RGB 55 62 75}
-    $autoState=if($script:refreshEnabled){"LIGADO"}else{"OFF"}
+    $autoState=if($script:refreshEnabled -and $script:refreshTabIdentity){"LIGADO"}elseif($script:refreshEnabled){"ABA"}elseif($script:refreshSeconds -gt 0){"PAUSA"}else{"OFF"}
     $cards=@(
       @{x=$watchLayout.autoX;w=$watchLayout.autoW;label="AUTO";value=$autoState;color=$autoColor}
       @{x=$watchLayout.timeX;w=$watchLayout.timeW;label="TEMPO";value=(Format-H2AdsRefreshRemaining);color=(RGB 35 61 91)}
