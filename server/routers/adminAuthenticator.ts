@@ -271,13 +271,15 @@ export const adminAuthenticatorRouter = router({
         .from(adminAuthenticatorOrderLinks)
         .innerJoin(adminAuthenticatorEntries, eq(adminAuthenticatorOrderLinks.authenticatorEntryId, adminAuthenticatorEntries.id))
         .where(eq(adminAuthenticatorOrderLinks.registrationId, input.registrationId));
+      // O horario acompanha o codigo gerado: permite cronometro preciso mesmo com relogio local adiantado/atrasado.
+      const serverNow = Date.now();
       const generated = links.map((entry) => {
         try {
           const secret = decryptTotpSecret({ ciphertext: entry.ciphertext, iv: entry.iv, tag: entry.tag });
-          const generated = generateTotp(secret);
-          return { entryId: entry.entryId, label: entry.label, issuer: entry.issuer, code: generated.code, expiresAt: generated.expiresAt };
+          const generated = generateTotp(secret, serverNow);
+          return { entryId: entry.entryId, label: entry.label, issuer: entry.issuer, code: generated.code, expiresAt: generated.expiresAt, serverNow };
         } catch {
-          return { entryId: entry.entryId, label: entry.label, issuer: entry.issuer, code: null, expiresAt: null };
+          return { entryId: entry.entryId, label: entry.label, issuer: entry.issuer, code: null, expiresAt: null, serverNow };
         }
       });
       return generated;
