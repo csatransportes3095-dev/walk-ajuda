@@ -58,6 +58,8 @@ export function OrderLoginAuthenticatorCode({
   const [showSecret, setShowSecret] = useState(false);
   const [now, setNow] = useState(() => Date.now());
   const refreshedExpiryRef = useRef<number | null>(null);
+  const serverClockOffsetRef = useRef(0);
+  const lastServerExpiryRef = useRef<number | null>(null);
 
   const codeQuery = trpc.adminAuthenticator.getCodeForOrder.useQuery(
     { registrationId },
@@ -95,6 +97,15 @@ export function OrderLoginAuthenticatorCode({
     return () => document.removeEventListener("visibilitychange", onVisibilityChange);
   }, []);
 
+  // Compensa a diferenca entre os relogios sem mudar a geracao TOTP no servidor.
+  useEffect(() => {
+    const first = codeQuery.data?.find((entry) => entry.serverNow != null);
+    if (!first || !Number.isFinite(first.serverNow)) return;
+    serverClockOffsetRef.current = first.serverNow - Date.now();
+    lastServerExpiryRef.current = first.expiresAt ?? null;
+    setNow(Date.now());
+  }, [codeQuery.data]);
+
   // Contagem visual sincronizada com a validade informada pelo servidor.
   useEffect(() => {
     if (!isPageVisible) return;
@@ -112,7 +123,7 @@ export function OrderLoginAuthenticatorCode({
       refreshedExpiryRef.current = expiresAt;
       setNow(Date.now());
       void codeQuery.refetch();
-    }, Math.max(0, expiresAt - Date.now() + 150));
+    }, Math.max(0, expiresAt - (Date.now() + serverClockOffsetRef.current) + 150));
     return () => window.clearTimeout(timer);
   }, [isPageVisible, codeQuery.data, codeQuery.refetch]);
 
@@ -202,7 +213,7 @@ export function OrderLoginAuthenticatorCode({
         <div className="mt-3 space-y-2">
           {codeQuery.data.map((entry) => {
             const remainingSeconds = entry.expiresAt
-              ? Math.max(0, Math.ceil((entry.expiresAt - now) / 1000))
+              ? Math.max(0, Math.ceil((entry.expiresAt - (now + serverClockOffsetRef.current)) / 1000))
               : 0;
             const expired = Boolean(entry.code && entry.expiresAt && remainingSeconds === 0);
             const progress = Math.max(0, Math.min(100, (remainingSeconds / 30) * 100));
@@ -214,7 +225,7 @@ export function OrderLoginAuthenticatorCode({
                   {entry.code ? (
                     <span className="flex shrink-0 flex-col items-end gap-1">
                       <span className="flex shrink-0 items-center gap-2 font-mono text-xl font-black tracking-[0.18em] text-cyan-100">
-                        <span>{expired ? "------" : entry.code}</span>
+                        <span>{entry.code}</span>
                         <Copy className="h-4 w-4 text-red-300" />
                         {copiedEntryId === entry.entryId && <span className="text-[10px] font-sans tracking-normal text-emerald-300">Copiado</span>}
                       </span>
