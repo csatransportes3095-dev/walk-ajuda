@@ -83,19 +83,39 @@ describe("H2 ADS opt-in per-instance refresh timer",()=>{
     expect(phone).toContain('if($script:refreshConfiguredLocally){return}');
     expect(phone).toContain('if($script:refreshDialogOpen){$script:refreshNextAtMs=0;return}');
   });
-  it("displays an AUTO countdown in the existing button without changing the stopwatch or refresh scheduler",()=>{
-    expect(phone).toContain("function Format-H2AdsRefreshRemaining");
-    expect(phone).toContain("$remainingMs=[long]($script:refreshNextAtMs-(Get-H2AdsWatchNowMs))");
-    expect(phone).toContain("$remainingSeconds=[long][Math]::Ceiling($remainingMs/1000.0)");
-    expect(phone).toContain('return "OFF"');
-    expect(phone).toContain('return "PAUSA"');
-    expect(phone).toContain('return "ABA"');
-    expect(phone).toContain("$item.label -eq \"AUTO\"");
-    expect(phone).toContain("$remainingText=Format-H2AdsRefreshRemaining");
-    expect(phone).toContain("$status.Height=88");
+  it("renders three independent horizontal AUTO / TEMPO / CICLOS cards",()=>{
+    expect(phone).toContain("function Get-H2AdsWatchLayout");
+    expect(phone).toContain("cardY=83; cardH=34");
+    expect(phone).toContain('$status.Height=128');
+    expect(phone).toContain('$topPad=144');
+    expect(phone).toContain('label="AUTO";value=$autoState');
+    expect(phone).toContain('label="TEMPO";value=(Format-H2AdsRefreshRemaining)');
+    expect(phone).toContain('label="CICLOS";value=([string]$script:refreshCycles)');
+    expect(phone).toContain("$watchLayout.cardY");
+    expect(phone).not.toContain('$item.label -eq "AUTO"');
     expect(phone).toContain("Format-H2AdsWatchElapsed");
+    expect(phone).toContain('label="INICIAR"');
+    expect(phone).toContain('label="PAUSAR"');
+    expect(phone).toContain('label="ZERAR"');
     expect(phone).toContain("Tick-H2AdsRefresh $chrome");
-    expect(phone).toContain("$status.Invalidate()");
+  });
+  it("keeps the AUTO card clickable, while TEMPO and CICLOS are read only",()=>{
+    expect(phone).toContain("$e.Y -ge $layout.cardTop -and $e.Y -le $layout.cardBottom");
+    expect(phone).toContain("Change-H2AdsRefresh;$status.Invalidate();return");
+    expect(phone).toContain("TEMPO and CICLOS are read-only cards");
+    expect(phone).toContain("if($e.Y -ge $layout.hitTop -and $e.Y -le $layout.hitBottom)");
+  });
+  it("counts only successful refresh dispatches to the configured selected Chrome tab",()=>{
+    expect(phone).toContain("$currentlySelected -ceq $script:refreshTabIdentity");
+    expect(phone).toContain("if([H2PhoneWindowNative]::RefreshBrowserPage($chromeWindow))");
+    expect(phone).toContain("$script:refreshCycles++");
+    expect(phone).toContain("if($script:refreshCycles -lt [long]::MaxValue)");
+    expect(phone).toContain("cycles=[long]$script:refreshCycles");
+    expect(phone).toContain("$loadedCycles=[long]$saved.cycles");
+    expect(phone).toContain("if($enabled -or $seconds -eq 0){$script:refreshCycles=[long]0}");
+    expect(phone).toContain("$script:refreshCycles=$oldCycles");
+    expect(phone).toContain("Save-H2AdsRefreshToggle");
+    expect(phone).toContain("function Format-H2AdsRefreshRemaining");
   });
   it("keeps each interval in its own local instance file and persists with atomic save",()=>{
     expect(phone).toContain('("instance-{0}-auto-refresh.json" -f $InstanceId)');

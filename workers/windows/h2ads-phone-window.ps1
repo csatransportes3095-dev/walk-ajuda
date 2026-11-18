@@ -331,7 +331,7 @@ $rect=New-Object H2PhoneWindowNative+Rectangle
 if(-not [H2PhoneWindowNative]::GetWindowRect($chrome,[ref]$rect)){exit 0}
 $desktop=[System.Windows.Forms.Screen]::FromHandle($chrome).WorkingArea
 $bezel=20
-$topPad=104
+$topPad=144
 $bottomPad=62
 $width=[Math]::Min(392,[Math]::Max(310,$desktop.Width-2*$bezel-12))
 $height=[Math]::Min(780,[Math]::Max(400,$desktop.Height-$topPad-$bottomPad-12))
@@ -390,6 +390,7 @@ $script:refreshPolicyReadAtMs=[long]0
 $script:refreshConfiguredLocally=$false
 $script:refreshDialogOpen=$false
 $script:refreshTabIdentity=$null
+$script:refreshCycles=[long]0
 $script:refreshToggleFile=Join-Path (Join-Path $env:LOCALAPPDATA "H2AdsWorker\stopwatches") ("instance-{0}-auto-refresh.json" -f $InstanceId)
 if(Test-Path -LiteralPath $script:refreshToggleFile) {
   try {
@@ -407,12 +408,18 @@ if(Test-Path -LiteralPath $script:refreshToggleFile) {
       $script:refreshSeconds=$localSeconds
       $script:refreshConfiguredLocally=$true
       if($localSeconds -eq 0){$script:refreshEnabled=$false}
+      if($null -ne $saved.cycles) {
+        $loadedCycles=[long]$saved.cycles
+        if($loadedCycles -lt 0){throw "invalid_auto_refresh_cycles"}
+        $script:refreshCycles=$loadedCycles
+      }
     }
   } catch {
     # Invalid local settings never start background refreshes by accident.
     $script:refreshEnabled=$false
     $script:refreshSeconds=0
     $script:refreshConfiguredLocally=$false
+    $script:refreshCycles=[long]0
   }
 }
 function Save-H2AdsRefreshToggle {
@@ -425,6 +432,7 @@ function Save-H2AdsRefreshToggle {
   $payload=([ordered]@{
     enabled=[bool]$script:refreshEnabled
     intervalSeconds=[int]$script:refreshSeconds
+    cycles=[long]$script:refreshCycles
     source="instance-window"
   } | ConvertTo-Json -Compress)
   $temporary="$($script:refreshToggleFile).$PID.tmp"
@@ -490,7 +498,11 @@ function Set-H2AdsRefreshSettings([int]$seconds,[bool]$enabled) {
   $oldLocal=$script:refreshConfiguredLocally
   $oldNext=$script:refreshNextAtMs
   $oldTab=$script:refreshTabIdentity
+  $oldCycles=[long]$script:refreshCycles
   try {
+    # A fresh AUTO session or DESATIVAR starts the cycle counter at zero.
+    # Saving a paused interval preserves the accumulated cycles.
+    if($enabled -or $seconds -eq 0){$script:refreshCycles=[long]0}
     $script:refreshTabIdentity=$tabId
     $script:refreshSeconds=$seconds
     $script:refreshEnabled=($enabled -and $seconds -gt 0)
@@ -505,6 +517,7 @@ function Set-H2AdsRefreshSettings([int]$seconds,[bool]$enabled) {
     $script:refreshConfiguredLocally=$oldLocal
     $script:refreshNextAtMs=$oldNext
     $script:refreshTabIdentity=$oldTab
+    $script:refreshCycles=$oldCycles
     [System.Windows.Forms.MessageBox]::Show(
       ("Nao foi possivel salvar a atualizacao automatica desta instancia." + [Environment]::NewLine + $message),
       "H2ADS - Atualizacao automatica",
@@ -643,7 +656,14 @@ function Tick-H2AdsRefresh([IntPtr]$chromeWindow) {
     $currentlySelected=[H2PhoneWindowNative]::SelectedChromeTabIdentity($chromeWindow)
     if(-not [string]::IsNullOrWhiteSpace($currentlySelected) -and
        $currentlySelected -ceq $script:refreshTabIdentity){
-      [H2PhoneWindowNative]::RefreshBrowserPage($chromeWindow)|Out-Null
+      # Count only a browser refresh command accepted by Windows for
+      # the configured, currently selected tab. A skipped tab adds zero.
+      if([H2PhoneWindowNative]::RefreshBrowserPage($chromeWindow)) {
+        if($script:refreshCycles -lt [long]::MaxValue){$script:refreshCycles++}
+        try { Save-H2AdsRefreshToggle } catch {
+          [Console]::Error.WriteLine("H2ADS: falha ao salvar contagem AUTO da instancia $InstanceId")
+        }
+      }
     }
     # A different active tab is never reloaded.
   }
@@ -750,24 +770,31 @@ function Change-H2AdsWatch([string]$action) {
   }
 }
 function Get-H2AdsWatchLayout([int]$width) {
-  # Two legible rows. Three explicit, independent actions with large hitboxes.
-  # Dedicated, equal-sized action slots. Keep the 00:00:00 readout at left.
-  # Even at the minimum supported instance width (310px Chrome), every label
-  # stays on a SINGLE line and each button has its own click target.
+  # First status row: clock, network and battery (unchanged).
+  # Second row: manual stopwatch and its three independent actions.
+  # Third row: AUTO, countdown, cycles -- 3 cards side by side.
+  # Accommodates the minimum 310px Chrome width.
   $gap=6
-  $actionW=[Math]::Max(46,[Math]::Min(58,[Math]::Floor(($width-112-3*$gap)/4)))
-  $resetW=$actionW; $pauseW=$actionW; $startW=$actionW; $autoW=$actionW
+  $actionW=[Math]::Max(49,[Math]::Min(65,[Math]::Floor(($width-115-2*$gap)/3)))
+  $resetW=$actionW; $pauseW=$actionW; $startW=$actionW
   $resetX=$width-12-$resetW
   $pauseX=$resetX-$gap-$pauseW
   $startX=$pauseX-$gap-$startW
-  $autoX=$startX-$gap-$autoW
+  $cardGap=7
+  $cardW=[Math]::Floor(($width-24-2*$cardGap)/3)
+  $autoX=12
+  $timeX=$autoX+$cardW+$cardGap
+  $cyclesX=$timeX+$cardW+$cardGap
   return @{
     clockY=6; textX=16; textY=46
-    autoX=$autoX; autoW=$autoW
+    autoX=$autoX; autoW=$cardW
+    timeX=$timeX; timeW=$cardW
+    cyclesX=$cyclesX; cyclesW=($width-12-$cyclesX)
     startX=$startX; startW=$startW
     pauseX=$pauseX; pauseW=$pauseW
     resetX=$resetX; resetW=$resetW
     buttonY=43; buttonH=28; hitTop=42; hitBottom=73
+    cardY=83; cardH=34; cardTop=82; cardBottom=119
   }
 }
 function New-H2AdsWatchButtonPath([single]$x,[single]$y,[single]$w,[single]$h) {
@@ -786,13 +813,13 @@ function New-H2AdsWatchButtonPath([single]$x,[single]$y,[single]$w,[single]$h) {
 $script:battery=95
 $script:wifiOn=$true
 $status=New-Object System.Windows.Forms.Panel
-$status.Height=88
+$status.Height=128
 $status.Width=$frame.Width-44
 $status.Location=New-Object System.Drawing.Point(22,8)
 $status.BackColor=RGB 0 0 2
 $status.Cursor=[System.Windows.Forms.Cursors]::Hand
 $script:autoHelp=New-Object System.Windows.Forms.ToolTip
-$script:autoHelp.SetToolTip($status,"AUTO: contador ate a proxima tentativa de atualizar a aba configurada. Se outra aba estiver selecionada, a atualizacao e ignorada. Clique em AUTO para ajustar.")
+$script:autoHelp.SetToolTip($status,"AUTO: configurar a aba e o intervalo. TEMPO: proxima tentativa de atualizacao. CICLOS: comandos de atualizacao confirmados na instancia.")
 Set-RoundedPanelRegion $status 24
 $status.add_Paint({
   param($sender,$e)
@@ -810,11 +837,12 @@ $status.add_Paint({
     $statusDivider=New-Object System.Drawing.Pen -ArgumentList (RGB 62 67 77),1.2
     try { $g.DrawLine($statusDivider,16,39,($w-16),39) } finally { $statusDivider.Dispose() }
     # The first row is reserved for time, camera and phone indicators.
-    # The second row shows stopwatch time and three LABELED buttons.
+    # Row 2: manual stopwatch with INICIAR, PAUSAR, ZERAR only.
+    # Row 3: independent AUTO, TEMPO and CICLOS cards.
     $divider=New-Object System.Drawing.Pen -ArgumentList (RGB 26 29 35),1
     try { $g.DrawLine($divider,16,39,($w-16),39) } finally { $divider.Dispose() }
     $watchText=Format-H2AdsWatchElapsed
-    $maxTextWidth=[single][Math]::Max(35,$watchLayout.autoX-$watchLayout.textX-6)
+    $maxTextWidth=[single][Math]::Max(35,$watchLayout.startX-$watchLayout.textX-6)
     $watchFont=$font
     $measured=$g.MeasureString($watchText,$font).Width
     if($measured -gt $maxTextWidth) {
@@ -830,12 +858,10 @@ $status.add_Paint({
     $align.LineAlignment=[System.Drawing.StringAlignment]::Center
     $align.FormatFlags=[System.Drawing.StringFormatFlags]::NoWrap
     $align.Trimming=[System.Drawing.StringTrimming]::None
-    $autoColor=if($script:refreshEnabled -and $script:refreshSeconds -gt 0){RGB 28 130 84}else{RGB 55 62 75}
     $actions=@(
-      @{x=$watchLayout.autoX;w=$watchLayout.autoW;label="AUTO";active=$script:refreshEnabled;color=$autoColor}
-      @{x=$watchLayout.startX;w=$watchLayout.startW;label="INICIAR";active=(-not $script:watchRunning);color=(RGB 31 92 67)}
-      @{x=$watchLayout.pauseX;w=$watchLayout.pauseW;label="PAUSAR";active=$script:watchRunning;color=(RGB 45 76 118)}
-      @{x=$watchLayout.resetX;w=$watchLayout.resetW;label="ZERAR";active=$true;color=(RGB 46 52 65)}
+      @{x=$watchLayout.startX;w=$watchLayout.startW;label="INICIAR";color=(RGB 31 92 67)}
+      @{x=$watchLayout.pauseX;w=$watchLayout.pauseW;label="PAUSAR";color=(RGB 45 76 118)}
+      @{x=$watchLayout.resetX;w=$watchLayout.resetW;label="ZERAR";color=(RGB 46 52 65)}
     )
     try {
       foreach($item in $actions) {
@@ -844,8 +870,6 @@ $status.add_Paint({
         $rect=New-Object System.Drawing.RectangleF -ArgumentList $item.x,$watchLayout.buttonY,$item.w,$watchLayout.buttonH
         try {
           $g.FillPath($fill,$path)
-          # GDI+ text scales with monitor DPI even if the phone panel uses
-          # native pixels. Fit text to its own button so PAUSAR never wraps.
           $measuredLabel=$g.MeasureString($item.label,$actionFont).Width
           $labelFont=$actionFont
           $usableW=[single]($item.w-8)
@@ -853,37 +877,43 @@ $status.add_Paint({
             $scaledSize=[single][Math]::Max(5.5,8*$usableW/$measuredLabel)
             $labelFont=New-Object System.Drawing.Font -ArgumentList "Segoe UI",$scaledSize,([System.Drawing.FontStyle]::Bold)
           }
-          try {
-            if($item.label -eq "AUTO") {
-              # Compact, two-line countdown INSIDE the existing AUTO button.
-              # Width, click target, 88px top bar and manual stopwatch stay intact.
-              $autoTitleRect=New-Object System.Drawing.RectangleF -ArgumentList $item.x,($watchLayout.buttonY+1),$item.w,12
-              $g.DrawString($item.label,$labelFont,$fg,$autoTitleRect,$align)
-              $remainingText=Format-H2AdsRefreshRemaining
-              $remainingFont=New-Object System.Drawing.Font -ArgumentList "Consolas",7.5,([System.Drawing.FontStyle]::Bold)
-              $remainingBrush=New-Object System.Drawing.SolidBrush -ArgumentList (RGB 214 255 231)
-              try {
-                # Fit HH:mm:ss even at the 310px minimum phone width.
-                $remainingWidth=$g.MeasureString($remainingText,$remainingFont).Width
-                $remainingUsableWidth=[single]($item.w-5)
-                if($remainingWidth -gt $remainingUsableWidth) {
-                  $smallSize=[single][Math]::Max(5.5,7.5*$remainingUsableWidth/$remainingWidth)
-                  $remainingFont.Dispose()
-                  $remainingFont=New-Object System.Drawing.Font -ArgumentList "Consolas",$smallSize,([System.Drawing.FontStyle]::Bold)
-                }
-                $remainingRect=New-Object System.Drawing.RectangleF -ArgumentList $item.x,($watchLayout.buttonY+13),$item.w,13
-                $g.DrawString($remainingText,$remainingFont,$remainingBrush,$remainingRect,$align)
-              } finally {
-                $remainingBrush.Dispose()
-                $remainingFont.Dispose()
-              }
-            } else {
-              $g.DrawString($item.label,$labelFont,$fg,$rect,$align)
-            }
-          } finally { if($labelFont -ne $actionFont){$labelFont.Dispose()} }
+          try {$g.DrawString($item.label,$labelFont,$fg,$rect,$align)}
+          finally {if($labelFont -ne $actionFont){$labelFont.Dispose()}}
         } finally {$fill.Dispose();$path.Dispose()}
       }
     } finally {$actionFont.Dispose();$align.Dispose()}
+
+    # Three separated horizontal cards, never stacked in the AUTO button.
+    $autoColor=if($script:refreshEnabled -and $script:refreshSeconds -gt 0){RGB 28 130 84}else{RGB 55 62 75}
+    $autoState=if($script:refreshEnabled){"LIGADO"}else{"OFF"}
+    $cards=@(
+      @{x=$watchLayout.autoX;w=$watchLayout.autoW;label="AUTO";value=$autoState;color=$autoColor}
+      @{x=$watchLayout.timeX;w=$watchLayout.timeW;label="TEMPO";value=(Format-H2AdsRefreshRemaining);color=(RGB 35 61 91)}
+      @{x=$watchLayout.cyclesX;w=$watchLayout.cyclesW;label="CICLOS";value=([string]$script:refreshCycles);color=(RGB 51 56 75)}
+    )
+    $cardLabelFont=New-Object System.Drawing.Font -ArgumentList "Segoe UI",8,([System.Drawing.FontStyle]::Bold)
+    $cardValueFont=New-Object System.Drawing.Font -ArgumentList "Consolas",9,([System.Drawing.FontStyle]::Bold)
+    try {
+      foreach($card in $cards) {
+        $fill=New-Object System.Drawing.SolidBrush -ArgumentList $card.color
+        $path=New-H2AdsWatchButtonPath $card.x $watchLayout.cardY $card.w $watchLayout.cardH
+        try {
+          $g.FillPath($fill,$path)
+          $labelRect=New-Object System.Drawing.RectangleF -ArgumentList $card.x,($watchLayout.cardY+1),$card.w,14
+          $g.DrawString($card.label,$cardLabelFont,$fg,$labelRect,$align)
+          $valueFont=$cardValueFont
+          $maxValueW=[single]($card.w-8)
+          $measuredValue=$g.MeasureString($card.value,$cardValueFont).Width
+          if($measuredValue -gt $maxValueW) {
+            $smallSize=[single][Math]::Max(5.5,9*$maxValueW/$measuredValue)
+            $valueFont=New-Object System.Drawing.Font -ArgumentList "Consolas",$smallSize,([System.Drawing.FontStyle]::Bold)
+          }
+          $valueRect=New-Object System.Drawing.RectangleF -ArgumentList $card.x,($watchLayout.cardY+15),$card.w,17
+          try {$g.DrawString($card.value,$valueFont,$fg,$valueRect,$align)}
+          finally {if($valueFont -ne $cardValueFont){$valueFont.Dispose()}}
+        } finally {$fill.Dispose();$path.Dispose()}
+      }
+    } finally {$cardLabelFont.Dispose();$cardValueFont.Dispose();$align.Dispose()}
     # Discreet punch-hole camera.
     $ring=New-Object System.Drawing.SolidBrush -ArgumentList (RGB 39 43 52)
     $lens=New-Object System.Drawing.SolidBrush -ArgumentList (RGB 0 1 4)
@@ -923,7 +953,8 @@ $status.add_MouseDown({
   if($e.Button -ne [System.Windows.Forms.MouseButtons]::Left){return}
   $layout=Get-H2AdsWatchLayout $status.ClientSize.Width
   if($e.Y -ge $layout.hitTop -and $e.Y -le $layout.hitBottom -and
-     $e.X -ge $layout.autoX -and $e.X -le ($layout.resetX+$layout.resetW)){return}
+     $e.X -ge $layout.startX -and $e.X -le ($layout.resetX+$layout.resetW)){return}
+  if($e.Y -ge $layout.cardTop -and $e.Y -le $layout.cardBottom){return}
   if($e.X -ge ($status.ClientSize.Width-135)){return}
   [H2PhoneWindowNative]::ReleaseCapture()|Out-Null
   [H2PhoneWindowNative]::SendMessage($frame.Handle,
@@ -934,10 +965,14 @@ $status.add_MouseClick({
   param($sender,$e)
   if($e.Button -ne [System.Windows.Forms.MouseButtons]::Left){return}
   $layout=Get-H2AdsWatchLayout $status.ClientSize.Width
-  if($e.Y -ge $layout.hitTop -and $e.Y -le $layout.hitBottom) {
-    if($e.X -ge $layout.autoX -and $e.X -le ($layout.autoX+$layout.autoW)){
+  if($e.Y -ge $layout.cardTop -and $e.Y -le $layout.cardBottom) {
+    if($e.X -ge $layout.autoX -and $e.X -le ($layout.autoX+$layout.autoW)) {
       Change-H2AdsRefresh;$status.Invalidate();return
     }
+    # TEMPO and CICLOS are read-only cards, never browser actions.
+    return
+  }
+  if($e.Y -ge $layout.hitTop -and $e.Y -le $layout.hitBottom) {
     if($e.X -ge $layout.resetX -and $e.X -le ($layout.resetX+$layout.resetW)){
       Change-H2AdsWatch "reset";$status.Invalidate();return
     }
