@@ -1,0 +1,37 @@
+name: H2ADS Proxy Cleanup Safety
+on:
+  pull_request:
+    branches:
+      - recovery/organizar-salvos-2026-08-24
+    paths:
+      - "server/h2adsProxyPool.ts"
+      - "server/h2adsProxyPoolCleanup.test.ts"
+      - "server/routers/h2ads.ts"
+      - "client/src/pages/H2Ads.tsx"
+      - ".github/workflows/h2ads-proxy-cleanup-ci.yml"
+permissions:
+  contents: read
+jobs:
+  verify:
+    runs-on: ubuntu-latest
+    timeout-minutes: 25
+    steps:
+      - uses: actions/checkout@v4
+      - uses: pnpm/action-setup@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+          cache: pnpm
+      - run: pnpm install --frozen-lockfile
+      - name: Test proxy cleanup safeguards
+        run: pnpm exec vitest run server/h2adsProxyPoolCleanup.test.ts
+      - name: TypeScript errors in modified files
+        run: |
+          pnpm exec tsc --noEmit > /tmp/h2ads-proxy-cleanup-types.log 2>&1 || true
+          if grep -E '^((server/h2adsProxyPool.ts)|(server/h2adsProxyPoolCleanup.test.ts)|(server/routers/h2ads.ts)|(client/src/pages/H2Ads.tsx))\(' /tmp/h2ads-proxy-cleanup-types.log; then
+            exit 1
+          fi
+      - name: Build production
+        run: |
+          node scripts/patch-media-local-export-20260910.mjs
+          pnpm build
