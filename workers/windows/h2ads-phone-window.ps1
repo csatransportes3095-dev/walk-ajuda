@@ -183,6 +183,18 @@ public static class H2PhoneWindowNative {
   public const long WS_MINIMIZEBOX=0x00020000L;
   public const long WS_MAXIMIZEBOX=0x00010000L;
 }
+// The native status is animated only when its visible values change.
+// Default WinForms Panel paints directly to screen and visibly flickers when
+// the PowerShell timer invalidates it repeatedly. Draw into a back buffer.
+public sealed class H2PhoneStatusPanel : System.Windows.Forms.Panel {
+  public H2PhoneStatusPanel() {
+    SetStyle(System.Windows.Forms.ControlStyles.AllPaintingInWmPaint |
+      System.Windows.Forms.ControlStyles.UserPaint |
+      System.Windows.Forms.ControlStyles.OptimizedDoubleBuffer |
+      System.Windows.Forms.ControlStyles.ResizeRedraw, true);
+    DoubleBuffered=true;
+  }
+}
 // WinForms native phone chassis. Its screen cutout exposes the real Chrome window.
 public sealed class H2PhoneDisplayForm : System.Windows.Forms.Form {
   public H2PhoneDisplayForm() {
@@ -707,6 +719,15 @@ function Format-H2AdsWatchElapsed {
   $remainder=[int]($seconds%60)
   return ('{0:00}:{1:00}:{2:00}' -f $hours,$minutes,$remainder)
 }
+# The 500ms timer keeps the Chrome window aligned, but the top panel only
+# needs repainting when the displayed clock / stopwatch / AUTO / cycles changes.
+# An idle panel may therefore go minutes without a single invalidation.
+function Get-H2AdsStatusSnapshot {
+  $minute=[DateTime]::Now.ToString("HH:mm")
+  $manualWatch=Format-H2AdsWatchElapsed
+  $autoRemaining=Format-H2AdsRefreshRemaining
+  return "$minute|$manualWatch|$autoRemaining|$($script:refreshCycles)|$($script:refreshEnabled)|$($script:refreshSeconds)|$($script:battery)|$($script:wifiOn)"
+}
 function Save-H2AdsWatchState {
   $directory=[System.IO.Path]::GetDirectoryName($script:watchFile)
   if(-not (Test-Path -LiteralPath $directory)) {
@@ -812,7 +833,7 @@ function New-H2AdsWatchButtonPath([single]$x,[single]$y,[single]$w,[single]$h) {
 # All icons are drawn as vector geometry, never font glyphs.
 $script:battery=95
 $script:wifiOn=$true
-$status=New-Object System.Windows.Forms.Panel
+$status=New-Object H2PhoneStatusPanel
 $status.Height=136
 $status.Width=$frame.Width-44
 $status.Location=New-Object System.Drawing.Point(22,8)
@@ -1122,6 +1143,9 @@ $frame.add_MouseUp({
   $frame.Capture=$false
 })
 
+# Compare the visible status content instead of flashing/repainting the entire
+# cosmetic phone chassis every half second.
+$script:lastStatusSnapshot=$null
 $timer=New-Object System.Windows.Forms.Timer
 $timer.Interval=500
 $timer.add_Tick({
@@ -1146,8 +1170,13 @@ $timer.add_Tick({
     [H2PhoneWindowNative]::FitHostedChrome($chrome,$frame.Handle,$bezel,$topPad,$bottomPad)|Out-Null
     if(-not $frame.Visible){$frame.Show()}
     Tick-H2AdsRefresh $chrome
-    $status.Invalidate()
-    $frame.Invalidate()
+    $currentStatusSnapshot=Get-H2AdsStatusSnapshot
+    if($script:lastStatusSnapshot -cne $currentStatusSnapshot) {
+      $script:lastStatusSnapshot=$currentStatusSnapshot
+      $status.Invalidate()
+    }
+    # The metal phone frame is STATIC: no frame-wide repaint on timer ticks.
+    # It is repainted by WinForms automatically when resized or uncovered.
   } catch {}
 })
 $frame.add_FormClosed({
