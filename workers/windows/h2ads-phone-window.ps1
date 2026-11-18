@@ -219,7 +219,7 @@ public sealed class H2PhoneDisplayForm : System.Windows.Forms.Form {
       // A real Win32 hole, not an invisible control over Chrome. Clicks and
       // typing in the screen go directly to the top-level Chrome window.
       outline.FillMode=System.Drawing.Drawing2D.FillMode.Alternate;
-      outline.AddRectangle(new System.Drawing.RectangleF(20f,104f,Width-40f,Height-166f));
+      outline.AddRectangle(new System.Drawing.RectangleF(20f,144f,Width-40f,Height-206f));
       var old=Region;
       Region=new System.Drawing.Region(outline);
       if(old!=null)old.Dispose();
@@ -263,7 +263,7 @@ public sealed class H2PhoneDisplayForm : System.Windows.Forms.Form {
     }
     // Internal screen recess exactly aligned with the real Chrome HWND.
     // The status bar and Chrome remain inside this phone-safe rounded area.
-    using(var screen=Rounded(20f,104f,w-40f,h-166f,28f))
+    using(var screen=Rounded(20f,144f,w-40f,h-206f,28f))
     using(var back=new System.Drawing.SolidBrush(System.Drawing.Color.FromArgb(1,5,12)))
     using(var outline=new System.Drawing.Pen(System.Drawing.Color.FromArgb(91,97,109),1.8f)) {
       g.FillPath(back,screen);
@@ -794,7 +794,7 @@ function Get-H2AdsWatchLayout([int]$width) {
     pauseX=$pauseX; pauseW=$pauseW
     resetX=$resetX; resetW=$resetW
     buttonY=43; buttonH=28; hitTop=42; hitBottom=73
-    cardY=83; cardH=34; cardTop=82; cardBottom=119
+    cardY=77; cardH=52; cardTop=76; cardBottom=131
   }
 }
 function New-H2AdsWatchButtonPath([single]$x,[single]$y,[single]$w,[single]$h) {
@@ -813,7 +813,7 @@ function New-H2AdsWatchButtonPath([single]$x,[single]$y,[single]$w,[single]$h) {
 $script:battery=95
 $script:wifiOn=$true
 $status=New-Object System.Windows.Forms.Panel
-$status.Height=128
+$status.Height=136
 $status.Width=$frame.Width-44
 $status.Location=New-Object System.Drawing.Point(22,8)
 $status.BackColor=RGB 0 0 2
@@ -892,23 +892,23 @@ $status.add_Paint({
       @{x=$watchLayout.cyclesX;w=$watchLayout.cyclesW;label="CICLOS";value=([string]$script:refreshCycles);color=(RGB 51 56 75)}
     )
     $cardLabelFont=New-Object System.Drawing.Font -ArgumentList "Segoe UI",8,([System.Drawing.FontStyle]::Bold)
-    $cardValueFont=New-Object System.Drawing.Font -ArgumentList "Consolas",9,([System.Drawing.FontStyle]::Bold)
+    $cardValueFont=New-Object System.Drawing.Font -ArgumentList "Consolas",11,([System.Drawing.FontStyle]::Bold)
     try {
       foreach($card in $cards) {
         $fill=New-Object System.Drawing.SolidBrush -ArgumentList $card.color
         $path=New-H2AdsWatchButtonPath $card.x $watchLayout.cardY $card.w $watchLayout.cardH
         try {
           $g.FillPath($fill,$path)
-          $labelRect=New-Object System.Drawing.RectangleF -ArgumentList $card.x,($watchLayout.cardY+1),$card.w,14
+          $labelRect=New-Object System.Drawing.RectangleF -ArgumentList $card.x,($watchLayout.cardY+5),$card.w,15
           $g.DrawString($card.label,$cardLabelFont,$fg,$labelRect,$align)
           $valueFont=$cardValueFont
           $maxValueW=[single]($card.w-8)
           $measuredValue=$g.MeasureString($card.value,$cardValueFont).Width
           if($measuredValue -gt $maxValueW) {
-            $smallSize=[single][Math]::Max(5.5,9*$maxValueW/$measuredValue)
+            $smallSize=[single][Math]::Max(6,11*$maxValueW/$measuredValue)
             $valueFont=New-Object System.Drawing.Font -ArgumentList "Consolas",$smallSize,([System.Drawing.FontStyle]::Bold)
           }
-          $valueRect=New-Object System.Drawing.RectangleF -ArgumentList $card.x,($watchLayout.cardY+15),$card.w,17
+          $valueRect=New-Object System.Drawing.RectangleF -ArgumentList $card.x,($watchLayout.cardY+23),$card.w,21
           try {$g.DrawString($card.value,$valueFont,$fg,$valueRect,$align)}
           finally {if($valueFont -ne $cardValueFont){$valueFont.Dispose()}}
         } finally {$fill.Dispose();$path.Dispose()}
