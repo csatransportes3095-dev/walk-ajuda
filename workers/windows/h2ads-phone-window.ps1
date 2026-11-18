@@ -648,6 +648,29 @@ function Tick-H2AdsRefresh([IntPtr]$chromeWindow) {
     # A different active tab is never reloaded.
   }
 }
+# Visual readout only. The existing AUTO scheduler remains authoritative.
+# "OFF" means disabled, "PAUSA" is a saved but inactive interval, and
+# "ABA" requests selecting a target after restarting the local Chrome.
+# Never query UI Automation inside the paint handler or touch the browser.
+function Format-H2AdsRefreshRemaining {
+  if(-not $script:refreshEnabled -or $script:refreshSeconds -le 0) {
+    if($script:refreshSeconds -gt 0){return "PAUSA"}
+    return "OFF"
+  }
+  if($script:refreshDialogOpen){return "PAUSA"}
+  if([string]::IsNullOrWhiteSpace($script:refreshTabIdentity)){return "ABA"}
+  $remainingMs=[long]($script:refreshSeconds*1000)
+  if($script:refreshNextAtMs -gt 0) {
+    $remainingMs=[long]($script:refreshNextAtMs-(Get-H2AdsWatchNowMs))
+  }
+  if($remainingMs -lt 0){$remainingMs=0}
+  $remainingSeconds=[long][Math]::Ceiling($remainingMs/1000.0)
+  $hours=[long][Math]::Floor($remainingSeconds/3600)
+  $minutes=[int][Math]::Floor(($remainingSeconds%3600)/60)
+  $seconds=[int]($remainingSeconds%60)
+  if($hours -gt 0){return ('{0:00}:{1:00}:{2:00}' -f $hours,$minutes,$seconds)}
+  return ('{0:00}:{1:00}' -f $minutes,$seconds)
+}
 Read-H2AdsRefreshPolicy
 
 function Get-H2AdsWatchElapsedMs {
@@ -769,7 +792,7 @@ $status.Location=New-Object System.Drawing.Point(22,8)
 $status.BackColor=RGB 0 0 2
 $status.Cursor=[System.Windows.Forms.Cursors]::Hand
 $script:autoHelp=New-Object System.Windows.Forms.ToolTip
-$script:autoHelp.SetToolTip($status,"AUTO: clique para definir o tempo, iniciar, pausar ou desativar nesta instancia.")
+$script:autoHelp.SetToolTip($status,"AUTO: contador ate a proxima tentativa de atualizar a aba configurada. Se outra aba estiver selecionada, a atualizacao e ignorada. Clique em AUTO para ajustar.")
 Set-RoundedPanelRegion $status 24
 $status.add_Paint({
   param($sender,$e)
@@ -830,8 +853,34 @@ $status.add_Paint({
             $scaledSize=[single][Math]::Max(5.5,8*$usableW/$measuredLabel)
             $labelFont=New-Object System.Drawing.Font -ArgumentList "Segoe UI",$scaledSize,([System.Drawing.FontStyle]::Bold)
           }
-          try { $g.DrawString($item.label,$labelFont,$fg,$rect,$align) }
-          finally { if($labelFont -ne $actionFont){$labelFont.Dispose()} }
+          try {
+            if($item.label -eq "AUTO") {
+              # Compact, two-line countdown INSIDE the existing AUTO button.
+              # Width, click target, 88px top bar and manual stopwatch stay intact.
+              $autoTitleRect=New-Object System.Drawing.RectangleF -ArgumentList $item.x,($watchLayout.buttonY+1),$item.w,12
+              $g.DrawString($item.label,$labelFont,$fg,$autoTitleRect,$align)
+              $remainingText=Format-H2AdsRefreshRemaining
+              $remainingFont=New-Object System.Drawing.Font -ArgumentList "Consolas",7.5,([System.Drawing.FontStyle]::Bold)
+              $remainingBrush=New-Object System.Drawing.SolidBrush -ArgumentList (RGB 214 255 231)
+              try {
+                # Fit HH:mm:ss even at the 310px minimum phone width.
+                $remainingWidth=$g.MeasureString($remainingText,$remainingFont).Width
+                $remainingUsableWidth=[single]($item.w-5)
+                if($remainingWidth -gt $remainingUsableWidth) {
+                  $smallSize=[single][Math]::Max(5.5,7.5*$remainingUsableWidth/$remainingWidth)
+                  $remainingFont.Dispose()
+                  $remainingFont=New-Object System.Drawing.Font -ArgumentList "Consolas",$smallSize,([System.Drawing.FontStyle]::Bold)
+                }
+                $remainingRect=New-Object System.Drawing.RectangleF -ArgumentList $item.x,($watchLayout.buttonY+13),$item.w,13
+                $g.DrawString($remainingText,$remainingFont,$remainingBrush,$remainingRect,$align)
+              } finally {
+                $remainingBrush.Dispose()
+                $remainingFont.Dispose()
+              }
+            } else {
+              $g.DrawString($item.label,$labelFont,$fg,$rect,$align)
+            }
+          } finally { if($labelFont -ne $actionFont){$labelFont.Dispose()} }
         } finally {$fill.Dispose();$path.Dispose()}
       }
     } finally {$actionFont.Dispose();$align.Dispose()}
