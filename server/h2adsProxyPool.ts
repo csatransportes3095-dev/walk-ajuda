@@ -150,7 +150,7 @@ export async function deleteUnusedH2AdsProxyPool(): Promise<{
       WHERE status IN ('available', 'used', 'failed', 'disabled')
       FOR UPDATE
     `);
-    const candidates = (result[0] ?? []) as Array<{
+    const candidates = (result[0] ?? []) as unknown as Array<{
       id: number;
       fingerprint: string;
       status: H2AdsPoolCleanupStatus;
