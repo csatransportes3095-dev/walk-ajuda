@@ -1,8 +1,8 @@
 import { createHash } from "node:crypto";
-import { and, asc, eq, ne } from "drizzle-orm";
-import { h2AdsProxyPool, type H2AdsProxyPool } from "../drizzle/schema";
+import { and, asc, eq, inArray, ne, sql } from "drizzle-orm";
+import { h2AdsInstanceProxyCredentials, h2AdsProxyPool, type H2AdsProxyPool } from "../drizzle/schema";
 import { getDb } from "./db";
-import { encryptH2AdsProxy, parseH2AdsProxyInput } from "./h2adsProxySecurity";
+import { decryptH2AdsProxy, encryptH2AdsProxy, parseH2AdsProxyInput } from "./h2adsProxySecurity";
 import type { H2AdsProxyProtocol } from "../shared/h2adsProxyInput";
 
 export type H2AdsProxyPoolSafeRow = Pick<
@@ -113,6 +113,84 @@ export async function listH2AdsProxyPool() {
     total: rows.length,
     rows: rows.slice(-100).reverse(),
   };
+}
+
+/**
+ * Delete inactive pool history so the admin can upload new proxies.
+ * Protect every currently configured route by comparing the encrypted
+ * credentials' decrypted fingerprints INSIDE the server, without exposing
+ * any addresses or passwords to the UI or logs.
+ *
+ * The transaction locks pool candidates BEFORE checking current credentials.
+ * A concurrent reservation cannot turn an available proxy into an active
+ * assignment between this check and the deletion.
+ */
+const H2ADS_POOL_CLEANUP_STATUSES = ["available", "used", "failed", "disabled"] as const;
+type H2AdsPoolCleanupStatus = typeof H2ADS_POOL_CLEANUP_STATUSES[number];
+
+export function isH2AdsProxyUnusedForDeletion(
+  row: { status: string; fingerprint: string },
+  currentCredentials: ReadonlySet<string>,
+): boolean {
+  return H2ADS_POOL_CLEANUP_STATUSES.some(status => status === row.status)
+    && !currentCredentials.has(row.fingerprint);
+}
+
+export async function deleteUnusedH2AdsProxyPool(): Promise<{
+  deleted: number;
+  protected: number;
+  examined: number;
+}> {
+  const db = await requireDb();
+  return db.transaction(async tx => {
+    // FOR UPDATE serializes cleanup with reservations, including failed
+    // / used historical rows. Never touch a row still marked "assigned".
+    const result = await tx.execute(sql`
+      SELECT id, fingerprint, status FROM h2ads_proxy_pool
+      WHERE status IN ('available', 'used', 'failed', 'disabled')
+      FOR UPDATE
+    `);
+    const candidates = (result[0] ?? []) as unknown as Array<{
+      id: number;
+      fingerprint: string;
+      status: H2AdsPoolCleanupStatus;
+    }>;
+    if (!candidates.length) return { deleted: 0, protected: 0, examined: 0 };
+
+    // Fail closed on any missing encryption key / corrupt credential.
+    // A "used" pool row can still be an active browser route after an
+    // interrupted rotation, so pool.status ALONE is not a safe signal.
+    const credentials = await tx.select({
+      encryptedPayload: h2AdsInstanceProxyCredentials.encryptedPayload,
+    }).from(h2AdsInstanceProxyCredentials);
+    const currentFingerprints = new Set<string>();
+    for (const credential of credentials) {
+      currentFingerprints.add(proxyFingerprint(decryptH2AdsProxy(credential.encryptedPayload)));
+    }
+
+    const eligibleIds: number[] = [];
+    for (const candidate of candidates) {
+      if (isH2AdsProxyUnusedForDeletion(candidate, currentFingerprints)) {
+        eligibleIds.push(Number(candidate.id));
+      }
+    }
+
+    // Recheck status at the moment of DELETE; never delete an assigned row.
+    let deleted = 0;
+    for (let i = 0; i < eligibleIds.length; i += 200) {
+      const batch = eligibleIds.slice(i, i + 200);
+      const removed = await tx.delete(h2AdsProxyPool).where(and(
+        inArray(h2AdsProxyPool.id, batch),
+        inArray(h2AdsProxyPool.status, [...H2ADS_POOL_CLEANUP_STATUSES]),
+      ));
+      deleted += Number(removed[0].affectedRows || 0);
+    }
+    return {
+      deleted,
+      protected: candidates.length - eligibleIds.length,
+      examined: candidates.length,
+    };
+  });
 }
 
 export async function reserveH2AdsProxyForInstance(instanceId: number, retainPrevious = false): Promise<H2AdsReservedProxy | null> {

@@ -137,6 +137,7 @@ export default function H2Ads() {
   const closeBrowser = trpc.h2Ads.closeBrowser.useMutation();
   const updateProxyRotation = trpc.h2Ads.updateProxyRotation.useMutation();
   const importProxyPool = trpc.h2Ads.importProxyPool.useMutation();
+  const deleteUnusedProxyPool = trpc.h2Ads.deleteUnusedProxyPool.useMutation();
   const [groupForm, setGroupForm] = useState<GroupForm | null>(null);
   const [instanceForm, setInstanceForm] = useState<InstanceForm | null>(null);
   const [newInstanceOrderLink, setNewInstanceOrderLink] = useState<H2AdsPendingOrderLink | null>(null);
@@ -311,6 +312,29 @@ export default function H2Ads() {
       await proxyPool.refetch();
     } catch (error) {
       toast.error(errorText(error, "Não foi possível adicionar proxies à fila."));
+    }
+  };
+
+  const removeUnusedProxies = async () => {
+    const counts = proxyPool.data?.counts;
+    const candidates = (counts?.available ?? 0) + (counts?.used ?? 0)
+      + (counts?.failed ?? 0) + (counts?.disabled ?? 0);
+    if (candidates < 1) {
+      toast.info("Nenhum proxy sem uso para excluir.");
+      return;
+    }
+    if (!window.confirm(
+      "Excluir proxies não utilizadas da fila H2 ADS?\n\n" +
+      "Disponíveis, usadas anteriormente, com falha e desativadas serão verificadas. " +
+      "As proxies atribuídas ou ainda configuradas em alguma instância serão preservadas.\n\n" +
+      "A exclusão é definitiva e permite cadastrar novamente as removidas."
+    )) return;
+    try {
+      const result = await deleteUnusedProxyPool.mutateAsync();
+      toast.success(`${result.deleted} proxy(s) excluída(s). ${result.protected} preservada(s) por vínculo.`);
+      await proxyPool.refetch();
+    } catch (error) {
+      toast.error(errorText(error, "Não foi possível excluir proxies sem uso."));
     }
   };
 
@@ -559,8 +583,11 @@ Isso encerra somente os browsers abertos. Grupos, clientes vinculados, proxies e
                 <option value="https">HTTPS</option>
                 <option value="socks5">SOCKS5</option>
               </select>
-              <button type="button" onClick={() => void addProxyPool()} disabled={importProxyPool.isPending || !proxyPoolText.trim() || !encryptionReady} className="h-11 rounded-xl bg-cyan-500 px-5 text-sm font-black text-white transition hover:brightness-110 disabled:cursor-not-allowed disabled:opacity-40">
+              <button type="button" onClick={() => void addProxyPool()} disabled={importProxyPool.isPending || deleteUnusedProxyPool.isPending || !proxyPoolText.trim() || !encryptionReady} className="h-11 rounded-xl bg-cyan-500 px-5 text-sm font-black text-white transition hover:brightness-110 disabled:cursor-not-allowed disabled:opacity-40">
                 {importProxyPool.isPending ? "ADICIONANDO..." : "ADICIONAR À FILA"}
+              </button>
+              <button type="button" onClick={() => void removeUnusedProxies()} disabled={deleteUnusedProxyPool.isPending || importProxyPool.isPending || proxyPool.isLoading || proxyPool.isError || !encryptionReady || ((proxyPool.data?.counts.available ?? 0) + (proxyPool.data?.counts.used ?? 0) + (proxyPool.data?.counts.failed ?? 0) + (proxyPool.data?.counts.disabled ?? 0)) === 0} className="inline-flex h-11 items-center justify-center gap-2 rounded-xl border border-rose-400/40 bg-rose-500/10 px-4 text-xs font-black text-rose-200 transition hover:bg-rose-500/20 disabled:cursor-not-allowed disabled:opacity-40">
+                <Trash2 className="h-4 w-4" /> {deleteUnusedProxyPool.isPending ? "EXCLUINDO..." : "EXCLUIR NÃO USADAS"}
               </button>
             </div>
           </div>
