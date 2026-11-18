@@ -331,7 +331,7 @@ $rect=New-Object H2PhoneWindowNative+Rectangle
 if(-not [H2PhoneWindowNative]::GetWindowRect($chrome,[ref]$rect)){exit 0}
 $desktop=[System.Windows.Forms.Screen]::FromHandle($chrome).WorkingArea
 $bezel=20
-$topPad=104
+$topPad=144
 $bottomPad=62
 $width=[Math]::Min(392,[Math]::Max(310,$desktop.Width-2*$bezel-12))
 $height=[Math]::Min(780,[Math]::Max(400,$desktop.Height-$topPad-$bottomPad-12))
@@ -390,6 +390,7 @@ $script:refreshPolicyReadAtMs=[long]0
 $script:refreshConfiguredLocally=$false
 $script:refreshDialogOpen=$false
 $script:refreshTabIdentity=$null
+$script:refreshCycles=[long]0
 $script:refreshToggleFile=Join-Path (Join-Path $env:LOCALAPPDATA "H2AdsWorker\stopwatches") ("instance-{0}-auto-refresh.json" -f $InstanceId)
 if(Test-Path -LiteralPath $script:refreshToggleFile) {
   try {
@@ -407,12 +408,18 @@ if(Test-Path -LiteralPath $script:refreshToggleFile) {
       $script:refreshSeconds=$localSeconds
       $script:refreshConfiguredLocally=$true
       if($localSeconds -eq 0){$script:refreshEnabled=$false}
+      if($null -ne $saved.cycles) {
+        $loadedCycles=[long]$saved.cycles
+        if($loadedCycles -lt 0){throw "invalid_auto_refresh_cycles"}
+        $script:refreshCycles=$loadedCycles
+      }
     }
   } catch {
     # Invalid local settings never start background refreshes by accident.
     $script:refreshEnabled=$false
     $script:refreshSeconds=0
     $script:refreshConfiguredLocally=$false
+    $script:refreshCycles=[long]0
   }
 }
 function Save-H2AdsRefreshToggle {
@@ -425,6 +432,7 @@ function Save-H2AdsRefreshToggle {
   $payload=([ordered]@{
     enabled=[bool]$script:refreshEnabled
     intervalSeconds=[int]$script:refreshSeconds
+    cycles=[long]$script:refreshCycles
     source="instance-window"
   } | ConvertTo-Json -Compress)
   $temporary="$($script:refreshToggleFile).$PID.tmp"
@@ -490,7 +498,11 @@ function Set-H2AdsRefreshSettings([int]$seconds,[bool]$enabled) {
   $oldLocal=$script:refreshConfiguredLocally
   $oldNext=$script:refreshNextAtMs
   $oldTab=$script:refreshTabIdentity
+  $oldCycles=[long]$script:refreshCycles
   try {
+    # A fresh AUTO session or DESATIVAR starts the cycle counter at zero.
+    # Saving a paused interval preserves the accumulated cycles.
+    if($enabled -or $seconds -eq 0){$script:refreshCycles=[long]0}
     $script:refreshTabIdentity=$tabId
     $script:refreshSeconds=$seconds
     $script:refreshEnabled=($enabled -and $seconds -gt 0)
@@ -505,6 +517,7 @@ function Set-H2AdsRefreshSettings([int]$seconds,[bool]$enabled) {
     $script:refreshConfiguredLocally=$oldLocal
     $script:refreshNextAtMs=$oldNext
     $script:refreshTabIdentity=$oldTab
+    $script:refreshCycles=$oldCycles
     [System.Windows.Forms.MessageBox]::Show(
       ("Nao foi possivel salvar a atualizacao automatica desta instancia." + [Environment]::NewLine + $message),
       "H2ADS - Atualizacao automatica",
@@ -643,7 +656,14 @@ function Tick-H2AdsRefresh([IntPtr]$chromeWindow) {
     $currentlySelected=[H2PhoneWindowNative]::SelectedChromeTabIdentity($chromeWindow)
     if(-not [string]::IsNullOrWhiteSpace($currentlySelected) -and
        $currentlySelected -ceq $script:refreshTabIdentity){
-      [H2PhoneWindowNative]::RefreshBrowserPage($chromeWindow)|Out-Null
+      # Count only a browser refresh command accepted by Windows for
+      # the configured, currently selected tab. A skipped tab adds zero.
+      if([H2PhoneWindowNative]::RefreshBrowserPage($chromeWindow)) {
+        if($script:refreshCycles -lt [long]::MaxValue){$script:refreshCycles++}
+        try { Save-H2AdsRefreshToggle } catch {
+          [Console]::Error.WriteLine("H2ADS: falha ao salvar contagem AUTO da instancia $InstanceId")
+        }
+      }
     }
     # A different active tab is never reloaded.
   }
