@@ -881,7 +881,7 @@ $status.add_Paint({
           finally {if($labelFont -ne $actionFont){$labelFont.Dispose()}}
         } finally {$fill.Dispose();$path.Dispose()}
       }
-    } finally {$actionFont.Dispose();$align.Dispose()}
+    } finally {$actionFont.Dispose()}
 
     # Three separated horizontal cards, never stacked in the AUTO button.
     $autoColor=if($script:refreshEnabled -and $script:refreshSeconds -gt 0){RGB 28 130 84}else{RGB 55 62 75}
