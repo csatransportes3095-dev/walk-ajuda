@@ -7404,7 +7404,7 @@ export const appRouter = router({
             ...(input.loginPhone !== undefined ? { loginPhone: input.loginPhone } : {}),
             ...(input.loginEmail !== undefined ? { loginEmail: input.loginEmail } : {}),
             ...(input.loginPassword !== undefined ? { loginPassword: input.loginPassword } : {}),
-            ...(input.authCode !== undefined ? { authCode: input.authCode.replace(/[-\\s]/g, '') } : {}),
+            ...(input.authCode !== undefined ? { authCode: input.authCode.replace(/[\\s-]/g, '') } : {}),
             ...(input.emailLink !== undefined ? { emailLink: input.emailLink } : {}),
             ...(input.cnhCode !== undefined ? { cnhCode: input.cnhCode } : {}),
             ...(input.loginNotes !== undefined ? { loginNotes: input.loginNotes } : {}),
@@ -7429,6 +7429,41 @@ export const appRouter = router({
           await deleteAuthenticatorQr(existing[0].authenticatorQrStorageKey).catch(() => {});
         }
         return { success: true };
+      }),
+    deleteAdditional: adminProcedure
+      .input(z.object({ registrationId: z.number().int().positive(), id: z.number().int().positive() }))
+      .mutation(async ({ input }) => {
+        const { getDb } = await import('./db');
+        const { orderAdditionalLogins } = await import('../drizzle/schema');
+        const { and, eq } = await import('drizzle-orm');
+        const db = await getDb();
+        if (!db) throw new TRPCError({ code: 'INTERNAL_SERVER_ERROR', message: 'Banco indisponível.' });
+        const where = and(eq(orderAdditionalLogins.registrationId, input.registrationId), eq(orderAdditionalLogins.id, input.id));
+        const rows = await db.select({ storageKey: orderAdditionalLogins.authenticatorQrStorageKey })
+          .from(orderAdditionalLogins).where(where).limit(1);
+        if (!rows[0]) throw new TRPCError({ code: 'NOT_FOUND', message: 'Login adicional não encontrado.' });
+        await db.delete(orderAdditionalLogins).where(where);
+        if (rows[0].storageKey) {
+          const { deleteAuthenticatorQr } = await import('./authenticatorQr');
+          await deleteAuthenticatorQr(rows[0].storageKey).catch(() => {});
+        }
+        return { success: true };
+      }),
+    getAdditionalAuthenticatorCodeForAdmin: adminProcedure
+      .input(z.object({ registrationId: z.number().int().positive(), id: z.number().int().positive() }))
+      .query(async ({ input }) => {
+        const { getDb } = await import('./db');
+        const { orderAdditionalLogins } = await import('../drizzle/schema');
+        const { and, eq } = await import('drizzle-orm');
+        const db = await getDb();
+        if (!db) throw new TRPCError({ code: 'INTERNAL_SERVER_ERROR', message: 'Banco indisponível.' });
+        const rows = await db.select({ secret: orderAdditionalLogins.authCode })
+          .from(orderAdditionalLogins).where(and(
+            eq(orderAdditionalLogins.registrationId, input.registrationId), eq(orderAdditionalLogins.id, input.id),
+          )).limit(1);
+        if (!rows[0]?.secret) return null;
+        const { generateTotp } = await import('./adminAuthenticatorVault');
+        try { return generateTotp(rows[0].secret); } catch { return null; }
       }),
     getAdditionalQrForAdmin: adminProcedure
       .input(z.object({ registrationId: z.number().int().positive(), id: z.number().int().positive() }))
