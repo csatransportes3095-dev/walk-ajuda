@@ -1,0 +1,119 @@
+name: CPF vault validation
+
+on:
+  pull_request:
+    branches: [recovery/organizar-salvos-2026-08-24]
+    paths:
+      - '.github/workflows/cpf-vault-validation.yml'
+      - 'shared/cpfVault.ts'
+      - 'shared/cpf.ts'
+      - 'server/cpfVault*.ts'
+      - 'server/routers/cpfVault.ts'
+      - 'server/routers.ts'
+      - 'client/src/components/*CpfVault*.tsx'
+      - 'client/src/components/CpfVault*.tsx'
+      - 'client/src/components/GlobalDevToolsProtection.tsx'
+      - 'client/src/pages/AdminCpfVault.tsx'
+      - 'client/src/pages/AdminOrders.tsx'
+      - 'client/src/pages/AdminCodes.tsx'
+      - 'client/src/App.tsx'
+      - 'scripts/apply-cpf-vault-migration.ts'
+      - 'scripts/tests/cpf-vault-ui/**'
+      - 'scripts/render-start.sh'
+      - 'drizzle/*cpf_usage_registry.sql'
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+concurrency:
+  group: cpf-vault-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  validate:
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+    services:
+      mysql:
+        image: mysql:8.4
+        env:
+          MYSQL_ROOT_PASSWORD: isolated-cpf-test
+          MYSQL_DATABASE: h2_cpf_vault_test
+        ports: ['3306:3306']
+        options: >-
+          --health-cmd="mysqladmin ping -h 127.0.0.1 -pisolated-cpf-test"
+          --health-interval=10s --health-timeout=5s --health-retries=12
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+      - name: Install locked dependencies
+        run: |
+          npm install -g pnpm@10.4.1
+          pnpm install --frozen-lockfile
+      - name: CPF validation, access control and real database invariants
+        env:
+          CPF_VAULT_TEST_DB_URL: mysql://root:isolated-cpf-test@127.0.0.1:3306/h2_cpf_vault_test
+        run: pnpm exec vitest run server/cpfVault.test.ts server/cpfVaultMysql.test.ts
+      - name: CPF browser checks with synthetic data
+        env:
+          PLAYWRIGHT_SKIP_BROWSER_DOWNLOAD: '1'
+          CPF_UI_OUTPUT_DIR: ${{ runner.temp }}/cpf-vault-ui
+        run: |
+          export CHROME_BIN="$(command -v google-chrome || command -v chromium || command -v chromium-browser || true)"
+          if [ -z "$CHROME_BIN" ]; then
+            echo "No installed Chrome/Chromium was found on this runner."
+            exit 1
+          fi
+          npm install --prefix "$RUNNER_TEMP/cpf-ui-tools" --no-package-lock --no-audit --no-fund playwright@1.57.0
+          export PLAYWRIGHT_MODULE="$RUNNER_TEMP/cpf-ui-tools/node_modules/playwright/index.mjs"
+          mkdir -p "$CPF_UI_OUTPUT_DIR"
+          node scripts/tests/cpf-vault-ui/server.mjs > "$CPF_UI_OUTPUT_DIR/server.log" 2>&1 &
+          qa_server_pid=$!
+          trap 'kill "$qa_server_pid" 2>/dev/null || true' EXIT
+          qa_ready=false
+          for attempt in {1..30}; do
+            if curl --fail --silent --max-time 1 http://127.0.0.1:4175/test-control > /dev/null; then
+              qa_ready=true
+              break
+            fi
+            if ! kill -0 "$qa_server_pid" 2>/dev/null; then
+              cat "$CPF_UI_OUTPUT_DIR/server.log"
+              exit 1
+            fi
+            sleep 1
+          done
+          if [ "$qa_ready" != true ]; then
+            cat "$CPF_UI_OUTPUT_DIR/server.log"
+            echo "The isolated CPF UI server did not become ready."
+            exit 1
+          fi
+          node scripts/tests/cpf-vault-ui/qa.mjs
+      - name: Keep CPF browser screenshots and results
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: cpf-vault-ui
+          path: |
+            ${{ runner.temp }}/cpf-vault-ui/*.png
+            ${{ runner.temp }}/cpf-vault-ui/*.json
+            ${{ runner.temp }}/cpf-vault-ui/*.log
+          if-no-files-found: ignore
+          retention-days: 7
+      - name: Prepare the production source exactly as Render does
+        run: |
+          node --input-type=module <<'JS'
+          import fs from 'node:fs';
+          import { execFileSync } from 'node:child_process';
+          const dockerfile = fs.readFileSync('Dockerfile', 'utf8');
+          const scripts = [...dockerfile.matchAll(/&& node (scripts\/[^\s]+)/g)].map(match => match[1]);
+          if (!scripts.length) throw new Error('No production preparation steps found');
+          for (const script of scripts) {
+            if (!/^scripts\/[A-Za-z0-9._/-]+\.mjs$/.test(script)) throw new Error('Unexpected preparation path');
+            execFileSync(process.execPath, [script], { stdio: 'inherit' });
+          }
+          JS
+      - name: Compile production frontend and server
+        run: pnpm build
