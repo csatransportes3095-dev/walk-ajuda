@@ -7221,6 +7221,35 @@ export const appRouter = router({
 
   // â"â‚¬â"â‚¬ Dados de Login Liberado por Pedido â"â‚¬â"â‚¬â"â‚¬â"â‚¬â"â‚¬â"â‚¬â"â‚¬â"â‚¬â"â‚¬â"â‚¬â"â‚¬â"â‚¬â"â‚¬â"â‚¬â"â‚¬â"â‚¬â"â‚¬â"â‚¬â"â‚¬â"â‚¬â"â‚¬â"â‚¬â"â‚¬â"â‚¬â"â‚¬â"â‚¬â"â‚¬â"â‚¬â"â‚¬â"â‚¬â"â‚¬â"â‚¬â"â‚¬â"â‚¬â"â‚¬â"â‚¬â"â‚¬
   loginData: router({
+    // Preview selection before delivery. Only populated credentials count.
+    getDeliverySelection: adminProcedure
+      .input(z.object({ registrationId: z.number().int().positive() }))
+      .query(async ({ input }) => {
+        const { getDb } = await import('./db');
+        const { orderLoginData, orderAdditionalLogins, orderLoginReleaseSettings } = await import('../drizzle/schema');
+        const { eq, asc } = await import('drizzle-orm');
+        const db = await getDb();
+        if (!db) throw new TRPCError({ code: 'INTERNAL_SERVER_ERROR', message: 'Banco indisponível.' });
+        const [primary, additional, settings] = await Promise.all([
+          db.select({ loginPhone: orderLoginData.loginPhone, loginEmail: orderLoginData.loginEmail, loginPassword: orderLoginData.loginPassword })
+            .from(orderLoginData).where(eq(orderLoginData.registrationId, input.registrationId)).limit(1),
+          db.select({ id: orderAdditionalLogins.id, displayOrder: orderAdditionalLogins.displayOrder, label: orderAdditionalLogins.label,
+            loginPhone: orderAdditionalLogins.loginPhone, loginEmail: orderAdditionalLogins.loginEmail,
+            loginPassword: orderAdditionalLogins.loginPassword, releasedToClient: orderAdditionalLogins.releasedToClient })
+            .from(orderAdditionalLogins).where(eq(orderAdditionalLogins.registrationId, input.registrationId))
+            .orderBy(asc(orderAdditionalLogins.displayOrder)),
+          db.select().from(orderLoginReleaseSettings).where(eq(orderLoginReleaseSettings.registrationId, input.registrationId)).limit(1),
+        ]);
+        const populated = (row: { loginPhone?: string | null; loginEmail?: string | null; loginPassword?: string | null }) =>
+          Boolean(row.loginPhone?.trim() || row.loginEmail?.trim() || row.loginPassword?.trim());
+        const items = [
+          ...(primary[0] && populated(primary[0]) ? [{ key: 'primary', label: 'Login 1', selected: settings[0] ? settings[0].primaryLoginReleased === 1 : true }] : []),
+          ...additional.filter(populated).map(item => ({
+            key: String(item.id), label: item.label || `Login ${item.displayOrder}`, selected: item.releasedToClient === 1,
+          })),
+        ];
+        return { items, requiresSelection: items.length > 1, confirmed: Boolean(settings[0]?.selectionConfirmedAt) };
+      }),
     // Additional independent logins; the legacy Login 1 is never rewritten.
     listAdditional: adminProcedure
       .input(z.object({ registrationId: z.number().int().positive() }))
