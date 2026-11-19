@@ -2721,7 +2721,7 @@ export default function AdminOrders() {
         return;
       }
       setDeliveryLoginKeys(preview.confirmed ? preview.items.filter(item => item.selected).map(item => item.key) : []);
-      setDeliveryLoginDialog({ order: null, registrationId, customerPhone, source, status, skipEmail: true, items: preview.items });
+      setDeliveryLoginDialog({ order: null, registrationId, customerPhone, source, status, skipEmail: false, items: preview.items });
     } catch (error: any) {
       toast.error(error?.message || 'Não foi possível conferir os logins. A entrega não foi alterada.');
     } finally { setCheckingDeliveryLogins(false); }
