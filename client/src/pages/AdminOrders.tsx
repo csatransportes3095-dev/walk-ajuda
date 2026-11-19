@@ -1,4 +1,5 @@
 import { OrderLoginCopyButton } from "@/components/OrderLoginCopyButton";
+import { OrderAdditionalLoginsAdmin } from "@/components/OrderAdditionalLoginsAdmin";
 import CompactOrderStatusPicker from "@/components/CompactOrderStatusPicker";
 import { hasOrderSurname, visibleOrderName } from "@/lib/orderCardCompactUtils";
 import { globalActiveStatuses, isGlobalStatus, statusChoicesForFlow } from "@shared/orderStatusScope";
@@ -5003,7 +5004,8 @@ export default function AdminOrders() {
                                                             )}
                                                           </div>
 
-                                                          {/* Agendamento */}
+                                                          <OrderAdditionalLoginsAdmin registrationId={ar.registrationId} />
+                                               {/* Agendamento */}
                                                           <OrderScheduleBlock
                                                             registrationId={ar.registrationId}
                                                             subOrderIndex={0}
@@ -7107,6 +7109,7 @@ export default function AdminOrders() {
                           </div>
                         );
                       })()}
+                      <OrderAdditionalLoginsAdmin registrationId={order.id} />
                       {/* Agendamento de atendimento */}
                       <OrderScheduleBlock
                         registrationId={order.id}
