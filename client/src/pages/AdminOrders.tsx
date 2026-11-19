@@ -698,7 +698,7 @@ export default function AdminOrders() {
   const [expandedId, setExpandedId] = useState<string | null>(null);
   const [activeTab, setActiveTab] = useState<Record<string, "status" | "cliente" | "historico" | "documentos" | "anotacoes">>({});
   const [selectedStatus, setSelectedStatus] = useState<Record<string, string>>({});
-  const [deliveryLoginDialog, setDeliveryLoginDialog] = useState<{ order: Order; status: string; skipEmail: boolean; items: Array<{ key: string; label: string; selected: boolean }> } | null>(null);
+  const [deliveryLoginDialog, setDeliveryLoginDialog] = useState<{ order: Order | null; registrationId: number; customerPhone: string; source: 'active' | 'archived' | 'rgcnh'; status: string; skipEmail: boolean; items: Array<{ key: string; label: string; selected: boolean }> } | null>(null);
   const [deliveryLoginKeys, setDeliveryLoginKeys] = useState<string[]>([]);
   const [checkingDeliveryLogins, setCheckingDeliveryLogins] = useState(false);
   const [revealedOrderNames, setRevealedOrderNames] = useState<Set<string>>(() => new Set());
@@ -2706,6 +2706,26 @@ export default function AdminOrders() {
       deliveryEstimate: order.deliveryEstimate || undefined, skipEmail, releasedLoginKeys,
     });
   };
+  const requestFolderDelivery = async (registrationId: number, customerPhone: string, status: string, source: 'archived' | 'rgcnh') => {
+    const mutation = source === 'archived' ? updateArchivedStatusMutation : updateRgCnhStatusMutation;
+    if (status !== 'entregue' && status !== 'pedido_entregue') {
+      mutation.mutate({ registrationId, subOrderIndex: 0, customerPhone, status });
+      return;
+    }
+    setCheckingDeliveryLogins(true);
+    try {
+      const preview = await trpcUtils.loginData.getDeliverySelection.fetch({ registrationId });
+      if (preview.items.length <= 1) {
+        mutation.mutate({ registrationId, subOrderIndex: 0, customerPhone, status,
+          releasedLoginKeys: preview.items.map(item => item.key) });
+        return;
+      }
+      setDeliveryLoginKeys(preview.confirmed ? preview.items.filter(item => item.selected).map(item => item.key) : []);
+      setDeliveryLoginDialog({ order: null, registrationId, customerPhone, source, status, skipEmail: true, items: preview.items });
+    } catch (error: any) {
+      toast.error(error?.message || 'Não foi possível conferir os logins. A entrega não foi alterada.');
+    } finally { setCheckingDeliveryLogins(false); }
+  };
   const requestOrderStatusUpdate = async (order: Order, skipEmail: boolean) => {
     const status = selectedStatus[getOrderKey(order)] || order.latestStatus || "em_andamento";
     if (status === 'recebido') { toast.error('Status "Recebido" é gerado automaticamente.'); return; }
@@ -2721,7 +2741,7 @@ export default function AdminOrders() {
         return;
       }
       setDeliveryLoginKeys(preview.confirmed ? preview.items.filter(item => item.selected).map(item => item.key) : []);
-      setDeliveryLoginDialog({ order, status, skipEmail, items: preview.items });
+      setDeliveryLoginDialog({ order, registrationId: order.id, customerPhone: order.phone, source: 'active', status, skipEmail, items: preview.items });
     } catch (error: any) {
       toast.error(error?.message || 'Não foi possível conferir os logins. A entrega não foi alterada.');
     } finally { setCheckingDeliveryLogins(false); }
@@ -4365,12 +4385,7 @@ export default function AdminOrders() {
                                           onClick={() => {
                                             const status = archivedSelectedStatus[String(ar.registrationId)] || rawStatus;
                                             if (!status) return;
-                                            updateArchivedStatusMutation.mutate({
-                                              registrationId: ar.registrationId,
-                                              subOrderIndex: 0,
-                                              customerPhone: ar.customerPhone || '',
-                                              status,
-                                            });
+                                            void requestFolderDelivery(ar.registrationId, ar.customerPhone || '', status, 'archived');
                                           }}
                                           disabled={updateArchivedStatusMutation.isPending}
                                           className="w-full py-2 px-4 bg-primary text-primary-foreground rounded-lg text-sm font-semibold hover:bg-primary/90 transition-colors disabled:opacity-50"
@@ -4877,12 +4892,7 @@ export default function AdminOrders() {
                                                       onClick={() => {
                                                         const status = rgCnhSelectedStatus[String(ar.registrationId)] || rawStatus;
                                                         if (!status) return;
-                                                        updateRgCnhStatusMutation.mutate({
-                                                          registrationId: ar.registrationId,
-                                                          subOrderIndex: 0,
-                                                          customerPhone: ar.customerPhone || '',
-                                                          status,
-                                                        });
+                                                        void requestFolderDelivery(ar.registrationId, ar.customerPhone || '', status, 'rgcnh');
                                                       }}
                                                       disabled={updateRgCnhStatusMutation.isPending}
                                                       className="w-full py-2 px-4 bg-primary text-primary-foreground rounded-lg text-sm font-semibold hover:bg-primary/90 transition-colors disabled:opacity-50"
@@ -8691,7 +8701,16 @@ export default function AdminOrders() {
                 onClick={() => {
                   const dialog = deliveryLoginDialog;
                   if (!dialog || !deliveryLoginKeys.length) return;
-                  sendOrderStatusUpdate(dialog.order, dialog.status, dialog.skipEmail, deliveryLoginKeys);
+                  if (dialog.source === 'active' && dialog.order) {
+                    sendOrderStatusUpdate(dialog.order, dialog.status, dialog.skipEmail, deliveryLoginKeys);
+                  } else {
+                    const mutation = dialog.source === 'archived' ? updateArchivedStatusMutation : updateRgCnhStatusMutation;
+                    mutation.mutate({
+                      registrationId: dialog.registrationId, subOrderIndex: 0,
+                      customerPhone: dialog.customerPhone, status: dialog.status,
+                      skipEmail: dialog.skipEmail, releasedLoginKeys: deliveryLoginKeys,
+                    });
+                  }
                   setDeliveryLoginDialog(null);
                 }}
                 className="flex-1 rounded-xl bg-lime-500 px-4 py-3 text-sm font-black text-black disabled:opacity-40">Confirmar entrega</button>
