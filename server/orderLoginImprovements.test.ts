@@ -39,7 +39,11 @@ describe('manual CNH / global group rules', () => {
     expect(save).not.toContain('saveOrderGroupDefault');
     const client = route.slice(route.indexOf('    getForClient:'), route.indexOf('    getAuthenticatorQrForClient:'));
     expect(client).toContain('canReadOrderLoginExtras');
-    expect(client).toContain('cnhCode: allowedExtras');
+    // The whole legacy payload is now gated by the owner/session/delivery check,
+    // rather than returning an unprotected subset and conditionally adding CNH.
+    expect(client).toContain('if (!db || !input.cpToken || !(await canReadOrderLoginExtras(db, input))) return null;');
+    expect(client).toContain('cnhCode: cleanLoginText(row.cnhCode)');
+    expect(client).toContain('if (releases[0] && releases[0].released !== 1) return null;');
     expect(client).not.toContain('...safeRow');
     expect(client).not.toContain('getCodeForOrder');
   });
