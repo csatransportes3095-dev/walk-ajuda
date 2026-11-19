@@ -1,0 +1,6 @@
+/* Import the production stylesheet unchanged and explicitly scan its components.
+   Vite's harness root is outside client/, so automatic Tailwind discovery alone
+   would render imported components without their utility classes. */
+@import "../../../client/src/index.css";
+@source "../../../client/src";
+@source "./main.tsx";

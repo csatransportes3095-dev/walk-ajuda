@@ -7,7 +7,7 @@ import { Toaster } from 'sonner';
 import { trpc } from '@/lib/trpc';
 import AdminCpfVault from '@/pages/AdminCpfVault';
 import OrderCpfVault from '@/components/OrderCpfVault';
-import '@/index.css';
+import './styles.css';
 
 const queryClient = new QueryClient({defaultOptions:{queries:{retry:false,refetchOnWindowFocus:false},mutations:{retry:false}}});
 const client = trpc.createClient({links:[httpBatchLink({url:'/api/trpc',transformer:superjson})]});

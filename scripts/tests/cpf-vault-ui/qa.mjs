@@ -20,7 +20,7 @@ try {
 }
 const context=await browser.newContext({viewport:{width:1440,height:1000},permissions:['clipboard-read','clipboard-write']});
 const page=await context.newPage();
-const errors=[];const checks=[];
+const errors=[];const checks=[];const visualStyles={};
 page.on('pageerror',e=>errors.push(String(e)));
 const control=async data=>(await page.request.post(base+'/test-control',{data})).json();
 const state=async()=>(await page.request.get(base+'/test-control')).json();
@@ -33,15 +33,69 @@ const setOrder=async order=>{
 };
 const fmt=v=>v.replace(/(\d{3})(\d{3})(\d{3})(\d{2})/,'$1.$2.$3-$4');
 const fixture=await control({reset:true});const cpf=fixture.cpf;
-const shot=name=>page.screenshot({path:path.join(outputDir,name),fullPage:true});
+const shot=async name=>{
+  // Let transient notifications expire so screenshots show the actual layout.
+  await page.mouse.move(0,0);
+  await page.waitForFunction(()=>!document.querySelector('[data-sonner-toast]'),null,{timeout:10000});
+  return page.screenshot({path:path.join(outputDir,name),fullPage:true,animations:'disabled'});
+};
+const assertPanelColor=async(single,expected)=>{
+  const color=await single.getByRole('status').evaluate(element=>{
+    const style=getComputedStyle(element);
+    const canvas=document.createElement('canvas');canvas.width=canvas.height=1;
+    const context=canvas.getContext('2d');
+    context.fillStyle=style.backgroundColor;context.fillRect(0,0,1,1);
+    return {background:style.backgroundColor,rgba:[...context.getImageData(0,0,1,1).data],padding:style.paddingTop};
+  });
+  visualStyles[`${expected}Panel`]=color;
+  const [red,green,blue,alpha]=color.rgba;
+  assert.ok(alpha>0,'status panel must have a visible background');
+  assert.ok(Number.parseFloat(color.padding)>=16,'status panel must have its utility padding');
+  if(expected==='green') assert.ok(green>red&&green>blue,'available panel must visibly be green');
+  else assert.ok(red>green&&red>blue,'used panel must visibly be red');
+};
+const assertModalLayout=async(dialog,desktop)=>{
+  const layout=await dialog.evaluate(element=>{
+    const style=getComputedStyle(element);const rect=element.getBoundingClientRect();
+    const overlay=document.querySelector('[data-slot="dialog-overlay"]');
+    return {position:style.position,maxWidth:style.maxWidth,padding:style.paddingTop,
+      x:rect.x,y:rect.y,width:rect.width,height:rect.height,right:rect.right,bottom:rect.bottom,
+      viewportWidth:innerWidth,viewportHeight:innerHeight,overlayPosition:overlay?getComputedStyle(overlay).position:null};
+  });
+  visualStyles[desktop?'desktopModal':'mobileModal']=layout;
+  assert.equal(layout.position,'fixed','dialog must be fixed, not appended below the page');
+  assert.equal(layout.overlayPosition,'fixed','dialog overlay must cover the viewport');
+  assert.ok(Number.parseFloat(layout.padding)>=24,'dialog must have its intended padding');
+  assert.ok(layout.x>=0&&layout.y>=0&&layout.right<=layout.viewportWidth+1&&layout.bottom<=layout.viewportHeight+1,'dialog must fit within the viewport');
+  if(desktop){
+    assert.ok(Number.parseFloat(layout.maxWidth)<=576&&Number.parseFloat(layout.maxWidth)>=500,'desktop dialog max-width must be constrained');
+    assert.ok(layout.width<=577&&layout.width>=500,'desktop dialog must retain a readable bounded width');
+  }else{
+    assert.ok(layout.width<=layout.viewportWidth-30&&layout.width>=300,'mobile dialog must leave side margins');
+  }
+};
 
 try {
   await page.goto(base,{waitUntil:'networkidle'});
+  const desktopLayout=await page.locator('main').evaluate(main=>{
+    const grid=main.querySelector(':scope > div');const style=getComputedStyle(main);const gridStyle=getComputedStyle(grid);
+    return {maxWidth:style.maxWidth,width:main.getBoundingClientRect().width,padding:style.paddingLeft,
+      display:gridStyle.display,columns:gridStyle.gridTemplateColumns,columnGap:gridStyle.columnGap};
+  });
+  visualStyles.desktopPage=desktopLayout;
+  assert.ok(Number.parseFloat(desktopLayout.maxWidth)>=1000&&Number.parseFloat(desktopLayout.maxWidth)<=1050,'desktop main must apply max-w-5xl');
+  assert.ok(desktopLayout.width<=1050&&desktopLayout.width>=900,'desktop main must stay bounded');
+  assert.ok(Number.parseFloat(desktopLayout.padding)>=16,'desktop main must apply side padding');
+  assert.equal(desktopLayout.display,'grid');
+  assert.equal(desktopLayout.columns.trim().split(/\s+/).length,2,'desktop consultation sections must form two columns');
+  assert.ok(Number.parseFloat(desktopLayout.columnGap)>=16,'desktop columns must be separated');
+  checks.push('Production Tailwind utilities render bounded desktop main, padding and two-column consultation grid');
   const single=page.getByRole('region',{name:'Consultar e registrar CPF'});
   const input=single.getByLabel('CPF para consulta');
   const consult=single.getByRole('button',{name:'Consultar CPF',exact:true});
   await input.fill(fmt(cpf[0]));await consult.click();
   await single.getByText('NÃO USADO — DISPONÍVEL',{exact:true}).waitFor();
+  await assertPanelColor(single,'green');
   const before=(await state()).calls.filter(x=>x.name==='check').length;
   await consult.click();
   await single.getByText('NÃO USADO — DISPONÍVEL',{exact:true}).waitFor();
@@ -50,6 +104,8 @@ try {
   await shot('desktop-available.png');
   await single.getByRole('button',{name:'Guardar como usado',exact:true}).click();
   await single.getByText('USADO — NÃO REUTILIZAR',{exact:true}).waitFor();
+  await assertPanelColor(single,'red');
+  checks.push('Available and used status panels render actual green/red backgrounds with padding');
   assert.equal((await state()).entries.filter(x=>x.normalizedCpf===cpf[0]).length,1);
   checks.push('Individual available -> save -> red used');
 
@@ -105,6 +161,8 @@ try {
   const opener=page.getByRole('button',{name:'Cofre de CPF',exact:true});
   await opener.click();
   const dialog=page.getByRole('dialog');await dialog.waitFor();
+  await assertModalLayout(dialog,false);
+  checks.push('Mobile dialog uses a fixed overlay, bounded width, padding and viewport-safe placement');
   assert.equal(await page.getByTestId('toggles').innerText(),'0');
   await dialog.getByLabel('CPF para consulta').fill(cpf[5]);
   await dialog.getByLabel('CPF para consulta').press('Enter');
@@ -124,6 +182,8 @@ try {
 
   await page.setViewportSize({width:1440,height:1000});
   await opener.click();await dialog.waitFor();
+  await assertModalLayout(dialog,true);
+  checks.push('Desktop dialog uses fixed positioning and the intended constrained max-width');
   await dialog.getByLabel('CPF para consulta').fill(cpf[6]);
   await dialog.getByRole('button',{name:'Consultar CPF',exact:true}).click();
   await dialog.getByText('NÃO USADO — DISPONÍVEL',{exact:true}).waitFor();
@@ -202,10 +262,10 @@ try {
   checks.push('Cards without a stable order root block consultation and registration without backend requests');
 
   assert.deepEqual(errors,[],'No browser runtime errors');
-  await fs.writeFile(path.join(outputDir,'qa-results.json'),JSON.stringify({passed:checks.length,checks,browserErrors:errors,cpfFixtureCount:cpf.length},null,2));
-  console.log(JSON.stringify({passed:checks.length,checks,browserErrors:errors},null,2));
+  await fs.writeFile(path.join(outputDir,'qa-results.json'),JSON.stringify({passed:checks.length,checks,browserErrors:errors,cpfFixtureCount:cpf.length,visualStyles},null,2));
+  console.log(JSON.stringify({passed:checks.length,checks,browserErrors:errors,visualStyles},null,2));
 } catch(error) {
-  await shot('qa-failure.png');
-  await fs.writeFile(path.join(outputDir,'qa-failure.json'),JSON.stringify({passed:checks.length,checks,error:String(error),stack:error.stack,browserErrors:errors},null,2));
+  await page.screenshot({path:path.join(outputDir,'qa-failure.png'),fullPage:true,animations:'disabled'});
+  await fs.writeFile(path.join(outputDir,'qa-failure.json'),JSON.stringify({passed:checks.length,checks,error:String(error),stack:error.stack,browserErrors:errors,visualStyles},null,2));
   throw error;
 } finally {await browser.close();}
