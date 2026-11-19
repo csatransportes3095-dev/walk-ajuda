@@ -82,6 +82,7 @@ jobs:
             exit 1
           fi
           node scripts/tests/customer-otp-delivery-ui/qa.mjs
+          node scripts/tests/customer-otp-delivery-ui/navigation-qa.mjs
       - name: Keep isolated OTP screenshots and results
         if: always()
         uses: actions/upload-artifact@v4

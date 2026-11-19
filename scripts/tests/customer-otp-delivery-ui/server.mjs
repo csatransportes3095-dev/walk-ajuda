@@ -13,6 +13,7 @@ import { fileURLToPath } from 'node:url';
 const root = fileURLToPath(new URL('.', import.meta.url));
 const repo = fileURLToPath(new URL('../../../', import.meta.url));
 const defaults = () => ({
+  checkMode: 'success',
   requestMode: 'success', retryAfterSeconds: 60, cooldownScope: 'channel',
   whatsappAvailable: true, supportNumber: '11999990099', delayMs: 0,
   checkCalls: [], requestCalls: [], verifyCalls: [],
@@ -23,6 +24,8 @@ const router = t.router({
   settings: t.router({ getAll: t.procedure.query(() => ({ whatsapp_number: state.supportNumber })) }),
   customers: t.router({ checkByPhoneMutation: t.procedure.input(z.object({ phone: z.string() })).mutation(({ input }) => {
     state.checkCalls.push({ ...input });
+    if (state.checkMode === 'failure') throw new TRPCError({ code: 'SERVICE_UNAVAILABLE', message: 'Falha de consulta para teste.' });
+    if (state.checkMode === 'blocked') return { exists: true, customerBlocked: true, blocked: false, customer: { email: 'fixture@example.invalid' } };
     return { exists: true, customerBlocked: false, blocked: false, customer: { email: 'fixture@example.invalid' } };
   }) }),
   customerPassword: t.router({
@@ -49,7 +52,7 @@ app.use(express.json());
 app.get('/test-control', (_req, res) => res.json(state));
 app.post('/test-control', (req, res) => {
   if (req.body.reset) state = defaults();
-  for (const key of ['requestMode', 'retryAfterSeconds', 'cooldownScope', 'whatsappAvailable', 'supportNumber', 'delayMs']) {
+  for (const key of ['checkMode', 'requestMode', 'retryAfterSeconds', 'cooldownScope', 'whatsappAvailable', 'supportNumber', 'delayMs']) {
     if (key in req.body) state[key] = req.body[key];
   }
   res.json(state);
