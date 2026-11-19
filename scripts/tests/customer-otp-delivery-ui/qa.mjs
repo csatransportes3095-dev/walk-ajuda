@@ -33,7 +33,8 @@ const phoneInput = () => page.getByLabel('Telefone com DDD');
 const codeInput = () => page.getByLabel('Código de 6 números');
 const confirm = () => page.getByRole('button', { name: 'CONFIRMAR E ACESSAR' });
 const emailResend = () => page.getByRole('button', { name: 'PEDIR OUTRO POR E-MAIL' });
-const automaticWhatsapp = () => page.getByRole('button', { name: /NÃO RECEBI O CÓDIGO —/ });
+const whatsappResend = () => page.getByRole('button', { name: 'PEDIR OUTRO PELO WHATSAPP', exact: true });
+const help = () => page.getByRole('button', { name: 'Não recebi o código', exact: true });
 const waitFor = async (condition, message) => {
   const end = Date.now() + 12_000;
   while (Date.now() < end) {
@@ -53,6 +54,27 @@ async function requestEmail() {
   await page.getByRole('button', { name: 'RECEBER POR E-MAIL', exact: true }).click();
   await codeInput().waitFor();
 }
+async function assertSimpleCodeStep() {
+  await codeInput().waitFor();
+  assert.equal(await help().getAttribute('aria-expanded'), 'false');
+  assert.equal(await page.locator('#h2-otp-help').isVisible(), false);
+  const form = page.locator('form').filter({ has: codeInput() });
+  assert.equal(await form.getByRole('button').count(), 2, 'The normal code step must show only Confirm and the small help action');
+  assert.equal(await form.locator('button[type="submit"]').count(), 1);
+  assert.equal(await form.getByRole('link').count(), 0, 'The normal flow must not require a second WhatsApp click');
+}
+async function openHelp() {
+  const before = await state();
+  const typedCode = await codeInput().inputValue();
+  if (await help().getAttribute('aria-expanded') !== 'true') await help().click();
+  await page.locator('#h2-otp-help').waitFor();
+  assert.equal(await help().getAttribute('aria-expanded'), 'true');
+  const after = await state();
+  assert.equal(await codeInput().inputValue(), typedCode, 'Opening help must preserve the typed code');
+  assert.deepEqual(after.checkCalls, before.checkCalls, 'Opening help must not repeat customer lookup');
+  assert.deepEqual(after.requestCalls, before.requestCalls, 'Opening help must not issue an OTP');
+  assert.deepEqual(after.verifyCalls, before.verifyCalls, 'Opening help must not verify a code');
+}
 
 try {
   await page.clock.install({ time: new Date('2026-11-19T22:00:00Z') });
@@ -71,10 +93,12 @@ try {
   assert.deepEqual((await state()).requestCalls, [{ phone: '11999990001', channel: 'email' }]);
   assert.deepEqual((await state()).checkCalls, [{ phone: '11999990001' }]);
   checks.push('A formatted international paste is normalized before browser length restrictions can corrupt the customer phone');
-  assert.equal(await page.getByRole('button', { name: /^E-MAIL · AGUARDE/ }).isDisabled(), true);
-  assert.equal(await page.getByRole('button', { name: 'PEDIR OUTRO PELO WHATSAPP', exact: true }).isEnabled(), true);
-  checks.push('The ordinary email cooldown leaves the independent WhatsApp channel available');
+  await assertSimpleCodeStep();
   await shot('desktop-email-code.png');
+  await openHelp();
+  assert.equal(await page.getByRole('button', { name: /^E-MAIL · AGUARDE/ }).isDisabled(), true);
+  assert.equal(await whatsappResend().isEnabled(), true);
+  checks.push('The normal code step shows only Confirm and small help; opening help sends nothing and exposes independent channel cooldowns');
 
   await codeInput().fill('246810');
   await page.clock.fastForward(61_000);
@@ -84,6 +108,7 @@ try {
   await page.getByText('Falha de entrega para teste.', { exact: true }).waitFor();
   await waitFor(() => confirm().isEnabled(), 'Confirmation stayed disabled after a failed resend');
   assert.equal(await codeInput().inputValue(), '246810');
+  assert.equal(await help().getAttribute('aria-expanded'), 'true');
   await confirm().click();
   await page.getByTestId('authenticated-phone').waitFor();
   assert.deepEqual((await state()).verifyCalls, [{ phone: '11999990001', code: '246810' }]);
@@ -91,6 +116,8 @@ try {
 
   await fresh();
   await requestEmail();
+  await assertSimpleCodeStep();
+  await openHelp();
   await codeInput().fill('246810');
   await page.clock.fastForward(61_000);
   await waitFor(() => emailResend().isEnabled(), 'Email resend did not reopen for the hourly-limit fixture');
@@ -101,7 +128,7 @@ try {
   assert.equal(await codeInput().inputValue(), '246810');
   assert.equal(await page.getByRole('button', { name: /^E-MAIL · AGUARDE/ }).isDisabled(), true);
   assert.equal(await page.getByRole('button', { name: /^WHATSAPP · AGUARDE/ }).isDisabled(), true);
-  assert.equal(await automaticWhatsapp().isDisabled(), true);
+  assert.equal(await help().getAttribute('aria-expanded'), 'true');
   assert.match(await page.getByRole('button', { name: /^E-MAIL · AGUARDE/ }).innerText(), /01:00:00|59:\d{2}/);
   const stored = await page.evaluate(() => ['email', 'whatsapp'].map(channel => Number(localStorage.getItem('h2_otp_cooldown_11999990001_' + channel)) - Date.now()));
   assert.ok(stored.every(duration => duration > 3_590_000 && duration <= 3_600_000));
@@ -110,9 +137,10 @@ try {
   await page.reload({ waitUntil: 'networkidle' });
   await codeInput().waitFor();
   assert.equal(await codeInput().inputValue(), '');
+  await assertSimpleCodeStep();
+  await openHelp();
   assert.equal(await page.getByRole('button', { name: /^E-MAIL · AGUARDE/ }).isDisabled(), true);
   assert.equal(await page.getByRole('button', { name: /^WHATSAPP · AGUARDE/ }).isDisabled(), true);
-  assert.equal(await automaticWhatsapp().isDisabled(), true);
   assert.equal((await state()).requestCalls.length, callsBeforeReload);
   await codeInput().fill('246810');
   assert.equal(await confirm().isEnabled(), true);
@@ -140,6 +168,8 @@ try {
   await page.evaluate(() => sessionStorage.setItem('h2_customer_otp_login_draft', JSON.stringify({ phone: '11999990001', step: 'code', channel: 'whatsapp', expiresAt: Date.now() + 600_000 })));
   await page.goto(base + '?initialPhone=11999990001', { waitUntil: 'networkidle' });
   await codeInput().waitFor();
+  await assertSimpleCodeStep();
+  await openHelp();
   await page.getByRole('link', { name: 'ABRIR WHATSAPP E ENVIAR MENSAGEM' }).waitFor();
   assert.equal((await state()).requestCalls.length, 0);
   assert.equal(await codeInput().inputValue(), '');
@@ -147,14 +177,17 @@ try {
 
   await fresh();
   await requestEmail();
+  await assertSimpleCodeStep();
+  await openHelp();
   assert.equal(await page.getByRole('button', { name: /^E-MAIL · AGUARDE/ }).isDisabled(), true);
-  assert.equal(await automaticWhatsapp().isEnabled(), true);
+  assert.equal(await whatsappResend().isEnabled(), true);
   assert.equal(await page.getByRole('link', { name: /PEDIR AJUDA NO WHATSAPP/ }).count(), 0);
   const automaticUrlsBefore = whatsappUrls.length;
   const automaticPopupPromise = context.waitForEvent('page');
-  await automaticWhatsapp().click();
+  await whatsappResend().click();
   const automaticPopup = await automaticPopupPromise;
-  await page.getByRole('link', { name: 'ABRIR WHATSAPP E ENVIAR MENSAGEM' }).waitFor();
+  await page.getByText('Toque em Enviar na mensagem preenchida no WhatsApp.', { exact: false }).waitFor();
+  await assertSimpleCodeStep();
   await waitFor(() => Promise.resolve(whatsappUrls.length > automaticUrlsBefore), 'The automatic email fallback did not open the queued WhatsApp request');
   const automaticDestination = new URL(whatsappUrls.at(-1));
   assert.equal(automaticDestination.searchParams.get('phone'), '5511999990099');
@@ -163,10 +196,10 @@ try {
     { phone: '11999990001', channel: 'email' },
     { phone: '11999990001', channel: 'whatsapp' },
   ]);
-  assert.equal(await page.getByRole('button', { name: /^E-MAIL · AGUARDE/ }).isDisabled(), true);
+  assert.equal(await page.evaluate(() => Number(localStorage.getItem('h2_otp_cooldown_11999990001_email')) > Date.now()), true);
   await automaticPopup.close();
   await page.bringToFront();
-  checks.push('The email code fallback requests an automatic WhatsApp code during the email cooldown and opens the prepared message without a manual-help link');
+  checks.push('Selecting WhatsApp inside help opens it automatically during the email cooldown and collapses help after the new request');
 
   await fresh();
   await phoneInput().fill('11999990001');
@@ -183,10 +216,12 @@ try {
   await popup.close();
   await page.bringToFront();
   await page.getByText('Toque em Enviar na mensagem preenchida no WhatsApp.', { exact: false }).waitFor();
-  assert.match(await page.getByRole('link', { name: 'ABRIR WHATSAPP E ENVIAR MENSAGEM' }).getAttribute('href'), /phone=5511999990099/);
+  await assertSimpleCodeStep();
   await page.setViewportSize({ width: 390, height: 844 });
   assert.equal(await page.evaluate(() => document.documentElement.scrollWidth <= innerWidth), true);
   await shot('mobile-whatsapp-instructions.png');
+  await openHelp();
+  assert.match(await page.getByRole('link', { name: 'ABRIR WHATSAPP E ENVIAR MENSAGEM' }).getAttribute('href'), /phone=5511999990099/);
   checks.push('The selected WhatsApp request opens the normalized support destination and clearly requires sending the prepared message');
 
   assert.deepEqual(browserErrors, []);

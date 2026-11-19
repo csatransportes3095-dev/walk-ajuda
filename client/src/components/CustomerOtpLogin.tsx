@@ -96,6 +96,7 @@ export function CustomerOtpLogin({ title = "Acesso H2 Colombiano", initialPhone 
   const [step, setStep] = useState<"phone" | "code">(initialState.step);
   const [deliveryChannel, setDeliveryChannel] = useState<"email" | "whatsapp">(initialState.channel);
   const [code, setCode] = useState("");
+  const [showHelp, setShowHelp] = useState(false);
   const [busy, setBusy] = useState(false);
   const [clockNow, setClockNow] = useState(() => Date.now());
   const [cooldowns, setCooldowns] = useState<{email:number;whatsapp:number}>(() => {
@@ -157,14 +158,18 @@ export function CustomerOtpLogin({ title = "Acesso H2 Colombiano", initialPhone 
       toast.error("Recebimento pelo WhatsApp indisponível. Use o botão azul do e-mail.");
       return;
     }
-    // Orders launch WhatsApp from a direct tap in a new tab, not through a
-    // delayed same-tab redirect. Reserve that tab synchronously, while the
-    // Android click still has browser user activation. Never pre-send the
-    // message or queue an OTP solely because the tab was reserved.
+    // Reserve a separate tab during the click in every browser. Keep the
+    // login page available for the code, even if the browser blocks the tab.
     let whatsappTab: Window | null = null;
     let whatsappNavigationStarted = false;
-    if (channel === "whatsapp" && typeof navigator !== "undefined" && /Android/i.test(navigator.userAgent)) {
-      try { whatsappTab = window.open("about:blank", "_blank"); } catch { /* blocked by browser */ }
+    if (channel === "whatsapp") {
+      try {
+        whatsappTab = window.open("about:blank", "_blank");
+        if (whatsappTab) whatsappTab.opener = null;
+      } catch {
+        try { whatsappTab?.close(); } catch {}
+        whatsappTab = null;
+      }
     }
     setBusy(true);
     try {
@@ -200,28 +205,21 @@ export function CustomerOtpLogin({ title = "Acesso H2 Colombiano", initialPhone 
       setCode("");
       setDeliveryChannel(channel);
       setStep("code");
+      setShowHelp(false);
       saveOtpDraft(cleanPhone, "code", channel);
       if (channel === "whatsapp") {
         // The customer must actually send the prepared message; merely
         // opening this link never authorizes the APK to deliver a code.
-        // Same URL AND new-tab navigation pattern as the working order
-        // resend action. This avoids relying on a same-tab redirect after
-        // two awaited requests, which can lose the original user gesture.
         const whatsappUrl = buildWhatsappMessageUrl(supportNumber, "Preciso receber meu código");
-        if (whatsappTab && !whatsappTab.closed) {
-          try {
-            whatsappTab.opener = null;
+        try {
+          if (whatsappTab && !whatsappTab.closed) {
             whatsappTab.location.replace(whatsappUrl);
             whatsappNavigationStarted = true;
-          } catch {
-            window.location.assign(whatsappUrl);
-            whatsappNavigationStarted = true;
           }
-        } else {
-          // Embedded browsers or popup blockers may refuse a reserved tab.
-          // Preserve the former behavior in those environments.
-          window.location.assign(whatsappUrl);
-          whatsappNavigationStarted = true;
+        } catch { /* Keep the login page open if the reserved tab cannot navigate. */ }
+        if (!whatsappNavigationStarted) {
+          setShowHelp(true);
+          toast.info("Para abrir o WhatsApp, toque em “ABRIR WHATSAPP E ENVIAR MENSAGEM” abaixo. A página do site continuará aberta.");
         }
       } else {
         toast.success(result.message || "Solicitação de código por e-mail realizada. Confira também a pasta de spam.");
@@ -349,50 +347,52 @@ export function CustomerOtpLogin({ title = "Acesso H2 Colombiano", initialPhone 
               className="flex w-full items-center justify-center gap-2 rounded-xl bg-emerald-500 p-4 font-black text-slate-950 disabled:opacity-50">
               <CheckCircle2 className="h-5 w-5" /> {busy ? "Validando..." : "CONFIRMAR E ACESSAR"}
             </button>
-            {deliveryChannel === "email" ? (
-              <button type="button" disabled={busy || remainingWhatsapp > 0 || h2AutoDelivery?.available !== true}
-                onClick={() => void send("whatsapp")}
-                className="flex min-h-12 w-full items-center justify-center gap-2 rounded-xl border border-emerald-400/50 bg-emerald-500/15 px-4 py-3 text-center text-sm font-black text-emerald-200 hover:bg-emerald-500/25 disabled:cursor-not-allowed disabled:opacity-50">
-                💬 {remainingWhatsapp > 0
-                  ? "NÃO RECEBI O CÓDIGO — WHATSAPP EM " + formatOtpCooldown(remainingWhatsapp)
-                  : h2AutoDelivery?.available !== true
-                    ? "WHATSAPP TEMPORARIAMENTE INDISPONÍVEL"
-                    : "NÃO RECEBI O CÓDIGO — RECEBER PELO WHATSAPP"}
-              </button>
-            ) : (
-              <a href={buildWhatsappMessageUrl(supportNumber, "Preciso receber meu código")}
-                target="_blank" rel="noopener noreferrer"
-                className="flex min-h-12 w-full items-center justify-center gap-2 rounded-xl bg-[#8B0000] px-4 py-3 text-center text-sm font-black text-white hover:bg-[#a30000]">
-                <MessageCircle className="h-5 w-5" /> ABRIR WHATSAPP E ENVIAR MENSAGEM
-              </a>
-            )}
-            <div className="space-y-2 rounded-xl border border-white/10 p-3" aria-label="Solicitar outro código">
-              <p className="text-center text-xs text-slate-300">Precisa de outro código? Escolha como receber:</p>
-              <button type="button" disabled={busy || remainingEmail > 0}
-                onClick={() => void send("email")}
-                className="flex min-h-12 w-full items-center justify-center gap-2 rounded-xl bg-cyan-500 p-3 font-bold text-slate-950 disabled:opacity-50">
-                <Mail className="h-4 w-4" />
-                {remainingEmail > 0 ? "E-MAIL · AGUARDE " + formatOtpCooldown(remainingEmail) : "PEDIR OUTRO POR E-MAIL"}
-              </button>
-              <button type="button" disabled={busy || remainingWhatsapp > 0 || h2AutoDelivery?.available !== true}
-                onClick={() => void send("whatsapp")}
-                className="flex min-h-12 w-full items-center justify-center gap-2 rounded-xl bg-[#8B0000] p-3 font-bold text-white disabled:opacity-50">
-                <MessageCircle className="h-4 w-4" />
-                {remainingWhatsapp > 0 ? "WHATSAPP · AGUARDE " + formatOtpCooldown(remainingWhatsapp) : "PEDIR OUTRO PELO WHATSAPP"}
-              </button>
-            </div>
             <button type="button" className="w-full py-2 text-sm text-cyan-300" disabled={busy}
-              onClick={() => { setStep("phone"); setCode(""); saveOtpDraft(cleanPhone, "phone", deliveryChannel); }}>
-              Alterar telefone
+              aria-expanded={showHelp} aria-controls="h2-otp-help"
+              onClick={() => setShowHelp(previous => !previous)}>
+              Não recebi o código
             </button>
+            {showHelp && (
+              <div id="h2-otp-help" role="region" aria-label="Ajuda para receber o código" className="space-y-3">
+                {deliveryChannel === "whatsapp" && (
+                  <a href={buildWhatsappMessageUrl(supportNumber, "Preciso receber meu código")}
+                    target="_blank" rel="noopener noreferrer"
+                    className="flex min-h-12 w-full items-center justify-center gap-2 rounded-xl bg-[#8B0000] px-4 py-3 text-center text-sm font-black text-white hover:bg-[#a30000]">
+                    <MessageCircle className="h-5 w-5" /> ABRIR WHATSAPP E ENVIAR MENSAGEM
+                  </a>
+                )}
+                <div className="space-y-2 rounded-xl border border-white/10 p-3" aria-label="Solicitar outro código">
+                  <p className="text-center text-xs text-slate-300">Precisa de outro código? Escolha como receber:</p>
+                  <button type="button" disabled={busy || remainingEmail > 0}
+                    onClick={() => void send("email")}
+                    className="flex min-h-12 w-full items-center justify-center gap-2 rounded-xl bg-cyan-500 p-3 font-bold text-slate-950 disabled:opacity-50">
+                    <Mail className="h-4 w-4" />
+                    {remainingEmail > 0 ? "E-MAIL · AGUARDE " + formatOtpCooldown(remainingEmail) : "PEDIR OUTRO POR E-MAIL"}
+                  </button>
+                  <button type="button" disabled={busy || remainingWhatsapp > 0 || h2AutoDelivery?.available !== true}
+                    onClick={() => void send("whatsapp")}
+                    className="flex min-h-12 w-full items-center justify-center gap-2 rounded-xl bg-[#8B0000] p-3 font-bold text-white disabled:opacity-50">
+                    <MessageCircle className="h-4 w-4" />
+                    {remainingWhatsapp > 0 ? "WHATSAPP · AGUARDE " + formatOtpCooldown(remainingWhatsapp) : "PEDIR OUTRO PELO WHATSAPP"}
+                  </button>
+                </div>
+                <button type="button" className="w-full py-2 text-sm text-cyan-300" disabled={busy}
+                  onClick={() => { setStep("phone"); setCode(""); setShowHelp(false); saveOtpDraft(cleanPhone, "phone", deliveryChannel); }}>
+                  Alterar telefone
+                </button>
+                <a href="https://h2colombiano.com/" className="block py-2 text-center text-sm text-cyan-300">
+                  ← VOLTAR AO SITE
+                </a>
+              </div>
+            )}
           </form>
         )}
-        <a
+        {step === "phone" && <a
           href="https://h2colombiano.com/"
           className="mt-4 flex min-h-11 w-full items-center justify-center gap-2 rounded-xl border border-cyan-400/40 bg-cyan-400/10 px-4 py-3 text-center text-sm font-bold text-cyan-200 transition-colors hover:bg-cyan-400/20"
         >
           ← VOLTAR AO SITE
-        </a>
+        </a>}
         {loginSettings?.login_show_footer !== "0" && <p className="mt-4 whitespace-pre-line text-center text-xs text-slate-400">
           {loginSettings?.login_footer?.trim() || "O código expira em 10 minutos. Nunca compartilhe o código recebido."}
         </p>}
