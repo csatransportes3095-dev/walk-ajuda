@@ -26,6 +26,7 @@ import { NotesTab } from "@/components/NotesTab";
 import { AuthenticatorQrAdminField, type PendingQr } from "@/components/AuthenticatorQrAdminField";
 import { OrderLoginAuthenticatorCode } from "@/components/OrderLoginAuthenticatorCode";
 import OrderH2AdsBrowserShortcut from "@/components/OrderH2AdsBrowserShortcut";
+import OrderCpfVault from "@/components/OrderCpfVault";
 import OrderPhotoConfirmation from "@/components/OrderPhotoConfirmation";
 import OrderConfirmation from "@/components/OrderConfirmation";
 import OrderPhotoMarkers from "@/components/OrderPhotoMarkers";
@@ -96,6 +97,8 @@ type Order = {
   isUrgent: number;
   commissionPaid: number;
   orderNumber: number | null;
+  orderRootId?: number | null;
+  cpfVaultOrderNumber?: number | null;
   customerNumber: number | null;
   deliveryEstimate: number | null;
   subOrderIndex: number;
@@ -424,6 +427,7 @@ function CustomFolderTab({ folderId, expandedId, setExpandedId, expandedCustomFo
     pricePaid: string | null; orderNumber: number | null; answers: string | null; latestStatus: string | null;
     latestStatusAt: number | null; note: string | null; accessedAt: number | null;
     profilePhotoUrl: string | null; subOrderIndex: number;
+    orderRootId?: number | null; cpfVaultOrderNumber?: number | null;
   }>;
   const orders = React.useMemo(() => {
     const list = [...rawOrders];
@@ -544,6 +548,9 @@ function CustomFolderTab({ folderId, expandedId, setExpandedId, expandedCustomFo
                 {isExpanded ? <ChevronUp className="w-4 h-4 text-muted-foreground flex-shrink-0" /> : <ChevronDown className="w-4 h-4 text-muted-foreground flex-shrink-0" />}
               </div>
 
+              <div className="px-4 pb-3">
+                <OrderCpfVault registrationId={ar.registrationId} subOrderIndex={ar.subOrderIndex ?? 0} customerName={ar.customerName} orderNumber={ar.cpfVaultOrderNumber} orderRootId={ar.orderRootId} />
+              </div>
               {/* Expanded content - same as Arquivo */}
               {isExpanded && (
                 <div className="border-t border-border bg-background/60 p-3">
@@ -4199,6 +4206,7 @@ export default function AdminOrders() {
                   orderNumber: number | null; answers: string | null; latestStatus: string | null;
                   latestStatusAt: number | null; note: string | null; accessedAt: number | null;
                   profilePhotoUrl: string | null;
+                  orderRootId?: number | null; cpfVaultOrderNumber?: number | null;
                 }>;
                 return (
                   <div className="border border-zinc-500/40 rounded-xl overflow-hidden">
@@ -4306,6 +4314,9 @@ export default function AdminOrders() {
                                         <span className="text-xs text-muted-foreground">{ar.customerPhone}</span>
                                       </div>
                                     </div>
+                                  </div>
+                                  <div className="mt-2" onClick={event => event.stopPropagation()} onKeyDown={event => event.stopPropagation()}>
+                                    <OrderCpfVault registrationId={ar.registrationId} subOrderIndex={0} customerName={ar.customerName} orderNumber={ar.cpfVaultOrderNumber} orderRootId={ar.orderRootId} />
                                   </div>
                                 </div>
                                 {/* Corpo com serviço, cidade e status */}
@@ -4666,6 +4677,7 @@ export default function AdminOrders() {
                   orderNumber: number | null; answers: string | null; latestStatus: string | null;
                   latestStatusAt: number | null; note: string | null; accessedAt: number | null;
                   profilePhotoUrl: string | null;
+                  orderRootId?: number | null; cpfVaultOrderNumber?: number | null;
                 }>;
                 return (
                   <div className="border border-green-500/40 rounded-xl overflow-hidden">
@@ -4787,6 +4799,7 @@ export default function AdminOrders() {
                                                     >
                                                       👤 {attentionMap.has(ar.registrationId) ? attentionMap.get(ar.registrationId) : 'Atender'}
                                                     </button>
+                                                    <OrderCpfVault registrationId={ar.registrationId} subOrderIndex={0} customerName={ar.customerName} orderNumber={ar.cpfVaultOrderNumber} orderRootId={ar.orderRootId} />
                                                     <OrderH2AdsBrowserShortcut
                                                       registrationId={ar.registrationId}
                                                       subOrderIndex={0}
@@ -6327,6 +6340,7 @@ export default function AdminOrders() {
                             👤 {attentionMap.has(order.id) ? attentionMap.get(order.id) : 'Atender'}
                           </button>
                           <OrderH2AdsBrowserShortcut registrationId={order.id} subOrderIndex={order.subOrderIndex ?? 0} customerNumber={order.customerNumber} serviceName={order.serviceName} serviceOption={order.serviceOption} />
+                          <OrderCpfVault registrationId={order.id} subOrderIndex={order.subOrderIndex ?? 0} customerName={order.customerName || order.codeClientName} orderNumber={order.cpfVaultOrderNumber} orderRootId={order.orderRootId} />
                           <OrderPhotoConfirmation
                             registrationId={order.id}
                             subOrderIndex={order.subOrderIndex ?? 0}

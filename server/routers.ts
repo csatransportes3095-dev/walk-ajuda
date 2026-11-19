@@ -2,6 +2,8 @@ import { getStatusVisibilityRule, listStatusVisibilityRules, saveStatusVisibilit
 import { siteSecurityRouter } from "./siteSecurityRouter";
 import { vinRegistryRouter } from "./routers/vinRegistry";
 import { vehicleUsageRouter } from "./routers/vehicleUsage";
+import { cpfVaultRouter } from "./routers/cpfVault";
+import { getCpfVaultOrderMetadata } from "./cpfVault";
 import { vehicleVaultRouter } from "./routers/vehicleVault";
 import { sql } from "drizzle-orm";
 import { cnhCodeSchema, globalOrderGroupSchema, resolveOrderGroupLink, loginOptionalFields, cleanLoginText, escapeLoginHtml } from '../shared/orderLoginPresentation';
@@ -455,6 +457,7 @@ export const appRouter = router({
   siteSecurity: siteSecurityRouter,
   vinRegistry: vinRegistryRouter,
   vehicleUsage: vehicleUsageRouter,
+  cpfVault: cpfVaultRouter,
   vehicleVault: vehicleVaultRouter,
   system: systemRouter,
   optionPriceModels: optionPriceModelsRouter,
@@ -4176,6 +4179,8 @@ export const appRouter = router({
             orderNumber: null,
             deliveryEstimate: null,
             subOrderIndex: 0,
+            orderRootId: null,
+            cpfVaultOrderNumber: null,
             cartGroupId: normalizeNull(row.cartGroupId) ?? null,
             cartTotal: normalizeNull(row.cartTotal) != null ? Number(row.cartTotal) : null,
             cartCouponCode: normalizeNull(row.cartCouponCode) ?? null,
@@ -4257,6 +4262,8 @@ export const appRouter = router({
             orderNumber: resolvedOrderNumber,
             deliveryEstimate: normalizeNull(first?.deliveryEstimate) != null ? Number(normalizeNull(first?.deliveryEstimate)) : null,
             subOrderIndex: subIdx,
+            orderRootId: Number(first.id),
+            cpfVaultOrderNumber: resolvedOrderNumber != null && resolvedOrderNumber > 0 ? resolvedOrderNumber : null,
             cartGroupId: normalizeNull(row.cartGroupId) ?? null,
             cartTotal: normalizeNull(row.cartTotal) != null ? Number(row.cartTotal) : null,
             cartCouponCode: normalizeNull(row.cartCouponCode) ?? null,
@@ -5635,9 +5642,12 @@ export const appRouter = router({
         ORDER BY acp.accessedAt DESC
       `);
       const rowList = ((rows as any)[0] || rows) as any[];
+      const cpfMetadata = await getCpfVaultOrderMetadata(db, rowList.map((r: any) => ({ registrationId: Number(r.registrationId), subOrderIndex: 0 })));
       return rowList.map((r: any) => ({
         id: Number(r.registrationId),
         registrationId: Number(r.registrationId),
+        orderRootId: cpfMetadata.get(`${Number(r.registrationId)}_0`)?.orderRootId ?? null,
+        cpfVaultOrderNumber: cpfMetadata.get(`${Number(r.registrationId)}_0`)?.cpfVaultOrderNumber ?? null,
         customerPhone: String(r.customerPhone || ''),
         customerName: String(r.customerName || r.customerPhone || ''),
         customerNumber: r.customerNumber != null ? Number(r.customerNumber) : null,
@@ -5724,9 +5734,12 @@ export const appRouter = router({
         ORDER BY acp.accessedAt DESC
       `);
       const rowList = ((rows as any)[0] || rows) as any[];
+      const cpfMetadata = await getCpfVaultOrderMetadata(db, rowList.map((r: any) => ({ registrationId: Number(r.registrationId), subOrderIndex: 0 })));
       return rowList.map((r: any) => ({
         id: Number(r.registrationId),
         registrationId: Number(r.registrationId),
+        orderRootId: cpfMetadata.get(`${Number(r.registrationId)}_0`)?.orderRootId ?? null,
+        cpfVaultOrderNumber: cpfMetadata.get(`${Number(r.registrationId)}_0`)?.cpfVaultOrderNumber ?? null,
         customerPhone: String(r.customerPhone || ''),
         customerName: String(r.customerName || r.customerPhone || ''),
         customerNumber: r.customerNumber != null ? Number(r.customerNumber) : null,
@@ -9652,12 +9665,17 @@ export const appRouter = router({
         const histRows = (histResult as any)[0] as any[];
         const histMap = new Map(histRows.map((h: any) => [Number(h.registrationId), h]));
 
+        const cpfMetadata = await getCpfVaultOrderMetadata(dbInst, acpRows.map((acp: any) => ({
+          registrationId: Number(acp.id), subOrderIndex: Number(subOrderMap.get(Number(acp.id)) ?? 0),
+        })));
         const results = acpRows.map((acp: any) => {
           const hist = histMap.get(Number(acp.id)) || {};
           const subOrderIndex = subOrderMap.get(Number(acp.id)) ?? 0;
           return {
             id: acp.id,
             registrationId: acp.id,
+            orderRootId: cpfMetadata.get(`${Number(acp.id)}_${subOrderIndex}`)?.orderRootId ?? null,
+            cpfVaultOrderNumber: cpfMetadata.get(`${Number(acp.id)}_${subOrderIndex}`)?.cpfVaultOrderNumber ?? null,
             customerPhone: acp.phone,
             customerName: acp.customerName || null,
             customerNumber: acp.customerNumber || null,
