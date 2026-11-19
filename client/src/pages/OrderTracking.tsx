@@ -630,6 +630,17 @@ function OrderTrackingContent() {
     { enabled: canAccess && (latestStatus === 'entregue' || latestStatus === 'pedido_entregue') && registrationId > 0,
       staleTime: 0, refetchInterval: 15000, refetchOnWindowFocus: true }
   );
+  const releasedLoginsQuery = trpc.loginData.listReleasedForClient.useQuery(
+    { registrationId, customerPhone: searchPhone, cpToken: pwdToken },
+    { enabled: canAccess && !!pwdToken && registrationId > 0 &&
+      (latestStatus === 'entregue' || latestStatus === 'pedido_entregue'),
+      staleTime: 0, refetchInterval: 15000, refetchOnWindowFocus: true }
+  );
+  const [additionalQrId, setAdditionalQrId] = useState<number | null>(null);
+  const additionalQrQuery = trpc.loginData.getAdditionalQrForClient.useQuery(
+    { registrationId, customerPhone: searchPhone, cpToken: pwdToken, id: additionalQrId || 0 },
+    { enabled: canAccess && !!pwdToken && additionalQrId !== null && registrationId > 0 }
+  );
   const authenticatorQrQuery = trpc.loginData.getAuthenticatorQrForClient.useQuery(
     { registrationId, cpToken: pwdToken },
     { enabled: canAccess && !!pwdToken && registrationId > 0 }
@@ -2108,6 +2119,79 @@ function OrderTrackingContent() {
               </div>
             )}
 
+
+            {/* Logins adicionais são independentes do Login 1 e só chegam aqui após liberação no servidor. */}
+            {(latestStatus === 'entregue' || latestStatus === 'pedido_entregue') && canAccess &&
+              (releasedLoginsQuery.data?.length ?? 0) > 0 && (
+              <div className="space-y-4">
+                {releasedLoginsQuery.data!.map(login => (
+                  <div key={login.id} className="rounded-2xl border border-lime-500/40 bg-[#0e1f12] p-5 space-y-3">
+                    <h3 className="text-base font-black text-lime-300">🔐 {login.label}</h3>
+                    {([
+                      ['Telefone', login.loginPhone],
+                      ['E-mail', login.loginEmail],
+                      ['Senha', login.loginPassword],
+                      ['Código CNH', login.cnhCode],
+                      ['Chave do autenticador', login.authCode],
+                    ] as const).filter(([, value]) => !!value).map(([label, value]) => (
+                      <div key={label} className="flex items-center justify-between gap-3 rounded-xl bg-black/30 p-3">
+                        <div className="min-w-0 flex-1">
+                          <p className="text-[10px] font-semibold uppercase text-white/45">{label}</p>
+                          <p className="break-all font-mono text-sm text-white">{value}</p>
+                        </div>
+                        <button type="button" onClick={() => copyField(value!, String(login.id) + label)}
+                          className="rounded-lg border border-lime-500/30 bg-lime-500/10 p-2 text-lime-300"
+                          title={'Copiar ' + label}>
+                          {copiedField === String(login.id) + label ? <Check className="h-4 w-4" /> : <Copy className="h-4 w-4" />}
+                        </button>
+                      </div>
+                    ))}
+                    {login.authenticatorCode && (
+                      <div className="rounded-xl border border-cyan-500/30 bg-cyan-500/10 p-3">
+                        <p className="text-[10px] uppercase text-cyan-200/70">Código atual do autenticador</p>
+                        <p className="font-mono text-2xl font-black tracking-widest text-white">{login.authenticatorCode}</p>
+                        <p className="mt-1 text-xs text-cyan-200/70">Atualiza automaticamente</p>
+                      </div>
+                    )}
+                    {login.hasAuthenticatorQr && (
+                      <button type="button" onClick={() => setAdditionalQrId(login.id)}
+                        className="w-full rounded-lg border border-lime-400/30 bg-lime-500/10 px-3 py-2 text-sm font-bold text-lime-200">
+                        <QrCode className="mr-2 inline h-4 w-4" />Visualizar QR do autenticador
+                      </button>
+                    )}
+                    {login.emailLink && safeLoginLink(login.emailLink) && (
+                      <a href={safeLoginLink(login.emailLink)!} target="_blank" rel="noopener noreferrer"
+                        className="block rounded-lg border border-white/15 p-3 text-center text-sm text-blue-300">
+                        Abrir acesso ao e-mail
+                      </a>
+                    )}
+                    {login.loginGroupLink && safeLoginLink(login.loginGroupLink) && (
+                      <a href={safeLoginLink(login.loginGroupLink)!} target="_blank" rel="noopener noreferrer"
+                        className="block rounded-lg border border-green-500/30 p-3 text-center text-sm text-green-300">
+                        Entrar no grupo do WhatsApp
+                      </a>
+                    )}
+                    {login.loginNotes && <p className="whitespace-pre-line rounded-xl bg-black/30 p-3 text-sm text-white/80">{login.loginNotes}</p>}
+                  </div>
+                ))}
+              </div>
+            )}
+            {additionalQrId !== null && (
+              <div className="fixed inset-0 z-[100] flex items-center justify-center bg-black/85 p-4"
+                onClick={() => setAdditionalQrId(null)}>
+                <div className="w-full max-w-sm rounded-xl bg-zinc-900 p-4 text-center"
+                  onClick={event => event.stopPropagation()}>
+                  <h3 className="mb-3 text-sm font-bold text-white">QR do autenticador</h3>
+                  {additionalQrQuery.isLoading ? <Loader2 className="mx-auto h-6 w-6 animate-spin text-lime-400" /> :
+                    additionalQrQuery.data ? (
+                      <img src={`data:${additionalQrQuery.data.mimeType};base64,${additionalQrQuery.data.data}`}
+                        alt="QR do autenticador" className="mx-auto max-h-72 max-w-full rounded-lg bg-white p-3" />
+                    ) : <p className="text-xs text-zinc-400">QR não disponível.</p>}
+                  <button type="button" onClick={() => setAdditionalQrId(null)}
+                    className="mt-4 w-full rounded-lg bg-zinc-700 px-4 py-2 text-sm font-bold text-white">Fechar</button>
+                </div>
+              </div>
+            )}
             {/* Alerta de Documentos Pendentes solicitados pelo admin */}
             {canAccess && pendingDocReqQuery.data && pendingDocReqQuery.data.length > 0 && (
               <div className="bg-[#1a1200] rounded-2xl border border-amber-500/50 p-5 space-y-3">
