@@ -1,4 +1,3 @@
-import { encodeWhatsappMessage } from "@shared/whatsappMessageText";
 import { buildWhatsappMessageUrl } from "@shared/whatsappUrl";
 import { useEffect, useState } from "react";
 
@@ -114,7 +113,6 @@ export function CustomerOtpLogin({ title = "Acesso H2 Colombiano", initialPhone 
   const { data: supportSettings } = trpc.settings.getAll.useQuery();
   const loginSettings = supportSettings;
   const supportNumber = normalizeOtpWhatsappDestination(String(supportSettings?.whatsapp_number || "5511978307371"));
-  const supportHref = `https://wa.me/${supportNumber}?text=${encodeWhatsappMessage("Olá! Sou cliente do H2 Colombiano. Estou tentando acessar o site, mas não recebi o código de confirmação por e-mail. Preciso de ajuda para continuar meu pedido.")}`;
 
   function rememberCooldown(channel: OtpChannel, seconds: number, scope: "all" | "channel" = "channel") {
     if (!Number.isFinite(seconds) || seconds <= 0) return;
@@ -352,9 +350,15 @@ export function CustomerOtpLogin({ title = "Acesso H2 Colombiano", initialPhone 
               <CheckCircle2 className="h-5 w-5" /> {busy ? "Validando..." : "CONFIRMAR E ACESSAR"}
             </button>
             {deliveryChannel === "email" ? (
-              <a href={supportHref} target="_blank" rel="noopener noreferrer" className="flex min-h-12 w-full items-center justify-center gap-2 rounded-xl border border-emerald-400/50 bg-emerald-500/15 px-4 py-3 text-center text-sm font-black text-emerald-200 hover:bg-emerald-500/25">
-                💬 NÃO RECEBI O CÓDIGO — PEDIR AJUDA NO WHATSAPP
-              </a>
+              <button type="button" disabled={busy || remainingWhatsapp > 0 || h2AutoDelivery?.available !== true}
+                onClick={() => void send("whatsapp")}
+                className="flex min-h-12 w-full items-center justify-center gap-2 rounded-xl border border-emerald-400/50 bg-emerald-500/15 px-4 py-3 text-center text-sm font-black text-emerald-200 hover:bg-emerald-500/25 disabled:cursor-not-allowed disabled:opacity-50">
+                💬 {remainingWhatsapp > 0
+                  ? "NÃO RECEBI O CÓDIGO — WHATSAPP EM " + formatOtpCooldown(remainingWhatsapp)
+                  : h2AutoDelivery?.available !== true
+                    ? "WHATSAPP TEMPORARIAMENTE INDISPONÍVEL"
+                    : "NÃO RECEBI O CÓDIGO — RECEBER PELO WHATSAPP"}
+              </button>
             ) : (
               <a href={buildWhatsappMessageUrl(supportNumber, "Preciso receber meu código")}
                 target="_blank" rel="noopener noreferrer"

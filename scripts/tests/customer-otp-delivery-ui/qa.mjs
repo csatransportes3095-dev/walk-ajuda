@@ -33,6 +33,7 @@ const phoneInput = () => page.getByLabel('Telefone com DDD');
 const codeInput = () => page.getByLabel('Código de 6 números');
 const confirm = () => page.getByRole('button', { name: 'CONFIRMAR E ACESSAR' });
 const emailResend = () => page.getByRole('button', { name: 'PEDIR OUTRO POR E-MAIL' });
+const automaticWhatsapp = () => page.getByRole('button', { name: /NÃO RECEBI O CÓDIGO —/ });
 const waitFor = async (condition, message) => {
   const end = Date.now() + 12_000;
   while (Date.now() < end) {
@@ -100,6 +101,7 @@ try {
   assert.equal(await codeInput().inputValue(), '246810');
   assert.equal(await page.getByRole('button', { name: /^E-MAIL · AGUARDE/ }).isDisabled(), true);
   assert.equal(await page.getByRole('button', { name: /^WHATSAPP · AGUARDE/ }).isDisabled(), true);
+  assert.equal(await automaticWhatsapp().isDisabled(), true);
   assert.match(await page.getByRole('button', { name: /^E-MAIL · AGUARDE/ }).innerText(), /01:00:00|59:\d{2}/);
   const stored = await page.evaluate(() => ['email', 'whatsapp'].map(channel => Number(localStorage.getItem('h2_otp_cooldown_11999990001_' + channel)) - Date.now()));
   assert.ok(stored.every(duration => duration > 3_590_000 && duration <= 3_600_000));
@@ -110,6 +112,7 @@ try {
   assert.equal(await codeInput().inputValue(), '');
   assert.equal(await page.getByRole('button', { name: /^E-MAIL · AGUARDE/ }).isDisabled(), true);
   assert.equal(await page.getByRole('button', { name: /^WHATSAPP · AGUARDE/ }).isDisabled(), true);
+  assert.equal(await automaticWhatsapp().isDisabled(), true);
   assert.equal((await state()).requestCalls.length, callsBeforeReload);
   await codeInput().fill('246810');
   assert.equal(await confirm().isEnabled(), true);
@@ -143,12 +146,36 @@ try {
   checks.push('A matching draft resumes its requested channel without creating another request or persisting the secret');
 
   await fresh();
+  await requestEmail();
+  assert.equal(await page.getByRole('button', { name: /^E-MAIL · AGUARDE/ }).isDisabled(), true);
+  assert.equal(await automaticWhatsapp().isEnabled(), true);
+  assert.equal(await page.getByRole('link', { name: /PEDIR AJUDA NO WHATSAPP/ }).count(), 0);
+  const automaticUrlsBefore = whatsappUrls.length;
+  const automaticPopupPromise = context.waitForEvent('page');
+  await automaticWhatsapp().click();
+  const automaticPopup = await automaticPopupPromise;
+  await page.getByRole('link', { name: 'ABRIR WHATSAPP E ENVIAR MENSAGEM' }).waitFor();
+  await waitFor(() => Promise.resolve(whatsappUrls.length > automaticUrlsBefore), 'The automatic email fallback did not open the queued WhatsApp request');
+  const automaticDestination = new URL(whatsappUrls.at(-1));
+  assert.equal(automaticDestination.searchParams.get('phone'), '5511999990099');
+  assert.equal(automaticDestination.searchParams.get('text'), 'Preciso receber meu código');
+  assert.deepEqual((await state()).requestCalls, [
+    { phone: '11999990001', channel: 'email' },
+    { phone: '11999990001', channel: 'whatsapp' },
+  ]);
+  assert.equal(await page.getByRole('button', { name: /^E-MAIL · AGUARDE/ }).isDisabled(), true);
+  await automaticPopup.close();
+  await page.bringToFront();
+  checks.push('The email code fallback requests an automatic WhatsApp code during the email cooldown and opens the prepared message without a manual-help link');
+
+  await fresh();
   await phoneInput().fill('11999990001');
+  const whatsappUrlsBefore = whatsappUrls.length;
   const popupPromise = context.waitForEvent('page');
   await page.getByRole('button', { name: 'RECEBER PELO WHATSAPP', exact: true }).click();
   const popup = await popupPromise;
   await codeInput().waitFor();
-  await waitFor(() => Promise.resolve(whatsappUrls.length > 0), 'WhatsApp redirect was not intercepted');
+  await waitFor(() => Promise.resolve(whatsappUrls.length > whatsappUrlsBefore), 'WhatsApp redirect was not intercepted');
   const destination = new URL(whatsappUrls.at(-1));
   assert.equal(destination.searchParams.get('phone'), '5511999990099');
   assert.equal(destination.searchParams.get('text'), 'Preciso receber meu código');
