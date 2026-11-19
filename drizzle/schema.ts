@@ -683,6 +683,43 @@ export const orderLoginData = mysqlTable("orderLoginData", {
 export type OrderLoginData = typeof orderLoginData.$inferSelect;
 export type InsertOrderLoginData = typeof orderLoginData.$inferInsert;
 
+// Multi-login experimental: additive table. Login 1 remains in orderLoginData,
+// without copying, migrating or changing any existing row.
+// New entries are private until explicitly released for a delivered order.
+export const orderAdditionalLogins = mysqlTable("orderAdditionalLogins", {
+  id: int("id").autoincrement().primaryKey(),
+  registrationId: int("registrationId").notNull(),
+  displayOrder: int("displayOrder").notNull(),
+  label: varchar("label", { length: 80 }),
+  customerPhone: varchar("customerPhone", { length: 32 }).notNull(),
+  loginPhone: varchar("loginPhone", { length: 64 }),
+  loginEmail: varchar("loginEmail", { length: 320 }),
+  loginPassword: varchar("loginPassword", { length: 256 }),
+  authCode: varchar("authCode", { length: 512 }),
+  emailLink: varchar("emailLink", { length: 512 }),
+  cnhCode: varchar("cnhCode", { length: 6 }),
+  loginNotes: text("loginNotes"),
+  loginGroupLink: varchar("loginGroupLink", { length: 1024 }),
+  authenticatorQrStorageKey: varchar("authenticatorQrStorageKey", { length: 512 }),
+  authenticatorQrMimeType: varchar("authenticatorQrMimeType", { length: 64 }),
+  authenticatorQrUpdatedAt: timestamp("authenticatorQrUpdatedAt"),
+  releasedToClient: int("releasedToClient").notNull().default(0),
+  createdAt: timestamp("createdAt").defaultNow().notNull(),
+  updatedAt: timestamp("updatedAt").defaultNow().onUpdateNow().notNull(),
+});
+export type OrderAdditionalLogin = typeof orderAdditionalLogins.$inferSelect;
+export type InsertOrderAdditionalLogin = typeof orderAdditionalLogins.$inferInsert;
+
+// Explicit release state for Login 1. Absence of a row preserves the legacy
+// visibility behavior of already-delivered orders.
+export const orderLoginReleaseSettings = mysqlTable("orderLoginReleaseSettings", {
+  registrationId: int("registrationId").primaryKey(),
+  primaryLoginReleased: int("primaryLoginReleased").notNull().default(0),
+  selectionConfirmedAt: timestamp("selectionConfirmedAt"),
+  updatedAt: timestamp("updatedAt").defaultNow().onUpdateNow().notNull(),
+});
+
+
 // Private login defaults, NOT public siteSettings. No row = legacy mode.
 // A row with groupLink NULL records an explicit removal for every order.
 export const orderLoginDefaults = mysqlTable("orderLoginDefaults", {
