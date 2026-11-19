@@ -1,0 +1,3 @@
+@import "../../../client/src/index.css";
+@source "../../../client/src/components/CustomerOtpLogin.tsx";
+@source "./main.tsx";

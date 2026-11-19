@@ -24,11 +24,14 @@ describe("Customer-initiated WhatsApp OTP", () => {
   });
   it("does not send WhatsApp code when customer selects email", () => {
     expect(access).toContain('if (channel === "email") await deliverOwnSiteCode(email,code)');
-    expect(access).toContain('if (channel === "whatsapp" && newlyIssued)');
+    expect(access).toContain("else await enqueueIncomingWhatsappOtp(");
+    expect(access).toMatch(/enqueueIncomingWhatsappOtp\([\s\S]*?\},\s*tx\)/);
     expect(login).toContain('channel}');
   });
   it("does not pretend opening WhatsApp is proof of delivery", () => {
-    expect(login).toContain("O código será respondido lá.");
+    expect(login).toContain("Toque em Enviar na mensagem preenchida no WhatsApp.");
+    expect(login).toContain("após receber a mensagem");
+    expect(login).toContain("ABRIR WHATSAPP E ENVIAR MENSAGEM");
     expect(login).toContain("Preciso receber meu código");
     expect(login).toContain("RECEBER POR E-MAIL");
     expect(login).toContain("RECEBER PELO WHATSAPP");
