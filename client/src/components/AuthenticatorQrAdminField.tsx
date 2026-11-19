@@ -7,6 +7,7 @@ type PendingQr = { data: string; mimeType: string } | null | undefined;
 
 type Props = {
   registrationId: number;
+  additionalLoginId?: number;
   authenticatorSecret?: string;
   hasExistingQr: boolean;
   pendingValue: PendingQr;
@@ -26,20 +27,25 @@ function readAsDataUrl(file: File) {
   });
 }
 
-export function AuthenticatorQrAdminField({ registrationId, authenticatorSecret, hasExistingQr, pendingValue, onPendingValueChange, disabled }: Props) {
+export function AuthenticatorQrAdminField({ registrationId, additionalLoginId, authenticatorSecret, hasExistingQr, pendingValue, onPendingValueChange, disabled }: Props) {
   const fileInputRef = useRef<HTMLInputElement>(null);
   const [isDragging, setIsDragging] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [expanded, setExpanded] = useState(false);
   const existingQuery = trpc.loginData.getAuthenticatorQrForAdmin.useQuery(
     { registrationId },
-    { enabled: hasExistingQr && pendingValue === undefined, staleTime: 0 }
+    { enabled: !additionalLoginId && hasExistingQr && pendingValue === undefined, staleTime: 0 }
   );
+  const additionalQuery = trpc.loginData.getAdditionalQrForAdmin.useQuery(
+    { registrationId, id: additionalLoginId || 0 },
+    { enabled: Boolean(additionalLoginId) && hasExistingQr && pendingValue === undefined, staleTime: 0 }
+  );
+  const savedQr = additionalLoginId ? additionalQuery.data : existingQuery.data;
 
   const previewData = pendingValue && typeof pendingValue === 'object'
     ? pendingValue.data
     : pendingValue === undefined
-      ? (existingQuery.data ? `data:${existingQuery.data.mimeType};base64,${existingQuery.data.data}` : null)
+      ? (savedQr ? `data:${savedQr.mimeType};base64,${savedQr.data}` : null)
       : null;
 
   const normalizedSecret = String(authenticatorSecret || '')

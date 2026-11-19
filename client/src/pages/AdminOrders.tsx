@@ -1,4 +1,5 @@
 import { OrderLoginCopyButton } from "@/components/OrderLoginCopyButton";
+import { OrderAdditionalLoginsAdmin } from "@/components/OrderAdditionalLoginsAdmin";
 import CompactOrderStatusPicker from "@/components/CompactOrderStatusPicker";
 import { hasOrderSurname, visibleOrderName } from "@/lib/orderCardCompactUtils";
 import { globalActiveStatuses, isGlobalStatus, statusChoicesForFlow } from "@shared/orderStatusScope";
@@ -697,6 +698,9 @@ export default function AdminOrders() {
   const [expandedId, setExpandedId] = useState<string | null>(null);
   const [activeTab, setActiveTab] = useState<Record<string, "status" | "cliente" | "historico" | "documentos" | "anotacoes">>({});
   const [selectedStatus, setSelectedStatus] = useState<Record<string, string>>({});
+  const [deliveryLoginDialog, setDeliveryLoginDialog] = useState<{ order: Order | null; registrationId: number; customerPhone: string; source: 'active' | 'archived' | 'rgcnh'; status: string; skipEmail: boolean; items: Array<{ key: string; label: string; selected: boolean }> } | null>(null);
+  const [deliveryLoginKeys, setDeliveryLoginKeys] = useState<string[]>([]);
+  const [checkingDeliveryLogins, setCheckingDeliveryLogins] = useState(false);
   const [revealedOrderNames, setRevealedOrderNames] = useState<Set<string>>(() => new Set());
   const toggleOrderName = (key: string) => setRevealedOrderNames(previous => {
     const next = new Set(previous);
@@ -2689,55 +2693,61 @@ export default function AdminOrders() {
     });
   };
 
-  const handleUpdateStatus = (order: Order) => {
-    const status = selectedStatus[getOrderKey(order)] || order.latestStatus || "em_andamento";
-    // Nunca enviar 'recebido' manualmente — criaria sub-pedido duplicado
-    if (status === 'recebido') {
-      toast.error('Status "Recebido" é gerado automaticamente e não pode ser definido manualmente.');
-      return;
-    }
+
+  const sendOrderStatusUpdate = (order: Order, status: string, skipEmail: boolean, releasedLoginKeys?: string[]) => {
     updateMutation.mutate({
-      registrationId: order.id,
-      subOrderIndex: order.subOrderIndex ?? 0,
-      customerPhone: order.phone,
-      customerEmail: order.customerEmail || undefined,
+      registrationId: order.id, subOrderIndex: order.subOrderIndex ?? 0,
+      customerPhone: order.phone, customerEmail: order.customerEmail || undefined,
       customerName: order.customerName || order.codeClientName || undefined,
-      status,
-      note: note[getOrderKey(order)] || undefined,
-      serviceName: order.serviceName || undefined,
-      serviceOption: order.serviceOption || undefined,
-      customerNumber: order.customerNumber || undefined,
-      orderNumber: order.orderNumber || undefined,
-      customerCity: order.customerCity || undefined,
-      customerUf: order.customerUf || undefined,
-      deliveryEstimate: order.deliveryEstimate || undefined,
-      skipEmail: false,
+      status, note: note[getOrderKey(order)] || undefined,
+      serviceName: order.serviceName || undefined, serviceOption: order.serviceOption || undefined,
+      customerNumber: order.customerNumber || undefined, orderNumber: order.orderNumber || undefined,
+      customerCity: order.customerCity || undefined, customerUf: order.customerUf || undefined,
+      deliveryEstimate: order.deliveryEstimate || undefined, skipEmail, releasedLoginKeys,
     });
   };
-  const handleUpdateStatusSilent = (order: Order) => {
-    const status = selectedStatus[getOrderKey(order)] || order.latestStatus || "em_andamento";
-    if (status === 'recebido') {
-      toast.error('Status "Recebido" é gerado automaticamente e não pode ser definido manualmente.');
+  const requestFolderDelivery = async (registrationId: number, customerPhone: string, status: string, source: 'archived' | 'rgcnh') => {
+    const mutation = source === 'archived' ? updateArchivedStatusMutation : updateRgCnhStatusMutation;
+    if (status !== 'entregue' && status !== 'pedido_entregue') {
+      mutation.mutate({ registrationId, subOrderIndex: 0, customerPhone, status });
       return;
     }
-    updateMutation.mutate({
-      registrationId: order.id,
-      subOrderIndex: order.subOrderIndex ?? 0,
-      customerPhone: order.phone,
-      customerEmail: order.customerEmail || undefined,
-      customerName: order.customerName || order.codeClientName || undefined,
-      status,
-      note: note[getOrderKey(order)] || undefined,
-      serviceName: order.serviceName || undefined,
-      serviceOption: order.serviceOption || undefined,
-      customerNumber: order.customerNumber || undefined,
-      orderNumber: order.orderNumber || undefined,
-      customerCity: order.customerCity || undefined,
-      customerUf: order.customerUf || undefined,
-      deliveryEstimate: order.deliveryEstimate || undefined,
-      skipEmail: true,
-    });
+    setCheckingDeliveryLogins(true);
+    try {
+      const preview = await trpcUtils.loginData.getDeliverySelection.fetch({ registrationId });
+      if (preview.items.length <= 1) {
+        mutation.mutate({ registrationId, subOrderIndex: 0, customerPhone, status,
+          releasedLoginKeys: preview.items.map(item => item.key) });
+        return;
+      }
+      setDeliveryLoginKeys(preview.confirmed ? preview.items.filter(item => item.selected).map(item => item.key) : []);
+      setDeliveryLoginDialog({ order: null, registrationId, customerPhone, source, status, skipEmail: false, items: preview.items });
+    } catch (error: any) {
+      toast.error(error?.message || 'Não foi possível conferir os logins. A entrega não foi alterada.');
+    } finally { setCheckingDeliveryLogins(false); }
   };
+  const requestOrderStatusUpdate = async (order: Order, skipEmail: boolean) => {
+    const status = selectedStatus[getOrderKey(order)] || order.latestStatus || "em_andamento";
+    if (status === 'recebido') { toast.error('Status "Recebido" é gerado automaticamente.'); return; }
+    if (status !== 'entregue' && status !== 'pedido_entregue') {
+      sendOrderStatusUpdate(order, status, skipEmail);
+      return;
+    }
+    setCheckingDeliveryLogins(true);
+    try {
+      const preview = await trpcUtils.loginData.getDeliverySelection.fetch({ registrationId: order.id });
+      if (preview.items.length <= 1) {
+        sendOrderStatusUpdate(order, status, skipEmail, preview.items.map(item => item.key));
+        return;
+      }
+      setDeliveryLoginKeys(preview.confirmed ? preview.items.filter(item => item.selected).map(item => item.key) : []);
+      setDeliveryLoginDialog({ order, registrationId: order.id, customerPhone: order.phone, source: 'active', status, skipEmail, items: preview.items });
+    } catch (error: any) {
+      toast.error(error?.message || 'Não foi possível conferir os logins. A entrega não foi alterada.');
+    } finally { setCheckingDeliveryLogins(false); }
+  };
+  const handleUpdateStatus = (order: Order) => { void requestOrderStatusUpdate(order, false); };
+  const handleUpdateStatusSilent = (order: Order) => { void requestOrderStatusUpdate(order, true); };
   const handleCancelOrder = (order: Order) => {
     updateMutation.mutate({
       registrationId: order.id,
@@ -4375,12 +4385,7 @@ export default function AdminOrders() {
                                           onClick={() => {
                                             const status = archivedSelectedStatus[String(ar.registrationId)] || rawStatus;
                                             if (!status) return;
-                                            updateArchivedStatusMutation.mutate({
-                                              registrationId: ar.registrationId,
-                                              subOrderIndex: 0,
-                                              customerPhone: ar.customerPhone || '',
-                                              status,
-                                            });
+                                            void requestFolderDelivery(ar.registrationId, ar.customerPhone || '', status, 'archived');
                                           }}
                                           disabled={updateArchivedStatusMutation.isPending}
                                           className="w-full py-2 px-4 bg-primary text-primary-foreground rounded-lg text-sm font-semibold hover:bg-primary/90 transition-colors disabled:opacity-50"
@@ -4504,7 +4509,8 @@ export default function AdminOrders() {
                                               </div>
 
                                               {/* Agendamento */}
-                                              <OrderScheduleBlock
+                                              <OrderAdditionalLoginsAdmin registrationId={ar.registrationId} />
+                                                <OrderScheduleBlock
                                                 registrationId={ar.registrationId}
                                                 subOrderIndex={0}
                                                 customerPhone={ar.customerPhone || ''}
@@ -4886,12 +4892,7 @@ export default function AdminOrders() {
                                                       onClick={() => {
                                                         const status = rgCnhSelectedStatus[String(ar.registrationId)] || rawStatus;
                                                         if (!status) return;
-                                                        updateRgCnhStatusMutation.mutate({
-                                                          registrationId: ar.registrationId,
-                                                          subOrderIndex: 0,
-                                                          customerPhone: ar.customerPhone || '',
-                                                          status,
-                                                        });
+                                                        void requestFolderDelivery(ar.registrationId, ar.customerPhone || '', status, 'rgcnh');
                                                       }}
                                                       disabled={updateRgCnhStatusMutation.isPending}
                                                       className="w-full py-2 px-4 bg-primary text-primary-foreground rounded-lg text-sm font-semibold hover:bg-primary/90 transition-colors disabled:opacity-50"
@@ -5014,7 +5015,8 @@ export default function AdminOrders() {
                                                             )}
                                                           </div>
 
-                                                          {/* Agendamento */}
+                                                          <OrderAdditionalLoginsAdmin registrationId={ar.registrationId} />
+                                               {/* Agendamento */}
                                                           <OrderScheduleBlock
                                                             registrationId={ar.registrationId}
                                                             subOrderIndex={0}
@@ -6487,19 +6489,19 @@ export default function AdminOrders() {
 
                       <button
                         onClick={() => handleUpdateStatus(order)}
-                        disabled={updateMutation.isPending}
+                        disabled={updateMutation.isPending || checkingDeliveryLogins}
                         className="w-full py-2 px-4 bg-primary text-primary-foreground rounded-lg text-sm font-semibold hover:bg-primary/90 transition-colors disabled:opacity-50"
                       >
-                        {updateMutation.isPending ? "Enviando..." : "Salvar e Notificar Cliente"}
+                        {checkingDeliveryLogins ? "Conferindo logins..." : updateMutation.isPending ? "Enviando..." : "Salvar e Notificar Cliente"}
                       </button>
 
                       <button
                         onClick={() => handleUpdateStatusSilent(order)}
-                        disabled={updateMutation.isPending}
+                        disabled={updateMutation.isPending || checkingDeliveryLogins}
                         className="w-full py-2 px-4 bg-zinc-700/60 border border-zinc-600/50 text-zinc-300 rounded-lg text-sm font-medium hover:bg-zinc-700/80 transition-colors disabled:opacity-50 flex items-center justify-center gap-2"
                       >
                         <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M5.586 15H4a1 1 0 01-1-1v-4a1 1 0 011-1h1.586l4.707-4.707C10.923 3.663 12 4.109 12 5v14c0 .891-1.077 1.337-1.707.707L5.586 15z" /><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M17 14l2-2m0 0l2-2m-2 2l-2-2m2 2l2 2" /></svg>
-                        {updateMutation.isPending ? "Salvando..." : "Salvar Sem Notificar Cliente"}
+                        {checkingDeliveryLogins ? "Conferindo logins..." : updateMutation.isPending ? "Salvando..." : "Salvar Sem Notificar Cliente"}
                       </button>
 
                       {order.customerEmail && order.latestStatus && (
@@ -7118,6 +7120,7 @@ export default function AdminOrders() {
                           </div>
                         );
                       })()}
+                      <OrderAdditionalLoginsAdmin registrationId={order.id} />
                       {/* Agendamento de atendimento */}
                       <OrderScheduleBlock
                         registrationId={order.id}
@@ -8668,6 +8671,53 @@ export default function AdminOrders() {
         {/* Arquivados não aparecem na busca — acesse a aba Arquivo para consultá-los */}
       </div>
 
+
+      {deliveryLoginDialog && createPortal(
+        <div className="fixed inset-0 z-[9999] flex items-center justify-center bg-black/80 p-4"
+          onClick={event => { if (event.target === event.currentTarget && !updateMutation.isPending) setDeliveryLoginDialog(null); }}>
+          <div role="dialog" aria-modal="true" aria-label="Selecionar logins para entrega"
+            className="w-full max-w-lg overflow-hidden rounded-2xl border border-lime-400/30 bg-zinc-950 shadow-2xl">
+            <div className="border-b border-white/10 p-5">
+              <h2 className="text-lg font-bold text-white">🔐 Selecionar logins para entrega</h2>
+              <p className="mt-2 text-sm text-zinc-400">Marque somente os logins que o cliente poderá visualizar. Os demais permanecem privados no ADM.</p>
+            </div>
+            <div className="max-h-[55vh] space-y-2 overflow-y-auto p-5">
+              {deliveryLoginDialog.items.map(item => (
+                <label key={item.key} className="flex cursor-pointer items-center gap-3 rounded-xl border border-white/10 bg-white/[0.04] px-4 py-3">
+                  <input type="checkbox" checked={deliveryLoginKeys.includes(item.key)}
+                    disabled={updateMutation.isPending}
+                    onChange={event => setDeliveryLoginKeys(previous => event.target.checked
+                      ? [...previous, item.key] : previous.filter(key => key !== item.key))}
+                    className="h-4 w-4 accent-lime-500" />
+                  <span className="text-sm font-semibold text-white">{item.label}</span>
+                </label>
+              ))}
+              {deliveryLoginKeys.length === 0 && <p className="text-xs text-amber-300">Selecione pelo menos um login.</p>}
+            </div>
+            <div className="flex gap-3 border-t border-white/10 p-5">
+              <button type="button" disabled={updateMutation.isPending} onClick={() => setDeliveryLoginDialog(null)}
+                className="flex-1 rounded-xl border border-white/15 px-4 py-3 text-sm font-bold text-zinc-300 disabled:opacity-50">Cancelar</button>
+              <button type="button" disabled={updateMutation.isPending || deliveryLoginKeys.length === 0}
+                onClick={() => {
+                  const dialog = deliveryLoginDialog;
+                  if (!dialog || !deliveryLoginKeys.length) return;
+                  if (dialog.source === 'active' && dialog.order) {
+                    sendOrderStatusUpdate(dialog.order, dialog.status, dialog.skipEmail, deliveryLoginKeys);
+                  } else {
+                    const mutation = dialog.source === 'archived' ? updateArchivedStatusMutation : updateRgCnhStatusMutation;
+                    mutation.mutate({
+                      registrationId: dialog.registrationId, subOrderIndex: 0,
+                      customerPhone: dialog.customerPhone, status: dialog.status,
+                      skipEmail: dialog.skipEmail, releasedLoginKeys: deliveryLoginKeys,
+                    });
+                  }
+                  setDeliveryLoginDialog(null);
+                }}
+                className="flex-1 rounded-xl bg-lime-500 px-4 py-3 text-sm font-black text-black disabled:opacity-40">Confirmar entrega</button>
+            </div>
+          </div>
+        </div>, document.body
+      )}
       {/* ===== MODAL DE MENSAGENS RÁPIDAS WHATSAPP ===== */}
       {waModalOrder && createPortal(
         <div

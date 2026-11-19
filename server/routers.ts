@@ -4866,6 +4866,7 @@ export const appRouter = router({
         customerUf: z.string().optional(),
         deliveryEstimate: z.number().optional(),
         skipEmail: z.boolean().optional().default(false),
+        releasedLoginKeys: z.array(z.string().regex(/^(primary|[1-9][0-9]*)$/)).optional(),
       }))
       .mutation(async ({ input }) => {
         const mailEnabled = hasMailChannel();
@@ -4888,13 +4889,122 @@ export const appRouter = router({
           return { success: false, error: 'Nao foi possivel validar a sequencia. Atualize e tente novamente; o status nao foi alterado.' };
         }
 
-        const result = await updateLastOrderStatus({
-          registrationId: input.registrationId,
-          subOrderIndex: input.subOrderIndex,
-          status: input.status,
-          note: input.note ?? null,
-        });
-        if (!result.success) return result;
+        // Never deliver multiple populated logins without an explicit release selection.
+        // Do not change the status until this check has passed.
+        const delivering = input.status === 'entregue' || input.status === 'pedido_entregue';
+        let releaseKeys: string[] | null = null;
+        if (delivering) {
+          const { getDb } = await import('./db');
+          const { orderLoginData, orderAdditionalLogins } = await import('../drizzle/schema');
+          const { eq } = await import('drizzle-orm');
+          const db = await getDb();
+          if (!db) throw new TRPCError({ code: 'INTERNAL_SERVER_ERROR', message: 'Banco indisponível.' });
+          const [primary, additional] = await Promise.all([
+            db.select({ loginPhone: orderLoginData.loginPhone, loginEmail: orderLoginData.loginEmail, loginPassword: orderLoginData.loginPassword })
+              .from(orderLoginData).where(eq(orderLoginData.registrationId, input.registrationId)).limit(1),
+            db.select({ id: orderAdditionalLogins.id, loginPhone: orderAdditionalLogins.loginPhone,
+              loginEmail: orderAdditionalLogins.loginEmail, loginPassword: orderAdditionalLogins.loginPassword })
+              .from(orderAdditionalLogins).where(eq(orderAdditionalLogins.registrationId, input.registrationId)),
+          ]);
+          const filled = (item: { loginPhone?: string | null; loginEmail?: string | null; loginPassword?: string | null }) =>
+            Boolean(item.loginPhone?.trim() || item.loginEmail?.trim() || item.loginPassword?.trim());
+          const available = [
+            ...(primary[0] && filled(primary[0]) ? ['primary'] : []),
+            ...additional.filter(filled).map(item => String(item.id)),
+          ];
+          if (available.length > 1 && input.releasedLoginKeys === undefined)
+            throw new TRPCError({ code: 'BAD_REQUEST', message: 'Selecione os logins que serão liberados antes de marcar Entregue.' });
+          const selected = input.releasedLoginKeys ?? available;
+          if (selected.length === 0 && available.length > 0)
+            throw new TRPCError({ code: 'BAD_REQUEST', message: 'Selecione pelo menos um login para liberar.' });
+          if (new Set(selected).size !== selected.length || selected.some(key => !available.includes(key)))
+            throw new TRPCError({ code: 'BAD_REQUEST', message: 'Seleção de logins inválida para este pedido.' });
+          releaseKeys = selected;
+        }
+
+        // Save the release selection BEFORE marking the order delivered. Customer
+        // reads also require a delivered status, so this ordering prevents a
+        // delivered order from exposing a stale/previous login selection.
+        // If the status update fails, restore the previous release state.
+        let rollbackRelease: (() => Promise<void>) | null = null;
+        if (releaseKeys !== null) {
+          const { getDb } = await import('./db');
+          const { orderAdditionalLogins, orderLoginReleaseSettings } = await import('../drizzle/schema');
+          const { eq, sql: drizzleSql } = await import('drizzle-orm');
+          const db = await getDb();
+          if (!db) throw new TRPCError({ code: 'INTERNAL_SERVER_ERROR', message: 'Banco indisponível antes da entrega.' });
+
+          const [previousSettings, previousAdditional] = await Promise.all([
+            db.select({
+              primaryLoginReleased: orderLoginReleaseSettings.primaryLoginReleased,
+              selectionConfirmedAt: orderLoginReleaseSettings.selectionConfirmedAt,
+            }).from(orderLoginReleaseSettings)
+              .where(eq(orderLoginReleaseSettings.registrationId, input.registrationId)).limit(1),
+            db.select({ id: orderAdditionalLogins.id, releasedToClient: orderAdditionalLogins.releasedToClient })
+              .from(orderAdditionalLogins).where(eq(orderAdditionalLogins.registrationId, input.registrationId)),
+          ]);
+          const previousKeys = previousAdditional.filter(item => item.releasedToClient === 1).map(item => String(item.id));
+          const oldSetting = previousSettings[0] ?? null;
+          if (oldSetting?.primaryLoginReleased === 1) previousKeys.push('primary');
+
+          const writeRelease = async (
+            keys: string[],
+            setting: { primaryLoginReleased: number; selectionConfirmedAt: Date | null } | null,
+          ) => db.transaction(async tx => {
+            await tx.update(orderAdditionalLogins).set({ releasedToClient: 0 })
+              .where(eq(orderAdditionalLogins.registrationId, input.registrationId));
+            for (const key of keys) {
+              if (key !== 'primary') await tx.update(orderAdditionalLogins)
+                .set({ releasedToClient: 1 })
+                .where(drizzleSql`${orderAdditionalLogins.registrationId} = ${input.registrationId} AND ${orderAdditionalLogins.id} = ${Number(key)}`);
+            }
+            if (setting === null) {
+              await tx.delete(orderLoginReleaseSettings)
+                .where(eq(orderLoginReleaseSettings.registrationId, input.registrationId));
+            } else {
+              await tx.insert(orderLoginReleaseSettings).values({
+                registrationId: input.registrationId,
+                primaryLoginReleased: setting.primaryLoginReleased,
+                selectionConfirmedAt: setting.selectionConfirmedAt,
+              }).onDuplicateKeyUpdate({ set: {
+                primaryLoginReleased: setting.primaryLoginReleased,
+                selectionConfirmedAt: setting.selectionConfirmedAt,
+              } });
+            }
+          });
+
+          await writeRelease(releaseKeys, {
+            primaryLoginReleased: releaseKeys.includes('primary') ? 1 : 0,
+            selectionConfirmedAt: new Date(),
+          });
+          rollbackRelease = async () => { await writeRelease(previousKeys, oldSetting); };
+        }
+
+        let result: Awaited<ReturnType<typeof updateLastOrderStatus>>;
+        try {
+          result = await updateLastOrderStatus({
+            registrationId: input.registrationId,
+            subOrderIndex: input.subOrderIndex,
+            status: input.status,
+            note: input.note ?? null,
+          });
+        } catch (error) {
+          if (rollbackRelease) {
+            try { await rollbackRelease(); }
+            catch (restoreError) { console.error('[MultiLogin] Falha ao restaurar seleção após erro de status:', restoreError); }
+          }
+          throw error;
+        }
+        if (!result.success) {
+          if (rollbackRelease) {
+            try { await rollbackRelease(); }
+            catch (restoreError) {
+              console.error('[MultiLogin] Falha ao restaurar seleção após status rejeitado:', restoreError);
+              throw new TRPCError({ code: 'INTERNAL_SERVER_ERROR', message: 'Falha ao restaurar seleção de logins. Não repita a entrega antes de conferir o pedido.' });
+            }
+          }
+          return result;
+        }
 
         // Ao marcar como entregue, remover urgência obrigatoriamente
         const FINAL_STATUSES = ['entregue', 'pedido_entregue', 'cancelado'];
@@ -4984,36 +5094,58 @@ export const appRouter = router({
               pedidoRows.push(`<tr><td style="color:#888;font-size:12px;padding:4px 8px 4px 0;">Previsão</td><td style="color:#22c55e;font-size:13px;font-weight:bold;padding:4px 0;">Í°Å¸""¦ ${previsaoU}</td></tr>`);
             }
             const pedidoHtmlU = pedidoRows.length > 0 ? `<div style="background:#111827;border:1px solid #374151;border-radius:8px;padding:14px 16px;margin-bottom:20px;"><p style="color:#a855f7;font-size:11px;font-weight:bold;margin:0 0 10px;text-transform:uppercase;letter-spacing:1px;">Dados do Pedido</p><table style="width:100%;border-collapse:collapse;">${pedidoRows.join('')}</table></div>` : '';
-            // Buscar dados de login para incluir no email se status for entregue
+
+            // E-mail de entrega: renderizar EXCLUSIVAMENTE os logins liberados nesta operação.
             let loginDataHtml = '';
             const FINAL_STATUSES_EMAIL = ['entregue', 'pedido_entregue'];
-            if (FINAL_STATUSES_EMAIL.includes(input.status)) {
+            if (FINAL_STATUSES_EMAIL.includes(input.status) && releaseKeys?.length) {
               try {
                 const dbL = await (await import('./db')).getDb();
-                const { orderLoginData: oldTable } = await import('../drizzle/schema');
+                const { orderLoginData: primaryTable, orderAdditionalLogins: additionalTable } = await import('../drizzle/schema');
                 const { eq: eqL } = await import('drizzle-orm');
                 if (dbL) {
-                  const loginRows = await dbL.select().from(oldTable).where(eqL(oldTable.registrationId, input.registrationId)).limit(1);
-                  const ld = loginRows[0];
-                  const loginDefaults = await readOrderLoginDefaults(dbL);
-                  const deliveredGroupLink = resolveOrderGroupLink(loginDefaults, ld?.loginGroupLink);
-                  if (ld) {
-                    const loginRows2: string[] = [];
-                    if (ld.loginEmail) loginRows2.push(`<tr><td style="color:#888;font-size:12px;padding:4px 8px 4px 0;">Login / Email</td><td style="color:#fff;font-size:13px;font-family:monospace;font-weight:bold;padding:4px 0;">${ld.loginEmail}</td></tr>`);
-                    if (ld.loginPassword) loginRows2.push(`<tr><td style="color:#888;font-size:12px;padding:4px 8px 4px 0;">Senha</td><td style="color:#fff;font-size:13px;font-family:monospace;font-weight:bold;padding:4px 0;">${ld.loginPassword}</td></tr>`);
-                    if (ld.cnhCode) loginRows2.push(`<tr><td style="color:#888;font-size:12px;padding:4px 8px 4px 0;">Código de Habilitação CNH</td><td style="color:#fff;font-size:13px;font-family:monospace;padding:4px 0;">${escapeLoginHtml(ld.cnhCode)}</td></tr>`);
-                    if (ld.authCode) loginRows2.push(`<tr><td style="color:#888;font-size:12px;padding:4px 8px 4px 0;">Autenticador</td><td style="color:#fff;font-size:12px;font-family:monospace;word-break:break-all;padding:4px 0;">${ld.authCode}</td></tr>`);
-                    if (ld.emailLink) loginRows2.push(`<tr><td style="color:#888;font-size:12px;padding:4px 8px 4px 0;">Link E-mail</td><td style="color:#a78bfa;font-size:12px;word-break:break-all;padding:4px 0;"><a href="${ld.emailLink}" style="color:#a78bfa;">${ld.emailLink}</a></td></tr>`);
-                    if (deliveredGroupLink) loginRows2.push(`<tr><td style="color:#888;font-size:12px;padding:4px 8px 4px 0;">Link do Grupo</td><td style="color:#4ade80;font-size:12px;word-break:break-all;padding:4px 0;"><a href="${escapeLoginHtml(deliveredGroupLink)}" style="color:#4ade80;">${escapeLoginHtml(deliveredGroupLink)}</a></td></tr>`);
-                    if (loginRows2.length > 0) {
-                      loginDataHtml += `<div style="background:#0d2b1a;border:1px solid #22c55e40;border-radius:8px;padding:14px 16px;margin-bottom:20px;"><p style="color:#22c55e;font-size:11px;font-weight:bold;margin:0 0 10px;text-transform:uppercase;letter-spacing:1px;">Í°Å¸"Â Seus Dados de Acesso</p><table style="width:100%;border-collapse:collapse;">${loginRows2.join('')}</table></div>`;
+                  const [primaryRows, additionalRows, loginDefaults] = await Promise.all([
+                    dbL.select().from(primaryTable).where(eqL(primaryTable.registrationId, input.registrationId)).limit(1),
+                    dbL.select().from(additionalTable).where(eqL(additionalTable.registrationId, input.registrationId)),
+                    readOrderLoginDefaults(dbL),
+                  ]);
+                  const chosen = new Set(releaseKeys);
+                  const logins = [
+                    ...(chosen.has('primary') && primaryRows[0] ? [{ ...primaryRows[0], label: 'Login 1' }] : []),
+                    ...additionalRows.filter(row => chosen.has(String(row.id)) && row.releasedToClient === 1)
+                      .map(row => ({ ...row, label: row.label || 'Login ' + row.displayOrder })),
+                  ];
+                  for (const login of logins) {
+                    const fields: Array<[string, string | null | undefined]> = [
+                      ['Telefone', login.loginPhone],
+                      ['Login / E-mail', login.loginEmail],
+                      ['Senha', login.loginPassword],
+                      ['Código de Habilitação CNH', login.cnhCode],
+                      ['Chave do Autenticador', login.authCode],
+                    ];
+                    const rows = fields.filter(([, value]) => Boolean(value?.trim())).map(([label, value]) =>
+                      '<tr><td style="color:#888;font-size:12px;padding:4px 8px 4px 0;">' +
+                      escapeLoginHtml(label) + '</td><td style="color:#fff;font-size:13px;font-family:monospace;word-break:break-all;padding:4px 0;">' +
+                      escapeLoginHtml(value || '') + '</td></tr>'
+                    );
+                    const group = resolveOrderGroupLink(loginDefaults, login.loginGroupLink);
+                    if (group) rows.push('<tr><td style="color:#888;font-size:12px;padding:4px 8px 4px 0;">Grupo</td><td style="color:#4ade80;font-size:12px;word-break:break-all;padding:4px 0;">' + escapeLoginHtml(group) + '</td></tr>');
+                    if (login.emailLink) rows.push('<tr><td style="color:#888;font-size:12px;padding:4px 8px 4px 0;">Link E-mail</td><td style="color:#a78bfa;font-size:12px;word-break:break-all;padding:4px 0;">' + escapeLoginHtml(login.emailLink) + '</td></tr>');
+                    if (rows.length) {
+                      loginDataHtml += '<div style="background:#0d2b1a;border:1px solid #22c55e40;border-radius:8px;padding:14px 16px;margin-bottom:20px;">' +
+                        '<p style="color:#22c55e;font-size:12px;font-weight:bold;margin:0 0 10px;">Seus Dados de Acesso — ' + escapeLoginHtml(login.label) + '</p>' +
+                        '<table style="width:100%;border-collapse:collapse;">' + rows.join('') + '</table></div>';
                     }
-                    if (ld.loginNotes) {
-                      loginDataHtml += `<div style="background:#0d1a2b;border:1px solid #3b82f640;border-radius:8px;padding:14px 16px;margin-bottom:20px;"><p style="color:#60a5fa;font-size:11px;font-weight:bold;margin:0 0 8px;text-transform:uppercase;letter-spacing:1px;">Í°Å¸"Â Instruções</p><p style="color:#ccc;font-size:13px;margin:0;white-space:pre-line;line-height:1.7;">${ld.loginNotes}</p></div>`;
+                    if (login.loginNotes) {
+                      loginDataHtml += '<div style="background:#0d1a2b;border:1px solid #3b82f640;border-radius:8px;padding:14px 16px;margin-bottom:20px;">' +
+                        '<p style="color:#60a5fa;font-size:12px;font-weight:bold;margin:0 0 8px;">Instruções — ' + escapeLoginHtml(login.label) + '</p>' +
+                        '<p style="color:#ccc;font-size:13px;margin:0;white-space:pre-line;line-height:1.7;">' + escapeLoginHtml(login.loginNotes) + '</p></div>';
                     }
                   }
                 }
-              } catch (_) {}
+              } catch (error) {
+                console.error('[MultiLogin] Falha ao preparar credenciais selecionadas para o e-mail:', error);
+              }
             }
             await sendMailDirect({
               from: '"H2 COLOMBIANO" <h2@h2colombiano.com>',
@@ -7221,6 +7353,187 @@ export const appRouter = router({
 
   // â"â‚¬â"â‚¬ Dados de Login Liberado por Pedido â"â‚¬â"â‚¬â"â‚¬â"â‚¬â"â‚¬â"â‚¬â"â‚¬â"â‚¬â"â‚¬â"â‚¬â"â‚¬â"â‚¬â"â‚¬â"â‚¬â"â‚¬â"â‚¬â"â‚¬â"â‚¬â"â‚¬â"â‚¬â"â‚¬â"â‚¬â"â‚¬â"â‚¬â"â‚¬â"â‚¬â"â‚¬â"â‚¬â"â‚¬â"â‚¬â"â‚¬â"â‚¬â"â‚¬â"â‚¬â"â‚¬â"â‚¬â"â‚¬
   loginData: router({
+    // Preview selection before delivery. Only populated credentials count.
+    getDeliverySelection: adminProcedure
+      .input(z.object({ registrationId: z.number().int().positive() }))
+      .query(async ({ input }) => {
+        const { getDb } = await import('./db');
+        const { orderLoginData, orderAdditionalLogins, orderLoginReleaseSettings } = await import('../drizzle/schema');
+        const { eq, asc } = await import('drizzle-orm');
+        const db = await getDb();
+        if (!db) throw new TRPCError({ code: 'INTERNAL_SERVER_ERROR', message: 'Banco indisponível.' });
+        const [primary, additional, settings] = await Promise.all([
+          db.select({ loginPhone: orderLoginData.loginPhone, loginEmail: orderLoginData.loginEmail, loginPassword: orderLoginData.loginPassword })
+            .from(orderLoginData).where(eq(orderLoginData.registrationId, input.registrationId)).limit(1),
+          db.select({ id: orderAdditionalLogins.id, displayOrder: orderAdditionalLogins.displayOrder, label: orderAdditionalLogins.label,
+            loginPhone: orderAdditionalLogins.loginPhone, loginEmail: orderAdditionalLogins.loginEmail,
+            loginPassword: orderAdditionalLogins.loginPassword, releasedToClient: orderAdditionalLogins.releasedToClient })
+            .from(orderAdditionalLogins).where(eq(orderAdditionalLogins.registrationId, input.registrationId))
+            .orderBy(asc(orderAdditionalLogins.displayOrder)),
+          db.select().from(orderLoginReleaseSettings).where(eq(orderLoginReleaseSettings.registrationId, input.registrationId)).limit(1),
+        ]);
+        const populated = (row: { loginPhone?: string | null; loginEmail?: string | null; loginPassword?: string | null }) =>
+          Boolean(row.loginPhone?.trim() || row.loginEmail?.trim() || row.loginPassword?.trim());
+        const items = [
+          ...(primary[0] && populated(primary[0]) ? [{ key: 'primary', label: 'Login 1', selected: settings[0] ? settings[0].primaryLoginReleased === 1 : true }] : []),
+          ...additional.filter(populated).map(item => ({
+            key: String(item.id), label: item.label || `Login ${item.displayOrder}`, selected: item.releasedToClient === 1,
+          })),
+        ];
+        return { items, requiresSelection: items.length > 1, confirmed: Boolean(settings[0]?.selectionConfirmedAt) };
+      }),
+    // Additional independent logins; the legacy Login 1 is never rewritten.
+    listAdditional: adminProcedure
+      .input(z.object({ registrationId: z.number().int().positive() }))
+      .query(async ({ input }) => {
+        const { getDb } = await import('./db');
+        const { orderAdditionalLogins } = await import('../drizzle/schema');
+        const { eq, asc } = await import('drizzle-orm');
+        const db = await getDb();
+        if (!db) throw new TRPCError({ code: 'INTERNAL_SERVER_ERROR', message: 'Banco indisponível.' });
+        const rows = await db.select().from(orderAdditionalLogins)
+          .where(eq(orderAdditionalLogins.registrationId, input.registrationId))
+          .orderBy(asc(orderAdditionalLogins.displayOrder), asc(orderAdditionalLogins.id));
+        return rows.map(({ authenticatorQrStorageKey, authenticatorQrMimeType, ...row }) => ({
+          ...row, hasAuthenticatorQr: Boolean(authenticatorQrStorageKey),
+        }));
+      }),
+    createAdditional: adminProcedure
+      .input(z.object({ registrationId: z.number().int().positive() }))
+      .mutation(async ({ input }) => {
+        const { getDb } = await import('./db');
+        const { orderAdditionalLogins, orderStatusHistory } = await import('../drizzle/schema');
+        const { eq, desc } = await import('drizzle-orm');
+        const db = await getDb();
+        if (!db) throw new TRPCError({ code: 'INTERNAL_SERVER_ERROR', message: 'Banco indisponível.' });
+        const history = await db.select({ customerPhone: orderStatusHistory.customerPhone })
+          .from(orderStatusHistory).where(eq(orderStatusHistory.registrationId, input.registrationId))
+          .orderBy(desc(orderStatusHistory.createdAt)).limit(1);
+        if (!history[0]?.customerPhone) throw new TRPCError({ code: 'NOT_FOUND', message: 'Pedido não encontrado.' });
+        const existing = await db.select({ id: orderAdditionalLogins.id, displayOrder: orderAdditionalLogins.displayOrder })
+          .from(orderAdditionalLogins).where(eq(orderAdditionalLogins.registrationId, input.registrationId));
+        const nextOrder = Math.max(1, ...existing.map(item => item.displayOrder)) + 1;
+        await db.insert(orderAdditionalLogins).values({
+          registrationId: input.registrationId, customerPhone: history[0].customerPhone,
+          displayOrder: nextOrder, label: `Login ${nextOrder}`,
+        });
+        return { success: true };
+      }),
+    saveAdditional: adminProcedure
+      .input(z.object({
+        registrationId: z.number().int().positive(), id: z.number().int().positive(),
+        label: z.string().max(80).optional(),
+        loginPhone: z.string().max(64).optional(), loginEmail: z.string().max(320).optional(),
+        loginPassword: z.string().max(256).optional(), authCode: z.string().max(512).optional(),
+        emailLink: z.string().max(512).optional(), cnhCode: cnhCodeSchema.optional(),
+        loginNotes: z.string().max(10000).optional(), loginGroupLink: z.string().max(1024).optional(),
+        authenticatorQrData: z.string().max(4_250_000).optional(),
+        authenticatorQrAction: z.enum(['keep', 'replace', 'delete']).default('keep'),
+      }))
+      .mutation(async ({ input }) => {
+        const { getDb } = await import('./db');
+        const { orderAdditionalLogins } = await import('../drizzle/schema');
+        const { and, eq } = await import('drizzle-orm');
+        const db = await getDb();
+        if (!db) throw new TRPCError({ code: 'INTERNAL_SERVER_ERROR', message: 'Banco indisponível.' });
+        const where = and(eq(orderAdditionalLogins.id, input.id), eq(orderAdditionalLogins.registrationId, input.registrationId));
+        const existing = await db.select().from(orderAdditionalLogins).where(where).limit(1);
+        if (!existing[0]) throw new TRPCError({ code: 'NOT_FOUND', message: 'Login não encontrado neste pedido.' });
+        const action = input.authenticatorQrData ? 'replace' : input.authenticatorQrAction;
+        if (action === 'replace' && !input.authenticatorQrData)
+          throw new TRPCError({ code: 'BAD_REQUEST', message: 'Selecione um QR válido.' });
+        let replacement: { storageKey: string; mimeType: string } | null = null;
+        if (action === 'replace' && input.authenticatorQrData) {
+          const { parseAuthenticatorQrBase64, storeAuthenticatorQr } = await import('./authenticatorQr');
+          replacement = await storeAuthenticatorQr(parseAuthenticatorQrBase64(input.authenticatorQrData));
+        }
+        try {
+          await db.update(orderAdditionalLogins).set({
+            ...(input.label !== undefined ? { label: input.label } : {}),
+            ...(input.loginPhone !== undefined ? { loginPhone: input.loginPhone } : {}),
+            ...(input.loginEmail !== undefined ? { loginEmail: input.loginEmail } : {}),
+            ...(input.loginPassword !== undefined ? { loginPassword: input.loginPassword } : {}),
+            ...(input.authCode !== undefined ? { authCode: input.authCode.replace(/[\\s-]/g, '') } : {}),
+            ...(input.emailLink !== undefined ? { emailLink: input.emailLink } : {}),
+            ...(input.cnhCode !== undefined ? { cnhCode: input.cnhCode } : {}),
+            ...(input.loginNotes !== undefined ? { loginNotes: input.loginNotes } : {}),
+            ...(input.loginGroupLink !== undefined ? { loginGroupLink: input.loginGroupLink } : {}),
+            ...(action === 'replace' ? {
+              authenticatorQrStorageKey: replacement!.storageKey,
+              authenticatorQrMimeType: replacement!.mimeType,
+              authenticatorQrUpdatedAt: new Date(),
+            } : action === 'delete' ? {
+              authenticatorQrStorageKey: null, authenticatorQrMimeType: null, authenticatorQrUpdatedAt: null,
+            } : {}),
+          }).where(where);
+        } catch (error) {
+          if (replacement) {
+            const { deleteAuthenticatorQr } = await import('./authenticatorQr');
+            await deleteAuthenticatorQr(replacement.storageKey).catch(() => {});
+          }
+          throw error;
+        }
+        if ((action === 'replace' || action === 'delete') && existing[0].authenticatorQrStorageKey) {
+          const { deleteAuthenticatorQr } = await import('./authenticatorQr');
+          await deleteAuthenticatorQr(existing[0].authenticatorQrStorageKey).catch(() => {});
+        }
+        return { success: true };
+      }),
+    deleteAdditional: adminProcedure
+      .input(z.object({ registrationId: z.number().int().positive(), id: z.number().int().positive() }))
+      .mutation(async ({ input }) => {
+        const { getDb } = await import('./db');
+        const { orderAdditionalLogins } = await import('../drizzle/schema');
+        const { and, eq } = await import('drizzle-orm');
+        const db = await getDb();
+        if (!db) throw new TRPCError({ code: 'INTERNAL_SERVER_ERROR', message: 'Banco indisponível.' });
+        const where = and(eq(orderAdditionalLogins.registrationId, input.registrationId), eq(orderAdditionalLogins.id, input.id));
+        const rows = await db.select({ storageKey: orderAdditionalLogins.authenticatorQrStorageKey })
+          .from(orderAdditionalLogins).where(where).limit(1);
+        if (!rows[0]) throw new TRPCError({ code: 'NOT_FOUND', message: 'Login adicional não encontrado.' });
+        await db.delete(orderAdditionalLogins).where(where);
+        if (rows[0].storageKey) {
+          const { deleteAuthenticatorQr } = await import('./authenticatorQr');
+          await deleteAuthenticatorQr(rows[0].storageKey).catch(() => {});
+        }
+        return { success: true };
+      }),
+    getAdditionalAuthenticatorCodeForAdmin: adminProcedure
+      .input(z.object({ registrationId: z.number().int().positive(), id: z.number().int().positive() }))
+      .query(async ({ input }) => {
+        const { getDb } = await import('./db');
+        const { orderAdditionalLogins } = await import('../drizzle/schema');
+        const { and, eq } = await import('drizzle-orm');
+        const db = await getDb();
+        if (!db) throw new TRPCError({ code: 'INTERNAL_SERVER_ERROR', message: 'Banco indisponível.' });
+        const rows = await db.select({ secret: orderAdditionalLogins.authCode })
+          .from(orderAdditionalLogins).where(and(
+            eq(orderAdditionalLogins.registrationId, input.registrationId), eq(orderAdditionalLogins.id, input.id),
+          )).limit(1);
+        if (!rows[0]?.secret) return null;
+        const { generateTotp } = await import('./adminAuthenticatorVault');
+        try { return generateTotp(rows[0].secret); } catch { return null; }
+      }),
+    getAdditionalQrForAdmin: adminProcedure
+      .input(z.object({ registrationId: z.number().int().positive(), id: z.number().int().positive() }))
+      .query(async ({ input }) => {
+        const { getDb } = await import('./db');
+        const { orderAdditionalLogins } = await import('../drizzle/schema');
+        const { and, eq } = await import('drizzle-orm');
+        const db = await getDb();
+        if (!db) throw new TRPCError({ code: 'INTERNAL_SERVER_ERROR', message: 'Banco indisponível.' });
+        const rows = await db.select({
+          storageKey: orderAdditionalLogins.authenticatorQrStorageKey,
+          mimeType: orderAdditionalLogins.authenticatorQrMimeType,
+        }).from(orderAdditionalLogins).where(and(
+          eq(orderAdditionalLogins.registrationId, input.registrationId), eq(orderAdditionalLogins.id, input.id),
+        )).limit(1);
+        if (!rows[0]?.storageKey || !rows[0]?.mimeType) return null;
+        const { readAuthenticatorQr } = await import('./authenticatorQr');
+        const image = await readAuthenticatorQr(rows[0].storageKey, rows[0].mimeType);
+        return { mimeType: image.mimeType, data: image.buffer.toString('base64') };
+      }),
+
     getGlobalGroup: adminProcedure.query(async () => {
       const db = await (await import('./db')).getDb();
       if (!db) throw new TRPCError({ code: 'INTERNAL_SERVER_ERROR', message: 'Banco indisponível.' });
@@ -7403,38 +7716,102 @@ export const appRouter = router({
         }
         return { success: true, hasAuthenticatorQr: action === 'replace' || (action === 'keep' && Boolean(existing?.authenticatorQrStorageKey)) };
       }),
-    // Cliente busca dados de login do seu pedido (sem autenticação admin)
+
+    // Cliente: toda leitura de credenciais exige sessão OTP válida, titularidade e status Entregue.
+    // A ausência de uma configuração de liberação mantém o comportamento dos pedidos históricos.
     getForClient: publicProcedure
       .input(z.object({ registrationId: z.number().int(), customerPhone: z.string(), cpToken: z.string().max(512).optional() }))
-      .query(async ({ input, ctx }) => {
+      .query(async ({ input }) => {
         const { getDb } = await import('./db');
-        const { orderLoginData } = await import('../drizzle/schema');
+        const { orderLoginData, orderLoginReleaseSettings } = await import('../drizzle/schema');
+        const { eq } = await import('drizzle-orm');
+        const db = await getDb();
+        if (!db || !input.cpToken || !(await canReadOrderLoginExtras(db, input))) return null;
+        const [rows, releases] = await Promise.all([
+          db.select().from(orderLoginData).where(eq(orderLoginData.registrationId, input.registrationId)).limit(1),
+          db.select({ released: orderLoginReleaseSettings.primaryLoginReleased })
+            .from(orderLoginReleaseSettings).where(eq(orderLoginReleaseSettings.registrationId, input.registrationId)).limit(1),
+        ]);
+        if (releases[0] && releases[0].released !== 1) return null;
+        const row = rows[0];
+        if (!row) return null;
+        const defaults = await readOrderLoginDefaults(db);
+        return {
+          id: row.id, registrationId: input.registrationId, customerPhone: row.customerPhone,
+          createdAt: row.createdAt, updatedAt: row.updatedAt,
+          loginPhone: cleanLoginText(row.loginPhone),
+          loginEmail: cleanLoginText(row.loginEmail),
+          loginPassword: cleanLoginText(row.loginPassword),
+          authCode: cleanLoginText(row.authCode),
+          emailLink: cleanLoginText(row.emailLink),
+          loginNotes: cleanLoginText(row.loginNotes),
+          cnhCode: cleanLoginText(row.cnhCode),
+          loginGroupLink: resolveOrderGroupLink(defaults, row.loginGroupLink),
+        };
+      }),
+    // Os logins adicionais nunca entram no retorno legado; somente os liberados.
+    listReleasedForClient: publicProcedure
+      .input(z.object({
+        registrationId: z.number().int().positive(),
+        customerPhone: z.string(),
+        cpToken: z.string().min(20).max(512),
+      }))
+      .query(async ({ input }) => {
+        const { getDb } = await import('./db');
+        const { orderAdditionalLogins } = await import('../drizzle/schema');
+        const { eq, and, asc } = await import('drizzle-orm');
+        const { generateTotp } = await import('./adminAuthenticatorVault');
+        const db = await getDb();
+        if (!db || !(await canReadOrderLoginExtras(db, input))) return [];
+        const rows = await db.select().from(orderAdditionalLogins)
+          .where(and(eq(orderAdditionalLogins.registrationId, input.registrationId), eq(orderAdditionalLogins.releasedToClient, 1)))
+          .orderBy(asc(orderAdditionalLogins.displayOrder), asc(orderAdditionalLogins.id));
+        const defaults = await readOrderLoginDefaults(db);
+        return rows.map(row => {
+          let currentCode: { code: string; expiresAt: number } | null = null;
+          if (row.authCode) {
+            try { currentCode = generateTotp(row.authCode); } catch { /* Chave não Base32: exibir apenas o valor salvo. */ }
+          }
+          return {
+            id: row.id, label: row.label || 'Login ' + row.displayOrder, displayOrder: row.displayOrder,
+            loginPhone: cleanLoginText(row.loginPhone),
+            loginEmail: cleanLoginText(row.loginEmail),
+            loginPassword: cleanLoginText(row.loginPassword),
+            authCode: cleanLoginText(row.authCode),
+            emailLink: cleanLoginText(row.emailLink),
+            cnhCode: cleanLoginText(row.cnhCode),
+            loginNotes: cleanLoginText(row.loginNotes),
+            loginGroupLink: resolveOrderGroupLink(defaults, row.loginGroupLink),
+            hasAuthenticatorQr: Boolean(row.authenticatorQrStorageKey),
+            authenticatorCode: currentCode?.code ?? null,
+            authenticatorExpiresAt: currentCode?.expiresAt ?? null,
+          };
+        });
+      }),
+    getAdditionalQrForClient: publicProcedure
+      .input(z.object({
+        registrationId: z.number().int().positive(), id: z.number().int().positive(),
+        customerPhone: z.string(), cpToken: z.string().min(20).max(512),
+      }))
+      .query(async ({ input }) => {
+        const { getDb } = await import('./db');
+        const { orderAdditionalLogins } = await import('../drizzle/schema');
         const { eq, and } = await import('drizzle-orm');
         const db = await getDb();
-        if (!db) return null;
-        const rows = await db.select().from(orderLoginData).where(
-          and(eq(orderLoginData.registrationId, input.registrationId), eq(orderLoginData.customerPhone, input.customerPhone))
-        ).limit(1);
-        const defaults = await readOrderLoginDefaults(db);
-        const allowedExtras = await canReadOrderLoginExtras(db, input, ctx.user?.role === 'admin' || isAdminJwtValid(ctx.req));
+        if (!db || !(await canReadOrderLoginExtras(db, input))) return null;
+        const rows = await db.select({
+          storageKey: orderAdditionalLogins.authenticatorQrStorageKey,
+          mimeType: orderAdditionalLogins.authenticatorQrMimeType,
+        }).from(orderAdditionalLogins).where(and(
+          eq(orderAdditionalLogins.registrationId, input.registrationId),
+          eq(orderAdditionalLogins.id, input.id),
+          eq(orderAdditionalLogins.releasedToClient, 1),
+        )).limit(1);
         const row = rows[0];
-        if (!row && !allowedExtras) return null;
-        // Explicit fields: new sensitive data and protected QR storage cannot
-        // escape through a spread, including calls from old browser tabs.
-        return {
-          id: row?.id, registrationId: input.registrationId, customerPhone: row?.customerPhone ?? input.customerPhone,
-          createdAt: row?.createdAt, updatedAt: row?.updatedAt,
-          loginPhone: cleanLoginText(row?.loginPhone),
-          loginEmail: cleanLoginText(row?.loginEmail),
-          loginPassword: cleanLoginText(row?.loginPassword),
-          authCode: cleanLoginText(row?.authCode),
-          emailLink: cleanLoginText(row?.emailLink),
-          loginNotes: cleanLoginText(row?.loginNotes),
-          cnhCode: allowedExtras ? cleanLoginText(row?.cnhCode) : null,
-          loginGroupLink: defaults === null
-            ? resolveOrderGroupLink(null, row?.loginGroupLink)
-            : allowedExtras ? resolveOrderGroupLink(defaults) : null,
-        };
+        if (!row?.storageKey || !row.mimeType) return null;
+        const { readAuthenticatorQr } = await import('./authenticatorQr');
+        const image = await readAuthenticatorQr(row.storageKey, row.mimeType);
+        return { mimeType: image.mimeType, data: image.buffer.toString('base64') };
       }),
     // Cliente autenticado recebe somente o código TOTP atual do autenticador vinculado ao próprio pedido.
     getAuthenticatorCodeForClient: publicProcedure
@@ -7464,6 +7841,13 @@ export const appRouter = router({
         if (!ownerPhone || ownerPhone !== sessionPhone) {
           throw new TRPCError({ code: 'FORBIDDEN', message: 'Este pedido não pertence à sessão atual.' });
         }
+        if (!(await canReadOrderLoginExtras(db, {
+          registrationId: input.registrationId, customerPhone: session.phone, cpToken: input.cpToken,
+        }))) return null;
+        const { orderLoginReleaseSettings } = await import('../drizzle/schema');
+        const primaryRelease = await db.select({ released: orderLoginReleaseSettings.primaryLoginReleased })
+          .from(orderLoginReleaseSettings).where(eq(orderLoginReleaseSettings.registrationId, input.registrationId)).limit(1);
+        if (primaryRelease[0] && primaryRelease[0].released !== 1) return null;
 
         const linked = await db.select({
           ciphertext: adminAuthenticatorEntries.secretCiphertext,
@@ -7504,6 +7888,13 @@ export const appRouter = router({
           throw new TRPCError({ code: 'UNAUTHORIZED', message: 'Sessão expirada. Entre novamente para acessar o QR.' });
         }
         const customerPhone = String(session.phone || '').replace(/\D/g, '');
+        if (!(await canReadOrderLoginExtras(db, {
+          registrationId: input.registrationId, customerPhone: session.phone, cpToken: input.cpToken,
+        }))) return null;
+        const { orderLoginReleaseSettings } = await import('../drizzle/schema');
+        const primaryRelease = await db.select({ released: orderLoginReleaseSettings.primaryLoginReleased })
+          .from(orderLoginReleaseSettings).where(eq(orderLoginReleaseSettings.registrationId, input.registrationId)).limit(1);
+        if (primaryRelease[0] && primaryRelease[0].released !== 1) return null;
         const rows = await db.select({ storageKey: orderLoginData.authenticatorQrStorageKey, mimeType: orderLoginData.authenticatorQrMimeType })
           .from(orderLoginData)
           .where(and(eq(orderLoginData.registrationId, input.registrationId), eq(orderLoginData.customerPhone, customerPhone)))
