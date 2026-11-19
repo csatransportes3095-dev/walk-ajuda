@@ -4494,7 +4494,8 @@ export default function AdminOrders() {
                                               </div>
 
                                               {/* Agendamento */}
-                                              <OrderScheduleBlock
+                                              <OrderAdditionalLoginsAdmin registrationId={ar.registrationId} />
+                                                <OrderScheduleBlock
                                                 registrationId={ar.registrationId}
                                                 subOrderIndex={0}
                                                 customerPhone={ar.customerPhone || ''}
