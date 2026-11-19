@@ -1713,6 +1713,7 @@ export const customerLoginHistory = mysqlTable("customerLoginHistory", {
   loginAt: timestamp("loginAt").defaultNow().notNull(),
   ipAddress: varchar("ipAddress", { length: 64 }),
   userAgent: varchar("userAgent", { length: 512 }),
+  sessionKey: varchar("sessionKey", { length: 64 }).unique("uq_customer_login_session"),
 });
 export type CustomerLoginHistory = typeof customerLoginHistory.$inferSelect;
 export type InsertCustomerLoginHistory = typeof customerLoginHistory.$inferInsert;

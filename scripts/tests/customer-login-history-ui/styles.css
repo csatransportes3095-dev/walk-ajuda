@@ -1,0 +1,4 @@
+/* The harness imports production CSS and explicitly scans the component files. */
+@import "../../../client/src/index.css";
+@source "../../../client/src/components/CustomerLoginHistory.tsx";
+@source "./main.tsx";
