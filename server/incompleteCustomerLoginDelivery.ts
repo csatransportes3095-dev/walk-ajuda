@@ -10,7 +10,7 @@ import { h2MailFrom } from "./mailSenderIdentity";
 export async function deliverIncompleteCustomerLoginCode(email: string, code: string, incomplete: boolean, preferSmtp = false) {
   // The first attempt uses Resend, while a retry can switch to Zoho/SMTP.
   // The shared, security-protected mail delivery module is not changed.
-  if (!incomplete || !process.env.RESEND_API_KEY || preferSmtp) return deliverOwnSiteCode(email, code);
+  if (!incomplete || !process.env.RESEND_API_KEY || preferSmtp) return deliverOwnSiteCode(email, code, "customer-login");
   if (!validSiteCode(code)) throw new Error("INVALID_GENERATED_CODE");
   const from = h2MailFrom(process.env.SMTP_FROM || process.env.SMTP_USER || "h2@h2colombiano.com");
   const subject = "H2 Colombiano - Código de acesso";
@@ -33,5 +33,5 @@ export async function deliverIncompleteCustomerLoginCode(email: string, code: st
   } catch {
     console.warn("[CustomerLogin] incomplete_profile resend failed");
   }
-  return deliverOwnSiteCode(email, code);
+  return deliverOwnSiteCode(email, code, "customer-login");
 }

@@ -11,6 +11,8 @@ on:
       - 'client/src/components/SiteAccessSessionBoundary.tsx'
       - 'client/src/lib/siteAccessSessionClient.ts'
       - 'client/src/main.tsx'
+      - 'scripts/site-access-feature-guard.mjs'
+      - 'scripts/site-access-feature-guard.test.mjs'
       - '.github/workflows/site-access-email-fallback-validation.yml'
 permissions:
   contents: read
@@ -60,11 +62,13 @@ jobs:
         env:
           PULL_REQUEST_BASE_SHA: ${{ github.event.pull_request.base.sha }}
         run: |
+          node --test scripts/site-access-feature-guard.test.mjs
           node --input-type=module <<'JS'
           import fs from 'node:fs';
           import assert from 'node:assert/strict';
           import {execFileSync} from 'node:child_process';
           import ts from 'typescript';
+          import {assertAuthorizedCustomerSessionFeatureChange} from './scripts/site-access-feature-guard.mjs';
           const base=process.env.PULL_REQUEST_BASE_SHA;
           if(!/^[a-f0-9]{40}$/i.test(base||''))throw new Error('Invalid pull request base SHA');
           const normalizeLines=source=>source.replace(/\r\n/g,'\n');
@@ -88,16 +92,9 @@ jobs:
           const protectedFiles=['server/siteAccessCodeDelivery.ts','server/siteSecurityRouter.ts','server/siteAccessSchema.ts','server/siteAccessGateway.ts','server/siteAccessPolicy.ts','server/siteAccessManualAdd.ts','server/siteSecurityDirectory.ts','server/autoSchedule.ts','server/routers/schedule.ts','server/routers/customerPassword.ts','server/_core/trpc.ts','server/_core/mailer.ts','server/_core/sendMailDirect.ts','server/db.ts','client/src/pages/AdminSiteSecurity.tsx','client/src/pages/OrderTracking.tsx','client/src/App.tsx','client/src/main.tsx','client/src/components/SiteAccessSessionBoundary.tsx','client/src/lib/siteAccessSessionClient.ts','Dockerfile','package.json','pnpm-lock.yaml'];
           for(const p of protectedFiles){
             const current=read(p),previous=before(p);
-            // Emergency email-only exception: allow exactly the independently audited
-            // Outlook transport-priority change, never any generator/session edits.
-            // Compare Git content hashes so even one additional source byte fails.
-            if (p==='server/siteAccessCodeDelivery.ts') {
-              const baseBlob=execFileSync('git',['rev-parse',base+':'+p],{encoding:'utf8'}).trim();
-              const changedBlob=execFileSync('git',['hash-object',p],{encoding:'utf8'}).trim();
-              assert.equal(baseBlob,'c538b625da08699030a85255c828b677dd10af8a','Unexpected original delivery source');
-              assert.equal(changedBlob,'7c2435e97c61d27aa8cb950902a06064cdf2db22','Delivery patch does not match the approved mail-only change');
-              continue;
-            }
+            // Only exact customer-login copy and the two bounded admin policy
+            // procedures may be added. All remaining source bytes must match.
+            if(assertAuthorizedCustomerSessionFeatureChange(p,previous,current))continue;
             assert.equal(
               normalizeIsolatedIntegrations(p,current),
               normalizeIsolatedIntegrations(p,previous),

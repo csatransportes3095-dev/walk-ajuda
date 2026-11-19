@@ -1,7 +1,7 @@
 import { Button } from "@/components/ui/button";
 import { trpc } from "@/lib/trpc";
 import { useState, useEffect, useRef } from "react";
-import { useLocation } from "wouter";
+import { useLocation, useSearch } from "wouter";
 import { toast } from "sonner";
 import { Save, Globe, CreditCard, Layout, MessageSquare, Star, Clock, LogIn, Upload, Trash2, Eye, EyeOff, Camera, ShieldCheck, Share2, ImageIcon, Plus, CheckCircle2, Circle, Pencil, X, Check, Smartphone, Info, RotateCcw, Wrench, DatabaseBackup } from "lucide-react";
 import AdminHeader from "@/components/AdminHeader";
@@ -10,6 +10,7 @@ import { ImageCropModal } from "@/components/ImageCropModal";
 import { HomeButtonsManager } from "@/components/HomeButtonsManager";
 import { SharePreviewSettings } from "@/components/SharePreviewSettings";
 import { MaintenanceManifestSettings, type MaintenanceManifestSettingsHandle } from "@/components/MaintenanceManifestSettings";
+import { AdminCustomerSessionSettings } from "@/components/AdminCustomerSessionSettings";
 
 
 // Lista de fontes com estilos bem distintos
@@ -61,6 +62,7 @@ const FONT_OPTIONS = [
 
 export default function AdminSettings() {
   const [, navigate] = useLocation();
+  const search = useSearch();
   const { data: settings, isLoading } = trpc.settings.getAll.useQuery();
   const utils = trpc.useUtils();
   const updateMut = trpc.settings.update.useMutation({
@@ -113,7 +115,17 @@ export default function AdminSettings() {
   };
 
   const [form, setForm] = useState<Record<string, string>>({});
-  const [activeTab, setActiveTab] = useState<"page" | "login" | "pix" | "contact" | "features" | "advanced" | "photo" | "security" | "og" | "trackingForm" | "whatsappOrder" | "whatsappLogin" | "apk" | "maintenance">("page");
+  const [activeTab, setActiveTab] = useState<"page" | "login" | "pix" | "contact" | "features" | "advanced" | "photo" | "security" | "og" | "trackingForm" | "whatsappOrder" | "whatsappLogin" | "apk" | "maintenance">(
+    () => new URLSearchParams(search).get("tab") === "login" ? "login" : "page"
+  );
+  useEffect(() => {
+    if (new URLSearchParams(search).get("tab") === "login") setActiveTab("login");
+  }, [search]);
+  useEffect(() => {
+    if (!isLoading && activeTab === "login" && window.location.hash === "#tempo-login") {
+      document.getElementById("tempo-login")?.scrollIntoView({ block: "start" });
+    }
+  }, [activeTab, isLoading, search]);
   const maintenanceManifestRef = useRef<MaintenanceManifestSettingsHandle>(null);
   const [apkFile, setApkFile] = useState<File | null>(null);
   const [uploadingApk, setUploadingApk] = useState(false);
@@ -1099,6 +1111,7 @@ export default function AdminSettings() {
         {/* LOGIN TAB */}
         {activeTab === "login" && (
           <div className="space-y-6">
+            <AdminCustomerSessionSettings />
             {/* Preview */}
             <div className="bg-[#111128] border border-purple-500/20 rounded-xl p-5">
               <h3 className="text-sm font-bold text-purple-400 mb-4">Preview da Tela de Login</h3>

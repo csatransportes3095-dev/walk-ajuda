@@ -19,7 +19,7 @@ describe("draft passwordless customer authentication stays closed until full mig
     expect(validSiteCode(code)).toBe(true);
     const source = readFileSync(new URL("./customerOtpAccess.ts", import.meta.url),"utf8");
     expect(source).toContain("const code = generateOwnSiteCode()");
-    expect(source).toContain("await deliverOwnSiteCode(email,code)");
+    expect(source).toContain('await deliverOwnSiteCode(email,code,"customer-login")');
     expect(source).not.toContain("randomInt(");
   });
 

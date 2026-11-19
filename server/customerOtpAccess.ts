@@ -15,6 +15,8 @@ import { assertLoginEmailProof } from "./customerLoginEmailProof";
 import { getAdminJwtSecret } from "./adminJwt";
 import { recordCustomerOtpLogin } from "./customerLoginHistory";
 import { resolveCustomerOtpRequestSource } from "./customerOtpRequestSource";
+import { readCustomerSessionPolicy } from "./customerSessionPolicy";
+import { CUSTOMER_SESSION_HOUR_MS, DEFAULT_CUSTOMER_SESSION_HOURS } from "../shared/customerSessionPolicy";
 
 /**
  * Customer authentication v2: registered phone + one-time email code.
@@ -22,7 +24,8 @@ import { resolveCustomerOtpRequestSource } from "./customerOtpRequestSource";
  * without checking its current, unique and unblocked owner in the database.
  * Admin passwords, product codes and H2 AUTO device authentication are separate.
  */
-export const CUSTOMER_SESSION_MS = 24 * 60 * 60 * 1000;
+// Compatibility constant for the default; issuance reads the current ADM policy.
+export const CUSTOMER_SESSION_MS = DEFAULT_CUSTOMER_SESSION_HOURS * CUSTOMER_SESSION_HOUR_MS;
 export const CUSTOMER_CODE_MS = 10 * 60 * 1000;
 
 /** Never expose draft authentication in production before every customer
@@ -139,13 +142,16 @@ async function issueSession(tx: any, customer: any, now: number) {
   const phone = normalizeCustomerPhone(customer.phone);
   const email = normalizeCustomerEmail(customer.email);
   if (!phone || !email) throw new TRPCError({ code: "UNAUTHORIZED", message: "Cadastro inválido." });
+  const sessionPolicy = await readCustomerSessionPolicy(tx);
   const token = "h2otp_" + randomBytes(32).toString("hex");
-  const expiry = new Date(now + CUSTOMER_SESSION_MS);
+  // The existing TIMESTAMP column has second precision. Store one absolute
+  // expiry in both tables, independent of the connection/driver time zone.
+  const expiresAtMs = Math.floor(now / 1000) * 1000 + sessionPolicy.hours * CUSTOMER_SESSION_HOUR_MS;
   const phoneKey = digest("phone", phone), emailKey = digest("email", email);
   await tx.execute(sql`INSERT INTO customerPasswordSessions (phone,token,expiresAt,createdAt,lastAccessAt)
-    VALUES (${phone},${token},${expiry},FROM_UNIXTIME(FLOOR(${now} / 1000)),FROM_UNIXTIME(FLOOR(${now} / 1000)))`);
+    VALUES (${phone},${token},FROM_UNIXTIME(${expiresAtMs} / 1000),FROM_UNIXTIME(FLOOR(${now} / 1000)),FROM_UNIXTIME(FLOOR(${now} / 1000)))`);
   await tx.execute(sql`INSERT INTO customerOtpSessions (tokenHash,customerId,phoneKey,emailKey,expiresAt)
-    VALUES (${digest("session",token)},${Number(customer.id)},${phoneKey},${emailKey},${now+CUSTOMER_SESSION_MS})`);
+    VALUES (${digest("session",token)},${Number(customer.id)},${phoneKey},${emailKey},${expiresAtMs})`);
   await recordCustomerOtpLogin(tx, { customerId: Number(customer.id), phone, token, loggedInAtMs: now });
   const profileUpdateFields = getMissingCustomerProfileFields(customer);
   return { success: true as const, token, profileUpdateRequired: profileUpdateFields.length > 0, profileUpdateFields };
@@ -217,7 +223,7 @@ export async function requestCustomerCode(phoneInput: string, request: Request, 
         SET customerId=${Number(customer.id)},emailKey=${emailKey},codeDigest=${codeHash},
           expiresAt=${now+CUSTOMER_CODE_MS},resendAfter=${now+RESEND_MS},attempts=0,usedAt=NULL,createdAt=${now}
         WHERE phoneKey=${phoneKey}`);
-      if (channel === "email") await deliverOwnSiteCode(email,code);
+      if (channel === "email") await deliverOwnSiteCode(email,code,"customer-login");
       else await enqueueIncomingWhatsappOtp({customerPhone:phone,code,phoneKey,
         codeDigest:codeHash,expiresAt:now+CUSTOMER_CODE_MS},tx);
       // Failed delivery/queue insert rolls back the challenge, queue, cooldown
@@ -307,6 +313,7 @@ export async function getVerifiedCustomerOtpSession(db:any, tokenInput:string) {
   const now=Date.now(),tokenHash=digest("session",token);
   const [session]=await rows(db,sql`SELECT
       s.phone AS sessionPhone,s.expiresAt AS sessionExpires,
+      UNIX_TIMESTAMP(s.expiresAt) * 1000 AS sessionExpiresAtMs,
       b.customerId,b.phoneKey,b.emailKey,b.expiresAt AS bindingExpires,
       c.id,c.phone,c.email,c.blocked,c.deletedAt,c.name,c.cpf,c.cep,c.street,
       c.addressNumber,c.neighborhood,c.city,c.uf,c.profilePhotoUrl

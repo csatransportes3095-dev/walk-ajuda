@@ -106,9 +106,10 @@ describe.skipIf(!testUrl)("Histórico de acessos — OTP real e MySQL isolado", 
     await query("DROP TRIGGER IF EXISTS history_test_reject_insert");
     await query("DROP TABLE IF EXISTS loanAdminEmailOutbox");
     await query("DROP TABLE IF EXISTS loans");
-    for (const table of ["customerLoginHistory", "customerPasswordSessions", "customerOtpSessions", "customerOtpChallenges", "customerOtpLimits", "customerOtpUsedProofs", "customerRegistrationReviews", "customerRegistrationReviewConfig", "customers"]) {
+    for (const table of ["customerLoginHistory", "customerPasswordSessions", "customerOtpSessions", "customerOtpChallenges", "customerOtpLimits", "customerOtpUsedProofs", "customerRegistrationReviews", "customerRegistrationReviewConfig", "customers", "appSettings"]) {
       await query(`DROP TABLE IF EXISTS ${table}`);
     }
+    await query("CREATE TABLE appSettings (id INT NOT NULL AUTO_INCREMENT PRIMARY KEY,`key` VARCHAR(128) NOT NULL UNIQUE,value TEXT NOT NULL,updatedAt TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP) ENGINE=InnoDB");
     await query(`CREATE TABLE customers (
       id INT NOT NULL PRIMARY KEY, phone VARCHAR(32) NOT NULL, email VARCHAR(320) NOT NULL,
       name VARCHAR(128) NOT NULL, blocked INT NOT NULL DEFAULT 0, deletedAt TIMESTAMP NULL,
@@ -139,7 +140,7 @@ describe.skipIf(!testUrl)("Histórico de acessos — OTP real e MySQL isolado", 
     await query("DROP TRIGGER IF EXISTS history_test_reject_insert");
     await query("DROP TABLE IF EXISTS loanAdminEmailOutbox");
     await query("DROP TABLE IF EXISTS loans");
-    for (const table of ["customerLoginHistory", "customerPasswordSessions", "customerOtpSessions", "customerOtpChallenges", "customerOtpLimits", "customerOtpUsedProofs", "customerRegistrationReviews", "customers"]) {
+    for (const table of ["customerLoginHistory", "customerPasswordSessions", "customerOtpSessions", "customerOtpChallenges", "customerOtpLimits", "customerOtpUsedProofs", "customerRegistrationReviews", "customers", "appSettings"]) {
       await query(`DELETE FROM ${table}`);
     }
     await query("UPDATE customerRegistrationReviewConfig SET mode='automatico',manualSince=NULL WHERE id=1");

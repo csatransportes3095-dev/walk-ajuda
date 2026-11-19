@@ -31,6 +31,8 @@ import { deliverOwnSiteCode } from "../siteAccessCodeDelivery";
 import { generateOwnSiteCode } from "../siteAccessOwnCodes";
 import { getCustomerLoginHistory } from "../customerLoginHistory";
 import { emailBelongsToAnotherCustomer, CUSTOMER_EMAIL_IN_USE_MESSAGE } from "../customerEmailOwnership";
+import { readCustomerSessionPolicy, saveCustomerSessionPolicy } from "../customerSessionPolicy";
+import { MIN_CUSTOMER_SESSION_HOURS, MAX_CUSTOMER_SESSION_HOURS } from "../../shared/customerSessionPolicy";
 
 const SESSION_DURATION_MS = 90 * 24 * 60 * 60 * 1000; // 90 dias
 const LOGIN_EMAIL_CODE_TTL_MS = 10 * 60 * 1000;
@@ -195,6 +197,10 @@ function requireLegacyPasswordMode(): void {
 
 export const customerPasswordRouter = router({
   authMode: publicProcedure.query(() => ({ passwordless: isCustomerOtpModeEnabled() })),
+  getSessionPolicy: adminProcedure.query(async () => readCustomerSessionPolicy(await getDb())),
+  updateSessionPolicy: adminProcedure
+    .input(z.object({ hours: z.number().int().min(MIN_CUSTOMER_SESSION_HOURS).max(MAX_CUSTOMER_SESSION_HOURS) }))
+    .mutation(async ({ input }) => saveCustomerSessionPolicy(await getDb(), input.hours)),
   // Admin-only readiness verification. Never sends email or reveals customer data,
   // code, mail credentials, token or any secret to the client.
   otpPreflight: adminProcedure.query(async () => {

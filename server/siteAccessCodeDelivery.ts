@@ -9,12 +9,18 @@ function safeFailure(error: unknown): string {
   return typeof value==='string' && /^[A-Z0-9_]{2,48}$/.test(value)?value:'DELIVERY_FAILED';
 }
 /** Generation is internal. Delivery still requires a mail server; SMTP is independent of Resend quota. */
-export async function deliverOwnSiteCode(email: string, code: string, purpose: 'site-access' | 'password-recovery' = 'site-access'): Promise<SiteCodeDelivery> {
+export async function deliverOwnSiteCode(email: string, code: string, purpose: 'site-access' | 'password-recovery' | 'customer-login' = 'site-access'): Promise<SiteCodeDelivery> {
   if (!validSiteCode(code)) throw new Error('INVALID_GENERATED_CODE');
   const from=h2MailFrom(process.env.SMTP_FROM || process.env.SMTP_USER || 'h2@h2colombiano.com');
   const subject=purpose === 'password-recovery' ? 'H2 Colombiano - Recuperação de senha' : 'H2 Colombiano - Código de acesso';
   const formatted=displaySiteCode(code);
-  const text=purpose === 'password-recovery' ? `Código para recuperar a senha do H2 Colombiano: ${formatted}\n\nEste código vale por 10 minutos e pode ser usado uma única vez para alterar sua senha. Não concede acesso nem libera serviços.\n\nSe não solicitou, ignore este e-mail.` : `Seu código para acessar o site H2 Colombiano: ${formatted}\n\nDigite ou cole os 6 números. Este código é de uso único e vale por 10 minutos. Após confirmar, seu acesso vale por até 24 horas, ou até você sair.\n\nNão compartilhe. Se não solicitou o acesso, ignore esta mensagem.`;
+  const accessDurationText = purpose === 'customer-login'
+    ? 'Após confirmar, sua sessão seguirá a duração definida pelo administrador, ou até você sair.'
+    : 'Após confirmar, seu acesso vale por até 24 horas, ou até você sair.';
+  const accessDurationHtml = purpose === 'customer-login'
+    ? '<p>Após a confirmação, sua sessão seguirá a duração definida pelo administrador, ou até você sair.</p>'
+    : '<p>Após a confirmação, o acesso vale por até 24 horas, ou até você sair.</p>';
+  const text=purpose === 'password-recovery' ? `Código para recuperar a senha do H2 Colombiano: ${formatted}\n\nEste código vale por 10 minutos e pode ser usado uma única vez para alterar sua senha. Não concede acesso nem libera serviços.\n\nSe não solicitou, ignore este e-mail.` : `Seu código para acessar o site H2 Colombiano: ${formatted}\n\nDigite ou cole os 6 números. Este código é de uso único e vale por 10 minutos. ${accessDurationText}\n\nNão compartilhe. Se não solicitou o acesso, ignore esta mensagem.`;
   const html=purpose === 'password-recovery'
     ? '<div style="font-family:Arial,sans-serif;max-width:480px;margin:auto;padding:24px">'
       +'<h2>H2 Colombiano</h2><p>Código para recuperar a senha:</p>'
@@ -25,7 +31,7 @@ export async function deliverOwnSiteCode(email: string, code: string, purpose: '
     +'<h2>H2 Colombiano</h2><p>Código para acessar o site:</p>'
     +'<p style="font-size:28px;font-weight:bold;letter-spacing:2px">'+formatted+'</p>'
     +'<p>Digite ou cole os 6 números. Uso único, válido por 10 minutos.</p>'
-    +'<p>Após a confirmação, o acesso vale por até 24 horas, ou até você sair.</p>'
+    +accessDurationHtml
     +'<p>Não compartilhe. Se não solicitou o acesso, ignore esta mensagem.</p></div>';
   const pass=process.env.SMTP_PASS || process.env.ZOHO_EMAIL_PASSWORD || '';
   const key=process.env.RESEND_API_KEY;
