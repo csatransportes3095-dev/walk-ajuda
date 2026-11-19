@@ -23,7 +23,7 @@ describe("Customer-initiated WhatsApp OTP", () => {
     expect(routes).toContain("registerH2AutoIncomingOtpRoutes(app)");
   });
   it("does not send WhatsApp code when customer selects email", () => {
-    expect(access).toContain('if (channel === "email") await deliverOwnSiteCode(email,code)');
+    expect(access).toContain('if (channel === "email") await deliverOwnSiteCode(email,code,"customer-login")');
     expect(access).toContain("else await enqueueIncomingWhatsappOtp(");
     expect(access).toMatch(/enqueueIncomingWhatsappOtp\([\s\S]*?\},\s*tx\)/);
     expect(login).toContain('channel}');

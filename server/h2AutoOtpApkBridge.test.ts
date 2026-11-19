@@ -17,14 +17,14 @@ describe("H2 Auto APK OTP bridge security checks", () => {
 
   it("uses the existing OTP generator for the selected channel in one transaction", () => {
     expect((access.match(/generateOwnSiteCode\(\)/g) || []).length).toBe(1);
-    expect(access).toContain('if (channel === "email") await deliverOwnSiteCode(email,code)');
+    expect(access).toContain('if (channel === "email") await deliverOwnSiteCode(email,code,"customer-login")');
     expect(access).toContain("codeDigest:codeHash");
     expect(access).toMatch(/enqueueIncomingWhatsappOtp\([\s\S]*?\},\s*tx\)/);
-    expect(access.indexOf("await enqueueIncomingWhatsappOtp(")).toBeGreaterThan(access.indexOf("await deliverOwnSiteCode(email,code)"));
+    expect(access.indexOf("await enqueueIncomingWhatsappOtp(")).toBeGreaterThan(access.indexOf('await deliverOwnSiteCode(email,code,"customer-login")'));
   });
 
   it("keeps email blue and WhatsApp blood-red as independent choices", () => {
-    expect(access).toContain('if (channel === "email") await deliverOwnSiteCode(email,code)');
+    expect(access).toContain('if (channel === "email") await deliverOwnSiteCode(email,code,"customer-login")');
     expect(access).toContain("else await enqueueIncomingWhatsappOtp(");
     expect(access).toContain("await enqueueIncomingWhatsappOtp({");
     expect(router).toContain('channel: z.enum(["email","whatsapp"]).optional().default("email")');

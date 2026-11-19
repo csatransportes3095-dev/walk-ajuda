@@ -28,6 +28,7 @@ type AuthenticatedCustomer = {
   db: any;
   customer: any;
   phone: string;
+  sessionExpiresAtMs: number | null;
 };
 
 async function rows(db: any, query: any): Promise<any[]> {
@@ -68,11 +69,11 @@ function cookieOptions(req: Request) {
   };
 }
 
-async function signCardToken(payload: { userId: number; phone: string }) {
+async function signCardToken(payload: { userId: number; phone: string }, expiresAtMs: number) {
   return new jose.SignJWT(payload as any)
     .setProtectedHeader({ alg: "HS256" })
     .setIssuedAt()
-    .setExpirationTime("30d")
+    .setExpirationTime(Math.floor(expiresAtMs / 1000))
     .sign(CC_JWT_SECRET);
 }
 
@@ -105,6 +106,7 @@ async function authenticateCustomer(req: Request, res: Response): Promise<Authen
   // is NOT proof of email verification. Never fall back to that table alone.
   let phone = "";
   let verifiedCustomerId: number | null = null;
+  let sessionExpiresAtMs: number | null = null;
   if (isCustomerOtpModeEnabled()) {
     const verified = await getVerifiedCustomerOtpSession(db, token);
     if (!verified) {
@@ -113,6 +115,11 @@ async function authenticateCustomer(req: Request, res: Response): Promise<Authen
     }
     phone = normalizeCustomerPhone(verified.phone);
     verifiedCustomerId = Number(verified.customerId);
+    sessionExpiresAtMs = Math.min(Number(verified.bindingExpires), Number(verified.sessionExpiresAtMs));
+    if (!Number.isFinite(sessionExpiresAtMs) || sessionExpiresAtMs <= Date.now()) {
+      res.status(401).json({ code: "UNAUTHORIZED", message: "Sessão central inválida ou expirada." });
+      return null;
+    }
   } else {
     // Keep the current customer login unchanged until full OTP cutover.
     const sessionRows = await rows(db, sql`
@@ -167,7 +174,7 @@ async function authenticateCustomer(req: Request, res: Response): Promise<Authen
     return null;
   }
 
-  return { db, customer, phone: normalizeCustomerPhone(customer.phone) || phone };
+  return { db, customer, phone: normalizeCustomerPhone(customer.phone) || phone, sessionExpiresAtMs };
 }
 
 async function ensureReferralDeclaration(db: any, clientId: number, route: SpreadsheetRoute, customer: any): Promise<void> {
@@ -308,8 +315,15 @@ async function cardSession(req: Request, res: Response) {
     return;
   }
 
-  const token = await signCardToken({ userId: Number(user.id), phone: String(user.phone || phone) });
-  res.cookie(CC_COOKIE, token, { ...cookieOptions(req), maxAge: CC_SESSION_MS });
+  // A derived login cannot outlive the OTP session that authorized it. Legacy
+  // password sessions retain their existing 30-day card-session limit.
+  const expiresAtMs = Math.floor(Math.min(Date.now() + CC_SESSION_MS, auth.sessionExpiresAtMs ?? Infinity) / 1000) * 1000;
+  if (expiresAtMs <= Date.now()) {
+    res.status(401).json({ code: "UNAUTHORIZED", message: "Sessão central inválida ou expirada." });
+    return;
+  }
+  const token = await signCardToken({ userId: Number(user.id), phone: String(user.phone || phone) }, expiresAtMs);
+  res.cookie(CC_COOKIE, token, { ...cookieOptions(req), maxAge: Math.max(0, expiresAtMs - Date.now()) });
   res.setHeader("Cache-Control", "no-store");
   res.status(200).json({
     success: true,

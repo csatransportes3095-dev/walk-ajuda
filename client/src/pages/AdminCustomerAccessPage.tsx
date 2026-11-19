@@ -10,6 +10,7 @@ import { ShieldCheck, Mail, Phone, Check, X } from "lucide-react";
  */
 export function AdminCustomerAccessPage() {
   const [working,setWorking]=useState<number|null>(null);
+  const sessionPolicy=trpc.customerPassword.getSessionPolicy.useQuery(undefined,{retry:false});
   const pending=trpc.customerPassword.adminListPendingAccess.useQuery(undefined,{refetchInterval:30000});
   const decide=trpc.customerPassword.adminDecideAccess.useMutation();
   async function update(requestId:number,approved:boolean) {
@@ -40,7 +41,13 @@ export function AdminCustomerAccessPage() {
         <p className="mt-1">O cliente informa o telefone e confirma o código de e-mail.
           Não existem liberação manual de senha, senha automática, reset ou vencimento de senha.</p>
         <p className="mt-2 flex items-center gap-2"><Mail className="h-4 w-4"/> Código válido por 10 minutos e uso único.</p>
-        <p className="mt-1 flex items-center gap-2"><Phone className="h-4 w-4"/> Acesso de sessão por até 24 horas.</p>
+        <p className="mt-1 flex items-center gap-2"><Phone className="h-4 w-4"/>
+          {sessionPolicy.data ? `Tempo para novos logins: ${sessionPolicy.data.hours} horas.`
+            : sessionPolicy.isError ? "Não foi possível consultar o tempo conectado." : "Consultando tempo conectado..."}
+        </p>
+        <a href="/admin/settings?tab=login#tempo-login" className="mt-2 inline-block text-sm font-semibold text-cyan-200 underline underline-offset-4">
+          Configurar tempo conectado
+        </a>
       </div>
       <div className="mt-7 flex items-center justify-between gap-4">
         <h2 className="text-lg font-bold">Autorizações de rota pendentes</h2>
