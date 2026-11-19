@@ -4922,40 +4922,89 @@ export const appRouter = router({
           releaseKeys = selected;
         }
 
-        const result = await updateLastOrderStatus({
-          registrationId: input.registrationId,
-          subOrderIndex: input.subOrderIndex,
-          status: input.status,
-          note: input.note ?? null,
-        });
-        if (!result.success) return result;
-
+        // Save the release selection BEFORE marking the order delivered. Customer
+        // reads also require a delivered status, so this ordering prevents a
+        // delivered order from exposing a stale/previous login selection.
+        // If the status update fails, restore the previous release state.
+        let rollbackRelease: (() => Promise<void>) | null = null;
         if (releaseKeys !== null) {
           const { getDb } = await import('./db');
           const { orderAdditionalLogins, orderLoginReleaseSettings } = await import('../drizzle/schema');
           const { eq, sql: drizzleSql } = await import('drizzle-orm');
           const db = await getDb();
-          if (!db) throw new TRPCError({ code: 'INTERNAL_SERVER_ERROR', message: 'Banco indisponível após alteração do status.' });
-          await db.transaction(async tx => {
-            await tx.update(orderAdditionalLogins)
-              .set({ releasedToClient: 0 })
+          if (!db) throw new TRPCError({ code: 'INTERNAL_SERVER_ERROR', message: 'Banco indisponível antes da entrega.' });
+
+          const [previousSettings, previousAdditional] = await Promise.all([
+            db.select({
+              primaryLoginReleased: orderLoginReleaseSettings.primaryLoginReleased,
+              selectionConfirmedAt: orderLoginReleaseSettings.selectionConfirmedAt,
+            }).from(orderLoginReleaseSettings)
+              .where(eq(orderLoginReleaseSettings.registrationId, input.registrationId)).limit(1),
+            db.select({ id: orderAdditionalLogins.id, releasedToClient: orderAdditionalLogins.releasedToClient })
+              .from(orderAdditionalLogins).where(eq(orderAdditionalLogins.registrationId, input.registrationId)),
+          ]);
+          const previousKeys = previousAdditional.filter(item => item.releasedToClient === 1).map(item => String(item.id));
+          const oldSetting = previousSettings[0] ?? null;
+          if (oldSetting?.primaryLoginReleased === 1) previousKeys.push('primary');
+
+          const writeRelease = async (
+            keys: string[],
+            setting: { primaryLoginReleased: number; selectionConfirmedAt: Date | null } | null,
+          ) => db.transaction(async tx => {
+            await tx.update(orderAdditionalLogins).set({ releasedToClient: 0 })
               .where(eq(orderAdditionalLogins.registrationId, input.registrationId));
-            for (const key of releaseKeys!) {
+            for (const key of keys) {
               if (key !== 'primary') await tx.update(orderAdditionalLogins)
                 .set({ releasedToClient: 1 })
                 .where(drizzleSql`${orderAdditionalLogins.registrationId} = ${input.registrationId} AND ${orderAdditionalLogins.id} = ${Number(key)}`);
             }
-            await tx.insert(orderLoginReleaseSettings).values({
-              registrationId: input.registrationId,
-              primaryLoginReleased: releaseKeys!.includes('primary') ? 1 : 0,
-              selectionConfirmedAt: new Date(),
-            }).onDuplicateKeyUpdate({ set: {
-              primaryLoginReleased: releaseKeys!.includes('primary') ? 1 : 0,
-              selectionConfirmedAt: new Date(),
-            } });
+            if (setting === null) {
+              await tx.delete(orderLoginReleaseSettings)
+                .where(eq(orderLoginReleaseSettings.registrationId, input.registrationId));
+            } else {
+              await tx.insert(orderLoginReleaseSettings).values({
+                registrationId: input.registrationId,
+                primaryLoginReleased: setting.primaryLoginReleased,
+                selectionConfirmedAt: setting.selectionConfirmedAt,
+              }).onDuplicateKeyUpdate({ set: {
+                primaryLoginReleased: setting.primaryLoginReleased,
+                selectionConfirmedAt: setting.selectionConfirmedAt,
+              } });
+            }
           });
+
+          await writeRelease(releaseKeys, {
+            primaryLoginReleased: releaseKeys.includes('primary') ? 1 : 0,
+            selectionConfirmedAt: new Date(),
+          });
+          rollbackRelease = async () => { await writeRelease(previousKeys, oldSetting); };
         }
 
+        let result: Awaited<ReturnType<typeof updateLastOrderStatus>>;
+        try {
+          result = await updateLastOrderStatus({
+            registrationId: input.registrationId,
+            subOrderIndex: input.subOrderIndex,
+            status: input.status,
+            note: input.note ?? null,
+          });
+        } catch (error) {
+          if (rollbackRelease) {
+            try { await rollbackRelease(); }
+            catch (restoreError) { console.error('[MultiLogin] Falha ao restaurar seleção após erro de status:', restoreError); }
+          }
+          throw error;
+        }
+        if (!result.success) {
+          if (rollbackRelease) {
+            try { await rollbackRelease(); }
+            catch (restoreError) {
+              console.error('[MultiLogin] Falha ao restaurar seleção após status rejeitado:', restoreError);
+              throw new TRPCError({ code: 'INTERNAL_SERVER_ERROR', message: 'Falha ao restaurar seleção de logins. Não repita a entrega antes de conferir o pedido.' });
+            }
+          }
+          return result;
+        }
 
         // Ao marcar como entregue, remover urgência obrigatoriamente
         const FINAL_STATUSES = ['entregue', 'pedido_entregue', 'cancelado'];
