@@ -4866,6 +4866,7 @@ export const appRouter = router({
         customerUf: z.string().optional(),
         deliveryEstimate: z.number().optional(),
         skipEmail: z.boolean().optional().default(false),
+        releasedLoginKeys: z.array(z.string().regex(/^(primary|[1-9][0-9]*)$/)).optional(),
       }))
       .mutation(async ({ input }) => {
         const mailEnabled = hasMailChannel();
@@ -4888,6 +4889,39 @@ export const appRouter = router({
           return { success: false, error: 'Nao foi possivel validar a sequencia. Atualize e tente novamente; o status nao foi alterado.' };
         }
 
+        // Never deliver multiple populated logins without an explicit release selection.
+        // Do not change the status until this check has passed.
+        const delivering = input.status === 'entregue' || input.status === 'pedido_entregue';
+        let releaseKeys: string[] | null = null;
+        if (delivering) {
+          const { getDb } = await import('./db');
+          const { orderLoginData, orderAdditionalLogins } = await import('../drizzle/schema');
+          const { eq } = await import('drizzle-orm');
+          const db = await getDb();
+          if (!db) throw new TRPCError({ code: 'INTERNAL_SERVER_ERROR', message: 'Banco indisponível.' });
+          const [primary, additional] = await Promise.all([
+            db.select({ loginPhone: orderLoginData.loginPhone, loginEmail: orderLoginData.loginEmail, loginPassword: orderLoginData.loginPassword })
+              .from(orderLoginData).where(eq(orderLoginData.registrationId, input.registrationId)).limit(1),
+            db.select({ id: orderAdditionalLogins.id, loginPhone: orderAdditionalLogins.loginPhone,
+              loginEmail: orderAdditionalLogins.loginEmail, loginPassword: orderAdditionalLogins.loginPassword })
+              .from(orderAdditionalLogins).where(eq(orderAdditionalLogins.registrationId, input.registrationId)),
+          ]);
+          const filled = (item: { loginPhone?: string | null; loginEmail?: string | null; loginPassword?: string | null }) =>
+            Boolean(item.loginPhone?.trim() || item.loginEmail?.trim() || item.loginPassword?.trim());
+          const available = [
+            ...(primary[0] && filled(primary[0]) ? ['primary'] : []),
+            ...additional.filter(filled).map(item => String(item.id)),
+          ];
+          if (available.length > 1 && input.releasedLoginKeys === undefined)
+            throw new TRPCError({ code: 'BAD_REQUEST', message: 'Selecione os logins que serão liberados antes de marcar Entregue.' });
+          const selected = input.releasedLoginKeys ?? available;
+          if (selected.length === 0 && available.length > 0)
+            throw new TRPCError({ code: 'BAD_REQUEST', message: 'Selecione pelo menos um login para liberar.' });
+          if (new Set(selected).size !== selected.length || selected.some(key => !available.includes(key)))
+            throw new TRPCError({ code: 'BAD_REQUEST', message: 'Seleção de logins inválida para este pedido.' });
+          releaseKeys = selected;
+        }
+
         const result = await updateLastOrderStatus({
           registrationId: input.registrationId,
           subOrderIndex: input.subOrderIndex,
@@ -4895,6 +4929,33 @@ export const appRouter = router({
           note: input.note ?? null,
         });
         if (!result.success) return result;
+
+        if (releaseKeys !== null) {
+          const { getDb } = await import('./db');
+          const { orderAdditionalLogins, orderLoginReleaseSettings } = await import('../drizzle/schema');
+          const { eq, sql: drizzleSql } = await import('drizzle-orm');
+          const db = await getDb();
+          if (!db) throw new TRPCError({ code: 'INTERNAL_SERVER_ERROR', message: 'Banco indisponível após alteração do status.' });
+          await db.transaction(async tx => {
+            await tx.update(orderAdditionalLogins)
+              .set({ releasedToClient: 0 })
+              .where(eq(orderAdditionalLogins.registrationId, input.registrationId));
+            for (const key of releaseKeys!) {
+              if (key !== 'primary') await tx.update(orderAdditionalLogins)
+                .set({ releasedToClient: 1 })
+                .where(drizzleSql`${orderAdditionalLogins.registrationId} = ${input.registrationId} AND ${orderAdditionalLogins.id} = ${Number(key)}`);
+            }
+            await tx.insert(orderLoginReleaseSettings).values({
+              registrationId: input.registrationId,
+              primaryLoginReleased: releaseKeys!.includes('primary') ? 1 : 0,
+              selectionConfirmedAt: new Date(),
+            }).onDuplicateKeyUpdate({ set: {
+              primaryLoginReleased: releaseKeys!.includes('primary') ? 1 : 0,
+              selectionConfirmedAt: new Date(),
+            } });
+          });
+        }
+
 
         // Ao marcar como entregue, remover urgência obrigatoriamente
         const FINAL_STATUSES = ['entregue', 'pedido_entregue', 'cancelado'];
