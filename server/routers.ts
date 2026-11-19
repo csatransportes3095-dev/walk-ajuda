@@ -7221,6 +7221,123 @@ export const appRouter = router({
 
   // â"â‚¬â"â‚¬ Dados de Login Liberado por Pedido â"â‚¬â"â‚¬â"â‚¬â"â‚¬â"â‚¬â"â‚¬â"â‚¬â"â‚¬â"â‚¬â"â‚¬â"â‚¬â"â‚¬â"â‚¬â"â‚¬â"â‚¬â"â‚¬â"â‚¬â"â‚¬â"â‚¬â"â‚¬â"â‚¬â"â‚¬â"â‚¬â"â‚¬â"â‚¬â"â‚¬â"â‚¬â"â‚¬â"â‚¬â"â‚¬â"â‚¬â"â‚¬â"â‚¬â"â‚¬â"â‚¬â"â‚¬â"â‚¬
   loginData: router({
+    // Additional independent logins; the legacy Login 1 is never rewritten.
+    listAdditional: adminProcedure
+      .input(z.object({ registrationId: z.number().int().positive() }))
+      .query(async ({ input }) => {
+        const { getDb } = await import('./db');
+        const { orderAdditionalLogins } = await import('../drizzle/schema');
+        const { eq, asc } = await import('drizzle-orm');
+        const db = await getDb();
+        if (!db) throw new TRPCError({ code: 'INTERNAL_SERVER_ERROR', message: 'Banco indisponível.' });
+        const rows = await db.select().from(orderAdditionalLogins)
+          .where(eq(orderAdditionalLogins.registrationId, input.registrationId))
+          .orderBy(asc(orderAdditionalLogins.displayOrder), asc(orderAdditionalLogins.id));
+        return rows.map(({ authenticatorQrStorageKey, authenticatorQrMimeType, ...row }) => ({
+          ...row, hasAuthenticatorQr: Boolean(authenticatorQrStorageKey),
+        }));
+      }),
+    createAdditional: adminProcedure
+      .input(z.object({ registrationId: z.number().int().positive() }))
+      .mutation(async ({ input }) => {
+        const { getDb } = await import('./db');
+        const { orderAdditionalLogins, orderStatusHistory } = await import('../drizzle/schema');
+        const { eq, desc } = await import('drizzle-orm');
+        const db = await getDb();
+        if (!db) throw new TRPCError({ code: 'INTERNAL_SERVER_ERROR', message: 'Banco indisponível.' });
+        const history = await db.select({ customerPhone: orderStatusHistory.customerPhone })
+          .from(orderStatusHistory).where(eq(orderStatusHistory.registrationId, input.registrationId))
+          .orderBy(desc(orderStatusHistory.createdAt)).limit(1);
+        if (!history[0]?.customerPhone) throw new TRPCError({ code: 'NOT_FOUND', message: 'Pedido não encontrado.' });
+        const existing = await db.select({ id: orderAdditionalLogins.id, displayOrder: orderAdditionalLogins.displayOrder })
+          .from(orderAdditionalLogins).where(eq(orderAdditionalLogins.registrationId, input.registrationId));
+        const nextOrder = Math.max(1, ...existing.map(item => item.displayOrder)) + 1;
+        await db.insert(orderAdditionalLogins).values({
+          registrationId: input.registrationId, customerPhone: history[0].customerPhone,
+          displayOrder: nextOrder, label: `Login ${nextOrder}`,
+        });
+        return { success: true };
+      }),
+    saveAdditional: adminProcedure
+      .input(z.object({
+        registrationId: z.number().int().positive(), id: z.number().int().positive(),
+        label: z.string().max(80).optional(),
+        loginPhone: z.string().max(64).optional(), loginEmail: z.string().max(320).optional(),
+        loginPassword: z.string().max(256).optional(), authCode: z.string().max(512).optional(),
+        emailLink: z.string().max(512).optional(), cnhCode: cnhCodeSchema.optional(),
+        loginNotes: z.string().max(10000).optional(), loginGroupLink: z.string().max(1024).optional(),
+        authenticatorQrData: z.string().max(4_250_000).optional(),
+        authenticatorQrAction: z.enum(['keep', 'replace', 'delete']).default('keep'),
+      }))
+      .mutation(async ({ input }) => {
+        const { getDb } = await import('./db');
+        const { orderAdditionalLogins } = await import('../drizzle/schema');
+        const { and, eq } = await import('drizzle-orm');
+        const db = await getDb();
+        if (!db) throw new TRPCError({ code: 'INTERNAL_SERVER_ERROR', message: 'Banco indisponível.' });
+        const where = and(eq(orderAdditionalLogins.id, input.id), eq(orderAdditionalLogins.registrationId, input.registrationId));
+        const existing = await db.select().from(orderAdditionalLogins).where(where).limit(1);
+        if (!existing[0]) throw new TRPCError({ code: 'NOT_FOUND', message: 'Login não encontrado neste pedido.' });
+        const action = input.authenticatorQrData ? 'replace' : input.authenticatorQrAction;
+        if (action === 'replace' && !input.authenticatorQrData)
+          throw new TRPCError({ code: 'BAD_REQUEST', message: 'Selecione um QR válido.' });
+        let replacement: { storageKey: string; mimeType: string } | null = null;
+        if (action === 'replace' && input.authenticatorQrData) {
+          const { parseAuthenticatorQrBase64, storeAuthenticatorQr } = await import('./authenticatorQr');
+          replacement = await storeAuthenticatorQr(parseAuthenticatorQrBase64(input.authenticatorQrData));
+        }
+        try {
+          await db.update(orderAdditionalLogins).set({
+            ...(input.label !== undefined ? { label: input.label } : {}),
+            ...(input.loginPhone !== undefined ? { loginPhone: input.loginPhone } : {}),
+            ...(input.loginEmail !== undefined ? { loginEmail: input.loginEmail } : {}),
+            ...(input.loginPassword !== undefined ? { loginPassword: input.loginPassword } : {}),
+            ...(input.authCode !== undefined ? { authCode: input.authCode.replace(/[-\\s]/g, '') } : {}),
+            ...(input.emailLink !== undefined ? { emailLink: input.emailLink } : {}),
+            ...(input.cnhCode !== undefined ? { cnhCode: input.cnhCode } : {}),
+            ...(input.loginNotes !== undefined ? { loginNotes: input.loginNotes } : {}),
+            ...(input.loginGroupLink !== undefined ? { loginGroupLink: input.loginGroupLink } : {}),
+            ...(action === 'replace' ? {
+              authenticatorQrStorageKey: replacement!.storageKey,
+              authenticatorQrMimeType: replacement!.mimeType,
+              authenticatorQrUpdatedAt: new Date(),
+            } : action === 'delete' ? {
+              authenticatorQrStorageKey: null, authenticatorQrMimeType: null, authenticatorQrUpdatedAt: null,
+            } : {}),
+          }).where(where);
+        } catch (error) {
+          if (replacement) {
+            const { deleteAuthenticatorQr } = await import('./authenticatorQr');
+            await deleteAuthenticatorQr(replacement.storageKey).catch(() => {});
+          }
+          throw error;
+        }
+        if ((action === 'replace' || action === 'delete') && existing[0].authenticatorQrStorageKey) {
+          const { deleteAuthenticatorQr } = await import('./authenticatorQr');
+          await deleteAuthenticatorQr(existing[0].authenticatorQrStorageKey).catch(() => {});
+        }
+        return { success: true };
+      }),
+    getAdditionalQrForAdmin: adminProcedure
+      .input(z.object({ registrationId: z.number().int().positive(), id: z.number().int().positive() }))
+      .query(async ({ input }) => {
+        const { getDb } = await import('./db');
+        const { orderAdditionalLogins } = await import('../drizzle/schema');
+        const { and, eq } = await import('drizzle-orm');
+        const db = await getDb();
+        if (!db) throw new TRPCError({ code: 'INTERNAL_SERVER_ERROR', message: 'Banco indisponível.' });
+        const rows = await db.select({
+          storageKey: orderAdditionalLogins.authenticatorQrStorageKey,
+          mimeType: orderAdditionalLogins.authenticatorQrMimeType,
+        }).from(orderAdditionalLogins).where(and(
+          eq(orderAdditionalLogins.registrationId, input.registrationId), eq(orderAdditionalLogins.id, input.id),
+        )).limit(1);
+        if (!rows[0]?.storageKey || !rows[0]?.mimeType) return null;
+        const { readAuthenticatorQr } = await import('./authenticatorQr');
+        const image = await readAuthenticatorQr(rows[0].storageKey, rows[0].mimeType);
+        return { mimeType: image.mimeType, data: image.buffer.toString('base64') };
+      }),
+
     getGlobalGroup: adminProcedure.query(async () => {
       const db = await (await import('./db')).getDb();
       if (!db) throw new TRPCError({ code: 'INTERNAL_SERVER_ERROR', message: 'Banco indisponível.' });
