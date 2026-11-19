@@ -25,7 +25,7 @@ const phoneToken = (phone: string) => {
     .update("h2-otp-incoming-phone:" + phone).digest("hex");
 };
 let schema: Promise<void> | null = null;
-async function ensure(db: any) {
+export async function ensureIncomingWhatsappOtpQueue(db: any) {
   if (!schema) schema = db.execute(sql`CREATE TABLE IF NOT EXISTS h2_auto_otp_incoming_queue (
     id CHAR(32) NOT NULL PRIMARY KEY,
     device_id VARCHAR(32) NOT NULL,
@@ -40,18 +40,22 @@ async function ensure(db: any) {
   ) ENGINE=InnoDB`).then(() => undefined).catch((error: unknown) => { schema = null; throw error; });
   await schema;
 }
-/** Called only after the OTP issuing transaction has committed. */
+/**
+ * Pass the challenge's transaction so its code and delivery task commit together.
+ * The caller prepares the table before opening that transaction: MySQL DDL can
+ * implicitly commit an otherwise atomic login-code request.
+ */
 export async function enqueueIncomingWhatsappOtp(input: {
   customerPhone: string; code: string; phoneKey: string; codeDigest: string; expiresAt: number;
-}): Promise<void> {
+}, executor?: any): Promise<void> {
   if (!isH2AutoApkOtpConfigured()) throw Error("H2_AUTO_NOT_CONFIGURED");
   const phone = normalize(input.customerPhone);
   if (!phone || !/^\d{6}$/.test(input.code)
     || !/^[a-f0-9]{64}$/.test(input.phoneKey)
     || !/^[a-f0-9]{64}$/.test(input.codeDigest)) throw Error("INVALID_OTP");
-  const db: any = await getDb();
+  const db: any = executor || await getDb();
   if (!db) throw Error("DB_UNAVAILABLE");
-  await ensure(db);
+  if (!executor) await ensureIncomingWhatsappOtpQueue(db);
   const deviceId = process.env.H2_AUTO_OTP_DEVICE_ID!;
   const paired = await db.execute(sql`SELECT token_hash FROM h2_auto_devices WHERE id=${deviceId} LIMIT 1`);
   if (!/^[a-f0-9]{64}$/.test(String(paired[0]?.[0]?.token_hash || ""))) throw Error("DEVICE_NOT_PAIRED");
@@ -59,8 +63,15 @@ export async function enqueueIncomingWhatsappOtp(input: {
   const recipientKey = phoneToken(phone);
   const payload = encrypt(JSON.stringify({code:input.code}));
   const now = Date.now();
-  await db.execute(sql`DELETE FROM h2_auto_otp_incoming_queue
-    WHERE expires_at<=${now} OR (device_id=${deviceId} AND recipient_key=${recipientKey})`);
+  // The caller already locks this customer's challenge. Read any old task IDs
+  // without locking an empty secondary-index range: two different customers
+  // must be able to enqueue into an initially empty InnoDB table concurrently.
+  const previous: any = await db.execute(sql`SELECT id FROM h2_auto_otp_incoming_queue
+    WHERE device_id=${deviceId} AND recipient_key=${recipientKey}`);
+  for (const task of previous[0] || []) {
+    await db.execute(sql`DELETE FROM h2_auto_otp_incoming_queue
+      WHERE id=${String(task.id)} AND device_id=${deviceId}`);
+  }
   await db.execute(sql`INSERT INTO h2_auto_otp_incoming_queue
     (id,device_id,recipient_key,phone_key,code_digest,payload_encrypted,expires_at,created_at)
     VALUES (${id},${deviceId},${recipientKey},${input.phoneKey},${input.codeDigest},${payload},${input.expiresAt},${now})`);
@@ -71,11 +82,15 @@ export function registerH2AutoIncomingOtpRoutes(app: Express): void {
       const deviceId = await authorizedOtpDevice(req);
       if (!deviceId) return response(res,401,{error:"unauthorized"});
       const phone = normalize(String(req.body?.phone || ""));
-      if (!phone) return response(res,400,{error:"invalid_phone"});
+      if (!phone) {
+        console.info("[CustomerOtp] channel=whatsapp state=incoming_invalid_phone");
+        return response(res,400,{error:"invalid_phone"});
+      }
       const db: any = await getDb();
       if (!db) throw Error("DB_UNAVAILABLE");
-      await ensure(db);
+      await ensureIncomingWhatsappOtpQueue(db);
       const recipientKey = phoneToken(phone), now = Date.now();
+      await db.execute(sql`DELETE FROM h2_auto_otp_incoming_queue WHERE expires_at<=${now}`);
       // Only an unused, unexpired challenge for the exact sender may be sent.
       const found: any = await db.execute(sql`SELECT q.id,q.payload_encrypted,q.expires_at
         FROM h2_auto_otp_incoming_queue q
@@ -86,11 +101,18 @@ export function registerH2AutoIncomingOtpRoutes(app: Express): void {
           AND c.expiresAt>${now} AND c.usedAt IS NULL AND c.attempts<5
         LIMIT 1`);
       const task = found[0]?.[0];
-      if (!task) return response(res,200,{task:null});
+      if (!task) {
+        console.info("[CustomerOtp] channel=whatsapp state=incoming_no_task");
+        return response(res,200,{task:null});
+      }
       const payload = JSON.parse(decrypt(String(task.payload_encrypted)));
       if (!/^\d{6}$/.test(payload.code)) throw Error("INVALID_PAYLOAD");
+      console.info("[CustomerOtp] channel=whatsapp state=incoming_matched");
       return response(res,200,{task:{id:task.id,code:payload.code,expiresAt:Number(task.expires_at)}});
-    } catch { return response(res,503,{error:"temporarily_unavailable"}); }
+    } catch {
+      console.warn("[CustomerOtp] channel=whatsapp state=incoming_unavailable");
+      return response(res,503,{error:"temporarily_unavailable"});
+    }
   });
   app.post("/api/h2-auto/otp/incoming/ack",async(req,res)=>{
     try {
@@ -104,12 +126,14 @@ export function registerH2AutoIncomingOtpRoutes(app: Express): void {
         || !["android_action_accepted","legacy_android_action_accepted"].includes(handoffState))
         return response(res,400,{error:"invalid_request"});
       const db: any=await getDb(); if(!db)throw Error("DB_UNAVAILABLE");
-      await ensure(db);
+      await ensureIncomingWhatsappOtpQueue(db);
       // Legacy sent_at names the one-shot Android handoff, not a WhatsApp
       // delivery receipt. Consume the code to avoid duplicate customer texts.
-      await db.execute(sql`UPDATE h2_auto_otp_incoming_queue
+      const updated: any = await db.execute(sql`UPDATE h2_auto_otp_incoming_queue
         SET sent_at=${Date.now()},payload_encrypted=''
         WHERE id=${id} AND device_id=${deviceId} AND sent_at IS NULL`);
+      if (Number(updated[0]?.affectedRows || 0) > 0)
+        console.info("[CustomerOtp] channel=whatsapp state=android_handoff_accepted delivery_confirmed=false");
       return response(res,200,{success:true,handoffState,deliveryConfirmed:false});
     }catch{return response(res,503,{error:"temporarily_unavailable"});}
   });

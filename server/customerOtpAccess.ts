@@ -7,13 +7,14 @@ import { getRegistrationReviewStatus } from "./customerRegistrationReview";
 import { normalizeCustomerPhone, normalizeCustomerEmail } from "./customerAccess";
 import { emailBelongsToAnotherCustomer } from "./customerEmailOwnership";
 import { deliverOwnSiteCode } from "./siteAccessCodeDelivery";
-import { enqueueIncomingWhatsappOtp } from "./h2-auto-incoming-otp";
+import { enqueueIncomingWhatsappOtp, ensureIncomingWhatsappOtpQueue } from "./h2-auto-incoming-otp";
 import { isH2AutoApkOtpReady } from "./h2-auto-otp-apk";
 import { generateOwnSiteCode } from "./siteAccessOwnCodes";
 import { getMissingCustomerProfileFields } from "./customerProfileRequirements";
 import { assertLoginEmailProof } from "./customerLoginEmailProof";
 import { getAdminJwtSecret } from "./adminJwt";
 import { recordCustomerOtpLogin } from "./customerLoginHistory";
+import { resolveCustomerOtpRequestSource } from "./customerOtpRequestSource";
 
 /**
  * Customer authentication v2: registered phone + one-time email code.
@@ -41,6 +42,7 @@ export function requireOtpMigrationEnabled(): void {
 }
 const RESEND_MS = 60 * 1000;
 const MAX_ATTEMPTS = 5;
+const OTP_LIMIT_WINDOW_MS = 60 * 60 * 1000;
 const GENERIC = "Se o telefone estiver cadastrado, enviaremos um código ao e-mail registrado.";
 const isToken = (v: string) => /^h2otp_[0-9a-f]{64}$/.test(v);
 
@@ -92,31 +94,45 @@ export async function ensureCustomerOtpTables(db: any): Promise<void> {
   catch (error) { schemaPromise = null; throw error; }
 }
 
-async function uniqueCustomer(db: any, normalized: string): Promise<any | null> {
-  if (!/^\d{11}$/.test(normalized)) return null;
+type IneligibleReason = "phone_invalid" | "customer_not_found" | "phone_not_unique" | "blocked" | "email_invalid" | "email_shared";
+async function uniqueCustomer(db: any, normalized: string, onIneligible?: (reason: IneligibleReason) => void): Promise<any | null> {
+  const reject = (reason: IneligibleReason) => { onIneligible?.(reason); return null; };
+  if (!/^\d{11}$/.test(normalized)) return reject("phone_invalid");
   const found = await rows(db, sql`SELECT id, phone, email, blocked, deletedAt, name, cpf,
     cep, street, addressNumber, neighborhood, city, uf, profilePhotoUrl
     FROM customers WHERE deletedAt IS NULL
     AND RIGHT(REGEXP_REPLACE(phone, '[^0-9]', ''),11) = ${normalized}
     LIMIT 3`);
-  if (found.length !== 1) return null;
+  if (found.length !== 1) return reject(found.length === 0 ? "customer_not_found" : "phone_not_unique");
   const c = found[0];
   const email = normalizeCustomerEmail(c.email);
-  if (!email || normalizeCustomerPhone(c.phone) !== normalized || Number(c.blocked || 0) !== 0) return null;
-  if (await emailBelongsToAnotherCustomer(db, email, Number(c.id))) return null;
+  if (!email) return reject("email_invalid");
+  if (normalizeCustomerPhone(c.phone) !== normalized) return reject("phone_invalid");
+  if (Number(c.blocked || 0) !== 0) return reject("blocked");
+  if (await emailBelongsToAnotherCustomer(db, email, Number(c.id))) return reject("email_shared");
   return c;
 }
 
-async function takeLimit(db: any, scope: string, maximum: number, now: number): Promise<boolean> {
-  const key = digest("limit", scope);
-  const span = 60 * 60 * 1000;
-  await db.execute(sql`INSERT INTO customerOtpLimits (limitKey,windowStart,hits)
-    VALUES (${key},${now},1)
-    ON DUPLICATE KEY UPDATE
-      hits=IF(windowStart+${span}<${now},1,hits+1),
-      windowStart=IF(windowStart+${span}<${now},${now},windowStart)`);
-  const [limit] = await rows(db, sql`SELECT hits FROM customerOtpLimits WHERE limitKey=${key} LIMIT 1`);
-  return Number(limit?.hits || 0) <= maximum;
+async function takeAttemptLimits(db: any, limits: Array<{scope:string;maximum:number}>, now: number): Promise<number> {
+  // Attempt protection commits independently of delivery: failed/cooldown
+  // attempts still count against abuse limits, never the six successful sends.
+  return db.transaction(async (tx: any) => {
+    let retryAfterSeconds = 0;
+    for (const limit of limits) {
+      const key = digest("limit", limit.scope);
+      await tx.execute(sql`INSERT INTO customerOtpLimits (limitKey,windowStart,hits)
+        VALUES (${key},${now},1)
+        ON DUPLICATE KEY UPDATE
+          hits=IF(windowStart+${OTP_LIMIT_WINDOW_MS}<=${now},1,LEAST(hits+1,1000000)),
+          windowStart=IF(windowStart+${OTP_LIMIT_WINDOW_MS}<=${now},${now},windowStart)`);
+      const [current] = await rows(tx, sql`SELECT hits,windowStart FROM customerOtpLimits
+        WHERE limitKey=${key} FOR UPDATE`);
+      if (!current) throw new Error("OTP_ATTEMPT_LIMIT_UNAVAILABLE");
+      if (Number(current.hits) > limit.maximum) retryAfterSeconds = Math.max(retryAfterSeconds,
+        Math.max(1,Math.ceil((Number(current.windowStart)+OTP_LIMIT_WINDOW_MS-now)/1000)));
+    }
+    return retryAfterSeconds;
+  });
 }
 
 async function issueSession(tx: any, customer: any, now: number) {
@@ -136,86 +152,98 @@ async function issueSession(tx: any, customer: any, now: number) {
 }
 
 export async function requestCustomerCode(phoneInput: string, request: Request, channel: "email" | "whatsapp" = "email"): Promise<{
-  success: true; message: string; resendBlocked?: boolean; retryAfterSeconds?: number;
+  success: true; message: string; resendBlocked?: boolean; retryAfterSeconds?: number; cooldownScope?: "all" | "channel";
 }> {
   requireOtpMigrationEnabled();
   const phone = normalizeCustomerPhone(phoneInput);
-  if (!phone || phone.length !== 11) return { success:true, message:GENERIC };
-  if (channel === "whatsapp" && !(await isH2AutoApkOtpReady()))
-    throw new TRPCError({code:"SERVICE_UNAVAILABLE",message:"WhatsApp temporariamente indisponível. Use o e-mail."});
+  const source = resolveCustomerOtpRequestSource(request);
+  const log = (state: string, reason?: IneligibleReason) => console.info(
+    `[CustomerOtp] state=${state} channel=${channel} ipSource=${source.source}${reason ? " reason="+reason : ""}`
+  );
   const db = await getDb() as any;
   if (!db) throw new TRPCError({ code:"SERVICE_UNAVAILABLE", message:"Serviço indisponível." });
   await ensureCustomerOtpTables(db);
-  const now = Date.now();
-  const ip = String(request.ip || request.socket?.remoteAddress || "unknown").slice(0,100);
-  // Persistent atomic per-number and per-source counters, including unknown phones.
-  const phoneAllowed = await takeLimit(db, "phone:"+phone, 6, now);
-  const ipAllowed = await takeLimit(db, "ip:"+ip, 40, now);
-  if (!phoneAllowed || !ipAllowed) {
-    // A blocked request must not direct the customer to WhatsApp as though
-    // a new challenge had been generated. This shared hourly safety limit is
-    // separate from the independent 60-second channel countdowns.
-    return {success:true, message:"Limite de solicitações atingido. Tente novamente mais tarde.",
-      resendBlocked:true, retryAfterSeconds:3600};
+  const attemptLimits = [{scope:"ip:"+source.ip, maximum:40}];
+  if (phone && phone.length === 11) attemptLimits.push({scope:"phone-attempt:"+phone, maximum:30});
+  const attemptWait = await takeAttemptLimits(db, attemptLimits, Date.now());
+  if (attemptWait > 0) {
+    log("attempt_limited");
+    return {success:true,message:"Limite de tentativas atingido. Aguarde o tempo indicado para solicitar outro código.",
+      resendBlocked:true,retryAfterSeconds:attemptWait,cooldownScope:"all"};
   }
-  const customer = await uniqueCustomer(db, phone);
+  if (!phone || phone.length !== 11) { log("customer_ineligible","phone_invalid"); return {success:true,message:GENERIC}; }
+  if (channel === "whatsapp" && !(await isH2AutoApkOtpReady())) {
+    log("whatsapp_unavailable");
+    throw new TRPCError({code:"SERVICE_UNAVAILABLE",message:"WhatsApp temporariamente indisponível. Tente receber o código por e-mail."});
+  }
+  const customer = await uniqueCustomer(db, phone, reason => log("customer_ineligible",reason));
   if (!customer) return { success:true, message:GENERIC };
   const email = normalizeCustomerEmail(customer.email);
   const phoneKey = digest("phone",phone), emailKey = digest("email",email);
-  // Each channel has its own persistent cooldown, while a single code per
-  // customer is always authoritative. A new code invalidates the previous one.
   const channelKey = digest("otp-resend:" + channel, phone);
-  let retryAfterSeconds = 0;
-  // The challenge row is locked FIRST so simultaneous channels cannot race.
-  const newlyIssued = await db.transaction(async (tx: any): Promise<{code:string;codeDigest:string}|null> => {
-    await tx.execute(sql`INSERT IGNORE INTO customerOtpChallenges
-      (phoneKey,customerId,emailKey,codeDigest,expiresAt,resendAfter,attempts,createdAt)
-      VALUES (${phoneKey},${Number(customer.id)},${emailKey},'',0,0,0,${now})`);
-    await rows(tx,sql`SELECT resendAfter FROM customerOtpChallenges WHERE phoneKey=${phoneKey} FOR UPDATE`);
-    // Reuse the existing durable limits table for per-channel timestamps:
-    // no new migration, no unrelated login changes.
-    await tx.execute(sql`INSERT IGNORE INTO customerOtpLimits (limitKey,windowStart,hits)
-      VALUES (${channelKey},0,0)`);
-    const [channelCooldown] = await rows(tx,sql`SELECT windowStart FROM customerOtpLimits
-      WHERE limitKey=${channelKey} FOR UPDATE`);
-    retryAfterSeconds = Math.max(0, Math.ceil(
-      (Number(channelCooldown?.windowStart || 0) + RESEND_MS - now) / 1000
-    ));
-    if (retryAfterSeconds > 0) return null;
-    // Reuse the existing H2 site code generator; do not invent a second OTP system.
-    const code = generateOwnSiteCode();
-    const codeHash = digest("code:"+phoneKey,code);
-    await tx.execute(sql`UPDATE customerOtpChallenges
-      SET customerId=${Number(customer.id)},emailKey=${emailKey},codeDigest=${codeHash},
-      expiresAt=${now+CUSTOMER_CODE_MS},resendAfter=${now+RESEND_MS},
-      attempts=0,usedAt=NULL,createdAt=${now}
-      WHERE phoneKey=${phoneKey}`);
-    // Delivery inside the transaction: delivery failure rolls the challenge back.
-    if (channel === "email") await deliverOwnSiteCode(email,code);
-    await tx.execute(sql`UPDATE customerOtpLimits SET windowStart=${now},hits=hits+1
-      WHERE limitKey=${channelKey}`);
-    return {code,codeDigest:codeHash};
-  });
-  // A cooldown request does not issue a code. Never open WhatsApp if no new
-  // queue task will exist; the current 10-minute code remains usable.
-  if (!newlyIssued) return {
-    success:true, message:"Aguarde para solicitar outro código.",
-    resendBlocked:true, retryAfterSeconds:Math.max(1,retryAfterSeconds),
-  };
-  // WhatsApp is an explicitly selected channel, not an unsolicited send.
-  // Never dispatch a code to the chat until a matching inbound message arrives.
-  if (channel === "whatsapp" && newlyIssued) {
-    try {
-      await enqueueIncomingWhatsappOtp({
-        customerPhone: phone, code: newlyIssued.code, phoneKey,
-        codeDigest: newlyIssued.codeDigest, expiresAt: now + CUSTOMER_CODE_MS,
-      });
-    } catch {
-      console.warn("[CustomerOtp] Incoming WhatsApp OTP queue unavailable");
-      throw new TRPCError({code:"SERVICE_UNAVAILABLE",message:"WhatsApp indisponível. Solicite o código por e-mail."});
-    }
+  // Preserve the existing six-per-hour namespace and all already stored limits.
+  const deliveryKey = digest("limit", "phone:"+phone);
+  type IssueResult = {state:"issued"} | {state:"channel_cooldown"|"delivery_limited";retryAfterSeconds:number};
+  let result: IssueResult;
+  try {
+    if (channel === "whatsapp") await ensureIncomingWhatsappOtpQueue(db);
+    result = await db.transaction(async (tx: any): Promise<IssueResult> => {
+      // Lock the challenge first, as verification and both sending channels do.
+      await tx.execute(sql`INSERT INTO customerOtpChallenges
+        (phoneKey,customerId,emailKey,codeDigest,expiresAt,resendAfter,attempts,createdAt)
+        VALUES (${phoneKey},${Number(customer.id)},${emailKey},'',0,0,0,0)
+        ON DUPLICATE KEY UPDATE phoneKey=phoneKey`);
+      await rows(tx,sql`SELECT resendAfter FROM customerOtpChallenges WHERE phoneKey=${phoneKey} FOR UPDATE`);
+      for (const key of [channelKey,deliveryKey]) {
+        await tx.execute(sql`INSERT INTO customerOtpLimits (limitKey,windowStart,hits)
+          VALUES (${key},0,0) ON DUPLICATE KEY UPDATE limitKey=limitKey`);
+      }
+      const [channelCooldown] = await rows(tx,sql`SELECT windowStart FROM customerOtpLimits
+        WHERE limitKey=${channelKey} FOR UPDATE`);
+      const [deliveryLimit] = await rows(tx,sql`SELECT windowStart,hits FROM customerOtpLimits
+        WHERE limitKey=${deliveryKey} FOR UPDATE`);
+      if (!channelCooldown || !deliveryLimit) throw new Error("OTP_DELIVERY_LIMIT_UNAVAILABLE");
+      const now = Date.now();
+      const cooldownWait = Math.max(0,Math.ceil((Number(channelCooldown.windowStart)+RESEND_MS-now)/1000));
+      if (cooldownWait > 0) return {state:"channel_cooldown",retryAfterSeconds:cooldownWait};
+      const resetWindow = Number(deliveryLimit.windowStart) <= 0 || Number(deliveryLimit.windowStart)+OTP_LIMIT_WINDOW_MS <= now;
+      const deliveryHits = resetWindow ? 0 : Number(deliveryLimit.hits);
+      if (deliveryHits >= 6) return {state:"delivery_limited",retryAfterSeconds:Math.max(1,
+        Math.ceil((Number(deliveryLimit.windowStart)+OTP_LIMIT_WINDOW_MS-now)/1000))};
+
+      const code = generateOwnSiteCode();
+      const codeHash = digest("code:"+phoneKey,code);
+      await tx.execute(sql`UPDATE customerOtpChallenges
+        SET customerId=${Number(customer.id)},emailKey=${emailKey},codeDigest=${codeHash},
+          expiresAt=${now+CUSTOMER_CODE_MS},resendAfter=${now+RESEND_MS},attempts=0,usedAt=NULL,createdAt=${now}
+        WHERE phoneKey=${phoneKey}`);
+      if (channel === "email") await deliverOwnSiteCode(email,code);
+      else await enqueueIncomingWhatsappOtp({customerPhone:phone,code,phoneKey,
+        codeDigest:codeHash,expiresAt:now+CUSTOMER_CODE_MS},tx);
+      // Failed delivery/queue insert rolls back the challenge, queue, cooldown
+      // and delivery count together. Attempt protection remains committed.
+      await tx.execute(sql`UPDATE customerOtpLimits SET windowStart=${resetWindow ? now : Number(deliveryLimit.windowStart)},hits=${deliveryHits+1}
+        WHERE limitKey=${deliveryKey}`);
+      await tx.execute(sql`UPDATE customerOtpLimits SET windowStart=${now},hits=hits+1
+        WHERE limitKey=${channelKey}`);
+      return {state:"issued"};
+    });
+  } catch {
+    log("delivery_failed");
+    throw new TRPCError({code:"SERVICE_UNAVAILABLE",message:channel === "email"
+      ? "Não foi possível enviar o código por e-mail. Tente novamente ou use o WhatsApp."
+      : "Não foi possível preparar o código pelo WhatsApp. Tente novamente ou use o e-mail."});
   }
-  return { success:true, message:GENERIC, resendBlocked:false, retryAfterSeconds:60 };
+  if (result.state !== "issued") {
+    log(result.state);
+    return {success:true,message:result.state === "channel_cooldown"
+      ? "Aguarde para solicitar outro código."
+      : "Limite de envios atingido. Aguarde o tempo indicado para solicitar outro código.",
+      resendBlocked:true,retryAfterSeconds:result.retryAfterSeconds,
+      cooldownScope:result.state === "channel_cooldown" ? "channel" : "all"};
+  }
+  log(channel === "email" ? "delivery_accepted" : "whatsapp_queued");
+  return {success:true,message:GENERIC,resendBlocked:false,retryAfterSeconds:60,cooldownScope:"channel"};
 }
 
 export async function verifyCustomerCode(phoneInput: string, code: string) {

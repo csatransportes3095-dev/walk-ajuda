@@ -1,0 +1,95 @@
+name: Customer OTP delivery validation
+
+on:
+  pull_request:
+    branches: [recovery/organizar-salvos-2026-08-24]
+    paths:
+      - '.github/workflows/customer-otp-delivery-validation.yml'
+      - 'server/customerOtp*.ts'
+      - 'server/h2-auto-incoming-otp.ts'
+      - 'server/h2-auto-otp-apk.ts'
+      - 'server/siteAccessCodeDelivery.ts'
+      - 'client/src/components/CustomerOtpLogin.tsx'
+      - 'scripts/tests/customer-otp-delivery-ui/**'
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+concurrency:
+  group: customer-otp-delivery-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  validate:
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    env:
+      TZ: UTC
+    services:
+      mysql:
+        image: mysql:8.4
+        env:
+          MYSQL_ROOT_PASSWORD: isolated-otp-delivery-test
+          MYSQL_DATABASE: h2_customer_otp_delivery_test
+        ports: ['3306:3306']
+        options: >-
+          --health-cmd="mysqladmin ping -h 127.0.0.1 -pisolated-otp-delivery-test"
+          --health-interval=10s --health-timeout=5s --health-retries=12
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+      - name: Install locked dependencies
+        run: |
+          npm install -g pnpm@10.4.1
+          pnpm install --frozen-lockfile
+      - name: Verify OTP quotas, atomic delivery and trusted client IP
+        env:
+          CUSTOMER_OTP_DELIVERY_TEST_DB_URL: mysql://root:isolated-otp-delivery-test@127.0.0.1:3306/h2_customer_otp_delivery_test
+        run: pnpm exec vitest run server/customerOtpDeliveryMysql.test.ts server/customerOtpClientIp.test.ts
+      - name: Verify the isolated automatic login interface
+        env:
+          PLAYWRIGHT_SKIP_BROWSER_DOWNLOAD: '1'
+          CUSTOMER_OTP_DELIVERY_UI_OUTPUT_DIR: ${{ runner.temp }}/customer-otp-delivery-ui
+        run: |
+          export CHROME_BIN="$(command -v google-chrome || command -v chromium || command -v chromium-browser || true)"
+          if [ -z "$CHROME_BIN" ]; then
+            echo "No installed Chrome/Chromium on this runner."
+            exit 1
+          fi
+          npm install --prefix "$RUNNER_TEMP/otp-ui-tools" --no-package-lock --no-audit --no-fund playwright@1.57.0
+          export PLAYWRIGHT_MODULE="$RUNNER_TEMP/otp-ui-tools/node_modules/playwright/index.mjs"
+          mkdir -p "$CUSTOMER_OTP_DELIVERY_UI_OUTPUT_DIR"
+          node scripts/tests/customer-otp-delivery-ui/server.mjs > "$CUSTOMER_OTP_DELIVERY_UI_OUTPUT_DIR/server.log" 2>&1 &
+          otp_qa_pid=$!
+          trap 'kill "$otp_qa_pid" 2>/dev/null || true' EXIT
+          otp_qa_ready=false
+          for attempt in {1..30}; do
+            if curl --fail --silent --max-time 1 http://127.0.0.1:4177/test-control > /dev/null; then
+              otp_qa_ready=true
+              break
+            fi
+            if ! kill -0 "$otp_qa_pid" 2>/dev/null; then
+              cat "$CUSTOMER_OTP_DELIVERY_UI_OUTPUT_DIR/server.log"
+              exit 1
+            fi
+            sleep 1
+          done
+          if [ "$otp_qa_ready" != true ]; then
+            cat "$CUSTOMER_OTP_DELIVERY_UI_OUTPUT_DIR/server.log"
+            exit 1
+          fi
+          node scripts/tests/customer-otp-delivery-ui/qa.mjs
+      - name: Keep isolated OTP screenshots and results
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: customer-otp-delivery-ui
+          path: |
+            ${{ runner.temp }}/customer-otp-delivery-ui/*.png
+            ${{ runner.temp }}/customer-otp-delivery-ui/*.json
+            ${{ runner.temp }}/customer-otp-delivery-ui/*.log
+          if-no-files-found: ignore
+          retention-days: 7
