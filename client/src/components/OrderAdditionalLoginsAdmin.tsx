@@ -16,7 +16,7 @@ const fields: Array<[Field, string]> = [
   ['loginPhone', 'Telefone'], ['loginEmail', 'E-mail'], ['loginPassword', 'Senha'],
   ['emailLink', 'Link de acesso ao e-mail'],
 ];
-const asDraft = (row: Partial<Draft>): Draft => ({
+const asDraft = (row: Partial<Record<keyof Draft, string | null>>): Draft => ({
   label: row.label || '', loginPhone: row.loginPhone || '', loginEmail: row.loginEmail || '',
   loginPassword: row.loginPassword || '', authCode: row.authCode || '',
   cnhCode: row.cnhCode || '', emailLink: row.emailLink || '',
