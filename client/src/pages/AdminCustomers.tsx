@@ -1,5 +1,6 @@
 import { createCustomerSaveGate, reconcileConfirmedProfilePhoto, replaceConfirmedProfilePhoto } from "@/lib/confirmedProfilePhotoSave";
 import { ProfilePhotoRecovery } from "@/components/ProfilePhotoRecovery";
+import CustomerLoginHistory from "@/components/CustomerLoginHistory";
 import { useEffect, useMemo, useState } from "react";
 import { trpc } from "@/lib/trpc";
 import { toast } from "sonner";
@@ -332,57 +333,6 @@ function ManualReferralForm({
     </div>
   );
 }
-
-// Componente de histórico de logins do cliente
-function LoginHistoryColumn({ phone, formatDate }: { phone: string; formatDate: (ts: number) => string }) {
-  const cleanPhone = phone.replace(/\D/g, '');
-  const { data, isLoading } = trpc.customerPassword.adminGetLoginHistory.useQuery(
-    { phone: cleanPhone },
-    { enabled: cleanPhone.length >= 10, staleTime: 0 }
-  );
-
-  return (
-    <div className="w-full min-w-0 rounded-xl border border-sky-400/25 bg-slate-950/40 p-3">
-      <div className="flex items-center gap-1 mb-1.5">
-        <Clock className="w-3 h-3 text-blue-400 flex-shrink-0" />
-        <span className="text-sm font-black text-sky-300">Últimos 5 acessos</span>
-      </div>
-      {isLoading ? (
-        <div className="space-y-1">
-          {[...Array(3)].map((_, i) => (
-            <div key={i} className="h-3 bg-muted/40 rounded animate-pulse" />
-          ))}
-        </div>
-      ) : (
-        <>
-          <div className="text-[11px] font-bold text-foreground mb-1.5">
-            <span className="text-blue-400">{data?.total ?? 0}</span>
-            <span className="text-muted-foreground font-normal"> total</span>
-          </div>
-          {data?.recent && data.recent.length > 0 ? (
-            <div className="grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-5 gap-2">
-              {data.recent.slice(0, 5).map((ts: number, i: number) => (
-                <div key={i} className={`min-w-0 rounded-lg border px-2.5 py-3 text-xs font-semibold leading-snug ${[
-                  'border-cyan-400/40 bg-cyan-500/10 text-cyan-200',
-                  'border-violet-400/40 bg-violet-500/10 text-violet-200',
-                  'border-emerald-400/40 bg-emerald-500/10 text-emerald-200',
-                  'border-amber-400/40 bg-amber-500/10 text-amber-200',
-                  'border-pink-400/40 bg-pink-500/10 text-pink-200',
-                ][i]}`}>
-                  <span className="block text-[10px] opacity-75">Acesso {i + 1}</span>
-                  {formatDate(ts)}
-                </div>
-              ))}
-            </div>
-          ) : (
-            <p className="text-[9px] text-muted-foreground/60 italic">Nenhum acesso</p>
-          )}
-        </>
-      )}
-    </div>
-  );
-}
-
 
 export default function AdminCustomers() {
   const profilePhotoUtils = trpc.useUtils();
@@ -1682,7 +1632,7 @@ export default function AdminCustomers() {
                   {expandedCustomerIds.has(c.id) && <div className="mt-3 flex flex-col gap-3 border-t pt-3" style={{ borderColor: 'rgba(255,255,255,0.07)' }}>
                   {/* Coluna esquerda: histórico de logins + badge revendedor */}
                   <div className="w-full flex flex-col gap-2">
-                    <LoginHistoryColumn phone={c.phone} formatDate={(ts) => formatDateBR(ts)} />
+                    <CustomerLoginHistory phone={c.phone} formatDate={(ts) => formatDateBR(ts)} />
                     {(c as any).isReseller && (
                       <div className="w-full flex-shrink-0">
                         <div className="w-full px-2 py-2 bg-gradient-to-br from-amber-500/20 to-orange-500/20 border border-amber-500/50 rounded-lg flex flex-col items-center gap-1">
@@ -1761,12 +1711,6 @@ export default function AdminCustomers() {
                   <p className="text-xs text-muted-foreground flex items-center gap-1.5">
                     <span>📅</span> <span className="text-muted-foreground/70">Cadastro:</span> {formatDateBR(c.createdAt, true)}
                   </p>
-                  {c.lastAccessAt && (
-                    <p className="text-xs text-muted-foreground flex items-center gap-1.5">
-                      <Clock className="w-3 h-3 flex-shrink-0" />
-                      <span className="text-muted-foreground/70">Último acesso:</span> {formatDateBR(c.lastAccessAt)}
-                    </p>
-                  )}
                   {(c as any).cpf && (
                     <p className="text-xs text-muted-foreground flex items-center gap-1.5">
                       <span>🪪</span> <span className="text-muted-foreground/70">CPF:</span> {(c as any).cpf.replace(/(\d{3})(\d{3})(\d{3})(\d{2})/, '$1.$2.$3-$4')}

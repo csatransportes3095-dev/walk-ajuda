@@ -29,6 +29,7 @@ import { ensureCustomerIdentityInfrastructure, findMainCustomerByIdentity, getRo
 import { getMissingCustomerProfileFields } from "../customerProfileRequirements";
 import { deliverOwnSiteCode } from "../siteAccessCodeDelivery";
 import { generateOwnSiteCode } from "../siteAccessOwnCodes";
+import { getCustomerLoginHistory } from "../customerLoginHistory";
 import { emailBelongsToAnotherCustomer, CUSTOMER_EMAIL_IN_USE_MESSAGE } from "../customerEmailOwnership";
 
 const SESSION_DURATION_MS = 90 * 24 * 60 * 60 * 1000; // 90 dias
@@ -1021,30 +1022,10 @@ export const customerPasswordRouter = router({
   // â”€â”€ Histórico de logins (admin) â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
 
   adminGetLoginHistory: adminProcedure
-    .input(z.object({ phone: z.string() }))
+    .input(z.object({ phone: z.string().min(10).max(32) }))
     .query(async ({ input }) => {
       const db = (await getDb()) as any;
-      if (!db) return { total: 0, recent: [] };
-      const cleanPhone = input.phone.replace(/\D/g, "");
-
-      // Total de logins
-      const countRows = await db
-        .select({ count: sql<number>`COUNT(*)` })
-        .from(customerLoginHistory)
-        .where(eq(customerLoginHistory.phone, cleanPhone));
-      const total = Number(countRows?.[0]?.count ?? 0);
-
-      // 5 últimos logins
-      const recent = await db
-        .select({ loginAt: customerLoginHistory.loginAt })
-        .from(customerLoginHistory)
-        .where(eq(customerLoginHistory.phone, cleanPhone))
-        .orderBy(sql`loginAt DESC`)
-        .limit(5);
-
-      return {
-        total,
-        recent: recent.map((r: any) => new Date(r.loginAt).getTime()),
-      };
+      if (!db) throw new TRPCError({ code: 'SERVICE_UNAVAILABLE', message: 'Histórico de acessos temporariamente indisponível.' });
+      return getCustomerLoginHistory(db, input.phone);
     }),
 });

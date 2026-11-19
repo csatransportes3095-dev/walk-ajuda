@@ -13,6 +13,7 @@ import { generateOwnSiteCode } from "./siteAccessOwnCodes";
 import { getMissingCustomerProfileFields } from "./customerProfileRequirements";
 import { assertLoginEmailProof } from "./customerLoginEmailProof";
 import { getAdminJwtSecret } from "./adminJwt";
+import { recordCustomerOtpLogin } from "./customerLoginHistory";
 
 /**
  * Customer authentication v2: registered phone + one-time email code.
@@ -126,9 +127,10 @@ async function issueSession(tx: any, customer: any, now: number) {
   const expiry = new Date(now + CUSTOMER_SESSION_MS);
   const phoneKey = digest("phone", phone), emailKey = digest("email", email);
   await tx.execute(sql`INSERT INTO customerPasswordSessions (phone,token,expiresAt,createdAt,lastAccessAt)
-    VALUES (${phone},${token},${expiry},NOW(),NOW())`);
+    VALUES (${phone},${token},${expiry},FROM_UNIXTIME(FLOOR(${now} / 1000)),FROM_UNIXTIME(FLOOR(${now} / 1000)))`);
   await tx.execute(sql`INSERT INTO customerOtpSessions (tokenHash,customerId,phoneKey,emailKey,expiresAt)
     VALUES (${digest("session",token)},${Number(customer.id)},${phoneKey},${emailKey},${now+CUSTOMER_SESSION_MS})`);
+  await recordCustomerOtpLogin(tx, { customerId: Number(customer.id), phone, token, loggedInAtMs: now });
   const profileUpdateFields = getMissingCustomerProfileFields(customer);
   return { success: true as const, token, profileUpdateRequired: profileUpdateFields.length > 0, profileUpdateFields };
 }

@@ -1,0 +1,114 @@
+name: Customer login history validation
+
+on:
+  pull_request:
+    branches: [recovery/organizar-salvos-2026-08-24]
+    paths:
+      - '.github/workflows/customer-login-history-validation.yml'
+      - 'server/customerLoginHistory*.ts'
+      - 'server/customerAccessEvidence*.ts'
+      - 'server/customerOtpAccess.ts'
+      - 'server/routers/customerPassword.ts'
+      - 'client/src/components/CustomerLoginHistory.tsx'
+      - 'client/src/pages/AdminCustomers.tsx'
+      - 'scripts/apply-customer-login-history-migration.ts'
+      - 'scripts/render-start.sh'
+      - 'scripts/tests/customer-login-history-ui/**'
+      - 'drizzle/*customer_login_history*.sql'
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+concurrency:
+  group: customer-login-history-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  validate:
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+    env:
+      TZ: UTC
+    services:
+      mysql:
+        image: mysql:8.4
+        env:
+          MYSQL_ROOT_PASSWORD: isolated-history-test
+          MYSQL_DATABASE: h2_customer_login_history_test
+        ports: ['3306:3306']
+        options: >-
+          --health-cmd="mysqladmin ping -h 127.0.0.1 -pisolated-history-test"
+          --health-interval=10s --health-timeout=5s --health-retries=12
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+      - name: Install locked dependencies
+        run: |
+          npm install -g pnpm@10.4.1
+          pnpm install --frozen-lockfile
+      - name: Login history access control and real MySQL invariants
+        env:
+          CUSTOMER_LOGIN_HISTORY_TEST_DB_URL: mysql://root:isolated-history-test@127.0.0.1:3306/h2_customer_login_history_test
+        run: pnpm exec vitest run server/customerLoginHistory.test.ts server/customerLoginHistoryMysql.test.ts
+      - name: Isolated history refresh and error interface
+        env:
+          PLAYWRIGHT_SKIP_BROWSER_DOWNLOAD: '1'
+          CUSTOMER_HISTORY_UI_OUTPUT_DIR: ${{ runner.temp }}/customer-login-history-ui
+        run: |
+          export CHROME_BIN="$(command -v google-chrome || command -v chromium || command -v chromium-browser || true)"
+          if [ -z "$CHROME_BIN" ]; then
+            echo "No installed Chrome/Chromium on this runner."
+            exit 1
+          fi
+          npm install --prefix "$RUNNER_TEMP/history-ui-tools" --no-package-lock --no-audit --no-fund playwright@1.57.0
+          export PLAYWRIGHT_MODULE="$RUNNER_TEMP/history-ui-tools/node_modules/playwright/index.mjs"
+          mkdir -p "$CUSTOMER_HISTORY_UI_OUTPUT_DIR"
+          node scripts/tests/customer-login-history-ui/server.mjs > "$CUSTOMER_HISTORY_UI_OUTPUT_DIR/server.log" 2>&1 &
+          history_qa_pid=$!
+          trap 'kill "$history_qa_pid" 2>/dev/null || true' EXIT
+          history_qa_ready=false
+          for attempt in {1..30}; do
+            if curl --fail --silent --max-time 1 http://127.0.0.1:4176/test-control > /dev/null; then
+              history_qa_ready=true
+              break
+            fi
+            if ! kill -0 "$history_qa_pid" 2>/dev/null; then
+              cat "$CUSTOMER_HISTORY_UI_OUTPUT_DIR/server.log"
+              exit 1
+            fi
+            sleep 1
+          done
+          if [ "$history_qa_ready" != true ]; then
+            cat "$CUSTOMER_HISTORY_UI_OUTPUT_DIR/server.log"
+            exit 1
+          fi
+          node scripts/tests/customer-login-history-ui/qa.mjs
+      - name: Keep isolated history screenshots and results
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: customer-login-history-ui
+          path: |
+            ${{ runner.temp }}/customer-login-history-ui/*.png
+            ${{ runner.temp }}/customer-login-history-ui/*.json
+            ${{ runner.temp }}/customer-login-history-ui/*.log
+          if-no-files-found: ignore
+          retention-days: 7
+      - name: Prepare the production source exactly as Render does
+        run: |
+          node --input-type=module <<'JS'
+          import fs from 'node:fs';
+          import { execFileSync } from 'node:child_process';
+          const dockerfile = fs.readFileSync('Dockerfile', 'utf8');
+          const scripts = [...dockerfile.matchAll(/&& node (scripts\/[^\s]+)/g)].map(match => match[1]);
+          if (!scripts.length) throw new Error('No production preparation scripts found');
+          for (const script of scripts) {
+            if (!/^scripts\/[A-Za-z0-9._/-]+\.mjs$/.test(script)) throw new Error('Unexpected preparation path');
+            execFileSync(process.execPath, [script], { stdio: 'inherit' });
+          }
+          JS
+      - name: Compile production frontend and server
+        run: pnpm build
