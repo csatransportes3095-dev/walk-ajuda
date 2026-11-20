@@ -251,6 +251,40 @@ describe("H2 Auto mídia e ACK privacy-safe", () => {
     expect(state.diagnosticInserts).toBe(details.length);
   });
 
+  it("recebe no ACK o inventário individual de fotos do cache, sem aceitar paths privados", async () => {
+    const inventory = [{
+      faqId: "faq_86", imageId: "a".repeat(32), sha256: "b".repeat(64), state: "READY",
+    }, {
+      faqId: "faq_87", imageId: "c".repeat(32), sha256: "d".repeat(64), state: "MISSING",
+    }];
+    const diagnostics = {
+      ...validDiagnostics,
+      apkVersion: "2.18-image-cache",
+      apkVersionCode: 118,
+      imageCacheFiles: inventory,
+      imageCacheFilesTruncated: false,
+      imageCacheUpdatedAt: 1_700_000_000_000,
+    };
+    const ok = await request("/api/h2-auto/ack", {
+      method: "POST", headers: headers(),
+      body: JSON.stringify({ revision: 1, diagnostics }),
+    });
+    expect(ok.status).toBe(200);
+    expect(state.diagnosticInserts).toBe(1);
+    for (const invalid of [
+      { ...inventory[0], path: "/data/user/0/private.jpg" },
+      { ...inventory[0], imageId: "invalid" },
+      { ...inventory[0], state: "SENT_CONFIRMED" },
+    ]) {
+      const result = await request("/api/h2-auto/ack", {
+        method: "POST", headers: headers(),
+        body: JSON.stringify({ revision: 1, diagnostics: { ...diagnostics, imageCacheFiles: [invalid] } }),
+      });
+      expect(result.status).toBe(400);
+    }
+    expect(state.diagnosticInserts).toBe(1);
+  });
+
   it("aceita o ACK da versão 1.95 com somente estado e horário de OTP", async () => {
     const response = await request("/api/h2-auto/ack", {
       method: "POST",

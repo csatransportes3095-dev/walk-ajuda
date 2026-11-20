@@ -116,6 +116,13 @@ const imageReplyDetailLabels: Record<string, string> = {
   UI_TIMEOUT: "O WhatsApp não concluiu a etapa de envio dentro do tempo esperado.",
   RECIPIENT_NOT_VERIFIED: "O APK não confirmou o destinatário na conversa.",
   OPERATOR_INTERVENED: "A tentativa automática foi interrompida após interação na tela do WhatsApp.",
+  INTERVENTION_CLICK: "O WhatsApp registrou um clique durante o compartilhamento.",
+  INTERVENTION_TEXT: "O WhatsApp registrou uma edição de texto.",
+  INTERVENTION_MEDIA: "O WhatsApp registrou uma mudança na seleção da imagem.",
+  INTERVENTION_DRAFT: "O WhatsApp mostrou um rascunho diferente do esperado.",
+  INTERVENTION_CAPTION: "A legenda da imagem é diferente da esperada.",
+  INTERVENTION_COMPOSER: "O campo de mensagem contém um rascunho inesperado.",
+  INTERVENTION_EXTRA_MEDIA: "O WhatsApp mostrou mais imagens selecionadas que o esperado.",
 };
 const imageReplyStageLabels: Record<string, string> = {
   NONE: "Ainda não iniciada",
@@ -1135,6 +1142,30 @@ export default function AdminH2Auto() {
                       <span>Na fila de envio: <strong>{diagnostic?.imageReplyQueuePending??"Sem registro"}</strong></span>
                     </div>
                     <p className="text-slate-400">Atualizado em: {dateLabel(diagnostic?.imageReplyStatusAt)}</p>
+                    <div className="space-y-2 border-t border-cyan-400/20 pt-3" aria-label="Arquivos de fotos no APK">
+                      <p className="font-black text-cyan-100">ARQUIVOS DE FOTOS NO APK</p>
+                      <p className="text-slate-300">Pasta lógica: armazenamento privado do H2 Auto / cache / h2_reply_images_v1. O ADM não acessa os arquivos diretamente.</p>
+                      <p className="text-slate-400">Última conferência no celular: {dateLabel(diagnostic?.imageCacheUpdatedAt)}</p>
+                      {(personalization.faq??[]).filter(faq=>faq.image).slice(0,100).map(faq=>{
+                        const file=diagnostic?.imageCacheFiles?.find(item=>item.faqId===faq.id
+                          && item.imageId===faq.image?.id && item.sha256===faq.image?.sha256);
+                        const label=!faq.enabled?"Pergunta desativada"
+                          : file?.state==="READY"?"PRONTA PARA ANEXAR"
+                          : file?.state==="DOWNLOAD_FAILED"?"FALHOU O DOWNLOAD"
+                          : file?.state==="MISSING"?"AGUARDANDO CACHE"
+                          : "NÃO CONFERIDA NESTE APK";
+                        return <div key={faq.id} className="flex items-center gap-3 rounded-lg border border-white/10 bg-slate-950/70 p-2">
+                          <img src={faq.image!.downloadPath} alt="Imagem vinculada à pergunta" className="h-20 w-14 shrink-0 rounded object-contain" loading="lazy"/>
+                          <div className="min-w-0 space-y-1">
+                            <p className="break-words font-bold text-white">{faq.question}</p>
+                            <p className={faq.enabled&&file?.state==="READY"?"font-bold text-emerald-300":"text-amber-200"}>{label}</p>
+                            <p className="break-all text-slate-400">ID: {faq.image!.id.slice(0,8)}… · {Math.round(faq.image!.fileSize/1024)} KB</p>
+                          </div>
+                        </div>;
+                      })}
+                      {(personalization.faq??[]).filter(faq=>faq.image).length>100 || diagnostic?.imageCacheFilesTruncated
+                        ? <p className="text-amber-200">A lista exibe até 100 registros. Outras imagens permanecem vinculadas às suas perguntas.</p> : null}
+                    </div>
                   </div>}
                 </div>
                 <div className="space-y-2 rounded-xl border border-violet-400/25 bg-slate-950/65 p-3">
