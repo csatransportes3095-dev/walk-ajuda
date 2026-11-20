@@ -89,11 +89,11 @@ async function enableLearningOnce(deviceId: string): Promise<void> {
     const selected = await tx.execute(sql`SELECT
       JSON_UNQUOTE(JSON_EXTRACT(config_json,'$.questionCollectionEnabled')) AS active
       FROM h2_auto_devices WHERE id=${deviceId} LIMIT 1 FOR UPDATE`);
-    const row = (selected[0] as any[])[0];
+    const row = (selected[0] as unknown as any[])[0];
     if (!row) return;
     const migrated = await tx.execute(sql`SELECT device_id FROM h2_auto_learning_optin_20261105
       WHERE device_id=${deviceId} LIMIT 1`);
-    if ((migrated[0] as any[]).length) return;
+    if ((migrated[0] as unknown as any[]).length) return;
     if (String(row.active) !== "true") {
       await tx.execute(sql`UPDATE h2_auto_devices SET
         config_json=JSON_SET(config_json,'$.questionCollectionEnabled',
