@@ -1,0 +1,123 @@
+name: Vehicle vault owner validation
+
+on:
+  pull_request:
+    branches: [recovery/organizar-salvos-2026-08-24]
+    paths:
+      - '.github/workflows/vehicle-vault-owner-validation.yml'
+      - 'server/vehicleVaultOwner*.ts'
+      - 'server/vehicleVaultClassification*.ts'
+      - 'server/vehicleVaultBatch.test.ts'
+      - 'server/vehicleVaultPlateLookup.test.ts'
+      - 'server/routers/vehicleVault.ts'
+      - 'client/src/components/VehicleVaultPanel.tsx'
+      - 'client/src/components/VehicleVaultBatchPanel.tsx'
+      - 'client/src/components/vehicleVaultBatchUtils.ts'
+      - 'scripts/tests/vehicle-vault-owner*'
+      - 'scripts/tests/vehicle-vault-owner-ui/**'
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+concurrency:
+  group: vehicle-vault-owner-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  validate:
+    runs-on: ubuntu-latest
+    timeout-minutes: 25
+    env:
+      TZ: UTC
+    services:
+      mysql:
+        image: mysql:8.4
+        env:
+          MYSQL_ROOT_PASSWORD: isolated-vehicle-owner-test
+          MYSQL_DATABASE: h2_vehicle_vault_owner_test
+        ports: ['3306:3306']
+        options: >-
+          --health-cmd="mysqladmin ping -h 127.0.0.1 -pisolated-vehicle-owner-test"
+          --health-interval=10s --health-timeout=5s --health-retries=12
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+      - name: Install locked dependencies and the production PDF tools
+        run: |
+          npm install -g pnpm@10.4.1
+          pnpm install --frozen-lockfile
+          sudo apt-get update -qq
+          sudo apt-get install -y --no-install-recommends poppler-utils tesseract-ocr tesseract-ocr-por tesseract-ocr-eng fonts-dejavu-core
+      - name: Verify real PDF OCR, private procedures and MySQL persistence
+        env:
+          VEHICLE_VAULT_OWNER_TEST_DB_URL: mysql://root:isolated-vehicle-owner-test@127.0.0.1:3306/h2_vehicle_vault_owner_test
+        run: >-
+          pnpm exec vitest run
+          server/vehicleVaultOwner.test.ts
+          server/vehicleVaultOwnerPdf.test.ts
+          server/vehicleVaultOwnerMysql.test.ts
+          server/vehicleVaultClassification.test.ts
+          server/vehicleVaultBatch.test.ts
+          server/vehicleVaultPlateLookup.test.ts
+      - name: Verify the real owner editor, reopening and batch separation
+        env:
+          PLAYWRIGHT_SKIP_BROWSER_DOWNLOAD: '1'
+          VEHICLE_VAULT_OWNER_UI_OUTPUT_DIR: ${{ runner.temp }}/vehicle-vault-owner-ui
+        run: |
+          export CHROME_BIN="$(command -v google-chrome || command -v chromium || command -v chromium-browser || true)"
+          if [ -z "$CHROME_BIN" ]; then
+            echo "No installed Chrome/Chromium on this runner."
+            exit 1
+          fi
+          npm install --prefix "$RUNNER_TEMP/vehicle-owner-ui-tools" --no-package-lock --no-audit --no-fund playwright@1.57.0
+          export PLAYWRIGHT_MODULE="$RUNNER_TEMP/vehicle-owner-ui-tools/node_modules/playwright/index.mjs"
+          mkdir -p "$VEHICLE_VAULT_OWNER_UI_OUTPUT_DIR"
+          node scripts/tests/vehicle-vault-owner-ui/server.mjs > "$VEHICLE_VAULT_OWNER_UI_OUTPUT_DIR/server.log" 2>&1 &
+          vehicle_owner_qa_pid=$!
+          trap 'kill "$vehicle_owner_qa_pid" 2>/dev/null || true' EXIT
+          vehicle_owner_qa_ready=false
+          for attempt in {1..30}; do
+            if curl --fail --silent --max-time 1 http://127.0.0.1:4179/test-control > /dev/null; then
+              vehicle_owner_qa_ready=true
+              break
+            fi
+            if ! kill -0 "$vehicle_owner_qa_pid" 2>/dev/null; then
+              cat "$VEHICLE_VAULT_OWNER_UI_OUTPUT_DIR/server.log"
+              exit 1
+            fi
+            sleep 1
+          done
+          if [ "$vehicle_owner_qa_ready" != true ]; then
+            cat "$VEHICLE_VAULT_OWNER_UI_OUTPUT_DIR/server.log"
+            exit 1
+          fi
+          node scripts/tests/vehicle-vault-owner-ui/qa.mjs
+      - name: Keep synthetic owner screenshots and results
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: vehicle-vault-owner-ui
+          path: |
+            ${{ runner.temp }}/vehicle-vault-owner-ui/*.png
+            ${{ runner.temp }}/vehicle-vault-owner-ui/*.json
+            ${{ runner.temp }}/vehicle-vault-owner-ui/*.log
+          if-no-files-found: ignore
+          retention-days: 7
+      - name: Prepare the production source exactly as Render does
+        run: |
+          node --input-type=module <<'JS'
+          import fs from 'node:fs';
+          import { execFileSync } from 'node:child_process';
+          const dockerfile = fs.readFileSync('Dockerfile', 'utf8');
+          const scripts = [...dockerfile.matchAll(/&& node (scripts\/[^\s]+)/g)].map(match => match[1]);
+          if (!scripts.length) throw new Error('No production preparation scripts found');
+          for (const script of scripts) {
+            if (!/^scripts\/[A-Za-z0-9._/-]+\.mjs$/.test(script)) throw new Error('Unexpected preparation path');
+            execFileSync(process.execPath, [script], { stdio: 'inherit' });
+          }
+          JS
+      - name: Compile production frontend and server
+        run: pnpm build

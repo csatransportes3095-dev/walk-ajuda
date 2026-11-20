@@ -6,7 +6,7 @@ export const MAX_PDFS_PER_BATCH = 20;
 export const MAX_PDF_BYTES = 10 * 1024 * 1024;
 
 export type VaultFieldKey =
-  | "plate" | "renavam" | "chassis" | "model" | "color" | "manufactureYear" | "modelYear" | "category" | "exerciseYear";
+  | "plate" | "renavam" | "chassis" | "model" | "color" | "manufactureYear" | "modelYear" | "ownerName" | "category" | "exerciseYear";
 export type VaultFields = Record<VaultFieldKey, string>;
 
 export const VAULT_FIELDS: ReadonlyArray<readonly [VaultFieldKey, string]> = [
@@ -29,6 +29,7 @@ export function normalizedBatchPlate(value: string): string {
 export function fieldsFromPdf(result: {
   plate: string; renavam: string; chassis: string; model: string; color: string;
   manufactureYear: number | null; modelYear: number | null;
+  ownerName?: string | null;
   category?: string; exerciseYear?: number | null;
 }): VaultFields {
   return {
@@ -39,6 +40,7 @@ export function fieldsFromPdf(result: {
     color: result.color || "",
     manufactureYear: result.manufactureYear ? String(result.manufactureYear) : "",
     modelYear: result.modelYear ? String(result.modelYear) : "",
+    ownerName: result.ownerName || "",
     category: result.category || "",exerciseYear: result.exerciseYear ? String(result.exerciseYear) : "",
   };
 }
@@ -62,6 +64,7 @@ export function validateBatchFields(fields: VaultFields): string[] {
     if (!/^\d{4}$/.test(value) || Number(value) < 1900 || Number(value) > 2100)
       issues.push(label + " inválido.");
   }
+  if((fields.ownerName || "").trim().length>200)issues.push("Nome do proprietário deve ter até 200 caracteres.");
   const category=fields.category.trim().toUpperCase();
   if(category && category!=="PARTICULAR" && category!=="ALUGUEL")issues.push("Categoria inválida.");
   const exercise=fields.exerciseYear.trim();

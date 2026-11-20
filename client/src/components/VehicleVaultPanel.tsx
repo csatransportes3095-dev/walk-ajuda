@@ -22,9 +22,9 @@ function ApprovalBadge({status}:{status:ApprovalStatus}) {
 }
 type VehicleFields = {
   plate:string; renavam:string; chassis:string; model:string; color:string;
-  manufactureYear:string; modelYear:string; category:string; exerciseYear:string;
+  manufactureYear:string; modelYear:string; ownerName:string; category:string; exerciseYear:string;
 };
-const EMPTY:VehicleFields={plate:"",renavam:"",chassis:"",model:"",color:"",manufactureYear:"",modelYear:"",category:"",exerciseYear:""};
+const EMPTY:VehicleFields={plate:"",renavam:"",chassis:"",model:"",color:"",manufactureYear:"",modelYear:"",ownerName:"",category:"",exerciseYear:""};
 const NAMES: Array<[keyof VehicleFields,string]>=[
   ["plate","PLACA"],["renavam","RENAVAM"],["chassis","CHASSI"],
   ["model","MARCA / MODELO"],["color","COR"],["manufactureYear","ANO FABRICAÇÃO"],
@@ -145,11 +145,12 @@ export default function VehicleVaultPanel(){
     document.body.style.overflow="hidden";
     return ()=>{document.body.style.overflow=previousOverflow;};
   },[mode]);
-  const preview=(result:{plate:string;renavam:string;chassis:string;model:string;color:string;manufactureYear:number|null;modelYear:number|null;category:string;exerciseYear:number|null;text:string;missing:string[]},silent=false)=>{
+  const preview=(result:{plate:string;renavam:string;chassis:string;model:string;color:string;manufactureYear:number|null;modelYear:number|null;ownerName?:string|null;category:string;exerciseYear:number|null;text:string;missing:string[]},silent=false)=>{
     setFields({plate:result.plate||"",renavam:result.renavam||"",chassis:result.chassis||"",
       model:result.model||"",color:result.color||"",
       manufactureYear:result.manufactureYear?String(result.manufactureYear):"",
       modelYear:result.modelYear?String(result.modelYear):"",
+      ownerName:result.ownerName||"",
       category:result.category||"",exerciseYear:result.exerciseYear?String(result.exerciseYear):""});
     setText(result.text||"");
     setMissing(result.missing||[]);
@@ -225,6 +226,8 @@ export default function VehicleVaultPanel(){
     if(!/^\d{4}$/.test(fields.manufactureYear)||!/^\d{4}$/.test(fields.modelYear)){
       toast.error("Informe os dois anos com quatro dígitos.");return;
     }
+    const ownerName=fields.ownerName.trim();
+    if(ownerName.length>200)return toast.error("Nome do proprietário deve ter até 200 caracteres.");
     const category=fields.category.trim().toUpperCase();
     const exerciseYear=fields.exerciseYear.trim();
     if(category && category!=="PARTICULAR" && category!=="ALUGUEL")return toast.error("Categoria deve ser PARTICULAR ou ALUGUEL.");
@@ -235,6 +238,7 @@ export default function VehicleVaultPanel(){
         plate:fields.plate,renavam:fields.renavam,chassis:fields.chassis,
         model:fields.model,color:fields.color,
         manufactureYear:Number(fields.manufactureYear),modelYear:Number(fields.modelYear),
+        ownerName:ownerName||null,
         category:category || null,exerciseYear:exerciseYear?Number(exerciseYear):null,
         approvalStatus:draftApproval,
         sourceText:text,pdfBase64:pdfBase64||undefined,pdfFilename:pdfName||undefined,
@@ -253,6 +257,7 @@ export default function VehicleVaultPanel(){
     setFields({
       plate:d.plate,renavam:d.renavam,chassis:d.chassis,model:d.model,color:d.color,
       manufactureYear:String(d.manufactureYear),modelYear:String(d.modelYear),
+      ownerName:d.ownerName||"",
       category:d.category||"",exerciseYear:d.exerciseYear?String(d.exerciseYear):"",
     });
     setPendingText(null);setAutoTextStatus("idle");
@@ -390,6 +395,11 @@ export default function VehicleVaultPanel(){
                     {NAMES.map(([key,label])=><div key={key} className={"min-w-0 "+(key==="chassis"||key==="model"?"col-span-2 sm:col-span-1":"")}>
                       <label className="block text-[11px] font-bold text-slate-300">{label}<input className="mt-1 w-full min-w-0 rounded-lg border border-white/20 bg-black/55 px-2.5 py-2.5 text-sm font-semibold text-white outline-none focus:border-cyan-300/50"
                         value={fields[key]} onChange={e=>setFields(v=>({...v,[key]:e.target.value}))} placeholder={label}/></label>
+                      {key==="modelYear"&&<label className="mt-2 block text-[11px] font-bold text-slate-300">NOME DO PROPRIETÁRIO
+                        <input type="text" maxLength={200}
+                          className="mt-1 w-full min-w-0 rounded-lg border border-white/20 bg-black/55 px-2.5 py-2.5 text-sm font-semibold text-white outline-none focus:border-cyan-300/50"
+                          value={fields.ownerName} onChange={e=>setFields(v=>({...v,ownerName:e.target.value}))} placeholder="NOME DO PROPRIETÁRIO"/>
+                      </label>}
                       {key==="color"&&fields.color.trim()&&<span className="mt-1 block"><VehicleColorBadge color={fields.color} compact/></span>}
                       {key==="category"&&<div className="mt-2 space-y-2" role="group" aria-label="Avaliar documento durante a extração">
                         <span className="block text-[10px] font-black text-slate-300">AVALIAÇÃO DO DOCUMENTO</span>
@@ -481,6 +491,10 @@ export default function VehicleVaultPanel(){
         {details.data&&<>
           <div className="grid grid-cols-2 gap-2 text-sm">
             {NAMES.map(([key,label])=><div key={key}><div className="mb-1 text-[10px] font-bold text-white/45">{label}</div>{key==="color"?<VehicleColorBadge color={details.data?.color||""}/>:<div className="break-all font-bold">{String(details.data?.[key]||"")}</div>}
+              {key==="modelYear"&&<div className="mt-3">
+                <div className="mb-1 text-[10px] font-bold text-white/45">NOME DO PROPRIETÁRIO</div>
+                <div className="break-all font-bold">{details.data?.ownerName||""}</div>
+              </div>}
               {key==="category"&&<div className="mt-4 space-y-2" role="group" aria-label="Avaliação do documento">
                 <p className="text-[10px] font-black uppercase tracking-wider text-white/60">AVALIAÇÃO DO DOCUMENTO</p>
                 <div className="grid grid-cols-2 gap-2">
