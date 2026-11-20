@@ -198,7 +198,13 @@ describe.skipIf(!testUrl)("H2 Auto images — isolated MySQL upload/save/config/
     expect(invalid).toMatchObject({ status: 400, body: { error: "invalid_ack" } });
     expect((await caller().list()).find(device => device.id === deviceId)?.diagnostics).toMatchObject(diagnostics);
 
-    expect((await json("/api/h2-auto/ack", { revision, diagnostics: legacy })).status).toBe(200);
+    // Opening the ADM list can apply the initial FAQ migration and advance the
+    // revision. A real APK reads /config again before acknowledging that state.
+    const resynced = await json("/api/h2-auto/config");
+    expect(resynced.status).toBe(200);
+    expect(resynced.body.revision).toBe((await current()).revision);
+    const legacyAck = await json("/api/h2-auto/ack", { revision: resynced.body.revision, diagnostics: legacy });
+    expect(legacyAck).toMatchObject({ status: 200, body: { success: true } });
     const older = (await caller().list()).find(device => device.id === deviceId)?.diagnostics;
     expect(older).toMatchObject(legacy);
     expect(older).not.toHaveProperty("imageReplyDetailCode");
