@@ -853,7 +853,7 @@ export const h2AutoAdminRouter = router({
       questionHash:z.string().regex(/^[a-f0-9]{64}$/),
       answer:z.string().trim().min(3).max(1200),
       variations:h2AutoFaqVariationsSchema.default(""),
-    })
+    }))
     .mutation(async ({input}) => {
       await ensure();
       await ensureH2AutoLearningTable();
