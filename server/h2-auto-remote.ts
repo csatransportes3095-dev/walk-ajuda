@@ -1181,14 +1181,36 @@ export function registerH2AutoDeviceRoutes(app: Express) {
       if (!d?.token_hash || !matchesHash(d.token_hash, token))
         return respond(res, 401, { error: "unauthorized" });
       const db = await getDb();
-      if (db)
-        await db.execute(
-          sql`UPDATE h2_auto_devices SET last_seen=${Date.now()} WHERE id=${id} AND token_hash=${hash(token)}`
-        );
+      let activeDevice = d;
+      if (db) {
+        // Only old photo references are retired, and only for this paired device.
+        // Compare-and-swap prevents overwriting any concurrent ADM text changes.
+        const original=decodeConfig(d.config_json);
+        const clean=withoutReplyImages(original);
+        const hadPhoto=original.personalization.faq.some(rule =>
+          Boolean(rule.image) || rule.answer.trim().length < 3);
+        if (hadPhoto && Number(d.revision)>0) {
+          const next={...original,personalization:clean.personalization};
+          const edited: any=await db.execute(sql`UPDATE h2_auto_devices SET
+            config_json=${JSON.stringify(next)},revision=revision+1,last_seen=${Date.now()}
+            WHERE id=${id} AND revision=${Number(d.revision)} AND token_hash=${hash(token)}`);
+          if (edited[0]?.affectedRows)
+            activeDevice={...d,revision:Number(d.revision)+1,config_json:next};
+          else {
+            const refreshed=await rows(sql`SELECT * FROM h2_auto_devices WHERE id=${id} LIMIT 1`);
+            if (!refreshed[0] || !matchesHash(refreshed[0].token_hash,token))
+              return respond(res,401,{error:"unauthorized"});
+            activeDevice=refreshed[0];
+          }
+        } else {
+          await db.execute(sql`UPDATE h2_auto_devices SET last_seen=${Date.now()}
+            WHERE id=${id} AND token_hash=${hash(token)}`);
+        }
+      }
       return respond(res, 200, {
-        revision: Number(d.revision),
-        needsInitialImport: Number(d.revision) === 0,
-        config: Number(d.revision) === 0 ? null : safeDevice(d).config,
+        revision: Number(activeDevice.revision),
+        needsInitialImport: Number(activeDevice.revision) === 0,
+        config: Number(activeDevice.revision) === 0 ? null : safeDevice(activeDevice).config,
       });
     } catch {
       return respond(res, 500, { error: "temporary_error" });
