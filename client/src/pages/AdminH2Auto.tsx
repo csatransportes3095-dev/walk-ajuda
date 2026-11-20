@@ -21,8 +21,6 @@ import H2AutoValidationBlocks from "@/components/H2AutoValidationBlocks";
 import H2AutoSilencedContacts from "@/components/H2AutoSilencedContacts";
 import H2AutoManualControls from "@/components/H2AutoManualControls";
 import H2AutoWhatsAppPreview from "@/components/H2AutoWhatsAppPreview";
-import H2AutoReplyImageEditor from "@/components/H2AutoReplyImageEditor";
-import type { H2AutoReplyImage } from "@shared/h2AutoReplyImage";
 import { H2_AUTO_CONFIRMATION_DEFAULTS as confirmationDefaults, H2_AUTO_CONFIRMATION_GROUPS as confirmationGroups, type H2AutoConfirmation } from "@shared/h2AutoConfirmation";
 import { H2_AUTO_SHORT_MEDIA, H2_AUTO_SHORT_ORDER_NOT_FOUND } from "@shared/h2AutoShortReplies";
 import { H2_AUTO_PERSONALIZATION_DEFAULT, H2_AUTO_FAQ_MAX_VARIATION_CHARS, H2_AUTO_FAQ_MAX_VARIATION_LINES, h2AutoFaqVariationLineCount, type H2AutoPersonalization } from "@shared/h2AutoPersonalization";
@@ -86,62 +84,6 @@ const replyLabels: Record<string, string> = {
   NO_REPLY_ACTION: "WhatsApp não disponibilizou Responder",
   SEND_FAILED: "Falha ao enviar resposta",
   SKIPPED: "Ignorado",
-};
-const imageReplyLabels: Record<string, string> = {
-  NOT_CHECKED: "Envio de foto ainda não verificado",
-  DOWNLOADING: "APK carregando as imagens",
-  READY: "Imagem disponível no APK",
-  DOWNLOAD_FAILED: "Falha ao carregar a imagem no APK",
-  QUEUED: "Foto aguardando envio",
-  SENDING: "APK tentando enviar a foto",
-  SENT_CONFIRMED: "Saída da foto confirmada na conversa",
-  ACTION_ACCEPTED_UNVERIFIED: "Ação aceita; saída da foto ainda não confirmada",
-  FAILED: "Falha ao enviar a resposta com foto",
-  UNSUPPORTED: "Não foi possível iniciar o envio nesta tentativa",
-  RECIPIENT_NOT_VERIFIED: "Contato não confirmado para o envio da foto",
-  PAUSED: "Envio de foto pausado",
-};
-const imageReplyDetailLabels: Record<string, string> = {
-  NONE: "",
-  ACCESSIBILITY_DISCONNECTED: "Acessibilidade do H2 Auto desconectada no Android.",
-  UI_BUSY: "O controle de envio está ocupado com outra tentativa.",
-  CHAT_ACTIVITY_NOT_FOUND: "O Android não encontrou uma tela do WhatsApp para abrir a conversa.",
-  CHAT_LAUNCH_REJECTED: "O Android impediu a abertura da conversa no WhatsApp.",
-  SHARE_ACTIVITY_NOT_FOUND: "O Android não encontrou uma tela do WhatsApp para anexar a foto.",
-  SHARE_LAUNCH_REJECTED: "O Android impediu a abertura da foto no WhatsApp.",
-  TEXT_ACTION_UNAVAILABLE: "A notificação do WhatsApp não ofereceu uma ação de resposta de texto válida.",
-  TEXT_ACTION_CANCELLED: "A ação de responder texto da notificação expirou ou foi cancelada pelo WhatsApp.",
-  IMAGE_MIME_UNSUPPORTED: "A notificação do WhatsApp não aceita esta imagem; o envio pela tela é necessário.",
-  IMAGE_ACTION_CANCELLED: "A ação de anexar a foto na notificação expirou ou foi cancelada pelo WhatsApp.",
-  UI_TIMEOUT: "O WhatsApp não concluiu a etapa de envio dentro do tempo esperado.",
-  RECIPIENT_NOT_VERIFIED: "O APK não confirmou o destinatário na conversa.",
-  OPERATOR_INTERVENED: "A tentativa automática foi interrompida após interação na tela do WhatsApp.",
-  INTERVENTION_CLICK: "O WhatsApp registrou um clique durante o compartilhamento.",
-  INTERVENTION_TEXT: "O WhatsApp registrou uma edição de texto.",
-  INTERVENTION_MEDIA: "O WhatsApp registrou uma mudança na seleção da imagem.",
-  INTERVENTION_DRAFT: "O WhatsApp mostrou um rascunho diferente do esperado.",
-  INTERVENTION_CAPTION: "A legenda da imagem é diferente da esperada.",
-  INTERVENTION_COMPOSER: "O campo de mensagem contém um rascunho inesperado.",
-  INTERVENTION_EXTRA_MEDIA: "O WhatsApp mostrou mais imagens selecionadas que o esperado.",
-};
-const imageReplyStageLabels: Record<string, string> = {
-  NONE: "Ainda não iniciada",
-  TEXT: "Texto da resposta",
-  IMAGE: "Preparação/envio da foto (anexo não confirmado)",
-};
-const imageReplyUiDiagnosticLabels: Record<string, string> = {
-  NOT_CHECKED: "Ainda não verificado no WhatsApp.",
-  WINDOW_NOT_AVAILABLE: "Janela do WhatsApp não disponível para inspeção.",
-  WRONG_WHATSAPP_WINDOW: "Janela aberta não corresponde ao WhatsApp de origem.",
-  MULTIPLE_RECIPIENT_IDENTITIES: "A tela contém identidades de destinatário conflitantes.",
-  PREVIEW_RECIPIENT_NOT_VISIBLE: "A prévia da imagem não mostra o destinatário verificável.",
-  CHAT_RECIPIENT_NOT_VISIBLE: "A conversa não mostra o destinatário verificável.",
-  RECIPIENT_NAME_OR_NUMBER_MISMATCH: "Nome ou número não coincide com o contato identificado.",
-  RECIPIENT_UNCONFIRMED: "Não foi possível confirmar a conversa.",
-};
-const imageReplyUiStageLabels: Record<string, string> = {
-  NONE: "Não iniciada", CHAT: "Abrindo a conversa", PREVIEW: "Prévia do anexo",
-  AFTER_CLICK: "Clique aceito (entrega não confirmada)",
 };
 // OTP-only diagnostics already uploaded by APK 1.95+: never a delivery receipt.
 const otpDeliveryLabels: Record<string, string> = {
@@ -299,32 +241,18 @@ export default function AdminH2Auto() {
     }
   };
 
-  const [personalDrafts, setPersonalDrafts] = useState<Record<string, { personalization: H2AutoPersonalization; revision: number }>>({});
+  const [personalDrafts, setPersonalDrafts] = useState<Record<string, H2AutoPersonalization>>({});
   const [newFaqDraftIds, setNewFaqDraftIds] = useState<Record<string,string>>({});
   const [personalSamples, setPersonalSamples] = useState<Record<string,string>>({});
   const [personalPreviews, setPersonalPreviews] = useState<Record<string,string>>({});
-  const [personalImagePreviews, setPersonalImagePreviews] = useState<Record<string,H2AutoReplyImage | undefined>>({});
-  const [replyImageUploads, setReplyImageUploads] = useState<Record<string,boolean>>({});
   const savePersonalization = trpc.h2AutoAdmin.savePersonalization.useMutation({
-    onSuccess: (result, vars) => {
-      // Do not discard typing or an image edit made while the save was in flight.
-      setPersonalDrafts(prev => {
-        const draft = prev[vars.id];
-        if (draft && JSON.stringify(draft.personalization) !== JSON.stringify(vars.personalization))
-          return {...prev,[vars.id]:{...draft,revision:result.revision}};
-        const next = {...prev}; delete next[vars.id]; return next;
-      });
-      setNewFaqDraftIds(prev => {
-        if (prev[vars.id] && !(vars.personalization.faq ?? []).some(faq=>faq.id===prev[vars.id])) return prev;
-        const next = {...prev}; delete next[vars.id]; return next;
-      });
+    onSuccess: (_result, vars) => {
+      setPersonalDrafts(prev => { const next = {...prev}; delete next[vars.id]; return next; });
+      setNewFaqDraftIds(prev => { const next = {...prev}; delete next[vars.id]; return next; });
       toast.success("Personalização salva. Nova pergunta movida para o final da fila.");
       void utils.h2AutoAdmin.list.invalidate();
     },
-    onError: e => {
-      toast.error(e.message || "Falha ao salvar personalização");
-      if (e.data?.code === "CONFLICT") void utils.h2AutoAdmin.list.invalidate();
-    },
+    onError: e => toast.error(e.message || "Falha ao salvar personalização"),
   });
   const previewPersonalization = trpc.h2AutoAdmin.previewPersonalization.useMutation({
     onError: e => toast.error(e.message || "Falha ao gerar prévia"),
@@ -707,38 +635,14 @@ export default function AdminH2Auto() {
           const value = draft?.config || d.config;
           const expectedRevision = draft?.revision ?? d.revision;
           const media = { ...mediaDefaults, ...(value.media || {}) };
-          const personalDraft = personalDrafts[d.id];
-          const personalRevision = personalDraft?.revision ?? d.revision;
-          const personalDraftIsStale = Boolean(personalDraft && personalDraft.revision < d.revision);
-          const presetPreparation = prepareH2AutoCommonFaq(personalDraft?.personalization ?? d.config.personalization ?? H2_AUTO_PERSONALIZATION_DEFAULT);
+          const presetPreparation = prepareH2AutoCommonFaq(personalDrafts[d.id] ?? d.config.personalization ?? H2_AUTO_PERSONALIZATION_DEFAULT);
           const personalization = presetPreparation.personalization;
           const faqInEditor = displayH2AutoFaqWithDraftFirst(personalization.faq??[],newFaqDraftIds[d.id]);
-          const imageUploadPending = Object.entries(replyImageUploads).some(([key,busy])=>busy && key.startsWith(d.id+":"));
           const canSavePersonalization = !savePersonalization.isPending && Boolean(personalDrafts[d.id]||presetPreparation.added>0)
-            && !imageUploadPending && !personalDraftIsStale
-            && !(personalization.faq??[]).some(x=>x.question.trim().length<3
-              || (x.answer.trim().length>0 ? x.answer.trim().length<3 : !x.image)
-              || h2AutoFaqVariationLineCount(x.variations)>H2_AUTO_FAQ_MAX_VARIATION_LINES);
+            && !(personalization.faq??[]).some(x=>x.question.trim().length<3 || x.answer.trim().length<3 || h2AutoFaqVariationLineCount(x.variations)>H2_AUTO_FAQ_MAX_VARIATION_LINES);
           const updatePersonalization = (patch: Partial<H2AutoPersonalization>) => {
-            setPersonalDrafts(prev => ({...prev, [d.id]: {
-              personalization: {...(prev[d.id]?.personalization ?? personalization),...patch},
-              revision: prev[d.id]?.revision ?? d.revision,
-            }}));
+            setPersonalDrafts(prev => ({...prev, [d.id]: {...personalization,...patch}}));
             setPersonalPreviews(prev => ({...prev, [d.id]: ""}));
-            setPersonalImagePreviews(prev => ({...prev, [d.id]: undefined}));
-          };
-          const updateFaqImage = (faqId: string, image: H2AutoReplyImage | undefined) => {
-            // Upload completion may happen after text was edited or another FAQ deleted.
-            setPersonalDrafts(prev => {
-              const latest = prev[d.id]?.personalization ?? personalization;
-              if (!latest.faq.some(faq=>faq.id===faqId)) return prev;
-              return {...prev,[d.id]:{
-                personalization: {...latest,faq:latest.faq.map(faq=>faq.id===faqId?{...faq,image}:faq)},
-                revision: prev[d.id]?.revision ?? d.revision,
-              }};
-            });
-            setPersonalPreviews(prev => ({...prev,[d.id]:""}));
-            setPersonalImagePreviews(prev => ({...prev,[d.id]:undefined}));
           };
           const fixedDraft = fixedDrafts[d.id];
           const confirmation: H2AutoConfirmation = {
@@ -1091,7 +995,7 @@ export default function AdminH2Auto() {
                         setNewFaqDraftIds(prev=>({...prev,[d.id]:id}));
                       }}>+ ADICIONAR PERGUNTA E RESPOSTA</button>
                   </div>
-                  {faqInEditor.map((faq,index)=><div key={faq.id} data-faq-id={faq.id} className={"rounded-xl border bg-[#080b1c] p-3 space-y-2 "+(newFaqDraftIds[d.id]===faq.id?"border-emerald-400/70 ring-2 ring-emerald-400/20":"border-violet-500/30")}>
+                  {faqInEditor.map((faq,index)=><div key={faq.id} className={"rounded-xl border bg-[#080b1c] p-3 space-y-2 "+(newFaqDraftIds[d.id]===faq.id?"border-emerald-400/70 ring-2 ring-emerald-400/20":"border-violet-500/30")}>
                     <div className="flex justify-between items-center gap-2">
                       <strong className="text-sm">{newFaqDraftIds[d.id]===faq.id?"✍️ NOVA PERGUNTA — EDITAR AGORA":`PERGUNTA ${personalization.faq.findIndex(item=>item.id===faq.id)+1}`}</strong>
                       <div className="flex gap-3 items-center">
@@ -1110,84 +1014,24 @@ export default function AdminH2Auto() {
                     <p className={"text-right text-xs font-bold "+(h2AutoFaqVariationLineCount(faq.variations)>H2_AUTO_FAQ_MAX_VARIATION_LINES?"text-red-300":"text-emerald-300")}>
                       {h2AutoFaqVariationLineCount(faq.variations)} / {H2_AUTO_FAQ_MAX_VARIATION_LINES} linhas de subperguntas
                     </p>
-                    <textarea className={field} rows={4} maxLength={1200} aria-label="Texto da resposta" placeholder="Resposta automática em texto livre, com quebras de linha para celular" value={faq.answer}
+                    <textarea className={field} rows={4} maxLength={1200} placeholder="Resposta automática em texto livre, com quebras de linha para celular" value={faq.answer}
                       onChange={e=>updatePersonalization({faq:personalization.faq.map(x=>x.id===faq.id?{...x,answer:e.target.value}:x)})}/>
-                    <H2AutoReplyImageEditor deviceId={d.id} image={faq.image} disabled={savePersonalization.isPending}
-                      onChange={image=>updateFaqImage(faq.id,image)}
-                      onBusyChange={busy=>setReplyImageUploads(prev=>{
-                        const key=d.id+":"+faq.id;
-                        if (Boolean(prev[key])===busy) return prev;
-                        const next={...prev};
-                        if(busy) next[key]=true; else delete next[key];
-                        return next;
-                      })}/>
                     {newFaqDraftIds[d.id]===faq.id && <div className="flex flex-wrap items-center justify-between gap-2 rounded-lg border border-emerald-400/30 bg-emerald-400/10 p-2">
                       <p className="text-xs text-emerald-100">Ao salvar, esta pergunta irá para o final da fila.</p>
                       <button type="button" disabled={!canSavePersonalization}
-                        onClick={()=>savePersonalization.mutate({id:d.id,personalization,expectedRevision:personalRevision})}
+                        onClick={()=>savePersonalization.mutate({id:d.id,personalization})}
                         className="rounded-lg bg-emerald-500 px-4 py-2 text-xs font-black text-slate-950 disabled:opacity-40">
                         {savePersonalization.isPending?"SALVANDO...":"SALVAR PERGUNTA"}
                       </button>
                     </div>}
                   </div>)}
                   <p className="text-xs text-emerald-200">{H2_AUTO_FAQ_SUGGESTIONS.length} perguntas sugeridas, desativadas e editáveis. Confira e salve para conservar as edições.</p>
-                  <p className="text-xs text-amber-200">Cada pergunta precisa de texto ou imagem na resposta. Perguntas ambíguas seguem o atendimento atual, sem inventar respostas.</p>
-                  {personalization.faq.some(faq=>faq.image) && (diagnostic?.apkVersionCode||0)<115 &&
-                    <p role="status" className="rounded-lg border border-amber-400/40 bg-amber-950/25 p-3 text-xs text-amber-100">
-                      Para enviar fotos anexadas, atualize o H2 Auto para a versão 2.15 ou superior e sincronize o aparelho.{' '}
-                      <a href="/baixar-h2-auto" className="font-bold underline">Baixar APK atualizado</a>
-                    </p>}
-                  {personalization.faq.some(faq=>faq.image) && <div role="status" aria-label="Estado das fotos no APK" className="space-y-2 rounded-xl border border-cyan-400/30 bg-cyan-950/20 p-3 text-xs">
-                    <p className="font-black text-cyan-100">FOTOS NO APK · ÚLTIMO REGISTRO DO APARELHO</p>
-                    <p className={diagnostic?.imageReplyStatusCode==="SENT_CONFIRMED"?"font-bold text-emerald-300":"font-bold text-cyan-200"}>
-                      {imageReplyLabels[diagnostic?.imageReplyStatusCode??"NOT_CHECKED"]??imageReplyLabels.NOT_CHECKED}
-                    </p>
-                    {diagnostic?.imageReplyDetailCode && imageReplyDetailLabels[diagnostic.imageReplyDetailCode] &&
-                      <p className="text-amber-100">{imageReplyDetailLabels[diagnostic.imageReplyDetailCode]}</p>}
-                    <div className="flex flex-wrap gap-x-4 gap-y-1 text-slate-300">
-                      <span>Etapa registrada: <strong>{imageReplyStageLabels[diagnostic?.imageReplyStage??""]??"Sem registro"}</strong></span>
-                      {diagnostic?.imageReplyUiStage && <span>Etapa na tela: <strong>{imageReplyUiStageLabels[diagnostic.imageReplyUiStage]??"Sem registro"}</strong></span>}
-                      {diagnostic?.imageReplyUiDiagnosticCode && diagnostic.imageReplyUiDiagnosticCode!=="NOT_CHECKED" && <span className="text-amber-200">Identificação: <strong>{imageReplyUiDiagnosticLabels[diagnostic.imageReplyUiDiagnosticCode]??"Diagnóstico indisponível"}</strong></span>}
-                      <span>Acessibilidade do H2 Auto: <strong>{diagnostic?.imageReplyAccessibilityConnected===true?"Conectada":diagnostic?.imageReplyAccessibilityConnected===false?"Desconectada":"Sem registro"}</strong></span>
-                    </div>
-                    {diagnostic?.imageReplyDetailCode==="ACCESSIBILITY_DISCONNECTED" && diagnostic.imageReplyAccessibilityConnected===false &&
-                      <p className="text-amber-100">Confira a conexão da acessibilidade em Fotos no APK. Se a permissão já estiver ativada, o registro indica uma falha de conexão do serviço.</p>}
-                    <div className="flex flex-wrap gap-x-4 gap-y-1 text-slate-300">
-                      <span>Imagens disponíveis: <strong>{diagnostic?.imageCacheReady??"Sem registro"}</strong></span>
-                      <span>Falhas ao carregar: <strong>{diagnostic?.imageCacheFailed??"Sem registro"}</strong></span>
-                      <span>Na fila de envio: <strong>{diagnostic?.imageReplyQueuePending??"Sem registro"}</strong></span>
-                    </div>
-                    <p className="text-slate-400">Atualizado em: {dateLabel(diagnostic?.imageReplyStatusAt)}</p>
-                    <div className="space-y-2 border-t border-cyan-400/20 pt-3" aria-label="Arquivos de fotos no APK">
-                      <p className="font-black text-cyan-100">ARQUIVOS DE FOTOS NO APK</p>
-                      <p className="text-slate-300">Pasta lógica: armazenamento privado do H2 Auto / cache / h2_reply_images_v1. O ADM não acessa os arquivos diretamente.</p>
-                      <p className="text-slate-400">Última conferência no celular: {dateLabel(diagnostic?.imageCacheUpdatedAt)}</p>
-                      {(personalization.faq??[]).filter(faq=>faq.image).slice(0,100).map(faq=>{
-                        const file=diagnostic?.imageCacheFiles?.find(item=>item.faqId===faq.id
-                          && item.imageId===faq.image?.id && item.sha256===faq.image?.sha256);
-                        const label=!faq.enabled?"Pergunta desativada"
-                          : file?.state==="READY"?"PRONTA PARA ANEXAR"
-                          : file?.state==="DOWNLOAD_FAILED"?"FALHOU O DOWNLOAD"
-                          : file?.state==="MISSING"?"AGUARDANDO CACHE"
-                          : "NÃO CONFERIDA NESTE APK";
-                        return <div key={faq.id} className="flex items-center gap-3 rounded-lg border border-white/10 bg-slate-950/70 p-2">
-                          <img src={faq.image!.downloadPath} alt="Imagem vinculada à pergunta" className="h-20 w-14 shrink-0 rounded object-contain" loading="lazy"/>
-                          <div className="min-w-0 space-y-1">
-                            <p className="break-words font-bold text-white">{faq.question}</p>
-                            <p className={faq.enabled&&file?.state==="READY"?"font-bold text-emerald-300":"text-amber-200"}>{label}</p>
-                            <p className="break-all text-slate-400">ID: {faq.image!.id.slice(0,8)}… · {Math.round(faq.image!.fileSize/1024)} KB</p>
-                          </div>
-                        </div>;
-                      })}
-                      {(personalization.faq??[]).filter(faq=>faq.image).length>100 || diagnostic?.imageCacheFilesTruncated
-                        ? <p className="text-amber-200">A lista exibe até 100 registros. Outras imagens permanecem vinculadas às suas perguntas.</p> : null}
-                    </div>
-                  </div>}
+                  <p className="text-xs text-amber-200">Salve apenas perguntas e respostas completas. Perguntas ambíguas seguem o atendimento atual, sem inventar respostas.</p>
                 </div>
                 <div className="space-y-2 rounded-xl border border-violet-400/25 bg-slate-950/65 p-3">
                   <p className="text-sm font-bold text-violet-200">TESTAR RESPOSTA ANTES DE ATIVAR</p>
                   <input className={field} maxLength={280} placeholder="Digite uma pergunta como o cliente escreveria..." value={personalSamples[d.id] ?? ""} onChange={e => setPersonalSamples(prev=>({...prev,[d.id]:e.target.value}))}/>
-                  <button type="button" className="rounded-lg border border-violet-400/50 bg-violet-800/40 px-4 py-2 text-xs font-black" disabled={previewPersonalization.isPending || imageUploadPending || !(personalSamples[d.id] ?? "").trim()}
+                  <button type="button" className="rounded-lg border border-violet-400/50 bg-violet-800/40 px-4 py-2 text-xs font-black" disabled={previewPersonalization.isPending || !(personalSamples[d.id] ?? "").trim()}
                     onClick={async () => {
                       try {
                         const result = await previewPersonalization.mutateAsync({
@@ -1195,31 +1039,13 @@ export default function AdminH2Auto() {
                           personalization: {...personalization,enabled:true},
                         });
                         setPersonalPreviews(prev => ({...prev,[d.id]:result.answer?.message ?? "Nenhuma regra encontrou resposta para essa pergunta."}));
-                        setPersonalImagePreviews(prev => ({...prev,[d.id]:result.answer?.image}));
                       } catch { /* onError exibe mensagem */ }
                     }}>VISUALIZAR RESPOSTA</button>
-                  {personalImagePreviews[d.id] && <figure className="space-y-2 rounded-xl border border-cyan-400/30 bg-black/30 p-3">
-                    <img src={personalImagePreviews[d.id]!.downloadPath} alt="Prévia da foto que acompanha a resposta"
-                      className="max-h-72 max-w-full rounded-lg object-contain"/>
-                    <figcaption className="text-xs text-cyan-200">Foto anexada à resposta selecionada.</figcaption>
-                  </figure>}
                   {personalPreviews[d.id] && <pre className="whitespace-pre-wrap rounded-lg bg-black/30 p-3 text-xs leading-relaxed text-white">{personalPreviews[d.id]}</pre>}
                 </div>
-                {imageUploadPending && <p role="status" className="text-xs text-cyan-200">Aguarde o carregamento da imagem para salvar.</p>}
-                {personalDraftIsStale && <div role="alert" className="space-y-2 rounded-xl border border-amber-400/40 bg-amber-950/25 p-3 text-xs text-amber-100">
-                  <p>As configurações foram atualizadas enquanto você editava. Seu rascunho continua nesta tela. Copie as alterações que deseja conservar antes de recarregar.</p>
-                  <button type="button" disabled={imageUploadPending} className="rounded-lg border border-amber-300/50 px-3 py-2 font-bold disabled:opacity-50" onClick={()=>{
-                    if (!window.confirm("Recarregar as perguntas salvas e descartar este rascunho?")) return;
-                    setPersonalDrafts(prev=>{const next={...prev};delete next[d.id];return next;});
-                    setNewFaqDraftIds(prev=>{const next={...prev};delete next[d.id];return next;});
-                    setPersonalPreviews(prev=>({...prev,[d.id]:""}));
-                    setPersonalImagePreviews(prev=>({...prev,[d.id]:undefined}));
-                    void utils.h2AutoAdmin.list.invalidate();
-                  }}>RECARREGAR PERGUNTAS SALVAS</button>
-                </div>}
                 <button type="button" className="rounded-xl bg-violet-500 px-5 py-3 font-black text-slate-950 disabled:opacity-50"
                   disabled={!canSavePersonalization}
-                  onClick={()=>savePersonalization.mutate({id:d.id,personalization,expectedRevision:personalRevision})}>SALVAR PERSONALIZAÇÃO DESTE APARELHO</button>
+                  onClick={()=>savePersonalization.mutate({id:d.id,personalization})}>SALVAR PERSONALIZAÇÃO DESTE APARELHO</button>
               </section>
               </div>
               <div className={section==="responses"?"space-y-4":"hidden"}>

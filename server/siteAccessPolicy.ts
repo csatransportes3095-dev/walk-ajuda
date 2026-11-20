@@ -30,9 +30,6 @@ export function isSecurityPublicPath(pathname: string): boolean {
     pathname === "/api/h2-auto/media"
   )
     return true;
-  // Image files are authenticated again by their exact device token or ADM
-  // cookie. Never make the whole H2 Auto API (or a storage prefix) public.
-  if (/^\/api\/h2-auto\/reply-images\/[a-f0-9]{24}\/[a-f0-9]{32}$/.test(pathname)) return true;
   if (isSiteVisitorEntryPath(pathname)) return true;
   if (
     /^\/api\/trpc\/adminAuth\.(login|check|setup|unlock|requestUnlock|logout)$/.test(
