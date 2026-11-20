@@ -12,7 +12,6 @@ import { invalidH2AutoPhoneStageAnswer, normalizeH2AutoPhone11, h2AutoNavigation
 import { manualSilencedPhones, normalizeSilencedPhone } from "./h2-auto-silenced-contacts";
 import { h2AutoConfirmationSchema } from "../shared/h2AutoConfirmation";
 import { h2AutoPersonalizationSchema, H2_AUTO_PERSONALIZATION_DEFAULT, getH2AutoPersonalizedReply } from "../shared/h2AutoPersonalization";
-import { h2AutoImageReplyFields, supportsH2AutoImageReplies } from "./h2-auto-image-reply-response";
 import { h2AutoCustomerNeedsProfileUpdate, selectH2AutoCustomerByPhone } from "./h2-auto-customer-profile-guidance";
 import { recordH2AutoUnknownQuestion, safeH2AutoUnknownQuestion } from "./h2-auto-learning";
 import { H2_AUTO_UNKNOWN_REPLY_DEFAULT, renderH2AutoUnknownReply, isH2AutoUnknownTextEligible, matchesH2AutoLocalReply, type H2AutoLocalTextRule } from "../shared/h2AutoUnknownReply";
@@ -109,7 +108,7 @@ async function rows(statement: ReturnType<typeof sql>): Promise<any[]> {
   const db = await getDb();
   if (!db) throw new Error("db_unavailable");
   const result = await db.execute(statement);
-  return (result[0] || []) as unknown as any[];
+  return (result[0] || []) as unknown as unknown as any[];
 }
 async function update(sessionId: string, changes: ReturnType<typeof sql>) {
   const db = await getDb();
@@ -320,8 +319,7 @@ export function registerH2AutoAccessRoutes(app: Express): void {
           .map(line => getH2AutoPersonalizedReply(line, personalization, {stage: "choice"}))
           .filter((reply): reply is NonNullable<typeof reply> => Boolean(reply));
         if (groupedLines.length > 1 && groupedReplies.length >= 2)
-          return respond(res, 200, {state: "choice", message: groupedReplies.map(reply => reply.message).filter(Boolean).join("\n\n"), topic: groupedReplies.map(reply => reply.topic).join(","),
-            ...h2AutoImageReplyFields(groupedReplies, supportsH2AutoImageReplies(req.header("x-h2-capabilities")))});
+          return respond(res, 200, {state: "choice", message: groupedReplies.map(reply => reply.message).join("\n\n"), topic: groupedReplies.map(reply => reply.topic).join(",")});
         const firstStage = initialH2AutoChoiceStage(input) ||
           (h2AutoNaturalExistingCustomerIntent(input) ? "customer_phone" :
           h2AutoNaturalReferralsIntent(input) ? "referrals_phone" :
@@ -337,8 +335,7 @@ export function registerH2AutoAccessRoutes(app: Express): void {
         if (openingPersonalization)
           // APKs antigos exibem message nos estados conhecidos, mas podem
           // descartar silenciosamente o estado novo "personalized".
-          return respond(res, 200, {state:"choice",message:openingPersonalization.message,topic:openingPersonalization.topic,
-            ...h2AutoImageReplyFields([openingPersonalization], supportsH2AutoImageReplies(req.header("x-h2-capabilities")))});
+          return respond(res, 200, {state:"choice",message:openingPersonalization.message,topic:openingPersonalization.topic});
         if (["oi","ola","olá","menu","inicio","início"].includes(normalized))
           return respond(res, 200, {state:"choice",message:initialMessage});
         if (!treeEnabled) {
@@ -429,8 +426,7 @@ export function registerH2AutoAccessRoutes(app: Express): void {
             // A sessão permanece autorizada no banco. O estado "choice" é
             // só um envelope de resposta aceito pelo APK 1.70, que descartava
             // o texto vindo em "authorized".
-            return respond(res, 200, {state:"choice",message:personalized.message,topic:personalized.topic,
-              ...h2AutoImageReplyFields([personalized], supportsH2AutoImageReplies(req.header("x-h2-capabilities")))});
+            return respond(res, 200, {state:"choice",message:personalized.message,topic:personalized.topic});
           }
         }
         const fallback = await unansweredResponse();
@@ -464,8 +460,7 @@ export function registerH2AutoAccessRoutes(app: Express): void {
           .map(line => getH2AutoPersonalizedReply(line, personalization, {stage: "choice"}))
           .filter((reply): reply is NonNullable<typeof reply> => Boolean(reply));
         if (groupedLines.length > 1 && groupedReplies.length >= 2)
-          return respond(res, 200, {state: "choice", message: groupedReplies.map(reply => reply.message).filter(Boolean).join("\n\n"), topic: groupedReplies.map(reply => reply.topic).join(","),
-            ...h2AutoImageReplyFields(groupedReplies, supportsH2AutoImageReplies(req.header("x-h2-capabilities")))});
+          return respond(res, 200, {state: "choice", message: groupedReplies.map(reply => reply.message).join("\n\n"), topic: groupedReplies.map(reply => reply.topic).join(",")});
         const selectedInitialStage = initialH2AutoChoiceStage(input);
         if (selectedInitialStage) {
           await update(sessionId, sql`stage=${selectedInitialStage},updated_at=${now}`);
@@ -487,8 +482,7 @@ export function registerH2AutoAccessRoutes(app: Express): void {
           return respond(res, 200, { state: "referral_phone", message: greetingPrefix ? `${greetingPrefix}\n\n${referrerMessage}` : referrerMessage });
         }
         const personalized = getH2AutoPersonalizedReply(input, personalization, {stage: "choice"});
-        if (personalized) return respond(res, 200, {state: "choice", message: personalized.message, topic: personalized.topic,
-          ...h2AutoImageReplyFields([personalized], supportsH2AutoImageReplies(req.header("x-h2-capabilities")))});
+        if (personalized) return respond(res, 200, {state: "choice", message: personalized.message, topic: personalized.topic});
         if (["oi","ola","olá","menu","inicio","início"].includes(normalized))
           return respond(res, 200, {state:"choice",message:initialMessage});
         if (!treeEnabled) {
@@ -510,8 +504,7 @@ export function registerH2AutoAccessRoutes(app: Express): void {
         if (isH2AutoFreeTextDuringPhoneStage(s.stage, input)) {
           const freeTextReply = getH2AutoPersonalizedReply(input, personalization, {stage: "customer_phone"});
           if (freeTextReply)
-            return respond(res, 200, {state: s.stage, message: freeTextReply.message, topic: freeTextReply.topic,
-              ...h2AutoImageReplyFields([freeTextReply], supportsH2AutoImageReplies(req.header("x-h2-capabilities")))});
+            return respond(res, 200, {state: s.stage, message: freeTextReply.message, topic: freeTextReply.topic});
           return respond(res, 200, {state: s.stage, message: s.stage === "referrals_phone" ? confirmation.phonePrompt : phoneMessage});
         }
         const phone = normalizeH2AutoPhone11(input);
@@ -625,8 +618,7 @@ export function registerH2AutoAccessRoutes(app: Express): void {
         if (isH2AutoFreeTextDuringPhoneStage(s.stage, input)) {
           const freeTextReply = getH2AutoPersonalizedReply(input, personalization, {stage: "customer_phone"});
           if (freeTextReply)
-            return respond(res, 200, {state: s.stage, message: freeTextReply.message, topic: freeTextReply.topic,
-              ...h2AutoImageReplyFields([freeTextReply], supportsH2AutoImageReplies(req.header("x-h2-capabilities")))});
+            return respond(res, 200, {state: s.stage, message: freeTextReply.message, topic: freeTextReply.topic});
           return respond(res, 200, {state: "referral_phone", message: referrerMessage});
         }
         if (invalidH2AutoPhoneStageAnswer(s.stage, input))
