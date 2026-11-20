@@ -127,7 +127,21 @@ const imageReplyDetailLabels: Record<string, string> = {
 const imageReplyStageLabels: Record<string, string> = {
   NONE: "Ainda não iniciada",
   TEXT: "Texto da resposta",
-  IMAGE: "Foto anexada",
+  IMAGE: "Preparação/envio da foto (anexo não confirmado)",
+};
+const imageReplyUiDiagnosticLabels: Record<string, string> = {
+  NOT_CHECKED: "Ainda não verificado no WhatsApp.",
+  WINDOW_NOT_AVAILABLE: "Janela do WhatsApp não disponível para inspeção.",
+  WRONG_WHATSAPP_WINDOW: "Janela aberta não corresponde ao WhatsApp de origem.",
+  MULTIPLE_RECIPIENT_IDENTITIES: "A tela contém identidades de destinatário conflitantes.",
+  PREVIEW_RECIPIENT_NOT_VISIBLE: "A prévia da imagem não mostra o destinatário verificável.",
+  CHAT_RECIPIENT_NOT_VISIBLE: "A conversa não mostra o destinatário verificável.",
+  RECIPIENT_NAME_OR_NUMBER_MISMATCH: "Nome ou número não coincide com o contato identificado.",
+  RECIPIENT_UNCONFIRMED: "Não foi possível confirmar a conversa.",
+};
+const imageReplyUiStageLabels: Record<string, string> = {
+  NONE: "Não iniciada", CHAT: "Abrindo a conversa", PREVIEW: "Prévia do anexo",
+  AFTER_CLICK: "Clique aceito (entrega não confirmada)",
 };
 // OTP-only diagnostics already uploaded by APK 1.95+: never a delivery receipt.
 const otpDeliveryLabels: Record<string, string> = {
@@ -1132,6 +1146,8 @@ export default function AdminH2Auto() {
                       <p className="text-amber-100">{imageReplyDetailLabels[diagnostic.imageReplyDetailCode]}</p>}
                     <div className="flex flex-wrap gap-x-4 gap-y-1 text-slate-300">
                       <span>Etapa registrada: <strong>{imageReplyStageLabels[diagnostic?.imageReplyStage??""]??"Sem registro"}</strong></span>
+                      {diagnostic?.imageReplyUiStage && <span>Etapa na tela: <strong>{imageReplyUiStageLabels[diagnostic.imageReplyUiStage]??"Sem registro"}</strong></span>}
+                      {diagnostic?.imageReplyUiDiagnosticCode && diagnostic.imageReplyUiDiagnosticCode!=="NOT_CHECKED" && <span className="text-amber-200">Identificação: <strong>{imageReplyUiDiagnosticLabels[diagnostic.imageReplyUiDiagnosticCode]??"Diagnóstico indisponível"}</strong></span>}
                       <span>Acessibilidade do H2 Auto: <strong>{diagnostic?.imageReplyAccessibilityConnected===true?"Conectada":diagnostic?.imageReplyAccessibilityConnected===false?"Desconectada":"Sem registro"}</strong></span>
                     </div>
                     {diagnostic?.imageReplyDetailCode==="ACCESSIBILITY_DISCONNECTED" && diagnostic.imageReplyAccessibilityConnected===false &&

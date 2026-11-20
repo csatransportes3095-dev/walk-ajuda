@@ -142,6 +142,13 @@ export const h2AutoDiagnosticsSchema = z
     imageReplyQueuePending: z.number().int().min(0).max(100).optional(),
     imageReplyDetailCode: z.enum(H2_AUTO_IMAGE_REPLY_DETAIL_CODES).optional(),
     imageReplyStage: z.enum(["NONE", "TEXT", "IMAGE"]).optional(),
+    imageReplyUiDiagnosticCode: z.enum([
+      "NOT_CHECKED", "WINDOW_NOT_AVAILABLE", "WRONG_WHATSAPP_WINDOW",
+      "MULTIPLE_RECIPIENT_IDENTITIES", "PREVIEW_RECIPIENT_NOT_VISIBLE",
+      "CHAT_RECIPIENT_NOT_VISIBLE", "RECIPIENT_NAME_OR_NUMBER_MISMATCH",
+      "RECIPIENT_UNCONFIRMED",
+    ]).optional(),
+    imageReplyUiStage: z.enum(["NONE", "CHAT", "PREVIEW", "AFTER_CLICK"]).optional(),
     imageReplyAccessibilityConnected: z.boolean().optional(),
     learningQueuePending: z.number().int().min(0).max(2000).optional(),
     learningQueueFull: z.number().int().min(0).max(1000000).optional(),
