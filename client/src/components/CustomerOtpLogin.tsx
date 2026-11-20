@@ -158,19 +158,6 @@ export function CustomerOtpLogin({ title = "Acesso H2 Colombiano", initialPhone 
       toast.error("Recebimento pelo WhatsApp indisponível. Use o botão azul do e-mail.");
       return;
     }
-    // Reserve a separate tab during the click in every browser. Keep the
-    // login page available for the code, even if the browser blocks the tab.
-    let whatsappTab: Window | null = null;
-    let whatsappNavigationStarted = false;
-    if (channel === "whatsapp") {
-      try {
-        whatsappTab = window.open("about:blank", "_blank");
-        if (whatsappTab) whatsappTab.opener = null;
-      } catch {
-        try { whatsappTab?.close(); } catch {}
-        whatsappTab = null;
-      }
-    }
     setBusy(true);
     try {
       // Check before requesting a code; the current OTP endpoint
@@ -208,30 +195,15 @@ export function CustomerOtpLogin({ title = "Acesso H2 Colombiano", initialPhone 
       setShowHelp(false);
       saveOtpDraft(cleanPhone, "code", channel);
       if (channel === "whatsapp") {
-        // The customer must actually send the prepared message; merely
-        // opening this link never authorizes the APK to deliver a code.
-        const whatsappUrl = buildWhatsappMessageUrl(supportNumber, "Preciso receber meu código");
-        try {
-          if (whatsappTab && !whatsappTab.closed) {
-            whatsappTab.location.replace(whatsappUrl);
-            whatsappNavigationStarted = true;
-          }
-        } catch { /* Keep the login page open if the reserved tab cannot navigate. */ }
-        if (!whatsappNavigationStarted) {
-          setShowHelp(true);
-          toast.info("Para abrir o WhatsApp, toque em “ABRIR WHATSAPP E ENVIAR MENSAGEM” abaixo. A página do site continuará aberta.");
-        }
+        // The WhatsApp link is activated only by the customer's next click.
+        // No asynchronous popup or browser navigation leaves this login tab.
+        toast.info("Código preparado. Abra o WhatsApp abaixo, envie a mensagem e volte à aba H2.");
       } else {
         toast.success(result.message || "Solicitação de código por e-mail realizada. Confira também a pasta de spam.");
       }
     } catch (err: any) {
       toast.error(err?.message || "Não foi possível solicitar o código.");
     } finally {
-      // Invalid phone, unavailable customer, email error, cooldown or
-      // rejected OTP must never leave an unwanted blank WhatsApp tab.
-      if (whatsappTab && !whatsappNavigationStarted) {
-        try { whatsappTab.close(); } catch {}
-      }
       setBusy(false);
     }
   }
@@ -336,6 +308,19 @@ export function CustomerOtpLogin({ title = "Acesso H2 Colombiano", initialPhone 
                 ? "Toque em Enviar na mensagem preenchida no WhatsApp. O sistema responde automaticamente com o código após receber a mensagem."
                 : "Digite o código recebido no e-mail cadastrado. Confira também a pasta de spam."}</span>
             </div>
+            {deliveryChannel === "whatsapp" && (
+              <div className="space-y-2 rounded-xl border border-emerald-400/30 bg-emerald-500/10 p-3" data-testid="h2-otp-whatsapp-separate-tab">
+                <a href={buildWhatsappMessageUrl(supportNumber, "Preciso receber meu código")}
+                  target="_blank" rel="noopener noreferrer"
+                  data-testid="h2-otp-open-whatsapp"
+                  className="flex min-h-14 w-full items-center justify-center gap-2 rounded-xl bg-[#128C4A] px-4 py-3 text-center text-sm font-black text-white hover:bg-[#0b783a]">
+                  <MessageCircle className="h-5 w-5" /> ABRIR WHATSAPP EM OUTRA ABA
+                </a>
+                <p className="text-center text-xs leading-relaxed text-slate-100">
+                  Envie a mensagem preparada e volte à aba H2 COLOMBIANO. Esta tela continuará pronta para digitar o código, sem solicitar outro.
+                </p>
+              </div>
+            )}
             <label htmlFor="h2-otp-code" className="block text-sm font-semibold">Código de 6 números</label>
             <input id="h2-otp-code" type="text" inputMode="numeric" autoComplete="one-time-code"
               pattern="[0-9]{6}" maxLength={6} value={code} autoFocus
@@ -354,13 +339,6 @@ export function CustomerOtpLogin({ title = "Acesso H2 Colombiano", initialPhone 
             </button>
             {showHelp && (
               <div id="h2-otp-help" role="region" aria-label="Ajuda para receber o código" className="space-y-3">
-                {deliveryChannel === "whatsapp" && (
-                  <a href={buildWhatsappMessageUrl(supportNumber, "Preciso receber meu código")}
-                    target="_blank" rel="noopener noreferrer"
-                    className="flex min-h-12 w-full items-center justify-center gap-2 rounded-xl bg-[#8B0000] px-4 py-3 text-center text-sm font-black text-white hover:bg-[#a30000]">
-                    <MessageCircle className="h-5 w-5" /> ABRIR WHATSAPP E ENVIAR MENSAGEM
-                  </a>
-                )}
                 <div className="space-y-2 rounded-xl border border-white/10 p-3" aria-label="Solicitar outro código">
                   <p className="text-center text-xs text-slate-300">Precisa de outro código? Escolha como receber:</p>
                   <button type="button" disabled={busy || remainingEmail > 0}
