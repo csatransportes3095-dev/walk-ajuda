@@ -1,0 +1,115 @@
+name: H2 AUTO - respostas com imagem anexada
+
+on:
+  pull_request:
+    branches: [recovery/organizar-salvos-2026-08-24]
+    paths:
+      - '.github/workflows/h2-auto-image-replies.yml'
+      - 'shared/h2AutoReplyImage.ts'
+      - 'shared/h2AutoPersonalization.ts'
+      - 'server/h2-auto-reply-images*'
+      - 'server/h2-auto-image-replies*'
+      - 'server/h2-auto-access.ts'
+      - 'server/h2-auto-remote.ts'
+      - 'server/siteAccessPolicy.ts'
+      - 'client/src/pages/AdminH2Auto.tsx'
+      - 'client/src/components/H2AutoReplyImageEditor.tsx'
+      - 'scripts/tests/h2-auto-reply-image-ui/**'
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+concurrency:
+  group: h2-auto-image-replies-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  validate:
+    runs-on: ubuntu-latest
+    timeout-minutes: 30
+    env:
+      TZ: UTC
+      H2_AUTO_REPLY_IMAGES_TEST_DB_URL: mysql://root:isolated-image-reply-test@127.0.0.1:33307/h2_auto_reply_images_test
+    services:
+      mysql:
+        image: mysql:8.4
+        env:
+          MYSQL_ROOT_PASSWORD: isolated-image-reply-test
+          MYSQL_DATABASE: h2_auto_reply_images_test
+        ports: ['33307:3306']
+        options: >-
+          --health-cmd="mysqladmin ping -h 127.0.0.1 -pisolated-image-reply-test"
+          --health-interval=10s --health-timeout=5s --health-retries=12
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+      - name: Install locked dependencies
+        run: |
+          npm install -g pnpm@10.4.1
+          pnpm install --frozen-lockfile
+      - name: Validate image bytes, authentication, saved replies and MySQL persistence
+        run: >-
+          pnpm exec vitest run
+          server/h2-auto-reply-images.test.ts
+          server/h2-auto-image-replies-access.test.ts
+          server/h2-auto-reply-images.mysql.test.ts
+          server/h2-auto-free-questions.test.ts
+          server/h2-auto-personalization.test.ts
+          server/h2-auto-unknown-reply.test.ts
+      - name: Verify the real ADM image editor on desktop and mobile
+        env:
+          H2_AUTO_REPLY_IMAGE_UI_OUTPUT_DIR: ${{ runner.temp }}/h2-auto-reply-image-ui
+        run: |
+          export CHROME_BIN="$(command -v google-chrome || command -v chromium || command -v chromium-browser || true)"
+          test -n "$CHROME_BIN"
+          npm install --prefix "$RUNNER_TEMP/h2-image-ui-tools" --no-package-lock --no-audit --no-fund playwright@1.57.0
+          export PLAYWRIGHT_MODULE="$RUNNER_TEMP/h2-image-ui-tools/node_modules/playwright/index.mjs"
+          mkdir -p "$H2_AUTO_REPLY_IMAGE_UI_OUTPUT_DIR"
+          node scripts/tests/h2-auto-reply-image-ui/server.mjs > "$H2_AUTO_REPLY_IMAGE_UI_OUTPUT_DIR/server.log" 2>&1 &
+          h2_image_ui_pid=$!
+          trap 'kill "$h2_image_ui_pid" 2>/dev/null || true' EXIT
+          h2_image_ui_ready=false
+          for attempt in {1..30}; do
+            if curl --fail --silent --max-time 1 http://127.0.0.1:4182/test-control > /dev/null; then
+              h2_image_ui_ready=true
+              break
+            fi
+            if ! kill -0 "$h2_image_ui_pid" 2>/dev/null; then
+              cat "$H2_AUTO_REPLY_IMAGE_UI_OUTPUT_DIR/server.log"
+              exit 1
+            fi
+            sleep 1
+          done
+          if [ "$h2_image_ui_ready" != true ]; then
+            cat "$H2_AUTO_REPLY_IMAGE_UI_OUTPUT_DIR/server.log"
+            exit 1
+          fi
+          node scripts/tests/h2-auto-reply-image-ui/qa.mjs
+      - name: Keep synthetic image editor evidence
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: h2-auto-reply-image-ui
+          path: |
+            ${{ runner.temp }}/h2-auto-reply-image-ui/*.png
+            ${{ runner.temp }}/h2-auto-reply-image-ui/*.json
+            ${{ runner.temp }}/h2-auto-reply-image-ui/*.log
+          if-no-files-found: ignore
+          retention-days: 7
+      - name: Prepare the production source exactly as Render does
+        run: |
+          node --input-type=module <<'JS'
+          import fs from 'node:fs';
+          import { execFileSync } from 'node:child_process';
+          const scripts = [...fs.readFileSync('Dockerfile', 'utf8').matchAll(/&& node (scripts\/[^\s]+)/g)].map(match => match[1]);
+          if (!scripts.length) throw new Error('No production preparation scripts found');
+          for (const script of scripts) {
+            if (!/^scripts\/[A-Za-z0-9._/-]+\.mjs$/.test(script)) throw new Error('Unexpected preparation path');
+            execFileSync(process.execPath, [script], { stdio: 'inherit' });
+          }
+          JS
+      - name: Compile frontend and server
+        run: pnpm build

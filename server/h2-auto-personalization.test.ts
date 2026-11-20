@@ -111,7 +111,7 @@ describe("H2 AUTO: respostas personalizadas com segurança", () => {
       expect(admin).toContain("hours:"+hours+",label:");
     }
     expect(admin).toContain("SALVAR TEMPO DE AUTENTICAÇÃO");
-    expect(remote).toContain('hours:z.number().int().min(1).max(720)');
+    expect(remote).toMatch(/\bhours\s*:\s*z\.number\(\)\.int\(\)\.min\(1\)\.max\(720\)/);
     expect(remote).toContain("'$.identificationSessionHours'");
     expect(access).toContain("Number(s.expires_at) > now");
     expect(access).toContain("configuredHours*hour");

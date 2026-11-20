@@ -36,6 +36,12 @@ export const H2_AUTO_REPLY_STATUS_CODES = [
   "SKIPPED",
 ] as const;
 
+export const H2_AUTO_IMAGE_REPLY_STATUS_CODES = [
+  "NOT_CHECKED", "DOWNLOADING", "READY", "DOWNLOAD_FAILED", "QUEUED",
+  "SENDING", "SENT_CONFIRMED", "ACTION_ACCEPTED_UNVERIFIED", "FAILED",
+  "UNSUPPORTED", "RECIPIENT_NOT_VERIFIED", "PAUSED",
+] as const;
+
 /**
  * H2 Auto 1.95-2.02 reports only fixed OTP stage identifiers. Match the APK
  * stage constants exactly: unknown codes, phone numbers, chat text, OTP bodies
@@ -92,6 +98,12 @@ export const h2AutoDiagnosticsSchema = z
     transcribeConfigured: z.boolean(),
     recordAudioPermission: z.boolean(),
     listenerConnected: z.boolean(),
+    imageRepliesSupported: z.boolean().optional(),
+    imageCacheReady: z.number().int().min(0).max(1000).optional(),
+    imageCacheFailed: z.number().int().min(0).max(1000).optional(),
+    imageReplyStatusCode: z.enum(H2_AUTO_IMAGE_REPLY_STATUS_CODES).optional(),
+    imageReplyStatusAt: z.number().int().min(0).max(H2_AUTO_MAX_TIMESTAMP).optional(),
+    imageReplyQueuePending: z.number().int().min(0).max(100).optional(),
     learningQueuePending: z.number().int().min(0).max(2000).optional(),
     learningQueueFull: z.number().int().min(0).max(1000000).optional(),
     learningWorkerFull: z.number().int().min(0).max(1000000).optional(),
