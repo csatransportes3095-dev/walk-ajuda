@@ -30,6 +30,22 @@ export function syntheticVehicleText(ownerName = '', vehicle = syntheticVehicle)
   ].join('\n');
 }
 
+/** Equivalent to the pasted report format, with invented identity values only. */
+export function syntheticOwnerMarkdown(ownerName = 'PESSOA SINTÉTICA DO TESTE') {
+  return [
+    '### Proprietário',
+    '',
+    `| **Nome**           | ${ownerName} |`,
+    '| ------------------ | --------------------------------- |',
+    '| **CPF/CNPJ**       | 00000000000 |',
+    '| **Tipo Documento** | FISICA |',
+  ].join('\n');
+}
+
+export function syntheticOwnerReportText(ownerName = 'PESSOA SINTÉTICA DO TESTE', vehicle = syntheticVehicle) {
+  return ['--- DADOS DO VEÍCULO ---', ...syntheticVehicleLines(vehicle).slice(1), '', syntheticOwnerMarkdown(ownerName)].join('\n');
+}
+
 /** The mixed fixture leaves all vehicle fields as real PDF text and only the
  * owner's labelled block as pixels. It exposes a missing owner-only OCR pass. */
 export async function makeSyntheticOwnerPdf({ ownerName = '', vehicle = syntheticVehicle, imageOwner = false, ocrOwnerName = '', imageClassification = false } = {}) {

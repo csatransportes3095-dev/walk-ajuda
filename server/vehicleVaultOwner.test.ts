@@ -1,7 +1,7 @@
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import jwt from 'jsonwebtoken';
 import type { TrpcContext } from './_core/context';
-import { syntheticVehicle, syntheticVehicleText } from '../scripts/tests/vehicle-vault-owner-fixtures.mjs';
+import { syntheticVehicle, syntheticVehicleText, syntheticOwnerMarkdown, syntheticOwnerReportText } from '../scripts/tests/vehicle-vault-owner-fixtures.mjs';
 
 const isolated = vi.hoisted(() => ({ getDb: vi.fn(async () => null) }));
 vi.mock('./db', () => ({ getDb: isolated.getDb }));
@@ -39,6 +39,7 @@ describe('Vehicle owner — labelled extraction without guessing identities', ()
     'NOME DO PROPRIETÁRIO\nCPF/CNPJ\n000.000.000-00',
     'NOME DO PROPRIETÁRIO: 000.000.000-00',
     'NOME DO PROPRIETÁRIO: 00.000.000/0000-00',
+    'Nome do proprietário: N/I',
     'LOCATÁRIO: PESSOA SINTÉTICA LOCATÁRIA\nARRENDATÁRIO: EMPRESA SINTÉTICA LOCATÁRIA',
     'PROPRIETÁRIO ANTERIOR: PESSOA SINTÉTICA ANTERIOR',
     'FORMULÁRIO DE SEGURO\nNOME\nPESSOA SINTÉTICA SEGURADA\nCPF/CNPJ\n000.000.000-00',
@@ -67,6 +68,48 @@ describe('Vehicle owner — labelled extraction without guessing identities', ()
   });
 });
 
+describe('Vehicle owner — pasted structured owner report', () => {
+  const ownerName = 'PESSOA SINTÉTICA DO TESTE';
+
+  it('reads the exact Markdown heading/table structure using only a synthetic identity', () => {
+    expect(parseVehicleVaultOwnerName(syntheticOwnerMarkdown())).toBe(ownerName);
+  });
+
+  it.each([
+    `Proprietário\nNome\t${ownerName}\nCPF/CNPJ\t00000000000\nTipo Documento\tFISICA`,
+    `Dados do Proprietário:\nNome: ${ownerName}\nCPF/CNPJ: 00000000000\nTipo Documento: FISICA`,
+    `Proprietário\nNome\n${ownerName}\nCPF/CNPJ\n00000000000\nTipo Documento\nFISICA`,
+  ])('reads equivalent browser, tab-separated and plain-text owner sections: %s', text => {
+    expect(parseVehicleVaultOwnerName(text)).toBe(ownerName);
+  });
+
+  it.each(['Locatário', 'Segurado', 'Proprietário anterior', 'Dados do veículo'])('does not treat a table in %s as the current owner', heading => {
+    expect(parseVehicleVaultOwnerName(syntheticOwnerMarkdown().replace('### Proprietário', '### ' + heading))).toBe('');
+  });
+
+  it.each(['N/I', 'Não informado', ''])('keeps the optional field empty for the placeholder %s', placeholder => {
+    expect(parseVehicleVaultOwnerName(syntheticOwnerMarkdown(placeholder))).toBe('');
+  });
+
+  it('stops an empty owner section before the next tenant section', () => {
+    const text = '### Proprietário\n\n' + syntheticOwnerMarkdown('OUTRA PESSOA SINTÉTICA').replace('### Proprietário', '### Locatário');
+    expect(parseVehicleVaultOwnerName(text)).toBe('');
+  });
+
+  it('keeps the actual owner separate from a later insured party', () => {
+    const text = syntheticOwnerMarkdown() + '\n\n' + syntheticOwnerMarkdown('OUTRA PESSOA SINTÉTICA').replace('### Proprietário', '### Segurado');
+    expect(parseVehicleVaultOwnerName(text)).toBe(ownerName);
+  });
+
+  it('returns empty when two owner sections disagree', () => {
+    expect(parseVehicleVaultOwnerName(syntheticOwnerMarkdown() + '\n\n' + syntheticOwnerMarkdown('OUTRA PESSOA SINTÉTICA'))).toBe('');
+  });
+
+  it('also rejects disagreement between the new table and an existing explicit owner label', () => {
+    expect(parseVehicleVaultOwnerName(syntheticOwnerMarkdown() + '\n\nNome do proprietário: OUTRA PESSOA SINTÉTICA')).toBe('');
+  });
+});
+
 describe('Vehicle owner — real private procedures', () => {
   beforeEach(() => { vi.stubEnv('JWT_SECRET', secret); isolated.getDb.mockClear(); });
   afterEach(() => vi.unstubAllEnvs());
@@ -75,6 +118,13 @@ describe('Vehicle owner — real private procedures', () => {
     const caller = vehicleVaultRouter.createCaller(context(adminCookie()));
     const found = await caller.previewText({ text: syntheticVehicleText('ANA SINTÉTICA DO TESTE') });
     expect(found).toMatchObject({ ...syntheticVehicle, ownerName: 'ANA SINTÉTICA DO TESTE', missing: [] });
+    expect(isolated.getDb).not.toHaveBeenCalled();
+  });
+
+  it('returns the report-table owner through the real previewText procedure without changing vehicle extraction', async () => {
+    const caller = vehicleVaultRouter.createCaller(context(adminCookie()));
+    const found = await caller.previewText({ text: syntheticOwnerReportText() });
+    expect(found).toMatchObject({ ...syntheticVehicle, ownerName: 'PESSOA SINTÉTICA DO TESTE', missing: [] });
     expect(isolated.getDb).not.toHaveBeenCalled();
   });
 

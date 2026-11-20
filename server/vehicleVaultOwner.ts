@@ -14,6 +14,7 @@ const cellsOf = (line: string): Cell[] => Array.from(
 const otherParty = /\b(?:LOCATARI[OA]|ARRENDATARI[OA]|COMPRADOR|VENDEDOR|CONDUTOR|SEGURADO|REPRESENTANTE)\b|\bPROPRIETARI[OA]\s*[-:(]*\s*(?:ANTERIOR|ANTIGO)\b|\b(?:ANTERIOR|ANTIGO)\s+PROPRIETARI[OA]\b/;
 const identityHeading = /^(?:CPF\s*\/\s*CNPJ|CPF|CNPJ)\b/;
 const fieldHeading = /^(?:NOME\b|PROPRIETARI[OA]\b|CPF\b|CNPJ\b|PLACA\b|RENAVAM\b|CHASSI\b|VIN\b|MARCA\b|MODELO\b|COR\b|ANO\b|CATEGORIA\b|EXERCICIO\b|ESPECIE\b|TIPO\b|CARROCERIA\b|LOCAL\b|DATA\b|ASSINADO\b|OBSERVAC(?:AO|OES)\b|CODIGO\b|NUMERO\b|CAPACIDADE\b|MOTOR\b|COMBUSTIVEL\b|POTENCIA\b|PESO\b|EIXOS\b|LOTA(?:CAO|COES)\b|RESTRIC(?:AO|OES)\b|CERTIFICADO\b|DADOS\b|SEGURO\b|DETRAN\b)/;
+const absentName = /^(?:N\s*[/.]?\s*[IAD]|NAO\s+(?:INFORMAD[OA]|DISPONIVEL|IDENTIFICAD[OA]|LOCALIZAD[OA]|CONSTA|SE APLICA)|SEM\s+(?:INFORMACAO|DADOS)|DESCONHECID[OA]|NULL)$/;
 
 function nameValue(raw: string): string {
   // A neighbouring identity field is not part of the name. Never keep an ID
@@ -23,9 +24,79 @@ function nameValue(raw: string): string {
     .replace(/\s+(?:\d{3}\.\d{3}\.\d{3}-\d{2}|\d{2}\.\d{3}\.\d{3}\/\d{4}-\d{2})\s*$/u, ""));
   if (value.length < 2 || value.length > 200 || !/\p{L}.*\p{L}/u.test(value) ||
       !/^[\p{L}\p{M}\p{N} &.'’()\/-]+$/u.test(value) ||
-      fieldHeading.test(fold(value)) || otherParty.test(fold(value)) ||
+      fieldHeading.test(fold(value)) || otherParty.test(fold(value)) || absentName.test(fold(value)) ||
       /^[A-Z]{3}\d[A-Z\d]\d{2}$/.test(value) || /^[A-HJ-NPR-Z0-9]{17}$/.test(value)) return "";
   return value;
+}
+
+const unmark = (value: string) => value.trim()
+  .replace(/^(?:\*\*|__)(.*)(?:\*\*|__)$/u, "$1").trim();
+
+/** RENAVAM reports may render the owner's labelled fields as a Markdown
+ * table. Only an explicit owner section grants meaning to a generic Nome. */
+function reportOwnerNames(source: string): string[] {
+  const names: string[] = [];
+  const nameHeading = /^(?:NOME(?:\s*\/\s*RAZAO SOCIAL)?|RAZAO SOCIAL)$/;
+  let inOwnerSection = false;
+  let awaitingName = false;
+  const reportLines = source.split("\n");
+  for (const [index, raw] of reportLines.entries()) {
+    const line = raw.trim();
+    if (!line) continue;
+    const section = fold(unmark(line
+      .replace(/^#{1,6}\s+/u, "").replace(/\s+#{1,6}$/u, "")
+      .replace(/^[-=]{2,}\s*|\s*[-=]{2,}$/gu, "").replace(/:\s*$/u, "")));
+    if (/^(?:DADOS\s+D[OA]\s+)?PROPRIETARI[OA](?:\s+ATUAL)?$/.test(section)) {
+      inOwnerSection = true;
+      awaitingName = false;
+      continue;
+    }
+    if (!inOwnerSection) continue;
+    // Any subsequent heading closes the block, including other people and
+    // unrelated sections. Plain copied headings are closed by the fallback.
+    const markedHeading = /^#{1,6}\s|^[-=]{2,}\s*\S/u.test(line);
+    const boldHeading = /^(?:\*\*[^*]+\*\*|__[^_]+__)\s*:?$/u.test(line);
+    if (markedHeading || (boldHeading && !nameHeading.test(section)) ||
+        /^(?:OUTROS|IMPORTACAO|INFORMACOES (?:ADICIONAIS|COMPLEMENTARES))$/.test(section)) {
+      inOwnerSection = false;
+      awaitingName = false;
+      continue;
+    }
+    if (/^\|?\s*:?-{3,}:?\s*\|(?:\s*:?-{3,}:?\s*\|?)+$/u.test(line)) continue;
+    const tableCells = line.includes("|")
+      ? line.replace(/^\|/, "").replace(/\|$/, "").split("|").map(unmark)
+      : line.split(/\t+| {3,}/u).map(unmark);
+    const pair = tableCells.length === 2 ? tableCells
+      : tableCells.length === 1 ? line.match(/^(.+?)\s*[:=]\s*(.*)$/u)?.slice(1) : undefined;
+    if (pair) {
+      const label = fold(unmark(pair[0]).replace(/:\s*$/u, ""));
+      awaitingName = false;
+      if (nameHeading.test(label)) {
+        const value = nameValue(unmark(pair[1]));
+        if (value) names.push(value);
+        awaitingName = !pair[1].trim();
+      } else if (!/^(?:CPF(?:\s*\/\s*CNPJ)?|CNPJ|TIPO\s+(?:DE\s+)?DOCUMENTO|DOCUMENTO)$/.test(label)) {
+        inOwnerSection = false;
+      }
+      continue;
+    }
+    if (nameHeading.test(section)) {
+      awaitingName = true;
+      continue;
+    }
+    if (awaitingName) {
+      // A browser may copy each table cell onto its own line. Require the
+      // following identity label so a wrapped CRLV name is not cut short.
+      const following = reportLines.slice(index + 1, index + 5).find(value => value.trim());
+      if (following && identityHeading.test(fold(unmark(following.replace(/:\s*$/u, ""))))) {
+        const value = nameValue(unmark(line));
+        if (value) names.push(value);
+      }
+    }
+    inOwnerSection = false;
+    awaitingName = false;
+  }
+  return names;
 }
 
 /**
@@ -39,6 +110,7 @@ export function parseVehicleVaultOwnerName(raw: string): string {
   const lines = original.split("\n").map(cellsOf);
   const crlv = /CERTIFICADO DE REGISTRO E LICENCIAMENTO|\bCRLV(?:[ -]?E)?\b/.test(fold(original));
   const candidates = new Map<string, string>();
+  for (const candidate of reportOwnerNames(original)) candidates.set(fold(candidate), candidate);
 
   for (let row = 0; row < lines.length; row++) {
     for (let column = 0; column < lines[row].length; column++) {

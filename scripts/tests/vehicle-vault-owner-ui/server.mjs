@@ -1,5 +1,5 @@
-// UI fixture storage only. The production router/PDF extraction and SQL are
-// tested separately; this server never imports them or accesses customer data.
+// UI fixture storage with the production owner-name parser for pasted text.
+// The production router/PDF extraction and SQL remain separate; no customer data.
 import express from 'express';
 import { createServer } from 'vite';
 import react from '@vitejs/plugin-react';
@@ -9,11 +9,18 @@ import { createExpressMiddleware } from '@trpc/server/adapters/express';
 import { z } from 'zod';
 import superjson from 'superjson';
 import path from 'node:path';
+import { readFile } from 'node:fs/promises';
 import { fileURLToPath } from 'node:url';
-import { makeSyntheticOwnerPdf, syntheticVehicle, syntheticVehicleText } from '../vehicle-vault-owner-fixtures.mjs';
+import { transform } from 'esbuild';
+import { makeSyntheticOwnerPdf, syntheticVehicle, syntheticVehicleText, syntheticOwnerReportText } from '../vehicle-vault-owner-fixtures.mjs';
 
 const root = fileURLToPath(new URL('.', import.meta.url));
 const repo = fileURLToPath(new URL('../../../', import.meta.url));
+// Import only the pure helper, without loading the application router or DB.
+const { code: ownerParserCode } = await transform(await readFile(path.join(repo, 'server/vehicleVaultOwner.ts'), 'utf8'), {
+  loader: 'ts', format: 'esm', target: 'node22',
+});
+const { parseVehicleVaultOwnerName } = await import('data:text/javascript;base64,' + Buffer.from(ownerParserCode).toString('base64'));
 const fixtures = await Promise.all([
   ['person', 'TST1A23', 'ANA SINTÉTICA DO TESTE'],
   ['company', 'TST2B34', 'EMPRESA SINTÉTICA & FILHOS LTDA'],
@@ -23,6 +30,10 @@ const fixtures = await Promise.all([
   const pdf = await makeSyntheticOwnerPdf({ ownerName, vehicle: fields });
   return { key, fields, ownerName, text: syntheticVehicleText(ownerName, fields), pdf, base64: pdf.toString('base64') };
 }));
+// Expected fixture names stay independent of the parser's actual output.
+const textFixtures = [...fixtures, {
+  key: 'report', fields: { ...syntheticVehicle }, ownerName: 'PESSOA SINTÉTICA DO TESTE', text: syntheticOwnerReportText(),
+}];
 const legacy = () => ({ ...syntheticVehicle, id: 1, plate: 'LEG1A23', ownerName: null, sourceText: 'SYNTHETIC LEGACY DOCUMENT',
   approvalStatus: 'pending', inactive: false, createdAt: '2026-11-20T00:00:00Z', updatedAt: '2026-11-20T00:00:00Z',
   links: [], history: [], pdfs: [], activeClients: 0, usageCount: 0, pdfCount: 0, chassisUsed: false });
@@ -40,9 +51,9 @@ const router = t.router({ vehicleVault: t.router({
   }),
   previewText: t.procedure.input(z.object({ text: z.string() })).mutation(({ input }) => {
     state.previewTextCalls.push(input.text);
-    const fixture = fixtures.find(value => value.text === input.text);
+    const fixture = textFixtures.find(value => value.text === input.text);
     if (!fixture) throw new TRPCError({ code: 'BAD_REQUEST', message: 'Use only a generated fixture text.' });
-    return preview(fixture);
+    return { ...fixture.fields, ownerName: parseVehicleVaultOwnerName(input.text), text: input.text, missing: [] };
   }),
   previewPdf: t.procedure.input(z.object({ base64: z.string() })).mutation(({ input }) => {
     const fixture = fixtures.find(value => value.base64 === input.base64);
@@ -83,7 +94,7 @@ app.get('/fixtures/:key.pdf', (req, res) => {
   res.type('application/pdf').send(fixture.pdf);
 });
 app.get('/fixtures/:key.json', (req, res) => {
-  const fixture = fixtures.find(value => value.key === req.params.key);
+  const fixture = textFixtures.find(value => value.key === req.params.key);
   if (!fixture) return res.sendStatus(404);
   res.json(preview(fixture));
 });
