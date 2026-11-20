@@ -1,0 +1,5 @@
+@import "../../../client/src/index.css";
+@source "../../../client/src/components/VehicleVaultPanel.tsx";
+@source "../../../client/src/components/VehicleVaultBatchPanel.tsx";
+@source "../../../client/src/components/VehicleVaultPlateLookupPanel.tsx";
+@source "./main.tsx";

@@ -19,7 +19,7 @@ type BatchItem = {
 };
 const EMPTY_FIELDS: VaultFields = {
   plate: "", renavam: "", chassis: "", model: "", color: "",
-  manufactureYear: "", modelYear: "",category: "",exerciseYear: "",
+  manufactureYear: "", modelYear: "", ownerName: "",category: "",exerciseYear: "",
 };
 
 function readPdfAsBase64(file: File): Promise<string> {
@@ -154,6 +154,7 @@ export default function VehicleVaultBatchPanel({ onSaved }: Props) {
             color: item.fields.color,
             manufactureYear: Number(item.fields.manufactureYear),
             modelYear: Number(item.fields.modelYear),
+            ownerName: (item.fields.ownerName || "").trim() || null,
             category: item.fields.category.trim().toUpperCase() === "" ? null : item.fields.category.trim().toUpperCase() as "PARTICULAR" | "ALUGUEL",
             exerciseYear: item.fields.exerciseYear.trim() ? Number(item.fields.exerciseYear) : null,
             sourceText: item.sourceText,
@@ -241,12 +242,20 @@ export default function VehicleVaultBatchPanel({ onSaved }: Props) {
             </button>}
           </div>
           {!saved && item.status !== "reading" && item.status !== "queued" && <div className="mt-3 grid grid-cols-1 gap-2 sm:grid-cols-2">
-            {VAULT_FIELDS.map(([key, label]) => <label key={key} className="block text-xs font-bold text-slate-300">
-              {label}
-              <input className="mt-1 w-full rounded-lg border border-white/20 bg-slate-950 p-2.5 text-sm text-white outline-none focus:border-cyan-400"
-                value={item.fields[key]} disabled={!!busy}
-                onChange={event => edit(item.id, key, event.target.value)} placeholder={label} />
-            </label>)}
+            {VAULT_FIELDS.map(([key, label]) => <div key={key}>
+              <label className="block text-xs font-bold text-slate-300">
+                {label}
+                <input className="mt-1 w-full rounded-lg border border-white/20 bg-slate-950 p-2.5 text-sm text-white outline-none focus:border-cyan-400"
+                  value={item.fields[key]} disabled={!!busy}
+                  onChange={event => edit(item.id, key, event.target.value)} placeholder={label} />
+              </label>
+              {key === "modelYear" && <label className="mt-2 block text-xs font-bold text-slate-300">NOME DO PROPRIETÁRIO
+                <input type="text" maxLength={200}
+                  className="mt-1 w-full rounded-lg border border-white/20 bg-slate-950 p-2.5 text-sm text-white outline-none focus:border-cyan-400"
+                  value={item.fields.ownerName || ""} disabled={!!busy}
+                  onChange={event => edit(item.id, "ownerName", event.target.value)} placeholder="NOME DO PROPRIETÁRIO" />
+              </label>}
+            </div>)}
           </div>}
           {!saved && issues.length > 0 && item.status !== "reading" && item.status !== "queued" &&
             <p className="mt-2 text-xs text-amber-200">{issues.join(" ")}</p>}
