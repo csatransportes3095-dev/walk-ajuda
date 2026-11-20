@@ -9,9 +9,6 @@ import { listActiveValidationBlocks, releaseValidationBlock, releaseAllValidatio
 import { changeSilencedPhone, manualSilencedPhones, legacySilencedEntries, releaseLegacySilencedEntry, normalizeSilencedPhone } from "./h2-auto-silenced-contacts";
 import { h2AutoTreeSchema, H2_AUTO_TREE_DEFAULT } from "../shared/h2AutoTree";
 import { h2AutoPersonalizationSchema, h2AutoFaqVariationsSchema, H2_AUTO_PERSONALIZATION_DEFAULT, getH2AutoPersonalizedReply } from "../shared/h2AutoPersonalization";
-import { h2AutoReplyImageSchema } from "../shared/h2AutoReplyImage";
-import { h2AutoReplyImageUploadSchema, uploadH2AutoReplyImage, assertH2AutoReplyImages,
-  registerH2AutoReplyImageRoutes } from "./h2-auto-reply-images";
 import { H2_AUTO_UNKNOWN_REPLY_DEFAULT } from "../shared/h2AutoUnknownReply";
 import { mergeH2AutoExpandedFaq } from "../shared/h2AutoFaqPresets";
 import { listH2AutoUnknownQuestions, deleteH2AutoUnknownQuestion, ensureH2AutoLearningTable, recordH2AutoUnknownQuestion } from "./h2-auto-learning";
@@ -346,6 +343,16 @@ async function migrateH2AutoShortCopyOnce(db: any): Promise<void> {
   console.info("[H2Auto] mensagens curtas:", migrated, "aparelho(s) atualizados; falhas:", failed);
 }
 
+// Existing photo-only FAQs are inactive; text FAQs remain unchanged.
+const withoutReplyImages = (config: RemoteConfig): RemoteConfig => ({
+  ...config,
+  personalization: {
+    ...config.personalization,
+    faq: config.personalization.faq
+      .filter(rule => rule.answer.trim().length >= 3)
+      .map(({image: _legacyImage, ...rule}) => rule),
+  },
+});
 const safeDevice = (r: any) => ({
   id: r.id,
   label: r.label,
@@ -353,9 +360,9 @@ const safeDevice = (r: any) => ({
   revision: Number(r.revision),
   lastSeen: r.last_seen ? Number(r.last_seen) : null,
   appliedRevision: Number(r.applied_revision || 0),
-  config: decodeConfig(r.config_json),
+  config: withoutReplyImages(decodeConfig(r.config_json)),
   snapshotConfig:
-    r.snapshot_json == null ? null : decodeConfig(r.snapshot_json),
+    r.snapshot_json == null ? null : withoutReplyImages(decodeConfig(r.snapshot_json)),
   snapshotReceivedAt: r.received_at == null ? null : Number(r.received_at),
   diagnostics: decodeH2AutoDiagnostics(r.diagnostics_json),
   diagnosticsReceivedAt:
@@ -844,11 +851,9 @@ export const h2AutoAdminRouter = router({
     .input(z.object({
       id:z.string().regex(/^[a-f0-9]{24}$/),
       questionHash:z.string().regex(/^[a-f0-9]{64}$/),
-      answer:z.string().trim().max(1200),
-      image:h2AutoReplyImageSchema.optional(),
+      answer:z.string().trim().min(3).max(1200),
       variations:h2AutoFaqVariationsSchema.default(""),
-    }).refine(input => input.answer.length >= 3 || (input.answer.length === 0 && Boolean(input.image)),
-      {message:"Escreva uma resposta ou anexe uma imagem.",path:["answer"]}))
+    })
     .mutation(async ({input}) => {
       await ensure();
       await ensureH2AutoLearningTable();
@@ -864,13 +869,11 @@ export const h2AutoAdminRouter = router({
       const config=decodeConfig(current.config_json);
       const question=String(questions[0].question).slice(0,160);
       const faqId="learn_"+input.questionHash.slice(0,20);
-      const entries=[...(config.personalization.faq || [])];
+      const entries=[...withoutReplyImages(config).personalization.faq];
       const index=entries.findIndex(item=>item.id===faqId ||
         item.question.trim().toLocaleLowerCase("pt-BR")===question.trim().toLocaleLowerCase("pt-BR"));
       const entry={...(index>=0?entries[index]:{}),id:index>=0?entries[index].id:faqId,question,
-        variations:input.variations,answer:input.answer,enabled:true,
-        ...(input.image?{image:input.image}:{})};
-      await assertH2AutoReplyImages(input.id,[entry]);
+        variations:input.variations,answer:input.answer,enabled:true};
       if(index>=0) entries[index]=entry; else entries.push(entry);
       const personalization=h2AutoPersonalizationSchema.parse({
         ...config.personalization,faq:entries,
@@ -884,13 +887,6 @@ export const h2AutoAdminRouter = router({
       return {success:true,faqId:entry.id,revision:Number(current.revision)+1,
         active:personalization.enabled};
     }),
-  /** An isolated field update: never overwrite menus, customer security or APK pauses. */
-  uploadReplyImage: adminProcedure
-    .input(h2AutoReplyImageUploadSchema)
-    .mutation(async ({input}) => {
-      await ensure();
-      return uploadH2AutoReplyImage(input);
-    }),
   savePersonalization: adminProcedure
     .input(z.object({
       id: z.string().regex(/^[a-f0-9]{24}$/),
@@ -901,7 +897,9 @@ export const h2AutoAdminRouter = router({
       await ensure();
       const db = await getDb();
       if (!db) throw new TRPCError({ code: "INTERNAL_SERVER_ERROR", message: "Banco indisponível." });
-      await assertH2AutoReplyImages(input.id,input.personalization.faq);
+      const cleanPersonalization=withoutReplyImages({...initial,personalization:input.personalization}).personalization;
+      if(cleanPersonalization.faq.length!==input.personalization.faq.length)
+        throw new TRPCError({code:"BAD_REQUEST",message:"Cada pergunta precisa de uma resposta em texto."});
       const current=(await rows(sql`SELECT revision FROM h2_auto_devices WHERE id=${input.id} LIMIT 1`))[0];
       if(!current) throw new TRPCError({code:"NOT_FOUND",message:"Aparelho não encontrado."});
       const revision=Number(current.revision);
@@ -909,7 +907,7 @@ export const h2AutoAdminRouter = router({
         throw new TRPCError({code:"CONFLICT",message:"As respostas mudaram. Atualize o painel antes de salvar."});
       const updated: any = await db.execute(sql`UPDATE h2_auto_devices
         SET config_json=JSON_SET(config_json,'$.personalization',
-          CAST(${JSON.stringify(input.personalization)} AS JSON)),
+          CAST(${JSON.stringify(cleanPersonalization)} AS JSON)),
           revision=revision+1 WHERE id=${input.id} AND revision=${revision}`);
       if (!updated[0]?.affectedRows)
         throw new TRPCError({ code: "CONFLICT", message: "As respostas mudaram. Atualize o painel antes de salvar." });
@@ -1124,7 +1122,6 @@ export const h2AutoAdminRouter = router({
 const respond = (res: Response, status: number, body: unknown) =>
   res.status(status).set("Cache-Control", "no-store").json(body);
 export function registerH2AutoDeviceRoutes(app: Express) {
-  registerH2AutoReplyImageRoutes(app);
   // Request bodies contain only the pairing code or opaque device token; no WhatsApp content.
   app.post("/api/h2-auto/pair", async (req: Request, res: Response) => {
     try {
@@ -1242,9 +1239,9 @@ export function registerH2AutoDeviceRoutes(app: Express) {
         return respond(res, 401, { error: "unauthorized" });
       const db = await getDb();
       if (!db) throw Error("db");
-      await assertH2AutoReplyImages(id,parsed.data.personalization.faq);
+      const cleanImport=withoutReplyImages(parsed.data);
       await db.execute(sql`INSERT IGNORE INTO h2_auto_local_snapshots (device_id,snapshot_json,received_at)
-     VALUES (${id},${JSON.stringify(parsed.data)},${Date.now()})`);
+     VALUES (${id},${JSON.stringify(cleanImport)},${Date.now()})`);
       if (Number(device.revision) !== 0)
         return respond(res, 200, {
           success: true,
@@ -1255,7 +1252,7 @@ export function registerH2AutoDeviceRoutes(app: Express) {
         });
       // Promote the local settings only if the ADM has NEVER been saved.
       const result: any =
-        await db.execute(sql`UPDATE h2_auto_devices SET config_json=${JSON.stringify(parsed.data)},revision=1,last_seen=${Date.now()}
+        await db.execute(sql`UPDATE h2_auto_devices SET config_json=${JSON.stringify(cleanImport)},revision=1,last_seen=${Date.now()}
      WHERE id=${id} AND token_hash=${hash(token)} AND revision=0`);
       if (!result[0]?.affectedRows)
         return respond(res, 200, {
