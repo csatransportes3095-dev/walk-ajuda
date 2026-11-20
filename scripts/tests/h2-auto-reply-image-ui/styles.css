@@ -1,0 +1,6 @@
+@import "../../../client/src/index.css";
+@source "../../../client/src/pages/AdminH2Auto.tsx";
+@source "../../../client/src/components/H2AutoReplyImageEditor.tsx";
+@source "../../../client/src/components/AdminHeader.tsx";
+@source "../../../client/src/components/H2AutoManualControls.tsx";
+@source "./main.tsx";

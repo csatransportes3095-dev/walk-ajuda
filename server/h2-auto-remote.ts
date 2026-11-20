@@ -9,6 +9,9 @@ import { listActiveValidationBlocks, releaseValidationBlock, releaseAllValidatio
 import { changeSilencedPhone, manualSilencedPhones, legacySilencedEntries, releaseLegacySilencedEntry, normalizeSilencedPhone } from "./h2-auto-silenced-contacts";
 import { h2AutoTreeSchema, H2_AUTO_TREE_DEFAULT } from "../shared/h2AutoTree";
 import { h2AutoPersonalizationSchema, h2AutoFaqVariationsSchema, H2_AUTO_PERSONALIZATION_DEFAULT, getH2AutoPersonalizedReply } from "../shared/h2AutoPersonalization";
+import { h2AutoReplyImageSchema } from "../shared/h2AutoReplyImage";
+import { h2AutoReplyImageUploadSchema, uploadH2AutoReplyImage, assertH2AutoReplyImages,
+  registerH2AutoReplyImageRoutes } from "./h2-auto-reply-images";
 import { H2_AUTO_UNKNOWN_REPLY_DEFAULT } from "../shared/h2AutoUnknownReply";
 import { mergeH2AutoExpandedFaq } from "../shared/h2AutoFaqPresets";
 import { listH2AutoUnknownQuestions, deleteH2AutoUnknownQuestion, ensureH2AutoLearningTable, recordH2AutoUnknownQuestion } from "./h2-auto-learning";
@@ -720,6 +723,9 @@ export const h2AutoAdminRouter = router({
         welcome: saved.welcome,
         menu: saved.menu,
         rules: saved.rules,
+        // FAQ attachments have their own save operation. A general settings
+        // form (including older open tabs) must never erase these images.
+        personalization: saved.personalization,
         manualControls: saved.manualControls,
         localPauseRelease: saved.localPauseRelease,
         pauseSync: saved.pauseSync,
@@ -838,9 +844,11 @@ export const h2AutoAdminRouter = router({
     .input(z.object({
       id:z.string().regex(/^[a-f0-9]{24}$/),
       questionHash:z.string().regex(/^[a-f0-9]{64}$/),
-      answer:z.string().trim().min(3).max(1200),
+      answer:z.string().trim().max(1200),
+      image:h2AutoReplyImageSchema.optional(),
       variations:h2AutoFaqVariationsSchema.default(""),
-    }))
+    }).refine(input => input.answer.length >= 3 || (input.answer.length === 0 && Boolean(input.image)),
+      {message:"Escreva uma resposta ou anexe uma imagem.",path:["answer"]}))
     .mutation(async ({input}) => {
       await ensure();
       await ensureH2AutoLearningTable();
@@ -859,8 +867,10 @@ export const h2AutoAdminRouter = router({
       const entries=[...(config.personalization.faq || [])];
       const index=entries.findIndex(item=>item.id===faqId ||
         item.question.trim().toLocaleLowerCase("pt-BR")===question.trim().toLocaleLowerCase("pt-BR"));
-      const entry={id:index>=0?entries[index].id:faqId,question,
-        variations:input.variations,answer:input.answer,enabled:true};
+      const entry={...(index>=0?entries[index]:{}),id:index>=0?entries[index].id:faqId,question,
+        variations:input.variations,answer:input.answer,enabled:true,
+        ...(input.image?{image:input.image}:{})};
+      await assertH2AutoReplyImages(input.id,[entry]);
       if(index>=0) entries[index]=entry; else entries.push(entry);
       const personalization=h2AutoPersonalizationSchema.parse({
         ...config.personalization,faq:entries,
@@ -875,22 +885,35 @@ export const h2AutoAdminRouter = router({
         active:personalization.enabled};
     }),
   /** An isolated field update: never overwrite menus, customer security or APK pauses. */
+  uploadReplyImage: adminProcedure
+    .input(h2AutoReplyImageUploadSchema)
+    .mutation(async ({input}) => {
+      await ensure();
+      return uploadH2AutoReplyImage(input);
+    }),
   savePersonalization: adminProcedure
     .input(z.object({
       id: z.string().regex(/^[a-f0-9]{24}$/),
       personalization: h2AutoPersonalizationSchema,
+      expectedRevision: z.number().int().min(0).optional(),
     }))
     .mutation(async ({ input }) => {
       await ensure();
       const db = await getDb();
       if (!db) throw new TRPCError({ code: "INTERNAL_SERVER_ERROR", message: "Banco indisponível." });
+      await assertH2AutoReplyImages(input.id,input.personalization.faq);
+      const current=(await rows(sql`SELECT revision FROM h2_auto_devices WHERE id=${input.id} LIMIT 1`))[0];
+      if(!current) throw new TRPCError({code:"NOT_FOUND",message:"Aparelho não encontrado."});
+      const revision=Number(current.revision);
+      if(input.expectedRevision !== undefined && input.expectedRevision !== revision)
+        throw new TRPCError({code:"CONFLICT",message:"As respostas mudaram. Atualize o painel antes de salvar."});
       const updated: any = await db.execute(sql`UPDATE h2_auto_devices
         SET config_json=JSON_SET(config_json,'$.personalization',
           CAST(${JSON.stringify(input.personalization)} AS JSON)),
-          revision=revision+1 WHERE id=${input.id}`);
+          revision=revision+1 WHERE id=${input.id} AND revision=${revision}`);
       if (!updated[0]?.affectedRows)
-        throw new TRPCError({ code: "NOT_FOUND", message: "Aparelho não encontrado." });
-      return { success: true };
+        throw new TRPCError({ code: "CONFLICT", message: "As respostas mudaram. Atualize o painel antes de salvar." });
+      return { success: true, revision:revision+1 };
     }),
   previewPersonalization: adminProcedure
     .input(z.object({
@@ -1101,6 +1124,7 @@ export const h2AutoAdminRouter = router({
 const respond = (res: Response, status: number, body: unknown) =>
   res.status(status).set("Cache-Control", "no-store").json(body);
 export function registerH2AutoDeviceRoutes(app: Express) {
+  registerH2AutoReplyImageRoutes(app);
   // Request bodies contain only the pairing code or opaque device token; no WhatsApp content.
   app.post("/api/h2-auto/pair", async (req: Request, res: Response) => {
     try {
@@ -1218,6 +1242,7 @@ export function registerH2AutoDeviceRoutes(app: Express) {
         return respond(res, 401, { error: "unauthorized" });
       const db = await getDb();
       if (!db) throw Error("db");
+      await assertH2AutoReplyImages(id,parsed.data.personalization.faq);
       await db.execute(sql`INSERT IGNORE INTO h2_auto_local_snapshots (device_id,snapshot_json,received_at)
      VALUES (${id},${JSON.stringify(parsed.data)},${Date.now()})`);
       if (Number(device.revision) !== 0)

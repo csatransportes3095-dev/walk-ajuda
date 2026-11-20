@@ -76,7 +76,13 @@ jobs:
           const read=p=>normalizeLines(fs.readFileSync(p,'utf8'));
           const normalizeIsolatedIntegrations=(p,source)=>{
             // Accept only the exact independently authenticated Android transport block.
-            if(p==='server/siteAccessPolicy.ts')return source.replace(
+            if(p==='server/siteAccessPolicy.ts')return source
+            // The image feature adds exactly one independently authenticated
+            // device-download route. All other gateway rules must still match.
+            .replace(
+              "  // Image files are authenticated again by their exact device token or ADM\n  // cookie. Never make the whole H2 Auto API (or a storage prefix) public.\n  if (/^\\/api\\/h2-auto\\/reply-images\\/[a-f0-9]{24}\\/[a-f0-9]{32}$/.test(pathname)) return true;\n",
+              ""
+            ).replace(
               "  // Pareamento usa codigo temporario; os demais endpoints validam o token proprio do agente.\n  if (\n    pathname === \"/api/h2-android/agent/claim\" ||\n    pathname === \"/api/h2-android/agent/heartbeat\" ||\n    pathname === \"/api/h2-android/agent/pull\" ||\n    pathname === \"/api/h2-android/agent/finish\" ||\n    pathname === \"/api/h2-android/agent/frame\"\n  ) return true;",
               "  // Endpoints com autenticacao separada; nenhum comando remoto nesta fase.\n  if (pathname === \"/api/h2-android/agent/claim\" || pathname === \"/api/h2-android/agent/heartbeat\") return true;"
             );
