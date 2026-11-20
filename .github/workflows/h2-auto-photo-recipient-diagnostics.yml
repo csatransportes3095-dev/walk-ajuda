@@ -1,0 +1,32 @@
+name: H2 AUTO - diagnostico seguro de fotos (APK e ADM)
+
+on:
+  pull_request:
+    branches: [recovery/organizar-salvos-2026-08-24]
+    paths:
+      - '.github/workflows/h2-auto-photo-recipient-diagnostics.yml'
+      - 'server/h2-auto-diagnostics.ts'
+      - 'server/h2-auto-diagnostics.test.ts'
+      - 'client/src/pages/AdminH2Auto.tsx'
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  recipient-diagnostics:
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '22'
+      - name: Install locked dependencies
+        run: |
+          npm install -g pnpm@10.4.1
+          pnpm install --frozen-lockfile
+      - name: Validate strict privacy-safe diagnostic ACK contract
+        run: pnpm exec vitest run server/h2-auto-diagnostics.test.ts
+      - name: Prepare and compile production server and ADM
+        run: pnpm build
