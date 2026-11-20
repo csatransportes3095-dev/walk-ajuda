@@ -127,6 +127,16 @@ export const h2AutoDiagnosticsSchema = z
     imageRepliesSupported: z.boolean().optional(),
     imageCacheReady: z.number().int().min(0).max(1000).optional(),
     imageCacheFailed: z.number().int().min(0).max(1000).optional(),
+    // Per-FAQ cache inventory: bounded opaque identifiers and fixed states only.
+    // Never transmit local paths, message bodies, phone numbers or file bytes.
+    imageCacheFiles: z.array(z.object({
+      faqId: z.string().regex(/^[a-z0-9_-]{3,48}$/),
+      imageId: z.string().regex(/^[a-f0-9]{32}$/),
+      sha256: z.string().regex(/^[a-f0-9]{64}$/),
+      state: z.enum(["READY", "MISSING", "DOWNLOAD_FAILED"]),
+    }).strict()).max(100).optional(),
+    imageCacheFilesTruncated: z.boolean().optional(),
+    imageCacheUpdatedAt: z.number().int().min(0).max(H2_AUTO_MAX_TIMESTAMP).optional(),
     imageReplyStatusCode: z.enum(H2_AUTO_IMAGE_REPLY_STATUS_CODES).optional(),
     imageReplyStatusAt: z.number().int().min(0).max(H2_AUTO_MAX_TIMESTAMP).optional(),
     imageReplyQueuePending: z.number().int().min(0).max(100).optional(),
