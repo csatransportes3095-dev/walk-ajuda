@@ -205,6 +205,52 @@ describe("H2 Auto mídia e ACK privacy-safe", () => {
     expect(state.diagnosticInserts).toBe(1);
   });
 
+  it("aceita apenas os sete novos códigos de foto dos APKs 2.16 e 2.17", async () => {
+    const details = [
+      "INTERVENTION_CLICK", "INTERVENTION_TEXT", "INTERVENTION_MEDIA",
+      "INTERVENTION_DRAFT", "INTERVENTION_CAPTION", "INTERVENTION_COMPOSER",
+      "INTERVENTION_EXTRA_MEDIA",
+    ];
+    for (const detail of details) {
+      const response = await request("/api/h2-auto/ack", {
+        method: "POST",
+        headers: headers(),
+        body: JSON.stringify({
+          revision: 1,
+          diagnostics: {
+            ...validDiagnostics,
+            apkVersion: "2.17-image-draft",
+            apkVersionCode: 117,
+            imageRepliesSupported: true,
+            imageCacheReady: 1,
+            imageCacheFailed: 0,
+            imageReplyStatusCode: "PAUSED",
+            imageReplyStatusAt: 1_700_000_000_000,
+            imageReplyQueuePending: 0,
+            imageReplyStage: "IMAGE",
+            imageReplyAccessibilityConnected: true,
+            imageReplyDetailCode: detail,
+          },
+        }),
+      });
+      expect(response.status, detail).toBe(200);
+    }
+    expect(state.diagnosticInserts).toBe(details.length);
+    const unknown = await request("/api/h2-auto/ack", {
+      method: "POST",
+      headers: headers(),
+      body: JSON.stringify({
+        revision: 1,
+        diagnostics: {
+          ...validDiagnostics,
+          imageReplyDetailCode: "java.lang.Exception: mensagem privada",
+        },
+      }),
+    });
+    expect(unknown.status).toBe(400);
+    expect(state.diagnosticInserts).toBe(details.length);
+  });
+
   it("aceita o ACK da versão 1.95 com somente estado e horário de OTP", async () => {
     const response = await request("/api/h2-auto/ack", {
       method: "POST",
