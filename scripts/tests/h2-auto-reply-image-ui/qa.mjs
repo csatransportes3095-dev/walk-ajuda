@@ -174,8 +174,37 @@ try {
   assert.equal(await photoStatus.getByText('Saída da foto confirmada na conversa', { exact: true }).count(), 0);
   checks.push('APK action acceptance is displayed separately from confirmed photo output');
 
-  await control({ apkVersionCode: 113 }); await reload(); await loaded(second());
-  await page.getByText('Para enviar fotos anexadas, atualize o H2 Auto para a versão 2.14 ou superior e sincronize o aparelho.', { exact: false }).waitFor();
+  await control({ imageReplyStatusCode: 'UNSUPPORTED', imageReplyDetailCode: 'ACCESSIBILITY_DISCONNECTED',
+    imageReplyStage: 'TEXT', imageReplyAccessibilityConnected: false }); await reload();
+  await photoStatus.getByText('Não foi possível iniciar o envio nesta tentativa', { exact: true }).waitFor();
+  await photoStatus.getByText('Acessibilidade do H2 Auto desconectada no Android.', { exact: true }).waitFor();
+  await photoStatus.getByText('Texto da resposta', { exact: true }).waitFor();
+  await photoStatus.getByText('Desconectada', { exact: true }).waitFor();
+  await photoStatus.getByText('Confira a conexão da acessibilidade em Fotos no APK.', { exact: false }).waitFor();
+  assert.equal(await photoStatus.getByText('Envio de fotos não disponível neste aparelho', { exact: true }).count(), 0);
+  checks.push('A disconnected accessibility service is identified at the text stage without blaming device compatibility');
+
+  await control({ imageReplyStatusCode: 'FAILED', imageReplyDetailCode: 'SHARE_LAUNCH_REJECTED',
+    imageReplyStage: 'IMAGE', imageReplyAccessibilityConnected: true }); await reload();
+  await photoStatus.getByText('O Android impediu a abertura da foto no WhatsApp.', { exact: true }).waitFor();
+  await photoStatus.getByText('Foto anexada', { exact: true }).waitFor();
+  await photoStatus.getByText('Conectada', { exact: true }).waitFor();
+  assert.equal(await photoStatus.getByText('Confira a conexão da acessibilidade em Fotos no APK.', { exact: false }).count(), 0);
+  assert.equal(await photoStatus.getByText('Saída da foto confirmada na conversa', { exact: true }).count(), 0);
+  checks.push('A share launch failure stays distinct from accessibility state and never appears as confirmed delivery');
+
+  await control({ imageReplyStatusCode: 'FAILED', imageReplyDetailCode: 'TEXT_ACTION_CANCELLED',
+    imageReplyStage: 'TEXT', imageReplyAccessibilityConnected: true }); await reload();
+  await photoStatus.getByText('A ação de responder texto da notificação expirou ou foi cancelada pelo WhatsApp.', { exact: true }).waitFor();
+  await photoStatus.getByText('Texto da resposta', { exact: true }).waitFor();
+  checks.push('Expired notification text actions retain their specific reason and stage');
+
+  await control({ apkVersionCode: 114, imageReplyStatusCode: 'UNSUPPORTED', imageReplyDetailCode: null,
+    imageReplyStage: null, imageReplyAccessibilityConnected: null }); await reload(); await loaded(second());
+  await photoStatus.getByText('Não foi possível iniciar o envio nesta tentativa', { exact: true }).waitFor();
+  assert.equal(await photoStatus.getByText('Sem registro', { exact: true }).count() >= 2, true);
+  assert.equal(await photoStatus.getByText('Acessibilidade do H2 Auto desconectada no Android.', { exact: true }).count(), 0);
+  await page.getByText('Para enviar fotos anexadas, atualize o H2 Auto para a versão 2.15 ou superior e sincronize o aparelho.', { exact: false }).waitFor();
   await page.setViewportSize({ width: 390, height: 844 });
   await second().scrollIntoViewIfNeeded();
   const group = second().getByRole('group', { name: 'Imagem da resposta', exact: true });

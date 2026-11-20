@@ -25,7 +25,7 @@ vi.mock("./db", () => ({ getDb: async () => {
 } }));
 import { registerH2AutoAccessRoutes } from "./h2-auto-access";
 import { supportsH2AutoImageReplies } from "./h2-auto-image-reply-response";
-import { h2AutoDiagnosticsSchema } from "./h2-auto-diagnostics";
+import { decodeH2AutoDiagnostics, h2AutoDiagnosticsSchema } from "./h2-auto-diagnostics";
 
 let server: Server, base: string;
 const image = (letter = "a"): H2AutoReplyImage => ({ id: letter.repeat(32), sha256: letter.repeat(64), mimeType: "image/jpeg",
@@ -36,6 +36,61 @@ beforeAll(async () => {
   const app = express(); app.use(express.json()); registerH2AutoAccessRoutes(app);
   server = app.listen(0); await new Promise<void>(resolve => server.once("listening", resolve));
   base = "http://127.0.0.1:" + (server.address() as any).port;
+});
+
+describe("H2 Auto 2.15 fixed image failure diagnostics", () => {
+  const legacy = { apkVersion: "2.14", apkVersionCode: 114, mediaEnabled: false, transcribeConfigured: false,
+    recordAudioPermission: false, listenerConnected: true, statusCode: "NOT_CHECKED", statusAt: 0,
+    androidErrorCode: -1, replyStatusCode: "NOT_CHECKED", replyStatusAt: 0,
+    imageRepliesSupported: true, imageCacheReady: 1, imageCacheFailed: 0,
+    imageReplyStatusCode: "UNSUPPORTED", imageReplyStatusAt: 1234, imageReplyQueuePending: 0 };
+
+  it("reads an older APK without inventing a failure cause or accessibility state", () => {
+    const decoded = decodeH2AutoDiagnostics(JSON.stringify(legacy));
+    expect(decoded).toMatchObject(legacy);
+    expect(decoded).not.toHaveProperty("imageReplyDetailCode");
+    expect(decoded).not.toHaveProperty("imageReplyStage");
+    expect(decoded).not.toHaveProperty("imageReplyAccessibilityConnected");
+  });
+
+  // Independent wire-contract fixtures, matched to APK 2.15. Do not iterate
+  // the schema's own enum: accidental omissions must fail this contract test.
+  it.each([
+    ["NONE", "NONE"],
+    ["ACCESSIBILITY_DISCONNECTED", "TEXT"],
+    ["UI_BUSY", "TEXT"],
+    ["CHAT_ACTIVITY_NOT_FOUND", "TEXT"],
+    ["CHAT_LAUNCH_REJECTED", "TEXT"],
+    ["SHARE_ACTIVITY_NOT_FOUND", "IMAGE"],
+    ["SHARE_LAUNCH_REJECTED", "IMAGE"],
+    ["TEXT_ACTION_UNAVAILABLE", "TEXT"],
+    ["TEXT_ACTION_CANCELLED", "TEXT"],
+    ["IMAGE_MIME_UNSUPPORTED", "IMAGE"],
+    ["IMAGE_ACTION_CANCELLED", "IMAGE"],
+    ["UI_TIMEOUT", "IMAGE"],
+    ["RECIPIENT_NOT_VERIFIED", "IMAGE"],
+    ["OPERATOR_INTERVENED", "IMAGE"],
+  ])("retains the fixed reason %s and its stage in stored diagnostics", (reason, stage) => {
+    const payload = { ...legacy, apkVersion: "2.15", apkVersionCode: 115,
+      imageReplyDetailCode: reason, imageReplyStage: stage, imageReplyAccessibilityConnected: false };
+    const parsed = h2AutoDiagnosticsSchema.parse(payload);
+    expect(decodeH2AutoDiagnostics(JSON.stringify(parsed))).toMatchObject(payload);
+  });
+
+  it("preserves a specific image failure when the aggregate result is partial failure", () => {
+    const payload = { ...legacy, apkVersion: "2.15", apkVersionCode: 115,
+      imageReplyStatusCode: "FAILED", imageReplyDetailCode: "SHARE_LAUNCH_REJECTED",
+      imageReplyStage: "IMAGE", imageReplyAccessibilityConnected: true };
+    expect(decodeH2AutoDiagnostics(payload)).toMatchObject(payload);
+  });
+
+  it("rejects arbitrary exception messages, recipient data, URLs and invalid field types", () => {
+    for (const reason of ["11999999999", "SENT TO CLIENT NAME", "java.lang.Exception: content://private/photo", "https://invalid.test/photo"])
+      expect(h2AutoDiagnosticsSchema.safeParse({ ...legacy, imageReplyDetailCode: reason }).success).toBe(false);
+    expect(h2AutoDiagnosticsSchema.safeParse({ ...legacy, imageReplyStage: "CLIENT CHAT" }).success).toBe(false);
+    expect(h2AutoDiagnosticsSchema.safeParse({ ...legacy, imageReplyAccessibilityConnected: "false" }).success).toBe(false);
+    expect(h2AutoDiagnosticsSchema.safeParse({ ...legacy, imageReplyErrorMessage: "Private conversation text" }).success).toBe(false);
+  });
 });
 afterAll(() => new Promise<void>(resolve => server.close(() => resolve())));
 beforeEach(() => { state.stage = "choice"; state.bot = true; state.blocked = ""; state.statements = []; state.faq = [rule()]; });

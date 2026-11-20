@@ -96,10 +96,31 @@ const imageReplyLabels: Record<string, string> = {
   SENDING: "APK tentando enviar a foto",
   SENT_CONFIRMED: "Saída da foto confirmada na conversa",
   ACTION_ACCEPTED_UNVERIFIED: "Ação aceita; saída da foto ainda não confirmada",
-  FAILED: "Falha ao enviar a foto",
-  UNSUPPORTED: "Envio de fotos não disponível neste aparelho",
+  FAILED: "Falha ao enviar a resposta com foto",
+  UNSUPPORTED: "Não foi possível iniciar o envio nesta tentativa",
   RECIPIENT_NOT_VERIFIED: "Contato não confirmado para o envio da foto",
   PAUSED: "Envio de foto pausado",
+};
+const imageReplyDetailLabels: Record<string, string> = {
+  NONE: "",
+  ACCESSIBILITY_DISCONNECTED: "Acessibilidade do H2 Auto desconectada no Android.",
+  UI_BUSY: "O controle de envio está ocupado com outra tentativa.",
+  CHAT_ACTIVITY_NOT_FOUND: "O Android não encontrou uma tela do WhatsApp para abrir a conversa.",
+  CHAT_LAUNCH_REJECTED: "O Android impediu a abertura da conversa no WhatsApp.",
+  SHARE_ACTIVITY_NOT_FOUND: "O Android não encontrou uma tela do WhatsApp para anexar a foto.",
+  SHARE_LAUNCH_REJECTED: "O Android impediu a abertura da foto no WhatsApp.",
+  TEXT_ACTION_UNAVAILABLE: "A notificação do WhatsApp não ofereceu uma ação de resposta de texto válida.",
+  TEXT_ACTION_CANCELLED: "A ação de responder texto da notificação expirou ou foi cancelada pelo WhatsApp.",
+  IMAGE_MIME_UNSUPPORTED: "A notificação do WhatsApp não aceita esta imagem; o envio pela tela é necessário.",
+  IMAGE_ACTION_CANCELLED: "A ação de anexar a foto na notificação expirou ou foi cancelada pelo WhatsApp.",
+  UI_TIMEOUT: "O WhatsApp não concluiu a etapa de envio dentro do tempo esperado.",
+  RECIPIENT_NOT_VERIFIED: "O APK não confirmou o destinatário na conversa.",
+  OPERATOR_INTERVENED: "A tentativa automática foi interrompida após interação na tela do WhatsApp.",
+};
+const imageReplyStageLabels: Record<string, string> = {
+  NONE: "Ainda não iniciada",
+  TEXT: "Texto da resposta",
+  IMAGE: "Foto anexada",
 };
 // OTP-only diagnostics already uploaded by APK 1.95+: never a delivery receipt.
 const otpDeliveryLabels: Record<string, string> = {
@@ -1090,9 +1111,9 @@ export default function AdminH2Auto() {
                   </div>)}
                   <p className="text-xs text-emerald-200">{H2_AUTO_FAQ_SUGGESTIONS.length} perguntas sugeridas, desativadas e editáveis. Confira e salve para conservar as edições.</p>
                   <p className="text-xs text-amber-200">Cada pergunta precisa de texto ou imagem na resposta. Perguntas ambíguas seguem o atendimento atual, sem inventar respostas.</p>
-                  {personalization.faq.some(faq=>faq.image) && (diagnostic?.apkVersionCode||0)<114 &&
+                  {personalization.faq.some(faq=>faq.image) && (diagnostic?.apkVersionCode||0)<115 &&
                     <p role="status" className="rounded-lg border border-amber-400/40 bg-amber-950/25 p-3 text-xs text-amber-100">
-                      Para enviar fotos anexadas, atualize o H2 Auto para a versão 2.14 ou superior e sincronize o aparelho.{' '}
+                      Para enviar fotos anexadas, atualize o H2 Auto para a versão 2.15 ou superior e sincronize o aparelho.{' '}
                       <a href="/baixar-h2-auto" className="font-bold underline">Baixar APK atualizado</a>
                     </p>}
                   {personalization.faq.some(faq=>faq.image) && <div role="status" aria-label="Estado das fotos no APK" className="space-y-2 rounded-xl border border-cyan-400/30 bg-cyan-950/20 p-3 text-xs">
@@ -1100,6 +1121,14 @@ export default function AdminH2Auto() {
                     <p className={diagnostic?.imageReplyStatusCode==="SENT_CONFIRMED"?"font-bold text-emerald-300":"font-bold text-cyan-200"}>
                       {imageReplyLabels[diagnostic?.imageReplyStatusCode??"NOT_CHECKED"]??imageReplyLabels.NOT_CHECKED}
                     </p>
+                    {diagnostic?.imageReplyDetailCode && imageReplyDetailLabels[diagnostic.imageReplyDetailCode] &&
+                      <p className="text-amber-100">{imageReplyDetailLabels[diagnostic.imageReplyDetailCode]}</p>}
+                    <div className="flex flex-wrap gap-x-4 gap-y-1 text-slate-300">
+                      <span>Etapa registrada: <strong>{imageReplyStageLabels[diagnostic?.imageReplyStage??""]??"Sem registro"}</strong></span>
+                      <span>Acessibilidade do H2 Auto: <strong>{diagnostic?.imageReplyAccessibilityConnected===true?"Conectada":diagnostic?.imageReplyAccessibilityConnected===false?"Desconectada":"Sem registro"}</strong></span>
+                    </div>
+                    {diagnostic?.imageReplyDetailCode==="ACCESSIBILITY_DISCONNECTED" && diagnostic.imageReplyAccessibilityConnected===false &&
+                      <p className="text-amber-100">Confira a conexão da acessibilidade em Fotos no APK. Se a permissão já estiver ativada, o registro indica uma falha de conexão do serviço.</p>}
                     <div className="flex flex-wrap gap-x-4 gap-y-1 text-slate-300">
                       <span>Imagens disponíveis: <strong>{diagnostic?.imageCacheReady??"Sem registro"}</strong></span>
                       <span>Falhas ao carregar: <strong>{diagnostic?.imageCacheFailed??"Sem registro"}</strong></span>
