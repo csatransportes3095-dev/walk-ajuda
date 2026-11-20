@@ -42,6 +42,24 @@ export const H2_AUTO_IMAGE_REPLY_STATUS_CODES = [
   "UNSUPPORTED", "RECIPIENT_NOT_VERIFIED", "PAUSED",
 ] as const;
 
+/** Fixed APK 2.15 failure reasons; never accept exception text or conversation data. */
+export const H2_AUTO_IMAGE_REPLY_DETAIL_CODES = [
+  "NONE",
+  "ACCESSIBILITY_DISCONNECTED",
+  "UI_BUSY",
+  "CHAT_ACTIVITY_NOT_FOUND",
+  "CHAT_LAUNCH_REJECTED",
+  "SHARE_ACTIVITY_NOT_FOUND",
+  "SHARE_LAUNCH_REJECTED",
+  "TEXT_ACTION_UNAVAILABLE",
+  "TEXT_ACTION_CANCELLED",
+  "IMAGE_MIME_UNSUPPORTED",
+  "IMAGE_ACTION_CANCELLED",
+  "UI_TIMEOUT",
+  "RECIPIENT_NOT_VERIFIED",
+  "OPERATOR_INTERVENED",
+] as const;
+
 /**
  * H2 Auto 1.95-2.02 reports only fixed OTP stage identifiers. Match the APK
  * stage constants exactly: unknown codes, phone numbers, chat text, OTP bodies
@@ -104,6 +122,9 @@ export const h2AutoDiagnosticsSchema = z
     imageReplyStatusCode: z.enum(H2_AUTO_IMAGE_REPLY_STATUS_CODES).optional(),
     imageReplyStatusAt: z.number().int().min(0).max(H2_AUTO_MAX_TIMESTAMP).optional(),
     imageReplyQueuePending: z.number().int().min(0).max(100).optional(),
+    imageReplyDetailCode: z.enum(H2_AUTO_IMAGE_REPLY_DETAIL_CODES).optional(),
+    imageReplyStage: z.enum(["NONE", "TEXT", "IMAGE"]).optional(),
+    imageReplyAccessibilityConnected: z.boolean().optional(),
     learningQueuePending: z.number().int().min(0).max(2000).optional(),
     learningQueueFull: z.number().int().min(0).max(1000000).optional(),
     learningWorkerFull: z.number().int().min(0).max(1000000).optional(),

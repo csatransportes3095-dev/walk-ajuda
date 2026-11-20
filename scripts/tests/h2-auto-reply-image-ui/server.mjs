@@ -23,9 +23,10 @@ const { h2AutoPersonalizationSchema, getH2AutoPersonalizedReply } = await import
 const deviceId = '0123456789abcdef01234567';
 const secondDeviceId = 'fedcba9876543210fedcba98';
 const makeDevice = (id, label) => ({ id, label, paired: true, revision: 10, appliedRevision: 10,
-  lastSeen: Date.now(), diagnosticsReceivedAt: Date.now(), diagnostics: { apkVersionCode: 114,
+  lastSeen: Date.now(), diagnosticsReceivedAt: Date.now(), diagnostics: { apkVersionCode: 115,
     imageRepliesSupported: true, imageCacheReady: 0, imageCacheFailed: 0, imageReplyQueuePending: 0,
-    imageReplyStatusCode: 'NOT_CHECKED' },
+    imageReplyStatusCode: 'NOT_CHECKED', imageReplyDetailCode: 'NONE', imageReplyStage: 'NONE',
+    imageReplyAccessibilityConnected: true },
   config: { enabled: true, whatsappMode: 'business', pauseMinutes: 60, scheduleOn: false,
     scheduleStart: '00:00', scheduleEnd: '23:59', identificationEnabled: true, ordersEnabled: true,
     questionCollectionEnabled: false, menu: Array(9).fill(''), rules: [], welcome: '',
@@ -46,7 +47,7 @@ const getDevice = id => { const found = state.devices.find(value => value.id ===
 const delay = ms => new Promise(resolve => setTimeout(resolve, ms));
 const t = initTRPC.create({ transformer: superjson });
 const router = t.router({
-  apk: t.router({ getH2AutoRelease: t.procedure.query(() => ({ available: true, versionName: '2.14', versionCode: 114, uploadedAt: Date.now() })) }),
+  apk: t.router({ getH2AutoRelease: t.procedure.query(() => ({ available: true, versionName: '2.15', versionCode: 115, uploadedAt: Date.now() })) }),
   h2AutoAdmin: t.router({
     list: t.procedure.query(() => structuredClone(state.devices)),
     learningQuestions: t.procedure.input(z.any()).query(() => ({ pending: 0, received: 0, questions: [] })),
@@ -96,6 +97,12 @@ app.post('/test-control', (req, res) => {
   if ('imageReplyStatusCode' in req.body) {
     state.devices[0].diagnostics.imageReplyStatusCode = String(req.body.imageReplyStatusCode);
     state.devices[0].diagnostics.imageReplyStatusAt = Date.now();
+  }
+  for (const field of ['imageReplyDetailCode', 'imageReplyStage', 'imageReplyAccessibilityConnected']) {
+    if (!(field in req.body)) continue;
+    if (req.body[field] === null) delete state.devices[0].diagnostics[field];
+    else state.devices[0].diagnostics[field] = field === 'imageReplyAccessibilityConnected'
+      ? Boolean(req.body[field]) : String(req.body[field]);
   }
   if (req.body.advanceRevision) state.devices[0].revision += 1;
   res.json(state);

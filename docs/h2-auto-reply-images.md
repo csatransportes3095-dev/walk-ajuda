@@ -8,7 +8,9 @@ pode anexar, visualizar, trocar ou remover a foto e salvar a personalização do
 aparelho. A resposta pode conter texto, imagem ou ambos; uma resposta sem nenhum
 conteúdo não pode ser salva.
 
-O APK precisa da capacidade `imageRepliesV1` (H2 Auto 2.14, versionCode 114).
+O APK precisa da capacidade `imageRepliesV1`, introduzida na versão 2.14.
+A versão recomendada é **2.15, versionCode 115**, com correções de envio e a área
+local **Fotos** para acompanhar carregamento e diagnóstico.
 Depois dessa atualização inicial, trocar a foto no ADM não exige reconstruir ou
 reinstalar o APK. A resposta continua sendo acionada pela mensagem recebida do
 cliente, sujeita às regras existentes de identificação, horário, pausa e bloqueio.
@@ -56,6 +58,34 @@ não é recibo de entrega ou leitura do WhatsApp. O funcionamento real das árvo
 de acessibilidade do WhatsApp deve ser observado no aparelho; testes de servidor,
 JVM e navegador não equivalem a essa confirmação.
 
+## Fotos no APK e diagnóstico da tentativa
+
+A entrada **Fotos** aparece no topo da tela inicial, abaixo do vínculo com o ADM.
+Ela mostra quantas imagens foram carregadas, falhas, fila, horário, estado da
+tentativa, etapa de texto/foto e motivo específico. Os dados são atualizados
+enquanto a página está aberta, sem reescrever a configuração de atendimento.
+**Sincronizar fotos** reutiliza a sincronização existente; não dispara fotos
+para clientes. O fluxo existente de sincronização pode continuar processando
+códigos de login pendentes.
+
+Os campos opcionais `imageReplyDetailCode`, `imageReplyStage` e
+`imageReplyAccessibilityConnected` complementam os códigos de estado já usados.
+O servidor aceita somente motivos enumerados e etapas `NONE`, `TEXT` e `IMAGE`;
+não recebe texto de conversa, exceções arbitrárias nem dados do destinatário.
+APKs anteriores continuam enviando ACK sem esses três campos.
+
+`UNSUPPORTED` significa que a tentativa não pôde iniciar; não prova
+incompatibilidade do aparelho. A conexão de acessibilidade também não equivale
+à configuração da permissão: um serviço pode estar autorizado e desconectado.
+O detalhe registrado na tentativa permanece separado da conexão atual.
+
+O módulo de imagens busca a ação atual da mesma notificação antes das ações de
+envio, verificando aplicativo, conversa, evento recebido e destinatário. Inputs
+de mídia exclusivos de `getDataOnlyRemoteInputs()` são considerados quando o
+WhatsApp anuncia suporte ao MIME. O caminho de tela trata o resultado real do
+lançamento, em vez de concluir indisponibilidade só pela consulta prévia de
+resolução do Android. Isso não remove as verificações de destinatário e prévia.
+
 ## Validação isolada
 
 O workflow `h2-auto-image-replies.yml` executa testes do contrato e da autorização,
@@ -67,3 +97,8 @@ enviada a clientes pelos testes.
 Os testes de MySQL exigem `H2_AUTO_REPLY_IMAGES_TEST_DB_URL` apontando exclusivamente
 para `h2_auto_reply_images_test` em um host local permitido; nenhuma conexão com
 o banco de produção é utilizada.
+
+O workflow Android `image-status-ui.yml` abre a tela nativa em um emulador
+isolado, com preferências sintéticas e sem conta WhatsApp ou pareamento. Confere
+a entrada Fotos, diagnóstico, navegação e tamanho de fonte maior. Essa inspeção
+da interface do H2 Auto não representa um teste de envio no WhatsApp real.

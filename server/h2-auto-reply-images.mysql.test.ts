@@ -179,6 +179,32 @@ describe.skipIf(!testUrl)("H2 Auto images — isolated MySQL upload/save/config/
     await caller().save({ id: deviceId, expectedRevision: before.revision, config: { ...oldConfig, pauseMinutes: 25 } });
     expect((await current()).config.personalization.faq[0].image).toEqual(image);
   });
+  it("persists authenticated 2.15 image failure reasons and still accepts a legacy diagnostic ACK", async () => {
+    const revision = (await current()).revision;
+    const legacy = { apkVersion: "2.14", apkVersionCode: 114, mediaEnabled: false, transcribeConfigured: false,
+      recordAudioPermission: false, listenerConnected: true, statusCode: "NOT_CHECKED", statusAt: 0,
+      androidErrorCode: -1, replyStatusCode: "NOT_CHECKED", replyStatusAt: 0,
+      imageRepliesSupported: true, imageCacheReady: 1, imageCacheFailed: 0,
+      imageReplyStatusCode: "UNSUPPORTED", imageReplyStatusAt: 1234, imageReplyQueuePending: 0 };
+    const diagnostics = { ...legacy, apkVersion: "2.15", apkVersionCode: 115,
+      imageReplyDetailCode: "ACCESSIBILITY_DISCONNECTED", imageReplyStage: "TEXT",
+      imageReplyAccessibilityConnected: false };
+    expect((await json("/api/h2-auto/ack", { revision, diagnostics })).status).toBe(200);
+    const listed = await caller().list();
+    expect(listed.find(device => device.id === deviceId)?.diagnostics).toMatchObject(diagnostics);
+
+    const invalid = await json("/api/h2-auto/ack", { revision,
+      diagnostics: { ...diagnostics, imageReplyDetailCode: "java.lang.Exception: private conversation" } });
+    expect(invalid).toMatchObject({ status: 400, body: { error: "invalid_ack" } });
+    expect((await caller().list()).find(device => device.id === deviceId)?.diagnostics).toMatchObject(diagnostics);
+
+    expect((await json("/api/h2-auto/ack", { revision, diagnostics: legacy })).status).toBe(200);
+    const older = (await caller().list()).find(device => device.id === deviceId)?.diagnostics;
+    expect(older).toMatchObject(legacy);
+    expect(older).not.toHaveProperty("imageReplyDetailCode");
+    expect(older).not.toHaveProperty("imageReplyStage");
+    expect(older).not.toHaveProperty("imageReplyAccessibilityConnected");
+  });
   it("does not acknowledge an image upload if the registry insert fails", async () => {
     const first = await upload(); await save(first, "Imagem já salva.");
     const count = isolated.objects.size;
