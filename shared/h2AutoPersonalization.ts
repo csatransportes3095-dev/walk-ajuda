@@ -1,5 +1,5 @@
 import { z } from "zod";
-import { h2AutoReplyImageSchema, type H2AutoReplyImage } from "./h2AutoReplyImage";
+import { h2AutoReplyImageSchema } from "./h2AutoReplyImage";
 
 /**
  * H2 AUTO: camada opcional de respostas contextuais, sem IA paga e sem acesso
@@ -24,6 +24,7 @@ export const h2AutoFaqRuleSchema = z.object({
   question: z.string().trim().min(3).max(160),
   variations: h2AutoFaqVariationsSchema.default(""),
   answer: z.string().trim().max(1200),
+  // Entrada antiga apenas para ler configurações existentes; imagens nunca são enviadas.
   image: h2AutoReplyImageSchema.optional(),
   enabled: z.boolean().default(true),
 }).strict().superRefine((rule, context) => {
@@ -67,7 +68,6 @@ export type H2AutoPersonalizedAnswer = {
   topic: H2AutoPersonalizedTopic;
   message: string;
   faqId: string;
-  image?: H2AutoReplyImage;
 };
 
 export const H2_AUTO_PERSONALIZATION_EXAMPLES = [
@@ -174,7 +174,7 @@ export function getH2AutoPersonalizedReply(
       /\d{5,}/.test(input) || /^(?:menu|in[ií]cio|0|[1-9]|10|\/h2|\/h3)$/i.test(input.trim()) ||
       /@|https?:\/\/|www\./i.test(input)) return null;
   const rule = findCustomFaq(input,(config.faq ?? []));
-  if (!rule) return null; // Não inventar resposta nem indicar menus que não existem.
+  if (!rule || rule.answer.trim().length < 3) return null; // Sem texto, não responde nem tenta enviar imagem.
   const name = config.verifiedName && context.verified
     ? safeVerifiedFirstName(context.verifiedFirstName) : "";
   const greeting = config.tone === "acolhedor" ? (name ? "Oi, " + name + "! 😊" : "Entendi! 😊")
@@ -186,10 +186,7 @@ export function getH2AutoPersonalizedReply(
   return {
     topic: "personalizada",
     faqId: rule.id,
-    ...(rule.image ? { image: rule.image } : {}),
-    // A photo-only answer must not be replaced by a greeting or an image URL.
-    // Keep the existing phone-stage reminder when identity is still pending.
-    message: rule.answer ? "⚡ *H2 COLOMBIANO* 🇨🇴\n\n" + greeting + "\n\n" + rule.answer +
-      reminder + "\n\n💬 Pode enviar outra pergunta. Continuamos por aqui." : reminder.trim(),
+    message: "⚡ *H2 COLOMBIANO* 🇨🇴\n\n" + greeting + "\n\n" + rule.answer +
+      reminder + "\n\n💬 Pode enviar outra pergunta. Continuamos por aqui.",
   };
 }
