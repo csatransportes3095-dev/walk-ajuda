@@ -31,7 +31,8 @@ describe("Customer-initiated WhatsApp OTP", () => {
   it("does not pretend opening WhatsApp is proof of delivery", () => {
     expect(login).toContain("Toque em Enviar na mensagem preenchida no WhatsApp.");
     expect(login).toContain("após receber a mensagem");
-    expect(login).toContain("ABRIR WHATSAPP E ENVIAR MENSAGEM");
+    expect(login).toContain("ABRIR WHATSAPP EM OUTRA ABA");
+    expect(login).toContain('target="_blank" rel="noopener noreferrer"');
     expect(login).toContain("Preciso receber meu código");
     expect(login).toContain("RECEBER POR E-MAIL");
     expect(login).toContain("RECEBER PELO WHATSAPP");

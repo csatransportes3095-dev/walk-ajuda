@@ -9,10 +9,9 @@ describe("Login WhatsApp opens separately and preserves the code form", () => {
   it("uses the same shared URL builder as order resend, including type and app_absent", () => {
     expect(orders).toContain("buildWhatsappMessageUrl(");
     expect(login).toContain('import { buildWhatsappMessageUrl } from "@shared/whatsappUrl"');
-    expect(login).toContain('const whatsappUrl = buildWhatsappMessageUrl(supportNumber, "Preciso receber meu código")');
-    expect(login).toContain('window.open("about:blank", "_blank")');
-    expect(login).toContain("whatsappTab.location.replace(whatsappUrl)");
-    expect(login).toContain("whatsappTab.close()");
+    expect(login).not.toContain('window.open("about:blank", "_blank")');
+    expect(login).not.toContain("whatsappTab.location.replace");
+    expect(login).not.toContain("whatsappTab.close()");
     expect(login).toContain('target="_blank" rel="noopener noreferrer"');
     expect(login).toContain('<a href={buildWhatsappMessageUrl(supportNumber, "Preciso receber meu código")}');
     const url = new URL(buildWhatsappMessageUrl("5511999999999", "Preciso receber meu código"));
@@ -23,16 +22,16 @@ describe("Login WhatsApp opens separately and preserves the code form", () => {
     expect(url.searchParams.get("type")).toBe("phone_number");
     expect(url.searchParams.get("app_absent")).toBe("0");
   });
-  it("reserves a separate tab for every browser and never replaces the original login URL", () => {
+  it("opens WhatsApp from a direct user link after the server prepares the code", () => {
     const send = login.slice(login.indexOf("async function send("), login.indexOf("async function confirm("));
-    expect(send).toContain('window.open("about:blank", "_blank")');
-    expect(send.indexOf('window.open("about:blank", "_blank")')).toBeLessThan(send.indexOf("await checkCustomer.mutateAsync"));
-    expect(send).not.toContain("navigator.userAgent");
-    expect(send).not.toMatch(/window\.location\.(assign|replace)|window\.location\s*=|window\.location\.href\s*=/);
+    expect(send).not.toContain('window.open("about:blank", "_blank")');
+    expect(send).not.toContain("window.open(");
+    expect(send).not.toContain("whatsappTab");
+    expect(send).not.toMatch(/window\\.location\\.(assign|replace)|window\\.location\\s*=|window\\.location\\.href\\s*=/);
     expect(send).toContain('setStep("code")');
-    expect(send).toContain("whatsappTab.location.replace(whatsappUrl)");
-    expect(send).toContain("whatsappTab.close()");
-    expect(send).toContain("A página do site continuará aberta.");
+    expect(send).toContain('saveOtpDraft(cleanPhone, "code", channel)');
+    expect(login).toContain('data-testid="h2-otp-open-whatsapp"');
+    expect(login).toContain('target="_blank" rel="noopener noreferrer"');
   });
   it("does not create extra UI or alter the OTP handoff", () => {
     expect(login).toContain("RECEBER PELO WHATSAPP");
