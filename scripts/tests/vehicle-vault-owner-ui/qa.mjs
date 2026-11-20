@@ -45,10 +45,27 @@ async function assertBelowYear() {
 }
 
 try {
-  const person = await fixture('person'), company = await fixture('company'), empty = await fixture('empty');
+  const person = await fixture('person'), company = await fixture('company'), empty = await fixture('empty'), report = await fixture('report');
   await control({ reset: true });
   await page.goto(base + '/adm/placa', { waitUntil: 'networkidle' });
   await newDocument();
+  await dialog.getByLabel('OU COLE O TEXTO · PREENCHIMENTO AUTOMÁTICO').fill(report.text);
+  assert.equal(report.ownerName, 'PESSOA SINTÉTICA DO TESTE');
+  await ownerIs(report.ownerName);
+  await dialog.getByText('Preenchido automaticamente', { exact: true }).waitFor();
+  assert.equal((await state()).previewTextCalls.at(-1), report.text);
+  const reportPreviewCalls = (await state()).previewTextCalls.length;
+  await owner().fill('');
+  await dialog.getByRole('button', { name: 'EXTRAIR NOVAMENTE', exact: true }).click();
+  await ownerIs(report.ownerName);
+  await dialog.getByText('Preenchido automaticamente', { exact: true }).waitFor();
+  assert.equal((await state()).previewTextCalls.length, reportPreviewCalls + 1);
+  assert.equal((await state()).previewTextCalls.at(-1), report.text);
+  assert.equal((await state()).saveCalls.length, 0);
+  await dialog.getByLabel('OU COLE O TEXTO · PREENCHIMENTO AUTOMÁTICO').evaluate(element => { element.scrollTop = element.scrollHeight; });
+  await shot('desktop-owner-markdown-report.png');
+  checks.push('Pasting and re-extracting the synthetic Markdown Proprietário table restores the owner through the production parser, independently of the fixture expected name');
+
   await dialog.getByLabel('OU COLE O TEXTO · PREENCHIMENTO AUTOMÁTICO').fill(person.text);
   await ownerIs(person.ownerName);
   await dialog.getByText('Preenchido automaticamente', { exact: true }).waitFor();
