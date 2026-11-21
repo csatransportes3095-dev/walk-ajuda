@@ -6051,6 +6051,7 @@ export default function Home() {
           botName={settings?.bot_assistant_name || undefined}
           botAvatar={settings?.bot_assistant_avatar || undefined}
           botWelcome={settings?.bot_assistant_welcome || undefined}
+          directEntry={matchBot}
           onStartNormal={() => setShowColombiaBot(false)}
           onSelectProduct={(product: any) => {
             setShowColombiaBot(false);
