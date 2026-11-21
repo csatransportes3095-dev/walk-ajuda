@@ -12,7 +12,7 @@ export const H2_AUTO_BOT_LINK_FAQ: H2AutoFaqRule = {
     "Qual é o link direto do bot?",
     "Como comprar com assistente de pedidos?",
     "Quero atendimento automático para pedido",
-  ].join("\\n"),
+  ].join("\n"),
   answer: [
     "🤖 *ASSISTENTE DE PEDIDOS H2*",
     "",
@@ -23,7 +23,7 @@ export const H2_AUTO_BOT_LINK_FAQ: H2AutoFaqRule = {
     "✅ Se já estiver logado, a conversa começa direto no robô.",
     "",
     "Nunca compartilhe seu código de acesso.",
-  ].join("\\n"),
+  ].join("\n"),
   enabled: true,
 };
 
