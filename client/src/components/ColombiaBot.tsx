@@ -1257,7 +1257,7 @@ export function ColombiaBot({ products, onStartNormal, onSelectProduct, onSelect
   };
 
   return (
-    <div className="fixed inset-0 z-[9990] flex flex-col bg-zinc-950">
+    <div data-colombia-bot className="fixed inset-0 z-[9990] flex flex-col bg-zinc-950">
       {/* Header */}
       <div className="flex items-center gap-3 px-4 py-3 border-b border-zinc-800 bg-zinc-900 shrink-0">
         {displayAvatar ? (
