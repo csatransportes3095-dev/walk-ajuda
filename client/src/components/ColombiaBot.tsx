@@ -109,6 +109,7 @@ export function ColombiaBot({ products, onStartNormal, onSelectProduct, onSelect
 
   // Callbacks armazenados em ref para evitar stale closure
   const callbacks = useRef<Record<string, (...args: any[]) => void>>({});
+  const couponInputIds = useRef<Set<string>>(new Set());
 
   // Histórico de snapshots para o botão Voltar
   type Snapshot = {
@@ -256,8 +257,7 @@ export function ColombiaBot({ products, onStartNormal, onSelectProduct, onSelect
     const callback = callbacks.current[messageId];
     const checkpoint = captureColombiaBotChoice(messages, messageId);
     if (!callback || !checkpoint) return;
-    // Não aceitar clique repetido em uma escolha antiga enquanto o avanço está pendente.
-    delete callbacks.current[messageId];
+    if (couponInputIds.current.has(messageId) && !isUsableBotCouponCode(String(args[0] || ""))) return;
     history.current.push({
       messages: checkpoint,
       inputValues: { ...inputValues },
@@ -272,6 +272,8 @@ export function ColombiaBot({ products, onStartNormal, onSelectProduct, onSelect
       callbacks: { ...callbacks.current },
     });
     if (history.current.length > 20) history.current.shift();
+    // O snapshot contém o handler original para o botão Voltar.
+    delete callbacks.current[messageId];
     callback(...args);
   };
 
@@ -720,6 +722,8 @@ export function ColombiaBot({ products, onStartNormal, onSelectProduct, onSelect
       askPix(product, option);
       return;
     }
+    // Cupom é uma etapa própria: não alterar respostas nem perguntas condicionais.
+    saveBotProgress('questions', 'cupom');
     const msgId = uid();
     // Callback para quando o cliente clicar em Sim ou Não
     callbacks.current[msgId] = async (answer: string) => {
@@ -732,8 +736,10 @@ export function ColombiaBot({ products, onStartNormal, onSelectProduct, onSelect
       if (couponChoice === 'enter-code') {
         // Pedir o código do cupom
         const inputId = uid();
+        couponInputIds.current.add(inputId);
         callbacks.current[inputId] = async (code: string) => {
           if (!isUsableBotCouponCode(code) || isValidatingCoupon) return;
+          couponInputIds.current.delete(inputId);
           setMessages(prev => prev.map(m =>
             m.type === 'input' && m.id === inputId ? { ...m, answered: true } : m
           ));
@@ -1285,6 +1291,7 @@ export function ColombiaBot({ products, onStartNormal, onSelectProduct, onSelect
               const snap = history.current.pop();
               cancelPendingAdvances();
               if (!snap) {
+                couponInputIds.current.clear();
                 // Após F5 não há snapshots em memória: voltar ao início de forma segura.
                 clearCompletedBotProgress();
                 setMessages([]);
@@ -1298,6 +1305,7 @@ export function ColombiaBot({ products, onStartNormal, onSelectProduct, onSelect
               setInputValues(snap.inputValues);
               flowState.current = snap.flowState;
               callbacks.current = snap.callbacks;
+              couponInputIds.current.clear();
               pendingUpload.current = null;
               pendingPixMsgId.current = '';
               setUploadingDocId(null);
@@ -1323,6 +1331,7 @@ export function ColombiaBot({ products, onStartNormal, onSelectProduct, onSelect
             onClick={() => {
               cancelPendingAdvances();
               clearCompletedBotProgress();
+              couponInputIds.current.clear();
               history.current = [];
               setMessages([]);
               setInputValues({});
