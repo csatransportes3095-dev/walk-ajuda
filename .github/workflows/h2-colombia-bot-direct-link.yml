@@ -1,0 +1,33 @@
+name: H2 ColombiaBot - Link Direto com OTP
+on:
+  pull_request:
+    branches: [recovery/organizar-salvos-2026-08-24]
+    paths:
+      - 'client/src/components/ColombiaBot.tsx'
+      - 'client/src/components/CustomerOtpSiteGate.tsx'
+      - 'client/src/pages/Home.tsx'
+      - 'client/src/pages/AtualizarCadastro.tsx'
+      - 'client/src/pages/AdminH2Auto.tsx'
+      - 'shared/h2AutoFaqPresets.ts'
+      - 'server/colombiaBotDirectLink.test.ts'
+      - '.github/workflows/h2-colombia-bot-direct-link.yml'
+  workflow_dispatch:
+permissions:
+  contents: read
+jobs:
+  bot-direct-link:
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '22'
+      - name: Instalar dependencias
+        run: |
+          npm install -g pnpm@10.4.1
+          pnpm install --frozen-lockfile
+      - name: Testar acesso direto e regressões do Bot
+        run: pnpm exec vitest run server/colombiaBotDirectLink.test.ts server/colombiaBotAndroidCouponResume.test.ts server/colombiaBotBackNavigation.test.ts server/colombiaBotStorefrontCards.test.ts server/questionBlockingBotCoupon.test.ts
+      - name: Compilar site
+        run: pnpm build

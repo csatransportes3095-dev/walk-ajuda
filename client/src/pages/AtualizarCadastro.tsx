@@ -12,7 +12,7 @@ const RETURN_TO_KEY = "h2_customer_return_to";
 function getSafeReturnTo(): string {
   if (typeof window === "undefined") return "/";
   const raw = sessionStorage.getItem(RETURN_TO_KEY) || "";
-  if (["/", "/login", "/acompanhar", "/gastos", "/emprestimo"].includes(raw)) return raw;
+  if (["/", "/login", "/bot", "/acompanhar", "/gastos", "/emprestimo"].includes(raw)) return raw;
   if (/^\/agendar\/[a-f0-9]{32}$/i.test(raw)) return raw;
   return "/";
 }

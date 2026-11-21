@@ -25,7 +25,7 @@ import { H2_AUTO_CONFIRMATION_DEFAULTS as confirmationDefaults, H2_AUTO_CONFIRMA
 import { H2_AUTO_SHORT_MEDIA, H2_AUTO_SHORT_ORDER_NOT_FOUND } from "@shared/h2AutoShortReplies";
 import { H2_AUTO_PERSONALIZATION_DEFAULT, H2_AUTO_FAQ_MAX_VARIATION_CHARS, H2_AUTO_FAQ_MAX_VARIATION_LINES, h2AutoFaqVariationLineCount, type H2AutoPersonalization } from "@shared/h2AutoPersonalization";
 import { H2_AUTO_UNKNOWN_REPLY_DEFAULT } from "@shared/h2AutoUnknownReply";
-import { prepareH2AutoCommonFaq, H2_AUTO_FAQ_SUGGESTIONS } from "@shared/h2AutoFaqPresets";
+import { prepareH2AutoCommonFaq, H2_AUTO_FAQ_SUGGESTIONS, H2_AUTO_BOT_LINK_FAQ, H2_AUTO_BOT_DIRECT_LINK } from "@shared/h2AutoFaqPresets";
 import { displayH2AutoFaqWithDraftFirst } from "@/lib/h2AutoFaqEditorOrder";
 
 const Box = ({ children }: { children: React.ReactNode }) => (
@@ -994,6 +994,22 @@ export default function AdminH2Auto() {
                         updatePersonalization({faq:[...(personalization.faq??[]),{id,question:"",variations:"",answer:"",enabled:true}]});
                         setNewFaqDraftIds(prev=>({...prev,[d.id]:id}));
                       }}>+ ADICIONAR PERGUNTA E RESPOSTA</button>
+                  </div>
+                  <div className="flex flex-wrap items-center justify-between gap-2 rounded-xl border border-emerald-400/35 bg-emerald-950/20 p-3">
+                    <div className="min-w-0">
+                      <p className="text-sm font-black text-emerald-200">🤖 LINK DIRETO DO ROBÔ DE PEDIDOS</p>
+                      <p className="break-all text-xs text-slate-300">{H2_AUTO_BOT_DIRECT_LINK}</p>
+                      <p className="text-xs text-slate-400">Adicionar uma resposta editável para enviar pelo WhatsApp. Não altera o APK nem envia mensagens até você salvar.</p>
+                    </div>
+                    <div className="flex flex-wrap gap-2">
+                      <button type="button" className="rounded-lg border border-emerald-400/50 px-3 py-2 text-xs font-bold text-emerald-200" onClick={()=>{void navigator.clipboard.writeText(H2_AUTO_BOT_DIRECT_LINK);toast.success("Link copiado.");}}>COPIAR LINK</button>
+                      <button type="button" className="rounded-lg bg-emerald-500 px-3 py-2 text-xs font-black text-slate-950 disabled:opacity-40" disabled={(personalization.faq??[]).length>=1000 || (personalization.faq??[]).some(x=>x.id===H2_AUTO_BOT_LINK_FAQ.id || x.question.trim().toLowerCase()===H2_AUTO_BOT_LINK_FAQ.question.toLowerCase())} onClick={()=>{
+                        if ((personalization.faq??[]).some(x=>x.id===H2_AUTO_BOT_LINK_FAQ.id || x.question.trim().toLowerCase()===H2_AUTO_BOT_LINK_FAQ.question.toLowerCase())) return;
+                        updatePersonalization({faq:[...(personalization.faq??[]),{...H2_AUTO_BOT_LINK_FAQ}]});
+                        setNewFaqDraftIds(prev=>({...prev,[d.id]:H2_AUTO_BOT_LINK_FAQ.id}));
+                        toast.info("Resposta adicionada ao rascunho. Confira e clique em SALVAR PERGUNTA.");
+                      }}>+ ADICIONAR RESPOSTA DO ROBÔ</button>
+                    </div>
                   </div>
                   {faqInEditor.map((faq,index)=><div key={faq.id} className={"rounded-xl border bg-[#080b1c] p-3 space-y-2 "+(newFaqDraftIds[d.id]===faq.id?"border-emerald-400/70 ring-2 ring-emerald-400/20":"border-violet-500/30")}>
                     <div className="flex justify-between items-center gap-2">
