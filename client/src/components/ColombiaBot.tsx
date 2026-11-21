@@ -13,16 +13,18 @@ import { isPersistedOrderResult } from "@shared/orderSubmission";
 import { getVehicleModels, getVehicleQuestionKind, VEHICLE_BRANDS, VEHICLE_COLORS, VEHICLE_YEARS } from "@shared/vehicleCatalog";
 import { applyVipBenefitToPrice, isVipOnlyLocked, normalizeVipAccessMode, vipBenefitText } from "@shared/vipPricing";
 import { globalPromotionIsActive, globalPromotionOverridesIndividual, globalPromotionPrice } from "@shared/globalPromotion";
+import { ColombiaBotStorefrontCard } from "@/components/ColombiaBotStorefrontCard";
 
 // ── Tipos ────────────────────────────────────────────────────────────────────
 
 type Product = {
-  id: number; name: string; description?: string; iconUrl?: string;
+  id: number; name: string; description?: string | null; iconUrl?: string | null; deliveryDays?: string | null;
   options: ProductOption[];
 };
 type OptionPriceModel = { id: number; optionId: number; label: string; price: string; originalPrice?: string | null; promoEndsAt?: number | null; sortOrder: number; isActive: number; vipAccessMode?: 'all' | 'benefit' | 'vip_only'; vipDiscountType?: 'percentage' | 'fixed'; vipDiscountValue?: number; vipHighlight?: number; vipHighlightText?: string | null; };
 type ProductOption = {
   id: number; name: string; price?: string; label?: string; type?: string; isPdfOnly?: number; priceModels?: OptionPriceModel[];
+  description?: string | null; warranty?: string | null; originalPrice?: string | null;
   questions: ProductQuestion[];
   documents: ProductDocument[];
 };
@@ -44,6 +46,8 @@ type ChatMsg =
   | { type: "bot"; id: string; text: string; audioUrl?: string | null; hideText?: boolean; questionLevel?: "principal" | "sub" }
   | { type: "user"; id: string; text: string }
   | { type: "options"; id: string; options: string[]; answered: boolean; questionLevel?: "principal" | "sub" }
+  | { type: "storefront-options"; id: string; product: Product; options: ProductOption[]; answered: boolean }
+  | { type: "storefront-guarantees"; id: string; product: Product; option: ProductOption; models: OptionPriceModel[]; answered: boolean }
   | { type: "input"; id: string; multiline: boolean; answered: boolean; questionLevel?: "principal" | "sub" }
   | { type: "audio-input"; id: string; question: ProductQuestion; answered: boolean; questionLevel?: "principal" | "sub" }
   | { type: "doc-upload"; id: string; docId: number; label: string; required: boolean; uploaded: boolean; previewUrl?: string; previewMime?: string }
@@ -255,7 +259,7 @@ export function ColombiaBot({ products, onStartNormal, onSelectProduct, onSelect
 
   const markAnswered = useCallback((id: string) => {
     setMessages(prev => prev.map(m =>
-      (m.type === "options" || m.type === "input" || m.type === "audio-input") && m.id === id
+      (m.type === "options" || m.type === "storefront-options" || m.type === "storefront-guarantees" || m.type === "input" || m.type === "audio-input") && m.id === id
         ? { ...m, answered: true }
         : m
     ));
@@ -468,14 +472,13 @@ export function ColombiaBot({ products, onStartNormal, onSelectProduct, onSelect
   const askOption = (product: Product) => {
     saveSnapshot();
     const optId = uid();
-    callbacks.current[optId] = (opt: string) => {
-      markAnswered(optId);
-      addMsgs({ type: "user", id: uid(), text: opt });
-      const option = product.options.find(o => {
-        const label = `${o.label || o.name}${o.price ? ` — ${priceForOption(o)}` : ""}`;
-        return label === opt;
-      });
+    // O card apenas apresenta os dados da vitrine: a seleção continua
+    // usando o ID real da opção e o mesmo motor de perguntas e documentos.
+    callbacks.current[optId] = (optionId: string) => {
+      const option = product.options.find(item => String(item.id) === optionId);
       if (!option) return;
+      markAnswered(optId);
+      addMsgs({ type: "user", id: uid(), text: (option.label || option.name) });
       resetOptionFlow();
       flowState.current.product = product;
       flowState.current.option = option;
@@ -483,13 +486,8 @@ export function ColombiaBot({ products, onStartNormal, onSelectProduct, onSelect
       setTimeout(() => startOptionPricing(product, option), 300);
     };
     addMsgs(
-      { type: "bot", id: uid(), text: `Qual opção de ${product.name} você quer?` },
-      {
-        type: "options",
-        id: optId,
-        options: product.options.map(o => `${o.label || o.name}${o.price ? ` — ${priceForOption(o)}` : ""}`),
-        answered: false
-      }
+      { type: "bot", id: uid(), text: "Escolha a opção de " + product.name + ". Confira os detalhes antes de selecionar." },
+      { type: "storefront-options", id: optId, product, options: product.options, answered: false }
     );
   };
 
@@ -505,7 +503,7 @@ export function ColombiaBot({ products, onStartNormal, onSelectProduct, onSelect
       const mode = normalizeVipAccessMode(model.vipAccessMode);
       const prefix = locked ? '🔒 SOMENTE VIP • ' : (!sitePromoOverrides && mode !== 'all' ? '👑 VIP • ' : '');
       const benefit = !sitePromoOverrides && isVipCustomer ? vipBenefitText(model) : '';
-      return `${prefix}${model.label} — ${getModelPrice(model)}${benefit ? ` • ${benefit}` : ''}`;
+      return prefix + model.label + ' — ' + getModelPrice(model) + (benefit ? ' • ' + benefit : '');
     };
     if (models.length === 1 && !isVipOnlyLocked(models[0], isVipCustomer)) {
       flowState.current.priceModel = models[0];
@@ -520,8 +518,10 @@ export function ColombiaBot({ products, onStartNormal, onSelectProduct, onSelect
     }
     saveSnapshot();
     const msgId = uid();
-    callbacks.current[msgId] = (answer: string) => {
-      const model = models.find(item => displayLabel(item) === answer);
+    callbacks.current[msgId] = (modelId: string) => {
+      // Nunca resolver o modelo pela string visual: promoções e rótulos
+      // podem mudar sem modificar o ID da escolha ou o preço salvo.
+      const model = models.find(item => String(item.id) === modelId);
       if (!model) return;
       if (isVipOnlyLocked(model, isVipCustomer)) {
         addMsgs({ type: 'bot', id: uid(), text: '🔒 Este modelo / categoria é SOMENTE VIP. Entre com uma senha VIP para liberar esta escolha.' });
@@ -529,14 +529,17 @@ export function ColombiaBot({ products, onStartNormal, onSelectProduct, onSelect
         return;
       }
       markAnswered(msgId);
-      addMsgs({ type: 'user', id: uid(), text: answer });
+      addMsgs({ type: 'user', id: uid(), text: displayLabel(model) });
       flowState.current.priceModel = model;
       saveBotProgress('questions', 'dados');
       setTimeout(() => askQuestions(product, option, {}), 250);
     };
+    const modelsAreGuarantees = models.some(model => /(corridas?|dias?|meses?|garantia)/i.test(model.label));
     addMsgs(
-      { type: 'bot', id: uid(), text: 'Qual modelo / categoria de preço você deseja?' },
-      { type: 'options', id: msgId, options: models.map(displayLabel), answered: false }
+      { type: 'bot', id: uid(), text: modelsAreGuarantees
+        ? 'Escolha a garantia do serviço. Corridas e dias são limites de GARANTIA, não a duração da conta.'
+        : 'Escolha o modelo ou categoria de preço. Confira as informações antes de continuar.' },
+      { type: 'storefront-guarantees', id: msgId, product, option, models, answered: false }
     );
   };
 
@@ -964,6 +967,63 @@ export function ColombiaBot({ products, onStartNormal, onSelectProduct, onSelect
             </div>
           </div>
         );
+
+      case "storefront-options": {
+        if (msg.answered) return null;
+        return (
+          <div key={msg.id} data-testid="colombia-bot-storefront-options" className="ml-4 mb-4 space-y-3 sm:ml-10">
+            {msg.options.map(option => (
+              <ColombiaBotStorefrontCard
+                key={option.id}
+                productName={msg.product.name}
+                optionName={option.label || option.name}
+                iconUrl={msg.product.iconUrl}
+                description={option.description || msg.product.description}
+                deliveryDays={msg.product.deliveryDays}
+                guarantee={option.warranty}
+                price={(option.priceModels || []).length > 0 ? undefined : priceForOption(option)}
+                selectLabel="Escolher esta opção"
+                onSelect={() => callbacks.current[msg.id]?.(String(option.id))}
+              />
+            ))}
+          </div>
+        );
+      }
+
+      case "storefront-guarantees": {
+        if (msg.answered) return null;
+        return (
+          <div key={msg.id} data-testid="colombia-bot-storefront-guarantees" className="ml-4 mb-4 space-y-3 sm:ml-10">
+            {msg.models.map(model => {
+              const vipOnly = isVipOnlyLocked(model, isVipCustomer);
+              const warranty = /(corridas?|dias?|meses?|garantia)/i.test(model.label)
+                ? model.label
+                : (msg.option.warranty || null);
+              const mode = normalizeVipAccessMode(model.vipAccessMode);
+              const vipLabel = vipOnly ? "🔒 Somente VIP"
+                : !sitePromoOverrides && mode !== "all" ? "👑 Benefício VIP" : null;
+              return (
+                <ColombiaBotStorefrontCard
+                  key={model.id}
+                  productName={msg.product.name}
+                  optionName={msg.option.label || msg.option.name}
+                  iconUrl={msg.product.iconUrl}
+                  description={msg.option.description || msg.product.description}
+                  deliveryDays={msg.product.deliveryDays}
+                  guarantee={warranty}
+                  price={getModelPrice(model)}
+                  originalPrice={sitePromoOverrides ? model.price : model.originalPrice}
+                  vipLabel={vipLabel}
+                  guaranteeSelection={Boolean(warranty)}
+                  disabled={vipOnly}
+                  selectLabel="Selecionar este plano"
+                  onSelect={() => callbacks.current[msg.id]?.(String(model.id))}
+                />
+              );
+            })}
+          </div>
+        );
+      }
 
       case "options": {
         if (msg.answered) return null;
