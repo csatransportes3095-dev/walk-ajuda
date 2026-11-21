@@ -1,5 +1,6 @@
 import { Link } from "wouter";
-import { ClipboardList, PackageCheck, Wallet, HandCoins, Users, ArrowUpRight } from "lucide-react";
+import { ClipboardList, PackageCheck, Wallet, HandCoins, Users, Bot, ArrowUpRight } from "lucide-react";
+import { trpc } from "@/lib/trpc";
 
 export const HOME_ROUTE_CARDS = [
   { label:"FAZER PEDIDO", description:"Escolha seus serviços e acompanhe a contratação", href:"/login", Icon:ClipboardList, color:"border-violet-400/40 from-violet-700/45 to-indigo-950/80", iconColor:"text-violet-300" },
@@ -9,8 +10,23 @@ export const HOME_ROUTE_CARDS = [
   { label:"MINHAS INDICAÇÕES", description:"Acompanhe comissões, valores a liberar, liberados e pagos", href:"/indicacoes", Icon:Users, color:"border-fuchsia-400/40 from-fuchsia-700/35 to-purple-950/80", iconColor:"text-fuchsia-300" },
 ] as const;
 
+export const HOME_ORDER_BOT_CARD = {
+  label: "ASSISTENTE DE PEDIDOS",
+  description: "Faça seu pedido com orientação passo a passo do robô",
+  href: "/bot",
+  Icon: Bot,
+  color: "border-indigo-400/40 from-indigo-700/45 to-violet-950/80",
+  iconColor: "text-indigo-200",
+} as const;
+
 /** Public route selector only. Each service keeps its own existing access gate. */
 export default function HomeRouteCards() {
+  const { data: settings } = trpc.settings.getAll.useQuery();
+  // Nunca ative o assistente automaticamente. Exiba seu atalho apenas quando
+  // o ADM já o mantiver habilitado; até carregar, preserve os cards normais.
+  const showOrderBotCard = Boolean(settings && settings.bot_assistant_enabled !== "0");
+  const cards = showOrderBotCard ? [...HOME_ROUTE_CARDS, HOME_ORDER_BOT_CARD] : HOME_ROUTE_CARDS;
+
   return (
     <main className="min-h-screen bg-[#060916] px-4 py-10 text-white sm:px-6 sm:py-16">
       <div className="mx-auto w-full max-w-5xl">
@@ -20,7 +36,7 @@ export default function HomeRouteCards() {
           <p className="mt-3 text-sm text-slate-300 sm:text-base">Selecione abaixo o serviço que deseja acessar.</p>
         </header>
         <nav aria-label="Rotas do H2 Colombiano" className="grid grid-cols-1 gap-4 sm:grid-cols-2 sm:gap-5">
-          {HOME_ROUTE_CARDS.map(({label,description,href,Icon,color,iconColor})=>(
+          {cards.map(({label,description,href,Icon,color,iconColor})=>(
             <Link key={href} href={href} className={`group relative flex min-h-[150px] flex-col justify-between rounded-3xl border bg-gradient-to-br p-5 shadow-xl transition hover:-translate-y-1 hover:brightness-125 focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-white sm:min-h-[180px] sm:p-7 ${color}`}>
               <div className="flex items-start justify-between">
                 <Icon aria-hidden="true" className={`h-9 w-9 sm:h-11 sm:w-11 ${iconColor}`}/>
