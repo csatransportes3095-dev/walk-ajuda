@@ -1,0 +1,29 @@
+name: H2 ColombiaBot - vitrines na conversa
+on:
+  pull_request:
+    branches: [recovery/organizar-salvos-2026-08-24]
+    paths:
+      - 'client/src/components/ColombiaBot.tsx'
+      - 'client/src/components/ColombiaBotStorefrontCard.tsx'
+      - 'server/colombiaBotStorefrontCards.test.ts'
+      - '.github/workflows/h2-colombia-bot-vitrine.yml'
+  workflow_dispatch:
+permissions:
+  contents: read
+jobs:
+  bot-storefront:
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '22'
+      - name: Install dependencies
+        run: |
+          npm install -g pnpm@10.4.1
+          pnpm install --frozen-lockfile
+      - name: Testar vitrines e garantir selecao correta
+        run: pnpm exec vitest run server/colombiaBotStorefrontCards.test.ts
+      - name: Compilar site de producao
+        run: pnpm build
