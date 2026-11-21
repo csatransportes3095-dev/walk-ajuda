@@ -2,6 +2,7 @@ import { useEffect, useMemo, useState } from "react";
 import { createPortal } from "react-dom";
 import { trpc } from "@/lib/trpc";
 import { isChassisAdminPath } from "@shared/chassisRoute";
+import { matchExactBlockingOption } from "@/lib/questionBlockingMatch";
 
 const SETTING_KEY = "question_blocking_manifest_rules_v1";
 
@@ -162,18 +163,19 @@ export default function QuestionBlockingManifestGuard() {
         return;
       }
 
+      // O bot possui handlers próprios por ID. Não interceptar suas escolhas globais.
+      if (event.target instanceof Element && event.target.closest("[data-colombia-bot]")) return;
+
       const answerHit = answerFromButton(event.target);
       if (!answerHit) return;
       const currentQuestion = findCurrentQuestion(questions);
       if (!currentQuestion) return;
 
       const options = parseOptionMeta(currentQuestion.options);
-      const clickedText = normalize(answerHit.answer);
-      const clickedOption = options.find((opt) => {
-        const optionText = normalize(opt.label);
-        return clickedText === optionText || clickedText.startsWith(`${optionText} `);
-      });
-      const canonicalAnswer = clickedOption?.label || answerHit.answer;
+      // Exigir opção exata da pergunta: "NÃO TENHO CUPOM" nunca é "NÃO".
+      const clickedOption = matchExactBlockingOption(answerHit.answer, options);
+      if (!clickedOption) return;
+      const canonicalAnswer = clickedOption.label;
       const normalizedAnswer = normalize(canonicalAnswer);
 
       const configured = rules.find((rule) => rule.questionId === currentQuestion.id && normalize(rule.answer) === normalizedAnswer);
