@@ -14,6 +14,7 @@ import { getVehicleModels, getVehicleQuestionKind, VEHICLE_BRANDS, VEHICLE_COLOR
 import { applyVipBenefitToPrice, isVipOnlyLocked, normalizeVipAccessMode, vipBenefitText } from "@shared/vipPricing";
 import { globalPromotionIsActive, globalPromotionOverridesIndividual, globalPromotionPrice } from "@shared/globalPromotion";
 import { ColombiaBotStorefrontCard } from "@/components/ColombiaBotStorefrontCard";
+import { captureColombiaBotChoice } from "@/lib/colombiaBotNavigation";
 
 // ── Tipos ────────────────────────────────────────────────────────────────────
 
@@ -235,23 +236,41 @@ export function ColombiaBot({ products, onStartNormal, onSelectProduct, onSelect
     } catch {}
   }, []);
 
-  // Salvar snapshot do estado atual antes de uma nova pergunta (para o botão Voltar)
-  const saveSnapshot = useCallback(() => {
-    setMessages(prev => {
-      setInputValues(iv => {
-        history.current.push({
-          messages: prev,
-          inputValues: iv,
-          flowState: JSON.parse(JSON.stringify(flowState.current)),
-          callbacks: { ...callbacks.current },
-        });
-        // Manter no máximo 20 snapshots
-        if (history.current.length > 20) history.current.shift();
-        return iv;
-      });
-      return prev;
+  // Registrar o checkpoint no clique; preservar a escolha anterior ainda ativa.
+  const advanceTimers = useRef<Set<number>>(new Set());
+  const queueAdvance = (next: () => void, delayMs: number) => {
+    const timer = window.queueAdvance(() => {
+      advanceTimers.current.delete(timer);
+      next();
+    }, delayMs);
+    advanceTimers.current.add(timer);
+  };
+  const cancelPendingAdvances = () => {
+    advanceTimers.current.forEach(timer => window.clearTimeout(timer));
+    advanceTimers.current.clear();
+  };
+  useEffect(() => () => cancelPendingAdvances(), []);
+
+  const handleChoice = (messageId: string, ...args: any[]) => {
+    const callback = callbacks.current[messageId];
+    const checkpoint = captureColombiaBotChoice(messages, messageId);
+    if (!callback || !checkpoint) return;
+    history.current.push({
+      messages: checkpoint,
+      inputValues: { ...inputValues },
+      flowState: {
+        ...flowState.current,
+        answers: { ...flowState.current.answers },
+        audioAnswers: { ...flowState.current.audioAnswers },
+        docFiles: { ...flowState.current.docFiles },
+        couponDiscount: flowState.current.couponDiscount
+          ? { ...flowState.current.couponDiscount } : null,
+      },
+      callbacks: { ...callbacks.current },
     });
-  }, []);
+    if (history.current.length > 20) history.current.shift();
+    callback(...args);
+  };
 
   const addMsgs = useCallback((...msgs: ChatMsg[]) => {
     setMessages(prev => [...prev, ...msgs]);
@@ -429,9 +448,9 @@ export function ColombiaBot({ products, onStartNormal, onSelectProduct, onSelect
       addMsgs({ type: "user", id: uid(), text: opt });
       if (opt === "Continuar sozinho") {
         clearCompletedBotProgress();
-        setTimeout(() => onStartNormal(), 200);
+        queueAdvance(() => onStartNormal(), 200);
       } else {
-        setTimeout(() => askService(), 300);
+        queueAdvance(() => askService(), 300);
       }
     };
     const welcomeMsg = botWelcome || `Olá! Sou o ${displayName}, seu assistente de pedidos. 👋\n\nComo prefere continuar?`;
@@ -442,7 +461,6 @@ export function ColombiaBot({ products, onStartNormal, onSelectProduct, onSelect
   };
 
   const askService = () => {
-    saveSnapshot();
     const optId = uid();
     callbacks.current[optId] = (opt: string) => {
       markAnswered(optId);
@@ -452,12 +470,12 @@ export function ColombiaBot({ products, onStartNormal, onSelectProduct, onSelect
       resetOptionFlow();
       flowState.current.product = product;
       saveBotProgress('questions', 'dados');
-      setTimeout(() => {
+      queueAdvance(() => {
         if (product.options.length === 0) {
           finishWithProduct(product, null);
         } else if (product.options.length === 1) {
           flowState.current.option = product.options[0];
-          setTimeout(() => startOptionPricing(product, product.options[0]), 300);
+          queueAdvance(() => startOptionPricing(product, product.options[0]), 300);
         } else {
           askOption(product);
         }
@@ -470,7 +488,6 @@ export function ColombiaBot({ products, onStartNormal, onSelectProduct, onSelect
   };
 
   const askOption = (product: Product) => {
-    saveSnapshot();
     const optId = uid();
     // O card apenas apresenta os dados da vitrine: a seleção continua
     // usando o ID real da opção e o mesmo motor de perguntas e documentos.
@@ -483,7 +500,7 @@ export function ColombiaBot({ products, onStartNormal, onSelectProduct, onSelect
       flowState.current.product = product;
       flowState.current.option = option;
       saveBotProgress('questions', 'dados');
-      setTimeout(() => startOptionPricing(product, option), 300);
+      queueAdvance(() => startOptionPricing(product, option), 300);
     };
     addMsgs(
       { type: "bot", id: uid(), text: "Escolha a opção de " + product.name + ". Confira os detalhes antes de selecionar." },
@@ -495,7 +512,7 @@ export function ColombiaBot({ products, onStartNormal, onSelectProduct, onSelect
     const models = option.priceModels || [];
     if (models.length === 0) {
       flowState.current.priceModel = null;
-      setTimeout(() => askQuestions(product, option, {}), 200);
+      queueAdvance(() => askQuestions(product, option, {}), 200);
       return;
     }
     const displayLabel = (model: OptionPriceModel) => {
@@ -507,10 +524,9 @@ export function ColombiaBot({ products, onStartNormal, onSelectProduct, onSelect
     };
     if (models.length === 1 && isVipOnlyLocked(models[0], isVipCustomer)) {
       addMsgs({ type: 'bot', id: uid(), text: '🔒 Este modelo / categoria é exclusivo para clientes VIP. Escolha outro serviço ou entre com uma senha VIP.' });
-      setTimeout(() => askService(), 450);
+      queueAdvance(() => askService(), 450);
       return;
     }
-    saveSnapshot();
     const msgId = uid();
     callbacks.current[msgId] = (modelId: string) => {
       // Nunca resolver o modelo pela string visual: promoções e rótulos
@@ -519,14 +535,14 @@ export function ColombiaBot({ products, onStartNormal, onSelectProduct, onSelect
       if (!model) return;
       if (isVipOnlyLocked(model, isVipCustomer)) {
         addMsgs({ type: 'bot', id: uid(), text: '🔒 Este modelo / categoria é SOMENTE VIP. Entre com uma senha VIP para liberar esta escolha.' });
-        setTimeout(() => startOptionPricing(product, option), 350);
+        queueAdvance(() => startOptionPricing(product, option), 350);
         return;
       }
       markAnswered(msgId);
       addMsgs({ type: 'user', id: uid(), text: displayLabel(model) });
       flowState.current.priceModel = model;
       saveBotProgress('questions', 'dados');
-      setTimeout(() => askQuestions(product, option, {}), 250);
+      queueAdvance(() => askQuestions(product, option, {}), 250);
     };
     const modelsAreGuarantees = models.some(model => /(corridas?|dias?|meses?|garantia)/i.test(model.label));
     addMsgs(
@@ -545,11 +561,10 @@ export function ColombiaBot({ products, onStartNormal, onSelectProduct, onSelect
 
     if (!nextQ) {
       // Todas respondidas → documentos
-      setTimeout(() => askDocuments(product, option), 300);
+      queueAdvance(() => askDocuments(product, option), 300);
       return;
     }
 
-    saveSnapshot();
     const msgId = uid();
 
     if (nextQ.fieldType === "audio") {
@@ -560,7 +575,7 @@ export function ColombiaBot({ products, onStartNormal, onSelectProduct, onSelect
         flowState.current.answers = newAnswers;
         flowState.current.audioAnswers = { ...flowState.current.audioAnswers, [nextQ.id]: audio };
         saveBotProgress('questions', 'dados');
-        setTimeout(() => askQuestions(product, option, newAnswers), 200);
+        queueAdvance(() => askQuestions(product, option, newAnswers), 200);
       };
       const questionLevel = nextQ.parentQuestionId ? "sub" as const : "principal" as const;
       addMsgs(
@@ -586,7 +601,7 @@ export function ColombiaBot({ products, onStartNormal, onSelectProduct, onSelect
           const newAnswers = { ...currentAnswers, [nextQ.id]: normalized };
           flowState.current.answers = newAnswers;
           saveBotProgress('questions', 'dados');
-          setTimeout(() => askQuestions(product, option, newAnswers), 300);
+          queueAdvance(() => askQuestions(product, option, newAnswers), 300);
         };
         const questionLevel = nextQ.parentQuestionId ? "sub" as const : "principal" as const;
         addMsgs(
@@ -604,7 +619,7 @@ export function ColombiaBot({ products, onStartNormal, onSelectProduct, onSelect
           newAnswers[nextQ.id] = val;
           flowState.current.answers = newAnswers;
           saveBotProgress('questions', 'dados');
-          setTimeout(() => askQuestions(product, option, newAnswers), 300);
+          queueAdvance(() => askQuestions(product, option, newAnswers), 300);
         };
         const questionLevel = nextQ.parentQuestionId ? "sub" as const : "principal" as const;
         addMsgs(
@@ -621,7 +636,7 @@ export function ColombiaBot({ products, onStartNormal, onSelectProduct, onSelect
         flowState.current.answers = newAnswers;
         saveBotProgress('questions', 'dados');
         // Continuar com as novas respostas — sub-perguntas serão recalculadas
-        setTimeout(() => askQuestions(product, option, newAnswers), 300);
+        queueAdvance(() => askQuestions(product, option, newAnswers), 300);
       };
       const questionLevel = nextQ.parentQuestionId ? "sub" as const : "principal" as const;
       addMsgs(
@@ -635,7 +650,7 @@ export function ColombiaBot({ products, onStartNormal, onSelectProduct, onSelect
         const newAnswers = { ...currentAnswers, [nextQ.id]: val };
         flowState.current.answers = newAnswers;
         saveBotProgress('questions', 'dados');
-        setTimeout(() => askQuestions(product, option, newAnswers), 300);
+        queueAdvance(() => askQuestions(product, option, newAnswers), 300);
       };
       const questionLevel = nextQ.parentQuestionId ? "sub" as const : "principal" as const;
       addMsgs(
@@ -646,7 +661,6 @@ export function ColombiaBot({ products, onStartNormal, onSelectProduct, onSelect
   };
 
   const askDocuments = (product: Product, option: ProductOption) => {
-    saveSnapshot();
     const docs = option.documents || [];
     if (docs.length === 0) {
       askCoupon(product, option);
@@ -680,7 +694,7 @@ export function ColombiaBot({ products, onStartNormal, onSelectProduct, onSelect
           const required = docs.filter(d => d.isRequired === undefined ? true : d.isRequired === 1);
           const allDone = required.every(d => flowState.current.docFiles[d.id]?.url);
           if (allDone) {
-            setTimeout(() => askCoupon(product, option), 400);
+            queueAdvance(() => askCoupon(product, option), 400);
           }
         } catch {
           addMsgs({ type: "bot", id: uid(), text: `Não consegui enviar ${doc.label}. Verifique sua conexão e tente novamente.` });
@@ -705,7 +719,6 @@ export function ColombiaBot({ products, onStartNormal, onSelectProduct, onSelect
       askPix(product, option);
       return;
     }
-    saveSnapshot();
     const msgId = uid();
     // Callback para quando o cliente clicar em Sim ou Não
     callbacks.current[msgId] = async (answer: string) => {
@@ -740,7 +753,7 @@ export function ColombiaBot({ products, onStartNormal, onSelectProduct, onSelect
             addMsgs({ type: 'bot', id: uid(), text: '❌ Erro ao validar cupom. Continuando sem desconto.' });
           } finally {
             setIsValidatingCoupon(false);
-            setTimeout(() => askPix(product, option), 400);
+            queueAdvance(() => askPix(product, option), 400);
           }
         };
         addMsgs(
@@ -749,7 +762,7 @@ export function ColombiaBot({ products, onStartNormal, onSelectProduct, onSelect
         );
       } else {
         // Não tem cupom — ir direto para o Pix
-        setTimeout(() => askPix(product, option), 400);
+        queueAdvance(() => askPix(product, option), 400);
       }
     };
     addMsgs(
@@ -760,7 +773,6 @@ export function ColombiaBot({ products, onStartNormal, onSelectProduct, onSelect
 
   // Etapa de pagamento Pix — mostra chave, botão copiar, upload comprovante
   const askPix = (product: Product, option: ProductOption | null) => {
-    saveSnapshot();
     const pixKey = activePix?.pixKey || settingsData?.pix_key || '';
     const pixName = activePix?.pixName || settingsData?.pix_name || '';
     const pixBank = activePix?.pixBank || settingsData?.pix_bank || '';
@@ -787,7 +799,7 @@ export function ColombiaBot({ products, onStartNormal, onSelectProduct, onSelect
           m.type === 'pix-payment' && m.id === msgId ? { ...m, uploaded: true, previewUrl: uploaded.url, previewMime: uploaded.mimeType } : m
         ));
         addMsgs({ type: 'user', id: uid(), text: '\u2705 Comprovante enviado' });
-        setTimeout(() => finishWithProduct(product, option), 400);
+        queueAdvance(() => finishWithProduct(product, option), 400);
       } catch {
         addMsgs({ type: 'bot', id: uid(), text: 'Não consegui enviar o comprovante. Verifique sua conexão e tente novamente.' });
       } finally {
@@ -977,7 +989,7 @@ export function ColombiaBot({ products, onStartNormal, onSelectProduct, onSelect
                 guarantee={option.warranty}
                 price={(option.priceModels || []).length > 0 ? undefined : priceForOption(option)}
                 selectLabel="Escolher esta opção"
-                onSelect={() => callbacks.current[msg.id]?.(String(option.id))}
+                onSelect={() => handleChoice(msg.id, String(option.id))}
               />
             ))}
           </div>
@@ -1012,7 +1024,7 @@ export function ColombiaBot({ products, onStartNormal, onSelectProduct, onSelect
                   guaranteeSelection={Boolean(warranty)}
                   disabled={vipOnly}
                   selectLabel="Selecionar este plano"
-                  onSelect={() => callbacks.current[msg.id]?.(String(model.id))}
+                  onSelect={() => handleChoice(msg.id, String(model.id))}
                 />
               );
             })}
@@ -1032,8 +1044,7 @@ export function ColombiaBot({ products, onStartNormal, onSelectProduct, onSelect
               <button
                 key={opt}
                 onClick={() => {
-                  const cb = callbacks.current[msg.id];
-                  if (cb) cb(opt);
+                  handleChoice(msg.id, opt);
                 }}
                 className={`w-full flex items-center justify-between gap-3 rounded-xl border px-4 py-3 text-left text-sm font-bold text-zinc-100 transition-all active:scale-[0.98] ${optionTone}`}
               >
@@ -1070,7 +1081,7 @@ export function ColombiaBot({ products, onStartNormal, onSelectProduct, onSelect
                 onKeyDown={e => {
                   if (e.key === "Enter") {
                     const cb = callbacks.current[msg.id];
-                    if (cb) { cb(inputValues[msg.id]?.trim() || ""); setInputValues(prev => { const n = { ...prev }; delete n[msg.id]; return n; }); }
+                    if (cb) { handleChoice(msg.id, inputValues[msg.id]?.trim() || ""); setInputValues(prev => { const n = { ...prev }; delete n[msg.id]; return n; }); }
                   }
                 }}
               />
@@ -1078,7 +1089,7 @@ export function ColombiaBot({ products, onStartNormal, onSelectProduct, onSelect
             <button
               onClick={() => {
                 const cb = callbacks.current[msg.id];
-                if (cb) { cb(inputValues[msg.id]?.trim() || ""); setInputValues(prev => { const n = { ...prev }; delete n[msg.id]; return n; }); }
+                if (cb) { handleChoice(msg.id, inputValues[msg.id]?.trim() || ""); setInputValues(prev => { const n = { ...prev }; delete n[msg.id]; return n; }); }
               }}
               className={`w-full rounded-xl bg-gradient-to-r py-2.5 text-sm font-bold text-white shadow-lg transition-colors ${confirmTone}`}
             >
@@ -1106,7 +1117,7 @@ export function ColombiaBot({ products, onStartNormal, onSelectProduct, onSelect
               allowFileUpload={msg.question.allowAudioFileUpload !== 0}
               helpText={msg.question.helpText}
               value={flowState.current.audioAnswers[msg.question.id]}
-              onConfirmed={audio => callbacks.current[msg.id]?.(audio)}
+              onConfirmed={audio => handleChoice(msg.id, audio)}
               onClear={() => { delete flowState.current.audioAnswers[msg.question.id]; delete flowState.current.answers[msg.question.id]; }}
             />
           </div>
@@ -1178,7 +1189,7 @@ export function ColombiaBot({ products, onStartNormal, onSelectProduct, onSelect
                   onClick={() => {
                     navigator.clipboard.writeText(msg.pixKey).catch(() => {});
                     setPixCopied(true);
-                    setTimeout(() => setPixCopied(false), 2000);
+                    queueAdvance(() => setPixCopied(false), 2000);
                   }}
                   className="shrink-0 px-3 py-1.5 rounded-lg bg-emerald-600 hover:bg-emerald-700 text-white text-xs font-bold transition-colors"
                 >
@@ -1263,6 +1274,7 @@ export function ColombiaBot({ products, onStartNormal, onSelectProduct, onSelect
             onClick={() => {
               const snap = history.current.pop();
               if (!snap) return;
+              cancelPendingAdvances();
               setMessages(snap.messages);
               setInputValues(snap.inputValues);
               flowState.current = snap.flowState;
@@ -1272,6 +1284,11 @@ export function ColombiaBot({ products, onStartNormal, onSelectProduct, onSelect
               setUploadingDocId(null);
               setPixCopied(false);
               setUploadingPix(false);
+              if (snap.flowState.product && snap.flowState.option) {
+                saveBotProgress('questions', 'dados');
+              } else {
+                clearCompletedBotProgress();
+              }
             }}
             className="flex items-center gap-1.5 text-sm text-zinc-300 hover:text-white transition-colors py-2 px-4 rounded-xl border border-zinc-700 hover:border-zinc-500 bg-zinc-800 hover:bg-zinc-700 font-medium"
           >
@@ -1285,6 +1302,7 @@ export function ColombiaBot({ products, onStartNormal, onSelectProduct, onSelect
           {/* Botão Recomeçar */}
           <button
             onClick={() => {
+              cancelPendingAdvances();
               history.current = [];
               setMessages([]);
               setInputValues({});
@@ -1295,7 +1313,7 @@ export function ColombiaBot({ products, onStartNormal, onSelectProduct, onSelect
               callbacks.current = {};
               pendingUpload.current = null;
               pendingPixMsgId.current = '';
-              setTimeout(() => startWelcome(), 100);
+              queueAdvance(() => startWelcome(), 100);
             }}
             className="flex items-center gap-1.5 text-sm text-zinc-400 hover:text-zinc-200 transition-colors py-2 px-4 rounded-xl hover:bg-zinc-800"
           >
