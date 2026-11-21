@@ -15,6 +15,7 @@ import { applyVipBenefitToPrice, isVipOnlyLocked, normalizeVipAccessMode, vipBen
 import { globalPromotionIsActive, globalPromotionOverridesIndividual, globalPromotionPrice } from "@shared/globalPromotion";
 import { ColombiaBotStorefrontCard } from "@/components/ColombiaBotStorefrontCard";
 import { captureColombiaBotChoice } from "@/lib/colombiaBotNavigation";
+import { isUsableBotCouponCode, resolveBotCouponChoice, resolveBotResumeStep, sameBotSelectOption } from "@/lib/colombiaBotFlow";
 
 // ── Tipos ────────────────────────────────────────────────────────────────────
 
@@ -239,7 +240,7 @@ export function ColombiaBot({ products, onStartNormal, onSelectProduct, onSelect
   // Registrar o checkpoint no clique; preservar a escolha anterior ainda ativa.
   const advanceTimers = useRef<Set<number>>(new Set());
   const queueAdvance = (next: () => void, delayMs: number) => {
-    const timer = window.queueAdvance(() => {
+    const timer = window.setTimeout(() => {
       advanceTimers.current.delete(timer);
       next();
     }, delayMs);
@@ -255,6 +256,8 @@ export function ColombiaBot({ products, onStartNormal, onSelectProduct, onSelect
     const callback = callbacks.current[messageId];
     const checkpoint = captureColombiaBotChoice(messages, messageId);
     if (!callback || !checkpoint) return;
+    // Não aceitar clique repetido em uma escolha antiga enquanto o avanço está pendente.
+    delete callbacks.current[messageId];
     history.current.push({
       messages: checkpoint,
       inputValues: { ...inputValues },
@@ -320,7 +323,7 @@ export function ColombiaBot({ products, onStartNormal, onSelectProduct, onSelect
         return !!parentAnswer;
       }
       if (!q.triggerOption) return !!parentAnswer;
-      return parentAnswer === q.triggerOption;
+      return sameBotSelectOption(parentAnswer, q.triggerOption);
     });
 
     const ordered: ProductQuestion[] = [];
@@ -418,21 +421,17 @@ export function ColombiaBot({ products, onStartNormal, onSelectProduct, onSelect
       };
       addMsgs({ type: 'bot', id: uid(), text: 'Encontrei seu pedido iniciado aqui no Bot. Vamos continuar de onde você parou. ✅' });
 
-      if (saved.cadastroSubStep === 'pagamento') {
-        askPix(product, option);
-        return true;
-      }
       const visibleQuestions = getVisibleQuestions(option.questions, answers);
-      if (visibleQuestions.some(question => answers[question.id] === undefined)) {
-        askQuestions(product, option, answers);
-        return true;
-      }
       const requiredDocs = option.documents.filter(doc => doc.isRequired === undefined || doc.isRequired === 1);
-      if (requiredDocs.some(doc => !docFiles[doc.id]?.url)) {
-        askDocuments(product, option);
-        return true;
-      }
-      askCoupon(product, option);
+      const nextStep = resolveBotResumeStep({
+        hasUnansweredQuestions: visibleQuestions.some(question => answers[question.id] === undefined),
+        hasMissingRequiredDocuments: requiredDocs.some(doc => !docFiles[doc.id]?.url),
+        wasAtPayment: saved.cadastroSubStep === 'pagamento',
+      });
+      if (nextStep === 'questions') askQuestions(product, option, answers);
+      else if (nextStep === 'documents') askDocuments(product, option);
+      else if (nextStep === 'payment') askPix(product, option);
+      else askCoupon(product, option);
       return true;
     } catch {
       return false;
@@ -630,9 +629,11 @@ export function ColombiaBot({ products, onStartNormal, onSelectProduct, onSelect
     } else if (nextQ.fieldType === "select" && nextQ.options) {
       const opts = parseOptions(nextQ.options);
       callbacks.current[msgId] = (val: string) => {
+        if (!opts.some(opt => sameBotSelectOption(val, opt))) return;
         markAnswered(msgId);
         addMsgs({ type: "user", id: uid(), text: val });
-        const newAnswers = { ...currentAnswers, [nextQ.id]: val };
+        const selected = opts.find(opt => sameBotSelectOption(val, opt))!;
+        const newAnswers = { ...currentAnswers, [nextQ.id]: selected };
         flowState.current.answers = newAnswers;
         saveBotProgress('questions', 'dados');
         // Continuar com as novas respostas — sub-perguntas serão recalculadas
@@ -726,10 +727,13 @@ export function ColombiaBot({ products, onStartNormal, onSelectProduct, onSelect
         m.type === 'options' && m.id === msgId ? { ...m, answered: true } : m
       ));
       addMsgs({ type: 'user', id: uid(), text: answer });
-      if (answer === 'SIM, TENHO UM CUPOM') {
+      const couponChoice = resolveBotCouponChoice(answer);
+      if (couponChoice === 'invalid') return;
+      if (couponChoice === 'enter-code') {
         // Pedir o código do cupom
         const inputId = uid();
         callbacks.current[inputId] = async (code: string) => {
+          if (!isUsableBotCouponCode(code) || isValidatingCoupon) return;
           setMessages(prev => prev.map(m =>
             m.type === 'input' && m.id === inputId ? { ...m, answered: true } : m
           ));
@@ -747,9 +751,13 @@ export function ColombiaBot({ products, onStartNormal, onSelectProduct, onSelect
                 : `R$ ${Number(discountValue).toFixed(2).replace('.', ',')} de desconto`;
               addMsgs({ type: 'bot', id: uid(), text: `✅ Cupom aplicado! ${discountText}` });
             } else {
+              flowState.current.couponCode = '';
+              flowState.current.couponDiscount = null;
               addMsgs({ type: 'bot', id: uid(), text: `❌ Cupom inválido: ${result.reason || 'Código não encontrado.'}` });
             }
           } catch {
+            flowState.current.couponCode = '';
+            flowState.current.couponDiscount = null;
             addMsgs({ type: 'bot', id: uid(), text: '❌ Erro ao validar cupom. Continuando sem desconto.' });
           } finally {
             setIsValidatingCoupon(false);
@@ -760,8 +768,10 @@ export function ColombiaBot({ products, onStartNormal, onSelectProduct, onSelect
           { type: 'bot', id: uid(), text: 'Digite o código do seu cupom:' },
           { type: 'input', id: inputId, multiline: false, answered: false }
         );
-      } else {
-        // Não tem cupom — ir direto para o Pix
+      } else if (couponChoice === 'skip') {
+        // A ausência de cupom nunca modifica as respostas do formulário.
+        flowState.current.couponCode = '';
+        flowState.current.couponDiscount = null;
         queueAdvance(() => askPix(product, option), 400);
       }
     };
@@ -1273,8 +1283,17 @@ export function ColombiaBot({ products, onStartNormal, onSelectProduct, onSelect
           <button
             onClick={() => {
               const snap = history.current.pop();
-              if (!snap) return;
               cancelPendingAdvances();
+              if (!snap) {
+                // Após F5 não há snapshots em memória: voltar ao início de forma segura.
+                clearCompletedBotProgress();
+                setMessages([]);
+                setInputValues({});
+                callbacks.current = {};
+                flowState.current = { ...flowState.current, product: null, option: null, priceModel: null, answers: {}, audioAnswers: {}, audioFlowId: createAudioFlowId(), docFiles: {}, pixProofUrl: '', pixProofMime: '', couponCode: '', couponDiscount: null };
+                startWelcome();
+                return;
+              }
               setMessages(snap.messages);
               setInputValues(snap.inputValues);
               flowState.current = snap.flowState;
@@ -1303,6 +1322,7 @@ export function ColombiaBot({ products, onStartNormal, onSelectProduct, onSelect
           <button
             onClick={() => {
               cancelPendingAdvances();
+              clearCompletedBotProgress();
               history.current = [];
               setMessages([]);
               setInputValues({});
@@ -1313,7 +1333,7 @@ export function ColombiaBot({ products, onStartNormal, onSelectProduct, onSelect
               callbacks.current = {};
               pendingUpload.current = null;
               pendingPixMsgId.current = '';
-              queueAdvance(() => startWelcome(), 100);
+              startWelcome();
             }}
             className="flex items-center gap-1.5 text-sm text-zinc-400 hover:text-zinc-200 transition-colors py-2 px-4 rounded-xl hover:bg-zinc-800"
           >
