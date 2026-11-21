@@ -143,7 +143,7 @@ if (!updatePage.includes('"/sorteio"')) {
   // Preservar destinos já autorizados por novas funções (/bot etc.).
   // O patch antigo dependia de uma lista literal de rotas e derrubava o build
   // sempre que outra atualização adicionava um caminho seguro.
-  const routeLine = updatePage.match(/^  if \\(\\[([^\\r\\n]*?)\\]\\.includes\\(raw\\)\\) return raw;$/m);
+  const routeLine = updatePage.match(/^  if \(\[([^\r\n]*?)\]\.includes\(raw\)\) return raw;$/m);
   if (!routeLine || !routeLine[1].includes('"/"') || !routeLine[1].includes('"/login"')) {
     throw new Error('[raffle-profile-update-gate] lista segura de retorno não encontrada');
   }
