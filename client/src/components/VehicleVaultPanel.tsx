@@ -1,6 +1,6 @@
 import { useEffect, useState } from "react";
 import { createPortal } from "react-dom";
-import { Archive, ClipboardPaste, FileSearch, FileText, FolderOpen, Loader2, Pencil, Plus, Printer, Search, ShieldCheck, Users, X } from "lucide-react";
+import { Archive, ClipboardPaste, Copy, FileSearch, FileText, FolderOpen, Loader2, Pencil, Plus, Printer, Search, ShieldCheck, Users, X } from "lucide-react";
 import { toast } from "sonner";
 import { trpc } from "@/lib/trpc";
 import VehicleVaultBatchPanel from "./VehicleVaultBatchPanel";
@@ -68,6 +68,64 @@ function VehicleColorBadge({color,compact=false}:{color:string;compact?:boolean}
       style={{backgroundColor:selected.swatch}}/>
     <span className="break-words">{color||"NÃO INFORMADA"}</span>
   </span>;
+}
+
+
+/**
+ * Sugestão local de conferência visual para a quinta posição da placa.
+ * Não altera o identificador salvo, não executa buscas nem grava dados.
+ * Sempre devolve somente uma opção de K a Z, diferente da original.
+ */
+const PLATE_VISUAL_CLOSEST: Record<string,string> = {
+  A:"M", B:"R", C:"O", D:"O", E:"L", F:"P", G:"Q", H:"N", I:"T", J:"U",
+  K:"X", L:"U", M:"N", N:"M", O:"Q", P:"R", Q:"O", R:"P", S:"Z", T:"Y",
+  U:"V", V:"U", W:"M", X:"K", Y:"V", Z:"S",
+};
+function normalizeComparedPlate(value:string) {
+  return String(value||"").toUpperCase().replace(/[^A-Z0-9]/g,"").slice(0,7);
+}
+function suggestOpticallySimilarPlate(value:string) {
+  const plate=normalizeComparedPlate(value);
+  if(!/^[A-Z]{3}[0-9][A-Z][0-9]{2}$/.test(plate))return "";
+  const closest=PLATE_VISUAL_CLOSEST[plate[4]];
+  if(!closest || closest===plate[4] || !/^[K-Z]$/.test(closest))return "";
+  return plate.slice(0,4)+closest+plate.slice(5);
+}
+function PlateVisualComparator() {
+  // Campo isolado: a entrada é sempre manual, sem carregar dados do documento.
+  const [plate,setPlate]=useState("");
+  const suggestion=suggestOpticallySimilarPlate(plate);
+  const copySuggestion=async()=>{
+    if(!suggestion)return;
+    try {
+      await navigator.clipboard.writeText(suggestion);
+      toast.success("Placa sugerida copiada.");
+    } catch {
+      toast.error("Não foi possível copiar a sugestão.");
+    }
+  };
+  return <div className="mt-4 max-w-sm space-y-2 rounded-xl border border-cyan-400/25 bg-cyan-500/[.04] p-3">
+    <label className="block text-[10px] font-black uppercase tracking-wide text-cyan-200">
+      COMPARADOR DE PLACA — 5ª LETRA
+      <input value={plate} maxLength={7}
+        onChange={event=>setPlate(normalizeComparedPlate(event.target.value))}
+        placeholder="ABC1D23" autoComplete="off" spellCheck={false}
+        aria-label="Placa completa para comparação visual"
+        className="mt-2 block w-full rounded-lg border border-white/20 bg-slate-950/70 px-3 py-2 font-mono text-base font-black tracking-widest text-white outline-none focus:border-cyan-300"/>
+    </label>
+    <div className="flex flex-wrap items-end justify-between gap-2">
+      <div className="min-w-0">
+        <div className="mb-1 text-[10px] font-bold text-white/50">SUGESTÃO — PLACA INTEIRA</div>
+        <div className="break-all font-mono text-lg font-black tracking-wider text-cyan-200" aria-live="polite">{suggestion||"—"}</div>
+      </div>
+      <button type="button" disabled={!suggestion} onClick={()=>void copySuggestion()}
+        className="inline-flex items-center gap-1.5 rounded-lg border border-cyan-300/40 bg-cyan-500/15 px-3 py-2 text-xs font-black text-cyan-100 hover:bg-cyan-500/25 disabled:cursor-not-allowed disabled:opacity-40">
+        <Copy className="h-4 w-4"/>COPIAR
+      </button>
+    </div>
+    {!suggestion&&<p className="text-[10px] text-amber-200">Informe uma placa de 7 caracteres no formato ABC1D23.</p>}
+    <p className="text-[10px] text-slate-400">Ferramenta independente: digite uma sequência manualmente. Não consulta nem altera os dados do documento.</p>
+  </div>;
 }
 
 function base64File(file:File):Promise<string>{
@@ -494,6 +552,7 @@ export default function VehicleVaultPanel(){
               {key==="modelYear"&&<div className="mt-3">
                 <div className="mb-1 text-[10px] font-bold text-white/45">NOME DO PROPRIETÁRIO</div>
                 <div className="break-all font-bold">{details.data?.ownerName||""}</div>
+                <PlateVisualComparator/>
               </div>}
               {key==="category"&&<div className="mt-4 space-y-2" role="group" aria-label="Avaliação do documento">
                 <p className="text-[10px] font-black uppercase tracking-wider text-white/60">AVALIAÇÃO DO DOCUMENTO</p>
