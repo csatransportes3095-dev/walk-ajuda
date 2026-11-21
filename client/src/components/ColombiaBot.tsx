@@ -505,12 +505,6 @@ export function ColombiaBot({ products, onStartNormal, onSelectProduct, onSelect
       const benefit = !sitePromoOverrides && isVipCustomer ? vipBenefitText(model) : '';
       return prefix + model.label + ' — ' + getModelPrice(model) + (benefit ? ' • ' + benefit : '');
     };
-    if (models.length === 1 && !isVipOnlyLocked(models[0], isVipCustomer)) {
-      flowState.current.priceModel = models[0];
-      saveBotProgress('questions', 'dados');
-      setTimeout(() => askQuestions(product, option, {}), 200);
-      return;
-    }
     if (models.length === 1 && isVipOnlyLocked(models[0], isVipCustomer)) {
       addMsgs({ type: 'bot', id: uid(), text: '🔒 Este modelo / categoria é exclusivo para clientes VIP. Escolha outro serviço ou entre com uma senha VIP.' });
       setTimeout(() => askService(), 450);
@@ -1007,6 +1001,7 @@ export function ColombiaBot({ products, onStartNormal, onSelectProduct, onSelect
                   key={model.id}
                   productName={msg.product.name}
                   optionName={msg.option.label || msg.option.name}
+                  planName={model.label}
                   iconUrl={msg.product.iconUrl}
                   description={msg.option.description || msg.product.description}
                   deliveryDays={msg.product.deliveryDays}
