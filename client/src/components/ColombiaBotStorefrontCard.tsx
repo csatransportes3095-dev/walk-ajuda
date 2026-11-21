@@ -3,6 +3,7 @@ import { ChevronRight, FileText, ShieldCheck, Truck } from "lucide-react";
 type Props = {
   productName: string;
   optionName: string;
+  planName?: string | null;
   iconUrl?: string | null;
   description?: string | null;
   deliveryDays?: string | null;
@@ -22,7 +23,7 @@ export function formatBotCatalogPrice(value: string | null | undefined): string 
 }
 
 export function ColombiaBotStorefrontCard({
-  productName, optionName, iconUrl, description, deliveryDays, guarantee,
+  productName, optionName, planName, iconUrl, description, deliveryDays, guarantee,
   price, originalPrice, selectLabel, onSelect, disabled = false,
   vipLabel, guaranteeSelection = false,
 }: Props) {
@@ -48,6 +49,7 @@ export function ColombiaBotStorefrontCard({
         <div className="min-w-0 flex-1">
           <p className="text-[10px] font-black uppercase tracking-wider text-violet-200">{productName}</p>
           <h3 className="mt-1 break-words text-base font-black leading-tight text-white">{optionName}</h3>
+          {planName && <p className="mt-1 break-words text-sm font-bold text-cyan-200">{planName}</p>}
           {vipLabel && <span className="mt-1 inline-block rounded-md border border-amber-400/40 bg-amber-400/10 px-2 py-1 text-[10px] font-bold text-amber-200">{vipLabel}</span>}
         </div>
       </header>
