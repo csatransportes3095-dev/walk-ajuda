@@ -80,6 +80,8 @@ interface Props {
   botName?: string;
   botAvatar?: string;
   botWelcome?: string;
+  /** Entrada exclusiva pelo link /bot: começa pelo serviço, sem tela de escolha. */
+  directEntry?: boolean;
 }
 
 const BOT_PROGRESS_KEY = 'walk_bot_order_progress';
@@ -95,7 +97,7 @@ function createAudioFlowId() {
 
 // ── Componente ───────────────────────────────────────────────────────────────────────────
 
-export function ColombiaBot({ products, onStartNormal, onSelectProduct, onSelectOption, onOrderComplete, botName, botAvatar, botWelcome }: Props) {
+export function ColombiaBot({ products, onStartNormal, onSelectProduct, onSelectOption, onOrderComplete, botName, botAvatar, botWelcome, directEntry = false }: Props) {
   const displayName = botName || 'Carminha';
   const displayAvatar = botAvatar || '';
   const [messages, setMessages] = useState<ChatMsg[]>([]);
@@ -177,7 +179,7 @@ export function ColombiaBot({ products, onStartNormal, onSelectProduct, onSelect
 
   // Inicializar: rascunhos do Bot só podem ser retomados dentro do próprio Bot.
   useEffect(() => {
-    if (!restoreBotProgress()) startWelcome();
+    if (!restoreBotProgress()) startEntry();
   }, []); // eslint-disable-line
 
   // ── Helpers ────────────────────────────────────────────────────────────────
@@ -459,6 +461,17 @@ export function ColombiaBot({ products, onStartNormal, onSelectProduct, onSelect
       { type: "bot", id: uid(), text: welcomeMsg },
       { type: "options", id: optId, options: [`🤖 Quero ajuda do ${displayName}`, "Continuar sozinho"], answered: false }
     );
+  };
+
+  // Pelo link /bot o cliente já escolheu ser atendido pelo robô.
+  // A vitrine normal ainda mantém a escolha entre atendimento guiado e manual.
+  const startEntry = () => {
+    if (!directEntry) {
+      startWelcome();
+      return;
+    }
+    addMsgs({ type: "bot", id: uid(), text: `Olá! Sou o ${displayName}, seu assistente de pedidos. 👋\n\nVamos escolher seu serviço.` });
+    askService();
   };
 
   const askService = () => {
@@ -1298,7 +1311,7 @@ export function ColombiaBot({ products, onStartNormal, onSelectProduct, onSelect
                 setInputValues({});
                 callbacks.current = {};
                 flowState.current = { ...flowState.current, product: null, option: null, priceModel: null, answers: {}, audioAnswers: {}, audioFlowId: createAudioFlowId(), docFiles: {}, pixProofUrl: '', pixProofMime: '', couponCode: '', couponDiscount: null };
-                startWelcome();
+                startEntry();
                 return;
               }
               setMessages(snap.messages);
@@ -1342,7 +1355,7 @@ export function ColombiaBot({ products, onStartNormal, onSelectProduct, onSelect
               callbacks.current = {};
               pendingUpload.current = null;
               pendingPixMsgId.current = '';
-              startWelcome();
+              startEntry();
             }}
             className="flex items-center gap-1.5 text-sm text-zinc-400 hover:text-zinc-200 transition-colors py-2 px-4 rounded-xl hover:bg-zinc-800"
           >
