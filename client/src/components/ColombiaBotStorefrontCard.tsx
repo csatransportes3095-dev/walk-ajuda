@@ -1,3 +1,4 @@
+import React from "react";
 import { ChevronRight, FileText, ShieldCheck, Truck } from "lucide-react";
 
 type Props = {
