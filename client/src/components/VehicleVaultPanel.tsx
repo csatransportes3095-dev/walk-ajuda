@@ -91,9 +91,9 @@ function suggestOpticallySimilarPlate(value:string) {
   if(!closest || closest===plate[4] || !/^[K-Z]$/.test(closest))return "";
   return plate.slice(0,4)+closest+plate.slice(5);
 }
-function PlateVisualComparator({originalPlate}:{originalPlate:string}) {
-  const [plate,setPlate]=useState(()=>normalizeComparedPlate(originalPlate));
-  useEffect(()=>setPlate(normalizeComparedPlate(originalPlate)),[originalPlate]);
+function PlateVisualComparator() {
+  // Campo isolado: a entrada é sempre manual, sem carregar dados do documento.
+  const [plate,setPlate]=useState("");
   const suggestion=suggestOpticallySimilarPlate(plate);
   const copySuggestion=async()=>{
     if(!suggestion)return;
@@ -124,7 +124,7 @@ function PlateVisualComparator({originalPlate}:{originalPlate:string}) {
       </button>
     </div>
     {!suggestion&&<p className="text-[10px] text-amber-200">Informe uma placa de 7 caracteres no formato ABC1D23.</p>}
-    <p className="text-[10px] text-slate-400">Sugestão apenas para conferência visual. A placa original do documento não é alterada.</p>
+    <p className="text-[10px] text-slate-400">Ferramenta independente: digite uma sequência manualmente. Não consulta nem altera os dados do documento.</p>
   </div>;
 }
 
@@ -552,7 +552,7 @@ export default function VehicleVaultPanel(){
               {key==="modelYear"&&<div className="mt-3">
                 <div className="mb-1 text-[10px] font-bold text-white/45">NOME DO PROPRIETÁRIO</div>
                 <div className="break-all font-bold">{details.data?.ownerName||""}</div>
-                <PlateVisualComparator originalPlate={details.data?.plate||""}/>
+                <PlateVisualComparator/>
               </div>}
               {key==="category"&&<div className="mt-4 space-y-2" role="group" aria-label="Avaliação do documento">
                 <p className="text-[10px] font-black uppercase tracking-wider text-white/60">AVALIAÇÃO DO DOCUMENTO</p>
