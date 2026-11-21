@@ -140,11 +140,16 @@ fs.writeFileSync(raffleFile, raffle, 'utf8');
 const updateFile = 'client/src/pages/AtualizarCadastro.tsx';
 let updatePage = fs.readFileSync(updateFile, 'utf8');
 if (!updatePage.includes('"/sorteio"')) {
-  updatePage = replaceOnce(
-    updatePage,
-    '  if (["/", "/login", "/acompanhar", "/gastos", "/emprestimo"].includes(raw)) return raw;',
-    '  if (["/", "/login", "/acompanhar", "/gastos", "/emprestimo", "/sorteio"].includes(raw)) return raw;',
-    'permitir retorno ao sorteio',
+  // Preservar destinos já autorizados por novas funções (/bot etc.).
+  // O patch antigo dependia de uma lista literal de rotas e derrubava o build
+  // sempre que outra atualização adicionava um caminho seguro.
+  const routeLine = updatePage.match(/^  if \(\[([^\r\n]*?)\]\.includes\(raw\)\) return raw;$/m);
+  if (!routeLine || !routeLine[1].includes('"/"') || !routeLine[1].includes('"/login"')) {
+    throw new Error('[raffle-profile-update-gate] lista segura de retorno não encontrada');
+  }
+  updatePage = updatePage.replace(
+    routeLine[0],
+    routeLine[0].replace('].includes(raw)', ', "/sorteio"].includes(raw)'),
   );
 }
 if (!updatePage.includes('customer_update_phone_hint')) {

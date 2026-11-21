@@ -1,0 +1,65 @@
+name: Render Docker patches - sorteio e bot
+on:
+  pull_request:
+    branches: [recovery/organizar-salvos-2026-08-24]
+    paths:
+      - 'client/src/pages/AtualizarCadastro.tsx'
+      - 'scripts/patch-raffle-profile-update-gate-20260910.mjs'
+      - 'server/renderRaffleBotReturnBuild.test.ts'
+      - '.github/workflows/render-raffle-bot-build.yml'
+  workflow_dispatch:
+permissions:
+  contents: read
+jobs:
+  docker-patch-chain:
+    runs-on: ubuntu-latest
+    timeout-minutes: 25
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '22'
+      - name: Instalar dependencias do projeto
+        run: |
+          npm install -g pnpm@10.4.1
+          pnpm install --frozen-lockfile
+      - name: Teste de regressao sem alterar arquivos
+        run: pnpm exec vitest run server/renderRaffleBotReturnBuild.test.ts server/colombiaBotDirectLink.test.ts
+      - name: Reproduzir a mesma ordem dos patches Docker
+        run: |
+          node scripts/patch-admin-login-data-reload.mjs
+          node scripts/patch-loans-due-today-filter.mjs
+          node scripts/patch-backup-resilience-20260909.mjs
+          node scripts/patch-backup-direct-stream-20260909.mjs
+          node scripts/patch-media-backup-recovery-tool-20260909.mjs
+          node scripts/patch-admin-backup-media-panel-20260909.mjs
+          node scripts/patch-backup-core-no-r2-20260909.mjs
+          node scripts/patch-media-drive-auth-diagnostics-20260909.mjs
+          node scripts/patch-admin-customers-mobile-performance-20260909.mjs
+          node scripts/patch-admin-customers-referrer-photo-20260909.mjs
+          node scripts/patch-admin-customers-referral-filter-20260909.mjs
+          node scripts/patch-admin-customers-referral-photo-stack-20260909.mjs
+          node scripts/patch-admin-customers-filter-conflict-20260914.mjs
+          node scripts/patch-admin-orders-status-background-20260909.mjs
+          node scripts/patch-status-custom-colors-20260909.mjs
+          node scripts/patch-admin-order-group-border-only-20260910.mjs
+          node scripts/patch-raffle-profile-update-gate-20260910.mjs
+          node scripts/patch-media-local-export-20260910.mjs
+          node scripts/patch-schedule-finalize-after-photo-stage-20260911.mjs
+          node scripts/patch-h2ads-schedule-topbar-sticky-groups-20260914.mjs
+          node scripts/patch-h2ads-layout-hotfix-20260914.mjs
+          node scripts/patch-h2ads-desktop-layout-20260914.mjs
+          node scripts/patch-desktop-refresh-flicker-20260914.mjs
+          node scripts/patch-h2ads-photo-analysis-filter-20260917.mjs
+          node scripts/fix-patch-loans-client-filters-syntax-20260914.mjs
+          node scripts/patch-loans-client-filters-20260914.mjs
+          node scripts/patch-loans-client-filter-safety-20260915.mjs
+          node scripts/patch-loans-manual-limit-priority-20260915.mjs
+          node scripts/patch-admin-customer-photo-download-20260914.mjs
+          node scripts/patch-admin-orders-login-email-filter-20260915.mjs
+          node scripts/fix-email-history-patch-runtime-escape-20260915.mjs
+          node scripts/patch-email-generator-history-ownership-20260915.mjs
+          node scripts/fix-email-history-domain-options-20260915.mjs
+          node scripts/patch-admin-orders-mobile-login-layout-20260915.mjs
+      - name: Compilar apos os patches da imagem Docker
+        run: pnpm build
