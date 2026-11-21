@@ -1,6 +1,28 @@
 import React from "react";
 import { ChevronRight, FileText, ShieldCheck, Truck } from "lucide-react";
 
+export type BotCatalogManifest = { title: string; body: string };
+
+export function resolveBotCatalogManifest(rawValues: Array<string | null | undefined>): BotCatalogManifest | null {
+  for (const raw of rawValues) {
+    if (!raw?.trim()) continue;
+    try {
+      const value: unknown = JSON.parse(raw);
+      if (!value || typeof value !== "object" || Array.isArray(value)) continue;
+      const setting = value as Record<string, unknown>;
+      if (setting.enabled === false || setting.active === false) continue;
+      if (typeof setting.body !== "string" || !setting.body.trim()) continue;
+      const title = typeof setting.title === "string" && setting.title.trim()
+        ? setting.title.trim()
+        : "Condições do produto";
+      return { title, body: setting.body.trim() };
+    } catch {
+      // Uma configuração antiga inválida não deve impedir a compra.
+    }
+  }
+  return null;
+}
+
 type Props = {
   productName: string;
   optionName: string;
@@ -16,6 +38,7 @@ type Props = {
   disabled?: boolean;
   vipLabel?: string | null;
   guaranteeSelection?: boolean;
+  manifest?: BotCatalogManifest | null;
 };
 
 export function formatBotCatalogPrice(value: string | null | undefined): string {
@@ -26,7 +49,7 @@ export function formatBotCatalogPrice(value: string | null | undefined): string 
 export function ColombiaBotStorefrontCard({
   productName, optionName, planName, iconUrl, description, deliveryDays, guarantee,
   price, originalPrice, selectLabel, onSelect, disabled = false,
-  vipLabel, guaranteeSelection = false,
+  vipLabel, guaranteeSelection = false, manifest,
 }: Props) {
   const formattedPrice = formatBotCatalogPrice(price);
   const original = formatBotCatalogPrice(originalPrice);
@@ -93,6 +116,12 @@ export function ColombiaBotStorefrontCard({
           </summary>
           <div className="mt-3 space-y-2 border-t border-white/10 pt-3 text-xs leading-relaxed text-slate-200">
             {details && <p className="whitespace-pre-line">{details}</p>}
+            {manifest && (
+              <section data-testid="colombia-bot-official-manifest" className="space-y-2 rounded-lg border border-amber-300/30 bg-amber-400/5 p-3">
+                <h4 className="font-black text-amber-200">Manifesto original: {manifest.title}</h4>
+                <p className="whitespace-pre-line break-words text-slate-100">{manifest.body}</p>
+              </section>
+            )}
             <p><strong className="text-white">Serviço:</strong> {productName} — {optionName}</p>
             {warranty && <p><strong className="text-white">Garantia:</strong> {warranty}</p>}
             {shipping && <p><strong className="text-white">Prazo de entrega:</strong> {shipping}</p>}
