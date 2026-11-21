@@ -1,5 +1,32 @@
 import type { H2AutoFaqRule, H2AutoPersonalization } from "./h2AutoPersonalization";
 
+/** Resposta pronta, opcional, para direcionar pedidos do WhatsApp ao site.
+ * Nunca realiza login, autentica cliente ou altera o motor do APK. */
+export const H2_AUTO_BOT_DIRECT_LINK = "https://h2colombiano.com/bot";
+export const H2_AUTO_BOT_LINK_FAQ: H2AutoFaqRule = {
+  id: "h2_pedido_bot_direto",
+  question: "Quero fazer meu pedido com o robô",
+  variations: [
+    "Me manda o link do robô",
+    "Quero fazer pedido pelo robô",
+    "Qual é o link direto do bot?",
+    "Como comprar com assistente de pedidos?",
+    "Quero atendimento automático para pedido",
+  ].join("\\n"),
+  answer: [
+    "🤖 *ASSISTENTE DE PEDIDOS H2*",
+    "",
+    "Clique para iniciar seu pedido diretamente com o nosso robô:",
+    H2_AUTO_BOT_DIRECT_LINK,
+    "",
+    "🔐 Se ainda não estiver logado, confirme seu telefone cadastrado com o código recebido por e-mail ou WhatsApp. Após entrar, o robô abre automaticamente.",
+    "✅ Se já estiver logado, a conversa começa direto no robô.",
+    "",
+    "Nunca compartilhe seu código de acesso.",
+  ].join("\\n"),
+  enabled: true,
+};
+
 /** Textos sugeridos a partir dos fluxos atuais do H2. Editáveis por aparelho.
  *  Inicialmente DESLIGADOS: só enviar após revisão do ADM.
  */
