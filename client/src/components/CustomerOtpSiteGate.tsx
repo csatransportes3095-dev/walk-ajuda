@@ -36,6 +36,7 @@ export function CustomerOtpSiteGate({ children }: { children: React.ReactNode })
     if (!session.data?.valid || !session.data.profileUpdateRequired) return;
     localStorage.setItem("customer_update_token", token);
     localStorage.setItem("customer_update_phone_hint", session.data.phone);
+    if (window.location.pathname === "/bot") sessionStorage.setItem("h2_customer_return_to", "/bot");
     if (window.location.pathname !== "/atualizarcadastro") navigate("/atualizarcadastro");
   }, [session.data, token, navigate]);
 
@@ -44,6 +45,7 @@ export function CustomerOtpSiteGate({ children }: { children: React.ReactNode })
     setConfirmedToken("");
     setToken(value.token);
     if (value.profileUpdateRequired) {
+      if (window.location.pathname === "/bot") sessionStorage.setItem("h2_customer_return_to", "/bot");
       localStorage.setItem("customer_update_token", value.token);
       localStorage.setItem("customer_update_phone_hint", value.phone);
       navigate("/atualizarcadastro");
