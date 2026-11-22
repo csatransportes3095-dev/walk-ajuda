@@ -3,6 +3,13 @@ on:
   pull_request:
     branches:
       - recovery/organizar-salvos-2026-08-24
+    paths:
+      - 'server/referralCommissionManual*.ts'
+      - 'server/referralCommissionPolicy*.ts'
+      - 'server/h2-auto-referral-commissions*.ts'
+      - 'server/h2-auto-orders.ts'
+      - 'client/src/pages/AdminCommissions.tsx'
+      - '.github/workflows/h2-auto-manual-commissions.yml'
   push:
     branches:
       - fix/commission-manual-status-gamer-20261028

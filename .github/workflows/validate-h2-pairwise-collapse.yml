@@ -4,6 +4,11 @@ on:
     branches: [fix/similaridade-resumo-combinacoes-recolhido-20261020]
   pull_request:
     branches: [recovery/organizar-salvos-2026-08-24]
+    paths:
+      - 'client/src/pages/AdminSimilarity.tsx'
+      - 'client/src/lib/face*.ts'
+      - 'server/similarFace*.ts'
+      - '.github/workflows/validate-h2-pairwise-collapse.yml'
 permissions:
   contents: read
 jobs:

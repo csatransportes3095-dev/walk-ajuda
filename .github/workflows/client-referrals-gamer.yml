@@ -6,6 +6,13 @@ on:
   pull_request:
     branches:
       - recovery/organizar-salvos-2026-08-24
+    paths:
+      - 'client/src/pages/ClientReferrals.tsx'
+      - 'client/src/pages/ClientReferralTree.tsx'
+      - 'server/clientReferralsRouter*.ts'
+      - 'server/referralCommission*.ts'
+      - 'server/h2-auto-referral-commissions*.ts'
+      - '.github/workflows/client-referrals-gamer.yml'
 permissions:
   contents: read
 jobs:

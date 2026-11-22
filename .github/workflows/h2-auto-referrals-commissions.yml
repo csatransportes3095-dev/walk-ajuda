@@ -6,6 +6,14 @@ on:
   pull_request:
     branches:
       - recovery/organizar-salvos-2026-08-24
+    paths:
+      - 'server/h2-auto-referral-commissions*.ts'
+      - 'server/h2-auto-orders.ts'
+      - 'server/commissionResolver*.ts'
+      - 'server/referralCommissionPolicy*.ts'
+      - 'shared/referral*.ts'
+      - 'client/src/pages/AdminCommissions.tsx'
+      - '.github/workflows/h2-auto-referrals-commissions.yml'
   workflow_dispatch:
 permissions:
   contents: read

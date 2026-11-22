@@ -4,6 +4,14 @@ on:
     branches: [feature/desconto-geral-site-20261016]
   pull_request:
     branches: [recovery/organizar-salvos-2026-08-24]
+    paths:
+      - 'shared/globalPromotion*.ts'
+      - 'server/vipPricing*.ts'
+      - 'server/storefrontCategories*.ts'
+      - 'server/homeRootCards*.ts'
+      - 'client/src/pages/AdminGlobalPromotion.tsx'
+      - 'client/src/pages/ClientReferrals.tsx'
+      - '.github/workflows/global-promotion-validate.yml'
   workflow_dispatch:
 permissions:
   contents: read

@@ -6,6 +6,13 @@ on:
   pull_request:
     branches:
       - recovery/organizar-salvos-2026-08-24
+    paths:
+      - 'server/h2-auto-silenced-contacts*.ts'
+      - 'server/h2-auto-remote.ts'
+      - 'server/h2-auto-validation-policy*.ts'
+      - 'client/src/components/H2AutoSilencedContacts.tsx'
+      - 'client/src/pages/AdminH2Auto.tsx'
+      - '.github/workflows/h2auto-manual-silenced-contacts.yml'
 permissions:
   contents: read
 jobs:

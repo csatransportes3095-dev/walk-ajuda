@@ -6,6 +6,13 @@ on:
   pull_request:
     branches:
       - recovery/organizar-salvos-2026-08-24
+    paths:
+      - 'client/src/lib/faceSimilarityPolicy*.ts'
+      - 'client/src/lib/faceMatchDecision*.ts'
+      - 'server/similarFaceReference*.ts'
+      - 'client/src/pages/AdminH2Bico.tsx'
+      - 'client/src/components/H2Bico*.tsx'
+      - '.github/workflows/validate-h2bico-min75.yml'
 permissions:
   contents: read
 jobs:
