@@ -116,7 +116,7 @@ export function ColombiaBot({ products, onStartNormal, onSelectProduct, onSelect
   const [isValidatingCoupon, setIsValidatingCoupon] = useState(false);
 
   // Callbacks armazenados em ref para evitar stale closure
-  const callbacks = useRef<Record<string, (...args: any[]) => void>>({});
+  const callbacks = useRef<Record<string, (...args: any[]) => any>>({});
   const couponInputIds = useRef<Set<string>>(new Set());
 
   // Histórico de snapshots para o botão Voltar
@@ -124,7 +124,7 @@ export function ColombiaBot({ products, onStartNormal, onSelectProduct, onSelect
     messages: ChatMsg[];
     inputValues: Record<string, string>;
     flowState: typeof flowState.current;
-    callbacks: Record<string, (...args: any[]) => void>;
+    callbacks: Record<string, (...args: any[]) => any>;
   };
   const history = useRef<Snapshot[]>([]);
 
@@ -288,9 +288,17 @@ export function ColombiaBot({ products, onStartNormal, onSelectProduct, onSelect
       callbacks: { ...callbacks.current },
     });
     if (history.current.length > 20) history.current.shift();
-    // O snapshot contém o handler original para o botão Voltar.
+    // Recuperar interação quando manifesto é recusado ou resposta não é permitida.
     delete callbacks.current[messageId];
-    callback(...args);
+    const completed = callback(...args);
+    const rearm = () => { callbacks.current[messageId] = callback; history.current.pop(); };
+    if (completed === false) rearm();
+    else if (completed && typeof completed.then === "function") {
+      void completed.then((value: unknown) => { if (value === false) rearm(); }).catch(() => {
+        rearm();
+        addMsgs({type:"bot",id:uid(),text:"Não foi possível confirmar esta escolha. Tente novamente."});
+      });
+    }
   };
 
   const addMsgs = useCallback((...msgs: ChatMsg[]) => {
@@ -532,10 +540,6 @@ export function ColombiaBot({ products, onStartNormal, onSelectProduct, onSelect
     callbacks.current[optId] = async (optionId: string) => {
       const option = product.options.find(item => String(item.id) === optionId);
       if (!option) return;
-      if (!(option.priceModels || []).length) {
-        const accepted = await requestProductManifest([`option_manifest_${option.id}`], `bot:base:${option.id}`, option.label || option.name);
-        if (!accepted) return;
-      }
       markAnswered(optId);
       addMsgs({ type: "user", id: uid(), text: (option.label || option.name) });
       resetOptionFlow();
@@ -557,7 +561,13 @@ export function ColombiaBot({ products, onStartNormal, onSelectProduct, onSelect
       flowState.current.priceModel = null;
       // Opção única também deve apresentar o manifesto obrigatório.
       void requestProductManifest([`option_manifest_${option.id}`], `bot:base:${option.id}`, option.label || option.name)
-        .then(accepted => { if (accepted) queueAdvance(() => askQuestions(product, option, {}), 200); });
+        .then(accepted => {
+          if (accepted) queueAdvance(() => askQuestions(product, option, {}), 200);
+          else {
+            addMsgs({type:"bot",id:uid(),text:"As condições precisam ser aceitas para continuar. Você pode escolher outra opção."});
+            queueAdvance(() => product.options.length > 1 ? askOption(product) : askService(), 200);
+          }
+        }).catch(() => askService());
       return;
     }
     const displayLabel = (model: OptionPriceModel) => {
@@ -584,7 +594,7 @@ export function ColombiaBot({ products, onStartNormal, onSelectProduct, onSelect
         return;
       }
       const accepted = await requestProductManifest([`price_model_manifest_${model.id}`, `option_manifest_${option.id}`], `bot:price:${model.id}`, model.label);
-      if (!accepted) return;
+      if (!accepted) return false;
       markAnswered(msgId);
       addMsgs({ type: 'user', id: uid(), text: displayLabel(model) });
       flowState.current.priceModel = model;
@@ -680,7 +690,7 @@ export function ColombiaBot({ products, onStartNormal, onSelectProduct, onSelect
       callbacks.current[msgId] = (val: string) => {
         if (!opts.some(opt => sameBotSelectOption(val, opt))) return;
         const blocked = findBotBlockedChoice(nextQ, val, settingsData?.question_blocking_manifest_rules_v1);
-        if (blocked) { setBlockedChoice(blocked); return; }
+        if (blocked) { setBlockedChoice(blocked); return false; }
         markAnswered(msgId);
         addMsgs({ type: "user", id: uid(), text: val });
         const selected = opts.find(opt => sameBotSelectOption(val, opt))!;
@@ -699,7 +709,7 @@ export function ColombiaBot({ products, onStartNormal, onSelectProduct, onSelect
       callbacks.current[msgId] = (val: string) => {
         if (nextQ.isRequired === 1 && !val.trim()) {
           addMsgs({type:"bot",id:uid(),text:"Esta resposta é obrigatória. Preencha para continuar."});
-          return;
+          return false;
         }
         markAnswered(msgId);
         addMsgs({ type: "user", id: uid(), text: val || "(sem resposta)" });
