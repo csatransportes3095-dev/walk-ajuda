@@ -41,6 +41,14 @@ export function resolveDeliveredGuideVideo(input: string): DeliveredGuideVideo |
     return { kind: "embed", url: "https://drive.google.com/file/d/" + match[1] + "/preview" };
   }
 
+  // O /video/:slug do H2 e uma rota de streaming de video do proprio site.
+  // Ela devolve bytes do arquivo com suporte a Range, nao uma pagina HTML.
+  if (host === "h2colombiano.com" || host === "www.h2colombiano.com") {
+    if (/^\/video\/[a-zA-Z0-9_-]{1,128}$/.test(url.pathname) && !url.search) {
+      return { kind: "file", url: "https://h2colombiano.com" + url.pathname };
+    }
+  }
+
   // Arquivos de vídeo HTTPS diretos, inclusive mídias publicadas no R2.
   if (ALLOWED_FILE_EXT.test(url.pathname)) return { kind: "file", url: url.toString() };
 

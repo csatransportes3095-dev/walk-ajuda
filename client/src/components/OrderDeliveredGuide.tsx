@@ -66,11 +66,11 @@ export default function OrderDeliveredGuide({ registrationId, subOrderIndex, cus
     setBlocks(current => current.map(block => block.id === id ? { ...block, ...patch } : block));
   }
   function saveContent() {
-    const clean = blocks.map(b => ({ ...b, title: b.title.trim(), text: b.text.trim(), imageUrl: b.imageUrl.trim(), videoUrl: b.videoUrl.trim() }))
+    const clean = blocks.map(b => ({ ...b, title: b.title.trim(), text: b.text.trim(), imageUrl: b.mediaType === "video" ? "" : b.imageUrl.trim(), videoUrl: b.mediaType === "video" ? b.videoUrl.trim() : "" }))
       .filter(b => b.title || b.text || (b.mediaType === "video" ? b.videoUrl : b.imageUrl));
     if (!clean.length) { toast.error("Adicione ao menos uma orientação, foto ou vídeo."); return; }
     const invalidVideo = clean.find(b => b.mediaType === "video" && !resolveDeliveredGuideVideo(b.videoUrl));
-    if (invalidVideo) { toast.error("Informe uma URL válida do YouTube, Vimeo, Google Drive ou MP4/WebM HTTPS."); return; }
+    if (invalidVideo) { toast.error("Informe uma URL válida do H2 Colombiano, YouTube, Vimeo, Google Drive ou MP4/WebM HTTPS."); return; }
     save.mutate({
       title: title.trim(), intro: intro.trim(), blocks: clean,
     });
@@ -151,7 +151,7 @@ export default function OrderDeliveredGuide({ registrationId, subOrderIndex, cus
                 <label className="block text-xs font-bold text-amber-200">LINK DO VÍDEO
                   <input type="url" value={block.videoUrl} placeholder="https://www.youtube.com/watch?v=..." onChange={e => editBlock(block.id, { videoUrl: e.target.value })} className="mt-1 w-full rounded-lg border border-amber-400/30 bg-slate-950 p-3 text-sm text-white" />
                 </label>
-                <p className="text-xs leading-relaxed text-slate-300">YouTube, Vimeo, vídeo público do Google Drive ou arquivo MP4/WebM HTTPS. O cliente assiste dentro das orientações, sem sair da página.</p>
+                <p className="text-xs leading-relaxed text-slate-300">Aceita também vídeos do próprio H2 Colombiano (/video/nome-do-video), YouTube, Vimeo, Google Drive público ou MP4/WebM HTTPS. O cliente assiste nesta página.</p>
                 {block.videoUrl && (() => {
                   const video = resolveDeliveredGuideVideo(block.videoUrl);
                   if (!video) return <p role="alert" className="text-xs font-bold text-rose-300">URL de vídeo inválida ou não incorporável.</p>;
