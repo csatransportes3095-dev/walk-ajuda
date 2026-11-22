@@ -75,6 +75,7 @@ import { adminAuthenticatorRouter } from "./routers/adminAuthenticator";
 import { h2bicoRouter } from "./routers/h2bico";
 import { photoConfirmationRouter } from "./routers/photoConfirmation";
 import { orderConfirmationRouter } from "./routers/orderConfirmation";
+import { deliveredOrderGuideRouter } from "./routers/deliveredOrderGuide";
 import { orderPhotoAttemptsRouter } from "./routers/orderPhotoAttempts";
 import { h2bicoReviewRouter } from "./h2bicoReview";
 import { h2bicoIntelligenceRouter } from "./h2bicoReviewIntelligence";
@@ -471,6 +472,7 @@ export const appRouter = router({
   schedule: scheduleRouter,
   photoConfirmation: photoConfirmationRouter,
   orderConfirmation: orderConfirmationRouter,
+  deliveredOrderGuide: deliveredOrderGuideRouter,
   orderPhotoAttempts: orderPhotoAttemptsRouter,
   spreadsheet: spreadsheetRouter,
   privateTransport: privateTransportRouter,
