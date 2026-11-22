@@ -1,4 +1,5 @@
 import { r2GetObjectBuffer, r2HeadObject } from "./r2Storage";
+import sharp from "sharp";
 
 export const COLOMBIA_BOT_PHOTO_MAX_BYTES = 5 * 1024 * 1024;
 
@@ -57,4 +58,24 @@ export async function loadColombiaBotPhotoFromR2(
   const contentType = ext === "png" ? "image/png" :
     ext === "webp" ? "image/webp" : "image/jpeg";
   return { buffer, contentType };
+}
+
+/**
+ * Imagem pública de miniatura para WhatsApp: JPEG consistente, pequena, sem EXIF
+ * e sem cortar a foto original. O cliente continua com seu arquivo R2 intocado.
+ */
+export async function optimizeColombiaBotWhatsappPhoto(input: ColombiaBotPhotoPreview): Promise<ColombiaBotPhotoPreview> {
+  if (input.buffer.length < 1 || input.buffer.length > COLOMBIA_BOT_PHOTO_MAX_BYTES) {
+    throw new Error("Imagem de origem fora do limite.");
+  }
+  const buffer = await sharp(input.buffer, { failOn: "error", limitInputPixels: 40_000_000 })
+    .rotate()
+    .resize({ width: 800, height: 800, fit: "inside", withoutEnlargement: true })
+    .flatten({ background: "#ffffff" })
+    .jpeg({ quality: 80 })
+    .toBuffer();
+  if (buffer.length === 0 || buffer.length > COLOMBIA_BOT_PHOTO_MAX_BYTES) {
+    throw new Error("Miniatura fora do limite.");
+  }
+  return { buffer, contentType: "image/jpeg" };
 }
