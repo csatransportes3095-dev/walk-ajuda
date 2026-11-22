@@ -157,6 +157,14 @@ export function ColombiaBot({ products, onStartNormal, onSelectProduct, onSelect
   // Buscar pix ativo e nome do cliente logado
   const { data: activePix } = trpc.pix.getActive.useQuery();
   const { data: settingsData } = trpc.settings.getAll.useQuery();
+  // Atualiza o Pix quando os dados de pagamento chegam depois da recuperação.
+  useEffect(() => {
+    const key = activePix?.pixKey || settingsData?.pix_key || "";
+    if (!key) return;
+    setMessages(prev => prev.map(msg => msg.type === "pix-payment" && !msg.uploaded && !msg.pixKey
+      ? { ...msg, pixKey: key, pixName: activePix?.pixName || settingsData?.pix_name || "", pixBank: activePix?.pixBank || settingsData?.pix_bank || "" }
+      : msg));
+  }, [activePix?.pixKey, activePix?.pixName, activePix?.pixBank, settingsData?.pix_key, settingsData?.pix_name, settingsData?.pix_bank]);
   const clientPhone = typeof window !== 'undefined' ? localStorage.getItem('walk_client_phone') || '' : '';
   const { isVipCustomer } = useVipMembership();
   const { data: globalPromotion } = trpc.globalPromotion.get.useQuery(undefined, { refetchOnWindowFocus: true, refetchInterval: 15000 });
@@ -441,7 +449,15 @@ export function ColombiaBot({ products, onStartNormal, onSelectProduct, onSelect
       });
       if (nextStep === 'questions') askQuestions(product, option, answers);
       else if (nextStep === 'documents') askDocuments(product, option);
-      else if (nextStep === 'payment') askPix(product, option);
+      else if (nextStep === 'payment') {
+        if (saved.couponCode && !sitePromoOverrides) {
+          void validateCouponMutation.mutateAsync({ code: saved.couponCode }).then(result => {
+            if (!result.valid) { flowState.current.couponCode = ''; flowState.current.couponDiscount = null; askCoupon(product, option); return; }
+            flowState.current.couponDiscount = {type: result.discountType || result.coupon?.discountType || 'fixed', value: result.discountValue ?? result.coupon?.discountValue ?? 0};
+            askPix(product, option);
+          }).catch(() => askCoupon(product, option));
+        } else askPix(product, option);
+      }
       else askCoupon(product, option);
       return true;
     } catch {
@@ -867,8 +883,9 @@ export function ColombiaBot({ products, onStartNormal, onSelectProduct, onSelect
 
     // Salvar progresso ao chegar na etapa de pagamento PIX
     saveBotProgress('cadastro', 'pagamento');
+    const summary = `Resumo do pedido: ${product.name}${option ? " • " + (option.label || option.name) : ""}\n${flowState.current.priceModel ? "Plano: " + flowState.current.priceModel.label + "\n" : ""}Respostas: ${Object.keys(flowState.current.answers).length} • Documentos: ${Object.values(flowState.current.docFiles).filter(doc => Boolean(doc.url)).length}\nTotal a pagar: ${price}`;
     addMsgs(
-      { type: 'bot', id: uid(), text: `Agora faça o pagamento via Pix${price ? ` de R$ ${price}` : ''} e envie o comprovante abaixo.` },
+      { type: 'bot', id: uid(), text: summary + "\n\nConfira os dados e faça o pagamento via Pix somente após conferir o valor." },
       { type: 'pix-payment', id: msgId, pixKey, pixName, pixBank, price, basePrice: totals.base, discountPrice: totals.discount, uploaded: false }
     );
   };
@@ -1301,7 +1318,7 @@ export function ColombiaBot({ products, onStartNormal, onSelectProduct, onSelect
   return (
     <div data-colombia-bot className="fixed inset-0 z-[9990] flex flex-col bg-zinc-950">
       {/* Header */}
-      <div className="flex items-center gap-3 px-4 py-3 border-b border-zinc-800 bg-zinc-900 shrink-0">
+      <div className="flex items-center gap-3 px-4 pt-[max(0.75rem,env(safe-area-inset-top))] pb-3 border-b border-zinc-800 bg-zinc-900 shrink-0">
         {displayAvatar ? (
           <img src={displayAvatar} alt={displayName} className="w-10 h-10 rounded-full object-cover shadow-lg" />
         ) : (
@@ -1313,7 +1330,7 @@ export function ColombiaBot({ products, onStartNormal, onSelectProduct, onSelect
           <p className="font-bold text-white text-sm">{displayName}</p>
           <p className="text-xs text-cyan-300">Assistente automático • {currentPhase}</p>
         </div>
-        <button onClick={onStartNormal} aria-label="Fechar assistente" className="p-2 rounded-lg text-zinc-500 hover:text-zinc-300 hover:bg-zinc-800 transition-colors">
+        <button onClick={() => { if (flowState.current.product && !window.confirm("Sair do assistente? Seu rascunho continuará salvo.")) return; onStartNormal(); }} aria-label="Fechar assistente" className="p-2 rounded-lg text-zinc-500 hover:text-zinc-300 hover:bg-zinc-800 transition-colors">
           <X className="w-5 h-5" />
         </button>
       </div>
@@ -1336,14 +1353,7 @@ export function ColombiaBot({ products, onStartNormal, onSelectProduct, onSelect
               const snap = history.current.pop();
               cancelPendingAdvances();
               if (!snap) {
-                couponInputIds.current.clear();
-                // Após F5 não há snapshots em memória: voltar ao início de forma segura.
-                clearCompletedBotProgress();
-                setMessages([]);
-                setInputValues({});
-                callbacks.current = {};
-                flowState.current = { ...flowState.current, product: null, option: null, priceModel: null, answers: {}, audioAnswers: {}, audioFlowId: createAudioFlowId(), docFiles: {}, pixProofUrl: '', pixProofMime: '', couponCode: '', couponDiscount: null };
-                startEntry();
+                addMsgs({type:"bot",id:uid(),text:"Rascunho preservado. Após atualizar a página, não é possível voltar uma etapa. Use Recomeçar para reiniciar."});
                 return;
               }
               setMessages(snap.messages);
