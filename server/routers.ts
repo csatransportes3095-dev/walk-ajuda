@@ -1688,6 +1688,40 @@ export const appRouter = router({
           if (input.answers) {
             try { parsedAnswers = JSON.parse(input.answers); } catch { /* ignore */ }
           }
+          // As mesmas respostas bloqueadas pelo ADM devem ser recusadas no servidor.
+          // A proteção abrange bot e vitrine manual, independentemente do HTML.
+          if (input.optionId && parsedAnswers.length > 0) {
+            const normalizeAnswer = (value: unknown) => String(value || '')
+              .normalize('NFD').replace(/[\u0300-\u036f]/g, '')
+              .trim().replace(/\s+/g, ' ').toUpperCase();
+            const configured = await getSetting('question_blocking_manifest_rules_v1');
+            let blockingRules: any[] = [];
+            try {
+              const parsed = JSON.parse(String(configured || '[]'));
+              if (Array.isArray(parsed)) blockingRules = parsed;
+            } catch { /* reter regras legadas armazenadas nas opções */ }
+            const optionQuestions = await listOptionQuestions(input.optionId);
+            for (const answer of parsedAnswers) {
+              const questionId = Number(answer.questionId);
+              if (!Number.isInteger(questionId) || questionId <= 0) continue;
+              const question = optionQuestions.find(q => q.id === questionId && q.fieldType === 'select');
+              if (!question) continue;
+              const choice = normalizeAnswer(answer.answer);
+              const restricted = blockingRules.some(rule => rule?.enabled !== false &&
+                Number(rule?.questionId) === questionId &&
+                normalizeAnswer(rule?.answer) === choice);
+              let legacyRestricted = false;
+              try {
+                const opts = JSON.parse(String(question.options || '[]'));
+                if (Array.isArray(opts)) legacyRestricted = opts.some((item: any) =>
+                  item && typeof item === 'object' && item.blocking === true &&
+                  normalizeAnswer(item.label) === choice);
+              } catch { /* opções legadas sem metadados */ }
+              if (restricted || legacyRestricted) {
+                return { success: false, message: 'Uma resposta não permite continuar com este pedido. Volte e revise as opções.' };
+              }
+            }
+          }
           let audioDraftsForOrder: Awaited<ReturnType<typeof getQuestionAudioDraftsByIds>> = [];
           // Produto e opção são usados também por pedidos comuns. Só iniciar a
           // validação de áudio quando o cliente efetivamente enviou uma referência
