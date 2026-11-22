@@ -7,6 +7,10 @@ on:
       - "client/src/pages/Home.tsx"
       - "server/routers.ts"
       - "server/colombiaBotQuality20261121.test.ts"
+      - "server/colombiaBotCustomerPhotoPreview.ts"
+      - "server/colombiaBotCustomerPhotoPreview.test.ts"
+      - "server/postOrderCustomerPhotoWhatsapp.test.ts"
+      - "server/_core/index.ts"
       - "server/colombiaBotReliability.ts"
       - "server/colombiaBotReliability.test.ts"
       - "server/colombiaBotReliability.mysql.test.ts"
@@ -31,6 +35,8 @@ jobs:
         run: |
           pnpm exec vitest run \
             server/colombiaBotQuality20261121.test.ts \
+            server/colombiaBotCustomerPhotoPreview.test.ts \
+            server/postOrderCustomerPhotoWhatsapp.test.ts \
             server/colombiaBotReliability.test.ts \
             server/colombiaBotAndroidCouponResume.test.ts \
             server/colombiaBotBackNavigation.test.ts \
