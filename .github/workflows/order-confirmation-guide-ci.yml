@@ -1,0 +1,35 @@
+name: Confirmacao Pedido - orientacoes isoladas
+on:
+  pull_request:
+    paths:
+      - "client/src/components/OrderConfirmationGuide.tsx"
+      - "client/src/pages/OrderConfirmationGuidePage.tsx"
+      - "client/src/pages/AdminOrders.tsx"
+      - "client/src/App.tsx"
+      - "client/src/main.tsx"
+      - "client/src/components/UnifiedCustomerAccessGate.tsx"
+      - "client/src/components/SiteAccessSessionBoundary.tsx"
+      - "client/public/route-fallback-guard-v1.js"
+      - "client/index.html"
+      - "server/siteAccessPolicy.ts"
+      - "server/routers/orderConfirmation.ts"
+      - "server/orderConfirmationGuide.test.ts"
+      - ".github/workflows/order-confirmation-guide-ci.yml"
+  workflow_dispatch:
+permissions:
+  contents: read
+jobs:
+  confirmation-guide:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: pnpm/action-setup@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+          cache: pnpm
+      - run: pnpm install --frozen-lockfile
+      - name: Testar somente CONFIRMACAO DO PEDIDO
+        run: pnpm exec vitest run server/orderConfirmationGuide.test.ts
+      - name: Compilar pagina e editor
+        run: pnpm build
