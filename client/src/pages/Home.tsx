@@ -270,7 +270,7 @@ export default function Home() {
   // Buscar dados dinâmicos.
   // Mantém o contrato completo já usado por cards, carrinho e checkout, mas evita
   // recarregar a árvore inteira de produtos enquanto a aba não está em uso.
-  const { data: rawProducts } = trpc.products.listActive.useQuery(undefined, {
+  const { data: rawProducts, isError: productsLoadFailed } = trpc.products.listActive.useQuery(undefined, {
     staleTime: 30_000,
     refetchInterval: 30_000,
     refetchIntervalInBackground: false,
@@ -279,7 +279,7 @@ export default function Home() {
   });
   const baseProducts = rawProducts as unknown as Product[] | undefined;
   const optionIds = useMemo(() => (baseProducts || []).flatMap(product => product.options.map(option => option.id)), [baseProducts]);
-  const { data: activeOptionPriceModels = [] } = trpc.optionPriceModels.listActive.useQuery(
+  const { data: activeOptionPriceModels = [], isSuccess: optionPriceModelsReady, isError: optionPriceModelsFailed } = trpc.optionPriceModels.listActive.useQuery(
     { optionIds },
     {
       enabled: optionIds.length > 0,
@@ -303,6 +303,10 @@ export default function Home() {
       options: product.options.map(option => ({ ...option, priceModels: byOption.get(option.id) || [] })),
     }));
   }, [baseProducts, activeOptionPriceModels]);
+  // O ColombiaBot só começa após produtos E modelos de preço chegarem.
+  // Isso não altera a vitrine normal: evita montar o robô com priceModels: [] provisório.
+  const botCatalogReady = Boolean(baseProducts && (optionIds.length === 0 || optionPriceModelsReady));
+  const botCatalogError = productsLoadFailed || (optionIds.length > 0 && optionPriceModelsFailed);
   const { data: settings } = trpc.settings.getAll.useQuery();
   const { data: globalPromotion } = trpc.globalPromotion.get.useQuery(undefined, { refetchOnWindowFocus: true, refetchInterval: 15000 });
   const [promotionNowMs, setPromotionNowMs] = useState(() => Date.now());
@@ -6054,8 +6058,18 @@ export default function Home() {
           </div>
         </div>
       )}
+      {/* Colombia Bot — aguardar catálogo oficial antes de iniciar/reabrir rascunho. */}
+      {botEnabled && showColombiaBot && !botCatalogReady && (
+        <div data-testid="colombia-bot-catalog-loading" role="status" aria-live="polite" className="fixed inset-0 z-[9990] flex items-center justify-center bg-zinc-950 p-5 text-white">
+          <div className="w-full max-w-md space-y-4 rounded-2xl border border-cyan-400/40 bg-zinc-900 p-6 text-center">
+            <h2 className="text-xl font-bold">{botCatalogError ? 'Não foi possível carregar os preços' : 'Carregando serviços e valores...'}</h2>
+            <p className="text-sm text-zinc-300">{botCatalogError ? 'Não podemos abrir o pedido sem consultar os valores oficiais. Tente novamente.' : 'Consultando as opções e os preços cadastrados antes de iniciar seu pedido.'}</p>
+            {botCatalogError && <button type="button" onClick={() => window.location.reload()} className="rounded-xl bg-cyan-500 px-5 py-3 font-bold text-zinc-950">Tentar novamente</button>}
+          </div>
+        </div>
+      )}
       {/* Colombia Bot — modal de tela cheia */}
-      {botEnabled && showColombiaBot && (
+      {botEnabled && showColombiaBot && botCatalogReady && (
         <ColombiaBot
           products={(products || []) as any}
           botName={settings?.bot_assistant_name || undefined}
