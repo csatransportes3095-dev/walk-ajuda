@@ -1016,16 +1016,17 @@ export function ColombiaBot({ products, onStartNormal, onSelectProduct, onSelect
         });
 
         if (isPersistedOrderResult(result)) {
+          const paidPrice = String((result as any).finalPrice || getBotCheckoutTotals(getModelPrice(flowState.current.priceModel) || priceForOption(option), sitePromoOverrides ? null : flowState.current.couponDiscount).total);
           reportBotEvent((result as any).message?.includes("anteriormente") ? "pedido_repetido" : "pedido_confirmado", "Finalizar");
           markActionDone(actionId);
           // Limpar antes de fechar o Bot: evita que a vitrine recupere um pedido já concluído.
           clearCompletedBotProgress();
           addMsgs({ type: "bot", id: uid(), text: "Pedido enviado com sucesso! \u2705\n\nO admin j\u00e1 recebeu e entrar\u00e1 em contato em breve." });
           onOrderComplete({
-            cartItems: [{ service: product.name, nameOption: option?.label || option?.name || 'N/A', price: getModelPrice(flowState.current.priceModel) || priceForOption(option) }],
+            cartItems: [{ service: product.name, nameOption: option?.label || option?.name || 'N/A', price: paidPrice }],
             answers: answersArray,
             docs: docsArray,
-            totalValue: getModelPrice(flowState.current.priceModel) || option?.price || '',
+            totalValue: paidPrice,
             referrerName: '',
             referrerPhone: '',
             clientName: flowState.current.clientName || profileQuery.data?.name || 'Cliente',
