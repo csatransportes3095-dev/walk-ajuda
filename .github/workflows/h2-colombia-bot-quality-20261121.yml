@@ -7,6 +7,12 @@ on:
       - "client/src/pages/Home.tsx"
       - "server/routers.ts"
       - "server/colombiaBotQuality20261121.test.ts"
+      - "server/colombiaBotReliability.ts"
+      - "server/colombiaBotReliability.test.ts"
+      - "server/routers/colombiaBotDiagnostics.ts"
+      - "client/src/components/ColombiaBotDiagnosticsPanel.tsx"
+      - "scripts/apply-colombiabot-reliability-migration.ts"
+      - "client/src/pages/AdminSettings.tsx"
       - ".github/workflows/h2-colombia-bot-quality-20261121.yml"
   workflow_dispatch:
 jobs:
@@ -24,6 +30,7 @@ jobs:
         run: |
           pnpm exec vitest run \
             server/colombiaBotQuality20261121.test.ts \
+            server/colombiaBotReliability.test.ts \
             server/colombiaBotAndroidCouponResume.test.ts \
             server/colombiaBotBackNavigation.test.ts \
             server/colombiaBotDirectLink.test.ts \
