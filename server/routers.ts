@@ -1823,6 +1823,7 @@ export const appRouter = router({
                 success: true,
                 message: 'Este pedido já foi registrado anteriormente. Nenhum pedido duplicado foi criado.',
                 registrationId: claim.registrationId,
+                finalPrice: claim.pricePaid,
                 scheduleUrl: null,
               };
             }
@@ -1888,6 +1889,7 @@ export const appRouter = router({
             await confirmColombiaBotSubmission(claimedBotDb, claimedBotRequestKey, {
               registrationId: persistedOrder.registrationId,
               orderStatusId: persistedOrder.orderStatusId,
+              pricePaid: input.price || null,
             });
           }
           try {
@@ -2377,6 +2379,7 @@ export const appRouter = router({
             success: true,
             message: emailSent ? 'Pedido enviado com sucesso!' : 'Pedido registrado! (email será reenviado em breve)',
             registrationId: outerRegId ?? null,
+            finalPrice: input.price ?? null,
             scheduleUrl: automaticScheduleUrl ?? null,
           };
         } catch (error) {
