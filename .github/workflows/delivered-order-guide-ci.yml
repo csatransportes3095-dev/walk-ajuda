@@ -10,6 +10,9 @@ on:
       - "server/siteAccessPolicy.ts"
       - "server/deliveredOrderGuidePublicGates.test.ts"
       - "server/deliveredOrderGuideLogin.test.ts"
+      - "server/deliveredOrderGuideRouteFallback.test.ts"
+      - "client/public/route-fallback-guard-v1.js"
+      - "client/index.html"
       - "server/deliveredOrderGuidePhone.ts"
       - "client/src/components/UnifiedCustomerAccessGate.tsx"
       - "client/src/main.tsx"
@@ -28,4 +31,4 @@ jobs:
           cache: pnpm
       - run: pnpm install --frozen-lockfile
       - name: Verificar somente Pedido Entregue
-        run: pnpm exec vitest run server/deliveredOrderGuide.test.ts server/deliveredOrderGuideAccess.test.ts server/deliveredOrderGuidePublicGates.test.ts server/deliveredOrderGuideLogin.test.ts
+        run: pnpm exec vitest run server/deliveredOrderGuide.test.ts server/deliveredOrderGuideAccess.test.ts server/deliveredOrderGuidePublicGates.test.ts server/deliveredOrderGuideLogin.test.ts server/deliveredOrderGuideRouteFallback.test.ts

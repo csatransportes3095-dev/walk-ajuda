@@ -36,7 +36,10 @@
     '/locadora/', '/cartoes/', '/video/', '/r/'
   ];
 
-  const known = exact.has(path) || prefixes.some(prefix => path.startsWith(prefix));
+  // Apenas links individuais de orientacao do Pedido Entregue (token de 48 hex).
+  // Login e conferencia do titular continuam obrigatorios na aplicacao e API.
+  const deliveredGuideTokenRoute = /^\/pedido-entregue\/[a-f0-9]{48}\/?$/.test(path);
+  const known = deliveredGuideTokenRoute || exact.has(path) || prefixes.some(prefix => path.startsWith(prefix));
   if (!known) {
     const target = new URL('/login', window.location.origin);
     target.searchParams.set('rota_invalida', rawPath);
