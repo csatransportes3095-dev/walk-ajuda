@@ -155,7 +155,13 @@ async function getGlobalGuide(): Promise<GlobalGuide | null> {
   }
 }
 async function saveGlobalGuide(value: GlobalGuide): Promise<GlobalGuide> {
-  await upsertSetting(GLOBAL_GUIDE_KEY, JSON.stringify(value));
+  const payload = JSON.stringify(value);
+  // siteSettings.settingValue usa TEXT (limite ~64 KiB); rejeitar conteúdos
+  // maiores com erro claro sem interferir em outras tabelas ou módulos.
+  if (Buffer.byteLength(payload, "utf8") > 60_000) {
+    throw new TRPCError({ code: "BAD_REQUEST", message: "Orientações globais excedem 60 KB. Divida os textos em blocos menores." });
+  }
+  await upsertSetting(GLOBAL_GUIDE_KEY, payload);
   return value;
 }
 function publicGlobalGuide(guide: GlobalGuide) {
