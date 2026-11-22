@@ -228,8 +228,19 @@ export function ColombiaBot({ products, onStartNormal, onSelectProduct, onSelect
   }, [globalPromotion?.active, globalPromotion?.schedule]);
   const sitePromoActive = globalPromotionIsActive(globalPromotion, promotionNowMs);
   const sitePromoOverrides = globalPromotionOverridesIndividual(globalPromotion, promotionNowMs);
-  const priceForOption = (option: ProductOption | null | undefined) => option ? globalPromotionPrice({ price: option.price || "", originalPrice: (option as any).originalPrice || null }, globalPromotion) : "";
-  const getModelPrice = (model: OptionPriceModel | null | undefined) => model ? sitePromoOverrides ? globalPromotionPrice(model, globalPromotion) : applyVipBenefitToPrice(model.price, model, isVipCustomer) : '';
+  // O Bot guarda callbacks da conversa. Ler o estado VIP/promoção mais recente
+  // evita que uma escolha feita após o carregamento da assinatura use o estado antigo.
+  const liveVipPricingRef = useRef({ isVipCustomer, sitePromoOverrides, globalPromotion });
+  liveVipPricingRef.current = { isVipCustomer, sitePromoOverrides, globalPromotion };
+  const priceForOption = (option: ProductOption | null | undefined) => option
+    ? globalPromotionPrice({ price: option.price || "", originalPrice: (option as any).originalPrice || null }, liveVipPricingRef.current.globalPromotion) : "";
+  const getModelPrice = (model: OptionPriceModel | null | undefined) => {
+    if (!model) return "";
+    const current = liveVipPricingRef.current;
+    return current.sitePromoOverrides
+      ? globalPromotionPrice(model, current.globalPromotion)
+      : applyVipBenefitToPrice(model.price, model, current.isVipCustomer);
+  };
   const profileQuery = trpc.customers.getMyProfile.useQuery(
     { phone: clientPhone },
     { enabled: !!clientPhone }
@@ -633,13 +644,13 @@ export function ColombiaBot({ products, onStartNormal, onSelectProduct, onSelect
       return;
     }
     const displayLabel = (model: OptionPriceModel) => {
-      const locked = isVipOnlyLocked(model, isVipCustomer);
+      const locked = isVipOnlyLocked(model, liveVipPricingRef.current.isVipCustomer);
       const mode = normalizeVipAccessMode(model.vipAccessMode);
-      const prefix = locked ? '🔒 SOMENTE VIP • ' : (!sitePromoOverrides && mode !== 'all' ? '👑 VIP • ' : '');
-      const benefit = !sitePromoOverrides && isVipCustomer ? vipBenefitText(model) : '';
+      const prefix = locked ? '🔒 SOMENTE VIP • ' : (!liveVipPricingRef.current.sitePromoOverrides && mode !== 'all' ? '👑 VIP • ' : '');
+      const benefit = !liveVipPricingRef.current.sitePromoOverrides && liveVipPricingRef.current.isVipCustomer ? vipBenefitText(model) : '';
       return prefix + model.label + ' — ' + getModelPrice(model) + (benefit ? ' • ' + benefit : '');
     };
-    if (models.length === 1 && isVipOnlyLocked(models[0], isVipCustomer)) {
+    if (models.length === 1 && isVipOnlyLocked(models[0], liveVipPricingRef.current.isVipCustomer)) {
       addMsgs({ type: 'bot', id: uid(), text: '🔒 Este modelo / categoria é exclusivo para clientes VIP. Escolha outro serviço ou entre com uma senha VIP.' });
       queueAdvance(() => askService(), 450);
       return;
@@ -650,7 +661,7 @@ export function ColombiaBot({ products, onStartNormal, onSelectProduct, onSelect
       // podem mudar sem modificar o ID da escolha ou o preço salvo.
       const model = models.find(item => String(item.id) === modelId);
       if (!model) return;
-      if (isVipOnlyLocked(model, isVipCustomer)) {
+      if (isVipOnlyLocked(model, liveVipPricingRef.current.isVipCustomer)) {
         addMsgs({ type: 'bot', id: uid(), text: '🔒 Este modelo / categoria é SOMENTE VIP. Entre com uma senha VIP para liberar esta escolha.' });
         queueAdvance(() => startOptionPricing(product, option), 350);
         return;
