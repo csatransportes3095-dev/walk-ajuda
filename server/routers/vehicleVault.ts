@@ -1,6 +1,6 @@
 import { TRPCError } from "@trpc/server";
 import { parseVehicleVaultClassification } from "../vehicleVaultClassification";
-import { normalizeVehicleVaultOwnerName, parseVehicleVaultOwnerName } from "../vehicleVaultOwner";
+import { normalizeVehicleVaultOwnerName, parseVehicleVaultOwnerName, normalizeVehicleVaultOwnerCpfCnpj, parseVehicleVaultOwnerCpfCnpj } from "../vehicleVaultOwner";
 import { z } from "zod";
 import { sql } from "drizzle-orm";
 import { router, adminProcedure } from "../_core/trpc";
@@ -49,6 +49,7 @@ async function database() {
           manufactureYear SMALLINT NOT NULL,
           modelYear SMALLINT NOT NULL,
           ownerName VARCHAR(200) NULL,
+          ownerCpfCnpj VARCHAR(14) NULL,
           sourceText LONGTEXT NOT NULL,
           inactive TINYINT NOT NULL DEFAULT 0,
           createdAt TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP,
@@ -74,6 +75,15 @@ async function database() {
         } catch (error) {
           // Another instance may have added this optional column after our
           // information_schema read. All other database errors must surface.
+          let cause: any = error;
+          while (cause?.cause && cause.code !== "ER_DUP_FIELDNAME" && Number(cause.errno) !== 1060) cause = cause.cause;
+          if (cause?.code !== "ER_DUP_FIELDNAME" && Number(cause?.errno) !== 1060) throw error;
+        }
+      }
+      if (!present.has("ownercpfcnpj")) {
+        try {
+          await db.execute(sql.raw("ALTER TABLE vehicle_vault_documents ADD COLUMN ownerCpfCnpj VARCHAR(14) NULL"));
+        } catch (error) {
           let cause: any = error;
           while (cause?.cause && cause.code !== "ER_DUP_FIELDNAME" && Number(cause.errno) !== 1060) cause = cause.cause;
           if (cause?.code !== "ER_DUP_FIELDNAME" && Number(cause?.errno) !== 1060) throw error;
@@ -223,7 +233,8 @@ function extractFields(raw: string) {
 
   const { category, exerciseYear } = parseVehicleVaultClassification(original);
   const ownerName = parseVehicleVaultOwnerName(original);
-  const result = { plate, renavam, chassis, model, color, manufactureYear, modelYear, category, exerciseYear, ownerName };
+  const ownerCpfCnpj = parseVehicleVaultOwnerCpfCnpj(original);
+  const result = { plate, renavam, chassis, model, color, manufactureYear, modelYear, category, exerciseYear, ownerName, ownerCpfCnpj };
   return { ...result, text: original, missing: fields.filter(key => !result[key]) };
 }
 async function readPdf(base64: string) {
@@ -242,7 +253,7 @@ async function readPdf(base64: string) {
     } catch {}
     let found = extractFields(text);
     // OCR também para campos opcionais ausentes, sem substituir o nome nativo.
-    if (found.missing.length > 2 || !found.category || !found.exerciseYear || !found.ownerName) {
+    if (found.missing.length > 2 || !found.category || !found.exerciseYear || !found.ownerName || !found.ownerCpfCnpj) {
       try {
         const prefix = join(dir, "pagina");
         await run("pdftoppm", ["-f", "1", "-l", "3", "-scale-to", "1800", "-png", file, prefix], { timeout: 40_000, maxBuffer: 1_000_000 });
@@ -256,14 +267,16 @@ async function readPdf(base64: string) {
         const second = extractFields(combined);
         if (second.missing.length < found.missing.length) {
           text = combined;
-          found = { ...second, ownerName: found.ownerName || second.ownerName };
-        } else if ((!found.ownerName && second.ownerName) ||
+          found = { ...second, ownerName: found.ownerName || second.ownerName,
+            ownerCpfCnpj: found.ownerCpfCnpj || second.ownerCpfCnpj };
+        } else if ((!found.ownerName && second.ownerName) || (!found.ownerCpfCnpj && second.ownerCpfCnpj) ||
           (second.missing.length === found.missing.length &&
             ((!found.category && second.category) || (!found.exerciseYear && second.exerciseYear)))) {
           text = combined;
           found = { ...found, category: found.category || second.category,
             exerciseYear: found.exerciseYear || second.exerciseYear,
-            ownerName: found.ownerName || second.ownerName, text: combined };
+            ownerName: found.ownerName || second.ownerName,
+            ownerCpfCnpj: found.ownerCpfCnpj || second.ownerCpfCnpj, text: combined };
         }
       } catch {}
     }
@@ -282,6 +295,11 @@ const fieldSchema = z.object({
   modelYear: z.number().int().min(1900).max(2100),
   ownerName: z.string().max(200).transform(normalizeVehicleVaultOwnerName)
     .pipe(z.string().max(200)).nullable().optional(),
+  ownerCpfCnpj: z.string().max(24).nullable().optional()
+    .superRefine((value, ctx) => {
+      if (value && !normalizeVehicleVaultOwnerCpfCnpj(value))
+        ctx.addIssue({ code: "custom", message: "CPF/CNPJ do proprietário inválido. Confira os dígitos." });
+    }).transform(value => value == null ? value : normalizeVehicleVaultOwnerCpfCnpj(value)),
   category: z.enum(["PARTICULAR", "ALUGUEL"]).nullable().optional(),
   exerciseYear: z.number().int().min(1900).max(2100).nullable().optional(),
   approvalStatus: z.enum(["pending","approved","rejected"]).optional(),
@@ -410,13 +428,13 @@ export const vehicleVaultRouter = router({
         previousApproval=String(before?.approvalStatus||"pending");
         await db.execute(sql`UPDATE vehicle_vault_documents SET
           plate=${plate},renavam=${renavam},chassis=${chassis},model=${model},color=${color},
-          manufactureYear=${input.manufactureYear},modelYear=${input.modelYear},ownerName=${input.ownerName === undefined ? sql`ownerName` : (input.ownerName || null)},category=${input.category ?? null},exerciseYear=${input.exerciseYear ?? null},approvalStatus=${input.approvalStatus ?? previousApproval},sourceText=${input.sourceText}
+          manufactureYear=${input.manufactureYear},modelYear=${input.modelYear},ownerName=${input.ownerName === undefined ? sql`ownerName` : (input.ownerName || null)},ownerCpfCnpj=${input.ownerCpfCnpj === undefined ? sql`ownerCpfCnpj` : (input.ownerCpfCnpj || null)},category=${input.category ?? null},exerciseYear=${input.exerciseYear ?? null},approvalStatus=${input.approvalStatus ?? previousApproval},sourceText=${input.sourceText}
           WHERE id=${id}`);
       }else{
         const created=await db.execute(sql`INSERT INTO vehicle_vault_documents
-          (plate,renavam,chassis,model,color,manufactureYear,modelYear,ownerName,category,exerciseYear,approvalStatus,sourceText)
+          (plate,renavam,chassis,model,color,manufactureYear,modelYear,ownerName,ownerCpfCnpj,category,exerciseYear,approvalStatus,sourceText)
           VALUES (${plate},${renavam},${chassis},${model},${color},
-          ${input.manufactureYear},${input.modelYear},${input.ownerName || null},${input.category ?? null},${input.exerciseYear ?? null},${input.approvalStatus ?? "pending"},${input.sourceText})`);
+          ${input.manufactureYear},${input.modelYear},${input.ownerName || null},${input.ownerCpfCnpj || null},${input.category ?? null},${input.exerciseYear ?? null},${input.approvalStatus ?? "pending"},${input.sourceText})`);
         id=Number((created[0] as any)?.insertId||0);
       }
       if(!id)throw new TRPCError({code:"INTERNAL_SERVER_ERROR",message:"Falha ao guardar veículo."});
@@ -444,11 +462,11 @@ export const vehicleVaultRouter = router({
   details: adminProcedure.input(z.object({id:z.number().int().positive()})).query(async ({input})=>{
     const db=await database();
     const doc=rows(await db.execute(sql`SELECT id,plate,renavam,chassis,model,color,
-      manufactureYear,modelYear,ownerName,category,exerciseYear,approvalStatus,sourceText,inactive,createdAt,updatedAt
+      manufactureYear,modelYear,ownerName,ownerCpfCnpj,category,exerciseYear,approvalStatus,sourceText,inactive,createdAt,updatedAt
       FROM vehicle_vault_documents WHERE id=${input.id} LIMIT 1`))[0];
     if(!doc)throw new TRPCError({code:"NOT_FOUND",message:"Veículo não encontrado."});
     const [linked,history,pdfs]=await Promise.all([
-      db.execute(sql`SELECT l.id,l.customerId,l.linkedAt,l.unlinkedAt,c.name,c.phone,c.customerNumber,c.cpf
+      db.execute(sql`SELECT l.id,l.customerId,l.linkedAt,l.unlinkedAt,c.name,c.phone,c.customerNumber,c.cpf,c.profilePhotoUrl
         FROM vehicle_vault_clients l LEFT JOIN customers c ON c.id=l.customerId
         WHERE l.vehicleId=${input.id} ORDER BY (l.unlinkedAt IS NULL) DESC,l.linkedAt DESC`),
       db.execute(sql`SELECT h.id,h.event,h.happenedAt,h.customerId,c.name customerName
@@ -469,10 +487,10 @@ export const vehicleVaultRouter = router({
       const numbered=raw.match(/^[*#]\s*(\d{1,9})$/);
       const q="%"+raw+"%";
       const found=numbered
-        ? await db.execute(sql`SELECT id,customerNumber,name,phone,cpf
+        ? await db.execute(sql`SELECT id,customerNumber,name,phone,cpf,profilePhotoUrl
             FROM customers WHERE deletedAt IS NULL AND customerNumber=${Number(numbered[1])}
             ORDER BY name LIMIT 25`)
-        : await db.execute(sql`SELECT id,customerNumber,name,phone,cpf
+        : await db.execute(sql`SELECT id,customerNumber,name,phone,cpf,profilePhotoUrl
             FROM customers WHERE deletedAt IS NULL AND
             (name LIKE ${q} OR phone LIKE ${q} OR cpf LIKE ${q} OR CAST(customerNumber AS CHAR) LIKE ${q})
             ORDER BY name LIMIT 25`);
