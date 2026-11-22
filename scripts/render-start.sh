@@ -68,6 +68,10 @@ run_boot_step "faq-guidelines-20261020" pnpm exec tsx scripts/apply-faq-guidelin
 run_boot_step "db-migrate-third-party-phone-20261020" pnpm exec tsx scripts/apply-third-party-phone-migration-20261020.ts
 run_boot_step "coupon-backfill-order-2080000-20261020" pnpm exec tsx scripts/backfill-order-2080000-coupon-20261020.ts
 
+# ColombiaBot: apenas duas tabelas novas, verificadas em MySQL isolado.
+# Nunca alterar tabelas de pedidos existentes nem executar migrações fora deste módulo.
+run_boot_step "db-migrate-colombiabot" pnpm exec tsx scripts/apply-colombiabot-reliability-migration.ts
+
 echo "[BOOT-DIAG] START server timestamp=$(date -u +%Y-%m-%dT%H:%M:%SZ)"
 echo "Iniciando servidor..."
 exec node dist/index.js
