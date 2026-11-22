@@ -5,14 +5,11 @@ import { BookOpenCheck, CheckCircle2, Image as ImageIcon, ShieldCheck } from "lu
 export default function DeliveredOrderGuidePage() {
   const [, params] = useRoute("/pedido-entregue/:token");
   const token = params?.token || "";
-  const isLegacyToken = /^[a-f0-9]{48}$/.test(token);
-  const globalQuery = trpc.deliveredOrderGuide.getPublicGlobal.useQuery(undefined, { refetchOnWindowFocus: true });
-  // Links por token compartilhados antes desta atualização também continuam abrindo.
-  const legacyQuery = trpc.deliveredOrderGuide.getPublic.useQuery(
-    { token }, { enabled: isLegacyToken && globalQuery.data?.found !== true, refetchOnWindowFocus: true }
+  const query = trpc.deliveredOrderGuide.getPublic.useQuery(
+    { token }, { enabled: /^[a-f0-9]{48}$/.test(token), refetchOnWindowFocus: true }
   );
-  const guide = globalQuery.data?.found ? globalQuery.data : legacyQuery.data?.found ? legacyQuery.data : null;
-  const isLoading = globalQuery.isLoading || (isLegacyToken && !globalQuery.data?.found && legacyQuery.isLoading);
+  const guide = query.data?.found ? query.data : null;
+  const isLoading = query.isLoading;
   return (
     <main className="min-h-screen bg-[#030b11] px-3 py-6 text-white sm:px-5">
       <div className="mx-auto max-w-2xl space-y-4">
