@@ -57,6 +57,7 @@ jobs:
         run: >-
           pnpm exec vitest run
           server/vehicleVaultOwner.test.ts
+          server/vehicleVaultOwnerIdentity.test.ts
           server/vehicleVaultOwnerPdf.test.ts
           server/vehicleVaultOwnerMysql.test.ts
           server/vehicleVaultClassification.test.ts
