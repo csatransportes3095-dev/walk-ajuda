@@ -22,7 +22,8 @@ describe("foto principal do cliente no pos-pedido", () => {
     expect(serverIndex).toContain('app.get("/link/foto-cliente"');
     expect(serverIndex).toContain('app.get("/link/foto-cliente-img"');
     expect(serverIndex).toContain('property="og:image"');
-    expect(serverIndex).toContain('hostname !== "midia.h2colombiano.com"');
+    expect(serverIndex).toContain("parseColombiaBotPhotoSource(req.query.src)");
+    expect(serverIndex).toContain("loadColombiaBotPhotoFromR2(sourceUrl)");
   });
 
   it("proxy da imagem entrega content type e content length", () => {

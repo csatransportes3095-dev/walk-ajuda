@@ -39,6 +39,7 @@ import { sendMail } from "./mailer";
 import { ensureCustomerIdentityInfrastructure, reconcileLegacyLoanPermissions } from "../customerAccess";
 import { getSharePreviewProfile, sharePreviewProxyPath, type SharePreviewProfileId } from "../sharePreviewProfiles";
 import { publicSiteUrl } from "../../shared/publicLinks";
+import { parseColombiaBotPhotoSource, loadColombiaBotPhotoFromR2 } from "../colombiaBotCustomerPhotoPreview";
 import { bootstrapCardInvoices } from "../cardsBilling";
 import { getBackupDownload, getBackupDownloadName } from "../routers/backup";
 import { logProcessDiagnostic, reconcileBackupsAfterRestart } from "../backupService";
@@ -230,20 +231,33 @@ async function getCustomerPhotoPreview(sourceUrl: URL) {
   const abort = new AbortController();
   const timeout = setTimeout(() => abort.abort(), 8_000);
   try {
-    const upstream = await fetch(key, { redirect: "follow", signal: abort.signal });
-    if (!upstream.ok) return null;
-
-    const contentType = upstream.headers.get("content-type") || "image/jpeg";
-    if (!contentType.toLowerCase().startsWith("image/")) return null;
-
-    const declaredLength = Number(upstream.headers.get("content-length") || "0");
-    const maxPreviewBytes = 5 * 1024 * 1024;
-    if (declaredLength > maxPreviewBytes) return null;
-
-    const buffer = Buffer.from(await upstream.arrayBuffer());
-    if (buffer.length === 0 || buffer.length > maxPreviewBytes) return null;
-
-    const entry = { buffer, contentType, fetchedAt: Date.now() };
+    let preview: { buffer: Buffer; contentType: string } | null = null;
+    try {
+      const upstream = await fetch(key, { redirect: "follow", signal: abort.signal });
+      if (upstream.ok) {
+        const contentType = upstream.headers.get("content-type") || "image/jpeg";
+        const declaredLength = Number(upstream.headers.get("content-length") || "0");
+        const maxPreviewBytes = 5 * 1024 * 1024;
+        if (contentType.toLowerCase().startsWith("image/") &&
+            declaredLength <= maxPreviewBytes) {
+          const buffer = Buffer.from(await upstream.arrayBuffer());
+          if (buffer.length > 0 && buffer.length <= maxPreviewBytes) {
+            preview = { buffer, contentType };
+          }
+        }
+      }
+    } catch {
+      // Se o endereço público não responder, tentar buscar o objeto no armazenamento.
+    }
+    if (!preview) {
+      try {
+        preview = await loadColombiaBotPhotoFromR2(sourceUrl);
+      } catch {
+        return null;
+      }
+    }
+    if (!preview) return null;
+    const entry = { ...preview, fetchedAt: Date.now() };
     customerPhotoPreviewCache.set(key, entry);
     trimCustomerPhotoPreviewCache();
     return entry;
@@ -503,21 +517,8 @@ async function startServer() {
   // Preview público da foto do cadastro para WhatsApp.
   // A URL original nunca é exposta em metadados sem validação e passa por proxy do domínio H2.
   app.get("/link/foto-cliente", async (req, res) => {
-    const rawSrc = String(req.query.src || "").trim();
-    if (!rawSrc) { res.status(400).end(); return; }
-
-    let sourceUrl: URL;
-    try {
-      sourceUrl = new URL(rawSrc);
-    } catch {
-      res.status(400).end();
-      return;
-    }
-
-    if (sourceUrl.protocol !== "https:" || sourceUrl.hostname !== "midia.h2colombiano.com") {
-      res.status(400).end();
-      return;
-    }
+    const sourceUrl = parseColombiaBotPhotoSource(req.query.src);
+    if (!sourceUrl) { res.status(400).end(); return; }
 
     const canonicalUrl = publicSiteUrl(`/link/foto-cliente?src=${encodeURIComponent(sourceUrl.toString())}`);
     const imageProxyUrl = publicSiteUrl(`/link/foto-cliente-img?src=${encodeURIComponent(sourceUrl.toString())}`);
@@ -530,21 +531,8 @@ async function startServer() {
   });
 
   app.get("/link/foto-cliente-img", async (req, res) => {
-    const rawSrc = String(req.query.src || "").trim();
-    if (!rawSrc) { res.status(400).end(); return; }
-
-    let sourceUrl: URL;
-    try {
-      sourceUrl = new URL(rawSrc);
-    } catch {
-      res.status(400).end();
-      return;
-    }
-
-    if (sourceUrl.protocol !== "https:" || sourceUrl.hostname !== "midia.h2colombiano.com") {
-      res.status(400).end();
-      return;
-    }
+    const sourceUrl = parseColombiaBotPhotoSource(req.query.src);
+    if (!sourceUrl) { res.status(400).end(); return; }
 
     try {
       const image = await getCustomerPhotoPreview(sourceUrl);
