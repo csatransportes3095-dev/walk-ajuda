@@ -1,7 +1,10 @@
 import { randomBytes } from "crypto";
 import { sql } from "drizzle-orm";
 import { z } from "zod";
-import { getDb } from "../db";
+import { getDb, getSetting, upsertSetting } from "../db";
+import { requireCustomerSession } from "../customerSession";
+import { sameDeliveredGuideCustomerPhone } from "../deliveredOrderGuidePhone";
+import { resolveDeliveredGuideVideo } from "../../client/src/lib/deliveredGuideVideo";
 import { adminProcedure, publicProcedure, router } from "../_core/trpc";
 import { TRPCError } from "@trpc/server";
 
@@ -163,6 +166,74 @@ function allowedValue(question: Question, value: string) {
   if (question.type === "thumbs") return value === "up" || value === "down";
   if (question.type === "mood") return value === "happy" || value === "neutral" || value === "sad";
   return value.length <= 2000;
+}
+
+
+// Orientações globais da CONFIRMAÇÃO DO PEDIDO, independentes do Pedido Entregue.
+// Perguntas e respostas históricas permanecem armazenadas.
+const CONFIRMATION_GUIDE_SETTING = "order_confirmation_guide_global_v1";
+const confirmationGuideBlockSchema = z.object({
+  id: z.string().min(1).max(80),
+  title: z.string().trim().max(160),
+  text: z.string().trim().max(4000),
+  imageUrl: z.string().trim().max(2048),
+  mediaType: z.enum(["image", "video"]).default("image"),
+  videoUrl: z.string().trim().max(2048).default(""),
+}).superRefine((block, ctx) => {
+  if (!block.title && !block.text && !(block.mediaType === "video" ? block.videoUrl : block.imageUrl)) {
+    ctx.addIssue({ code: "custom", message: "Adicione texto, foto ou vídeo ao bloco." });
+  }
+  if (block.mediaType === "video" && !resolveDeliveredGuideVideo(block.videoUrl)) {
+    ctx.addIssue({ code: "custom", path: ["videoUrl"], message: "Informe URL válida do H2, YouTube, Vimeo, Drive ou MP4/WebM HTTPS." });
+  }
+});
+function isApprovedConfirmationImage(value: string): boolean {
+  if (!value) return true;
+  try {
+    const url = new URL(value);
+    if (url.protocol !== "https:" || url.username || url.password || url.port || url.hash) return false;
+    const hosts = new Set(["midia.h2colombiano.com"]);
+    if (process.env.R2_PUBLIC_URL) {
+      try {
+        const trusted = new URL(process.env.R2_PUBLIC_URL);
+        if (trusted.protocol === "https:") hosts.add(trusted.hostname);
+      } catch { /* host inválido não é permitido */ }
+    }
+    return hosts.has(url.hostname) && url.pathname.startsWith("/") && !url.pathname.includes("..");
+  } catch { return false; }
+}
+const confirmationGuideInputSchema = z.object({
+  title: z.string().trim().min(3).max(140),
+  intro: z.string().trim().max(4000),
+  blocks: z.array(confirmationGuideBlockSchema).min(1).max(24),
+}).superRefine((guide, ctx) => {
+  guide.blocks.forEach((block, index) => {
+    if (block.mediaType !== "video" && block.imageUrl && !isApprovedConfirmationImage(block.imageUrl)) {
+      ctx.addIssue({ code: "custom", path: ["blocks", index, "imageUrl"], message: "Imagem fora do armazenamento H2 autorizado." });
+    }
+  });
+});
+const confirmationGuideStoredSchema = confirmationGuideInputSchema.safeExtend({
+  status: z.enum(["draft", "published"]),
+  updatedAt: z.string().datetime(),
+});
+type ConfirmationGuide = z.infer<typeof confirmationGuideStoredSchema>;
+
+async function getConfirmationGlobalGuide(): Promise<ConfirmationGuide | null> {
+  const raw = await getSetting(CONFIRMATION_GUIDE_SETTING);
+  if (!raw) return null;
+  try {
+    const parsed = confirmationGuideStoredSchema.safeParse(JSON.parse(raw));
+    return parsed.success ? parsed.data : null;
+  } catch { return null; }
+}
+async function saveConfirmationGlobalGuide(value: ConfirmationGuide): Promise<ConfirmationGuide> {
+  const serialized = JSON.stringify(value);
+  if (Buffer.byteLength(serialized, "utf8") > 60_000) {
+    throw new TRPCError({ code: "BAD_REQUEST", message: "Orientações globais excedem 60 KB. Divida os textos em blocos menores." });
+  }
+  await upsertSetting(CONFIRMATION_GUIDE_SETTING, serialized);
+  return value;
 }
 
 export const orderConfirmationRouter = router({
