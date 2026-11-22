@@ -313,7 +313,7 @@ export default function Home() {
   }, [globalPromotion?.active, globalPromotion?.schedule]);
   const sitePromoActive = globalPromotionIsActive(globalPromotion, promotionNowMs);
   const sitePromoOverrides = globalPromotionOverridesIndividual(globalPromotion, promotionNowMs);
-  const botEnabled = settings?.bot_assistant_enabled !== '0';
+  const botEnabled = Boolean(settings && settings.bot_assistant_enabled !== '0');
   const { data: activePix } = trpc.pix.getActive.useQuery();
   const { data: faqData } = trpc.faq.getPublic.useQuery();
 
@@ -467,11 +467,11 @@ export default function Home() {
   // Abrir bot automaticamente quando rota é /bot e products já carregou
   const [botAutoOpened, setBotAutoOpened] = useState(false);
   useEffect(() => {
-    if (matchBot && products && products.length > 0 && !botAutoOpened) {
+    if (matchBot && botEnabled && products && products.length > 0 && !botAutoOpened) {
       setBotAutoOpened(true);
       setShowColombiaBot(true);
     }
-  }, [matchBot, products, botAutoOpened]);
+  }, [matchBot, botEnabled, products, botAutoOpened]);
 
   useEffect(() => {
     if (adData?.campaign) {
@@ -6044,8 +6044,18 @@ export default function Home() {
 
       {/* Botão WhatsApp gerenciado globalmente via WhatsAppFloat (App.tsx) — apenas na tela inicial */}
 
+      {/* O link direto também deve respeitar a ativação no ADM. */}
+      {matchBot && settings && !botEnabled && (
+        <div role="status" className="fixed inset-0 z-[9990] flex items-center justify-center bg-zinc-950 p-5 text-white">
+          <div className="w-full max-w-md space-y-4 rounded-2xl border border-cyan-400/30 bg-zinc-900 p-6 text-center">
+            <h2 className="text-xl font-bold">Assistente temporariamente indisponível</h2>
+            <p className="text-sm text-slate-300">O assistente de pedidos está desativado pelo administrador. Você pode continuar pelo atendimento normal.</p>
+            <a href="/pedidos" className="block rounded-xl bg-cyan-500 px-4 py-3 font-bold text-zinc-950">Voltar aos pedidos</a>
+          </div>
+        </div>
+      )}
       {/* Colombia Bot — modal de tela cheia */}
-      {showColombiaBot && (
+      {botEnabled && showColombiaBot && (
         <ColombiaBot
           products={(products || []) as any}
           botName={settings?.bot_assistant_name || undefined}
