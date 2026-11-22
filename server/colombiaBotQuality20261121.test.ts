@@ -14,7 +14,8 @@ describe("ColombiaBot: checkout, ADM e experiencia segura", () => {
     expect(getBotCheckoutTotals("R$ 450,00", null).discount).toBe("R$ 0,00");
     expect(bot).toContain("O servidor recalcula o cupom uma única vez.");
     expect(bot).toContain("originalPrice: getModelPrice(");
-    expect(backend).toContain("const officialBase = parseMoney(officialCatalogPrice);");
+    expect(backend).toContain("if (input.botSubmissionKey) {");
+    expect(backend).toContain("officialBase = parseMoney(botCatalogPrice);");
   });
 
   it("bloqueia somente resposta configurada da pergunta exata", () => {
