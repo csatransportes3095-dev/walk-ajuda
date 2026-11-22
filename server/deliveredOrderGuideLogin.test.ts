@@ -25,8 +25,9 @@ describe("Pedido Entregue: exigir login e retornar ao link correto", () => {
     expect(router).not.toContain("addOrderStatus");
   });
   it("envia token da sessao validada sem mudar editor global ou link individual", () => {
-    expect(page).toContain("getPublic.useQuery(");
-    expect(page).toContain("{ token, customerSessionToken }");
+    expect(page).toContain("getPublic.useMutation(");
+    expect(page).toContain("guideRequest.mutate({ token, customerSessionToken })");
+    expect(router).toContain(".mutation(async ({ input }) => {");
     expect(page).toContain('localStorage.getItem("cp_token")');
     expect(router).toContain("saveGlobal: adminProcedure");
     expect(router).toContain("createLinkForOrder: adminProcedure");
