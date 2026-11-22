@@ -107,6 +107,7 @@ import ClientReferralTree from "./pages/ClientReferralTree";
 import SchedulePage from "./pages/SchedulePage";
 import PhotoConfirmationPage from "./pages/PhotoConfirmationPage";
 import OrderConfirmationPage from "./pages/OrderConfirmationPage";
+import DeliveredOrderGuidePage from "./pages/DeliveredOrderGuidePage";
 import PublicQuotePage from "./pages/PublicQuotePage";
 import PublicReceiptPage from "./pages/PublicReceiptPage";
 import { SpreadsheetPage } from "./pages/SpreadsheetPage";
@@ -410,6 +411,7 @@ function Router() {
       <Route path={"/agendar/:token"} component={SchedulePage} />
       <Route path={"/confirmacao-foto/:token"} component={PhotoConfirmationPage} />
       <Route path={"/confirmacao-pedido/:token"} component={OrderConfirmationPage} />
+      <Route path={"/pedido-entregue/:token"} component={DeliveredOrderGuidePage} />
       <Route path={"/orcamento/:publicToken"} component={PublicQuotePage} />
       <Route path={"/recibo/:publicToken"} component={PublicReceiptPage} />
       <Route path={"/locadora"} component={LocadoraPortal} />
@@ -465,7 +467,8 @@ function AppContent() {
   const isAgendarRoute = location.startsWith("/agendar");
   const isPhotoConfirmationRoute = location === "/confirmacao-foto" || location.startsWith("/confirmacao-foto/");
   const isOrderConfirmationRoute = location === "/confirmacao-pedido" || location.startsWith("/confirmacao-pedido/");
-  const isDirectPublicTokenRoute = isAgendarRoute || isPhotoConfirmationRoute || isOrderConfirmationRoute;
+  const isDeliveredGuideRoute = location === "/pedido-entregue" || location.startsWith("/pedido-entregue/");
+  const isDirectPublicTokenRoute = isAgendarRoute || isPhotoConfirmationRoute || isOrderConfirmationRoute || isDeliveredGuideRoute;
   const isVideoRoute = location.startsWith("/video") || location === "/tutorial";
   const isGastosRoute = location.toLowerCase() === "/gastos";
   const isEmprestimoRoute = location.toLowerCase() === "/emprestimo";
