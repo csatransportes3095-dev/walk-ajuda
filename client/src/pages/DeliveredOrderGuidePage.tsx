@@ -9,6 +9,7 @@ export default function DeliveredOrderGuidePage() {
     { token }, { enabled: /^[a-f0-9]{48}$/.test(token), refetchOnWindowFocus: true }
   );
   const guide = query.data?.found ? query.data : null;
+  const isLoading = query.isLoading;
   return (
     <main className="min-h-screen bg-[#030b11] px-3 py-6 text-white sm:px-5">
       <div className="mx-auto max-w-2xl space-y-4">
@@ -22,8 +23,8 @@ export default function DeliveredOrderGuidePage() {
           {guide?.customerName && <p className="mt-2 text-sm text-slate-300">{guide.customerName}</p>}
           {guide?.orderNumber && <p className="text-xs text-cyan-200">Pedido #{guide.orderNumber}</p>}
         </header>
-        {query.isLoading && <div role="status" className="rounded-xl border border-cyan-500/20 bg-slate-900/80 p-5 text-center text-sm">Carregando orientações...</div>}
-        {!query.isLoading && !guide && (
+        {isLoading && <div role="status" className="rounded-xl border border-cyan-500/20 bg-slate-900/80 p-5 text-center text-sm">Carregando orientações...</div>}
+        {!isLoading && !guide && (
           <section role="status" className="rounded-xl border border-amber-400/25 bg-slate-900 p-6 text-center text-sm text-amber-200">
             Este link não está disponível. Solicite à equipe H2 Colombiano o link atualizado.
           </section>

@@ -2,7 +2,7 @@ import { randomBytes } from "crypto";
 import { sql } from "drizzle-orm";
 import { z } from "zod";
 import { TRPCError } from "@trpc/server";
-import { getDb } from "../db";
+import { getDb, getSetting, upsertSetting } from "../db";
 import { adminProcedure, publicProcedure, router } from "../_core/trpc";
 
 // Orientações de pedido entregue: não são perguntas e não alteram status.
@@ -121,10 +121,126 @@ async function getByToken(token: string) {
   `);
   return normalizeRow((Array.isArray(result) ? result[0] : [])?.[0]);
 }
+
+/**
+ * Cadastro global: um só conjunto de orientações, fotos e prints para todos
+ * os pedidos. Registros antigos com token são mantidos para não quebrar links enviados.
+ */
+const GLOBAL_GUIDE_KEY = "delivered_order_guide_global_v1";
+const globalGuideInputSchema = z.object({
+  title: z.string().trim().min(3).max(140),
+  intro: z.string().trim().max(4000),
+  blocks: blocksSchema,
+}).superRefine((input, ctx) => {
+  input.blocks.forEach((block, index) => {
+    if (block.imageUrl && !allowedImageUrl(block.imageUrl)) {
+      ctx.addIssue({ code: "custom", path: ["blocks", index, "imageUrl"], message: "Imagem fora do armazenamento H2 autorizado." });
+    }
+  });
+});
+const globalGuideStoredSchema = globalGuideInputSchema.safeExtend({
+  status: z.enum(["draft", "published"]),
+  updatedAt: z.string().datetime(),
+});
+type GlobalGuide = z.infer<typeof globalGuideStoredSchema>;
+
+async function getGlobalGuide(): Promise<GlobalGuide | null> {
+  const json = await getSetting(GLOBAL_GUIDE_KEY);
+  if (!json) return null;
+  try {
+    const parsed = globalGuideStoredSchema.safeParse(JSON.parse(json));
+    return parsed.success ? parsed.data : null;
+  } catch {
+    return null;
+  }
+}
+async function saveGlobalGuide(value: GlobalGuide): Promise<GlobalGuide> {
+  const payload = JSON.stringify(value);
+  // siteSettings.settingValue usa TEXT (limite ~64 KiB); rejeitar conteúdos
+  // maiores com erro claro sem interferir em outras tabelas ou módulos.
+  if (Buffer.byteLength(payload, "utf8") > 60_000) {
+    throw new TRPCError({ code: "BAD_REQUEST", message: "Orientações globais excedem 60 KB. Divida os textos em blocos menores." });
+  }
+  await upsertSetting(GLOBAL_GUIDE_KEY, payload);
+  return value;
+}
+function publicGlobalGuide(guide: GlobalGuide) {
+  return { found: true as const, title: guide.title, intro: guide.intro, blocks: guide.blocks };
+}
+
 export const deliveredOrderGuideRouter = router({
+  // Todos os cards do ADM abrem exatamente o mesmo editor.
+  getGlobal: adminProcedure.query(async () => getGlobalGuide()),
+
+  saveGlobal: adminProcedure
+    .input(globalGuideInputSchema)
+    .mutation(async ({ input }) => {
+      const existing = await getGlobalGuide();
+      return saveGlobalGuide({
+        ...input,
+        status: existing?.status || "draft",
+        updatedAt: new Date().toISOString(),
+      });
+    }),
+
+  publishGlobal: adminProcedure.mutation(async () => {
+    const existing = await getGlobalGuide();
+    if (!existing?.blocks.length) {
+      throw new TRPCError({ code: "BAD_REQUEST", message: "Cadastre e salve as orientações globais antes de publicar." });
+    }
+    return saveGlobalGuide({ ...existing, status: "published", updatedAt: new Date().toISOString() });
+  }),
+
+  unpublishGlobal: adminProcedure.mutation(async () => {
+    const existing = await getGlobalGuide();
+    if (!existing) return null;
+    return saveGlobalGuide({ ...existing, status: "draft", updatedAt: new Date().toISOString() });
+  }),
+
+
   getForOrder: adminProcedure
     .input(orderKeySchema)
     .query(async ({ input }) => getByOrder(input.registrationId, input.subOrderIndex)),
+
+  // O mesmo formulário global atende a todos, mas cada pedido tem seu próprio token.
+  // Reutiliza o token quando o ADM reabre o card, sem gerar um link diferente.
+  createLinkForOrder: adminProcedure
+    .input(orderKeySchema.extend({
+      customerPhone: z.string().max(32).default(""),
+      customerName: z.string().max(128).nullable().optional(),
+      orderNumber: z.number().int().positive().nullable().optional(),
+    }))
+    .mutation(async ({ input }) => {
+      const global = await getGlobalGuide();
+      if (global?.status !== "published") {
+        throw new TRPCError({ code: "BAD_REQUEST", message: "Publique primeiro o formulário global de orientações." });
+      }
+      await ensureInfrastructure();
+      const db = await getDb() as any;
+      const existing = await getByOrder(input.registrationId, input.subOrderIndex);
+      if (existing) {
+        // Preserva o endereço já compartilhado para este mesmo pedido.
+        await db.execute(sql`
+          UPDATE deliveredOrderGuides
+          SET status='published',
+              customerPhone=${input.customerPhone},
+              customerName=${input.customerName ?? null},
+              orderNumber=${input.orderNumber ?? null}
+          WHERE id=${existing.id}
+        `);
+      } else {
+        const token = randomBytes(24).toString("hex");
+        await db.execute(sql`
+          INSERT INTO deliveredOrderGuides
+            (token,registrationId,subOrderIndex,customerPhone,customerName,orderNumber,title,intro,blocks,status)
+          VALUES
+            (${token},${input.registrationId},${input.subOrderIndex},${input.customerPhone},
+             ${input.customerName ?? null},${input.orderNumber ?? null},${"PEDIDO ENTREGUE"},
+             ${""},${"[]"},'published')
+        `);
+      }
+      return getByOrder(input.registrationId, input.subOrderIndex);
+    }),
 
   saveForOrder: adminProcedure
     .input(saveSchema)
@@ -182,9 +298,15 @@ export const deliveredOrderGuideRouter = router({
     .query(async ({ input }) => {
       const record = await getByToken(input.token);
       if (!record) return { found: false as const };
+      // O token sempre identifica um único pedido. O conteúdo é compartilhado.
+      const global = await getGlobalGuide();
+      if (global && global.status !== "published") return { found: false as const };
       const db = await getDb() as any;
       if (!record.openedAt) {
         await db.execute(sql`UPDATE deliveredOrderGuides SET openedAt=NOW() WHERE id=${record.id}`);
+      }
+      if (global) {
+        return { ...publicGlobalGuide(global), customerName: record.customerName, orderNumber: record.orderNumber };
       }
       // A página do cliente não recebe telefone nem dados internos do ADM.
       return {

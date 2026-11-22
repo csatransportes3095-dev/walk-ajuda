@@ -9,6 +9,31 @@ const app = readFileSync("client/src/App.tsx", "utf8");
 const api = readFileSync("server/routers.ts", "utf8");
 
 describe("Pedido Entregue: orientações visuais por pedido", () => {
+  it("cadastra o texto e as imagens uma única vez, mas cria token separado por pedido", () => {
+    expect(router).toContain("getGlobal: adminProcedure");
+    expect(router).toContain("saveGlobal: adminProcedure");
+    expect(router).toContain("publishGlobal: adminProcedure");
+    expect(router).toContain("createLinkForOrder: adminProcedure");
+    expect(router).toContain("getByOrder(input.registrationId, input.subOrderIndex)");
+    expect(router).toContain("randomBytes(24)");
+    expect(editor).toContain("GERAR LINK INDIVIDUAL DESTE PEDIDO");
+    expect(editor).toContain("getForOrder.useQuery(orderKey");
+    expect(editor).toContain('publicSiteUrl("/pedido-entregue/" + orderRecord.token)');
+    expect(editor).not.toContain('publicSiteUrl("/pedido-entregue")');
+  });
+  it("abre apenas por token individual e usa o conteúdo global publicado", () => {
+    expect(page).toContain('useRoute("/pedido-entregue/:token")');
+    expect(page).toContain("getPublic.useQuery(");
+    expect(page).not.toContain("getPublicGlobal");
+    expect(router).toContain("const record = await getByToken(input.token)");
+    expect(router).toContain("publicGlobalGuide(global)");
+    expect(router).not.toContain("getPublicGlobal:");
+  });
+  it("não cria perguntas nem altera status do pedido", () => {
+    expect(router).not.toContain("addOrderStatus");
+    expect(page).not.toContain("saveAnswer");
+  });
+
   it("insere terceiro botão ao lado das confirmações nas duas visões do ADM", () => {
     expect(admin.match(/<OrderDeliveredGuide/g)?.length).toBe(2);
     expect(admin).toContain('import OrderPhotoConfirmation');

@@ -17,8 +17,9 @@ export default function OrderDeliveredGuide({ registrationId, subOrderIndex, cus
   orderNumber?: number | null;
 }) {
   const utils = trpc.useUtils();
-  const key = { registrationId, subOrderIndex };
-  const query = trpc.deliveredOrderGuide.getForOrder.useQuery(key, { staleTime: 0, refetchOnWindowFocus: true });
+  const query = trpc.deliveredOrderGuide.getGlobal.useQuery(undefined, { staleTime: 0, refetchOnWindowFocus: true });
+  const orderKey = { registrationId, subOrderIndex };
+  const orderQuery = trpc.deliveredOrderGuide.getForOrder.useQuery(orderKey, { staleTime: 0, refetchOnWindowFocus: true });
   const [open, setOpen] = useState(false);
   const [title, setTitle] = useState("ATENÇÃO — PEDIDO ENTREGUE");
   const [intro, setIntro] = useState("Confira com atenção as orientações, imagens e prints enviados pela equipe.");
@@ -27,27 +28,34 @@ export default function OrderDeliveredGuide({ registrationId, subOrderIndex, cus
   const [uploading, setUploading] = useState<string | null>(null);
   const record = query.data;
   const published = record?.status === "published";
-  const link = published && record?.token ? publicSiteUrl("/pedido-entregue/" + record.token) : "";
+  const orderRecord = orderQuery.data;
+  const link = published && orderRecord?.status === "published" && orderRecord?.token
+    ? publicSiteUrl("/pedido-entregue/" + orderRecord.token) : "";
 
   useEffect(() => {
     if (!record || dirty) return;
     setTitle(record.title);
     setIntro(record.intro);
     setBlocks(record.blocks?.length ? record.blocks as Block[] : [newBlock()]);
-  }, [record?.id, record?.updatedAt, dirty]);
+  }, [record?.updatedAt, dirty]);
   const refresh = async () => {
-    await utils.deliveredOrderGuide.getForOrder.invalidate(key);
+    await utils.deliveredOrderGuide.getGlobal.invalidate();
     await query.refetch();
+    await utils.deliveredOrderGuide.getForOrder.invalidate(orderKey);
   };
-  const save = trpc.deliveredOrderGuide.saveForOrder.useMutation({
+  const save = trpc.deliveredOrderGuide.saveGlobal.useMutation({
     onSuccess: async () => { setDirty(false); toast.success("Orientações salvas."); await refresh(); },
     onError: e => toast.error(e.message),
   });
-  const publish = trpc.deliveredOrderGuide.publish.useMutation({
+  const publish = trpc.deliveredOrderGuide.publishGlobal.useMutation({
     onSuccess: async () => { toast.success("Link publicado."); await refresh(); },
     onError: e => toast.error(e.message),
   });
-  const unpublish = trpc.deliveredOrderGuide.unpublish.useMutation({
+  const createLink = trpc.deliveredOrderGuide.createLinkForOrder.useMutation({
+    onSuccess: async () => { toast.success("Link individual deste pedido gerado."); await refresh(); },
+    onError: e => toast.error(e.message),
+  });
+  const unpublish = trpc.deliveredOrderGuide.unpublishGlobal.useMutation({
     onSuccess: async () => { toast.success("Link desativado."); await refresh(); },
     onError: e => toast.error(e.message),
   });
@@ -60,8 +68,7 @@ export default function OrderDeliveredGuide({ registrationId, subOrderIndex, cus
       .filter(b => b.title || b.text || b.imageUrl);
     if (!clean.length) { toast.error("Adicione ao menos uma orientação ou imagem."); return; }
     save.mutate({
-      ...key, customerPhone: customerPhone || "", customerName: customerName || null,
-      orderNumber: orderNumber || null, title: title.trim(), intro: intro.trim(), blocks: clean,
+      title: title.trim(), intro: intro.trim(), blocks: clean,
     });
   }
   async function uploadImage(id: string, file?: File) {
@@ -102,8 +109,8 @@ export default function OrderDeliveredGuide({ registrationId, subOrderIndex, cus
         <header className="mb-4 flex items-start justify-between gap-3 border-b border-emerald-400/20 pb-3">
           <div>
             <h2 className="flex items-center gap-2 text-lg font-black text-emerald-200"><BookOpenCheck className="h-5 w-5"/> PEDIDO ENTREGUE</h2>
-            <p className="text-xs text-slate-400">Orientações para {customerName || customerPhone} · Pedido {orderNumber || registrationId}</p>
-            <p className="mt-2 text-xs text-amber-200">Textos, fotos e prints. Sem perguntas e sem alterar o status do pedido.</p>
+            <p className="text-xs text-slate-400">Cadastro GLOBAL · Link exclusivo do pedido {orderNumber || registrationId}.</p>
+            <p className="mt-2 text-xs text-amber-200">Edite uma vez para todos os clientes. Sem perguntas e sem alterar o status do pedido.</p>
           </div>
           <button type="button" aria-label="Fechar" onClick={() => setOpen(false)} className="rounded-lg border border-white/10 p-2"><X className="h-4 w-4"/></button>
         </header>
@@ -115,7 +122,7 @@ export default function OrderDeliveredGuide({ registrationId, subOrderIndex, cus
             <textarea value={intro} rows={3} maxLength={4000} onChange={e => { setIntro(e.target.value); setDirty(true); }} className="mt-1 w-full rounded-lg border border-white/15 bg-black/30 p-3 text-sm text-white"/>
           </label>
           <div className="flex items-center justify-between gap-3">
-            <h3 className="text-sm font-black text-emerald-200">FOTOS, PRINTS E ORIENTAÇÕES</h3>
+            <h3 className="text-sm font-black text-emerald-200">FOTOS, PRINTS E ORIENTAÇÕES GLOBAIS</h3>
             <button type="button" onClick={() => { setDirty(true); setBlocks(b => [...b, newBlock()]); }} className="rounded-lg bg-emerald-500/20 px-3 py-2 text-xs font-bold text-emerald-200"><Plus className="inline h-4 w-4"/> ADICIONAR BLOCO</button>
           </div>
           {blocks.map((block, index) => (
@@ -133,18 +140,19 @@ export default function OrderDeliveredGuide({ registrationId, subOrderIndex, cus
               <input value={block.imageUrl} placeholder="Ou cole a URL da imagem H2" onChange={e => editBlock(block.id, { imageUrl: e.target.value })} className="w-full rounded-lg border border-white/10 bg-slate-950 p-2 text-xs text-slate-300"/>
             </section>
           ))}
-          {dirty && <p role="status" className="text-sm font-bold text-amber-200">Alterações não salvas. Salve antes de compartilhar.</p>}
+          {dirty && <p role="status" className="text-sm font-bold text-amber-200">Alterações globais não salvas. Salve antes de compartilhar.</p>}
           <button type="button" onClick={saveContent} disabled={save.isPending || uploading !== null} className="flex min-h-12 w-full items-center justify-center gap-2 rounded-xl bg-cyan-400 px-4 font-black text-slate-950 disabled:opacity-40">
             <Save className="h-5 w-5"/>{save.isPending ? "SALVANDO..." : "SALVAR ORIENTAÇÕES"}
           </button>
           {record && (
             <section className="space-y-3 rounded-xl border border-white/15 bg-black/20 p-3">
-              <p className="text-xs font-black">{published ? "🟢 LINK PUBLICADO" : "🟡 RASCUNHO — CLIENTE NÃO VISUALIZA"}{record.openedAt ? " · Link já aberto" : ""}</p>
-              {published && <p className="break-all text-xs text-cyan-200">{link}</p>}
-              <button type="button" disabled={dirty || publish.isPending || unpublish.isPending} onClick={() => published ? unpublish.mutate(key) : publish.mutate(key)} className="min-h-10 w-full rounded-lg border border-emerald-400/40 bg-emerald-400/15 px-3 text-sm font-bold text-emerald-200 disabled:opacity-40">
+              <p className="text-xs font-black">{published ? "🟢 FORMULÁRIO GLOBAL PUBLICADO" : "🟡 RASCUNHO GLOBAL — CLIENTE NÃO VISUALIZA"}{orderRecord?.openedAt ? " · Link deste pedido já aberto" : ""}</p>
+              {link && <p className="break-all text-xs text-cyan-200">{link}</p>}
+              <button type="button" disabled={dirty || publish.isPending || unpublish.isPending} onClick={() => published ? unpublish.mutate() : publish.mutate()} className="min-h-10 w-full rounded-lg border border-emerald-400/40 bg-emerald-400/15 px-3 text-sm font-bold text-emerald-200 disabled:opacity-40">
                 {published ? "DESATIVAR LINK" : "PUBLICAR ORIENTAÇÕES"}
               </button>
-              {published && <div className="grid grid-cols-3 gap-2">
+              {published && !link && <button type="button" disabled={dirty || createLink.isPending} onClick={() => createLink.mutate({ ...orderKey, customerPhone: customerPhone || "", customerName: customerName || null, orderNumber: orderNumber || null })} className="min-h-10 w-full rounded-lg border border-cyan-400/40 bg-cyan-400/15 px-3 text-sm font-bold text-cyan-200 disabled:opacity-40">{createLink.isPending ? "GERANDO..." : "GERAR LINK INDIVIDUAL DESTE PEDIDO"}</button>}
+              {link && <div className="grid grid-cols-3 gap-2">
                 <button type="button" disabled={dirty} onClick={() => void copyLink()} className="rounded-lg border border-cyan-400/30 p-2 text-xs font-bold text-cyan-200 disabled:opacity-40"><ClipboardCopy className="mx-auto mb-1 h-4 w-4"/>COPIAR</button>
                 <button type="button" disabled={dirty || !customerPhone} onClick={openWhatsapp} className="rounded-lg border border-emerald-400/30 p-2 text-xs font-bold text-emerald-200 disabled:opacity-40"><MessageCircle className="mx-auto mb-1 h-4 w-4"/>WHATSAPP</button>
                 <button type="button" disabled={dirty} onClick={() => window.open(link,"_blank","noopener,noreferrer")} className="rounded-lg border border-violet-400/30 p-2 text-xs font-bold text-violet-200 disabled:opacity-40"><ExternalLink className="mx-auto mb-1 h-4 w-4"/>ABRIR</button>
@@ -157,7 +165,7 @@ export default function OrderDeliveredGuide({ registrationId, subOrderIndex, cus
   ) : null;
   return <>
     <button type="button" onClick={e => { e.stopPropagation(); setOpen(true); }} className={"inline-flex min-h-8 items-center gap-1 rounded-lg border px-2.5 py-1 text-[10px] font-black sm:min-h-9 sm:text-[11px] " + (published ? "border-emerald-500/50 bg-emerald-500/20 text-emerald-200" : "border-cyan-500/40 bg-cyan-500/15 text-cyan-200")}>
-      {published ? <CheckCircle2 className="h-4 w-4"/> : <BookOpenCheck className="h-4 w-4"/>} PEDIDO ENTREGUE
+      {link ? <CheckCircle2 className="h-4 w-4"/> : <BookOpenCheck className="h-4 w-4"/>} PEDIDO ENTREGUE
     </button>
     {modal}
   </>;
