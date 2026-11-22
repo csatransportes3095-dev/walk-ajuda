@@ -237,6 +237,97 @@ async function saveConfirmationGlobalGuide(value: ConfirmationGuide): Promise<Co
 }
 
 export const orderConfirmationRouter = router({
+
+  // Editor global de confirmação; os questionários antigos continuam preservados.
+  getGlobalGuide: adminProcedure.query(async () => getConfirmationGlobalGuide()),
+
+  saveGlobalGuide: adminProcedure
+    .input(confirmationGuideInputSchema)
+    .mutation(async ({ input }) => {
+      const existing = await getConfirmationGlobalGuide();
+      return saveConfirmationGlobalGuide({
+        ...input, status: existing?.status || "draft", updatedAt: new Date().toISOString(),
+      });
+    }),
+
+  publishGlobalGuide: adminProcedure.mutation(async () => {
+    const existing = await getConfirmationGlobalGuide();
+    if (!existing?.blocks.length) {
+      throw new TRPCError({ code: "BAD_REQUEST", message: "Salve as orientações antes de publicar." });
+    }
+    return saveConfirmationGlobalGuide({ ...existing, status: "published", updatedAt: new Date().toISOString() });
+  }),
+
+  unpublishGlobalGuide: adminProcedure.mutation(async () => {
+    const existing = await getConfirmationGlobalGuide();
+    if (!existing) return null;
+    return saveConfirmationGlobalGuide({ ...existing, status: "draft", updatedAt: new Date().toISOString() });
+  }),
+
+  createGuideLinkForOrder: adminProcedure
+    .input(z.object({
+      registrationId: z.number().int().positive(),
+      subOrderIndex: z.number().int().min(0).default(0),
+      customerPhone: z.string().max(32).default(""),
+      customerName: z.string().max(128).nullable().optional(),
+      orderNumber: z.number().int().positive().nullable().optional(),
+    }))
+    .mutation(async ({ input }) => {
+      const global = await getConfirmationGlobalGuide();
+      if (global?.status !== "published") {
+        throw new TRPCError({ code: "BAD_REQUEST", message: "Publique as orientações antes de gerar o link." });
+      }
+      const current = await getByOrder(input.registrationId, input.subOrderIndex);
+      const db = await getDb() as any;
+      if (current) {
+        // Não reescrever perguntas, respostas, token ou status antigos.
+        await db.execute(sql`
+          UPDATE orderConfirmationChecklists
+          SET customerPhone=${input.customerPhone},
+              customerName=${input.customerName ?? null},
+              orderNumber=${input.orderNumber ?? null}
+          WHERE id=${current.id}
+        `);
+      } else {
+        const token = randomBytes(24).toString("hex");
+        await db.execute(sql`
+          INSERT INTO orderConfirmationChecklists
+            (token,registrationId,subOrderIndex,customerPhone,customerName,orderNumber,questions,answers,status)
+          VALUES
+            (${token},${input.registrationId},${input.subOrderIndex},${input.customerPhone},
+             ${input.customerName ?? null},${input.orderNumber ?? null},${"[]"},${"{}"},'pending')
+        `);
+      }
+      return getByOrder(input.registrationId, input.subOrderIndex);
+    }),
+
+  getPublicGuide: publicProcedure
+    .input(z.object({
+      token: z.string().regex(/^[a-f0-9]{48}$/),
+      customerSessionToken: z.string().min(32).max(256),
+    }))
+    .mutation(async ({ input }) => {
+      const session = await requireCustomerSession(input.customerSessionToken);
+      const record = await getByToken(input.token);
+      if (!record) return { found: false as const };
+      if (!sameDeliveredGuideCustomerPhone(session.phone, record.customerPhone)) {
+        throw new TRPCError({
+          code: "FORBIDDEN",
+          message: "Este link pertence ao telefone cadastrado no pedido. Entre na conta correta.",
+        });
+      }
+      const guide = await getConfirmationGlobalGuide();
+      if (guide?.status !== "published") return { found: false as const };
+      const db = await getDb() as any;
+      if (!record.openedAt) {
+        await db.execute(sql`UPDATE orderConfirmationChecklists SET openedAt=NOW() WHERE id=${record.id}`);
+      }
+      return {
+        found: true as const, title: guide.title, intro: guide.intro, blocks: guide.blocks,
+        customerName: record.customerName, orderNumber: record.orderNumber,
+      };
+    }),
+
   getForOrder: adminProcedure
     .input(z.object({ registrationId: z.number().int().positive(), subOrderIndex: z.number().int().min(0).default(0) }))
     .query(async ({ input }) => getByOrder(input.registrationId, input.subOrderIndex)),
