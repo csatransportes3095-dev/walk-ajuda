@@ -11,6 +11,7 @@ import { HomeButtonsManager } from "@/components/HomeButtonsManager";
 import { SharePreviewSettings } from "@/components/SharePreviewSettings";
 import { MaintenanceManifestSettings, type MaintenanceManifestSettingsHandle } from "@/components/MaintenanceManifestSettings";
 import { AdminCustomerSessionSettings } from "@/components/AdminCustomerSessionSettings";
+import { ColombiaBotDiagnosticsPanel } from "@/components/ColombiaBotDiagnosticsPanel";
 
 
 // Lista de fontes com estilos bem distintos
@@ -1078,6 +1079,7 @@ export default function AdminSettings() {
               <Field label="Subtítulo Botão Principal" k="bot_btn_primary_sub" form={form} onChange={updateField} placeholder="Atendimento guiado passo a passo" />
               <Field label="Texto Botão Secundário" k="bot_btn_secondary_text" form={form} onChange={updateField} placeholder="PREFIRO FAZER SOZINHO" />
               <Field label="Subtítulo Botão Secundário" k="bot_btn_secondary_sub" form={form} onChange={updateField} placeholder="Navegar pelo site manualmente" />
+              <div className="mt-5"><ColombiaBotDiagnosticsPanel /></div>
             </Section>
 
             <Section title="Rodapé da Página Inicial">
