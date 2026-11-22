@@ -17,7 +17,7 @@ export async function ensureColombiaBotReliabilitySchema(db: SqlDb): Promise<voi
         "requestKey VARCHAR(36) NOT NULL PRIMARY KEY, " +
         "fingerprint VARCHAR(64) NOT NULL, " +
         "state VARCHAR(20) NOT NULL DEFAULT 'processing', " +
-        "registrationId INT NULL, orderStatusId INT NULL, " +
+        "registrationId INT NULL, orderStatusId INT NULL, pricePaid VARCHAR(64) NULL, " +
         "createdAt TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP, " +
         "updatedAt TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP, " +
         "INDEX colombiaBotSubmissions_state_idx (state, createdAt)) ENGINE=InnoDB"
@@ -46,7 +46,7 @@ export function botSubmissionFingerprint(input: { phone: string; productId?: num
 
 export type BotSubmissionClaim =
   | { kind: "owner" }
-  | { kind: "duplicate"; registrationId: number; orderStatusId: number }
+  | { kind: "duplicate"; registrationId: number; orderStatusId: number; pricePaid: string | null }
   | { kind: "pending" }
   | { kind: "conflict" };
 
@@ -67,7 +67,7 @@ export async function claimColombiaBotSubmission(
   const header: any = Array.isArray(inserted) ? inserted[0] : inserted;
   if (Number(header?.affectedRows) === 1) return { kind: "owner" };
   if (header?.affectedRows === undefined) throw new Error("Sem confirmação do bloqueio de duplicidade");
-  const result = await db.execute(sql`SELECT fingerprint, state, registrationId, orderStatusId
+  const result = await db.execute(sql`SELECT fingerprint, state, registrationId, orderStatusId, pricePaid
     FROM colombiaBotSubmissions WHERE requestKey = ${requestKey} LIMIT 1`);
   const entry = rowsFrom(result)[0];
   if (!entry) throw new Error("Registro de duplicidade indisponível");
@@ -75,17 +75,17 @@ export async function claimColombiaBotSubmission(
   const registrationId = Number(entry.registrationId);
   const orderStatusId = Number(entry.orderStatusId);
   if (entry.state === "completed" && registrationId > 0 && orderStatusId > 0) {
-    return { kind: "duplicate", registrationId, orderStatusId };
+    return { kind: "duplicate", registrationId, orderStatusId, pricePaid: entry.pricePaid ? String(entry.pricePaid) : null };
   }
   // Uma tentativa sem confirmação NÃO pode criar outro pedido automaticamente.
   return { kind: "pending" };
 }
 
 export async function confirmColombiaBotSubmission(
-  db: SqlDb, requestKey: string, order: { registrationId: number; orderStatusId: number }
+  db: SqlDb, requestKey: string, order: { registrationId: number; orderStatusId: number; pricePaid?: string | null }
 ): Promise<void> {
   const result = await db.execute(sql`UPDATE colombiaBotSubmissions
-    SET state = 'completed', registrationId = ${order.registrationId}, orderStatusId = ${order.orderStatusId}
+    SET state = 'completed', registrationId = ${order.registrationId}, orderStatusId = ${order.orderStatusId}, pricePaid = ${order.pricePaid || null}
     WHERE requestKey = ${requestKey} AND state = 'processing'`);
   const header: any = Array.isArray(result) ? result[0] : result;
   if (Number(header?.affectedRows) !== 1) throw new Error("Não foi possível confirmar chave idempotente");
@@ -145,6 +145,6 @@ export async function getColombiaBotDiagnostics(db: SqlDb) {
       registrationId: Number(item.registrationId || 0) || null,
       createdAt: new Date(item.createdAt).toISOString(),
     })),
-    retentionDays: 7,
+    windowDays: 7,
   };
 }
