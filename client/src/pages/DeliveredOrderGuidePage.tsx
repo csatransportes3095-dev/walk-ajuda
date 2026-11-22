@@ -20,6 +20,8 @@ export default function DeliveredOrderGuidePage() {
           <div className="mb-2 h-1 rounded-full bg-gradient-to-r from-cyan-400 via-blue-500 to-emerald-500"/>
           <p className="text-xs font-bold uppercase tracking-widest text-emerald-300">Orientações do cliente</p>
           <h1 className="mt-2 text-2xl font-black text-white sm:text-3xl">{guide?.title || "PEDIDO ENTREGUE"}</h1>
+          {guide?.customerName && <p className="mt-2 text-sm text-slate-300">{guide.customerName}</p>}
+          {guide?.orderNumber && <p className="text-xs text-cyan-200">Pedido #{guide.orderNumber}</p>}
         </header>
         {isLoading && <div role="status" className="rounded-xl border border-cyan-500/20 bg-slate-900/80 p-5 text-center text-sm">Carregando orientações...</div>}
         {!isLoading && !guide && (
