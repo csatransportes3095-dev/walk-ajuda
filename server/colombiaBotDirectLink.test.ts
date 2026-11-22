@@ -16,7 +16,7 @@ describe("Link direto do ColombiaBot com login H2 preservado",()=>{
     expect(app).toContain('<Route path={"/bot"} component={Home} />');
     expect(app).toContain('<UnifiedCustomerGate>');
     expect(home).toContain('directEntry={matchBot}');
-    expect(home).toContain('if (matchBot && products && products.length > 0 && !botAutoOpened)');
+    expect(home).toContain('if (matchBot && botEnabled && products && products.length > 0 && !botAutoOpened)');
   });
   it("inicia o serviço sem perguntar entre bot e site somente no link direto",()=>{
     expect(bot).toContain("if (!directEntry)");
