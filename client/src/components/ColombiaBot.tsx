@@ -110,6 +110,7 @@ export function ColombiaBot({ products, onStartNormal, onSelectProduct, onSelect
   const [blockedChoice, setBlockedChoice] = useState<BotBlockedChoice | null>(null);
   const [sendError, setSendError] = useState("");
   const [currentPhase, setCurrentPhase] = useState("Serviço");
+  const [reviewOpen, setReviewOpen] = useState(false);
 
   const submitMutation = trpc.uploads.submitFiles.useMutation();
   const validateCouponMutation = trpc.coupons.validate.useMutation();
@@ -123,6 +124,7 @@ export function ColombiaBot({ products, onStartNormal, onSelectProduct, onSelect
   type Snapshot = {
     messages: ChatMsg[];
     inputValues: Record<string, string>;
+    phase: string;
     flowState: typeof flowState.current;
     callbacks: Record<string, (...args: any[]) => any>;
   };
@@ -277,6 +279,7 @@ export function ColombiaBot({ products, onStartNormal, onSelectProduct, onSelect
     history.current.push({
       messages: checkpoint,
       inputValues: { ...inputValues },
+      phase: currentPhase,
       flowState: {
         ...flowState.current,
         answers: { ...flowState.current.answers },
@@ -287,7 +290,7 @@ export function ColombiaBot({ products, onStartNormal, onSelectProduct, onSelect
       },
       callbacks: { ...callbacks.current },
     });
-    if (history.current.length > 20) history.current.shift();
+    if (history.current.length > 40) history.current.shift();
     // Recuperar interação quando manifesto é recusado ou resposta não é permitida.
     delete callbacks.current[messageId];
     const completed = callback(...args);
@@ -1354,9 +1357,40 @@ export function ColombiaBot({ products, onStartNormal, onSelectProduct, onSelect
 
       {sendError && <div role="alert" className="mx-3 my-2 rounded-xl border border-amber-400/40 bg-amber-400/10 p-3 text-sm text-amber-100">{sendError} <a href="/acompanhar" className="font-bold underline">Conferir pedido</a></div>}
       {blockedChoice && <div role="alertdialog" aria-modal="true" className="absolute inset-0 z-40 flex items-center justify-center bg-black/90 p-4"><div className="w-full max-w-md space-y-4 rounded-2xl border border-amber-400/60 bg-zinc-900 p-5 text-white"><h2 className="font-black text-xl text-amber-200">{blockedChoice.title}</h2><p className="text-sm">{blockedChoice.question}</p><p className="text-sm text-red-300">Resposta: {blockedChoice.answer}</p><p className="text-sm">{blockedChoice.message}</p><button type="button" className="w-full rounded-xl bg-amber-400 px-4 py-3 font-bold text-zinc-950" onClick={() => setBlockedChoice(null)}>{blockedChoice.buttonLabel}</button></div></div>}
-      {/* Rodapé — botões Voltar e Recomeçar */}
+      {reviewOpen && <div role="dialog" aria-modal="true" aria-label="Revisar respostas" className="absolute inset-0 z-30 flex items-center justify-center bg-black/90 p-4">
+        <div className="w-full max-w-md rounded-2xl border border-cyan-400/50 bg-zinc-900 p-4 text-white">
+          <h2 className="text-lg font-bold">Revisar respostas</h2>
+          <p className="mt-1 text-xs text-zinc-300">Escolha uma etapa anterior. Respostas posteriores precisarão ser confirmadas novamente.</p>
+          <div className="mt-3 max-h-[55vh] space-y-2 overflow-auto">
+            {history.current.map((snap,index) => {
+              const preview = [...snap.messages].reverse().find(m => m.type === "bot" && m.questionLevel);
+              const label = preview && preview.type === "bot" ? preview.text : "Escolha de serviço ou plano";
+              return <button key={index} type="button" className="w-full rounded-xl border border-cyan-400/30 bg-cyan-500/10 px-3 py-2 text-left text-sm hover:bg-cyan-500/20" onClick={() => {
+                cancelPendingAdvances();
+                history.current = history.current.slice(0,index);
+                setMessages(snap.messages);
+                setInputValues(snap.inputValues);
+                setCurrentPhase(snap.phase);
+                flowState.current = snap.flowState;
+                callbacks.current = snap.callbacks;
+                couponInputIds.current.clear();
+                pendingUpload.current = null;
+                pendingPixMsgId.current = "";
+                setUploadingDocId(null);
+                setUploadingPix(false);
+                setPixCopied(false);
+                setReviewOpen(false);
+                if (snap.flowState.product && snap.flowState.option) saveBotProgress("questions","dados");
+                else clearCompletedBotProgress();
+              }}>{index+1}. {label.slice(0,115)}</button>;
+            })}
+          </div>
+          <button type="button" onClick={() => setReviewOpen(false)} className="mt-4 w-full rounded-xl bg-zinc-700 px-4 py-3 font-bold">Fechar</button>
+        </div>
+      </div>}
+      {/* Rodapé — botões Voltar, Revisar e Recomeçar */}
       {!isSubmitting && (
-        <div className="shrink-0 px-4 pt-2 pb-[max(0.5rem,env(safe-area-inset-bottom))] border-t border-zinc-800/60 flex items-center justify-center gap-3">
+        <div className="shrink-0 px-3 pt-2 pb-[max(0.5rem,env(safe-area-inset-bottom))] border-t border-zinc-800/60 flex flex-wrap items-center justify-center gap-2">
           {/* Botão Voltar — só aparece quando há histórico */}
           <button
             onClick={() => {
@@ -1368,6 +1402,7 @@ export function ColombiaBot({ products, onStartNormal, onSelectProduct, onSelect
               }
               setMessages(snap.messages);
               setInputValues(snap.inputValues);
+              setCurrentPhase(snap.phase);
               flowState.current = snap.flowState;
               callbacks.current = snap.callbacks;
               couponInputIds.current.clear();
@@ -1388,8 +1423,10 @@ export function ColombiaBot({ products, onStartNormal, onSelectProduct, onSelect
             Voltar
           </button>
 
-          {/* Divisor */}
-          <span className="text-zinc-700 text-xs">|</span>
+          <button type="button" onClick={() => setReviewOpen(true)} disabled={history.current.length===0}
+            className="rounded-xl border border-cyan-400/40 bg-cyan-400/10 px-3 py-2 text-sm font-semibold text-cyan-200 disabled:opacity-40">
+            Revisar respostas
+          </button>
 
           {/* Botão Recomeçar */}
           <button
@@ -1399,6 +1436,7 @@ export function ColombiaBot({ products, onStartNormal, onSelectProduct, onSelect
               clearCompletedBotProgress();
               couponInputIds.current.clear();
               history.current = [];
+              setReviewOpen(false);
               setMessages([]);
               setInputValues({});
               setUploadingDocId(null);
