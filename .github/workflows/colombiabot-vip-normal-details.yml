@@ -1,0 +1,27 @@
+name: ColombiaBot - comparacao VIP e Normal (isolado)
+on:
+  pull_request:
+    paths:
+      - "client/src/components/ColombiaBot.tsx"
+      - "client/src/components/ColombiaBotStorefrontCard.tsx"
+      - "client/src/lib/colombiaBotVipComparison.ts"
+      - "server/colombiaBotVipNormalDetails.test.ts"
+      - ".github/workflows/colombiabot-vip-normal-details.yml"
+  workflow_dispatch:
+permissions:
+  contents: read
+jobs:
+  bot-vip-normal:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: pnpm/action-setup@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+          cache: pnpm
+      - run: pnpm install --frozen-lockfile
+      - name: Testar apenas comparacao VIP e Normal do ColombiaBot
+        run: pnpm exec vitest run server/colombiaBotVipNormalDetails.test.ts
+      - name: Compilar vitrine do ColombiaBot
+        run: pnpm build
