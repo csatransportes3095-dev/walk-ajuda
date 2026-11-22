@@ -19,6 +19,9 @@ export function isSiteVisitorEntryPath(pathname: string): boolean {
 }
 
 export function isSecurityPublicPath(pathname: string): boolean {
+  // Somente o link individual de Pedido Entregue e sua consulta por token são públicos.
+  if (/^\/pedido-entregue\/[a-f0-9]{48}\/?$/.test(pathname)) return true;
+  if (pathname === "/api/trpc/deliveredOrderGuide.getPublic") return true;
   // No generic /api bypass: only exact minimal routes.
   if (pathname === "/api/ping") return true;
   // Device endpoints each verify an independent per-device secret or single-use code.
