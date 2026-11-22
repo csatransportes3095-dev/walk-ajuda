@@ -106,6 +106,7 @@ export function ColombiaBot({ products, onStartNormal, onSelectProduct, onSelect
   const [inputValues, setInputValues] = useState<Record<string, string>>({});
   const [uploadingDocId, setUploadingDocId] = useState<number | null>(null);
   const [isSubmitting, setIsSubmitting] = useState(false);
+  const submittingRef = useRef(false);
   const [blockedChoice, setBlockedChoice] = useState<BotBlockedChoice | null>(null);
   const [sendError, setSendError] = useState("");
   const [currentPhase, setCurrentPhase] = useState("Serviço");
@@ -538,7 +539,9 @@ export function ColombiaBot({ products, onStartNormal, onSelectProduct, onSelect
     const models = option.priceModels || [];
     if (models.length === 0) {
       flowState.current.priceModel = null;
-      queueAdvance(() => askQuestions(product, option, {}), 200);
+      // Opção única também deve apresentar o manifesto obrigatório.
+      void requestProductManifest([`option_manifest_${option.id}`], `bot:base:${option.id}`, option.label || option.name)
+        .then(accepted => { if (accepted) queueAdvance(() => askQuestions(product, option, {}), 200); });
       return;
     }
     const displayLabel = (model: OptionPriceModel) => {
@@ -678,6 +681,10 @@ export function ColombiaBot({ products, onStartNormal, onSelectProduct, onSelect
       );
     } else {
       callbacks.current[msgId] = (val: string) => {
+        if (nextQ.isRequired === 1 && !val.trim()) {
+          addMsgs({type:"bot",id:uid(),text:"Esta resposta é obrigatória. Preencha para continuar."});
+          return;
+        }
         markAnswered(msgId);
         addMsgs({ type: "user", id: uid(), text: val || "(sem resposta)" });
         const newAnswers = { ...currentAnswers, [nextQ.id]: val };
@@ -870,7 +877,8 @@ export function ColombiaBot({ products, onStartNormal, onSelectProduct, onSelect
     setCurrentPhase("Finalizar");
     const actionId = uid();
     callbacks.current[actionId] = async () => {
-      if (isSubmitting) return;
+      if (submittingRef.current) return;
+      submittingRef.current = true;
       setSendError("");
       setIsSubmitting(true);
 
@@ -913,7 +921,7 @@ export function ColombiaBot({ products, onStartNormal, onSelectProduct, onSelect
       const cpToken = localStorage.getItem('cp_token') || '';
       // Usar telefone do flowState (salvo quando perfil carregou) ou fallbacks
       const clientPhoneForSubmit = profileQuery.data?.phone?.replace(/\D/g, '') || clientPhone.replace(/\D/g, '') || '';
-      if (!clientPhoneForSubmit) { setSendError('Telefone autenticado não identificado. Entre novamente.'); setIsSubmitting(false); return; }
+      if (!clientPhoneForSubmit) { setSendError('Telefone autenticado não identificado. Entre novamente.'); submittingRef.current = false; setIsSubmitting(false); return; }
 
       try {
         addMsgs({ type: "bot", id: uid(), text: "Enviando seu pedido... \u23f3" });
@@ -972,6 +980,7 @@ export function ColombiaBot({ products, onStartNormal, onSelectProduct, onSelect
       } catch (err: any) {
         setSendError(`Envio não confirmado: ${err?.message || 'erro de conexão'}. Confira seus pedidos antes de tentar novamente.`);
       } finally {
+        submittingRef.current = false;
         setIsSubmitting(false);
       }
     };
