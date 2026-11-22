@@ -1,13 +1,15 @@
 import { useEffect, useState } from "react";
 import { createPortal } from "react-dom";
-import { BookOpenCheck, CheckCircle2, ClipboardCopy, ExternalLink, ImagePlus, MessageCircle, Plus, Save, Trash2, X } from "lucide-react";
+import { BookOpenCheck, CheckCircle2, ClipboardCopy, ExternalLink, ImagePlus, MessageCircle, PlayCircle, Plus, Save, Trash2, X } from "lucide-react";
+import { resolveDeliveredGuideVideo } from "@/lib/deliveredGuideVideo";
 import { toast } from "sonner";
 import { trpc } from "@/lib/trpc";
 import { publicSiteUrl } from "@shared/publicLinks";
 import { buildWhatsappMessageUrl } from "@shared/whatsappUrl";
 
-type Block = { id: string; title: string; text: string; imageUrl: string };
-const newBlock = (): Block => ({ id: crypto.randomUUID(), title: "", text: "", imageUrl: "" });
+type Block = { id: string; title: string; text: string; imageUrl: string; mediaType: "image" | "video"; videoUrl: string };
+const newBlock = (): Block => ({ id: crypto.randomUUID(), title: "", text: "", imageUrl: "", mediaType: "image", videoUrl: "" });
+const normalizeBlock = (block: Partial<Block> & Pick<Block, "id" | "title" | "text" | "imageUrl">): Block => ({ ...newBlock(), ...block, mediaType: block.mediaType === "video" ? "video" : "image", videoUrl: block.videoUrl || "" });
 
 export default function OrderDeliveredGuide({ registrationId, subOrderIndex, customerPhone, customerName, orderNumber }: {
   registrationId: number;
@@ -36,7 +38,7 @@ export default function OrderDeliveredGuide({ registrationId, subOrderIndex, cus
     if (!record || dirty) return;
     setTitle(record.title);
     setIntro(record.intro);
-    setBlocks(record.blocks?.length ? record.blocks as Block[] : [newBlock()]);
+    setBlocks(record.blocks?.length ? record.blocks.map(block => normalizeBlock(block)) : [newBlock()]);
   }, [record?.updatedAt, dirty]);
   const refresh = async () => {
     await utils.deliveredOrderGuide.getGlobal.invalidate();
@@ -64,9 +66,11 @@ export default function OrderDeliveredGuide({ registrationId, subOrderIndex, cus
     setBlocks(current => current.map(block => block.id === id ? { ...block, ...patch } : block));
   }
   function saveContent() {
-    const clean = blocks.map(b => ({ ...b, title: b.title.trim(), text: b.text.trim(), imageUrl: b.imageUrl.trim() }))
-      .filter(b => b.title || b.text || b.imageUrl);
-    if (!clean.length) { toast.error("Adicione ao menos uma orientação ou imagem."); return; }
+    const clean = blocks.map(b => ({ ...b, title: b.title.trim(), text: b.text.trim(), imageUrl: b.imageUrl.trim(), videoUrl: b.videoUrl.trim() }))
+      .filter(b => b.title || b.text || (b.mediaType === "video" ? b.videoUrl : b.imageUrl));
+    if (!clean.length) { toast.error("Adicione ao menos uma orientação, foto ou vídeo."); return; }
+    const invalidVideo = clean.find(b => b.mediaType === "video" && !resolveDeliveredGuideVideo(b.videoUrl));
+    if (invalidVideo) { toast.error("Informe uma URL válida do YouTube, Vimeo, Google Drive ou MP4/WebM HTTPS."); return; }
     save.mutate({
       title: title.trim(), intro: intro.trim(), blocks: clean,
     });
@@ -132,12 +136,30 @@ export default function OrderDeliveredGuide({ registrationId, subOrderIndex, cus
               </div>
               <input value={block.title} maxLength={160} placeholder="Título da orientação" onChange={e => editBlock(block.id, { title: e.target.value })} className="w-full rounded-lg border border-white/15 bg-slate-950 p-3 text-sm"/>
               <textarea value={block.text} rows={4} maxLength={4000} placeholder="Texto explicativo para o cliente" onChange={e => editBlock(block.id, { text: e.target.value })} className="w-full rounded-lg border border-white/15 bg-slate-950 p-3 text-sm"/>
+              <div className="grid grid-cols-2 gap-2" role="group" aria-label={"Mídia do bloco " + (index + 1)}>
+                <button type="button" aria-pressed={block.mediaType !== "video"} onClick={() => editBlock(block.id, { mediaType: "image" })} className={`flex min-h-11 items-center justify-center gap-2 rounded-lg border px-3 text-xs font-black ${block.mediaType !== "video" ? "border-cyan-300 bg-cyan-500/20 text-cyan-100" : "border-white/15 bg-black/20 text-slate-300"}`}><ImagePlus className="h-4 w-4"/> FOTO / PRINT</button>
+                <button type="button" aria-pressed={block.mediaType === "video"} onClick={() => editBlock(block.id, { mediaType: "video" })} className={`flex min-h-11 items-center justify-center gap-2 rounded-lg border px-3 text-xs font-black ${block.mediaType === "video" ? "border-amber-300 bg-amber-500/20 text-amber-100" : "border-white/15 bg-black/20 text-slate-300"}`}><PlayCircle className="h-4 w-4"/> VÍDEO POR URL</button>
+              </div>
+              {block.mediaType !== "video" ? <>
               {block.imageUrl && <img src={block.imageUrl} alt={"Exemplo visual " + (index + 1)} className="max-h-72 w-full rounded-lg object-contain"/>}
               <label className="flex min-h-11 cursor-pointer items-center justify-center gap-2 rounded-lg border border-dashed border-cyan-400/45 bg-cyan-500/10 px-3 text-xs font-bold text-cyan-200">
                 <ImagePlus className="h-4 w-4"/> {uploading === block.id ? "ENVIANDO..." : "ADICIONAR FOTO OU PRINT"}
                 <input type="file" accept="image/*" className="hidden" disabled={uploading !== null} onChange={e => { const file = e.target.files?.[0]; e.target.value = ""; void uploadImage(block.id, file); }}/>
               </label>
               <input value={block.imageUrl} placeholder="Ou cole a URL da imagem H2" onChange={e => editBlock(block.id, { imageUrl: e.target.value })} className="w-full rounded-lg border border-white/10 bg-slate-950 p-2 text-xs text-slate-300"/>
+              </> : <>
+                <label className="block text-xs font-bold text-amber-200">LINK DO VÍDEO
+                  <input type="url" value={block.videoUrl} placeholder="https://www.youtube.com/watch?v=..." onChange={e => editBlock(block.id, { videoUrl: e.target.value })} className="mt-1 w-full rounded-lg border border-amber-400/30 bg-slate-950 p-3 text-sm text-white" />
+                </label>
+                <p className="text-xs leading-relaxed text-slate-300">YouTube, Vimeo, vídeo público do Google Drive ou arquivo MP4/WebM HTTPS. O cliente assiste dentro das orientações, sem sair da página.</p>
+                {block.videoUrl && (() => {
+                  const video = resolveDeliveredGuideVideo(block.videoUrl);
+                  if (!video) return <p role="alert" className="text-xs font-bold text-rose-300">URL de vídeo inválida ou não incorporável.</p>;
+                  return video.kind === "file"
+                    ? <video src={video.url} controls playsInline preload="metadata" className="max-h-72 w-full rounded-lg bg-black" />
+                    : <iframe title={"Prévia do vídeo " + (index + 1)} src={video.url} loading="lazy" allow="autoplay; encrypted-media; picture-in-picture; fullscreen" allowFullScreen referrerPolicy="strict-origin-when-cross-origin" className="aspect-video w-full rounded-lg bg-black" />;
+                })()}
+              </>}
             </section>
           ))}
           {dirty && <p role="status" className="text-sm font-bold text-amber-200">Alterações globais não salvas. Salve antes de compartilhar.</p>}
