@@ -1344,7 +1344,7 @@ export function ColombiaBot({ products, onStartNormal, onSelectProduct, onSelect
 
       {sendError && <div role="alert" className="mx-3 my-2 rounded-xl border border-amber-400/40 bg-amber-400/10 p-3 text-sm text-amber-100">{sendError} <a href="/acompanhar" className="font-bold underline">Conferir pedido</a></div>}
       {blockedChoice && <div role="alertdialog" aria-modal="true" className="absolute inset-0 z-40 flex items-center justify-center bg-black/90 p-4"><div className="w-full max-w-md space-y-4 rounded-2xl border border-amber-400/60 bg-zinc-900 p-5 text-white"><h2 className="font-black text-xl text-amber-200">{blockedChoice.title}</h2><p className="text-sm">{blockedChoice.question}</p><p className="text-sm text-red-300">Resposta: {blockedChoice.answer}</p><p className="text-sm">{blockedChoice.message}</p><button type="button" className="w-full rounded-xl bg-amber-400 px-4 py-3 font-bold text-zinc-950" onClick={() => setBlockedChoice(null)}>{blockedChoice.buttonLabel}</button></div></div>}
-      {/* Rodapé — botões Voltar e Recomeçar */
+      {/* Rodapé — botões Voltar e Recomeçar */}
       {!isSubmitting && (
         <div className="shrink-0 px-4 pt-2 pb-[max(0.5rem,env(safe-area-inset-bottom))] border-t border-zinc-800/60 flex items-center justify-center gap-3">
           {/* Botão Voltar — só aparece quando há histórico */}
