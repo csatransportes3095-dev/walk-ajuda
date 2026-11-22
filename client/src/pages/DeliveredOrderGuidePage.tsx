@@ -1,4 +1,5 @@
 import { useRoute } from "wouter";
+import { useEffect } from "react";
 import { trpc } from "@/lib/trpc";
 import { BookOpenCheck, CheckCircle2, Image as ImageIcon, ShieldCheck } from "lucide-react";
 
@@ -8,16 +9,16 @@ export default function DeliveredOrderGuidePage() {
   // A tela só é montada após o login pelo UnifiedCustomerAccessGate.
   // Enviar o token de sessão ao servidor, que revalida a identidade e o pedido.
   const customerSessionToken = typeof window !== "undefined" ? localStorage.getItem("cp_token") || "" : "";
-  const query = trpc.deliveredOrderGuide.getPublic.useQuery(
-    { token, customerSessionToken },
-    {
-      enabled: /^[a-f0-9]{48}$/.test(token) && customerSessionToken.length >= 32,
-      retry: false,
-      refetchOnWindowFocus: true,
-    }
-  );
-  const guide = query.data?.found ? query.data : null;
-  const isLoading = query.isLoading;
+  const validToken = /^[a-f0-9]{48}$/.test(token);
+  const guideRequest = trpc.deliveredOrderGuide.getPublic.useMutation();
+  useEffect(() => {
+    if (!validToken || customerSessionToken.length < 32) return;
+    // POST: o servidor valida a sessao e o titular sem expor o token na URL.
+    guideRequest.mutate({ token, customerSessionToken });
+  }, [token, customerSessionToken, validToken]);
+  const guide = guideRequest.data?.found ? guideRequest.data : null;
+  const isLoading = validToken && customerSessionToken.length >= 32
+    && !guideRequest.isSuccess && !guideRequest.isError;
   return (
     <main className="min-h-screen bg-[#030b11] px-3 py-6 text-white sm:px-5">
       <div className="mx-auto max-w-2xl space-y-4">
@@ -34,7 +35,7 @@ export default function DeliveredOrderGuidePage() {
         {isLoading && <div role="status" className="rounded-xl border border-cyan-500/20 bg-slate-900/80 p-5 text-center text-sm">Carregando orientações...</div>}
         {!isLoading && !guide && (
           <section role="status" className="rounded-xl border border-amber-400/25 bg-slate-900 p-6 text-center text-sm text-amber-200">
-            {query.isError ? query.error.message : "Este link não está disponível. Solicite à equipe H2 Colombiano o link atualizado."}
+            {guideRequest.isError ? guideRequest.error.message : "Este link não está disponível. Solicite à equipe H2 Colombiano o link atualizado."}
           </section>
         )}
         {guide && <>
