@@ -7,7 +7,9 @@ type SessionView={phase:'checking'|'ready'|'error'|'closing';required:boolean;ex
 /** UX mirror only: the gateway and server-side session registry remain authoritative. */
 export default function SiteAccessSessionBoundary({children,onClear}:{children:ReactNode;onClear:()=>void}) {
   const [path]=useLocation();
-  const publicTokenRoute=path.startsWith('/confirmacao-foto/')||path.startsWith('/agendar/');
+  // Este link individual é de leitura pública: não exige sessão do site.
+  const deliveredGuideTokenRoute = /^\/pedido-entregue\/[a-f0-9]{48}\/?$/.test(path.toLowerCase());
+  const publicTokenRoute=path.startsWith('/confirmacao-foto/')||path.startsWith('/agendar/')||deliveredGuideTokenRoute;
   const excluded=path.toLowerCase()==='/adimin/android'||path==='/site-access'||path==='/admin'||path.startsWith('/admin/')||path==='/adm'||path.startsWith('/adm/')||publicTokenRoute;
   const [view,setView]=useState<SessionView>({phase:'checking',required:false,expiresAt:null});
   const checking=useRef(false),closing=useRef(false),lastToken=useRef('');

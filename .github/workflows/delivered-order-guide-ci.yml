@@ -8,6 +8,9 @@ on:
       - "server/deliveredOrderGuide.test.ts"
       - "server/deliveredOrderGuideAccess.test.ts"
       - "server/siteAccessPolicy.ts"
+      - "server/deliveredOrderGuidePublicGates.test.ts"
+      - "client/src/main.tsx"
+      - "client/src/components/SiteAccessSessionBoundary.tsx"
       - ".github/workflows/delivered-order-guide-ci.yml"
   workflow_dispatch:
 jobs:
@@ -22,4 +25,4 @@ jobs:
           cache: pnpm
       - run: pnpm install --frozen-lockfile
       - name: Verificar somente Pedido Entregue
-        run: pnpm exec vitest run server/deliveredOrderGuide.test.ts server/deliveredOrderGuideAccess.test.ts
+        run: pnpm exec vitest run server/deliveredOrderGuide.test.ts server/deliveredOrderGuideAccess.test.ts server/deliveredOrderGuidePublicGates.test.ts
