@@ -40,9 +40,9 @@ export function ColombiaBotStorefrontCard({
       data-testid="colombia-bot-storefront-card"
       className="w-full min-w-0 overflow-hidden rounded-2xl border border-violet-400/60 bg-[linear-gradient(150deg,rgba(43,18,88,.95),rgba(10,19,43,.98)_55%,rgba(7,16,34,.99))] text-left text-white shadow-[0_14px_36px_rgba(0,0,0,.3),0_0_24px_rgba(124,58,237,.15)]"
     >
-      <header className="flex items-center gap-3 border-b border-violet-300/20 bg-violet-500/10 px-3 py-3">
+      <header className="flex items-center gap-2.5 border-b border-violet-300/20 bg-violet-500/10 px-3 py-2.5">
         {iconUrl ? (
-          <img src={iconUrl} alt="" loading="lazy" className="h-14 w-14 shrink-0 rounded-xl border border-violet-300/30 bg-black/40 object-contain" />
+          <img src={iconUrl} alt="" loading="lazy" className="h-12 w-12 shrink-0 rounded-xl border border-violet-300/30 bg-black/40 object-contain" />
         ) : (
           <div className="grid h-12 w-12 shrink-0 place-items-center rounded-xl border border-violet-300/30 bg-violet-500/20">
             <ShieldCheck className="h-6 w-6 text-violet-200" />
@@ -55,13 +55,13 @@ export function ColombiaBotStorefrontCard({
           {vipLabel && <span className="mt-1 inline-block rounded-md border border-amber-400/40 bg-amber-400/10 px-2 py-1 text-[10px] font-bold text-amber-200">{vipLabel}</span>}
         </div>
       </header>
-      <div className="space-y-3 px-3 py-3">
+      <div className="space-y-2.5 px-3 py-3">
         {warranty && (
-          <div className="rounded-xl border border-emerald-400/50 bg-emerald-500/[0.09] px-3 py-3">
+          <div className="rounded-xl border border-emerald-400/50 bg-emerald-500/[0.09] px-3 py-2.5">
             <div className="flex items-center gap-2 text-xs font-black uppercase tracking-wide text-emerald-300">
               <ShieldCheck className="h-4 w-4" /> Garantia do serviço
             </div>
-            <p className="mt-2 break-words text-base font-extrabold text-white">{warranty}</p>
+            <p className="mt-1.5 break-words text-base font-extrabold leading-snug text-white">{warranty}</p>
             <p className="mt-1 text-[11px] font-semibold leading-relaxed text-emerald-100/90">
               {dualWarrantyLimit ? "A garantia termina quando o primeiro limite for atingido (corridas ou dias). " : "Estes são limites da garantia. "}
               Não representam a duração da conta.
@@ -75,7 +75,7 @@ export function ColombiaBotStorefrontCard({
               {original && original !== formattedPrice && (
                 <p className="text-xs text-slate-400 line-through">De {original}</p>
               )}
-              <p className="text-2xl font-black leading-tight text-emerald-300">{formattedPrice}</p>
+              <p className="text-xl font-black leading-tight text-emerald-300 sm:text-2xl">{formattedPrice}</p>
             </div>
             {shipping && <span className="inline-flex max-w-full items-center gap-1.5 rounded-lg border border-sky-400/30 bg-sky-500/10 px-2 py-1.5 text-xs font-semibold text-sky-200"><Truck className="h-3.5 w-3.5 shrink-0" /> Entrega: {shipping}</span>}
           </div>

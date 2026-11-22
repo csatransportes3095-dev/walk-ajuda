@@ -79,6 +79,8 @@ import { orderPhotoAttemptsRouter } from "./routers/orderPhotoAttempts";
 import { h2bicoReviewRouter } from "./h2bicoReview";
 import { h2bicoIntelligenceRouter } from "./h2bicoReviewIntelligence";
 import { createSqlOrderPersistenceStore, isPersistedPublicOrder, notifyOnlyAfterPersistence, persistPublicOrder } from "./orderPersistence";
+import { colombiaBotDiagnosticsRouter } from "./routers/colombiaBotDiagnostics";
+import { claimColombiaBotSubmission, confirmColombiaBotSubmission, flagColombiaBotSubmissionForReview } from "./colombiaBotReliability";
 import { ensureAutomaticScheduleForOrder, regenerateAutomaticScheduleForOrder } from "./autoSchedule";
 import { resolveLegacyCommissionValue, type CommissionCandidate } from "./commissionResolver";
 import { resolveReferralCommissionState } from "../shared/referralCommissionPolicy";
@@ -455,6 +457,7 @@ async function withResolvedRaffleWinnerPhoto<T extends any>(raffle: T): Promise<
 
 export const appRouter = router({
   siteSecurity: siteSecurityRouter,
+  colombiaBotDiagnostics: colombiaBotDiagnosticsRouter,
   vinRegistry: vinRegistryRouter,
   vehicleUsage: vehicleUsageRouter,
   cpfVault: cpfVaultRouter,
@@ -1440,6 +1443,7 @@ export const appRouter = router({
         paymentProofUrl: z.string().optional(),    // URL já enviada via /api/upload/client-file
         paymentProofMime: z.string().optional(),
         vipInstallmentCheckoutToken: z.string().min(16).max(80).optional(),
+        botSubmissionKey: z.string().uuid().optional(),
         answers: z.string().optional(),
         // Referências aditivas de respostas em áudio: usadas somente pelo novo tipo de pergunta.
         productId: z.number().int().positive().optional(),
@@ -1480,6 +1484,8 @@ export const appRouter = router({
           if (phoneBlock.blocked) return { success: false, message: 'Acesso bloqueado. Entre em contato pelo WhatsApp.' };
         }
         logIpAccess(clientIp, 'order', input.phone, undefined).catch(() => {});
+        let claimedBotDb: any;
+        let claimedBotRequestKey: string | undefined;
         try {
           // Validar acesso: aceitar accessCode (sistema antigo) OU cpToken (novo sistema)
           let cpTokenValid = false;
@@ -1498,9 +1504,14 @@ export const appRouter = router({
               cpTokenValid = true;
               // Extrair phone da sessão para garantir que está disponível mesmo quando input.phone vier vazio
               cpTokenPhone = sess.phone?.replace(/\D/g, '') || '';
+              // Identidade autoritativa: não permitir que o navegador escolha outro telefone.
+              if (input.botSubmissionKey && cpTokenPhone) input.phone = cpTokenPhone;
             } catch {
               return { success: false, message: 'Erro ao verificar sessão. Tente novamente.' };
             }
+          }
+          if (input.botSubmissionKey && !cpTokenValid) {
+            return { success: false, message: 'Sessão do cliente expirada. Entre novamente no ColombiaBot.' };
           }
           if (!cpTokenValid) {
             // Sistema antigo: validar via accessCode
@@ -1615,7 +1626,19 @@ export const appRouter = router({
               input.cartCouponCode = input.couponCode.trim().toUpperCase();
               input.cartCouponDiscount = officialDiscount;
             } else {
-              const officialBase = parseMoney(input.originalPrice || input.price);
+              // Preservar checkout manual. Somente o ColombiaBot valida o preço-base
+              // pelo catálogo, evitando desconto duplicado no próprio assistente.
+              let officialBase = parseMoney(input.originalPrice || input.price);
+              if (input.botSubmissionKey) {
+                let botCatalogPrice = input.price || '';
+                if (input.productId && input.optionId) {
+                  const availableOptions = await listProductOptions(input.productId);
+                  const selectedOption = availableOptions.find(row => row.id === input.optionId && row.isActive === 1);
+                  if (!selectedOption) return { success: false, message: 'Produto indisponível para o cupom.' };
+                  if (!input.priceModelId) botCatalogPrice = String(selectedOption.price || '');
+                }
+                officialBase = parseMoney(botCatalogPrice);
+              }
               if (officialBase <= 0) {
                 return { success: false, message: 'Não foi possível validar o valor do pedido para aplicar o cupom.' };
               }
@@ -1676,6 +1699,40 @@ export const appRouter = router({
           let parsedAnswers: Array<{ question: string; answer: string; questionId?: number; answerType?: string; depth?: number; optionsMeta?: string; audioUrl?: string; durationSeconds?: number }> = [];
           if (input.answers) {
             try { parsedAnswers = JSON.parse(input.answers); } catch { /* ignore */ }
+          }
+          // As mesmas respostas bloqueadas pelo ADM devem ser recusadas no servidor.
+          // Proteção exclusiva do ColombiaBot; não alterar checkout manual.
+          if (input.botSubmissionKey && input.optionId && parsedAnswers.length > 0) {
+            const normalizeAnswer = (value: unknown) => String(value || '')
+              .normalize('NFD').replace(/[\u0300-\u036f]/g, '')
+              .trim().replace(/\s+/g, ' ').toUpperCase();
+            const configured = await getSetting('question_blocking_manifest_rules_v1');
+            let blockingRules: any[] = [];
+            try {
+              const parsed = JSON.parse(String(configured || '[]'));
+              if (Array.isArray(parsed)) blockingRules = parsed;
+            } catch { /* reter regras legadas armazenadas nas opções */ }
+            const optionQuestions = await listOptionQuestions(input.optionId);
+            for (const answer of parsedAnswers) {
+              const questionId = Number(answer.questionId);
+              if (!Number.isInteger(questionId) || questionId <= 0) continue;
+              const question = optionQuestions.find(q => q.id === questionId && q.fieldType === 'select');
+              if (!question) continue;
+              const choice = normalizeAnswer(answer.answer);
+              const restricted = blockingRules.some(rule => rule?.enabled !== false &&
+                Number(rule?.questionId) === questionId &&
+                normalizeAnswer(rule?.answer) === choice);
+              let legacyRestricted = false;
+              try {
+                const opts = JSON.parse(String(question.options || '[]'));
+                if (Array.isArray(opts)) legacyRestricted = opts.some((item: any) =>
+                  item && typeof item === 'object' && item.blocking === true &&
+                  normalizeAnswer(item.label) === choice);
+              } catch { /* opções legadas sem metadados */ }
+              if (restricted || legacyRestricted) {
+                return { success: false, message: 'Uma resposta não permite continuar com este pedido. Volte e revise as opções.' };
+              }
+            }
           }
           let audioDraftsForOrder: Awaited<ReturnType<typeof getQuestionAudioDraftsByIds>> = [];
           // Produto e opção são usados também por pedidos comuns. Só iniciar a
@@ -1756,6 +1813,36 @@ export const appRouter = router({
           // Garantir que temos o phone: usar input.phone ou extrair do cpToken
           const effectivePhone = (input.phone || cpTokenPhone || '').replace(/\D/g, '');
 
+          // O lock é adquirido somente após as validações de produto, sessão, cupom e áudios.
+          // Uma segunda instância nunca deve executar persistência nem efeitos colaterais.
+          if (input.botSubmissionKey) {
+            const botDb = await (await import('./db')).getDb();
+            if (!botDb) return { success: false, message: 'Serviço temporariamente indisponível. Seu pedido não foi enviado.' };
+            const claim = await claimColombiaBotSubmission(botDb, input.botSubmissionKey, {
+              phone: input.phone || cpTokenPhone || '',
+              productId: input.productId,
+              optionId: input.optionId,
+              priceModelId: input.priceModelId,
+            });
+            if (claim.kind === "duplicate") {
+              return {
+                success: true,
+                message: 'Este pedido já foi registrado anteriormente. Nenhum pedido duplicado foi criado.',
+                registrationId: claim.registrationId,
+                finalPrice: claim.pricePaid,
+                scheduleUrl: null,
+              };
+            }
+            if (claim.kind === "pending") {
+              return { success: false, message: 'Seu pedido já está em processamento ou precisa de conferência. Consulte /acompanhar antes de tentar novamente.', pendingReview: true };
+            }
+            if (claim.kind === "conflict") {
+              return { success: false, message: 'Os dados desta tentativa mudaram. Recomece o atendimento para gerar uma nova solicitação.' };
+            }
+            claimedBotDb = botDb;
+            claimedBotRequestKey = input.botSubmissionKey;
+          }
+
           let persistedOrder: Awaited<ReturnType<typeof persistPublicOrder>> | undefined;
           let persistenceDb: any;
           let outerRegId: number | undefined;
@@ -1797,7 +1884,22 @@ export const appRouter = router({
           }
           if (!isPersistedPublicOrder(persistedOrder)) {
             console.error('[OrderStatus] Pedido rejeitado: registrationId/status inicial não foram persistidos.');
+            if (claimedBotDb && claimedBotRequestKey) {
+              await flagColombiaBotSubmissionForReview(claimedBotDb, claimedBotRequestKey);
+            }
+            if (claimedBotRequestKey) {
+              return { success: false, message: 'Não foi possível confirmar o registro. Consulte /acompanhar antes de fazer outra tentativa.', pendingReview: true };
+            }
             return { success: false, message: 'Não foi possível registrar o pedido. Tente novamente; nenhum pedido foi confirmado.' };
+          }
+          // Registrar os IDs idempotentes imediatamente após a gravação do status.
+          // Uma falha nos e-mails ou no financeiro nunca poderá reabrir o pedido.
+          if (claimedBotDb && claimedBotRequestKey) {
+            await confirmColombiaBotSubmission(claimedBotDb, claimedBotRequestKey, {
+              registrationId: persistedOrder.registrationId,
+              orderStatusId: persistedOrder.orderStatusId,
+              pricePaid: input.price || null,
+            });
           }
           try {
             if (!cpTokenValid) await consumeAccessCode(input.accessCode || '', input.phone);
@@ -2286,10 +2388,16 @@ export const appRouter = router({
             success: true,
             message: emailSent ? 'Pedido enviado com sucesso!' : 'Pedido registrado! (email será reenviado em breve)',
             registrationId: outerRegId ?? null,
+            ...(input.botSubmissionKey ? { finalPrice: input.price ?? null } : {}),
             scheduleUrl: automaticScheduleUrl ?? null,
           };
         } catch (error) {
           console.error('Erro geral ao processar pedido:', error);
+          if (claimedBotDb && claimedBotRequestKey) {
+            try { await flagColombiaBotSubmissionForReview(claimedBotDb, claimedBotRequestKey); }
+            catch (flagError) { console.error('[ColombiaBot] Falha ao sinalizar conferência:', flagError); }
+            return { success: false, message: 'Não foi possível confirmar o pedido. Verifique /acompanhar; não reenvie automaticamente.', pendingReview: true };
+          }
           return { success: false, message: 'Erro ao processar pedido' };
         }
       }),

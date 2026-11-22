@@ -15,6 +15,8 @@ import { applyVipBenefitToPrice, isVipOnlyLocked, normalizeVipAccessMode, vipBen
 import { globalPromotionIsActive, globalPromotionOverridesIndividual, globalPromotionPrice } from "@shared/globalPromotion";
 import { ColombiaBotStorefrontCard } from "@/components/ColombiaBotStorefrontCard";
 import { captureColombiaBotChoice } from "@/lib/colombiaBotNavigation";
+import { getBotCheckoutTotals, findBotBlockedChoice, sameBotProgressOwner, type BotBlockedChoice } from "@/lib/colombiaBotCheckout";
+import { requestProductManifest } from "@/lib/productManifest";
 import { isUsableBotCouponCode, resolveBotCouponChoice, resolveBotResumeStep, sameBotSelectOption } from "@/lib/colombiaBotFlow";
 
 // ── Tipos ────────────────────────────────────────────────────────────────────
@@ -53,7 +55,7 @@ type ChatMsg =
   | { type: "input"; id: string; multiline: boolean; answered: boolean; questionLevel?: "principal" | "sub" }
   | { type: "audio-input"; id: string; question: ProductQuestion; answered: boolean; questionLevel?: "principal" | "sub" }
   | { type: "doc-upload"; id: string; docId: number; label: string; required: boolean; uploaded: boolean; previewUrl?: string; previewMime?: string }
-  | { type: "pix-payment"; id: string; pixKey: string; pixName: string; pixBank: string; price: string; uploaded: boolean; previewUrl?: string; previewMime?: string }
+  | { type: "pix-payment"; id: string; pixKey: string; pixName: string; pixBank: string; price: string; basePrice?: string; discountPrice?: string; uploaded: boolean; previewUrl?: string; previewMime?: string }
   | { type: "action"; id: string; label: string; done: boolean };
 
 // ── Props ────────────────────────────────────────────────────────────────────
@@ -104,21 +106,48 @@ export function ColombiaBot({ products, onStartNormal, onSelectProduct, onSelect
   const [inputValues, setInputValues] = useState<Record<string, string>>({});
   const [uploadingDocId, setUploadingDocId] = useState<number | null>(null);
   const [isSubmitting, setIsSubmitting] = useState(false);
+  const submittingRef = useRef(false);
+  const [blockedChoice, setBlockedChoice] = useState<BotBlockedChoice | null>(null);
+  const [sendError, setSendError] = useState("");
+  const [currentPhase, setCurrentPhase] = useState("Serviço");
+  // UUID estável entre reenvios e recarregamentos; só muda ao iniciar outra compra.
+  const botSubmissionKeyRef = useRef(createAudioFlowId());
+  const botDiagSessionRef = useRef(createAudioFlowId());
+  const botLastLoggedPhaseRef = useRef("");
+  const [reviewOpen, setReviewOpen] = useState(false);
 
   const submitMutation = trpc.uploads.submitFiles.useMutation();
   const validateCouponMutation = trpc.coupons.validate.useMutation();
+  const botDiagnosticMutation = trpc.colombiaBotDiagnostics.record.useMutation();
+  const reportBotEvent = (eventCode: "etapa" | "falha_envio" | "pedido_confirmado" | "pedido_pendente" | "pedido_repetido", phase = currentPhase) => {
+    const cpToken = typeof window !== "undefined" ? localStorage.getItem("cp_token") || "" : "";
+    const phases = ["Serviço", "Garantia / preço", "Dados", "Documentos", "Cupom", "Pagamento", "Finalizar"];
+    if (!cpToken || !phases.includes(phase)) return;
+    botDiagnosticMutation.mutate({
+      sessionId: botDiagSessionRef.current,
+      phase: phase as "Serviço" | "Garantia / preço" | "Dados" | "Documentos" | "Cupom" | "Pagamento" | "Finalizar",
+      eventCode,
+      cpToken,
+    });
+  };
+  useEffect(() => {
+    if (botLastLoggedPhaseRef.current === currentPhase) return;
+    botLastLoggedPhaseRef.current = currentPhase;
+    reportBotEvent("etapa", currentPhase);
+  }, [currentPhase]); // não duplicar eventos durante renders
   const [isValidatingCoupon, setIsValidatingCoupon] = useState(false);
 
   // Callbacks armazenados em ref para evitar stale closure
-  const callbacks = useRef<Record<string, (...args: any[]) => void>>({});
+  const callbacks = useRef<Record<string, (...args: any[]) => any>>({});
   const couponInputIds = useRef<Set<string>>(new Set());
 
   // Histórico de snapshots para o botão Voltar
   type Snapshot = {
     messages: ChatMsg[];
     inputValues: Record<string, string>;
+    phase: string;
     flowState: typeof flowState.current;
-    callbacks: Record<string, (...args: any[]) => void>;
+    callbacks: Record<string, (...args: any[]) => any>;
   };
   const history = useRef<Snapshot[]>([]);
 
@@ -151,6 +180,14 @@ export function ColombiaBot({ products, onStartNormal, onSelectProduct, onSelect
   // Buscar pix ativo e nome do cliente logado
   const { data: activePix } = trpc.pix.getActive.useQuery();
   const { data: settingsData } = trpc.settings.getAll.useQuery();
+  // Atualiza o Pix quando os dados de pagamento chegam depois da recuperação.
+  useEffect(() => {
+    const key = activePix?.pixKey || settingsData?.pix_key || "";
+    if (!key) return;
+    setMessages(prev => prev.map(msg => msg.type === "pix-payment" && !msg.uploaded && !msg.pixKey
+      ? { ...msg, pixKey: key, pixName: activePix?.pixName || settingsData?.pix_name || "", pixBank: activePix?.pixBank || settingsData?.pix_bank || "" }
+      : msg));
+  }, [activePix?.pixKey, activePix?.pixName, activePix?.pixBank, settingsData?.pix_key, settingsData?.pix_name, settingsData?.pix_bank]);
   const clientPhone = typeof window !== 'undefined' ? localStorage.getItem('walk_client_phone') || '' : '';
   const { isVipCustomer } = useVipMembership();
   const { data: globalPromotion } = trpc.globalPromotion.get.useQuery(undefined, { refetchOnWindowFocus: true, refetchInterval: 15000 });
@@ -206,10 +243,12 @@ export function ColombiaBot({ products, onStartNormal, onSelectProduct, onSelect
         questionAudioAnswers: fs.audioAnswers,
         questionAudioFlowId: fs.audioFlowId,
         clientName: fs.clientName || '',
-        clientPhone: fs.clientPhone || '',
+        clientPhone: clientPhone.replace(/\D/g, '') || fs.clientPhone || '',
         clientCity: '',
         clientEmail: '',
         couponCode: fs.couponCode || '',
+        botSubmissionKey: botSubmissionKeyRef.current,
+        botDiagSessionId: botDiagSessionRef.current,
         carDocumentYear: '',
         savedAt: Date.now(),
         fromBot: true, // marcador para saber que veio do bot
@@ -263,6 +302,7 @@ export function ColombiaBot({ products, onStartNormal, onSelectProduct, onSelect
     history.current.push({
       messages: checkpoint,
       inputValues: { ...inputValues },
+      phase: currentPhase,
       flowState: {
         ...flowState.current,
         answers: { ...flowState.current.answers },
@@ -273,10 +313,18 @@ export function ColombiaBot({ products, onStartNormal, onSelectProduct, onSelect
       },
       callbacks: { ...callbacks.current },
     });
-    if (history.current.length > 20) history.current.shift();
-    // O snapshot contém o handler original para o botão Voltar.
+    if (history.current.length > 40) history.current.shift();
+    // Recuperar interação quando manifesto é recusado ou resposta não é permitida.
     delete callbacks.current[messageId];
-    callback(...args);
+    const completed = callback(...args);
+    const rearm = () => { callbacks.current[messageId] = callback; history.current.pop(); };
+    if (completed === false) rearm();
+    else if (completed && typeof completed.then === "function") {
+      void completed.then((value: unknown) => { if (value === false) rearm(); }).catch(() => {
+        rearm();
+        addMsgs({type:"bot",id:uid(),text:"Não foi possível confirmar esta escolha. Tente novamente."});
+      });
+    }
   };
 
   const addMsgs = useCallback((...msgs: ChatMsg[]) => {
@@ -366,6 +414,7 @@ export function ColombiaBot({ products, onStartNormal, onSelectProduct, onSelect
     fs.pixProofMime = '';
     fs.couponCode = '';
     fs.couponDiscount = null;
+    botSubmissionKeyRef.current = createAudioFlowId();
   };
 
   const restoreBotProgress = (): boolean => {
@@ -385,10 +434,17 @@ export function ColombiaBot({ products, onStartNormal, onSelectProduct, onSelect
       if (!raw) return false;
 
       const saved = JSON.parse(raw);
+      if (typeof saved.botSubmissionKey === "string" && /^[a-f0-9-]{36}$/i.test(saved.botSubmissionKey)) {
+        botSubmissionKeyRef.current = saved.botSubmissionKey;
+      }
+      if (typeof saved.botDiagSessionId === "string" && /^[a-f0-9-]{36}$/i.test(saved.botDiagSessionId)) {
+        botDiagSessionRef.current = saved.botDiagSessionId;
+      }
       if (!saved?.savedAt || Date.now() - saved.savedAt > 24 * 60 * 60 * 1000) {
         clearCompletedBotProgress();
         return false;
       }
+      if (!sameBotProgressOwner(saved.clientPhone, clientPhone)) { clearCompletedBotProgress(); return false; }
       const product = products.find(item => item.id === saved.productId);
       const option = product?.options.find(item => item.id === saved.optionId);
       if (!product || !option) {
@@ -434,7 +490,15 @@ export function ColombiaBot({ products, onStartNormal, onSelectProduct, onSelect
       });
       if (nextStep === 'questions') askQuestions(product, option, answers);
       else if (nextStep === 'documents') askDocuments(product, option);
-      else if (nextStep === 'payment') askPix(product, option);
+      else if (nextStep === 'payment') {
+        if (saved.couponCode && !sitePromoOverrides) {
+          void validateCouponMutation.mutateAsync({ code: saved.couponCode }).then(result => {
+            if (!result.valid) { flowState.current.couponCode = ''; flowState.current.couponDiscount = null; askCoupon(product, option); return; }
+            flowState.current.couponDiscount = {type: result.discountType || result.coupon?.discountType || 'fixed', value: result.discountValue ?? result.coupon?.discountValue ?? 0};
+            askPix(product, option);
+          }).catch(() => askCoupon(product, option));
+        } else askPix(product, option);
+      }
       else askCoupon(product, option);
       return true;
     } catch {
@@ -475,6 +539,7 @@ export function ColombiaBot({ products, onStartNormal, onSelectProduct, onSelect
   };
 
   const askService = () => {
+    setCurrentPhase("Serviço");
     const optId = uid();
     callbacks.current[optId] = (opt: string) => {
       markAnswered(optId);
@@ -505,7 +570,7 @@ export function ColombiaBot({ products, onStartNormal, onSelectProduct, onSelect
     const optId = uid();
     // O card apenas apresenta os dados da vitrine: a seleção continua
     // usando o ID real da opção e o mesmo motor de perguntas e documentos.
-    callbacks.current[optId] = (optionId: string) => {
+    callbacks.current[optId] = async (optionId: string) => {
       const option = product.options.find(item => String(item.id) === optionId);
       if (!option) return;
       markAnswered(optId);
@@ -523,10 +588,19 @@ export function ColombiaBot({ products, onStartNormal, onSelectProduct, onSelect
   };
 
   const startOptionPricing = (product: Product, option: ProductOption) => {
+    setCurrentPhase("Garantia / preço");
     const models = option.priceModels || [];
     if (models.length === 0) {
       flowState.current.priceModel = null;
-      queueAdvance(() => askQuestions(product, option, {}), 200);
+      // Opção única também deve apresentar o manifesto obrigatório.
+      void requestProductManifest([`option_manifest_${option.id}`], `bot:base:${option.id}`, option.label || option.name)
+        .then(accepted => {
+          if (accepted) queueAdvance(() => askQuestions(product, option, {}), 200);
+          else {
+            addMsgs({type:"bot",id:uid(),text:"As condições precisam ser aceitas para continuar. Você pode escolher outra opção."});
+            queueAdvance(() => product.options.length > 1 ? askOption(product) : askService(), 200);
+          }
+        }).catch(() => askService());
       return;
     }
     const displayLabel = (model: OptionPriceModel) => {
@@ -542,7 +616,7 @@ export function ColombiaBot({ products, onStartNormal, onSelectProduct, onSelect
       return;
     }
     const msgId = uid();
-    callbacks.current[msgId] = (modelId: string) => {
+    callbacks.current[msgId] = async (modelId: string) => {
       // Nunca resolver o modelo pela string visual: promoções e rótulos
       // podem mudar sem modificar o ID da escolha ou o preço salvo.
       const model = models.find(item => String(item.id) === modelId);
@@ -552,6 +626,8 @@ export function ColombiaBot({ products, onStartNormal, onSelectProduct, onSelect
         queueAdvance(() => startOptionPricing(product, option), 350);
         return;
       }
+      const accepted = await requestProductManifest([`price_model_manifest_${model.id}`, `option_manifest_${option.id}`], `bot:price:${model.id}`, model.label);
+      if (!accepted) return false;
       markAnswered(msgId);
       addMsgs({ type: 'user', id: uid(), text: displayLabel(model) });
       flowState.current.priceModel = model;
@@ -568,6 +644,7 @@ export function ColombiaBot({ products, onStartNormal, onSelectProduct, onSelect
   };
 
   const askQuestions = (product: Product, option: ProductOption, currentAnswers: Record<number, string>) => {
+    setCurrentPhase("Dados");
     // Recalcular perguntas visíveis com as respostas atuais
     const visible = getVisibleQuestions(option.questions, currentAnswers);
     // Próxima pergunta ainda não respondida
@@ -645,6 +722,8 @@ export function ColombiaBot({ products, onStartNormal, onSelectProduct, onSelect
       const opts = parseOptions(nextQ.options);
       callbacks.current[msgId] = (val: string) => {
         if (!opts.some(opt => sameBotSelectOption(val, opt))) return;
+        const blocked = findBotBlockedChoice(nextQ, val, settingsData?.question_blocking_manifest_rules_v1);
+        if (blocked) { setBlockedChoice(blocked); return false; }
         markAnswered(msgId);
         addMsgs({ type: "user", id: uid(), text: val });
         const selected = opts.find(opt => sameBotSelectOption(val, opt))!;
@@ -661,6 +740,10 @@ export function ColombiaBot({ products, onStartNormal, onSelectProduct, onSelect
       );
     } else {
       callbacks.current[msgId] = (val: string) => {
+        if (nextQ.isRequired === 1 && !val.trim()) {
+          addMsgs({type:"bot",id:uid(),text:"Esta resposta é obrigatória. Preencha para continuar."});
+          return false;
+        }
         markAnswered(msgId);
         addMsgs({ type: "user", id: uid(), text: val || "(sem resposta)" });
         const newAnswers = { ...currentAnswers, [nextQ.id]: val };
@@ -677,6 +760,7 @@ export function ColombiaBot({ products, onStartNormal, onSelectProduct, onSelect
   };
 
   const askDocuments = (product: Product, option: ProductOption) => {
+    setCurrentPhase("Documentos");
     const docs = option.documents || [];
     if (docs.length === 0) {
       askCoupon(product, option);
@@ -729,6 +813,7 @@ export function ColombiaBot({ products, onStartNormal, onSelectProduct, onSelect
 
   // Etapa de cupom de desconto — antes do Pix
   const askCoupon = (product: Product, option: ProductOption | null) => {
+    setCurrentPhase("Cupom");
     if (sitePromoOverrides) {
       flowState.current.couponCode = "";
       flowState.current.couponDiscount = null;
@@ -805,7 +890,10 @@ export function ColombiaBot({ products, onStartNormal, onSelectProduct, onSelect
     const pixKey = activePix?.pixKey || settingsData?.pix_key || '';
     const pixName = activePix?.pixName || settingsData?.pix_name || '';
     const pixBank = activePix?.pixBank || settingsData?.pix_bank || '';
-    const price = getModelPrice(flowState.current.priceModel) || priceForOption(option);
+    setCurrentPhase("Pagamento");
+    const basePrice = getModelPrice(flowState.current.priceModel) || priceForOption(option);
+    const totals = getBotCheckoutTotals(basePrice, sitePromoOverrides ? null : flowState.current.couponDiscount);
+    const price = basePrice.trim() ? totals.total : "";
 
     const msgId = uid();
     pendingPixMsgId.current = msgId;
@@ -838,16 +926,20 @@ export function ColombiaBot({ products, onStartNormal, onSelectProduct, onSelect
 
     // Salvar progresso ao chegar na etapa de pagamento PIX
     saveBotProgress('cadastro', 'pagamento');
+    const summary = `Resumo do pedido: ${product.name}${option ? " • " + (option.label || option.name) : ""}\n${flowState.current.priceModel ? "Plano: " + flowState.current.priceModel.label + "\n" : ""}Respostas: ${Object.keys(flowState.current.answers).length} • Documentos: ${Object.values(flowState.current.docFiles).filter(doc => Boolean(doc.url)).length}\nTotal a pagar: ${price || "A confirmar"}`;
     addMsgs(
-      { type: 'bot', id: uid(), text: `Agora faça o pagamento via Pix${price ? ` de R$ ${price}` : ''} e envie o comprovante abaixo.` },
-      { type: 'pix-payment', id: msgId, pixKey, pixName, pixBank, price, uploaded: false }
+      { type: 'bot', id: uid(), text: summary + "\n\nConfira os dados e faça o pagamento via Pix somente após conferir o valor." },
+      { type: 'pix-payment', id: msgId, pixKey, pixName, pixBank, price, basePrice: totals.base, discountPrice: totals.discount, uploaded: false }
     );
   };
 
   const finishWithProduct = (product: Product, option: ProductOption | null) => {
+    setCurrentPhase("Finalizar");
     const actionId = uid();
     callbacks.current[actionId] = async () => {
-      markActionDone(actionId);
+      if (submittingRef.current) return;
+      submittingRef.current = true;
+      setSendError("");
       setIsSubmitting(true);
 
       // Considerar exclusivamente as perguntas de áudio visíveis da opção atual.
@@ -888,10 +980,8 @@ export function ColombiaBot({ products, onStartNormal, onSelectProduct, onSelect
 
       const cpToken = localStorage.getItem('cp_token') || '';
       // Usar telefone do flowState (salvo quando perfil carregou) ou fallbacks
-      const clientPhoneForSubmit = flowState.current.clientPhone
-        || profileQuery.data?.phone?.replace(/\D/g, '')
-        || localStorage.getItem('walk_client_phone')?.replace(/\D/g, '')
-        || '';
+      const clientPhoneForSubmit = profileQuery.data?.phone?.replace(/\D/g, '') || clientPhone.replace(/\D/g, '') || '';
+      if (!clientPhoneForSubmit) { setSendError('Telefone autenticado não identificado. Entre novamente.'); submittingRef.current = false; setIsSubmitting(false); return; }
 
       try {
         addMsgs({ type: "bot", id: uid(), text: "Enviando seu pedido... \u23f3" });
@@ -905,6 +995,7 @@ export function ColombiaBot({ products, onStartNormal, onSelectProduct, onSelect
           city: profileQuery.data?.city || undefined,
           email: profileQuery.data?.email || undefined,
           cpToken: cpToken || undefined,
+          botSubmissionKey: botSubmissionKeyRef.current,
           answers: answersArray.length > 0 ? JSON.stringify(answersArray) : undefined,
           productId: product.id,
           optionId: option?.id,
@@ -912,18 +1003,12 @@ export function ColombiaBot({ products, onStartNormal, onSelectProduct, onSelect
           questionAudioFlowId: hasAudioAnswersForCurrentOption ? flowState.current.audioFlowId : undefined,
           audioDraftIds: hasAudioAnswersForCurrentOption ? audioDraftIdsForSubmit : undefined,
           couponCode: !sitePromoOverrides ? flowState.current.couponCode || undefined : undefined,
+          originalPrice: getModelPrice(flowState.current.priceModel) || priceForOption(option),
           price: (() => {
             const rawPrice = getModelPrice(flowState.current.priceModel) || priceForOption(option);
             if (!rawPrice) return undefined;
-            const discount = sitePromoOverrides ? null : flowState.current.couponDiscount;
-            if (!discount) return rawPrice;
-            // Extrair valor numérico do preço (ex: "R$ 350,00" -> 350)
-            const num = parseFloat(rawPrice.replace(/[^\d,]/g, '').replace(',', '.'));
-            if (isNaN(num)) return rawPrice;
-            const final = discount.type === 'percentage'
-              ? num - (num * discount.value / 100)
-              : num - discount.value;
-            return `R$ ${Math.max(0, final).toFixed(2).replace('.', ',')}`;
+            // O servidor recalcula o cupom uma única vez.
+            return rawPrice;
           })(),
           priceModelId: flowState.current.priceModel?.id || undefined,
           paymentProofUrl: flowState.current.pixProofUrl || undefined,
@@ -931,14 +1016,17 @@ export function ColombiaBot({ products, onStartNormal, onSelectProduct, onSelect
         });
 
         if (isPersistedOrderResult(result)) {
+          const paidPrice = String((result as any).finalPrice || getBotCheckoutTotals(getModelPrice(flowState.current.priceModel) || priceForOption(option), sitePromoOverrides ? null : flowState.current.couponDiscount).total);
+          reportBotEvent((result as any).message?.includes("anteriormente") ? "pedido_repetido" : "pedido_confirmado", "Finalizar");
+          markActionDone(actionId);
           // Limpar antes de fechar o Bot: evita que a vitrine recupere um pedido já concluído.
           clearCompletedBotProgress();
           addMsgs({ type: "bot", id: uid(), text: "Pedido enviado com sucesso! \u2705\n\nO admin j\u00e1 recebeu e entrar\u00e1 em contato em breve." });
           onOrderComplete({
-            cartItems: [{ service: product.name, nameOption: option?.label || option?.name || 'N/A', price: getModelPrice(flowState.current.priceModel) || priceForOption(option) }],
+            cartItems: [{ service: product.name, nameOption: option?.label || option?.name || 'N/A', price: paidPrice }],
             answers: answersArray,
             docs: docsArray,
-            totalValue: getModelPrice(flowState.current.priceModel) || option?.price || '',
+            totalValue: paidPrice,
             referrerName: '',
             referrerPhone: '',
             clientName: flowState.current.clientName || profileQuery.data?.name || 'Cliente',
@@ -950,11 +1038,14 @@ export function ColombiaBot({ products, onStartNormal, onSelectProduct, onSelect
           const message = (result as any).message || (result.success
             ? 'O servidor não confirmou o registro do pedido. Tente novamente.'
             : 'Tente novamente.');
-          addMsgs({ type: "bot", id: uid(), text: `Erro ao enviar pedido: ${message}` });
+          reportBotEvent((result as any).pendingReview ? "pedido_pendente" : "falha_envio", "Finalizar");
+          setSendError(`Erro ao enviar pedido: ${message}`);
         }
       } catch (err: any) {
-        addMsgs({ type: "bot", id: uid(), text: `Erro ao enviar: ${err?.message || 'Tente novamente.'}` });
+        reportBotEvent("pedido_pendente", "Finalizar");
+        setSendError(`Envio não confirmado: ${err?.message || 'erro de conexão'}. Confira seus pedidos antes de tentar novamente.`);
       } finally {
+        submittingRef.current = false;
         setIsSubmitting(false);
       }
     };
@@ -1210,15 +1301,17 @@ export function ColombiaBot({ products, onStartNormal, onSelectProduct, onSelect
               <div className="flex items-center gap-2 text-emerald-400 text-xs font-bold">
                 <span>💚</span> CHAVE PIX
               </div>
+              {(!msg.pixKey || !msg.price) && <p className="text-sm font-bold text-amber-200">Dados de pagamento incompletos. Não efetue o pagamento até a chave e o valor estarem disponíveis.</p>}
               {msg.pixName && <p className="text-xs text-zinc-400">Beneficiário: <span className="text-white font-semibold">{msg.pixName}</span>{msg.pixBank ? ` — ${msg.pixBank}` : ''}</p>}
-              {msg.price && <p className="text-xs text-zinc-400">Valor: <span className="text-emerald-400 font-bold text-sm">R$ {msg.price}</span></p>}
+              {msg.discountPrice && msg.discountPrice !== "R$ 0,00" && <><p className="text-xs text-zinc-400">Valor original: {msg.basePrice}</p><p className="text-xs text-emerald-300">Desconto: {msg.discountPrice}</p></>}
+              {msg.price && <p className="text-sm text-zinc-200">Total a pagar: <span className="text-emerald-300 font-black text-lg">{msg.price}</span></p>}
               <div className="flex items-center gap-2 bg-zinc-900 rounded-lg px-3 py-2">
                 <span className="text-sm text-white font-mono flex-1 break-all">{msg.pixKey}</span>
                 <button
-                  onClick={() => {
-                    navigator.clipboard.writeText(msg.pixKey).catch(() => {});
-                    setPixCopied(true);
-                    queueAdvance(() => setPixCopied(false), 2000);
+                  disabled={!msg.pixKey || !msg.price}
+                  onClick={async () => {
+                    try { await navigator.clipboard.writeText(msg.pixKey); setPixCopied(true); queueAdvance(() => setPixCopied(false), 2000); }
+                    catch { addMsgs({type:"bot",id:uid(),text:"Não foi possível copiar a chave Pix."}); }
                   }}
                   className="shrink-0 px-3 py-1.5 rounded-lg bg-emerald-600 hover:bg-emerald-700 text-white text-xs font-bold transition-colors"
                 >
@@ -1237,6 +1330,7 @@ export function ColombiaBot({ products, onStartNormal, onSelectProduct, onSelect
                 </div>
               ) : (
                 <button
+                  disabled={!msg.pixKey || !msg.price}
                   onClick={() => {
                     pendingPixMsgId.current = msg.id;
                     pixFileInputRef.current?.click();
@@ -1272,7 +1366,7 @@ export function ColombiaBot({ products, onStartNormal, onSelectProduct, onSelect
   return (
     <div data-colombia-bot className="fixed inset-0 z-[9990] flex flex-col bg-zinc-950">
       {/* Header */}
-      <div className="flex items-center gap-3 px-4 py-3 border-b border-zinc-800 bg-zinc-900 shrink-0">
+      <div className="flex items-center gap-3 px-4 pt-[max(0.75rem,env(safe-area-inset-top))] pb-3 border-b border-zinc-800 bg-zinc-900 shrink-0">
         {displayAvatar ? (
           <img src={displayAvatar} alt={displayName} className="w-10 h-10 rounded-full object-cover shadow-lg" />
         ) : (
@@ -1282,40 +1376,68 @@ export function ColombiaBot({ products, onStartNormal, onSelectProduct, onSelect
         )}
         <div className="flex-1">
           <p className="font-bold text-white text-sm">{displayName}</p>
-          <p className="text-xs text-emerald-400">● Online agora</p>
+          <p className="text-xs text-cyan-300">Assistente automático • {currentPhase}</p>
         </div>
-        <button onClick={onStartNormal} className="p-2 rounded-lg text-zinc-500 hover:text-zinc-300 hover:bg-zinc-800 transition-colors">
+        <button onClick={() => { if (flowState.current.product && !window.confirm("Sair do assistente? Seu rascunho continuará salvo.")) return; onStartNormal(); }} aria-label="Fechar assistente" className="p-2 rounded-lg text-zinc-500 hover:text-zinc-300 hover:bg-zinc-800 transition-colors">
           <X className="w-5 h-5" />
         </button>
       </div>
 
+      <div aria-label={`Etapa atual: ${currentPhase}`} className="flex shrink-0 gap-1 border-b border-zinc-800 p-2">{["Serviço","Garantia / preço","Dados","Documentos","Cupom","Pagamento","Finalizar"].map((phase,i,steps)=><div key={phase} title={phase} className={`h-1.5 flex-1 rounded-full ${steps.indexOf(currentPhase)>=i ? "bg-cyan-400":"bg-zinc-700"}`}/>)}</div>
       {/* Chat */}
-      <div className="flex-1 overflow-y-auto px-4 py-4">
+      <div className="flex-1 overflow-y-auto px-3 py-4 sm:px-4">
         {messages.map((msg, idx) => renderMsg(msg, idx))}
         <div ref={chatEndRef} />
       </div>
 
-      {/* Rodapé — botões Voltar e Recomeçar */}
+      {sendError && <div role="alert" className="mx-3 my-2 rounded-xl border border-amber-400/40 bg-amber-400/10 p-3 text-sm text-amber-100">{sendError} <a href="/acompanhar" className="font-bold underline">Conferir pedido</a></div>}
+      {blockedChoice && <div role="alertdialog" aria-modal="true" className="absolute inset-0 z-40 flex items-center justify-center bg-black/90 p-4"><div className="w-full max-w-md space-y-4 rounded-2xl border border-amber-400/60 bg-zinc-900 p-5 text-white"><h2 className="font-black text-xl text-amber-200">{blockedChoice.title}</h2><p className="text-sm">{blockedChoice.question}</p><p className="text-sm text-red-300">Resposta: {blockedChoice.answer}</p><p className="text-sm">{blockedChoice.message}</p><button type="button" className="w-full rounded-xl bg-amber-400 px-4 py-3 font-bold text-zinc-950" onClick={() => setBlockedChoice(null)}>{blockedChoice.buttonLabel}</button></div></div>}
+      {reviewOpen && <div role="dialog" aria-modal="true" aria-label="Revisar respostas" className="absolute inset-0 z-30 flex items-center justify-center bg-black/90 p-4">
+        <div className="w-full max-w-md rounded-2xl border border-cyan-400/50 bg-zinc-900 p-4 text-white">
+          <h2 className="text-lg font-bold">Revisar respostas</h2>
+          <p className="mt-1 text-xs text-zinc-300">Escolha uma etapa anterior. Respostas posteriores precisarão ser confirmadas novamente.</p>
+          <div className="mt-3 max-h-[55vh] space-y-2 overflow-auto">
+            {history.current.map((snap,index) => {
+              const preview = [...snap.messages].reverse().find(m => m.type === "bot" && m.questionLevel);
+              const label = preview && preview.type === "bot" ? preview.text : "Escolha de serviço ou plano";
+              return <button key={index} type="button" className="w-full rounded-xl border border-cyan-400/30 bg-cyan-500/10 px-3 py-2 text-left text-sm hover:bg-cyan-500/20" onClick={() => {
+                cancelPendingAdvances();
+                history.current = history.current.slice(0,index);
+                setMessages(snap.messages);
+                setInputValues(snap.inputValues);
+                setCurrentPhase(snap.phase);
+                flowState.current = snap.flowState;
+                callbacks.current = snap.callbacks;
+                couponInputIds.current.clear();
+                pendingUpload.current = null;
+                pendingPixMsgId.current = "";
+                setUploadingDocId(null);
+                setUploadingPix(false);
+                setPixCopied(false);
+                setReviewOpen(false);
+                if (snap.flowState.product && snap.flowState.option) saveBotProgress("questions","dados");
+                else clearCompletedBotProgress();
+              }}>{index+1}. {label.slice(0,115)}</button>;
+            })}
+          </div>
+          <button type="button" onClick={() => setReviewOpen(false)} className="mt-4 w-full rounded-xl bg-zinc-700 px-4 py-3 font-bold">Fechar</button>
+        </div>
+      </div>}
+      {/* Rodapé — botões Voltar, Revisar e Recomeçar */}
       {!isSubmitting && (
-        <div className="shrink-0 px-4 py-2 border-t border-zinc-800/60 flex items-center justify-center gap-3">
+        <div className="shrink-0 px-3 pt-2 pb-[max(0.5rem,env(safe-area-inset-bottom))] border-t border-zinc-800/60 flex flex-wrap items-center justify-center gap-2">
           {/* Botão Voltar — só aparece quando há histórico */}
           <button
             onClick={() => {
               const snap = history.current.pop();
               cancelPendingAdvances();
               if (!snap) {
-                couponInputIds.current.clear();
-                // Após F5 não há snapshots em memória: voltar ao início de forma segura.
-                clearCompletedBotProgress();
-                setMessages([]);
-                setInputValues({});
-                callbacks.current = {};
-                flowState.current = { ...flowState.current, product: null, option: null, priceModel: null, answers: {}, audioAnswers: {}, audioFlowId: createAudioFlowId(), docFiles: {}, pixProofUrl: '', pixProofMime: '', couponCode: '', couponDiscount: null };
-                startEntry();
+                addMsgs({type:"bot",id:uid(),text:"Rascunho preservado. Após atualizar a página, não é possível voltar uma etapa. Use Recomeçar para reiniciar."});
                 return;
               }
               setMessages(snap.messages);
               setInputValues(snap.inputValues);
+              setCurrentPhase(snap.phase);
               flowState.current = snap.flowState;
               callbacks.current = snap.callbacks;
               couponInputIds.current.clear();
@@ -1336,16 +1458,23 @@ export function ColombiaBot({ products, onStartNormal, onSelectProduct, onSelect
             Voltar
           </button>
 
-          {/* Divisor */}
-          <span className="text-zinc-700 text-xs">|</span>
+          <button type="button" onClick={() => setReviewOpen(true)} disabled={history.current.length===0}
+            className="rounded-xl border border-cyan-400/40 bg-cyan-400/10 px-3 py-2 text-sm font-semibold text-cyan-200 disabled:opacity-40">
+            Revisar respostas
+          </button>
 
           {/* Botão Recomeçar */}
           <button
             onClick={() => {
+              if (!window.confirm("Recomeçar? As respostas ainda não enviadas serão apagadas.")) return;
               cancelPendingAdvances();
               clearCompletedBotProgress();
               couponInputIds.current.clear();
               history.current = [];
+              botSubmissionKeyRef.current = createAudioFlowId();
+              botDiagSessionRef.current = createAudioFlowId();
+              botLastLoggedPhaseRef.current = "";
+              setReviewOpen(false);
               setMessages([]);
               setInputValues({});
               setUploadingDocId(null);

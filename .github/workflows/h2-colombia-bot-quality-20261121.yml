@@ -1,0 +1,70 @@
+name: ColombiaBot - auditoria de checkout e UX
+on:
+  pull_request:
+    paths:
+      - "client/src/components/ColombiaBot.tsx"
+      - "client/src/lib/colombiaBotCheckout.ts"
+      - "client/src/pages/Home.tsx"
+      - "server/routers.ts"
+      - "server/colombiaBotQuality20261121.test.ts"
+      - "server/colombiaBotReliability.ts"
+      - "server/colombiaBotReliability.test.ts"
+      - "server/colombiaBotReliability.mysql.test.ts"
+      - "server/routers/colombiaBotDiagnostics.ts"
+      - "client/src/components/ColombiaBotDiagnosticsPanel.tsx"
+      - "scripts/apply-colombiabot-reliability-migration.ts"
+      - "client/src/pages/AdminSettings.tsx"
+      - ".github/workflows/h2-colombia-bot-quality-20261121.yml"
+  workflow_dispatch:
+jobs:
+  audit-bot:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: pnpm/action-setup@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+          cache: pnpm
+      - run: pnpm install --frozen-lockfile
+      - name: Verify Bot checkout, guards and regression flows
+        run: |
+          pnpm exec vitest run \
+            server/colombiaBotQuality20261121.test.ts \
+            server/colombiaBotReliability.test.ts \
+            server/colombiaBotAndroidCouponResume.test.ts \
+            server/colombiaBotBackNavigation.test.ts \
+            server/colombiaBotDirectLink.test.ts \
+            server/colombiaBotStorefrontCards.test.ts \
+            server/questionBlockingBotCoupon.test.ts \
+            server/botUploadVisualConfirmation.test.ts
+      - name: Build site
+        run: pnpm run build
+
+  mysql-bot-isolated:
+    runs-on: ubuntu-latest
+    services:
+      mysql:
+        image: mysql:8.0
+        env:
+          MYSQL_ROOT_PASSWORD: test_only
+          MYSQL_DATABASE: colombiabot_isolated
+        ports:
+          - 3306:3306
+        options: >-
+          --health-cmd="mysqladmin ping -h localhost -uroot -ptest_only"
+          --health-interval=10s --health-timeout=5s --health-retries=10
+    env:
+      COLOMBIABOT_TEST_DATABASE_URL: mysql://root:test_only@127.0.0.1:3306/colombiabot_isolated
+    steps:
+      - uses: actions/checkout@v4
+      - uses: pnpm/action-setup@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+          cache: pnpm
+      - run: pnpm install --frozen-lockfile
+      - name: Create ONLY isolated test tables
+        run: DATABASE_URL="$COLOMBIABOT_TEST_DATABASE_URL" pnpm exec tsx scripts/apply-colombiabot-reliability-migration.ts
+      - name: Test MySQL concurrency, retries, and privacy
+        run: pnpm exec vitest run server/colombiaBotReliability.mysql.test.ts
