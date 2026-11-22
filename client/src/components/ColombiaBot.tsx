@@ -110,10 +110,31 @@ export function ColombiaBot({ products, onStartNormal, onSelectProduct, onSelect
   const [blockedChoice, setBlockedChoice] = useState<BotBlockedChoice | null>(null);
   const [sendError, setSendError] = useState("");
   const [currentPhase, setCurrentPhase] = useState("Serviço");
+  // UUID estável entre reenvios e recarregamentos; só muda ao iniciar outra compra.
+  const botSubmissionKeyRef = useRef(createAudioFlowId());
+  const botDiagSessionRef = useRef(createAudioFlowId());
+  const botLastLoggedPhaseRef = useRef("");
   const [reviewOpen, setReviewOpen] = useState(false);
 
   const submitMutation = trpc.uploads.submitFiles.useMutation();
   const validateCouponMutation = trpc.coupons.validate.useMutation();
+  const botDiagnosticMutation = trpc.colombiaBotDiagnostics.record.useMutation();
+  const reportBotEvent = (eventCode: "etapa" | "falha_envio" | "pedido_confirmado" | "pedido_pendente" | "pedido_repetido", phase = currentPhase) => {
+    const cpToken = typeof window !== "undefined" ? localStorage.getItem("cp_token") || "" : "";
+    const phases = ["Serviço", "Garantia / preço", "Dados", "Documentos", "Cupom", "Pagamento", "Finalizar"];
+    if (!cpToken || !phases.includes(phase)) return;
+    botDiagnosticMutation.mutate({
+      sessionId: botDiagSessionRef.current,
+      phase: phase as "Serviço" | "Garantia / preço" | "Dados" | "Documentos" | "Cupom" | "Pagamento" | "Finalizar",
+      eventCode,
+      cpToken,
+    });
+  };
+  useEffect(() => {
+    if (botLastLoggedPhaseRef.current === currentPhase) return;
+    botLastLoggedPhaseRef.current = currentPhase;
+    reportBotEvent("etapa", currentPhase);
+  }, [currentPhase]); // não duplicar eventos durante renders
   const [isValidatingCoupon, setIsValidatingCoupon] = useState(false);
 
   // Callbacks armazenados em ref para evitar stale closure
@@ -226,6 +247,8 @@ export function ColombiaBot({ products, onStartNormal, onSelectProduct, onSelect
         clientCity: '',
         clientEmail: '',
         couponCode: fs.couponCode || '',
+        botSubmissionKey: botSubmissionKeyRef.current,
+        botDiagSessionId: botDiagSessionRef.current,
         carDocumentYear: '',
         savedAt: Date.now(),
         fromBot: true, // marcador para saber que veio do bot
@@ -391,6 +414,7 @@ export function ColombiaBot({ products, onStartNormal, onSelectProduct, onSelect
     fs.pixProofMime = '';
     fs.couponCode = '';
     fs.couponDiscount = null;
+    botSubmissionKeyRef.current = createAudioFlowId();
   };
 
   const restoreBotProgress = (): boolean => {
@@ -410,6 +434,12 @@ export function ColombiaBot({ products, onStartNormal, onSelectProduct, onSelect
       if (!raw) return false;
 
       const saved = JSON.parse(raw);
+      if (typeof saved.botSubmissionKey === "string" && /^[a-f0-9-]{36}$/i.test(saved.botSubmissionKey)) {
+        botSubmissionKeyRef.current = saved.botSubmissionKey;
+      }
+      if (typeof saved.botDiagSessionId === "string" && /^[a-f0-9-]{36}$/i.test(saved.botDiagSessionId)) {
+        botDiagSessionRef.current = saved.botDiagSessionId;
+      }
       if (!saved?.savedAt || Date.now() - saved.savedAt > 24 * 60 * 60 * 1000) {
         clearCompletedBotProgress();
         return false;
@@ -965,6 +995,7 @@ export function ColombiaBot({ products, onStartNormal, onSelectProduct, onSelect
           city: profileQuery.data?.city || undefined,
           email: profileQuery.data?.email || undefined,
           cpToken: cpToken || undefined,
+          botSubmissionKey: botSubmissionKeyRef.current,
           answers: answersArray.length > 0 ? JSON.stringify(answersArray) : undefined,
           productId: product.id,
           optionId: option?.id,
@@ -985,6 +1016,7 @@ export function ColombiaBot({ products, onStartNormal, onSelectProduct, onSelect
         });
 
         if (isPersistedOrderResult(result)) {
+          reportBotEvent((result as any).message?.includes("anteriormente") ? "pedido_repetido" : "pedido_confirmado", "Finalizar");
           markActionDone(actionId);
           // Limpar antes de fechar o Bot: evita que a vitrine recupere um pedido já concluído.
           clearCompletedBotProgress();
@@ -1005,9 +1037,11 @@ export function ColombiaBot({ products, onStartNormal, onSelectProduct, onSelect
           const message = (result as any).message || (result.success
             ? 'O servidor não confirmou o registro do pedido. Tente novamente.'
             : 'Tente novamente.');
+          reportBotEvent((result as any).pendingReview ? "pedido_pendente" : "falha_envio", "Finalizar");
           setSendError(`Erro ao enviar pedido: ${message}`);
         }
       } catch (err: any) {
+        reportBotEvent("pedido_pendente", "Finalizar");
         setSendError(`Envio não confirmado: ${err?.message || 'erro de conexão'}. Confira seus pedidos antes de tentar novamente.`);
       } finally {
         submittingRef.current = false;
@@ -1436,6 +1470,9 @@ export function ColombiaBot({ products, onStartNormal, onSelectProduct, onSelect
               clearCompletedBotProgress();
               couponInputIds.current.clear();
               history.current = [];
+              botSubmissionKeyRef.current = createAudioFlowId();
+              botDiagSessionRef.current = createAudioFlowId();
+              botLastLoggedPhaseRef.current = "";
               setReviewOpen(false);
               setMessages([]);
               setInputValues({});
