@@ -1,4 +1,5 @@
 import { randomBytes } from "crypto";
+import { DEFAULT_DELIVERED_ORDER_WHATSAPP_TEMPLATE } from "../../shared/deliveredOrderWhatsapp";
 import { sql } from "drizzle-orm";
 import { z } from "zod";
 import { TRPCError } from "@trpc/server";
@@ -187,7 +188,24 @@ function publicGlobalGuide(guide: GlobalGuide) {
   return { found: true as const, title: guide.title, intro: guide.intro, blocks: guide.blocks };
 }
 
+const WHATSAPP_MESSAGE_SETTING_KEY = "delivered_order_guide_whatsapp_message_v1";
+const whatsappMessageSchema = z.string().min(10).max(3500).superRefine((value, ctx) => {
+  if (!value.includes("{nome}")) ctx.addIssue({ code: "custom", message: "Mantenha o campo {nome} para identificar o cliente." });
+  if (!value.includes("{link}")) ctx.addIssue({ code: "custom", message: "Mantenha o campo {link} para enviar as orientações do pedido." });
+});
+
 export const deliveredOrderGuideRouter = router({
+  getWhatsappMessage: adminProcedure.query(async () => {
+    return (await getSetting(WHATSAPP_MESSAGE_SETTING_KEY)) || DEFAULT_DELIVERED_ORDER_WHATSAPP_TEMPLATE;
+  }),
+
+  saveWhatsappMessage: adminProcedure
+    .input(z.object({ message: whatsappMessageSchema }))
+    .mutation(async ({ input }) => {
+      await upsertSetting(WHATSAPP_MESSAGE_SETTING_KEY, input.message);
+      return { saved: true as const };
+    }),
+
   // Todos os cards do ADM abrem exatamente o mesmo editor.
   getGlobal: adminProcedure.query(async () => getGlobalGuide()),
 

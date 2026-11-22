@@ -6,6 +6,8 @@ on:
       - "client/src/pages/DeliveredOrderGuidePage.tsx"
       - "server/routers/deliveredOrderGuide.ts"
       - "server/deliveredOrderGuide.test.ts"
+      - "server/deliveredOrderWhatsappEditor.test.ts"
+      - "shared/deliveredOrderWhatsapp.ts"
       - "server/deliveredOrderGuideAccess.test.ts"
       - "server/siteAccessPolicy.ts"
       - "server/deliveredOrderGuidePublicGates.test.ts"
@@ -34,7 +36,7 @@ jobs:
           node-version: 22
           cache: pnpm
       - run: pnpm install --frozen-lockfile
-      - name: Verificar somente Pedido Entregue
-        run: pnpm exec vitest run server/deliveredOrderGuide.test.ts server/deliveredOrderGuideAccess.test.ts server/deliveredOrderGuidePublicGates.test.ts server/deliveredOrderGuideLogin.test.ts server/deliveredOrderGuideRouteFallback.test.ts server/deliveredOrderGuideLinks.test.ts server/deliveredOrderGuideVideo.test.ts
+      - name: Verificar mensagem WhatsApp e integracao do Pedido Entregue
+        run: pnpm exec vitest run server/deliveredOrderWhatsappEditor.test.ts server/deliveredOrderGuide.test.ts server/deliveredOrderGuideAccess.test.ts
       - name: Compilar alteração do Pedido Entregue
         run: pnpm build
