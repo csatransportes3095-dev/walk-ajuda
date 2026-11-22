@@ -1,0 +1,36 @@
+name: ColombiaBot - auditoria de checkout e UX
+on:
+  pull_request:
+    paths:
+      - "client/src/components/ColombiaBot.tsx"
+      - "client/src/lib/colombiaBotCheckout.ts"
+      - "client/src/pages/Home.tsx"
+      - "server/routers.ts"
+      - "server/colombiaBotQuality20261121.test.ts"
+      - ".github/workflows/h2-colombia-bot-quality-20261121.yml"
+  workflow_dispatch:
+jobs:
+  audit-bot:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: pnpm/action-setup@v4
+        with:
+          version: 10.4.1
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+          cache: pnpm
+      - run: pnpm install --frozen-lockfile
+      - name: Verify Bot checkout, guards and regression flows
+        run: |
+          pnpm exec vitest run \
+            server/colombiaBotQuality20261121.test.ts \
+            server/colombiaBotAndroidCouponResume.test.ts \
+            server/colombiaBotBackNavigation.test.ts \
+            server/colombiaBotDirectLink.test.ts \
+            server/colombiaBotStorefrontCards.test.ts \
+            server/questionBlockingBotCoupon.test.ts \
+            server/botUploadVisualConfirmation.test.ts
+      - name: Build site
+        run: pnpm run build
