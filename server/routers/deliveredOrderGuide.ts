@@ -5,6 +5,7 @@ import { TRPCError } from "@trpc/server";
 import { getDb, getSetting, upsertSetting } from "../db";
 import { requireCustomerSession } from "../customerSession";
 import { sameDeliveredGuideCustomerPhone } from "../deliveredOrderGuidePhone";
+import { resolveDeliveredGuideVideo } from "../../client/src/lib/deliveredGuideVideo";
 import { adminProcedure, publicProcedure, router } from "../_core/trpc";
 
 // Orientações de pedido entregue: não são perguntas e não alteram status.
@@ -13,8 +14,15 @@ const blockSchema = z.object({
   title: z.string().trim().max(160),
   text: z.string().trim().max(4000),
   imageUrl: z.string().trim().max(2048),
-}).refine(block => Boolean(block.title || block.text || block.imageUrl), {
-  message: "Adicione texto ou uma imagem em cada bloco.",
+  mediaType: z.enum(["image", "video"]).default("image"),
+  videoUrl: z.string().trim().max(2048).default(""),
+}).superRefine((block, ctx) => {
+  if (!block.title && !block.text && !(block.mediaType === "video" ? block.videoUrl : block.imageUrl)) {
+    ctx.addIssue({ code: "custom", message: "Adicione texto, foto ou vídeo em cada bloco." });
+  }
+  if (block.mediaType === "video" && !resolveDeliveredGuideVideo(block.videoUrl)) {
+    ctx.addIssue({ code: "custom", path: ["videoUrl"], message: "Cole um link válido de vídeo do YouTube, Vimeo, Drive ou arquivo MP4/WebM HTTPS." });
+  }
 });
 const blocksSchema = z.array(blockSchema).min(1).max(24);
 type Block = z.infer<typeof blockSchema>;
@@ -50,6 +58,9 @@ const saveSchema = orderKeySchema.extend({
   input.blocks.forEach((block, index) => {
     if (block.imageUrl && !allowedImageUrl(block.imageUrl)) {
       ctx.addIssue({ code: "custom", path: ["blocks", index, "imageUrl"], message: "Imagem fora do armazenamento H2 autorizado." });
+    }
+    if (block.mediaType === "video" && !resolveDeliveredGuideVideo(block.videoUrl)) {
+      ctx.addIssue({ code: "custom", path: ["blocks", index, "videoUrl"], message: "Link de vídeo não permitido." });
     }
   });
 });
@@ -87,7 +98,10 @@ function normalizeRow(row: any) {
   let blocks: Block[] = [];
   try {
     const parsed = JSON.parse(String(row.blocks || "[]"));
-    if (Array.isArray(parsed)) blocks = parsed.filter(item => blockSchema.safeParse(item).success);
+    if (Array.isArray(parsed)) blocks = parsed.flatMap(item => {
+      const result = blockSchema.safeParse(item);
+      return result.success ? [result.data] : [];
+    });
   } catch { /* não expor conteúdo inválido */ }
   return {
     id: Number(row.id),
@@ -137,6 +151,9 @@ const globalGuideInputSchema = z.object({
   input.blocks.forEach((block, index) => {
     if (block.imageUrl && !allowedImageUrl(block.imageUrl)) {
       ctx.addIssue({ code: "custom", path: ["blocks", index, "imageUrl"], message: "Imagem fora do armazenamento H2 autorizado." });
+    }
+    if (block.mediaType === "video" && !resolveDeliveredGuideVideo(block.videoUrl)) {
+      ctx.addIssue({ code: "custom", path: ["blocks", index, "videoUrl"], message: "Link de vídeo não permitido." });
     }
   });
 });
@@ -328,7 +345,7 @@ export const deliveredOrderGuideRouter = router({
         found: true as const,
         title: record.title,
         intro: record.intro,
-        blocks: record.blocks.filter(block => allowedImageUrl(block.imageUrl)),
+        blocks: record.blocks.filter(block => allowedImageUrl(block.imageUrl) && (block.mediaType !== "video" || Boolean(resolveDeliveredGuideVideo(block.videoUrl)))),
         customerName: record.customerName,
         orderNumber: record.orderNumber,
       };

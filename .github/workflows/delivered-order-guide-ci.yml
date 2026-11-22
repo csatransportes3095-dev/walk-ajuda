@@ -12,6 +12,8 @@ on:
       - "server/deliveredOrderGuideLogin.test.ts"
       - "server/deliveredOrderGuideRouteFallback.test.ts"
       - "server/deliveredOrderGuideLinks.test.ts"
+      - "server/deliveredOrderGuideVideo.test.ts"
+      - "client/src/lib/deliveredGuideVideo.ts"
       - "client/src/lib/deliveredGuideLinks.ts"
       - "client/public/route-fallback-guard-v1.js"
       - "client/index.html"
@@ -33,4 +35,6 @@ jobs:
           cache: pnpm
       - run: pnpm install --frozen-lockfile
       - name: Verificar somente Pedido Entregue
-        run: pnpm exec vitest run server/deliveredOrderGuide.test.ts server/deliveredOrderGuideAccess.test.ts server/deliveredOrderGuidePublicGates.test.ts server/deliveredOrderGuideLogin.test.ts server/deliveredOrderGuideRouteFallback.test.ts server/deliveredOrderGuideLinks.test.ts
+        run: pnpm exec vitest run server/deliveredOrderGuide.test.ts server/deliveredOrderGuideAccess.test.ts server/deliveredOrderGuidePublicGates.test.ts server/deliveredOrderGuideLogin.test.ts server/deliveredOrderGuideRouteFallback.test.ts server/deliveredOrderGuideLinks.test.ts server/deliveredOrderGuideVideo.test.ts
+      - name: Compilar alteração do Pedido Entregue
+        run: pnpm build
