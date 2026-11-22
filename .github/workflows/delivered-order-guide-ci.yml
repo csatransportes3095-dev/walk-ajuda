@@ -1,0 +1,23 @@
+name: Pedido Entregue - teste isolado
+on:
+  pull_request:
+    paths:
+      - "client/src/components/OrderDeliveredGuide.tsx"
+      - "client/src/pages/DeliveredOrderGuidePage.tsx"
+      - "server/routers/deliveredOrderGuide.ts"
+      - "server/deliveredOrderGuide.test.ts"
+      - ".github/workflows/delivered-order-guide-ci.yml"
+  workflow_dispatch:
+jobs:
+  delivered-guide:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: pnpm/action-setup@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+          cache: pnpm
+      - run: pnpm install --frozen-lockfile
+      - name: Verificar somente Pedido Entregue
+        run: pnpm exec vitest run server/deliveredOrderGuide.test.ts

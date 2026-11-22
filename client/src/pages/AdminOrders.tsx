@@ -29,6 +29,7 @@ import OrderH2AdsBrowserShortcut from "@/components/OrderH2AdsBrowserShortcut";
 import OrderCpfVault from "@/components/OrderCpfVault";
 import OrderPhotoConfirmation from "@/components/OrderPhotoConfirmation";
 import OrderConfirmation from "@/components/OrderConfirmation";
+import OrderDeliveredGuide from "@/components/OrderDeliveredGuide";
 import OrderPhotoMarkers from "@/components/OrderPhotoMarkers";
 import CompactOrderPhotoMarkers from "@/components/CompactOrderPhotoMarkers";
 import { matchesDeliveredOrderSearch } from "@/lib/deliveredOrderSearch";
@@ -4824,6 +4825,13 @@ export default function AdminOrders() {
                                                       customerName={ar.customerName}
                                                       orderNumber={ar.orderNumber}
                                                     />
+                                                    <OrderDeliveredGuide
+                                                      registrationId={ar.registrationId}
+                                                      subOrderIndex={0}
+                                                      customerPhone={ar.customerPhone || ""}
+                                                      customerName={ar.customerName}
+                                                      orderNumber={ar.orderNumber}
+                                                    />
                                                   </div>
                                                 </div>
                                               </div>
@@ -6349,6 +6357,13 @@ export default function AdminOrders() {
                             orderNumber={order.orderNumber}
                           />
 <OrderConfirmation
+                            registrationId={order.id}
+                            subOrderIndex={order.subOrderIndex ?? 0}
+                            customerPhone={order.phone || ""}
+                            customerName={order.customerName || order.codeClientName}
+                            orderNumber={order.orderNumber}
+                          />
+                          <OrderDeliveredGuide
                             registrationId={order.id}
                             subOrderIndex={order.subOrderIndex ?? 0}
                             customerPhone={order.phone || ""}
