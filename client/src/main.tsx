@@ -111,7 +111,8 @@ function RootMaintenanceBoundary() {
   const isSiteAccessEntry = pathname === "/site-access";
   // A página informativa do Pedido Entregue é pública somente com token individual válido.
   const isDeliveredOrderGuideLink = /^\/pedido-entregue\/[a-f0-9]{48}\/?$/.test(pathname);
-  const bypassManifest = isDeliveredOrderGuideLink || isSiteAccessEntry || pathname === "/adimin/android" || (pathname === "/adm" || pathname.startsWith("/adm/") || pathname.startsWith("/admin")) || isChassisAdminPath(pathname) || isH2AdsPath(pathname) || pathname === "/similaridade";
+  const isConfirmationGuideLink = /^\/confirmacao-orientacoes\/[a-f0-9]{48}\/?$/.test(pathname);
+  const bypassManifest = isConfirmationGuideLink || isDeliveredOrderGuideLink || isSiteAccessEntry || pathname === "/adimin/android" || (pathname === "/adm" || pathname.startsWith("/adm/") || pathname.startsWith("/admin")) || isChassisAdminPath(pathname) || isH2AdsPath(pathname) || pathname === "/similaridade";
 
   const manifestQuery = trpc.maintenanceManifest.get.useQuery(undefined, {
     enabled: !bypassManifest,
