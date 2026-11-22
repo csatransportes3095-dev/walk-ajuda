@@ -41,9 +41,9 @@ export default function OrderConfirmationGuide({ registrationId, subOrderIndex, 
     setBlocks(record.blocks?.length ? record.blocks.map(block => normalizeBlock(block)) : [newBlock()]);
   }, [record?.updatedAt, dirty]);
   const refresh = async () => {
-    await utils.deliveredOrderGuide.getGlobal.invalidate();
+    await utils.orderConfirmation.getGlobalGuide.invalidate();
     await query.refetch();
-    await utils.deliveredOrderGuide.getForOrder.invalidate(orderKey);
+    await utils.orderConfirmation.getForOrder.invalidate(orderKey);
   };
   const save = trpc.orderConfirmation.saveGlobalGuide.useMutation({
     onSuccess: async () => { setDirty(false); toast.success("Orientações salvas."); await refresh(); },
