@@ -5,10 +5,14 @@ import { BookOpenCheck, CheckCircle2, Image as ImageIcon, ShieldCheck } from "lu
 export default function DeliveredOrderGuidePage() {
   const [, params] = useRoute("/pedido-entregue/:token");
   const token = params?.token || "";
-  const query = trpc.deliveredOrderGuide.getPublic.useQuery(
-    { token }, { enabled: /^[a-f0-9]{48}$/.test(token), refetchOnWindowFocus: true }
+  const isLegacyToken = /^[a-f0-9]{48}$/.test(token);
+  const globalQuery = trpc.deliveredOrderGuide.getPublicGlobal.useQuery(undefined, { refetchOnWindowFocus: true });
+  // Links por token compartilhados antes desta atualização também continuam abrindo.
+  const legacyQuery = trpc.deliveredOrderGuide.getPublic.useQuery(
+    { token }, { enabled: isLegacyToken && globalQuery.data?.found !== true, refetchOnWindowFocus: true }
   );
-  const guide = query.data?.found ? query.data : null;
+  const guide = globalQuery.data?.found ? globalQuery.data : legacyQuery.data?.found ? legacyQuery.data : null;
+  const isLoading = globalQuery.isLoading || (isLegacyToken && !globalQuery.data?.found && legacyQuery.isLoading);
   return (
     <main className="min-h-screen bg-[#030b11] px-3 py-6 text-white sm:px-5">
       <div className="mx-auto max-w-2xl space-y-4">
@@ -19,11 +23,9 @@ export default function DeliveredOrderGuidePage() {
           <div className="mb-2 h-1 rounded-full bg-gradient-to-r from-cyan-400 via-blue-500 to-emerald-500"/>
           <p className="text-xs font-bold uppercase tracking-widest text-emerald-300">Orientações do cliente</p>
           <h1 className="mt-2 text-2xl font-black text-white sm:text-3xl">{guide?.title || "PEDIDO ENTREGUE"}</h1>
-          {guide?.customerName && <p className="mt-2 text-sm text-slate-300">{guide.customerName}</p>}
-          {guide?.orderNumber && <p className="text-xs text-cyan-200">Pedido #{guide.orderNumber}</p>}
         </header>
-        {query.isLoading && <div role="status" className="rounded-xl border border-cyan-500/20 bg-slate-900/80 p-5 text-center text-sm">Carregando orientações...</div>}
-        {!query.isLoading && !guide && (
+        {isLoading && <div role="status" className="rounded-xl border border-cyan-500/20 bg-slate-900/80 p-5 text-center text-sm">Carregando orientações...</div>}
+        {!isLoading && !guide && (
           <section role="status" className="rounded-xl border border-amber-400/25 bg-slate-900 p-6 text-center text-sm text-amber-200">
             Este link não está disponível. Solicite à equipe H2 Colombiano o link atualizado.
           </section>
