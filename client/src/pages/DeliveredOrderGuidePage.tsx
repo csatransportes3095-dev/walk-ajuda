@@ -1,7 +1,20 @@
 import { useRoute } from "wouter";
 import { useEffect } from "react";
 import { trpc } from "@/lib/trpc";
+import { splitDeliveredGuideLinks } from "@/lib/deliveredGuideLinks";
 import { BookOpenCheck, CheckCircle2, Image as ImageIcon, ShieldCheck } from "lucide-react";
+
+function LinkedGuideText({ text }: { text: string }) {
+  return <>
+    {splitDeliveredGuideLinks(text).map((part, index) =>
+      part.href
+        ? <a key={index} href={part.href} target="_blank" rel="noopener noreferrer"
+            className="break-all font-semibold text-cyan-300 underline underline-offset-4 hover:text-cyan-100 focus-visible:outline focus-visible:outline-2 focus-visible:outline-cyan-200"
+          >{part.text}</a>
+        : <span key={index}>{part.text}</span>
+    )}
+  </>;
+}
 
 export default function DeliveredOrderGuidePage() {
   const [, params] = useRoute("/pedido-entregue/:token");
@@ -39,13 +52,13 @@ export default function DeliveredOrderGuidePage() {
           </section>
         )}
         {guide && <>
-          {guide.intro && <section className="rounded-xl border border-emerald-400/25 bg-emerald-950/50 p-5 text-sm leading-relaxed whitespace-pre-wrap">{guide.intro}</section>}
+          {guide.intro && <section className="rounded-xl border border-emerald-400/25 bg-emerald-950/50 p-5 text-sm leading-relaxed whitespace-pre-wrap"><LinkedGuideText text={guide.intro}/></section>}
           {guide.blocks.map((block, index) => (
             <section key={block.id} className="overflow-hidden rounded-2xl border border-cyan-400/30 bg-[#061913] shadow-lg">
               {block.imageUrl && <img src={block.imageUrl} alt={block.title || "Exemplo visual " + (index + 1)} loading={index === 0 ? "eager" : "lazy"} className="max-h-[700px] w-full bg-black/50 object-contain"/>}
               <div className="space-y-2 p-4 sm:p-5">
                 {block.title && <h2 className="flex items-start gap-2 text-lg font-black text-emerald-200"><ImageIcon className="mt-1 h-5 w-5 shrink-0"/>{block.title}</h2>}
-                {block.text && <p className="whitespace-pre-wrap text-sm leading-7 text-slate-100 sm:text-base">{block.text}</p>}
+                {block.text && <p className="whitespace-pre-wrap text-sm leading-7 text-slate-100 sm:text-base"><LinkedGuideText text={block.text}/></p>}
               </div>
             </section>
           ))}
