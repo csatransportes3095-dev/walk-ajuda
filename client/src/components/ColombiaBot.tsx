@@ -863,7 +863,7 @@ export function ColombiaBot({ products, onStartNormal, onSelectProduct, onSelect
     setCurrentPhase("Pagamento");
     const basePrice = getModelPrice(flowState.current.priceModel) || priceForOption(option);
     const totals = getBotCheckoutTotals(basePrice, sitePromoOverrides ? null : flowState.current.couponDiscount);
-    const price = totals.total;
+    const price = basePrice.trim() ? totals.total : "";
 
     const msgId = uid();
     pendingPixMsgId.current = msgId;
@@ -896,7 +896,7 @@ export function ColombiaBot({ products, onStartNormal, onSelectProduct, onSelect
 
     // Salvar progresso ao chegar na etapa de pagamento PIX
     saveBotProgress('cadastro', 'pagamento');
-    const summary = `Resumo do pedido: ${product.name}${option ? " • " + (option.label || option.name) : ""}\n${flowState.current.priceModel ? "Plano: " + flowState.current.priceModel.label + "\n" : ""}Respostas: ${Object.keys(flowState.current.answers).length} • Documentos: ${Object.values(flowState.current.docFiles).filter(doc => Boolean(doc.url)).length}\nTotal a pagar: ${price}`;
+    const summary = `Resumo do pedido: ${product.name}${option ? " • " + (option.label || option.name) : ""}\n${flowState.current.priceModel ? "Plano: " + flowState.current.priceModel.label + "\n" : ""}Respostas: ${Object.keys(flowState.current.answers).length} • Documentos: ${Object.values(flowState.current.docFiles).filter(doc => Boolean(doc.url)).length}\nTotal a pagar: ${price || "A confirmar"}`;
     addMsgs(
       { type: 'bot', id: uid(), text: summary + "\n\nConfira os dados e faça o pagamento via Pix somente após conferir o valor." },
       { type: 'pix-payment', id: msgId, pixKey, pixName, pixBank, price, basePrice: totals.base, discountPrice: totals.discount, uploaded: false }
@@ -1266,14 +1266,14 @@ export function ColombiaBot({ products, onStartNormal, onSelectProduct, onSelect
               <div className="flex items-center gap-2 text-emerald-400 text-xs font-bold">
                 <span>💚</span> CHAVE PIX
               </div>
-              {!msg.pixKey && <p className="text-sm font-bold text-amber-200">Chave Pix indisponível. Não efetue o pagamento.</p>}
+              {(!msg.pixKey || !msg.price) && <p className="text-sm font-bold text-amber-200">Dados de pagamento incompletos. Não efetue o pagamento até a chave e o valor estarem disponíveis.</p>}
               {msg.pixName && <p className="text-xs text-zinc-400">Beneficiário: <span className="text-white font-semibold">{msg.pixName}</span>{msg.pixBank ? ` — ${msg.pixBank}` : ''}</p>}
               {msg.discountPrice && msg.discountPrice !== "R$ 0,00" && <><p className="text-xs text-zinc-400">Valor original: {msg.basePrice}</p><p className="text-xs text-emerald-300">Desconto: {msg.discountPrice}</p></>}
               {msg.price && <p className="text-sm text-zinc-200">Total a pagar: <span className="text-emerald-300 font-black text-lg">{msg.price}</span></p>}
               <div className="flex items-center gap-2 bg-zinc-900 rounded-lg px-3 py-2">
                 <span className="text-sm text-white font-mono flex-1 break-all">{msg.pixKey}</span>
                 <button
-                  disabled={!msg.pixKey}
+                  disabled={!msg.pixKey || !msg.price}
                   onClick={async () => {
                     try { await navigator.clipboard.writeText(msg.pixKey); setPixCopied(true); queueAdvance(() => setPixCopied(false), 2000); }
                     catch { addMsgs({type:"bot",id:uid(),text:"Não foi possível copiar a chave Pix."}); }
@@ -1295,7 +1295,7 @@ export function ColombiaBot({ products, onStartNormal, onSelectProduct, onSelect
                 </div>
               ) : (
                 <button
-                  disabled={!msg.pixKey}
+                  disabled={!msg.pixKey || !msg.price}
                   onClick={() => {
                     pendingPixMsgId.current = msg.id;
                     pixFileInputRef.current?.click();
