@@ -22,6 +22,21 @@ export function parseColombiaBotPhotoSource(raw: unknown): URL | null {
   return url;
 }
 
+// Links novos usam apenas a chave do arquivo. Mantemos src= para links antigos.
+export function parseColombiaBotPhotoKey(raw: unknown): URL | null {
+  if (typeof raw !== "string" || raw.length > 260) return null;
+  const key = raw.trim();
+  if (!/^profile-photos\/[a-zA-Z0-9_-][a-zA-Z0-9._-]{0,220}\.(?:jpg|jpeg|png|webp)$/i.test(key) ||
+      key.includes("..")) return null;
+  return parseColombiaBotPhotoSource(`https://midia.h2colombiano.com/${key}`);
+}
+
+export function parseColombiaBotPhotoRequest(query: { src?: unknown; k?: unknown }): URL | null {
+  // Se k= for fornecido, não aceitar src= como substituto para valores inválidos.
+  if (query.k !== undefined) return parseColombiaBotPhotoKey(query.k);
+  return parseColombiaBotPhotoSource(query.src);
+}
+
 export async function loadColombiaBotPhotoFromR2(
   sourceUrl: URL,
   storage: {
