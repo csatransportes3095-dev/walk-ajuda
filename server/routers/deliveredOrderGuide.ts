@@ -300,7 +300,8 @@ export const deliveredOrderGuideRouter = router({
       token: z.string().regex(/^[a-f0-9]{48}$/),
       customerSessionToken: z.string().min(32).max(256),
     }))
-    .query(async ({ input }) => {
+    // POST: nao enviar o token de sessao por URL/GET.
+    .mutation(async ({ input }) => {
       // O link nao e mais publico: a sessao deve ser valida no servidor, nao
       // apenas no navegador. Nao consultar registros antes de validar login.
       const session = await requireCustomerSession(input.customerSessionToken);
