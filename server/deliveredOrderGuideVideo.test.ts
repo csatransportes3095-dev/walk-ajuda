@@ -26,6 +26,19 @@ describe("Pedido Entregue: foto ou vídeo URL na mesma página", () => {
     });
     expect(resolveDeliveredGuideVideo("https://midia.h2colombiano.com/video.webm?v=1")?.kind).toBe("file");
   });
+  it("reconhece vídeo já publicado no H2 pelo slug e mantém player na mesma página", () => {
+    expect(resolveDeliveredGuideVideo("https://h2colombiano.com/video/como-entrar-na-conta")).toEqual({
+      kind: "file", url: "https://h2colombiano.com/video/como-entrar-na-conta",
+    });
+    expect(resolveDeliveredGuideVideo("https://www.h2colombiano.com/video/como-entrar-na-conta")?.kind).toBe("file");
+    expect(resolveDeliveredGuideVideo("https://h2colombiano.com/video/../../admin")).toBeNull();
+    expect(resolveDeliveredGuideVideo("https://h2colombiano.com/qualquer-coisa")).toBeNull();
+  });
+  it("ignora URL antiga de foto quando o bloco ativo é vídeo", () => {
+    expect(editor).toContain('imageUrl: b.mediaType === "video" ? "" : b.imageUrl.trim()');
+    expect(router).toContain('block.mediaType !== "video" && block.imageUrl && !allowedImageUrl(block.imageUrl)');
+    expect(router).toContain('block.mediaType === "video" ? Boolean(resolveDeliveredGuideVideo(block.videoUrl)) : allowedImageUrl(block.imageUrl)');
+  });
   it("rejeita javascript, HTTP, hosts locais e links sem player suportado", () => {
     for (const url of ["javascript:alert(1)", "http://youtube.com/watch?v=dQw4w9WgXcQ",
       "https://localhost/test.mp4", "https://127.0.0.1/test.mp4", "https://example.com/site",
