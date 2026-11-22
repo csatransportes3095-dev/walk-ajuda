@@ -2307,10 +2307,23 @@ export default function Home() {
     const od = submittedOrderData;
     const profilePhotoUrl = String(od?.profilePhotoUrl || myProfileQuery.data?.profilePhotoUrl || '').trim();
     if (!profilePhotoUrl) return { pageUrl: '', imageUrl: '' };
-    const encoded = encodeURIComponent(profilePhotoUrl);
+    // Enviar chave curta e estável ao WhatsApp, sem URL codificada dentro de URL.
+    // O servidor valida a origem e mantém compatibilidade com links antigos (src=).
+    let photoKey = "";
+    try {
+      const parsed = new URL(profilePhotoUrl);
+      if (parsed.protocol === "https:" && parsed.hostname === "midia.h2colombiano.com" &&
+          !parsed.username && !parsed.password && !parsed.port && !parsed.search && !parsed.hash &&
+          /^\/profile-photos\/[a-zA-Z0-9_-][a-zA-Z0-9._-]{0,220}\.(?:jpg|jpeg|png|webp)$/i.test(parsed.pathname) &&
+          !parsed.pathname.includes("..")) {
+        photoKey = parsed.pathname.slice(1);
+      }
+    } catch { /* não enviar um link quebrado */ }
+    if (!photoKey) return { pageUrl: '', imageUrl: '' };
+    const param = `k=${encodeURIComponent(photoKey)}`;
     return {
-      pageUrl: publicSiteUrl(`/link/foto-cliente?src=${encoded}`),
-      imageUrl: publicSiteUrl(`/link/foto-cliente-img?src=${encoded}`),
+      pageUrl: publicSiteUrl(`/link/foto-cliente?${param}`),
+      imageUrl: publicSiteUrl(`/link/foto-cliente-img?${param}`),
     };
   };
 

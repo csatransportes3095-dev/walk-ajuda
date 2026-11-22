@@ -51,7 +51,7 @@ describe("ColombiaBot: checkout, ADM e experiencia segura", () => {
 
   it("respeita ativacao do bot pelo ADM em /bot", () => {
     expect(home).toContain("if (matchBot && botEnabled && products");
-    expect(home).toContain("botEnabled && showColombiaBot && (");
+    expect(home).toContain("botEnabled && showColombiaBot && botCatalogReady && (");
   });
   it("prepara somente as duas tabelas do Bot antes de iniciar a API", () => {
     const migration = "run_boot_step \"db-migrate-colombiabot\" pnpm exec tsx scripts/apply-colombiabot-reliability-migration.ts";

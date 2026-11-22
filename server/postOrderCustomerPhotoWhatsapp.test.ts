@@ -18,11 +18,11 @@ describe("foto principal do cliente no pos-pedido", () => {
   });
 
   it("usa link H2 proprio para gerar miniatura no WhatsApp", () => {
-    expect(home).toContain("/link/foto-cliente?src=");
+    expect(home).toContain("/link/foto-cliente?${param}");
     expect(serverIndex).toContain('app.get("/link/foto-cliente"');
     expect(serverIndex).toContain('app.get("/link/foto-cliente-img"');
     expect(serverIndex).toContain('property="og:image"');
-    expect(serverIndex).toContain("parseColombiaBotPhotoSource(req.query.src)");
+    expect(serverIndex).toContain("parseColombiaBotPhotoRequest(req.query)");
     expect(serverIndex).toContain("loadColombiaBotPhotoFromR2(sourceUrl)");
   });
 
@@ -30,6 +30,7 @@ describe("foto principal do cliente no pos-pedido", () => {
     expect(serverIndex).toContain('res.set("Content-Type", image.contentType)');
     expect(serverIndex).toContain('res.set("Content-Length", String(image.buffer.length))');
     expect(serverIndex).toContain("maxPreviewBytes = 5 * 1024 * 1024");
+    expect(serverIndex).toContain("optimizeColombiaBotWhatsappPhoto(preview)");
   });
 
   it("preaquece e mantém a foto em cache antes do WhatsApp", () => {
