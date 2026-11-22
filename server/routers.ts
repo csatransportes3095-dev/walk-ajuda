@@ -79,6 +79,8 @@ import { orderPhotoAttemptsRouter } from "./routers/orderPhotoAttempts";
 import { h2bicoReviewRouter } from "./h2bicoReview";
 import { h2bicoIntelligenceRouter } from "./h2bicoReviewIntelligence";
 import { createSqlOrderPersistenceStore, isPersistedPublicOrder, notifyOnlyAfterPersistence, persistPublicOrder } from "./orderPersistence";
+import { colombiaBotDiagnosticsRouter } from "./routers/colombiaBotDiagnostics";
+import { claimColombiaBotSubmission, confirmColombiaBotSubmission, flagColombiaBotSubmissionForReview } from "./colombiaBotReliability";
 import { ensureAutomaticScheduleForOrder, regenerateAutomaticScheduleForOrder } from "./autoSchedule";
 import { resolveLegacyCommissionValue, type CommissionCandidate } from "./commissionResolver";
 import { resolveReferralCommissionState } from "../shared/referralCommissionPolicy";
@@ -455,6 +457,7 @@ async function withResolvedRaffleWinnerPhoto<T extends any>(raffle: T): Promise<
 
 export const appRouter = router({
   siteSecurity: siteSecurityRouter,
+  colombiaBotDiagnostics: colombiaBotDiagnosticsRouter,
   vinRegistry: vinRegistryRouter,
   vehicleUsage: vehicleUsageRouter,
   cpfVault: cpfVaultRouter,
@@ -1440,6 +1443,7 @@ export const appRouter = router({
         paymentProofUrl: z.string().optional(),    // URL já enviada via /api/upload/client-file
         paymentProofMime: z.string().optional(),
         vipInstallmentCheckoutToken: z.string().min(16).max(80).optional(),
+        botSubmissionKey: z.string().uuid().optional(),
         answers: z.string().optional(),
         // Referências aditivas de respostas em áudio: usadas somente pelo novo tipo de pergunta.
         productId: z.number().int().positive().optional(),
@@ -1480,6 +1484,8 @@ export const appRouter = router({
           if (phoneBlock.blocked) return { success: false, message: 'Acesso bloqueado. Entre em contato pelo WhatsApp.' };
         }
         logIpAccess(clientIp, 'order', input.phone, undefined).catch(() => {});
+        let claimedBotDb: any;
+        let claimedBotRequestKey: string | undefined;
         try {
           // Validar acesso: aceitar accessCode (sistema antigo) OU cpToken (novo sistema)
           let cpTokenValid = false;
@@ -1801,6 +1807,35 @@ export const appRouter = router({
           // Garantir que temos o phone: usar input.phone ou extrair do cpToken
           const effectivePhone = (input.phone || cpTokenPhone || '').replace(/\D/g, '');
 
+          // O lock é adquirido somente após as validações de produto, sessão, cupom e áudios.
+          // Uma segunda instância nunca deve executar persistência nem efeitos colaterais.
+          if (input.botSubmissionKey) {
+            const botDb = await (await import('./db')).getDb();
+            if (!botDb) return { success: false, message: 'Serviço temporariamente indisponível. Seu pedido não foi enviado.' };
+            const claim = await claimColombiaBotSubmission(botDb, input.botSubmissionKey, {
+              phone: input.phone || cpTokenPhone || '',
+              productId: input.productId,
+              optionId: input.optionId,
+              priceModelId: input.priceModelId,
+            });
+            if (claim.kind === "duplicate") {
+              return {
+                success: true,
+                message: 'Este pedido já foi registrado anteriormente. Nenhum pedido duplicado foi criado.',
+                registrationId: claim.registrationId,
+                scheduleUrl: null,
+              };
+            }
+            if (claim.kind === "pending") {
+              return { success: false, message: 'Seu pedido já está em processamento ou precisa de conferência. Consulte /acompanhar antes de tentar novamente.', pendingReview: true };
+            }
+            if (claim.kind === "conflict") {
+              return { success: false, message: 'Os dados desta tentativa mudaram. Recomece o atendimento para gerar uma nova solicitação.' };
+            }
+            claimedBotDb = botDb;
+            claimedBotRequestKey = input.botSubmissionKey;
+          }
+
           let persistedOrder: Awaited<ReturnType<typeof persistPublicOrder>> | undefined;
           let persistenceDb: any;
           let outerRegId: number | undefined;
@@ -1842,7 +1877,18 @@ export const appRouter = router({
           }
           if (!isPersistedPublicOrder(persistedOrder)) {
             console.error('[OrderStatus] Pedido rejeitado: registrationId/status inicial não foram persistidos.');
-            return { success: false, message: 'Não foi possível registrar o pedido. Tente novamente; nenhum pedido foi confirmado.' };
+            if (claimedBotDb && claimedBotRequestKey) {
+              await flagColombiaBotSubmissionForReview(claimedBotDb, claimedBotRequestKey);
+            }
+            return { success: false, message: 'Não foi possível confirmar o registro. Consulte /acompanhar antes de fazer outra tentativa.', pendingReview: Boolean(claimedBotRequestKey) };
+          }
+          // Registrar os IDs idempotentes imediatamente após a gravação do status.
+          // Uma falha nos e-mails ou no financeiro nunca poderá reabrir o pedido.
+          if (claimedBotDb && claimedBotRequestKey) {
+            await confirmColombiaBotSubmission(claimedBotDb, claimedBotRequestKey, {
+              registrationId: persistedOrder.registrationId,
+              orderStatusId: persistedOrder.orderStatusId,
+            });
           }
           try {
             if (!cpTokenValid) await consumeAccessCode(input.accessCode || '', input.phone);
@@ -2335,6 +2381,11 @@ export const appRouter = router({
           };
         } catch (error) {
           console.error('Erro geral ao processar pedido:', error);
+          if (claimedBotDb && claimedBotRequestKey) {
+            try { await flagColombiaBotSubmissionForReview(claimedBotDb, claimedBotRequestKey); }
+            catch (flagError) { console.error('[ColombiaBot] Falha ao sinalizar conferência:', flagError); }
+            return { success: false, message: 'Não foi possível confirmar o pedido. Verifique /acompanhar; não reenvie automaticamente.', pendingReview: true };
+          }
           return { success: false, message: 'Erro ao processar pedido' };
         }
       }),
