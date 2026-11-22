@@ -56,7 +56,7 @@ const saveSchema = orderKeySchema.extend({
   blocks: blocksSchema,
 }).superRefine((input, ctx) => {
   input.blocks.forEach((block, index) => {
-    if (block.imageUrl && !allowedImageUrl(block.imageUrl)) {
+    if (block.mediaType !== "video" && block.imageUrl && !allowedImageUrl(block.imageUrl)) {
       ctx.addIssue({ code: "custom", path: ["blocks", index, "imageUrl"], message: "Imagem fora do armazenamento H2 autorizado." });
     }
     if (block.mediaType === "video" && !resolveDeliveredGuideVideo(block.videoUrl)) {
@@ -149,7 +149,7 @@ const globalGuideInputSchema = z.object({
   blocks: blocksSchema,
 }).superRefine((input, ctx) => {
   input.blocks.forEach((block, index) => {
-    if (block.imageUrl && !allowedImageUrl(block.imageUrl)) {
+    if (block.mediaType !== "video" && block.imageUrl && !allowedImageUrl(block.imageUrl)) {
       ctx.addIssue({ code: "custom", path: ["blocks", index, "imageUrl"], message: "Imagem fora do armazenamento H2 autorizado." });
     }
     if (block.mediaType === "video" && !resolveDeliveredGuideVideo(block.videoUrl)) {
@@ -345,7 +345,7 @@ export const deliveredOrderGuideRouter = router({
         found: true as const,
         title: record.title,
         intro: record.intro,
-        blocks: record.blocks.filter(block => allowedImageUrl(block.imageUrl) && (block.mediaType !== "video" || Boolean(resolveDeliveredGuideVideo(block.videoUrl)))),
+        blocks: record.blocks.filter(block => block.mediaType === "video" ? Boolean(resolveDeliveredGuideVideo(block.videoUrl)) : allowedImageUrl(block.imageUrl)),
         customerName: record.customerName,
         orderNumber: record.orderNumber,
       };
