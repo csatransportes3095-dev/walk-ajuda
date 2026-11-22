@@ -1,5 +1,6 @@
 import React from "react";
-import { ChevronRight, FileText, ShieldCheck, Truck } from "lucide-react";
+import { ChevronRight, Crown, FileText, ShieldCheck, Truck } from "lucide-react";
+import type { ColombiaBotVipComparison } from "@/lib/colombiaBotVipComparison";
 
 type Props = {
   productName: string;
@@ -16,6 +17,7 @@ type Props = {
   disabled?: boolean;
   vipLabel?: string | null;
   guaranteeSelection?: boolean;
+  vipComparison?: ColombiaBotVipComparison | null;
 };
 
 export function formatBotCatalogPrice(value: string | null | undefined): string {
@@ -26,7 +28,7 @@ export function formatBotCatalogPrice(value: string | null | undefined): string 
 export function ColombiaBotStorefrontCard({
   productName, optionName, planName, iconUrl, description, deliveryDays, guarantee,
   price, originalPrice, selectLabel, onSelect, disabled = false,
-  vipLabel, guaranteeSelection = false,
+  vipLabel, guaranteeSelection = false, vipComparison,
 }: Props) {
   const formattedPrice = formatBotCatalogPrice(price);
   const original = formatBotCatalogPrice(originalPrice);
@@ -68,10 +70,38 @@ export function ColombiaBotStorefrontCard({
             </p>
           </div>
         )}
+        {vipComparison && (
+          <section data-testid="colombia-bot-vip-normal-comparison" className="overflow-hidden rounded-xl border border-amber-400/40 bg-slate-950/50">
+            <div className="flex items-center gap-2 border-b border-amber-400/25 bg-amber-500/10 px-3 py-2 text-sm font-black text-amber-200">
+              <Crown className="h-4 w-4" /> PREÇO NORMAL X VIP
+            </div>
+            <div className="grid grid-cols-2 gap-px bg-white/10">
+              <div className="min-w-0 bg-[#101827] p-3">
+                <p className="text-[10px] font-black uppercase text-slate-300">{vipComparison.vipOnly ? "Normal indisponível" : "👤 VALOR NORMAL"}</p>
+                <p className="mt-1 break-words text-lg font-black text-white">
+                  {vipComparison.normalPrice ? formatBotCatalogPrice(vipComparison.normalPrice) : "Somente VIP"}
+                </p>
+                {!vipComparison.isVipCustomer && vipComparison.normalAvailable && <p className="mt-1 text-[10px] font-semibold text-slate-400">Seu valor sem VIP</p>}
+              </div>
+              <div className="min-w-0 bg-[#292035] p-3">
+                <p className="text-[10px] font-black uppercase text-amber-200">👑 VALOR VIP</p>
+                <p className="mt-1 break-words text-lg font-black text-amber-300">{formatBotCatalogPrice(vipComparison.vipPrice)}</p>
+                {vipComparison.savingText && <p className="mt-1 text-[11px] font-bold text-emerald-300">Economia de {vipComparison.savingText}</p>}
+              </div>
+            </div>
+            <div className="space-y-1 border-t border-amber-400/20 px-3 py-2 text-xs leading-relaxed text-slate-200">
+              <p className="font-bold text-amber-200">{vipComparison.isVipCustomer ? "👑 Você tem VIP ativo." : vipComparison.vipOnly ? "🔒 Plano exclusivo para clientes VIP." : "👤 Você está no plano Normal."}</p>
+              {vipComparison.benefitText && <p>{vipComparison.benefitText}</p>}
+              {vipComparison.promoOverrides && <p>Promoção geral ativa: vale para clientes VIP e Normais.</p>}
+              <p>{vipComparison.vipOnly ? "Este plano não pode ser adquirido por clientes sem VIP." : "O valor aplicado na compra depende do seu cadastro VIP atual."}</p>
+              {!vipComparison.isVipCustomer && <a href="/vip" className="inline-flex min-h-10 items-center rounded-lg border border-amber-300/40 bg-amber-300/10 px-3 py-2 font-black text-amber-200 underline underline-offset-2">Conhecer o H2 VIP</a>}
+            </div>
+          </section>
+        )}
         {formattedPrice ? (
           <div className="flex flex-wrap items-end justify-between gap-2">
             <div>
-              <p className="text-[10px] font-bold uppercase tracking-wide text-slate-300">Valor do serviço</p>
+              <p className="text-[10px] font-bold uppercase tracking-wide text-slate-300">{vipComparison ? "Total aplicado ao seu cadastro" : "Valor do serviço"}</p>
               {original && original !== formattedPrice && (
                 <p className="text-xs text-slate-400 line-through">De {original}</p>
               )}
