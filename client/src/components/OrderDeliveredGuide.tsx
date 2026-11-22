@@ -18,6 +18,8 @@ export default function OrderDeliveredGuide({ registrationId, subOrderIndex, cus
 }) {
   const utils = trpc.useUtils();
   const query = trpc.deliveredOrderGuide.getGlobal.useQuery(undefined, { staleTime: 0, refetchOnWindowFocus: true });
+  const orderKey = { registrationId, subOrderIndex };
+  const orderQuery = trpc.deliveredOrderGuide.getForOrder.useQuery(orderKey, { staleTime: 0, refetchOnWindowFocus: true });
   const [open, setOpen] = useState(false);
   const [title, setTitle] = useState("ATENÇÃO — PEDIDO ENTREGUE");
   const [intro, setIntro] = useState("Confira com atenção as orientações, imagens e prints enviados pela equipe.");
@@ -26,7 +28,9 @@ export default function OrderDeliveredGuide({ registrationId, subOrderIndex, cus
   const [uploading, setUploading] = useState<string | null>(null);
   const record = query.data;
   const published = record?.status === "published";
-  const link = published ? publicSiteUrl("/pedido-entregue") : "";
+  const orderRecord = orderQuery.data;
+  const link = published && orderRecord?.status === "published" && orderRecord?.token
+    ? publicSiteUrl("/pedido-entregue/" + orderRecord.token) : "";
 
   useEffect(() => {
     if (!record || dirty) return;
@@ -37,6 +41,7 @@ export default function OrderDeliveredGuide({ registrationId, subOrderIndex, cus
   const refresh = async () => {
     await utils.deliveredOrderGuide.getGlobal.invalidate();
     await query.refetch();
+    await utils.deliveredOrderGuide.getForOrder.invalidate(orderKey);
   };
   const save = trpc.deliveredOrderGuide.saveGlobal.useMutation({
     onSuccess: async () => { setDirty(false); toast.success("Orientações salvas."); await refresh(); },
@@ -44,6 +49,10 @@ export default function OrderDeliveredGuide({ registrationId, subOrderIndex, cus
   });
   const publish = trpc.deliveredOrderGuide.publishGlobal.useMutation({
     onSuccess: async () => { toast.success("Link publicado."); await refresh(); },
+    onError: e => toast.error(e.message),
+  });
+  const createLink = trpc.deliveredOrderGuide.createLinkForOrder.useMutation({
+    onSuccess: async () => { toast.success("Link individual deste pedido gerado."); await refresh(); },
     onError: e => toast.error(e.message),
   });
   const unpublish = trpc.deliveredOrderGuide.unpublishGlobal.useMutation({
@@ -100,7 +109,7 @@ export default function OrderDeliveredGuide({ registrationId, subOrderIndex, cus
         <header className="mb-4 flex items-start justify-between gap-3 border-b border-emerald-400/20 pb-3">
           <div>
             <h2 className="flex items-center gap-2 text-lg font-black text-emerald-200"><BookOpenCheck className="h-5 w-5"/> PEDIDO ENTREGUE</h2>
-            <p className="text-xs text-slate-400">Cadastro GLOBAL — as orientações são iguais para todos os pedidos.</p>
+            <p className="text-xs text-slate-400">Cadastro GLOBAL · Link exclusivo do pedido {orderNumber || registrationId}.</p>
             <p className="mt-2 text-xs text-amber-200">Edite uma vez para todos os clientes. Sem perguntas e sem alterar o status do pedido.</p>
           </div>
           <button type="button" aria-label="Fechar" onClick={() => setOpen(false)} className="rounded-lg border border-white/10 p-2"><X className="h-4 w-4"/></button>
@@ -137,12 +146,13 @@ export default function OrderDeliveredGuide({ registrationId, subOrderIndex, cus
           </button>
           {record && (
             <section className="space-y-3 rounded-xl border border-white/15 bg-black/20 p-3">
-              <p className="text-xs font-black">{published ? "🟢 LINK PUBLICADO" : "🟡 RASCUNHO — CLIENTE NÃO VISUALIZA"}{record.openedAt ? " · Link já aberto" : ""}</p>
-              {published && <p className="break-all text-xs text-cyan-200">{link}</p>}
+              <p className="text-xs font-black">{published ? "🟢 FORMULÁRIO GLOBAL PUBLICADO" : "🟡 RASCUNHO GLOBAL — CLIENTE NÃO VISUALIZA"}{orderRecord?.openedAt ? " · Link deste pedido já aberto" : ""}</p>
+              {link && <p className="break-all text-xs text-cyan-200">{link}</p>}
               <button type="button" disabled={dirty || publish.isPending || unpublish.isPending} onClick={() => published ? unpublish.mutate() : publish.mutate()} className="min-h-10 w-full rounded-lg border border-emerald-400/40 bg-emerald-400/15 px-3 text-sm font-bold text-emerald-200 disabled:opacity-40">
                 {published ? "DESATIVAR LINK" : "PUBLICAR ORIENTAÇÕES"}
               </button>
-              {published && <div className="grid grid-cols-3 gap-2">
+              {published && !link && <button type="button" disabled={dirty || createLink.isPending} onClick={() => createLink.mutate({ ...orderKey, customerPhone: customerPhone || "", customerName: customerName || null, orderNumber: orderNumber || null })} className="min-h-10 w-full rounded-lg border border-cyan-400/40 bg-cyan-400/15 px-3 text-sm font-bold text-cyan-200 disabled:opacity-40">{createLink.isPending ? "GERANDO..." : "GERAR LINK INDIVIDUAL DESTE PEDIDO"}</button>}
+              {link && <div className="grid grid-cols-3 gap-2">
                 <button type="button" disabled={dirty} onClick={() => void copyLink()} className="rounded-lg border border-cyan-400/30 p-2 text-xs font-bold text-cyan-200 disabled:opacity-40"><ClipboardCopy className="mx-auto mb-1 h-4 w-4"/>COPIAR</button>
                 <button type="button" disabled={dirty || !customerPhone} onClick={openWhatsapp} className="rounded-lg border border-emerald-400/30 p-2 text-xs font-bold text-emerald-200 disabled:opacity-40"><MessageCircle className="mx-auto mb-1 h-4 w-4"/>WHATSAPP</button>
                 <button type="button" disabled={dirty} onClick={() => window.open(link,"_blank","noopener,noreferrer")} className="rounded-lg border border-violet-400/30 p-2 text-xs font-bold text-violet-200 disabled:opacity-40"><ExternalLink className="mx-auto mb-1 h-4 w-4"/>ABRIR</button>
@@ -155,7 +165,7 @@ export default function OrderDeliveredGuide({ registrationId, subOrderIndex, cus
   ) : null;
   return <>
     <button type="button" onClick={e => { e.stopPropagation(); setOpen(true); }} className={"inline-flex min-h-8 items-center gap-1 rounded-lg border px-2.5 py-1 text-[10px] font-black sm:min-h-9 sm:text-[11px] " + (published ? "border-emerald-500/50 bg-emerald-500/20 text-emerald-200" : "border-cyan-500/40 bg-cyan-500/15 text-cyan-200")}>
-      {published ? <CheckCircle2 className="h-4 w-4"/> : <BookOpenCheck className="h-4 w-4"/>} PEDIDO ENTREGUE
+      {link ? <CheckCircle2 className="h-4 w-4"/> : <BookOpenCheck className="h-4 w-4"/>} PEDIDO ENTREGUE
     </button>
     {modal}
   </>;
