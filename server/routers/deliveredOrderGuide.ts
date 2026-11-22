@@ -2,7 +2,7 @@ import { randomBytes } from "crypto";
 import { sql } from "drizzle-orm";
 import { z } from "zod";
 import { TRPCError } from "@trpc/server";
-import { getDb } from "../db";
+import { getDb, getSetting, upsertSetting } from "../db";
 import { adminProcedure, publicProcedure, router } from "../_core/trpc";
 
 // Orientações de pedido entregue: não são perguntas e não alteram status.
@@ -121,7 +121,82 @@ async function getByToken(token: string) {
   `);
   return normalizeRow((Array.isArray(result) ? result[0] : [])?.[0]);
 }
+
+/**
+ * Cadastro global: um só conjunto de orientações, fotos e prints para todos
+ * os pedidos. Registros antigos com token são mantidos para não quebrar links enviados.
+ */
+const GLOBAL_GUIDE_KEY = "delivered_order_guide_global_v1";
+const globalGuideInputSchema = z.object({
+  title: z.string().trim().min(3).max(140),
+  intro: z.string().trim().max(4000),
+  blocks: blocksSchema,
+}).superRefine((input, ctx) => {
+  input.blocks.forEach((block, index) => {
+    if (block.imageUrl && !allowedImageUrl(block.imageUrl)) {
+      ctx.addIssue({ code: "custom", path: ["blocks", index, "imageUrl"], message: "Imagem fora do armazenamento H2 autorizado." });
+    }
+  });
+});
+const globalGuideStoredSchema = globalGuideInputSchema.safeExtend({
+  status: z.enum(["draft", "published"]),
+  updatedAt: z.string().datetime(),
+});
+type GlobalGuide = z.infer<typeof globalGuideStoredSchema>;
+
+async function getGlobalGuide(): Promise<GlobalGuide | null> {
+  const json = await getSetting(GLOBAL_GUIDE_KEY);
+  if (!json) return null;
+  try {
+    const parsed = globalGuideStoredSchema.safeParse(JSON.parse(json));
+    return parsed.success ? parsed.data : null;
+  } catch {
+    return null;
+  }
+}
+async function saveGlobalGuide(value: GlobalGuide): Promise<GlobalGuide> {
+  await upsertSetting(GLOBAL_GUIDE_KEY, JSON.stringify(value));
+  return value;
+}
+function publicGlobalGuide(guide: GlobalGuide) {
+  return { found: true as const, title: guide.title, intro: guide.intro, blocks: guide.blocks };
+}
+
 export const deliveredOrderGuideRouter = router({
+  // Todos os cards do ADM abrem exatamente o mesmo editor.
+  getGlobal: adminProcedure.query(async () => getGlobalGuide()),
+
+  saveGlobal: adminProcedure
+    .input(globalGuideInputSchema)
+    .mutation(async ({ input }) => {
+      const existing = await getGlobalGuide();
+      return saveGlobalGuide({
+        ...input,
+        status: existing?.status || "draft",
+        updatedAt: new Date().toISOString(),
+      });
+    }),
+
+  publishGlobal: adminProcedure.mutation(async () => {
+    const existing = await getGlobalGuide();
+    if (!existing?.blocks.length) {
+      throw new TRPCError({ code: "BAD_REQUEST", message: "Cadastre e salve as orientações globais antes de publicar." });
+    }
+    return saveGlobalGuide({ ...existing, status: "published", updatedAt: new Date().toISOString() });
+  }),
+
+  unpublishGlobal: adminProcedure.mutation(async () => {
+    const existing = await getGlobalGuide();
+    if (!existing) return null;
+    return saveGlobalGuide({ ...existing, status: "draft", updatedAt: new Date().toISOString() });
+  }),
+
+  // Link global único, somente leitura e sem autenticação.
+  getPublicGlobal: publicProcedure.query(async () => {
+    const guide = await getGlobalGuide();
+    return guide?.status === "published" ? publicGlobalGuide(guide) : { found: false as const };
+  }),
+
   getForOrder: adminProcedure
     .input(orderKeySchema)
     .query(async ({ input }) => getByOrder(input.registrationId, input.subOrderIndex)),
@@ -182,6 +257,10 @@ export const deliveredOrderGuideRouter = router({
     .query(async ({ input }) => {
       const record = await getByToken(input.token);
       if (!record) return { found: false as const };
+      // Links antigos continuam funcionando: quando houver guia global publicado,
+      // mostram o conteúdo global, sem dados específicos de outro cliente.
+      const global = await getGlobalGuide();
+      if (global?.status === "published") return publicGlobalGuide(global);
       const db = await getDb() as any;
       if (!record.openedAt) {
         await db.execute(sql`UPDATE deliveredOrderGuides SET openedAt=NOW() WHERE id=${record.id}`);
