@@ -3,6 +3,14 @@ on:
   pull_request:
     branches:
       - recovery/organizar-salvos-2026-08-24
+    paths:
+      - 'server/h2-auto-*.ts'
+      - 'server/referralCommission*.ts'
+      - 'server/commissionResolver*.ts'
+      - 'shared/h2Auto*.ts'
+      - 'shared/referral*.ts'
+      - 'client/src/pages/AdminH2Auto.tsx'
+      - '.github/workflows/h2-auto-once-verified-totals.yml'
   push:
     branches:
       - fix/h2auto-once-verified-referral-totals-20261028
