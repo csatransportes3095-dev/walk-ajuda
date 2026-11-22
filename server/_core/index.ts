@@ -39,7 +39,7 @@ import { sendMail } from "./mailer";
 import { ensureCustomerIdentityInfrastructure, reconcileLegacyLoanPermissions } from "../customerAccess";
 import { getSharePreviewProfile, sharePreviewProxyPath, type SharePreviewProfileId } from "../sharePreviewProfiles";
 import { publicSiteUrl } from "../../shared/publicLinks";
-import { parseColombiaBotPhotoRequest, loadColombiaBotPhotoFromR2 } from "../colombiaBotCustomerPhotoPreview";
+import { parseColombiaBotPhotoRequest, loadColombiaBotPhotoFromR2, optimizeColombiaBotWhatsappPhoto } from "../colombiaBotCustomerPhotoPreview";
 import { bootstrapCardInvoices } from "../cardsBilling";
 import { getBackupDownload, getBackupDownloadName } from "../routers/backup";
 import { logProcessDiagnostic, reconcileBackupsAfterRestart } from "../backupService";
@@ -257,6 +257,12 @@ async function getCustomerPhotoPreview(sourceUrl: URL) {
       }
     }
     if (!preview) return null;
+    // Só a miniatura destinada ao WhatsApp é convertida; o arquivo R2 permanece original.
+    try {
+      preview = await optimizeColombiaBotWhatsappPhoto(preview);
+    } catch {
+      return null;
+    }
     const entry = { ...preview, fetchedAt: Date.now() };
     customerPhotoPreviewCache.set(key, entry);
     trimCustomerPhotoPreviewCache();
@@ -524,7 +530,7 @@ async function startServer() {
     const photoQuery = `k=${encodeURIComponent(photoKey)}`;
     const canonicalUrl = publicSiteUrl(`/link/foto-cliente?${photoQuery}`);
     const imageProxyUrl = publicSiteUrl(`/link/foto-cliente-img?${photoQuery}`);
-    const imageType = /\.png$/i.test(photoKey) ? "image/png" : /\.webp$/i.test(photoKey) ? "image/webp" : "image/jpeg";
+    const imageType = "image/jpeg";
     const title = "H2 COLOMBIANO";
     const description = "Pedido recebido";
 
