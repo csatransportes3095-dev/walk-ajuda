@@ -1498,6 +1498,8 @@ export const appRouter = router({
               cpTokenValid = true;
               // Extrair phone da sessão para garantir que está disponível mesmo quando input.phone vier vazio
               cpTokenPhone = sess.phone?.replace(/\D/g, '') || '';
+              // Identidade autoritativa: não permitir que o navegador escolha outro telefone.
+              if (cpTokenPhone) input.phone = cpTokenPhone;
             } catch {
               return { success: false, message: 'Erro ao verificar sessão. Tente novamente.' };
             }
@@ -1615,7 +1617,16 @@ export const appRouter = router({
               input.cartCouponCode = input.couponCode.trim().toUpperCase();
               input.cartCouponDiscount = officialDiscount;
             } else {
-              const officialBase = parseMoney(input.originalPrice || input.price);
+              // O preço-base do cupom é recuperado do catálogo no servidor.
+              // Não confiar em originalPrice / price enviados pelo navegador.
+              let officialCatalogPrice = input.price || '';
+              if (input.productId && input.optionId) {
+                const availableOptions = await listProductOptions(input.productId);
+                const selectedOption = availableOptions.find(row => row.id === input.optionId && row.isActive === 1);
+                if (!selectedOption) return { success: false, message: 'Produto indisponível para o cupom.' };
+                if (!input.priceModelId) officialCatalogPrice = String(selectedOption.price || '');
+              }
+              const officialBase = parseMoney(officialCatalogPrice);
               if (officialBase <= 0) {
                 return { success: false, message: 'Não foi possível validar o valor do pedido para aplicar o cupom.' };
               }
