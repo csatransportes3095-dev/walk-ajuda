@@ -62,7 +62,7 @@ describe("CONFIRMAÇÃO DO PEDIDO - editor de orientações independente", () =>
     expect(router).toContain("WHERE id=<<dollar>>{current.id}".replace("<<dollar>>", "$"));
     expect(router).toContain('const token = randomBytes(24).toString("hex")');
     expect(editor).toContain('publicSiteUrl("/confirmacao-orientacoes/" + orderRecord.token)');
-    expect(editor).toContain("trpc.orderConfirmation.createGuideLinkForOrder.useMutation()");
+    expect(editor).toContain("trpc.orderConfirmation.createGuideLinkForOrder.useMutation({");
   });
   it("o novo link passa pelo filtro inicial", () => {
     expect(redirects("/confirmacao-orientacoes/" + token)).toEqual([]);
