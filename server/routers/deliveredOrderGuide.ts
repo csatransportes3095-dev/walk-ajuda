@@ -191,15 +191,50 @@ export const deliveredOrderGuideRouter = router({
     return saveGlobalGuide({ ...existing, status: "draft", updatedAt: new Date().toISOString() });
   }),
 
-  // Link global único, somente leitura e sem autenticação.
-  getPublicGlobal: publicProcedure.query(async () => {
-    const guide = await getGlobalGuide();
-    return guide?.status === "published" ? publicGlobalGuide(guide) : { found: false as const };
-  }),
 
   getForOrder: adminProcedure
     .input(orderKeySchema)
     .query(async ({ input }) => getByOrder(input.registrationId, input.subOrderIndex)),
+
+  // O mesmo formulário global atende a todos, mas cada pedido tem seu próprio token.
+  // Reutiliza o token quando o ADM reabre o card, sem gerar um link diferente.
+  createLinkForOrder: adminProcedure
+    .input(orderKeySchema.extend({
+      customerPhone: z.string().max(32).default(""),
+      customerName: z.string().max(128).nullable().optional(),
+      orderNumber: z.number().int().positive().nullable().optional(),
+    }))
+    .mutation(async ({ input }) => {
+      const global = await getGlobalGuide();
+      if (global?.status !== "published") {
+        throw new TRPCError({ code: "BAD_REQUEST", message: "Publique primeiro o formulário global de orientações." });
+      }
+      await ensureInfrastructure();
+      const db = await getDb() as any;
+      const existing = await getByOrder(input.registrationId, input.subOrderIndex);
+      if (existing) {
+        // Preserva o endereço já compartilhado para este mesmo pedido.
+        await db.execute(sql`
+          UPDATE deliveredOrderGuides
+          SET status='published',
+              customerPhone=${input.customerPhone},
+              customerName=${input.customerName ?? null},
+              orderNumber=${input.orderNumber ?? null}
+          WHERE id=${existing.id}
+        `);
+      } else {
+        const token = randomBytes(24).toString("hex");
+        await db.execute(sql`
+          INSERT INTO deliveredOrderGuides
+            (token,registrationId,subOrderIndex,customerPhone,customerName,orderNumber,title,intro,blocks,status)
+          VALUES
+            (${token},${input.registrationId},${input.subOrderIndex},${input.customerPhone},
+             ${input.customerName ?? null},${input.orderNumber ?? null},${"PEDIDO ENTREGUE"},
+             ${""},${"[]"},'published')
+        `);
+      }
+      return getByOrder(input.registrationId, input.subOrderIndex);
+    }),
 
   saveForOrder: adminProcedure
     .input(saveSchema)
@@ -257,13 +292,15 @@ export const deliveredOrderGuideRouter = router({
     .query(async ({ input }) => {
       const record = await getByToken(input.token);
       if (!record) return { found: false as const };
-      // Links antigos continuam funcionando: quando houver guia global publicado,
-      // mostram o conteúdo global, sem dados específicos de outro cliente.
+      // O token sempre identifica um único pedido. O conteúdo é compartilhado.
       const global = await getGlobalGuide();
-      if (global?.status === "published") return publicGlobalGuide(global);
+      if (global && global.status !== "published") return { found: false as const };
       const db = await getDb() as any;
       if (!record.openedAt) {
         await db.execute(sql`UPDATE deliveredOrderGuides SET openedAt=NOW() WHERE id=${record.id}`);
+      }
+      if (global) {
+        return { ...publicGlobalGuide(global), customerName: record.customerName, orderNumber: record.orderNumber };
       }
       // A página do cliente não recebe telefone nem dados internos do ADM.
       return {
