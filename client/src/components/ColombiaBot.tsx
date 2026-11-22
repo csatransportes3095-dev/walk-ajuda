@@ -14,6 +14,7 @@ import { getVehicleModels, getVehicleQuestionKind, VEHICLE_BRANDS, VEHICLE_COLOR
 import { applyVipBenefitToPrice, isVipOnlyLocked, normalizeVipAccessMode, vipBenefitText } from "@shared/vipPricing";
 import { globalPromotionIsActive, globalPromotionOverridesIndividual, globalPromotionPrice } from "@shared/globalPromotion";
 import { ColombiaBotStorefrontCard } from "@/components/ColombiaBotStorefrontCard";
+import { getColombiaBotVipComparison } from "@/lib/colombiaBotVipComparison";
 import { captureColombiaBotChoice } from "@/lib/colombiaBotNavigation";
 import { getBotCheckoutTotals, findBotBlockedChoice, sameBotProgressOwner, type BotBlockedChoice } from "@/lib/colombiaBotCheckout";
 import { parseBrazilMoney } from "@shared/vipPricing";
@@ -1191,6 +1192,7 @@ export function ColombiaBot({ products, onStartNormal, onSelectProduct, onSelect
                 ? model.label
                 : (msg.option.warranty || null);
               const mode = normalizeVipAccessMode(model.vipAccessMode);
+              const vipComparison = getColombiaBotVipComparison(model, isVipCustomer, sitePromoOverrides, getModelPrice(model));
               const vipLabel = vipOnly ? "🔒 Somente VIP"
                 : !sitePromoOverrides && mode !== "all" ? "👑 Benefício VIP" : null;
               return (
@@ -1206,6 +1208,7 @@ export function ColombiaBot({ products, onStartNormal, onSelectProduct, onSelect
                   price={getModelPrice(model)}
                   originalPrice={sitePromoOverrides ? model.price : model.originalPrice}
                   vipLabel={vipLabel}
+                  vipComparison={vipComparison}
                   guaranteeSelection={Boolean(warranty)}
                   disabled={vipOnly}
                   selectLabel="Selecionar este plano"
