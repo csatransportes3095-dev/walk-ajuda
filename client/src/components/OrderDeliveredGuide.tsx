@@ -37,7 +37,7 @@ export default function OrderDeliveredGuide({ registrationId, subOrderIndex, cus
     setTitle(record.title);
     setIntro(record.intro);
     setBlocks(record.blocks?.length ? record.blocks as Block[] : [newBlock()]);
-  }, [record?.id, record?.updatedAt, dirty]);
+  }, [record?.updatedAt, dirty]);
   const refresh = async () => {
     await utils.deliveredOrderGuide.getGlobal.invalidate();
     await query.refetch();
