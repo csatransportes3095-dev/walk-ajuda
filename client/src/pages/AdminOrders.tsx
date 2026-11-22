@@ -28,7 +28,7 @@ import { OrderLoginAuthenticatorCode } from "@/components/OrderLoginAuthenticato
 import OrderH2AdsBrowserShortcut from "@/components/OrderH2AdsBrowserShortcut";
 import OrderCpfVault from "@/components/OrderCpfVault";
 import OrderPhotoConfirmation from "@/components/OrderPhotoConfirmation";
-import OrderConfirmation from "@/components/OrderConfirmation";
+import OrderConfirmationGuide from "@/components/OrderConfirmationGuide";
 import OrderDeliveredGuide from "@/components/OrderDeliveredGuide";
 import OrderPhotoMarkers from "@/components/OrderPhotoMarkers";
 import CompactOrderPhotoMarkers from "@/components/CompactOrderPhotoMarkers";
@@ -4818,7 +4818,7 @@ export default function AdminOrders() {
                                                       customerName={ar.customerName}
                                                       orderNumber={ar.orderNumber}
                                                     />
-<OrderConfirmation
+<OrderConfirmationGuide
                                                       registrationId={ar.registrationId}
                                                       subOrderIndex={0}
                                                       customerPhone={ar.customerPhone || ""}
@@ -6356,7 +6356,7 @@ export default function AdminOrders() {
                             customerName={order.customerName || order.codeClientName}
                             orderNumber={order.orderNumber}
                           />
-<OrderConfirmation
+<OrderConfirmationGuide
                             registrationId={order.id}
                             subOrderIndex={order.subOrderIndex ?? 0}
                             customerPhone={order.phone || ""}

@@ -1,7 +1,10 @@
 import { randomBytes } from "crypto";
 import { sql } from "drizzle-orm";
 import { z } from "zod";
-import { getDb } from "../db";
+import { getDb, getSetting, upsertSetting } from "../db";
+import { requireCustomerSession } from "../customerSession";
+import { sameDeliveredGuideCustomerPhone } from "../deliveredOrderGuidePhone";
+import { resolveDeliveredGuideVideo } from "../../client/src/lib/deliveredGuideVideo";
 import { adminProcedure, publicProcedure, router } from "../_core/trpc";
 import { TRPCError } from "@trpc/server";
 
@@ -165,7 +168,166 @@ function allowedValue(question: Question, value: string) {
   return value.length <= 2000;
 }
 
+
+// Orientações globais da CONFIRMAÇÃO DO PEDIDO, independentes do Pedido Entregue.
+// Perguntas e respostas históricas permanecem armazenadas.
+const CONFIRMATION_GUIDE_SETTING = "order_confirmation_guide_global_v1";
+const confirmationGuideBlockSchema = z.object({
+  id: z.string().min(1).max(80),
+  title: z.string().trim().max(160),
+  text: z.string().trim().max(4000),
+  imageUrl: z.string().trim().max(2048),
+  mediaType: z.enum(["image", "video"]).default("image"),
+  videoUrl: z.string().trim().max(2048).default(""),
+}).superRefine((block, ctx) => {
+  if (!block.title && !block.text && !(block.mediaType === "video" ? block.videoUrl : block.imageUrl)) {
+    ctx.addIssue({ code: "custom", message: "Adicione texto, foto ou vídeo ao bloco." });
+  }
+  if (block.mediaType === "video" && !resolveDeliveredGuideVideo(block.videoUrl)) {
+    ctx.addIssue({ code: "custom", path: ["videoUrl"], message: "Informe URL válida do H2, YouTube, Vimeo, Drive ou MP4/WebM HTTPS." });
+  }
+});
+function isApprovedConfirmationImage(value: string): boolean {
+  if (!value) return true;
+  try {
+    const url = new URL(value);
+    if (url.protocol !== "https:" || url.username || url.password || url.port || url.hash) return false;
+    const hosts = new Set(["midia.h2colombiano.com"]);
+    if (process.env.R2_PUBLIC_URL) {
+      try {
+        const trusted = new URL(process.env.R2_PUBLIC_URL);
+        if (trusted.protocol === "https:") hosts.add(trusted.hostname);
+      } catch { /* host inválido não é permitido */ }
+    }
+    return hosts.has(url.hostname) && url.pathname.startsWith("/") && !url.pathname.includes("..");
+  } catch { return false; }
+}
+const confirmationGuideInputSchema = z.object({
+  title: z.string().trim().min(3).max(140),
+  intro: z.string().trim().max(4000),
+  blocks: z.array(confirmationGuideBlockSchema).min(1).max(24),
+}).superRefine((guide, ctx) => {
+  guide.blocks.forEach((block, index) => {
+    if (block.mediaType !== "video" && block.imageUrl && !isApprovedConfirmationImage(block.imageUrl)) {
+      ctx.addIssue({ code: "custom", path: ["blocks", index, "imageUrl"], message: "Imagem fora do armazenamento H2 autorizado." });
+    }
+  });
+});
+const confirmationGuideStoredSchema = confirmationGuideInputSchema.safeExtend({
+  status: z.enum(["draft", "published"]),
+  updatedAt: z.string().datetime(),
+});
+type ConfirmationGuide = z.infer<typeof confirmationGuideStoredSchema>;
+
+async function getConfirmationGlobalGuide(): Promise<ConfirmationGuide | null> {
+  const raw = await getSetting(CONFIRMATION_GUIDE_SETTING);
+  if (!raw) return null;
+  try {
+    const parsed = confirmationGuideStoredSchema.safeParse(JSON.parse(raw));
+    return parsed.success ? parsed.data : null;
+  } catch { return null; }
+}
+async function saveConfirmationGlobalGuide(value: ConfirmationGuide): Promise<ConfirmationGuide> {
+  const serialized = JSON.stringify(value);
+  if (Buffer.byteLength(serialized, "utf8") > 60_000) {
+    throw new TRPCError({ code: "BAD_REQUEST", message: "Orientações globais excedem 60 KB. Divida os textos em blocos menores." });
+  }
+  await upsertSetting(CONFIRMATION_GUIDE_SETTING, serialized);
+  return value;
+}
+
 export const orderConfirmationRouter = router({
+
+  // Editor global de confirmação; os questionários antigos continuam preservados.
+  getGlobalGuide: adminProcedure.query(async () => getConfirmationGlobalGuide()),
+
+  saveGlobalGuide: adminProcedure
+    .input(confirmationGuideInputSchema)
+    .mutation(async ({ input }) => {
+      const existing = await getConfirmationGlobalGuide();
+      return saveConfirmationGlobalGuide({
+        ...input, status: existing?.status || "draft", updatedAt: new Date().toISOString(),
+      });
+    }),
+
+  publishGlobalGuide: adminProcedure.mutation(async () => {
+    const existing = await getConfirmationGlobalGuide();
+    if (!existing?.blocks.length) {
+      throw new TRPCError({ code: "BAD_REQUEST", message: "Salve as orientações antes de publicar." });
+    }
+    return saveConfirmationGlobalGuide({ ...existing, status: "published", updatedAt: new Date().toISOString() });
+  }),
+
+  unpublishGlobalGuide: adminProcedure.mutation(async () => {
+    const existing = await getConfirmationGlobalGuide();
+    if (!existing) return null;
+    return saveConfirmationGlobalGuide({ ...existing, status: "draft", updatedAt: new Date().toISOString() });
+  }),
+
+  createGuideLinkForOrder: adminProcedure
+    .input(z.object({
+      registrationId: z.number().int().positive(),
+      subOrderIndex: z.number().int().min(0).default(0),
+      customerPhone: z.string().max(32).default(""),
+      customerName: z.string().max(128).nullable().optional(),
+      orderNumber: z.number().int().positive().nullable().optional(),
+    }))
+    .mutation(async ({ input }) => {
+      const global = await getConfirmationGlobalGuide();
+      if (global?.status !== "published") {
+        throw new TRPCError({ code: "BAD_REQUEST", message: "Publique as orientações antes de gerar o link." });
+      }
+      const current = await getByOrder(input.registrationId, input.subOrderIndex);
+      const db = await getDb() as any;
+      if (current) {
+        // Não reescrever perguntas, respostas, token ou status antigos.
+        await db.execute(sql`
+          UPDATE orderConfirmationChecklists
+          SET customerPhone=${input.customerPhone},
+              customerName=${input.customerName ?? null},
+              orderNumber=${input.orderNumber ?? null}
+          WHERE id=${current.id}
+        `);
+      } else {
+        const token = randomBytes(24).toString("hex");
+        await db.execute(sql`
+          INSERT INTO orderConfirmationChecklists
+            (token,registrationId,subOrderIndex,customerPhone,customerName,orderNumber,questions,answers,status)
+          VALUES
+            (${token},${input.registrationId},${input.subOrderIndex},${input.customerPhone},
+             ${input.customerName ?? null},${input.orderNumber ?? null},${"[]"},${"{}"},'pending')
+        `);
+      }
+      return getByOrder(input.registrationId, input.subOrderIndex);
+    }),
+
+  getPublicGuide: publicProcedure
+    .input(z.object({
+      token: z.string().regex(/^[a-f0-9]{48}$/),
+      customerSessionToken: z.string().min(32).max(256),
+    }))
+    .mutation(async ({ input }) => {
+      const session = await requireCustomerSession(input.customerSessionToken);
+      const record = await getByToken(input.token);
+      if (!record) return { found: false as const };
+      if (!sameDeliveredGuideCustomerPhone(session.phone, record.customerPhone)) {
+        throw new TRPCError({
+          code: "FORBIDDEN",
+          message: "Este link pertence ao telefone cadastrado no pedido. Entre na conta correta.",
+        });
+      }
+      const guide = await getConfirmationGlobalGuide();
+      if (guide?.status !== "published") return { found: false as const };
+      const db = await getDb() as any;
+      if (!record.openedAt) {
+        await db.execute(sql`UPDATE orderConfirmationChecklists SET openedAt=NOW() WHERE id=${record.id}`);
+      }
+      return {
+        found: true as const, title: guide.title, intro: guide.intro, blocks: guide.blocks,
+        customerName: record.customerName, orderNumber: record.orderNumber,
+      };
+    }),
+
   getForOrder: adminProcedure
     .input(z.object({ registrationId: z.number().int().positive(), subOrderIndex: z.number().int().min(0).default(0) }))
     .query(async ({ input }) => getByOrder(input.registrationId, input.subOrderIndex)),

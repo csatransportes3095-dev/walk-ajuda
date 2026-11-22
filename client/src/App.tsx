@@ -107,6 +107,7 @@ import ClientReferralTree from "./pages/ClientReferralTree";
 import SchedulePage from "./pages/SchedulePage";
 import PhotoConfirmationPage from "./pages/PhotoConfirmationPage";
 import OrderConfirmationPage from "./pages/OrderConfirmationPage";
+import OrderConfirmationGuidePage from "./pages/OrderConfirmationGuidePage";
 import DeliveredOrderGuidePage from "./pages/DeliveredOrderGuidePage";
 import PublicQuotePage from "./pages/PublicQuotePage";
 import PublicReceiptPage from "./pages/PublicReceiptPage";
@@ -411,6 +412,7 @@ function Router() {
       <Route path={"/agendar/:token"} component={SchedulePage} />
       <Route path={"/confirmacao-foto/:token"} component={PhotoConfirmationPage} />
       <Route path={"/confirmacao-pedido/:token"} component={OrderConfirmationPage} />
+       <Route path={"/confirmacao-orientacoes/:token"} component={OrderConfirmationGuidePage} />
       <Route path={"/pedido-entregue/:token"} component={DeliveredOrderGuidePage} />
       <Route path={"/orcamento/:publicToken"} component={PublicQuotePage} />
       <Route path={"/recibo/:publicToken"} component={PublicReceiptPage} />
@@ -468,7 +470,8 @@ function AppContent() {
   const isPhotoConfirmationRoute = location === "/confirmacao-foto" || location.startsWith("/confirmacao-foto/");
   const isOrderConfirmationRoute = location === "/confirmacao-pedido" || location.startsWith("/confirmacao-pedido/");
   const isDeliveredGuideRoute = location === "/pedido-entregue" || location.startsWith("/pedido-entregue/");
-  const isDirectPublicTokenRoute = isAgendarRoute || isPhotoConfirmationRoute || isOrderConfirmationRoute || isDeliveredGuideRoute;
+  const isConfirmationGuideRoute = location.startsWith("/confirmacao-orientacoes/");
+  const isDirectPublicTokenRoute = isAgendarRoute || isPhotoConfirmationRoute || isOrderConfirmationRoute || isDeliveredGuideRoute || isConfirmationGuideRoute;
   const isVideoRoute = location.startsWith("/video") || location === "/tutorial";
   const isGastosRoute = location.toLowerCase() === "/gastos";
   const isEmprestimoRoute = location.toLowerCase() === "/emprestimo";
