@@ -176,17 +176,44 @@ export function ColombiaBot({ products, onStartNormal, onSelectProduct, onSelect
   const [uploadingPix, setUploadingPix] = useState(false);
   const pixFileInputRef = useRef<HTMLInputElement>(null);
   const pendingPixMsgId = useRef<string>('');
+  const [pixActionError, setPixActionError] = useState("");
+
+  // Copia pelo Clipboard API e, quando indisponível no Android, tenta seleção
+  // de texto pelo método legado. Nunca exibe "copiado" sem confirmação.
+  const copyPixKey = async (key: string): Promise<boolean> => {
+    if (!key.trim()) return false;
+    try {
+      if (navigator.clipboard?.writeText) {
+        await navigator.clipboard.writeText(key);
+        return true;
+      }
+    } catch { /* tentar fallback no mesmo clique */ }
+    const element = document.createElement("textarea");
+    element.value = key;
+    element.setAttribute("readonly", "");
+    element.style.position = "fixed";
+    element.style.opacity = "0";
+    document.body.appendChild(element);
+    element.focus();
+    element.select();
+    let copied = false;
+    try { copied = document.execCommand("copy"); }
+    catch { copied = false; }
+    document.body.removeChild(element);
+    return copied;
+  };
 
   // Buscar pix ativo e nome do cliente logado
   const { data: activePix } = trpc.pix.getActive.useQuery();
   const { data: settingsData } = trpc.settings.getAll.useQuery();
-  // Atualiza o Pix quando os dados de pagamento chegam depois da recuperação.
+  // Sincroniza chave, beneficiário e instituição mesmo quando apenas o banco muda no ADM.
+  // A mensagem mantém o valor da compra; os dados da conta vêm sempre da conta Pix ativa.
   useEffect(() => {
-    const key = activePix?.pixKey || settingsData?.pix_key || "";
-    if (!key) return;
-    setMessages(prev => prev.map(msg => msg.type === "pix-payment" && !msg.uploaded && !msg.pixKey
-      ? { ...msg, pixKey: key, pixName: activePix?.pixName || settingsData?.pix_name || "", pixBank: activePix?.pixBank || settingsData?.pix_bank || "" }
-      : msg));
+    const key = String(activePix?.pixKey || settingsData?.pix_key || "").trim();
+    const name = String(activePix?.pixName || settingsData?.pix_name || "").trim();
+    const bank = String(activePix?.pixBank || settingsData?.pix_bank || "").trim();
+    setMessages(prev => prev.map(msg => msg.type === "pix-payment" && !msg.uploaded
+      ? { ...msg, pixKey: key, pixName: name, pixBank: bank } : msg));
   }, [activePix?.pixKey, activePix?.pixName, activePix?.pixBank, settingsData?.pix_key, settingsData?.pix_name, settingsData?.pix_bank]);
   const clientPhone = typeof window !== 'undefined' ? localStorage.getItem('walk_client_phone') || '' : '';
   const { isVipCustomer } = useVipMembership();
@@ -887,27 +914,46 @@ export function ColombiaBot({ products, onStartNormal, onSelectProduct, onSelect
 
   // Etapa de pagamento Pix — mostra chave, botão copiar, upload comprovante
   const askPix = (product: Product, option: ProductOption | null) => {
-    const pixKey = activePix?.pixKey || settingsData?.pix_key || '';
-    const pixName = activePix?.pixName || settingsData?.pix_name || '';
-    const pixBank = activePix?.pixBank || settingsData?.pix_bank || '';
+    const pixKey = String(activePix?.pixKey || settingsData?.pix_key || '').trim();
+    const pixName = String(activePix?.pixName || settingsData?.pix_name || '').trim();
+    const pixBank = String(activePix?.pixBank || settingsData?.pix_bank || '').trim();
+    const availableModels = option?.priceModels?.filter(model => model.isActive === 1) || [];
+    if (availableModels.length > 0 && !flowState.current.priceModel) {
+      addMsgs({ type: "bot", id: uid(), text: "Preciso confirmar qual plano você escolheu antes de mostrar o Pix. Selecione o plano novamente." });
+      if (option) startOptionPricing(product, option);
+      return;
+    }
+    const selected = flowState.current.priceModel;
+    if (selected && availableModels.length > 0 && !availableModels.some(model => model.id === selected.id)) {
+      flowState.current.priceModel = null;
+      addMsgs({ type: "bot", id: uid(), text: "O plano selecionado não está mais disponível. Confira os preços e escolha novamente." });
+      if (option) startOptionPricing(product, option);
+      return;
+    }
     setCurrentPhase("Pagamento");
     const basePrice = getModelPrice(flowState.current.priceModel) || priceForOption(option);
     const totals = getBotCheckoutTotals(basePrice, sitePromoOverrides ? null : flowState.current.couponDiscount);
     const price = basePrice.trim() ? totals.total : "";
+    setPixActionError("");
 
     const msgId = uid();
     pendingPixMsgId.current = msgId;
 
     callbacks.current[msgId] = async (file: File) => {
-      if (file.size > 15 * 1024 * 1024) {
-        addMsgs({ type: 'bot', id: uid(), text: 'O comprovante está muito grande. Envie um arquivo de até 15 MB.' });
+      if (!file || (!file.type.startsWith("image/") && file.type !== "application/pdf" && !/\.(jpe?g|png|webp|heic|heif|gif|pdf)$/i.test(file.name))) {
+        setPixActionError("Formato inválido. Use uma imagem ou PDF.");
         return;
       }
+      if (file.size > 15 * 1024 * 1024) {
+        setPixActionError("O comprovante está muito grande. Envie um arquivo de até 15 MB.");
+        return;
+      }
+      setPixActionError("");
       setUploadingPix(true);
       try {
         const uploaded = await uploadOrderFileReliably(file, 'comprovante-pix');
         if (!uploaded.ok) {
-          addMsgs({ type: 'bot', id: uid(), text: uploaded.message });
+          setPixActionError(uploaded.message);
           return;
         }
         flowState.current.pixProofUrl = uploaded.url;
@@ -918,7 +964,7 @@ export function ColombiaBot({ products, onStartNormal, onSelectProduct, onSelect
         addMsgs({ type: 'user', id: uid(), text: '\u2705 Comprovante enviado' });
         queueAdvance(() => finishWithProduct(product, option), 400);
       } catch {
-        addMsgs({ type: 'bot', id: uid(), text: 'Não consegui enviar o comprovante. Verifique sua conexão e tente novamente.' });
+        setPixActionError("Não consegui enviar o comprovante. Verifique sua conexão e tente novamente.");
       } finally {
         setUploadingPix(false);
       }
@@ -1301,17 +1347,28 @@ export function ColombiaBot({ products, onStartNormal, onSelectProduct, onSelect
               <div className="flex items-center gap-2 text-emerald-400 text-xs font-bold">
                 <span>💚</span> CHAVE PIX
               </div>
-              {(!msg.pixKey || !msg.price) && <p className="text-sm font-bold text-amber-200">Dados de pagamento incompletos. Não efetue o pagamento até a chave e o valor estarem disponíveis.</p>}
-              {msg.pixName && <p className="text-xs text-zinc-400">Beneficiário: <span className="text-white font-semibold">{msg.pixName}</span>{msg.pixBank ? ` — ${msg.pixBank}` : ''}</p>}
+              {(!msg.pixKey || !msg.price) && <p role="alert" className="text-sm font-bold text-amber-200">Dados de pagamento incompletos. Não efetue o pagamento até a chave e o valor estarem disponíveis. {msg.price ? "Verifique a chave Pix no ADM." : "Confira o plano e o preço cadastrado no ADM."}</p>}
+              {msg.pixName && <p className="text-xs text-zinc-400">Beneficiário: <span className="text-white font-semibold">{msg.pixName}</span></p>}
+              <p className="text-xs text-zinc-400">Instituição: <span className={msg.pixBank ? "text-white font-semibold" : "text-amber-200 font-semibold"}>{msg.pixBank || "Não informada no ADM"}</span></p>
               {msg.discountPrice && msg.discountPrice !== "R$ 0,00" && <><p className="text-xs text-zinc-400">Valor original: {msg.basePrice}</p><p className="text-xs text-emerald-300">Desconto: {msg.discountPrice}</p></>}
               {msg.price && <p className="text-sm text-zinc-200">Total a pagar: <span className="text-emerald-300 font-black text-lg">{msg.price}</span></p>}
               <div className="flex items-center gap-2 bg-zinc-900 rounded-lg px-3 py-2">
-                <span className="text-sm text-white font-mono flex-1 break-all">{msg.pixKey}</span>
+                <span className="text-sm text-white font-mono flex-1 break-all select-text">{msg.pixKey || "Chave Pix indisponível"}</span>
                 <button
-                  disabled={!msg.pixKey || !msg.price}
+                  type="button"
                   onClick={async () => {
-                    try { await navigator.clipboard.writeText(msg.pixKey); setPixCopied(true); queueAdvance(() => setPixCopied(false), 2000); }
-                    catch { addMsgs({type:"bot",id:uid(),text:"Não foi possível copiar a chave Pix."}); }
+                    setPixActionError("");
+                    if (!msg.pixKey) {
+                      setPixActionError("A chave Pix ainda não está configurada no ADM.");
+                      return;
+                    }
+                    const success = await copyPixKey(msg.pixKey);
+                    if (!success) {
+                      setPixActionError("Não foi possível copiar automaticamente. Toque e segure a chave para copiar manualmente.");
+                      return;
+                    }
+                    setPixCopied(true);
+                    queueAdvance(() => setPixCopied(false), 2000);
                   }}
                   className="shrink-0 px-3 py-1.5 rounded-lg bg-emerald-600 hover:bg-emerald-700 text-white text-xs font-bold transition-colors"
                 >
@@ -1330,8 +1387,13 @@ export function ColombiaBot({ products, onStartNormal, onSelectProduct, onSelect
                 </div>
               ) : (
                 <button
-                  disabled={!msg.pixKey || !msg.price}
+                  type="button"
                   onClick={() => {
+                    setPixActionError("");
+                    if (!msg.pixKey || !msg.price) {
+                      setPixActionError("Não envie comprovante nem pague antes de confirmar a chave e o valor Pix. Confira as configurações e o preço do plano.");
+                      return;
+                    }
                     pendingPixMsgId.current = msg.id;
                     pixFileInputRef.current?.click();
                   }}
@@ -1341,6 +1403,7 @@ export function ColombiaBot({ products, onStartNormal, onSelectProduct, onSelect
                 </button>
               )}
             </div>
+            {pixActionError && <p role="alert" className="rounded-xl border border-amber-400/50 bg-amber-400/10 px-3 py-2 text-sm font-semibold text-amber-100">{pixActionError}</p>}
           </div>
         );
 
