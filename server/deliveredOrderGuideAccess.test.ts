@@ -5,8 +5,8 @@ const decide = (pathname: string, mode: "restricted" | "blocked" = "restricted")
   siteAccessDecision({ mode, pathname, hasAdminSession: false, hasAuthorizedSession: false });
 const token = "a".repeat(48);
 
-describe("Pedido Entregue: acesso público exclusivo por token", () => {
-  it("abre o link individual e sua consulta de leitura sem login", () => {
+describe("Pedido Entregue: transporte da pagina, login validado separadamente no servidor", () => {
+  it("permite carregar pagina e API sem sessao do site, para autenticar pelo cliente", () => {
     for (const mode of ["restricted", "blocked"] as const) {
       expect(decide("/pedido-entregue/" + token, mode)).toBe("allow");
       expect(decide("/api/trpc/deliveredOrderGuide.getPublic", mode)).toBe("allow");

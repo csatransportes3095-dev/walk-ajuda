@@ -23,7 +23,7 @@ describe("Pedido Entregue: orientações visuais por pedido", () => {
   });
   it("abre apenas por token individual e usa o conteúdo global publicado", () => {
     expect(page).toContain('useRoute("/pedido-entregue/:token")');
-    expect(page).toContain("getPublic.useQuery(");
+    expect(page).toContain("getPublic.useMutation(");
     expect(page).not.toContain("getPublicGlobal");
     expect(router).toContain("const record = await getByToken(input.token)");
     expect(router).toContain("publicGlobalGuide(global)");

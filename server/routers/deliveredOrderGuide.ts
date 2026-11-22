@@ -3,6 +3,8 @@ import { sql } from "drizzle-orm";
 import { z } from "zod";
 import { TRPCError } from "@trpc/server";
 import { getDb, getSetting, upsertSetting } from "../db";
+import { requireCustomerSession } from "../customerSession";
+import { sameDeliveredGuideCustomerPhone } from "../deliveredOrderGuidePhone";
 import { adminProcedure, publicProcedure, router } from "../_core/trpc";
 
 // Orientações de pedido entregue: não são perguntas e não alteram status.
@@ -294,11 +296,24 @@ export const deliveredOrderGuideRouter = router({
     }),
 
   getPublic: publicProcedure
-    .input(z.object({ token: z.string().regex(/^[a-f0-9]{48}$/) }))
-    .query(async ({ input }) => {
+    .input(z.object({
+      token: z.string().regex(/^[a-f0-9]{48}$/),
+      customerSessionToken: z.string().min(32).max(256),
+    }))
+    // POST: nao enviar o token de sessao por URL/GET.
+    .mutation(async ({ input }) => {
+      // O link nao e mais publico: a sessao deve ser valida no servidor, nao
+      // apenas no navegador. Nao consultar registros antes de validar login.
+      const session = await requireCustomerSession(input.customerSessionToken);
       const record = await getByToken(input.token);
       if (!record) return { found: false as const };
-      // O token sempre identifica um único pedido. O conteúdo é compartilhado.
+      if (!sameDeliveredGuideCustomerPhone(session.phone, record.customerPhone)) {
+        throw new TRPCError({
+          code: "FORBIDDEN",
+          message: "Este link pertence ao telefone cadastrado no pedido. Entre na conta correta.",
+        });
+      }
+      // O token identifica um pedido e o formulario de orientacoes e global.
       const global = await getGlobalGuide();
       if (global && global.status !== "published") return { found: false as const };
       const db = await getDb() as any;
