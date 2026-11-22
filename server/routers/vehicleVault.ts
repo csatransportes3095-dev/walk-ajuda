@@ -338,6 +338,7 @@ export const vehicleVaultRouter = router({
     modelYear:z.number().int().min(1900).max(2100).optional(),
     status:z.enum(["all","available","in_use","used","inactive"]).default("all"),
     approval:z.enum(["all","pending","approved","rejected"]).default("all"),
+    category:z.enum(["all","PARTICULAR","ALUGUEL"]).default("all"),
     limit:z.number().int().min(1).max(150).default(100),
   }).strict()).query(async ({ input }) => {
     const db=await database();
@@ -366,6 +367,7 @@ export const vehicleVaultRouter = router({
     if(input.status==="used")filters.push(sql`EXISTS
       (SELECT 1 FROM vehicle_vault_history h WHERE h.vehicleId=d.id AND h.event='linked')`);
     if(input.approval!=="all")filters.push(sql`d.approvalStatus=${input.approval}`);
+    if(input.category!=="all")filters.push(sql`d.category=${input.category}`);
     const result=await db.execute(sql`
       SELECT d.id,d.plate,d.renavam,d.chassis,d.model,d.color,d.manufactureYear,d.modelYear,d.ownerName,d.category,d.exerciseYear,d.approvalStatus,d.inactive,d.updatedAt,
         (SELECT COUNT(*) FROM vehicle_vault_clients a WHERE a.vehicleId=d.id AND a.unlinkedAt IS NULL) activeClients,

@@ -8,6 +8,7 @@ import VehicleVaultPlateLookupPanel from "./VehicleVaultPlateLookupPanel";
 
 type ApprovalStatus = "pending" | "approved" | "rejected";
 type ApprovalFilter = "all" | ApprovalStatus;
+type CategoryFilter = "all" | "PARTICULAR" | "ALUGUEL";
 const APPROVAL_LABELS: Record<ApprovalStatus,string> = {pending:"NÃO AVALIADO",approved:"APROVADO",rejected:"REPROVADO"};
 function ApprovalBadge({status}:{status:ApprovalStatus}) {
   const appearance=status==="approved"
@@ -172,17 +173,18 @@ export default function VehicleVaultPanel(){
   const [yearMod,setYearMod]=useState("");
   const [status,setStatus]=useState<"all"|"available"|"in_use"|"used">("all");
   const [approval,setApproval]=useState<ApprovalFilter>("all");
+  const [categoryFilter,setCategoryFilter]=useState<CategoryFilter>("all");
   const [selected,setSelected]=useState<number|null>(null);
   const [clientQuery,setClientQuery]=useState("");
   const [pendingClientQuery,setPendingClientQuery]=useState("");
   const [readingPdf,setReadingPdf]=useState(false);
   // A vitrine inicial não carrega 150 veículos; os resultados aparecem apenas com uma pesquisa ou filtro.
-  const hasActiveSearch=Boolean(searchQuery.trim()||model.trim()||color.trim()||yearFab.trim()||yearMod.trim()||status!=="all"||approval!=="all");
+  const hasActiveSearch=Boolean(searchQuery.trim()||model.trim()||color.trim()||yearFab.trim()||yearMod.trim()||status!=="all"||approval!=="all"||categoryFilter!=="all");
   const search=trpc.vehicleVault.search.useQuery({
     query:searchQuery,model,color,
     manufactureYear:/^\d{4}$/.test(yearFab)?Number(yearFab):undefined,
     modelYear:/^\d{4}$/.test(yearMod)?Number(yearMod):undefined,
-    status,approval,limit:150,
+    status,approval,category:categoryFilter,limit:150,
   },{enabled:hasActiveSearch,retry:false});
   const totalCount=trpc.vehicleVault.totalCount.useQuery(undefined,{retry:false});
   const details=trpc.vehicleVault.details.useQuery({id:selected||1},{enabled:!!selected,retry:false});
@@ -506,6 +508,19 @@ export default function VehicleVaultPanel(){
             <option value="all">Todos</option><option value="available">Sem cliente em uso</option>
             <option value="in_use">Em uso</option><option value="used">Já utilizado</option>
           </select>
+        </div>
+        <div className="flex flex-wrap items-center gap-2" role="group" aria-label="Filtrar veículos por categoria">
+          <span className="mr-1 text-[11px] font-black uppercase tracking-wide text-slate-400">Categoria:</span>
+          {([
+            ["all","TODAS"],
+            ["PARTICULAR","PARTICULAR"],
+            ["ALUGUEL","ALUGUEL"],
+          ] as const).map(([value,label])=><button key={value} type="button"
+            aria-pressed={categoryFilter===value}
+            onClick={()=>{setCategoryFilter(value);setSelected(null);}}
+            className={"rounded-xl border px-3 py-2 text-xs font-black transition-colors "+(categoryFilter===value?"border-cyan-300 bg-cyan-500/20 text-cyan-100":"border-white/15 bg-slate-900 text-slate-400 hover:border-white/35 hover:text-white")}>
+            {label}
+          </button>)}
         </div>
         <div className="flex flex-wrap items-center gap-2" role="group" aria-label="Filtrar por aprovação do documento">
           <span className="mr-1 text-[11px] font-black uppercase tracking-wide text-slate-400">Avaliação:</span>
