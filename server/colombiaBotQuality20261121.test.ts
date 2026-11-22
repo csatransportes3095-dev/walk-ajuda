@@ -5,6 +5,7 @@ import { findBotBlockedChoice, getBotCheckoutTotals, sameBotProgressOwner } from
 const bot = readFileSync("client/src/components/ColombiaBot.tsx", "utf8");
 const backend = readFileSync("server/routers.ts", "utf8");
 const home = readFileSync("client/src/pages/Home.tsx", "utf8");
+const boot = readFileSync("scripts/render-start.sh", "utf8");
 
 describe("ColombiaBot: checkout, ADM e experiencia segura", () => {
   it("mostra Pix com desconto uma vez, nunca acima do valor original", () => {
@@ -52,4 +53,10 @@ describe("ColombiaBot: checkout, ADM e experiencia segura", () => {
     expect(home).toContain("if (matchBot && botEnabled && products");
     expect(home).toContain("botEnabled && showColombiaBot && (");
   });
+  it("prepara somente as duas tabelas do Bot antes de iniciar a API", () => {
+    const migration = "run_boot_step \"db-migrate-colombiabot\" pnpm exec tsx scripts/apply-colombiabot-reliability-migration.ts";
+    expect(boot).toContain(migration);
+    expect(boot.indexOf(migration)).toBeLessThan(boot.indexOf('exec node dist/index.js'));
+  });
+
 });
