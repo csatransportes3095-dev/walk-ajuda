@@ -5,8 +5,16 @@ import { BookOpenCheck, CheckCircle2, Image as ImageIcon, ShieldCheck } from "lu
 export default function DeliveredOrderGuidePage() {
   const [, params] = useRoute("/pedido-entregue/:token");
   const token = params?.token || "";
+  // A tela só é montada após o login pelo UnifiedCustomerAccessGate.
+  // Enviar o token de sessão ao servidor, que revalida a identidade e o pedido.
+  const customerSessionToken = typeof window !== "undefined" ? localStorage.getItem("cp_token") || "" : "";
   const query = trpc.deliveredOrderGuide.getPublic.useQuery(
-    { token }, { enabled: /^[a-f0-9]{48}$/.test(token), refetchOnWindowFocus: true }
+    { token, customerSessionToken },
+    {
+      enabled: /^[a-f0-9]{48}$/.test(token) && customerSessionToken.length >= 32,
+      retry: false,
+      refetchOnWindowFocus: true,
+    }
   );
   const guide = query.data?.found ? query.data : null;
   const isLoading = query.isLoading;
@@ -26,7 +34,7 @@ export default function DeliveredOrderGuidePage() {
         {isLoading && <div role="status" className="rounded-xl border border-cyan-500/20 bg-slate-900/80 p-5 text-center text-sm">Carregando orientações...</div>}
         {!isLoading && !guide && (
           <section role="status" className="rounded-xl border border-amber-400/25 bg-slate-900 p-6 text-center text-sm text-amber-200">
-            Este link não está disponível. Solicite à equipe H2 Colombiano o link atualizado.
+            {query.isError ? query.error.message : "Este link não está disponível. Solicite à equipe H2 Colombiano o link atualizado."}
           </section>
         )}
         {guide && <>
