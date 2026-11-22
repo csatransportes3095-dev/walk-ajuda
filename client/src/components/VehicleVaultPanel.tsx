@@ -1,6 +1,6 @@
 import { useEffect, useState } from "react";
 import { createPortal } from "react-dom";
-import { Archive, ClipboardPaste, Copy, FileSearch, FileText, FolderOpen, Loader2, Pencil, Plus, Printer, Search, ShieldCheck, Users, X } from "lucide-react";
+import { Archive, ClipboardPaste, Copy, FileSearch, FileText, FolderOpen, Loader2, Pencil, Plus, Printer, Search, ShieldCheck, UserRound, Users, X } from "lucide-react";
 import { toast } from "sonner";
 import { trpc } from "@/lib/trpc";
 import VehicleVaultBatchPanel from "./VehicleVaultBatchPanel";
@@ -22,9 +22,9 @@ function ApprovalBadge({status}:{status:ApprovalStatus}) {
 }
 type VehicleFields = {
   plate:string; renavam:string; chassis:string; model:string; color:string;
-  manufactureYear:string; modelYear:string; ownerName:string; category:string; exerciseYear:string;
+  manufactureYear:string; modelYear:string; ownerName:string; ownerCpfCnpj:string; category:string; exerciseYear:string;
 };
-const EMPTY:VehicleFields={plate:"",renavam:"",chassis:"",model:"",color:"",manufactureYear:"",modelYear:"",ownerName:"",category:"",exerciseYear:""};
+const EMPTY:VehicleFields={plate:"",renavam:"",chassis:"",model:"",color:"",manufactureYear:"",modelYear:"",ownerName:"",ownerCpfCnpj:"",category:"",exerciseYear:""};
 const NAMES: Array<[keyof VehicleFields,string]>=[
   ["plate","PLACA"],["renavam","RENAVAM"],["chassis","CHASSI"],
   ["model","MARCA / MODELO"],["color","COR"],["manufactureYear","ANO FABRICAÇÃO"],
@@ -128,6 +128,30 @@ function PlateVisualComparator() {
   </div>;
 }
 
+function formatOwnerIdentity(value:string) {
+  const digits=String(value||"").replace(/\D/g,"");
+  if(digits.length===11)return digits.replace(/(\d{3})(\d{3})(\d{3})(\d{2})/,"$1.$2.$3-$4");
+  if(digits.length===14)return digits.replace(/(\d{2})(\d{3})(\d{3})(\d{4})(\d{2})/,"$1.$2.$3/$4-$5");
+  return value||"NÃO INFORMADO";
+}
+function CustomerPhoto({url,name}:{url?:string|null;name:string}){
+  const [failed,setFailed]=useState(false);
+  useEffect(()=>setFailed(false),[url]);
+  return <div className="flex h-12 w-12 shrink-0 items-center justify-center overflow-hidden rounded-xl border border-cyan-400/30 bg-slate-800">
+    {url&&!failed?<img src={url} alt={"Foto de "+name} loading="lazy" onError={()=>setFailed(true)} className="h-full w-full object-cover"/>:<UserRound aria-label="Sem foto cadastrada" className="h-6 w-6 text-slate-400"/>}
+  </div>;
+}
+function CustomerIdentity({person}:{person:{name?:string|null;phone?:string|null;cpf?:string|null;customerNumber?:number|null;profilePhotoUrl?:string|null}}){
+  const name=person.name||"Cliente cadastrado";
+  return <div className="flex min-w-0 flex-1 items-center gap-3">
+    <CustomerPhoto url={person.profilePhotoUrl} name={name}/>
+    <div className="min-w-0 space-y-1">
+      <p className="break-words text-xs font-bold text-white">{name}</p>
+      <p className="break-all text-[11px] text-slate-300">CPF: {person.cpf||"Não informado"}</p>
+      <p className="break-all text-[11px] text-slate-400">Telefone: {person.phone||"Não informado"}{person.customerNumber?" · Cadastro #"+person.customerNumber:""}</p>
+    </div>
+  </div>;
+}
 function base64File(file:File):Promise<string>{
   return new Promise((resolve,reject)=>{
     const reader=new FileReader();
@@ -203,12 +227,12 @@ export default function VehicleVaultPanel(){
     document.body.style.overflow="hidden";
     return ()=>{document.body.style.overflow=previousOverflow;};
   },[mode]);
-  const preview=(result:{plate:string;renavam:string;chassis:string;model:string;color:string;manufactureYear:number|null;modelYear:number|null;ownerName?:string|null;category:string;exerciseYear:number|null;text:string;missing:string[]},silent=false)=>{
+  const preview=(result:{plate:string;renavam:string;chassis:string;model:string;color:string;manufactureYear:number|null;modelYear:number|null;ownerName?:string|null;ownerCpfCnpj?:string|null;category:string;exerciseYear:number|null;text:string;missing:string[]},silent=false)=>{
     setFields({plate:result.plate||"",renavam:result.renavam||"",chassis:result.chassis||"",
       model:result.model||"",color:result.color||"",
       manufactureYear:result.manufactureYear?String(result.manufactureYear):"",
       modelYear:result.modelYear?String(result.modelYear):"",
-      ownerName:result.ownerName||"",
+      ownerName:result.ownerName||"",ownerCpfCnpj:result.ownerCpfCnpj||"",
       category:result.category||"",exerciseYear:result.exerciseYear?String(result.exerciseYear):""});
     setText(result.text||"");
     setMissing(result.missing||[]);
@@ -285,6 +309,7 @@ export default function VehicleVaultPanel(){
       toast.error("Informe os dois anos com quatro dígitos.");return;
     }
     const ownerName=fields.ownerName.trim();
+    const ownerCpfCnpj=fields.ownerCpfCnpj.trim();
     if(ownerName.length>200)return toast.error("Nome do proprietário deve ter até 200 caracteres.");
     const category=fields.category.trim().toUpperCase();
     const exerciseYear=fields.exerciseYear.trim();
@@ -296,7 +321,7 @@ export default function VehicleVaultPanel(){
         plate:fields.plate,renavam:fields.renavam,chassis:fields.chassis,
         model:fields.model,color:fields.color,
         manufactureYear:Number(fields.manufactureYear),modelYear:Number(fields.modelYear),
-        ownerName:ownerName||null,
+        ownerName:ownerName||null,ownerCpfCnpj:ownerCpfCnpj||null,
         category:category || null,exerciseYear:exerciseYear?Number(exerciseYear):null,
         approvalStatus:draftApproval,
         sourceText:text,pdfBase64:pdfBase64||undefined,pdfFilename:pdfName||undefined,
@@ -315,7 +340,7 @@ export default function VehicleVaultPanel(){
     setFields({
       plate:d.plate,renavam:d.renavam,chassis:d.chassis,model:d.model,color:d.color,
       manufactureYear:String(d.manufactureYear),modelYear:String(d.modelYear),
-      ownerName:d.ownerName||"",
+      ownerName:d.ownerName||"",ownerCpfCnpj:d.ownerCpfCnpj||"",
       category:d.category||"",exerciseYear:d.exerciseYear?String(d.exerciseYear):"",
     });
     setPendingText(null);setAutoTextStatus("idle");
@@ -458,6 +483,11 @@ export default function VehicleVaultPanel(){
                           className="mt-1 w-full min-w-0 rounded-lg border border-white/20 bg-black/55 px-2.5 py-2.5 text-sm font-semibold text-white outline-none focus:border-cyan-300/50"
                           value={fields.ownerName} onChange={e=>setFields(v=>({...v,ownerName:e.target.value}))} placeholder="NOME DO PROPRIETÁRIO"/>
                       </label>}
+                      {key==="modelYear"&&<label className="mt-2 block text-[11px] font-bold text-slate-300">CPF / CNPJ DO PROPRIETÁRIO
+                        <input type="text" maxLength={24} inputMode="numeric"
+                          className="mt-1 w-full min-w-0 rounded-lg border border-white/20 bg-black/55 px-2.5 py-2.5 text-sm font-semibold text-white outline-none focus:border-cyan-300/50"
+                          value={fields.ownerCpfCnpj} onChange={e=>setFields(v=>({...v,ownerCpfCnpj:e.target.value}))} placeholder="CPF ou CNPJ do proprietário"/>
+                      </label>}
                       {key==="color"&&fields.color.trim()&&<span className="mt-1 block"><VehicleColorBadge color={fields.color} compact/></span>}
                       {key==="category"&&<div className="mt-2 space-y-2" role="group" aria-label="Avaliar documento durante a extração">
                         <span className="block text-[10px] font-black text-slate-300">AVALIAÇÃO DO DOCUMENTO</span>
@@ -551,7 +581,9 @@ export default function VehicleVaultPanel(){
             {NAMES.map(([key,label])=><div key={key}><div className="mb-1 text-[10px] font-bold text-white/45">{label}</div>{key==="color"?<VehicleColorBadge color={details.data?.color||""}/>:<div className="break-all font-bold">{String(details.data?.[key]||"")}</div>}
               {key==="modelYear"&&<div className="mt-3">
                 <div className="mb-1 text-[10px] font-bold text-white/45">NOME DO PROPRIETÁRIO</div>
-                <div className="break-all font-bold">{details.data?.ownerName||""}</div>
+                <div className="break-all font-bold">{details.data?.ownerName||"NÃO INFORMADO"}</div>
+                <div className="mt-2 text-[10px] font-bold text-white/45">CPF / CNPJ DO PROPRIETÁRIO</div>
+                <div className="break-all font-bold">{formatOwnerIdentity(details.data?.ownerCpfCnpj||"")}</div>
                 <PlateVisualComparator/>
               </div>}
               {key==="category"&&<div className="mt-4 space-y-2" role="group" aria-label="Avaliação do documento">
@@ -597,13 +629,13 @@ export default function VehicleVaultPanel(){
                 placeholder="Nome, CPF, telefone ou nº cadastro" className="min-w-0 flex-1 rounded-lg border border-white/20 bg-black/40 p-2 text-xs"/>
               <button onClick={()=>setPendingClientQuery(clientQuery.trim())} className="rounded-lg bg-cyan-500 px-3 text-xs font-black text-black">BUSCAR</button>
             </div>
-            {customers.data?.map(person=><div key={person.id} className="flex items-center justify-between gap-2 border-b border-white/10 py-2 text-xs">
-              <span>{person.name} · {person.phone} {person.customerNumber?" · #"+person.customerNumber:""}</span>
-              <button disabled={link.isPending} onClick={()=>void linkCustomer(person.id)} className="rounded-lg border border-emerald-400/40 px-2 py-1 font-bold text-emerald-300">VINCULAR</button>
+            {customers.data?.map(person=><div key={person.id} className="flex flex-wrap items-center justify-between gap-2 border-b border-white/10 py-2 text-xs sm:flex-nowrap">
+              <CustomerIdentity person={person}/>
+              <button disabled={link.isPending} onClick={()=>void linkCustomer(person.id)} className="shrink-0 rounded-lg border border-emerald-400/40 px-2 py-1 font-bold text-emerald-300">VINCULAR</button>
             </div>)}
-            {details.data.links.filter(l=>!l.unlinkedAt).map(l=><div key={l.id} className="flex items-center justify-between gap-2 border-b border-white/10 py-2 text-xs">
-              <span>{l.name||"Cliente cadastrado"} · {l.phone||"Sem telefone"}</span>
-              <button disabled={unlink.isPending} onClick={()=>void unlinkCustomer(l.customerId)} className="rounded-lg border border-red-400/40 px-2 py-1 text-red-200">DESVINCULAR</button>
+            {details.data.links.filter(l=>!l.unlinkedAt).map(l=><div key={l.id} className="flex flex-wrap items-center justify-between gap-2 border-b border-white/10 py-2 text-xs sm:flex-nowrap">
+              <CustomerIdentity person={l}/>
+              <button disabled={unlink.isPending} onClick={()=>void unlinkCustomer(l.customerId)} className="shrink-0 rounded-lg border border-red-400/40 px-2 py-1 text-red-200">DESVINCULAR</button>
             </div>)}
             {!details.data.links.some(l=>!l.unlinkedAt)&&<p className="text-xs text-white/45">Nenhum cliente usando este documento atualmente.</p>}
           </div>
