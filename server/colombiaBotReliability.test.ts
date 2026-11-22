@@ -63,13 +63,15 @@ describe("ColombiaBot: idempotencia e diagnosticos", () => {
 
   it("aceita apenas etapas e eventos previstos; corta telemetria em 40 eventos", async () => {
     expect(BOT_PHASES).toContain("Pagamento");
-    const db = { execute: vi.fn().mockResolvedValue([[{ total: 40 }], []]) };
+    const db = { execute: vi.fn()
+      .mockResolvedValueOnce([{ affectedRows: 1 }])
+      .mockResolvedValueOnce([[{ total: 40 }], []]) };
     const accepted = await recordColombiaBotEvent(db, {
       sessionId: key,
       eventId: "48d90829-35cd-434d-9917-f08765769f46",
       phase: "Pagamento", eventCode: "etapa",
     });
     expect(accepted).toBe(false);
-    expect(db.execute).toHaveBeenCalledTimes(1);
+    expect(db.execute).toHaveBeenCalledTimes(2);
   });
 });
