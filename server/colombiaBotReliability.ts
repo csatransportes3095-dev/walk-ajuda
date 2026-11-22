@@ -51,8 +51,12 @@ export type BotSubmissionClaim =
   | { kind: "conflict" };
 
 function rowsFrom(result: any): Array<Record<string, any>> {
-  const payload = Array.isArray(result) ? result[0] : result;
-  return Array.isArray(payload) ? payload : [];
+  if (!Array.isArray(result)) return [];
+  if (Array.isArray(result[0])) return result[0];
+  if (result[0] && typeof result[0] === "object" && !("affectedRows" in result[0])) {
+    return result;
+  }
+  return [];
 }
 
 export async function claimColombiaBotSubmission(
@@ -96,10 +100,20 @@ export async function flagColombiaBotSubmissionForReview(db: SqlDb, requestKey: 
     WHERE requestKey = ${requestKey} AND state = 'processing'`);
 }
 
+let lastDiagnosticPruneAt = 0;
+
 export async function recordColombiaBotEvent(db: SqlDb, input: {
   eventId: string; sessionId: string; phase: BotPhase; eventCode: BotEvent;
 }): Promise<boolean> {
   await ensureColombiaBotReliabilitySchema(db);
+  // Remoção conservadora de telemetria antiga, no máximo uma operação por hora e instância.
+  if (Date.now() - lastDiagnosticPruneAt > 60 * 60 * 1000) {
+    lastDiagnosticPruneAt = Date.now();
+    try {
+      await db.execute(sql`DELETE FROM colombiaBotDiagnosticEvents
+        WHERE createdAt < NOW() - INTERVAL 8 DAY`);
+    } catch { /* falha de limpeza não interrompe pedidos */ }
+  }
   // Limite de eventos por sessão e janela: preservar o Render, evitar ruído e abuso.
   const row = rowsFrom(await db.execute(sql`SELECT COUNT(*) AS total
     FROM colombiaBotDiagnosticEvents WHERE sessionId = ${input.sessionId}
