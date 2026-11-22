@@ -16,6 +16,7 @@ import { globalPromotionIsActive, globalPromotionOverridesIndividual, globalProm
 import { ColombiaBotStorefrontCard } from "@/components/ColombiaBotStorefrontCard";
 import { captureColombiaBotChoice } from "@/lib/colombiaBotNavigation";
 import { getBotCheckoutTotals, findBotBlockedChoice, sameBotProgressOwner, type BotBlockedChoice } from "@/lib/colombiaBotCheckout";
+import { parseBrazilMoney } from "@shared/vipPricing";
 import { requestProductManifest } from "@/lib/productManifest";
 import { isUsableBotCouponCode, resolveBotCouponChoice, resolveBotResumeStep, sameBotSelectOption } from "@/lib/colombiaBotFlow";
 
@@ -934,6 +935,16 @@ export function ColombiaBot({ products, onStartNormal, onSelectProduct, onSelect
     const basePrice = getModelPrice(flowState.current.priceModel) || priceForOption(option);
     const totals = getBotCheckoutTotals(basePrice, sitePromoOverrides ? null : flowState.current.couponDiscount);
     const price = basePrice.trim() ? totals.total : "";
+    // Não criar card de pagamento ou permitir upload quando não houver preço oficial.
+    // O valor zerado pelo cupom integral continua permitido; preço-base ausente não.
+    if (!basePrice.trim() || parseBrazilMoney(basePrice) <= 0) {
+      setCurrentPhase("Garantia / preço");
+      setPixActionError("");
+      addMsgs({ type: "bot", id: uid(), text: "Não foi possível confirmar o preço deste serviço. O pagamento foi bloqueado para sua segurança. Escolha outro plano ou tente novamente depois que o valor for corrigido." });
+      if (option) startOptionPricing(product, option);
+      else askService();
+      return;
+    }
     setPixActionError("");
 
     const msgId = uid();
@@ -1022,6 +1033,14 @@ export function ColombiaBot({ products, onStartNormal, onSelectProduct, onSelect
             docsArray.push({ label: d.label, url: df.url, fileKey: df.fileKey, mime: df.mime || 'image/jpeg' });
           }
         });
+      }
+
+      const finalBasePrice = getModelPrice(flowState.current.priceModel) || priceForOption(option);
+      if (!finalBasePrice.trim() || parseBrazilMoney(finalBasePrice) <= 0 || !flowState.current.pixProofUrl) {
+        setSendError("Pedido não enviado: é obrigatório confirmar o preço oficial e anexar o comprovante Pix.");
+        submittingRef.current = false;
+        setIsSubmitting(false);
+        return;
       }
 
       const cpToken = localStorage.getItem('cp_token') || '';
