@@ -22,6 +22,7 @@ function isUnifiedCustomerRoute(pathname: string): boolean {
     path === "/foto" ||
     // Apenas o link individual válido de Pedido Entregue exige login do cliente.
     /^\/pedido-entregue\/[a-f0-9]{48}$/.test(path) ||
+    /^\/confirmacao-orientacoes\/[a-f0-9]{48}$/.test(path) ||
     path === "/cartoes" ||
     path.startsWith("/cartoes/")
   );
