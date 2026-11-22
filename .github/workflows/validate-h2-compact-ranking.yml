@@ -4,6 +4,12 @@ on:
     branches: [feat/similaridade-grid-compacto-20261020]
   pull_request:
     branches: [recovery/organizar-salvos-2026-08-24]
+    paths:
+      - 'client/src/pages/AdminSimilarity.tsx'
+      - 'client/src/lib/face*.ts'
+      - 'server/similarFace*.ts'
+      - 'server/h2Face*.ts'
+      - '.github/workflows/validate-h2-compact-ranking.yml'
 permissions:
   contents: read
 jobs:

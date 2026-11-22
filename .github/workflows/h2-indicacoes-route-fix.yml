@@ -6,6 +6,13 @@ on:
   pull_request:
     branches:
       - recovery/organizar-salvos-2026-08-24
+    paths:
+      - 'server/route-fallback-indicacoes.test.ts'
+      - 'client/public/route-fallback-guard-v1.js'
+      - 'client/index.html'
+      - 'client/src/pages/ClientReferrals.tsx'
+      - 'client/src/App.tsx'
+      - '.github/workflows/h2-indicacoes-route-fix.yml'
 permissions:
   contents: read
 jobs:

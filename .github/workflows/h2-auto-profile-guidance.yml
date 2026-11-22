@@ -3,6 +3,12 @@ on:
   pull_request:
     branches:
       - recovery/organizar-salvos-2026-08-24
+    paths:
+      - 'server/h2-auto-*.ts'
+      - 'server/h2Auto*.ts'
+      - 'client/src/pages/AdminH2Auto.tsx'
+      - 'shared/h2Auto*.ts'
+      - '.github/workflows/h2-auto-profile-guidance.yml'
   push:
     branches:
       - fix/h2auto-cadastro-incompleto-login-20261028

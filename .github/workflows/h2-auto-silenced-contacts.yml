@@ -4,6 +4,12 @@ on:
     branches: [feature/h2auto-manual-silenced-contacts-20261028]
   pull_request:
     branches: [recovery/organizar-salvos-2026-08-24]
+    paths:
+      - 'server/h2-auto-silenced-contacts*.ts'
+      - 'server/h2AutoLegacyPauseVisibility.test.ts'
+      - 'server/h2-auto-validation-policy*.ts'
+      - 'client/src/components/H2AutoSilencedContacts.tsx'
+      - '.github/workflows/h2-auto-silenced-contacts.yml'
 permissions:
   contents: read
 jobs:

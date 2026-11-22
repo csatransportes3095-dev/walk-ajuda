@@ -6,6 +6,14 @@ on:
   pull_request:
     branches:
       - recovery/organizar-salvos-2026-08-24
+    paths:
+      - 'server/h2-auto-*.ts'
+      - 'server/h2Auto*.ts'
+      - 'client/src/pages/AdminH2Auto.tsx'
+      - 'client/src/pages/ClientReferrals.tsx'
+      - 'shared/h2Auto*.ts'
+      - 'server/referralCommissionPolicy*.ts'
+      - '.github/workflows/h2-auto-option3-referrals.yml'
 permissions:
   contents: read
 jobs:
