@@ -196,7 +196,7 @@ export default function OrderH2AdsBrowserShortcut({ registrationId, subOrderInde
 
   const openBrowser = async (event: MouseEvent<HTMLButtonElement>) => {
     event.stopPropagation();
-    if (!shortcut?.canOpen || pending) return;
+    if (!shortcut?.canOpen || !readyToOpen || pending) return;
     try {
       await launchBrowser.mutateAsync({ instanceId: shortcut.instanceId });
       toast.success("Comando para abrir o browser H2ADS enviado.");
@@ -545,9 +545,9 @@ export default function OrderH2AdsBrowserShortcut({ registrationId, subOrderInde
       <button
       type="button"
       onClick={openBrowser}
-      disabled={!shortcut.canOpen || pending}
+      disabled={!readyToOpen || pending}
       className="inline-flex min-h-8 items-center justify-center gap-1.5 rounded-lg border border-emerald-500/35 bg-emerald-500/15 px-2.5 py-1.5 text-[10px] font-black text-emerald-200 transition hover:bg-emerald-500/25 disabled:cursor-not-allowed disabled:opacity-30 sm:min-h-9 sm:px-3 sm:text-[11px] lg:min-h-10 lg:px-3.5 lg:text-xs"
-      title={shortcut.canOpen ? "Abrir browser da instância vinculada" : statusTitle}
+      title={readyToOpen ? "Abrir browser da instância vinculada" : "Aguarde Worker, proxy e perfil prontos antes de abrir."}
     >
       <Play className="h-3.5 w-3.5 lg:h-4 lg:w-4" />ABRIR
     </button>
