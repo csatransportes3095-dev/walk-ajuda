@@ -97,7 +97,7 @@ export function CustomerOtpLogin({ title = "Acesso H2 Colombiano", initialPhone 
   const [deliveryChannel, setDeliveryChannel] = useState<OtpChannel>(initialState.channel);
   const [code, setCode] = useState("");
   const [showHelp, setShowHelp] = useState(false);
-  const [showWhatsappFallback, setShowWhatsappFallback] = useState(initialState.step === "code" && initialState.channel === "whatsapp");
+  const [showWhatsappFallback, setShowWhatsappFallback] = useState(initialState.step === "code" && initialState.channel !== "email");
   const [busy, setBusy] = useState(false);
   const [clockNow, setClockNow] = useState(() => Date.now());
   const [cooldowns, setCooldowns] = useState<{email:number;whatsapp:number}>(() => {
