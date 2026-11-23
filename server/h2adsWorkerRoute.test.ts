@@ -3,12 +3,13 @@ import path from "node:path";
 import { spawnSync } from "node:child_process";
 import { beforeEach, describe, expect, it, vi } from "vitest";
 
-const { authenticateH2AdsWorker, claimH2AdsWorker, claimNextH2AdsWorkerCommand, completeH2AdsWorkerBrowserCommand, completeH2AdsWorkerPreparation, decryptH2AdsProxy, getH2AdsInstance, getH2AdsPreparedObservedIp, getH2AdsProxyCredential, recordH2AdsBrowserRuntimeState, recordH2AdsWorkerHeartbeat, getDb } = vi.hoisted(() => ({
+const { authenticateH2AdsWorker, claimH2AdsWorker, claimNextH2AdsWorkerCommand, completeH2AdsWorkerBrowserCommand, completeH2AdsWorkerPreparation, expireH2AdsStalledPreparationsForWorker, decryptH2AdsProxy, getH2AdsInstance, getH2AdsPreparedObservedIp, getH2AdsProxyCredential, recordH2AdsBrowserRuntimeState, recordH2AdsWorkerHeartbeat, getDb } = vi.hoisted(() => ({
   authenticateH2AdsWorker: vi.fn(),
   claimH2AdsWorker: vi.fn(),
   claimNextH2AdsWorkerCommand: vi.fn(),
   completeH2AdsWorkerBrowserCommand: vi.fn(),
   completeH2AdsWorkerPreparation: vi.fn(),
+  expireH2AdsStalledPreparationsForWorker: vi.fn(),
   decryptH2AdsProxy: vi.fn(),
   getH2AdsInstance: vi.fn(),
   getH2AdsPreparedObservedIp: vi.fn(),
