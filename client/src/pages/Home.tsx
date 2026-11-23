@@ -389,7 +389,7 @@ export default function Home() {
   const [referrerValidationStatus, setReferrerValidationStatus] = useState<{ valid: boolean; name?: string } | null>(null);
   const [couponCode, setCouponCode] = useState("");
   const [couponValid, setCouponValid] = useState<boolean | null>(null);
-  const [couponDiscount, setCouponDiscount] = useState<{ type: string; value: number; productId?: number | null } | null>(null);
+  const [couponDiscount, setCouponDiscount] = useState<{ type: string; value: number; productId?: number | null; optionId?: number | null } | null>(null);
   const [thirdPartyName, setThirdPartyName] = useState(""); // nome do cliente final (revendedor)
   const [thirdPartyPhone, setThirdPartyPhone] = useState(""); // telefone do cliente final (revendedor)
   const [isValidatingCoupon, setIsValidatingCoupon] = useState(false);
@@ -1272,7 +1272,7 @@ export default function Home() {
     if (isNaN(numericValue)) return originalValue;
     let discounted = numericValue;
     // Aplicar desconto de cupom
-    if (couponDiscount && (couponDiscount.productId == null || selectedProduct?.id === couponDiscount.productId || (cart.length > 1 && cart.every(item => item.product.id === couponDiscount.productId)))) {
+    if (couponDiscount && (couponDiscount.productId == null || selectedProduct?.id === couponDiscount.productId || (cart.length > 1 && cart.every(item => item.product.id === couponDiscount.productId))) && (couponDiscount.optionId == null || selectedOption?.id === couponDiscount.optionId || (cart.length > 1 && cart.every(item => item.option?.id === couponDiscount.optionId)))) {
       if (couponDiscount.type === 'percentage') {
         discounted = discounted - (discounted * couponDiscount.value / 100);
       } else {
@@ -1438,17 +1438,21 @@ export default function Home() {
       const selectedIds = cart.length > 1
         ? cart.map(item => item.product.id)
         : selectedProduct?.id ? [selectedProduct.id] : [];
+      const selectedOptionIds = cart.length > 1
+        ? cart.map(item => item.option?.id).filter((id): id is number => typeof id === "number")
+        : selectedOption?.id ? [selectedOption.id] : [];
       const result = await validateCouponMutation.mutateAsync({
         code: couponCode.trim(), ...(selectedIds.length ? { productIds: selectedIds } : {}),
+        ...(selectedOptionIds.length ? { optionIds: selectedOptionIds } : {}),
       });
       if (result.valid) {
         setCouponValid(true);
-        setCouponDiscount({ type: result.discountType!, value: result.discountValue!, productId: result.productId ?? null });
+        setCouponDiscount({ type: result.discountType!, value: result.discountValue!, productId: result.productId ?? null, optionId: result.optionId ?? null });
         const discountText = result.discountType === 'percentage'
           ? `${result.discountValue}% de desconto`
           : `R$ ${result.discountValue!.toFixed(2).replace('.', ',')} de desconto`;
         const scope = result.productName
-          ? ` Válido exclusivamente para: ${result.productName}.`
+          ? ` Válido para: ${result.productName}${result.optionName ? " — " + result.optionName : " (todas as opções)"}.`
           : " Válido para todos os produtos.";
         setCouponMessage(`Cupom válido! ${discountText}.${scope}`);
         toast.success(`Cupom aplicado: ${discountText}.${scope}`);
@@ -1827,7 +1831,8 @@ export default function Home() {
       const cartItems = cart.length > 1 ? cart : null;
 
       if (cartItems) {
-        if (couponDiscount?.productId != null && !cartItems.every(item => item.product.id === couponDiscount.productId)) {
+        if ((couponDiscount?.productId != null && !cartItems.every(item => item.product.id === couponDiscount.productId)) ||
+          (couponDiscount?.optionId != null && !cartItems.every(item => item.option?.id === couponDiscount.optionId))) {
           toast.error("Este cupom não vale para todos os produtos do carrinho. Remova os outros produtos ou retire o cupom.");
           setSubmitFailure("Cupom exclusivo de outro produto. Revise o carrinho.");
           setIsSubmitting(false);
@@ -1846,7 +1851,8 @@ export default function Home() {
         // Calcular desconto do cupom sobre o total
         let cartCouponDiscountValue: number | undefined;
         if (!sitePromoOverrides && couponDiscount && (
-          couponDiscount.productId == null || cartItems.every(item => item.product.id === couponDiscount.productId)
+          (couponDiscount.productId == null || cartItems.every(item => item.product.id === couponDiscount.productId)) &&
+          (couponDiscount.optionId == null || cartItems.every(item => item.option?.id === couponDiscount.optionId))
         )) {
           if (couponDiscount.type === 'percentage') {
             cartCouponDiscountValue = Math.min(cartTotalValue, cartTotalValue * couponDiscount.value / 100);
@@ -1961,7 +1967,8 @@ export default function Home() {
         return;
       }
 
-      if (couponDiscount?.productId != null && selectedProduct?.id !== couponDiscount.productId) {
+      if ((couponDiscount?.productId != null && selectedProduct?.id !== couponDiscount.productId) ||
+          (couponDiscount?.optionId != null && selectedOption?.id !== couponDiscount.optionId)) {
         toast.error("Este cupom não vale para o produto selecionado.");
         setSubmitFailure("Cupom exclusivo de outro produto. Selecione o produto correto.");
         setIsSubmitting(false);
@@ -2292,10 +2299,16 @@ export default function Home() {
 
   const hasResellerDiscount = !sitePromoOverrides && getResellerDiscountAmount() > 0;
   // Nao exibir preco promocional de outro produto apos mudar a selecao.
-  const couponMatchesSelection = !couponDiscount || couponDiscount.productId == null
-    || (cart.length > 1
-      ? cart.every(item => item.product.id === couponDiscount.productId)
-      : selectedProduct?.id === couponDiscount.productId);
+  const couponMatchesSelection = !couponDiscount || (
+    (couponDiscount.productId == null ||
+      (cart.length > 1
+        ? cart.every(item => item.product.id === couponDiscount.productId)
+        : selectedProduct?.id === couponDiscount.productId)) &&
+    (couponDiscount.optionId == null ||
+      (cart.length > 1
+        ? cart.every(item => item.option?.id === couponDiscount.optionId)
+        : selectedOption?.id === couponDiscount.optionId))
+  );
   const activeCouponDiscount = sitePromoOverrides || !couponMatchesSelection ? null : couponDiscount;
   const finalValue = (activeCouponDiscount || hasResellerDiscount) ? calculateDiscountedValue(originalValue) : originalValue;
 
@@ -4386,7 +4399,8 @@ export default function Home() {
                       {isValidatingCoupon ? '...' : 'Aplicar'}
                     </button>
                   </div>
-                  {couponMessage && <p className={`text-xs mt-1 font-semibold ${couponValid && couponMatchesSelection ? 'text-green-400' : 'text-red-400'}`}>{couponMatchesSelection ? couponMessage : "Este cupom vale somente para outro produto. Selecione o produto correto ou remova o cupom."}</p>}
+                  {couponMessage && <p className={`text-xs mt-1 font-semibold ${couponValid && couponMatchesSelection ? 'text-green-400' : 'text-red-400'}`}>{couponMatchesSelection ? couponMessage : "Este cupom não vale para a opção selecionada. Escolha a opção correta ou remova o cupom."}</p>}
+                  {couponValid && couponMatchesSelection && <p className="text-amber-300 text-xs font-semibold mt-1">🏷️ Compras com cupom não geram comissão de indicação.</p>}
                 </div>}
 
                 {/* Campo de cliente final para revendedores */}

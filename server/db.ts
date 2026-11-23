@@ -1,5 +1,5 @@
 import { emailBelongsToAnotherCustomer, CUSTOMER_EMAIL_IN_USE_MESSAGE } from "./customerEmailOwnership";
-import { couponAppliesToProductIds } from "../shared/couponProductScope";
+import { couponAppliesToProductIds, couponAppliesToOptionIds } from "../shared/couponProductScope";
 import { normalizeCustomerText } from "../shared/customerTextNormalization";
 import { TRPCError } from "@trpc/server";
 import { ensureStatusScopeSchema, withStatusScopeLock, archiveScopeDefinition, assertStatusCanBeRemoved, assertNotInitialStatus, scopeRows } from "./orderStatusScope";
@@ -367,6 +367,16 @@ async function ensureCouponScheduleInfrastructure(): Promise<void> {
           throw error;
         }
       }
+      try {
+        await db.execute(sql`ALTER TABLE coupons ADD COLUMN optionId INT NULL AFTER productId`);
+      } catch (error) {
+        const outer = error as { code?: string; errno?: number; cause?: unknown };
+        const cause = (outer?.cause || {}) as { code?: string; errno?: number };
+        if ((outer?.code || cause?.code) !== "ER_DUP_FIELDNAME" && (outer?.errno || cause?.errno) !== 1060) {
+          console.error("[coupons] Falha ao garantir coluna optionId:", error);
+          throw error;
+        }
+      }
     })().catch((error) => {
       couponScheduleInfrastructurePromise = null;
       throw error;
@@ -375,11 +385,11 @@ async function ensureCouponScheduleInfrastructure(): Promise<void> {
   return couponScheduleInfrastructurePromise;
 }
 
-export async function createCoupon(data: { code: string; discountType: 'percentage' | 'fixed'; discountValue: number; productId?: number | null; maxUses?: number; startsAt?: Date | null; expiresAt?: Date | null; }): Promise<Coupon> {
+export async function createCoupon(data: { code: string; discountType: 'percentage' | 'fixed'; discountValue: number; productId?: number | null; optionId?: number | null; maxUses?: number; startsAt?: Date | null; expiresAt?: Date | null; }): Promise<Coupon> {
   const db = await getDb();
   if (!db) throw new Error('Database not available');
   await ensureCouponScheduleInfrastructure();
-  await db.insert(coupons).values({ code: data.code.toUpperCase(), discountType: data.discountType, discountValue: data.discountValue, productId: data.productId ?? null, maxUses: data.maxUses || 1, currentUses: 0, startsAt: data.startsAt || null, expiresAt: data.expiresAt || null, status: 'active' });
+  await db.insert(coupons).values({ code: data.code.toUpperCase(), discountType: data.discountType, discountValue: data.discountValue, productId: data.productId ?? null, optionId: data.optionId ?? null, maxUses: data.maxUses || 1, currentUses: 0, startsAt: data.startsAt || null, expiresAt: data.expiresAt || null, status: 'active' });
   const result = await db.select().from(coupons).where(eq(coupons.code, data.code.toUpperCase())).limit(1);
   return result[0];
 }
@@ -403,7 +413,7 @@ export async function toggleCoupon(id: number, status: 'active' | 'disabled'): P
   await db.update(coupons).set({ status }).where(eq(coupons.id, id));
 }
 
-export async function validateCoupon(code: string, productIds?: readonly number[]): Promise<{ valid: boolean; coupon?: Coupon; reason?: string; discountType?: 'percentage' | 'fixed'; discountValue?: number; productId?: number | null; productName?: string | null; }> {
+export async function validateCoupon(code: string, productIds?: readonly number[], optionIds?: readonly number[]): Promise<{ valid: boolean; coupon?: Coupon; reason?: string; discountType?: 'percentage' | 'fixed'; discountValue?: number; productId?: number | null; productName?: string | null; optionId?: number | null; optionName?: string | null; }> {
   const db = await getDb();
   if (!db) return { valid: false, reason: 'Banco de dados indisponível' };
   await ensureCouponScheduleInfrastructure();
@@ -430,7 +440,27 @@ export async function validateCoupon(code: string, productIds?: readonly number[
       };
     }
   }
-  return { valid: true, coupon, discountType: coupon.discountType, discountValue: coupon.discountValue, productId: coupon.productId ?? null, productName };
+  let optionName: string | null = null;
+  if (coupon.optionId != null) {
+    const chosenOption = await db.select({
+      label: productOptions.label, productId: productOptions.productId, isActive: productOptions.isActive,
+    }).from(productOptions).where(eq(productOptions.id, coupon.optionId)).limit(1);
+    if (!chosenOption[0] || chosenOption[0].isActive !== 1 || chosenOption[0].productId !== coupon.productId) {
+      return { valid: false, reason: "A opção vinculada a este cupom não está disponível." };
+    }
+    optionName = chosenOption[0].label;
+    if (optionIds && !couponAppliesToOptionIds(coupon.optionId, optionIds)) {
+      return {
+        valid: false, productId: coupon.productId, productName,
+        optionId: coupon.optionId, optionName,
+        reason: `Este cupom é válido somente para ${productName} — ${optionName}. Selecione essa opção para receber o desconto.`,
+      };
+    }
+  }
+  return {
+    valid: true, coupon, discountType: coupon.discountType, discountValue: coupon.discountValue,
+    productId: coupon.productId ?? null, productName, optionId: coupon.optionId ?? null, optionName,
+  };
 }
 
 export async function consumeCoupon(code: string, usedBy?: string): Promise<void> {
@@ -5835,6 +5865,7 @@ export async function createReferralCommissionAttribution(input: {
   serviceOption?: string | null;
   commissionValue: number;
   promotionNoCommission?: boolean;
+  couponApplied?: boolean;
 }): Promise<ReferralCommissionAttribution | null> {
   const db = await getDb();
   if (!db) return null;
@@ -5862,7 +5893,7 @@ export async function createReferralCommissionAttribution(input: {
       commissionRule: input.promotionNoCommission ? PROMOTION_REFERRAL_RULE : "fixed_option",
       commissionValue: input.promotionNoCommission ? 0 : Math.max(0, Math.round(input.commissionValue)),
       status: input.promotionNoCommission ? "nao_elegivel" : "em_analise",
-      invalidReason: input.promotionNoCommission ? "Produto em promoção: sem comissão de indicação." : null,
+      invalidReason: input.promotionNoCommission ? (input.couponApplied ? "Cupom de desconto utilizado: sem comissão de indicação." : "Produto em promoção: sem comissão de indicação.") : null,
       invalidatedAt: input.promotionNoCommission ? new Date() : null,
     } satisfies InsertReferralCommissionAttribution);
   } catch (error: any) {

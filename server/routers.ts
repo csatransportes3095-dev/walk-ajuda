@@ -649,6 +649,7 @@ export const appRouter = router({
         discountType: z.enum(['percentage', 'fixed']),
         discountValue: z.number().min(1),
         productId: z.number().int().positive().nullable().optional(),
+        optionId: z.number().int().positive().nullable().optional(),
         maxUses: z.number().min(1).default(1),
         startsAt: z.string().optional(),
         expiresAt: z.string().optional(),
@@ -663,14 +664,23 @@ export const appRouter = router({
           if (startsAt && expiresAt && expiresAt <= startsAt) {
             return { success: false, message: 'O fim deve ser posterior ao início.' };
           }
+          if (input.optionId != null && input.productId == null) {
+            return { success: false, message: "Selecione o produto antes da opção." };
+          }
           if (input.productId != null) {
             const allowedProducts = await listActiveProducts();
             if (!allowedProducts.some(product => product.id === input.productId)) {
               return { success: false, message: "Selecione um produto ativo da vitrine." };
             }
+            if (input.optionId != null) {
+              const options = await listProductOptions(input.productId);
+              if (!options.some(option => option.id === input.optionId && option.isActive === 1)) {
+                return { success: false, message: "Selecione uma opção ativa deste produto." };
+              }
+            }
           }
           const coupon = await createCoupon({
-            code: input.code, productId: input.productId ?? null, discountType: input.discountType,
+            code: input.code, productId: input.productId ?? null, optionId: input.optionId ?? null, discountType: input.discountType,
             discountValue: input.discountValue, maxUses: input.maxUses,
             startsAt, expiresAt,
           });
@@ -693,15 +703,27 @@ export const appRouter = router({
 
     products: adminProcedure.query(async () => {
       const active = await listActiveProducts();
-      return active.map(product => ({ id: product.id, name: product.name }));
+      return await Promise.all(active.map(async product => ({
+        id: product.id,
+        name: product.name,
+        options: (await listProductOptions(product.id))
+          .filter(option => option.isActive === 1)
+          .map(option => ({ id: option.id, label: option.label })),
+      })));
     }),
 
     list: adminProcedure.query(async () => {
       const [allCoupons, allProducts] = await Promise.all([listCoupons(), listProducts()]);
       const names = new Map(allProducts.map(product => [product.id, product.name]));
+      const scopedProductIds = Array.from(new Set(allCoupons
+        .filter(coupon => coupon.optionId != null && coupon.productId != null)
+        .map(coupon => Number(coupon.productId))));
+      const matchingOptions = (await Promise.all(scopedProductIds.map(id => listProductOptions(id)))).flat();
+      const optionNames = new Map(matchingOptions.map(option => [option.id, option.label]));
       return allCoupons.map(coupon => ({
         ...coupon,
         productName: coupon.productId == null ? null : names.get(coupon.productId) || "Produto não encontrado",
+        optionName: coupon.optionId == null ? null : optionNames.get(coupon.optionId) || "Opção não encontrada",
       }));
     }),
 
@@ -718,10 +740,13 @@ export const appRouter = router({
         code: z.string().min(1),
         productId: z.number().int().positive().optional(),
         productIds: z.array(z.number().int().positive()).min(1).max(20).optional(),
+        optionId: z.number().int().positive().optional(),
+        optionIds: z.array(z.number().int().positive()).min(1).max(20).optional(),
       }))
       .mutation(async ({ input }) => await validateCoupon(
         input.code,
         input.productIds ?? (input.productId ? [input.productId] : undefined),
+        input.optionIds ?? (input.optionId ? [input.optionId] : undefined),
       )),
   }),
 
@@ -1576,6 +1601,7 @@ export const appRouter = router({
           // O backend não confia no valor enviado pelo navegador.
           const globalPromo = parseGlobalPromotionConfig(await getSetting("global_promotion_config_v1"));
           let promotionalOrderAtCheckout = false;
+          let couponAppliedAtCheckout = false;
           if (globalPromotionOverridesIndividual(globalPromo)) {
             if (!input.optionId || !input.productId) {
               return { success: false, message: "Seleção do produto ausente. Reabra a compra para confirmar a promoção geral." };
@@ -1625,7 +1651,7 @@ export const appRouter = router({
           // Nunca confia no desconto calculado pelo navegador.
           if (!globalPromotionOverridesIndividual(globalPromo) && input.couponCode) {
             // Mesmo que o navegador omita o produto, um cupom restrito nao passa.
-            const couponCheck = await validateCoupon(input.couponCode, [input.productId || 0]);
+            const couponCheck = await validateCoupon(input.couponCode, [input.productId || 0], [input.optionId || 0]);
             if (!couponCheck.valid || !couponCheck.discountType || couponCheck.discountValue == null) {
               return { success: false, message: couponCheck.reason || 'Cupom inválido ou indisponível.' };
             }
@@ -1635,6 +1661,10 @@ export const appRouter = router({
                 return { success: false, message: 'Este cupom só pode ser usado com uma opção do produto ' + (couponCheck.productName || 'selecionado') + '.' };
               }
             }
+            // Qualquer compra com cupom valido segue a regra de promocao: sem indicacao.
+            // A atribuicao sera congelada como nao_elegivel, impedindo pagamento posterior.
+            couponAppliedAtCheckout = true;
+            promotionalOrderAtCheckout = true;
 
             const parseMoney = (value?: string | null) => {
               if (!value) return 0;
@@ -2205,6 +2235,7 @@ export const appRouter = router({
                           serviceOption: option.label || input.nameOption,
                           commissionValue: promotionalOrderAtCheckout ? 0 : Number(option.commissionValue),
                           promotionNoCommission: promotionalOrderAtCheckout,
+                          couponApplied: couponAppliedAtCheckout,
                         });
                       }
                     }
@@ -6132,6 +6163,20 @@ export const appRouter = router({
         await ensureCommissionReferralStatusColumns(db);
         const { getReferralCommissionAttributionByRegistration, updateReferralCommissionAttributionStatus } = await import('./db');
         let frozenAttribution = await getReferralCommissionAttributionByRegistration(input.registrationId);
+        // Camada adicional: nem mesmo uma liberacao manual pode pagar indicacao
+        // de pedido que utilizou cupom, incluindo historicos anteriores.
+        if (input.paid) {
+          const couponOrderRows = await db.execute(sql`
+            SELECT cartCouponCode FROM accessCodePhones WHERE id = ${input.registrationId} LIMIT 1
+          `);
+          const paidOrderCoupon = (couponOrderRows[0] as unknown as Array<{ cartCouponCode?: string | null }>)?.[0]?.cartCouponCode;
+          if (String(paidOrderCoupon || "").trim()) {
+            throw new TRPCError({
+              code: "BAD_REQUEST",
+              message: "Pedido com cupom de desconto não gera comissão de indicação.",
+            });
+          }
+        }
         const { getCommissionManualOverrides } = await import("./referralCommissionManual");
         const manualPaymentOverride = (await getCommissionManualOverrides(db,[input.registrationId])).get(input.registrationId);
         if (input.paid) {
