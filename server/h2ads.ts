@@ -378,6 +378,19 @@ export async function expireH2AdsStalledPreparation(instanceId: number): Promise
         inArray(h2AdsWorkerCommands.status, ["queued", "claimed"]),
       )).orderBy(desc(h2AdsWorkerCommands.id)).limit(2);
 
+    // The Worker acknowledges a command and updates the browser run in two
+    // statements. Do not interpret that tiny transition as an orphaned run.
+    const [latest] = await tx.select({
+      status: h2AdsWorkerCommands.status,
+      completedAt: h2AdsWorkerCommands.completedAt,
+    }).from(h2AdsWorkerCommands)
+      .where(and(
+        eq(h2AdsWorkerCommands.instanceId, instanceId),
+        eq(h2AdsWorkerCommands.workerId, run.workerId),
+        eq(h2AdsWorkerCommands.command, "prepare_browser"),
+      )).orderBy(desc(h2AdsWorkerCommands.id)).limit(1);
+    if (!active.length && latest?.completedAt && latest.completedAt.getTime() > cutoff.getTime()) return false;
+
     // A newly queued or claimed command is active; do not overtake it.
     for (const command of active) {
       const relevantTime = command.status === "claimed" ? command.claimedAt : command.createdAt;
