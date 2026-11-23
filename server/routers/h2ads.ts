@@ -3,6 +3,9 @@ import { addH2AdsStartupSite, listH2AdsStartupSites, toggleH2AdsStartupSite, rem
 import { TRPCError } from "@trpc/server";
 import { addH2AdsGlobalExtension, listH2AdsGlobalExtensions, removeH2AdsGlobalExtension, setH2AdsGlobalExtension } from "../h2adsGlobalExtensions";
 import { z } from "zod";
+import { eq } from "drizzle-orm";
+import { getDb } from "../db";
+import { h2AdsInstanceBrowserRuns } from "../../drizzle/schema";
 import {
   createH2AdsGroup,
   createH2AdsInstance,
@@ -20,6 +23,7 @@ import {
   requestH2AdsBrowserClose,
   requestH2AdsBrowserLaunch,
   requestH2AdsBrowserPreparation,
+  expireH2AdsStalledPreparation,
   revokeH2AdsBrowserWorker,
   saveH2AdsProxyCredential,
   saveH2AdsNetworkProfile,
@@ -31,7 +35,7 @@ import { assertH2AdsInstanceNotDeleting } from "../h2adsDeletionState";
 import { decryptH2AdsProxy, encryptH2AdsProxy, H2ADS_PROXY_ROTATION_MINUTES_MAX, H2ADS_PROXY_ROTATION_MINUTES_MIN, isH2AdsProxyEncryptionReady, parseH2AdsProxyInput, proxyCredentialSummary } from "../h2adsProxySecurity";
 import { classifyH2AdsRouteFailure, getH2AdsRouteMismatches, validateH2AdsProxyRoute } from "../h2adsProxyValidation";
 import { h2AdsOrderLinkRouterPart } from "../h2adsOrderLinkRouter";
-import { setH2AdsOrderLink } from "../h2adsOrderLink";
+import { listH2AdsOrderLinks, setH2AdsOrderLink } from "../h2adsOrderLink";
 import { assignH2AdsInstanceWorkerPortable } from "../h2adsProfilePortability";
 import { autoProvisionH2AdsInstance, getH2AdsAutoWorkerStatus, rotateH2AdsInstanceProxy } from "../h2adsAutoProvisioning";
 import { deleteUnusedH2AdsProxyPool, importH2AdsProxyPool, listH2AdsProxyPool } from "../h2adsProxyPool";
@@ -77,6 +81,11 @@ export const h2AdsCreateInstanceSchema = z.object({
 export const h2AdsCreateLinkedInstanceSchema = h2AdsCreateInstanceSchema.extend({
   registrationId: z.number().int().positive(),
   subOrderIndex: z.number().int().min(0).default(0),
+}).strict();
+
+// Somente o card exige confirmação extra quando já há instância vinculada.
+export const h2AdsCreateLinkedInstanceAutoSchema = h2AdsCreateLinkedInstanceSchema.extend({
+  allowAdditionalInstance: z.boolean().optional().default(false),
 }).strict();
 
 export const h2AdsUpdateInstanceSchema = z.object({
@@ -324,6 +333,34 @@ export const h2AdsRouter = {
     }
   }),
 
+  recoverStalledPreparation: adminProcedure.input(h2AdsPrepareBrowserSchema).mutation(async ({ input }) => {
+    await requireConfigurableInstance(input.instanceId);
+    try {
+      const recovered = await expireH2AdsStalledPreparation(input.instanceId);
+      if (!recovered) {
+        // Um poll autenticado pode ter acabado de reconciliar o comando expirado.
+        const db = await getDb();
+        if (!db) throw new Error("Banco H2ADS indisponível.");
+        const [run] = await db.select({
+          state: h2AdsInstanceBrowserRuns.state,
+          lastErrorCategory: h2AdsInstanceBrowserRuns.lastErrorCategory,
+        }).from(h2AdsInstanceBrowserRuns)
+          .where(eq(h2AdsInstanceBrowserRuns.instanceId, input.instanceId)).limit(1);
+        if (run?.state !== "blocked" || run.lastErrorCategory !== "preparation_timeout") {
+          throw new Error("A preparação ainda está ativa ou a sessão mudou. Nenhum comando foi alterado.");
+        }
+      }
+      // Reutiliza o Worker e o proxy aprovados. Nenhuma nova instância/proxy.
+      const command = await requestH2AdsBrowserPreparation(input.instanceId);
+      return { success: true, recovered: true, ...command };
+    } catch (error) {
+      throw new TRPCError({
+        code: "CONFLICT",
+        message: error instanceof Error ? error.message : "Não foi possível recuperar a preparação H2ADS.",
+      });
+    }
+  }),
+
   launchBrowser: adminProcedure.input(h2AdsBrowserManualCommandSchema).mutation(async ({ input }) => {
     await requireConfigurableInstance(input.instanceId);
     try {
@@ -388,9 +425,15 @@ export const h2AdsRouter = {
     }
   }),
 
-  createInstanceLinkedOrderAuto: adminProcedure.input(h2AdsCreateLinkedInstanceSchema).mutation(async ({ input }) => {
-    const { registrationId, subOrderIndex, ...instanceInput } = input;
+  createInstanceLinkedOrderAuto: adminProcedure.input(h2AdsCreateLinkedInstanceAutoSchema).mutation(async ({ input }) => {
+    const { registrationId, subOrderIndex, allowAdditionalInstance, ...instanceInput } = input;
     await requireWritableGroup(instanceInput.groupId);
+    if (!allowAdditionalInstance && (await listH2AdsOrderLinks()).some(link =>
+      link.registrationId === registrationId && link.subOrderIndex === subOrderIndex
+    )) throw new TRPCError({
+      code: "CONFLICT",
+      message: "Este pedido já possui uma instância H2ADS. Use a existente ou confirme a criação adicional.",
+    });
     const id = await createH2AdsInstance(instanceInput);
     try {
       await setH2AdsOrderLink(id, registrationId, subOrderIndex);
