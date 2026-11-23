@@ -2,7 +2,7 @@ import { useState, type MouseEvent, type ChangeEvent } from "react";
 import { Play, Plus, RefreshCw, Square, Trash2 } from "lucide-react";
 import { toast } from "sonner";
 import { trpc } from "@/lib/trpc";
-import { resolveH2AdsOrderBrowserShortcutState, resolveH2AdsOrderLinkRepairCandidate, describeH2AdsOrderBrowserBlock } from "@shared/h2adsOrderBrowserShortcut";
+import { resolveH2AdsOrderBrowserShortcutState, resolveH2AdsOrderLinkRepairCandidate, describeH2AdsOrderBrowserBlock, isH2AdsPreparationStalled } from "@shared/h2adsOrderBrowserShortcut";
 import { normalizeH2AdsRoutingText, resolveH2AdsAutomaticGroup } from "@shared/h2adsGroupRouting";
 
 export default function OrderH2AdsBrowserShortcut({ registrationId, subOrderIndex, customerNumber, customerName, orderNumber, latestStatus, serviceName, serviceOption }: { registrationId: number; subOrderIndex: number; customerNumber?: number | null; customerName?: string | null; orderNumber?: number | null; latestStatus?: string | null; serviceName?: string | null; serviceOption?: string | null }) {
@@ -33,6 +33,7 @@ export default function OrderH2AdsBrowserShortcut({ registrationId, subOrderInde
   const closeBrowser = trpc.h2Ads.closeBrowser.useMutation();
   const validateProxy = trpc.h2Ads.validateProxy.useMutation();
   const prepareBrowser = trpc.h2Ads.prepareBrowser.useMutation();
+  const recoverStalledPreparation = trpc.h2Ads.recoverStalledPreparation.useMutation();
   const updateInstance = trpc.h2Ads.updateInstance.useMutation();
   const setOrderLink = trpc.h2Ads.setOrderLink.useMutation();
   const createInstanceLinkedOrderAuto = trpc.h2Ads.createInstanceLinkedOrderAuto.useMutation();
@@ -84,6 +85,20 @@ export default function OrderH2AdsBrowserShortcut({ registrationId, subOrderInde
   const linkedInstance = shortcut ? (dashboard?.instances ?? []).find(instance => instance.id === shortcut.instanceId) : undefined;
   const linkedRun = shortcut ? (dashboard?.instanceBrowserRuns ?? []).find(run => run.instanceId === shortcut.instanceId) : undefined;
   const networkProfile = shortcut ? (dashboard?.networkProfiles ?? []).find(profile => profile.instanceId === shortcut.instanceId) : undefined;
+  const linkedAssignment = shortcut ? (dashboard?.instanceWorkerAssignments ?? []).find(assignment => assignment.instanceId === shortcut.instanceId) : undefined;
+  const linkedWorker = linkedAssignment ? (dashboard?.browserWorkers ?? []).find(worker => worker.id === linkedAssignment.workerId) : undefined;
+  const proxyConfigured = shortcut ? (dashboard?.proxyCredentialStatuses ?? []).some(item => item.instanceId === shortcut.instanceId) : false;
+  const preparationStalled = Boolean(linkedRun && isH2AdsPreparationStalled(linkedRun.state, linkedRun.lastChangedAt));
+  const preparationRecoverable = preparationStalled || (linkedRun?.state === "blocked" && linkedRun.lastErrorCategory === "preparation_timeout");
+  const readyToOpen = Boolean(shortcut?.canOpen && proxyConfigured && networkProfile?.healthStatus === "healthy"
+    && (linkedAssignment?.profileState === "local_only" || linkedAssignment?.profileState === "snapshot_ready"));
+  const browserStage = shortcut?.state === "browser_open" ? "CHROME ABERTO"
+    : readyToOpen ? "PRONTA PARA ABRIR"
+    : preparationStalled ? "PREPARAÇÃO TRAVADA"
+    : shortcut?.state === "queued" ? "NA FILA"
+    : shortcut?.state === "preparing" ? "PREPARANDO"
+    : shortcut?.state === "blocked" ? "BLOQUEADA"
+    : shortcut ? "CRIADA — NÃO PRONTA" : "SEM INSTÂNCIA";
 
   const repairCandidate = shortcut ? null : resolveH2AdsOrderLinkRepairCandidate({
     registrationId,
@@ -97,7 +112,7 @@ export default function OrderH2AdsBrowserShortcut({ registrationId, subOrderInde
     groups: (dashboard?.groups ?? []) as any[],
   });
 
-  const pending = launchBrowser.isPending || closeBrowser.isPending || validateProxy.isPending || prepareBrowser.isPending || updateInstance.isPending || setOrderLink.isPending || createInstanceLinkedOrderAuto.isPending || rotateProxyAuto.isPending || deleteInstance.isPending;
+  const pending = launchBrowser.isPending || closeBrowser.isPending || validateProxy.isPending || prepareBrowser.isPending || recoverStalledPreparation.isPending || updateInstance.isPending || setOrderLink.isPending || createInstanceLinkedOrderAuto.isPending || rotateProxyAuto.isPending || deleteInstance.isPending;
 
   const refresh = async () => {
     await Promise.all([
@@ -130,6 +145,12 @@ export default function OrderH2AdsBrowserShortcut({ registrationId, subOrderInde
     const prefix = currentOrder.customerNumber ? `*${currentOrder.customerNumber}` : customerNumber ? `*${customerNumber}` : `#${currentOrder.orderNumber || registrationId}`;
     const customerName = String(currentOrder.customerName || currentOrder.codeClientName || "CLIENTE").trim().replace(/\s+/g, " ").toLocaleUpperCase("pt-BR");
     const name = (newName.trim() || `${prefix} ${customerName}`).slice(0, 128);
+    // Preserva a opção legítima de múltiplas instâncias, mas exige um segundo
+    // consentimento inequívoco e confirmação também no servidor.
+    const allowAdditionalInstance = linkedIds.length > 0;
+    if (allowAdditionalInstance && !window.confirm(
+      `Este pedido já tem ${linkedIds.length} instância(s) H2ADS vinculada(s).\n\nCriar MAIS UMA instância? A atual não será excluída nem corrigida.\n\nCancelar para usar RECUPERAR PREPARAÇÃO na instância existente.`
+    )) return;
     const confirmed = window.confirm(`Criar a instância H2ADS:\n\n${name}\n\nGrupo: ${group.name}\n\nEla será vinculada automaticamente a este pedido.`);
     if (!confirmed) return;
 
@@ -141,6 +162,7 @@ export default function OrderH2AdsBrowserShortcut({ registrationId, subOrderInde
         status: "draft",
         registrationId,
         subOrderIndex,
+        allowAdditionalInstance,
       });
       const provision = created.provision;
       if (provision.status === "preparing") toast.success("Instância criada. Proxy + WALK1 configurados e preparação enviada.");
@@ -155,6 +177,20 @@ export default function OrderH2AdsBrowserShortcut({ registrationId, subOrderInde
       await refresh();
     } catch (error) {
       toast.error(error instanceof Error ? error.message : "Não foi possível criar a instância H2ADS.");
+    }
+  };
+
+  const recoverPreparation = async (event: MouseEvent<HTMLButtonElement>) => {
+    event.stopPropagation();
+    if (!shortcut || !preparationRecoverable || pending) return;
+    if (!window.confirm("Recuperar a preparação desta MESMA instância H2ADS?\n\nNão será criada outra instância nem reservado outro proxy. O Chrome aberto continuará protegido.")) return;
+    try {
+      await recoverStalledPreparation.mutateAsync({ instanceId: shortcut.instanceId });
+      toast.success("Nova preparação enviada ao Worker, mantendo a instância e o proxy.");
+      await refresh();
+    } catch (error) {
+      toast.error(error instanceof Error ? error.message : "Não foi possível recuperar a preparação.");
+      await refresh();
     }
   };
 
@@ -459,7 +495,7 @@ export default function OrderH2AdsBrowserShortcut({ registrationId, subOrderInde
   }
 
   const statusTitle = shortcut.reason || (shortcut.state === "browser_open" ? "Browser H2ADS aberto" : "Browser H2ADS pronto");
-  const blockedDetails = shortcut.canOpen || shortcut.canClose ? null : describeH2AdsOrderBrowserBlock({
+  const blockedDetails = shortcut.canOpen || shortcut.canClose || preparationStalled ? null : describeH2AdsOrderBrowserBlock({
     state: shortcut.state,
     reason: shortcut.reason,
     errorCategory: linkedRun?.lastErrorCategory ?? null,
@@ -490,6 +526,18 @@ export default function OrderH2AdsBrowserShortcut({ registrationId, subOrderInde
     <span className="flex w-full flex-wrap items-center gap-1.5 border-t border-white/10 pt-1.5 sm:gap-2 sm:pt-2">
       {linkExistingPanel}
       {createPanel}
+      <div className="flex w-full flex-wrap items-center gap-1.5 rounded-lg border border-white/10 bg-black/20 px-2 py-2 text-[10px] font-bold text-slate-200" aria-label="Diagnóstico da instância H2ADS">
+        <span className={readyToOpen ? "text-emerald-300" : "text-amber-200"}>{browserStage}</span>
+        <span>INSTÂNCIA #{shortcut.instanceId}</span>
+        <span>PROXY: {proxyConfigured ? networkProfile?.healthStatus === "healthy" ? "VALIDADO" : "PENDENTE" : "AUSENTE"}</span>
+        <span>WORKER: {linkedWorker?.connectionStatus === "online" ? "ONLINE" : linkedWorker ? "OFFLINE" : "NÃO ATRIBUÍDO"}</span>
+        <span>PERFIL: {linkedAssignment?.profileState === "local_only" || linkedAssignment?.profileState === "snapshot_ready" ? "PRONTO" : "PENDENTE"}</span>
+        <span>COMANDO: {preparationStalled ? "EXPIRADO" : shortcut.state === "preparing" ? "EM EXECUÇÃO" : shortcut.state === "queued" ? "NA FILA" : "SEM PENDÊNCIA"}</span>
+        {linkedRun?.lastErrorCategory && <span>FALHA: {linkedRun.lastErrorCategory}</span>}
+      </div>
+      {preparationStalled && <div role="status" className="w-full rounded-lg border border-amber-400/30 bg-amber-500/[0.08] px-3 py-2 text-left text-[11px] font-bold text-amber-100">
+        Preparação expirada. Use RECUPERAR PREPARAÇÃO. Não crie outra instância nem troque o proxy.
+      </div>}
       {blockedDetails && <div role="status" className="w-full rounded-lg border border-amber-400/30 bg-amber-500/[0.08] px-3 py-2 text-left text-[11px] leading-5 text-amber-100">
         <strong className="block font-black">ABRIR indisponível — {blockedDetails.message}</strong>
         <span className="block text-amber-100/80">{blockedDetails.guidance}</span>
@@ -521,6 +569,13 @@ export default function OrderH2AdsBrowserShortcut({ registrationId, subOrderInde
     >
       <RefreshCw className="h-3.5 w-3.5 lg:h-4 lg:w-4" />PREPARAR NOVAMENTE
     </button>
+    {preparationRecoverable && <button
+      type="button"
+      onClick={recoverPreparation}
+      disabled={pending || linkedWorker?.connectionStatus !== "online"}
+      className="inline-flex min-h-8 items-center justify-center gap-1.5 rounded-lg border border-amber-400/40 bg-amber-500/20 px-3 py-2 text-[11px] font-black text-amber-100 disabled:opacity-40"
+      title="Repetir a preparação da mesma instância sem trocar proxy"
+    ><RefreshCw className="h-4 w-4" />RECUPERAR PREPARAÇÃO</button>}
     <button
       type="button"
       onClick={rotateProxy}
