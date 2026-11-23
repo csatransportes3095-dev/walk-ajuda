@@ -14,7 +14,7 @@ describe("H2 login OTP cooldown migration wiring", () => {
     expect(access).toContain('state:"channel_cooldown"');
     expect(access).toContain('if (channel !== "whatsapp") await deliverOwnSiteCode(email,code,"customer-login")');
     expect(access).toContain("await ensureIncomingWhatsappOtpQueue(db)");
-    expect(access).toMatch(/enqueueIncomingWhatsappOtp\\([\\s\\S]*?\\},\\s*tx\\)/);
+    expect(access).toMatch(/enqueueIncomingWhatsappOtp\([\s\S]*?\},\s*tx\)/);
     expect(access).toContain('whatsappPrepared = true');
     expect(access).toContain("codeDigest=${codeHash}");
     expect(access).toContain("usedAt=NULL");
