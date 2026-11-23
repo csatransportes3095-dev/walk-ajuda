@@ -2,6 +2,8 @@ import { describe, expect, it } from "vitest";
 import {
   canonicalH2AdsServiceKey,
   describeH2AdsOrderBrowserBlock,
+  isH2AdsPreparationStalled,
+  H2ADS_PREPARATION_RECOVERY_MS,
   resolveH2AdsOrderBrowserShortcutState,
   resolveH2AdsOrderLinkRepairCandidate,
 } from "../shared/h2adsOrderBrowserShortcut";
@@ -14,6 +16,20 @@ const base = {
   assignments: [{ instanceId: 9, workerId: 7 }],
   workers: [{ id: 7, connectionStatus: "online" }],
 };
+
+describe("H2ADS recuperacao segura de preparacao", () => {
+  it("so considera expirada uma fila/preparacao antiga, nunca Chrome aberto", () => {
+    const now = Date.parse("2026-11-23T18:00:00Z");
+    const aged = new Date(now - H2ADS_PREPARATION_RECOVERY_MS - 1);
+    expect(isH2AdsPreparationStalled("queued", aged, now)).toBe(true);
+    expect(isH2AdsPreparationStalled("preparing", aged, now)).toBe(true);
+    expect(isH2AdsPreparationStalled("preparing", new Date(now - 60_000), now)).toBe(false);
+    for (const state of ["browser_open", "closed", "proxy_verified", "blocked"]) {
+      expect(isH2AdsPreparationStalled(state, aged, now)).toBe(false);
+    }
+    expect(isH2AdsPreparationStalled("preparing", null, now)).toBe(false);
+  });
+});
 
 describe("H2ADS order browser shortcut", () => {
   it("usa somente o vínculo exato de pedido e subpedido", () => {
