@@ -16,10 +16,10 @@ describe("H2 Auto APK OTP bridge security checks", () => {
   });
 
   it("generates one OTP and reuses the exact code on both channels", () => {
-    expect((access.match(/generateOwnSiteCode\\(\\)/g) || []).length).toBe(1);
+    expect((access.match(/generateOwnSiteCode\(\)/g) || []).length).toBe(1);
     expect(access).toContain('if (channel !== "whatsapp") await deliverOwnSiteCode(email,code,"customer-login")');
     expect(access).toContain("codeDigest:codeHash");
-    expect(access).toMatch(/enqueueIncomingWhatsappOtp\\([\\s\\S]*?\\},\\s*tx\\)/);
+    expect(access).toMatch(/enqueueIncomingWhatsappOtp\([\s\S]*?\},\s*tx\)/);
     expect(access).toContain('channel === "both" ? ["email", "whatsapp"] : [channel]');
   });
   it("keeps the single button and preserves the existing H2 AUTO conversation flow", () => {
