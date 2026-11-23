@@ -8,38 +8,26 @@ const incoming = readFileSync(new URL("./h2-auto-incoming-otp.ts", import.meta.u
 // Behavior, concurrency and rollback are exercised against real MySQL in
 // customerOtpDeliveryMysql.test.ts. These retain the migration wiring checks.
 describe("H2 login OTP cooldown migration wiring", () => {
-  it("locks email and WhatsApp separately on the server, retaining a single current code", () => {
-    expect(access).toContain('digest("otp-resend:" + channel, phone)');
-    expect(access).toContain("SELECT windowStart FROM customerOtpLimits");
-    expect(access).toContain("WHERE limitKey=${channelKey} FOR UPDATE");
-    expect(access).toContain("Math.ceil(");
+  it("locks both cooldown keys for one current code without duplicating sends", () => {
+    expect(access).toContain('channel === "both" ? ["email", "whatsapp"] : [channel]');
+    expect(access).toContain('WHERE limitKey=${key} FOR UPDATE');
     expect(access).toContain('state:"channel_cooldown"');
-    expect(access).toContain("SET windowStart=${now},hits=hits+1");
-    expect(access).toContain("resendBlocked:true");
-    expect(access).toContain('if (channel === "email") await deliverOwnSiteCode(email,code,"customer-login")');
+    expect(access).toContain('if (channel !== "whatsapp") await deliverOwnSiteCode(email,code,"customer-login")');
     expect(access).toContain("await ensureIncomingWhatsappOtpQueue(db)");
-    expect(access).toMatch(/enqueueIncomingWhatsappOtp\([\s\S]*?\},\s*tx\)/);
+    expect(access).toMatch(/enqueueIncomingWhatsappOtp\\([\\s\\S]*?\\},\\s*tx\\)/);
+    expect(access).toContain('whatsappPrepared = true');
     expect(access).toContain("codeDigest=${codeHash}");
     expect(access).toContain("usedAt=NULL");
   });
-  it("shows an independent countdown on each button and both resend choices", () => {
-    expect(login).toContain('cooldownKey(phone: string, channel: OtpChannel)');
+  it("uses one combined request and one shared resend countdown on the login", () => {
     expect(login).toContain('savedCooldown(cleanPhone,"email")');
     expect(login).toContain('savedCooldown(cleanPhone,"whatsapp")');
-    expect(login).toContain("remainingEmail > 0");
-    expect(login).toContain("remainingWhatsapp > 0");
-    expect(login).toContain("formatOtpCooldown(remainingEmail)");
-    expect(login).toContain("formatOtpCooldown(remainingWhatsapp)");
+    expect(login).toContain('Math.max(remainingEmail, remainingWhatsapp)');
+    expect(login).toContain('send("both")');
+    expect(login).toContain('SOLICITAR NOVO CÓDIGO');
+    expect(login).toContain('RECEBER CÓDIGO');
+    expect(login).toContain('if (result.resendBlocked)');
     expect(login).toContain('if (scope === "all")');
-    expect(login).toContain("result.cooldownScope");
-    expect(login).toContain('void send("email")');
-    expect(login).toContain('void send("whatsapp")');
-    expect(login).toContain("PEDIR OUTRO PELO WHATSAPP");
-    expect(login).toContain("PEDIR OUTRO POR E-MAIL");
-    expect(login).toContain("if (result.resendBlocked)");
-    expect(login).toContain("if (channel === \"whatsapp\")");
-    expect(login).toContain("bg-[#8B0000]");
-    expect(login).toContain("bg-cyan-500");
   });
   it("does not issue a code on a cooldown request or permit an old code to be fetched", () => {
     const issuing = access.slice(access.indexOf("export async function requestCustomerCode"), access.indexOf("export async function verifyCustomerCode"));
