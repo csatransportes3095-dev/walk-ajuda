@@ -363,7 +363,7 @@ export function CustomerOtpLogin({ title = "Acesso H2 Colombiano", initialPhone 
                   Envie a mensagem pronta e volte a esta tela para digitar o código.
                 </p>
               </div>
-            )
+            )}
             <button type="submit" disabled={busy || code.length !== 6}
               className="flex w-full items-center justify-center gap-2 rounded-xl bg-emerald-500 p-4 font-black text-slate-950 disabled:opacity-50">
               <CheckCircle2 className="h-5 w-5" /> {busy ? "Validando..." : "CONFIRMAR E ACESSAR"}
