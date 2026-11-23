@@ -35,7 +35,7 @@ jobs:
           mkdir -p "$CUSTOMER_OTP_DELIVERY_UI_OUTPUT_DIR"
           npm install --prefix "$RUNNER_TEMP/otp-webkit-tools" --no-package-lock --no-audit --no-fund playwright@1.57.0
           export PLAYWRIGHT_MODULE="$RUNNER_TEMP/otp-webkit-tools/node_modules/playwright/index.mjs"
-          "$RUNNER_TEMP/otp-webkit-tools/node_modules/.bin/playwright" install --with-deps webkit
+          "$RUNNER_TEMP/otp-webkit-tools/node_modules/.bin/playwright" install webkit
           node scripts/tests/customer-otp-delivery-ui/server.mjs > "$CUSTOMER_OTP_DELIVERY_UI_OUTPUT_DIR/server.log" 2>&1 &
           otp_server_pid=$!
           trap 'kill "$otp_server_pid" 2>/dev/null || true' EXIT
