@@ -28,14 +28,13 @@ describe("Customer-initiated WhatsApp OTP", () => {
     expect(access).toMatch(/enqueueIncomingWhatsappOtp\([\s\S]*?\},\s*tx\)/);
     expect(login).toContain('channel}');
   });
-  it("does not pretend opening WhatsApp is proof of delivery", () => {
-    expect(login).toContain("Toque em Enviar na mensagem preenchida no WhatsApp.");
+  it("não confunde abrir WhatsApp com confirmação de entrega do OTP", () => {
     expect(login).toContain("após receber a mensagem");
-    expect(login).toContain("ABRIR WHATSAPP (SE NÃO ABRIU)");
-    expect(login).toContain("whatsappTab.location.replace(");
-    expect(login).toContain('target="_blank" rel="noopener noreferrer"');
+    expect(login).toContain("Envie a mensagem pronta e volte a esta tela para digitar o código.");
+    expect(login).toContain('href={whatsappUrl}');
     expect(login).toContain("Preciso receber meu código");
     expect(login).toContain("RECEBER CÓDIGO");
     expect(login).toContain('send("both")');
+    expect(login).not.toContain("openWhatsappWaitingTab");
   });
 });
