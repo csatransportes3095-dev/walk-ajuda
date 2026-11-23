@@ -30,13 +30,13 @@ const router = t.router({
   }) }),
   customerPassword: t.router({
     h2AutoOtpAvailable: t.procedure.query(() => ({ available: state.whatsappAvailable })),
-    requestCustomerCode: t.procedure.input(z.object({ phone: z.string(), channel: z.enum(['email', 'whatsapp']) })).mutation(async ({ input }) => {
+    requestCustomerCode: t.procedure.input(z.object({ phone: z.string(), channel: z.enum(['email', 'whatsapp', 'both']) })).mutation(async ({ input }) => {
       state.requestCalls.push({ ...input });
       const mode = state.requestMode;
       if (state.delayMs) await new Promise(resolve => setTimeout(resolve, state.delayMs));
       if (mode === 'failure') throw new TRPCError({ code: 'SERVICE_UNAVAILABLE', message: 'Falha de entrega para teste.' });
       return { success: true, message: mode === 'blocked' ? 'Limite temporário para teste.' : 'Solicitação recebida para teste.',
-        resendBlocked: mode === 'blocked', retryAfterSeconds: state.retryAfterSeconds, cooldownScope: state.cooldownScope };
+        resendBlocked: mode === 'blocked', retryAfterSeconds: state.retryAfterSeconds, cooldownScope: input.channel === 'both' ? 'all' : state.cooldownScope, whatsappPrepared: input.channel !== 'email' && state.whatsappAvailable };
     }),
     verifyCustomerCode: t.procedure.input(z.object({ phone: z.string(), code: z.string() })).mutation(({ input }) => {
       state.verifyCalls.push({ ...input });
