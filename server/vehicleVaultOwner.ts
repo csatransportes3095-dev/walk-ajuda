@@ -171,3 +171,79 @@ export function parseVehicleVaultOwnerName(raw: string): string {
   }
   return candidates.size === 1 ? candidates.values().next().value! : "";
 }
+
+
+/** CPF/CNPJ do proprietário atual, nunca do cliente vinculado ou de terceiros. */
+export function normalizeVehicleVaultOwnerCpfCnpj(input: unknown): string {
+  const id = String(input ?? "").replace(/\D/g, "");
+  if (![11, 14].includes(id.length) || /^(\d)\1+$/.test(id)) return "";
+  const digit = (weights: number[], data: string) => {
+    const sum = weights.reduce((acc, weight, index) => acc + Number(data[index]) * weight, 0);
+    const remainder = (sum * 10) % 11;
+    return remainder === 10 ? 0 : remainder;
+  };
+  if (id.length === 11) {
+    const weights1 = [10, 9, 8, 7, 6, 5, 4, 3, 2];
+    const weights2 = [11, ...weights1];
+    return digit(weights1, id) === Number(id[9]) && digit(weights2, id) === Number(id[10]) ? id : "";
+  }
+  const weights1 = [5, 4, 3, 2, 9, 8, 7, 6, 5, 4, 3, 2];
+  const weights2 = [6, ...weights1];
+  const cnpjDigit = (weights: number[]) => {
+    const sum = weights.reduce((acc, weight, index) => acc + Number(id[index]) * weight, 0);
+    const remainder = sum % 11;
+    return remainder < 2 ? 0 : 11 - remainder;
+  };
+  return cnpjDigit(weights1) === Number(id[12]) && cnpjDigit(weights2) === Number(id[13]) ? id : "";
+}
+
+/**
+ * A identificação só é extraída quando há um único proprietário reconhecido,
+ * o rótulo CPF/CNPJ está próximo ao nome dele e não atravessa uma seção de
+ * locatário/segurado/outro titular. Sem identificação segura, retorna vazio.
+ */
+export function parseVehicleVaultOwnerCpfCnpj(raw: string): string {
+  const original = String(raw ?? "").slice(0, 120_000).normalize("NFC")
+    .replace(/\r/g, "").replace(/\t/g, "        ");
+  const owner = fold(parseVehicleVaultOwnerName(original));
+  if (!owner) return "";
+  const lines = original.split("\n");
+  const ownerAnchor = owner.split(/\s+/u).slice(0, 2).join(" ");
+  const nameRows = lines.flatMap((line, index) =>
+    fold(line).includes(ownerAnchor) ? [index] : []);
+  if (!nameRows.length) return "";
+  const heading = /\b(?:CPF\s*\/\s*CNPJ|CPF|CNPJ)\b/gu;
+  const identity = /(?<!\d)(?:\d{2}[.\s]?\d{3}[.\s]?\d{3}[\/\s]?\d{4}[-\s]?\d{2}|\d{3}[.\s]?\d{3}[.\s]?\d{3}[-\s]?\d{2})(?!\d)/gu;
+  const matches = new Set<string>();
+  for (let row = 0; row < lines.length; row++) {
+    // Preserve original column offsets. `fold()` collapses repeated spaces,
+    // which shifts the CPF/CNPJ label in two-column CRLV layouts and makes
+    // the identity be read from the wrong column.
+    const line = lines[row].normalize("NFD").replace(/[\u0300-\u036f]/g, "").toUpperCase();
+    if (otherParty.test(line)) continue;
+    for (const label of line.matchAll(heading)) {
+      const closest = nameRows.filter(index => Math.abs(index - row) <= 5)
+        .sort((a, b) => Math.abs(a - row) - Math.abs(b - row))[0];
+      if (closest === undefined) continue;
+      const between = lines.slice(Math.min(row, closest) + 1, Math.max(row, closest));
+      if (between.some(value => otherParty.test(fold(value)))) continue;
+      const afterLabel = lines[row].slice((label.index ?? 0) + label[0].length);
+      const spans = [afterLabel];
+      // CRLV layout: CPF/CNPJ is printed as a heading and the number below it,
+      // sometimes in the second column (>100 characters to the right).
+      for (let next = row + 1; next <= Math.min(row + 2, lines.length - 1); next++) {
+        const following = lines[next];
+        if (otherParty.test(fold(following))) break;
+        const start = Math.max(0, (label.index ?? 0) - 5);
+        spans.push(following.slice(start, start + 60));
+      }
+      for (const span of spans) {
+        for (const candidate of span.matchAll(identity)) {
+          const value = normalizeVehicleVaultOwnerCpfCnpj(candidate[0]);
+          if (value) matches.add(value);
+        }
+      }
+    }
+  }
+  return matches.size === 1 ? matches.values().next().value! : "";
+}
