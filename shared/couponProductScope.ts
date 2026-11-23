@@ -7,6 +7,17 @@ export function couponAppliesToProductIds(
   return !!selectedProductIds?.length && selectedProductIds.every(id => id === couponProductId);
 }
 
-export function couponScopeLabel(productName: string | null | undefined): string {
-  return productName ? `Válido exclusivamente para: ${productName}` : "Válido para todos os produtos";
+export function couponAppliesToOptionIds(
+  couponOptionId: number | null | undefined,
+  selectedOptionIds: readonly number[] | null | undefined,
+): boolean {
+  if (couponOptionId == null) return true;
+  return !!selectedOptionIds?.length && selectedOptionIds.every(id => id === couponOptionId);
+}
+
+export function couponScopeLabel(productName: string | null | undefined, optionName?: string | null): string {
+  if (!productName) return "Válido para todos os produtos";
+  return optionName
+    ? `Válido exclusivamente para: ${productName} — ${optionName}`
+    : `Válido para: ${productName} (todas as opções)`;
 }

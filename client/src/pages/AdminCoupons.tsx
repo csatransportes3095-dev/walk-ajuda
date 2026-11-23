@@ -28,6 +28,7 @@ export default function AdminCoupons() {
   const [discountType, setDiscountType] = useState<"fixed" | "percentage">("fixed");
   const [discountValue, setDiscountValue] = useState("");
   const [productId, setProductId] = useState("all");
+  const [optionId, setOptionId] = useState("all");
   const [maxUses, setMaxUses] = useState("1");
   const [startsAt, setStartsAt] = useState("");
   const [expiresAt, setExpiresAt] = useState("");
@@ -36,6 +37,7 @@ export default function AdminCoupons() {
   const couponsQuery = trpc.coupons.list.useQuery(undefined, {
   });
   const couponProductsQuery = trpc.coupons.products.useQuery();
+  const selectedCouponProduct = couponProductsQuery.data?.find(product => String(product.id) === productId);
 
   const createMutation = trpc.coupons.create.useMutation({
     onSuccess: (result) => {
@@ -44,6 +46,7 @@ export default function AdminCoupons() {
         setNewCode("");
         setDiscountValue("");
         setProductId("all");
+        setOptionId("all");
         setMaxUses("1");
         setStartsAt("");
         setExpiresAt("");
@@ -99,8 +102,12 @@ export default function AdminCoupons() {
       toast.error("O fim deve ser posterior ao início");
       return;
     }
-    if (productId !== "all" && !couponProductsQuery.data?.some(product => product.id === Number(productId))) {
+    if (productId !== "all" && !selectedCouponProduct) {
       toast.error("Selecione um produto ativo da vitrine.");
+      return;
+    }
+    if (optionId !== "all" && !selectedCouponProduct?.options.some(option => option.id === Number(optionId))) {
+      toast.error("Selecione uma opção ativa do produto.");
       return;
     }
     setIsCreating(true);
@@ -109,6 +116,7 @@ export default function AdminCoupons() {
       discountType,
       discountValue: Number(discountValue),
       productId: productId === "all" ? null : Number(productId),
+      optionId: optionId === "all" ? null : Number(optionId),
       maxUses: Number(maxUses) || 1,
       startsAt: startsAt ? new Date(startsAt).toISOString() : undefined,
       expiresAt: expiresAt ? new Date(expiresAt).toISOString() : undefined,
@@ -176,7 +184,7 @@ export default function AdminCoupons() {
             </div>
             <div>
               <label className="block text-sm text-white/70 mb-1">Este cupom é válido para</label>
-              <select value={productId} onChange={e => setProductId(e.target.value)}
+              <select value={productId} onChange={e => { setProductId(e.target.value); setOptionId("all"); }}
                 style={whiteSelectStyle} aria-label="Produto permitido pelo cupom">
                 <option value="all">TODOS OS PRODUTOS</option>
                 {(couponProductsQuery.data || []).map(product => (
@@ -185,6 +193,18 @@ export default function AdminCoupons() {
               </select>
               {productId !== "all" && <p className="mt-1 text-xs text-amber-200">O desconto só será aceito para este produto. O cliente verá seu nome ao informar o cupom.</p>}
             </div>
+            {productId !== "all" && <div>
+              <label className="block text-sm text-white/70 mb-1">Opção do produto</label>
+              <select value={optionId} onChange={e => setOptionId(e.target.value)}
+                style={whiteSelectStyle} aria-label="Opção permitida pelo cupom">
+                <option value="all">TODAS AS OPÇÕES DE {selectedCouponProduct?.name || "ESTE PRODUTO"}</option>
+                {(selectedCouponProduct?.options || []).map(option => (
+                  <option key={option.id} value={option.id}>{option.label}</option>
+                ))}
+              </select>
+              {optionId !== "all" && <p className="mt-1 text-xs text-amber-200">Exclusivo para: {selectedCouponProduct?.name} — {selectedCouponProduct?.options.find(option => String(option.id) === optionId)?.label}</p>}
+            </div>}
+            <p className="text-xs font-semibold text-amber-200">🏷️ Compras com cupom não geram comissão de indicação.</p>
             <div className="grid grid-cols-2 gap-3">
               <div>
                 <label className="block text-sm text-white/70 mb-1">Tipo</label>
@@ -321,7 +341,10 @@ export default function AdminCoupons() {
                       </div>
                     </div>
 
-                    <p className="text-xs font-bold text-cyan-200">🎯 {coupon.productId == null ? "Válido para todos os produtos" : "Somente: " + (coupon.productName || "Produto não encontrado")}</p>
+                    <p className="text-xs font-bold text-cyan-200">🎯 {coupon.productId == null
+                      ? "Válido para todos os produtos"
+                      : "Produto: " + (coupon.productName || "Produto não encontrado")
+                        + " — " + (coupon.optionId == null ? "Todas as opções" : coupon.optionName || "Opção não encontrada")}</p>
                     {/* Info */}
                     <div className="grid grid-cols-2 gap-2 text-sm">
                       <div>
@@ -419,7 +442,7 @@ export default function AdminCoupons() {
                           </div>
                         </td>
                         <td className="py-3 px-4 text-xs text-cyan-200 font-bold">
-                          {coupon.productId == null ? "TODOS OS PRODUTOS" : coupon.productName || "Produto não encontrado"}
+                          {coupon.productId == null ? "TODOS OS PRODUTOS" : (coupon.productName || "Produto não encontrado") + " — " + (coupon.optionId == null ? "Todas as opções" : coupon.optionName || "Opção não encontrada")}
                         </td>
                         <td className="py-3 px-4">
                           <span

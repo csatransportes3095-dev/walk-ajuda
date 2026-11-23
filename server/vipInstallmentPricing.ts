@@ -148,7 +148,7 @@ export async function resolveVipInstallmentCheckoutPricing(input: {
   let couponDiscountCents = 0;
   let totalCents = subtotalCents;
   if (couponCode) {
-    const validation = await validateCoupon(couponCode, items.map(item => item.productId));
+    const validation = await validateCoupon(couponCode, items.map(item => item.productId), items.map(item => item.optionId));
     if (!validation.valid || !validation.discountType || validation.discountValue == null) {
       throw new Error(validation.reason || "Cupom inválido ou indisponível.");
     }
