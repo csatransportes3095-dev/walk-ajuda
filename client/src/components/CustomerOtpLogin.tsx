@@ -31,8 +31,9 @@ export function formatOtpCooldown(seconds: number): string {
 // iOS in-app browsers may discard sessionStorage when returning from an app.
 // Mirror only the non-authorizing phone/step for up to 10 minutes, never OTPs.
 function readOtpDraft(): OtpDraft | null {
-  for (const storage of [sessionStorage, localStorage]) {
+  for (const kind of ["session", "local"] as const) {
     try {
+      const storage = kind === "session" ? window.sessionStorage : window.localStorage;
       const raw = storage.getItem(OTP_DRAFT_KEY);
       if (!raw) continue;
       const draft = JSON.parse(raw);
@@ -53,13 +54,13 @@ function readOtpDraft(): OtpDraft | null {
 }
 function saveOtpDraft(phone: string, step: "phone" | "code", channel: OtpChannel = "both", whatsappPrepared = false) {
   const draft = JSON.stringify({phone, step, channel, whatsappPrepared, expiresAt: Date.now() + OTP_DRAFT_TTL_MS});
-  for (const storage of [sessionStorage, localStorage]) {
-    try { storage.setItem(OTP_DRAFT_KEY, draft); } catch {}
+  for (const kind of ["session", "local"] as const) {
+    try { (kind === "session" ? window.sessionStorage : window.localStorage).setItem(OTP_DRAFT_KEY, draft); } catch {}
   }
 }
 function clearOtpDraft() {
-  for (const storage of [sessionStorage, localStorage]) {
-    try { storage.removeItem(OTP_DRAFT_KEY); } catch {}
+  for (const kind of ["session", "local"] as const) {
+    try { (kind === "session" ? window.sessionStorage : window.localStorage).removeItem(OTP_DRAFT_KEY); } catch {}
   }
 }
 import { trpc } from "@/lib/trpc";
