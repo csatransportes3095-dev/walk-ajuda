@@ -41,7 +41,7 @@ const sendKey = (phone = phoneA) => key("limit", "phone:" + phone);
 const source = (ip = "203.0.113.21", cf?: string) => ({
   ip, socket: { remoteAddress: ip }, headers: cf ? { "cf-connecting-ip": cf } : {},
 }) as any;
-const send = (channel: "email" | "whatsapp" = "email", phone = phoneA, request = source()) =>
+const send = (channel: "email" | "whatsapp" | "both" = "email", phone = phoneA, request = source()) =>
   requestCustomerCode(phone, request, channel);
 async function quotaHits(phone = phoneA) {
   const [row] = await query("SELECT hits FROM customerOtpLimits WHERE limitKey=?", [sendKey(phone)]);
@@ -115,6 +115,27 @@ describe.skipIf(!testUrl)("Customer OTP delivery — real isolated MySQL", () =>
     await pool?.end();
     isolated.db = null;
     vi.restoreAllMocks(); vi.unstubAllEnvs();
+  });
+
+  it("sends one exact code by email and the H2 AUTO queue in a combined request", async () => {
+    const result = await send("both");
+    expect(result).toMatchObject({
+      success: true, resendBlocked: false, retryAfterSeconds: 60,
+      cooldownScope: "all", whatsappPrepared: true,
+    });
+    expect(isolated.deliver).toHaveBeenCalledTimes(1);
+    const [destination, code] = isolated.deliver.mock.calls[0];
+    expect(destination).toBe(emailA);
+    expect(code).toMatch(/^\d{6}$/);
+    const saved = await committedState();
+    expect(saved.queue).toHaveLength(1);
+    const queued = JSON.parse(decrypt(String(saved.queue[0].payload_encrypted)));
+    expect(queued.code).toBe(code);
+    expect(await quotaHits()).toBe(1);
+    const blocked = await send("both");
+    expect(blocked).toMatchObject({ success:true, resendBlocked:true, cooldownScope:"channel" });
+    expect(isolated.deliver).toHaveBeenCalledTimes(1);
+    expect(await quotaHits()).toBe(1);
   });
 
   it("does not spend six-delivery quota on cooldown clicks and keeps the other channel available", async () => {
