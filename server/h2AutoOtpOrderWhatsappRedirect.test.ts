@@ -32,8 +32,8 @@ describe("Login WhatsApp em uma ação, preservando tela do código", () => {
     expect(send).not.toMatch(/window\\.location\\.(assign|replace)|window\\.location\\s*=|window\\.location\\.href\\s*=/);
   });
   it("mantém canais e evita CTA extra como caminho principal", () => {
-    expect(login).toContain("RECEBER PELO WHATSAPP");
-    expect(login).toContain("RECEBER POR E-MAIL");
+    expect(login).toContain("RECEBER CÓDIGO");
+    expect(login).toContain('send("both")');
     expect(login).toContain("ABRIR WHATSAPP (SE NÃO ABRIU)");
     expect(login).toContain("showWhatsappFallback && (");
     expect(login).not.toContain("ABRIR WHATSAPP NORMAL");

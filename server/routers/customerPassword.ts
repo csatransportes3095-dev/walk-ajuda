@@ -222,7 +222,7 @@ export const customerPasswordRouter = router({
   requestCustomerCode: publicProcedure
     .input(z.object({
       phone: z.string().min(10).max(32),
-      channel: z.enum(["email","whatsapp"]).optional().default("email"),
+      channel: z.enum(["email","whatsapp","both"]).optional().default("email"),
     }))
     .mutation(async ({ input, ctx }) => requestCustomerCode(input.phone, ctx.req, input.channel)),
   verifyCustomerCode: publicProcedure
