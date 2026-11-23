@@ -97,6 +97,7 @@ export function CustomerOtpLogin({ title = "Acesso H2 Colombiano", initialPhone 
   const [deliveryChannel, setDeliveryChannel] = useState<"email" | "whatsapp">(initialState.channel);
   const [code, setCode] = useState("");
   const [showHelp, setShowHelp] = useState(false);
+  const [showWhatsappFallback, setShowWhatsappFallback] = useState(initialState.step === "code" && initialState.channel === "whatsapp");
   const [busy, setBusy] = useState(false);
   const [clockNow, setClockNow] = useState(() => Date.now());
   const [cooldowns, setCooldowns] = useState<{email:number;whatsapp:number}>(() => {
@@ -147,6 +148,24 @@ export function CustomerOtpLogin({ title = "Acesso H2 Colombiano", initialPhone 
     else window.location.assign("/cadastro");
   }
 
+  // A aba precisa nascer dentro do clique do usuário. Se for aberta após
+  // awaits, Safari/Chrome podem bloquear a nova aba e deixar o cliente sem código.
+  function openWhatsappWaitingTab(): Window | null {
+    let tab: Window | null = null;
+    try {
+      tab = window.open("", "_blank");
+      if (!tab) return null;
+      tab.opener = null;
+      tab.document.title = "H2 Colombiano - preparando WhatsApp";
+      tab.document.body.style.cssText = "margin:0;background:#050b1b;color:#fff;font-family:Arial,sans-serif;display:grid;place-items:center;min-height:100vh;text-align:center;padding:24px;box-sizing:border-box";
+      tab.document.body.textContent = "H2 COLOMBIANO - Preparando seu código. Abriremos o WhatsApp automaticamente.";
+      return tab;
+    } catch {
+      try { tab?.close(); } catch {}
+      return null;
+    }
+  }
+
   async function send(channel: OtpChannel) {
     const remaining = channel === "email" ? remainingEmail : remainingWhatsapp;
     if (remaining > 0) { toast.info("Aguarde " + formatOtpCooldown(remaining) + " para solicitar outro código por " + (channel === "email" ? "e-mail" : "WhatsApp") + "."); return; }
@@ -158,31 +177,40 @@ export function CustomerOtpLogin({ title = "Acesso H2 Colombiano", initialPhone 
       toast.error("Recebimento pelo WhatsApp indisponível. Use o botão azul do e-mail.");
       return;
     }
+    // Abrir imediatamente a segunda aba durante o clique, antes de consultar o
+    // servidor. O envio da mensagem só pode acontecer APÓS o código existir.
+    const whatsappTab = channel === "whatsapp" ? openWhatsappWaitingTab() : null;
+    setShowWhatsappFallback(false);
     setBusy(true);
     try {
       // Check before requesting a code; the current OTP endpoint
       // intentionally returns a generic response for unknown numbers.
       const account = await checkCustomer.mutateAsync({ phone: cleanPhone });
       if (account.blocked || account.customerBlocked) {
+        whatsappTab?.close();
         toast.error(account.customerBlocked
           ? "Este cadastro está bloqueado. Entre em contato com o atendimento."
           : "Consulta temporariamente bloqueada. Entre em contato com o atendimento.");
         return;
       }
       if (account.exists === false) {
+        whatsappTab?.close();
         startRegistration();
         return;
       }
       if (account.exists !== true) {
+        whatsappTab?.close();
         toast.error("Não foi possível consultar este número. Tente novamente.");
         return;
       }
       if (!account.customer?.email) {
+        whatsappTab?.close();
         toast.error("Seu cadastro está sem e-mail. Entre em contato com o atendimento.");
         return;
       }
       const result = await requestCode.mutateAsync({phone: cleanPhone, channel});
       if (result.resendBlocked) {
+        whatsappTab?.close();
         const wait = Math.max(0,result.retryAfterSeconds || 0);
         rememberCooldown(channel, wait, result.cooldownScope || (wait > 60 ? "all" : "channel"));
         toast.info(result.message || "Aguarde para solicitar outro código.");
@@ -195,13 +223,26 @@ export function CustomerOtpLogin({ title = "Acesso H2 Colombiano", initialPhone 
       setShowHelp(false);
       saveOtpDraft(cleanPhone, "code", channel);
       if (channel === "whatsapp") {
-        // The WhatsApp link is activated only by the customer's next click.
-        // No asynchronous popup or browser navigation leaves this login tab.
-        toast.info("Código preparado. Abra o WhatsApp abaixo, envie a mensagem e volte à aba H2.");
+        // O formulário de seis dígitos permanece na aba original.
+        // A segunda aba recebe o destino somente depois de o OTP estar salvo.
+        let redirected = false;
+        if (whatsappTab && !whatsappTab.closed) {
+          try {
+            whatsappTab.location.replace(buildWhatsappMessageUrl(supportNumber, "Preciso receber meu código"));
+            redirected = true;
+          } catch {
+            try { whatsappTab.close(); } catch {}
+          }
+        }
+        setShowWhatsappFallback(!redirected);
+        toast.info(redirected
+          ? "WhatsApp aberto. Envie a mensagem preparada e volte para digitar seu código nesta aba."
+          : "O navegador bloqueou a abertura do WhatsApp. Use o link de recuperação abaixo.");
       } else {
         toast.success(result.message || "Solicitação de código por e-mail realizada. Confira também a pasta de spam.");
       }
     } catch (err: any) {
+      try { whatsappTab?.close(); } catch {}
       toast.error(err?.message || "Não foi possível solicitar o código.");
     } finally {
       setBusy(false);
@@ -305,19 +346,19 @@ export function CustomerOtpLogin({ title = "Acesso H2 Colombiano", initialPhone 
             <div className="flex items-center gap-2 text-sm text-cyan-100">
               {deliveryChannel === "whatsapp" ? <MessageCircle className="h-5 w-5 text-[#ff6060]" /> : <Mail className="h-5 w-5" />}
               <span>{deliveryChannel === "whatsapp"
-                ? "Toque em Enviar na mensagem preenchida no WhatsApp. O sistema responde automaticamente com o código após receber a mensagem."
+                ? "O WhatsApp abre automaticamente em outra aba. Toque em Enviar na mensagem preenchida no WhatsApp. O sistema responde com o código após receber a mensagem. Volte aqui para digitá-lo."
                 : "Digite o código recebido no e-mail cadastrado. Confira também a pasta de spam."}</span>
             </div>
-            {deliveryChannel === "whatsapp" && (
+            {deliveryChannel === "whatsapp" && showWhatsappFallback && (
               <div className="space-y-2 rounded-xl border border-emerald-400/30 bg-emerald-500/10 p-3" data-testid="h2-otp-whatsapp-separate-tab">
                 <a href={buildWhatsappMessageUrl(supportNumber, "Preciso receber meu código")}
                   target="_blank" rel="noopener noreferrer"
                   data-testid="h2-otp-open-whatsapp"
                   className="flex min-h-14 w-full items-center justify-center gap-2 rounded-xl bg-[#128C4A] px-4 py-3 text-center text-sm font-black text-white hover:bg-[#0b783a]">
-                  <MessageCircle className="h-5 w-5" /> ABRIR WHATSAPP EM OUTRA ABA
+                  <MessageCircle className="h-5 w-5" /> ABRIR WHATSAPP (SE NÃO ABRIU)
                 </a>
                 <p className="text-center text-xs leading-relaxed text-slate-100">
-                  Envie a mensagem preparada e volte à aba H2 COLOMBIANO. Esta tela continuará pronta para digitar o código, sem solicitar outro.
+                  O navegador impediu o redirecionamento automático. Abra pelo link acima, envie a mensagem e volte a esta tela.
                 </p>
               </div>
             )}

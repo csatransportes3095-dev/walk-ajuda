@@ -60,6 +60,7 @@ async function fixture({ profile = 'desktop', popupMode = 'native', server = {} 
       if (mode === 'closed') { popup.close(); state.closeCalls++; return popup; }
       if (mode === 'navigation-throws') return {
         get closed() { return popup.closed; },
+        get document() { return popup.document; },
         get opener() { return popup.opener; },
         set opener(value) { popup.opener = value; },
         location: { replace() { state.navigationAttempts++; throw new Error('Synthetic popup navigation failure'); } },
@@ -87,21 +88,21 @@ async function fixture({ profile = 'desktop', popupMode = 'native', server = {} 
     await page.getByText('Toque em Enviar na mensagem preenchida no WhatsApp.', { exact: false }).waitFor();
   };
   const directLink = async () => {
-    const link = page.getByRole('link', { name: 'ABRIR WHATSAPP EM OUTRA ABA', exact: true });
+    const link = page.getByRole('link', { name: 'ABRIR WHATSAPP (SE NÃO ABRIU)', exact: true });
     await link.waitFor();
     assert.equal(await link.getAttribute('target'), '_blank');
     assert.match(await link.getAttribute('rel'), /noopener/);
     assert.match(await link.getAttribute('rel'), /noreferrer/);
     return link;
   };
-  const simpleCodeStep = async () => {
+  const simpleCodeStep = async (withFallback = false) => {
     await sameCodeStep();
     assert.equal(await page.getByRole('button', { name: 'Não recebi o código', exact: true }).getAttribute('aria-expanded'), 'false');
     assert.equal(await page.locator('#h2-otp-help').isVisible(), false);
     const form = page.locator('form').filter({ has: page.getByLabel('Código de 6 números') });
     assert.equal(await form.getByRole('button').count(), 2);
     assert.equal(await form.locator('button[type="submit"]').count(), 1);
-    assert.equal(await form.getByRole('link').count(), 1);
+    assert.equal(await form.getByRole('link').count(), withFallback ? 1 : 0);
   };
   const request = () => page.getByRole('button', { name: 'RECEBER PELO WHATSAPP', exact: true }).click();
   const close = async () => { await context.close(); activeContext = undefined; activePage = undefined; };
@@ -111,14 +112,12 @@ async function fixture({ profile = 'desktop', popupMode = 'native', server = {} 
 try {
   for (const profile of ['desktop', 'iphone', 'android']) {
     const f = await fixture({ profile, server: { delayMs: 150 } });
-    await f.request();
-    await f.simpleCodeStep();
-    assert.equal(f.destinations.length,0,'Preparing OTP cannot navigate to WhatsApp or open blank tabs');
-    assert.deepEqual(await f.page.evaluate(() => window.__otpPopupFixture.calls), []);
     const popupPromise = f.context.waitForEvent('page');
-    await (await f.directLink()).click();
+    await f.request();
     const popup = await popupPromise;
-    await waitFor(() => Promise.resolve(f.destinations.length === 1), profile + ' did not open the explicit WhatsApp link');
+    // O formulário está pronto para retorno na ABA ORIGINAL, sem segundo botão.
+    await f.simpleCodeStep();
+    await waitFor(() => Promise.resolve(f.destinations.length === 1), profile + ' não redirecionou automaticamente');
     await popup.waitForURL('https://api.whatsapp.com/**');
     assert.notEqual(popup, f.page);
     assert.equal(await popup.evaluate(() => window.opener === null), true);
@@ -132,29 +131,29 @@ try {
     await f.page.getByRole('button', { name: 'CONFIRMAR E ACESSAR', exact: true }).click();
     await f.page.getByTestId('authenticated-phone').waitFor();
     assert.deepEqual((await f.state()).verifyCalls, [{ phone, code: '246810' }]);
-    checks.push(profile + ': WhatsApp opens separately; the original URL and code form survive returning and completing login');
+    checks.push(profile + ': um clique abre a segunda aba no WhatsApp; aba H2 fixa permite confirmar código');
     await f.close();
   }
 
-  // A Safari popup blocker cannot block an asynchronous popup that never exists.
-  // The customer always opens the real WhatsApp URL using the anchor click.
+  // Bloqueio real ou simulado do popup: não consumir outro OTP ao usar recuperação.
   for (const popupMode of ['null', 'throws', 'closed', 'navigation-throws']) {
     const f = await fixture({ popupMode });
     await f.request();
-    await f.simpleCodeStep();
-    assert.deepEqual(await f.page.evaluate(() => window.__otpPopupFixture.calls), []);
-    assert.equal(f.destinations.length, 0);
+    await f.simpleCodeStep(true);
+    assert.equal(f.destinations.length, 0, 'Um popup falho não pode navegar para WhatsApp');
+    const originalCalls = await f.page.evaluate(() => window.__otpPopupFixture.calls);
+    assert.equal(originalCalls.length, 1, 'A primeira ação tentou abrir apenas uma aba');
+    assert.ok(f.popups.every(popup => popup.isClosed()), 'Popup de preparação falho deve ser fechado');
     const before = await f.state();
-    const popupPromise = f.context.waitForEvent('page');
+    const fallbackPopupPromise = f.context.waitForEvent('page');
     await (await f.directLink()).click();
-    const popup = await popupPromise;
-    await popup.waitForURL('https://api.whatsapp.com/**');
+    const fallbackPopup = await fallbackPopupPromise;
+    await fallbackPopup.waitForURL('https://api.whatsapp.com/**');
     await f.sameCodeStep();
-    assert.deepEqual((await f.state()).requestCalls, before.requestCalls, 'Opening external link must not request another OTP');
-    await popup.close();
+    assert.deepEqual((await f.state()).requestCalls, before.requestCalls, 'Fallback não pode gerar outro OTP');
+    await fallbackPopup.close();
     await f.page.bringToFront();
-    if (popupMode === 'null') await f.page.screenshot({ path: path.join(output, 'navigation-blocked-popup-return.png'), fullPage: true });
-    checks.push(popupMode + ': no JS popup is created; explicit link preserves original H2 code step');
+    checks.push(popupMode + ': recuperação manual sem segundo código e sem perder tela do H2');
     await f.close();
   }
 
@@ -168,8 +167,9 @@ try {
     const f = await fixture({ server: scenario.server });
     await f.request();
     await f.page.getByText(scenario.message, { exact: true }).waitFor();
-    assert.equal(f.popups.length, 0, 'Rejected request must not create an empty browser tab');
-    assert.deepEqual(await f.page.evaluate(() => window.__otpPopupFixture.calls), []);
+    assert.equal(f.destinations.length, 0, 'Falha não deve abrir WhatsApp');
+    assert.ok(f.popups.every(p => p.isClosed()), 'A aba temporária deve fechar em caso de falha');
+    assert.equal((await f.page.evaluate(() => window.__otpPopupFixture.calls)).length, 1);
     await f.sameDocument();
     assert.equal(await f.page.getByLabel('Telefone com DDD').isVisible(), true);
     assert.equal(await f.page.getByLabel('Código de 6 números').count(), 0);
