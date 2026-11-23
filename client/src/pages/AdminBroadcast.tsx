@@ -290,6 +290,26 @@ export default function AdminBroadcast() {
   const waCurrentLink = waLinks.find(l => !l.sent) || null;
   const waCurrentPosition = waCurrentLink ? waCompletedCount + 1 : waLinks.length;
   const waProgress = waLinks.length > 0 ? Math.round((waCompletedCount / waLinks.length) * 100) : 0;
+  const eligiblePhones = new Set(cpfEligibleCustomers.map(c => c.phone));
+  const waSelectedEligibleCount = waSelectedPhones.filter(phone => eligiblePhones.has(phone)).length;
+  const selectedEligibleCount = selectedPhones.filter(phone => eligiblePhones.has(phone)).length;
+
+  // O filtro acompanha os destinatários, em ambas as abas.
+  const cpfFilterControl = (
+    <div className="rounded-xl border border-amber-400/30 bg-amber-500/10 px-3 py-3 space-y-1 mb-3">
+      <label className="flex items-center gap-3 text-sm font-bold text-amber-200 cursor-pointer">
+        <input type="checkbox" checked={requireCpf}
+          onChange={e => { setRequireCpf(e.target.checked); setWaLinks([]); setShowWaPreview(false); }}
+          className="w-4 h-4 accent-amber-500" />
+        Ignorar clientes sem CPF cadastrado
+      </label>
+      <p className="text-xs text-amber-100/75">
+        {requireCpf
+          ? `${customers.length} cadastrados • ${cpfEligibleCustomers.length} com CPF • ${cpfExcludedCount} sem CPF excluídos`
+          : `${customers.length} cadastrados • filtro de CPF desativado`}
+      </p>
+    </div>
+  );
 
   return (
     <div className="min-h-screen bg-[#0a0a1a]">
@@ -313,19 +333,6 @@ export default function AdminBroadcast() {
           </button>
         </div>
 
-        <div className="rounded-xl border border-amber-400/30 bg-amber-500/10 px-4 py-3 space-y-1">
-          <label className="flex items-center gap-3 text-sm font-bold text-amber-200 cursor-pointer">
-            <input type="checkbox" checked={requireCpf}
-              onChange={e => { setRequireCpf(e.target.checked); setWaLinks([]); setShowWaPreview(false); }}
-              className="w-4 h-4 accent-amber-500" />
-            Ignorar clientes sem CPF cadastrado
-          </label>
-          <p className="text-xs text-amber-100/70">
-            {requireCpf
-              ? `${cpfEligibleCustomers.length} cliente(s) com CPF serão considerados. ${cpfExcludedCount} sem CPF serão excluídos.`
-              : "Filtro desativado: clientes sem CPF também podem receber a mensagem."}
-          </p>
-        </div>
         {/* ===== MODO WHATSAPP ===== */}
         {sendMode === 'whatsapp' && (
           <div className="bg-black/40 backdrop-blur-md border border-green-500/30 rounded-2xl p-5 space-y-4">
@@ -388,6 +395,7 @@ export default function AdminBroadcast() {
             {/* Destinatários */}
             <div>
               <label className="block text-sm text-white/70 mb-2">Destinatários</label>
+              {cpfFilterControl}
               <div className="flex flex-wrap gap-2 mb-3">
                 <button
                   onClick={() => { setWaTargetType('all'); setWaLinks([]); }}
@@ -399,19 +407,19 @@ export default function AdminBroadcast() {
                   onClick={() => { setWaTargetType('withOrders'); setWaLinks([]); }}
                   className={`flex items-center gap-2 px-3 py-2 rounded-lg border text-sm font-bold transition-all ${waTargetType === 'withOrders' ? 'bg-blue-600/30 border-blue-500/50 text-blue-300' : 'bg-white/5 border-white/10 text-white/50 hover:bg-white/10'}`}
                 >
-                  <CheckCircle className="w-4 h-4" /> Com Pedidos ({customers.filter(c => (c as any).hasOrder).length})
+                  <CheckCircle className="w-4 h-4" /> Com Pedidos ({cpfEligibleCustomers.filter(c => (c as any).hasOrder).length})
                 </button>
                 <button
                   onClick={() => { setWaTargetType('withoutOrders'); setWaLinks([]); }}
                   className={`flex items-center gap-2 px-3 py-2 rounded-lg border text-sm font-bold transition-all ${waTargetType === 'withoutOrders' ? 'bg-orange-600/30 border-orange-500/50 text-orange-300' : 'bg-white/5 border-white/10 text-white/50 hover:bg-white/10'}`}
                 >
-                  <Ban className="w-4 h-4" /> Sem Pedidos ({customers.filter(c => !(c as any).hasOrder).length})
+                  <Ban className="w-4 h-4" /> Sem Pedidos ({cpfEligibleCustomers.filter(c => !(c as any).hasOrder).length})
                 </button>
                 <button
                   onClick={() => { setWaTargetType('vip'); setWaLinks([]); }}
                   className={`flex items-center gap-2 px-3 py-2 rounded-lg border text-sm font-bold transition-all ${waTargetType === 'vip' ? 'bg-amber-500/25 border-amber-400/55 text-amber-200' : 'bg-white/5 border-white/10 text-white/50 hover:bg-white/10'}`}
                 >
-                  <span aria-hidden="true">👑</span> Clientes VIP ({customers.filter(c => (c as any).isVip).length})
+                  <span aria-hidden="true">👑</span> Clientes VIP ({cpfEligibleCustomers.filter(c => (c as any).isVip).length})
                 </button>
                 <button
                   onClick={() => { setWaTargetType('byStatus'); setWaLinks([]); }}
@@ -423,7 +431,7 @@ export default function AdminBroadcast() {
                   onClick={() => { setWaTargetType('selected'); setWaShowCustomerList(true); setWaLinks([]); }}
                   className={`flex items-center gap-2 px-3 py-2 rounded-lg border text-sm font-bold transition-all ${waTargetType === 'selected' ? 'bg-purple-600/30 border-purple-500/50 text-purple-300' : 'bg-white/5 border-white/10 text-white/50 hover:bg-white/10'}`}
                 >
-                  <CheckCircle className="w-4 h-4" /> Individual {waSelectedPhones.length > 0 && `(${waSelectedPhones.length})`}
+                  <CheckCircle className="w-4 h-4" /> Individual {waSelectedEligibleCount > 0 && `(${waSelectedEligibleCount})`}
                 </button>
               </div>
 
@@ -442,13 +450,13 @@ export default function AdminBroadcast() {
                             : 'bg-white/5 border-white/10 text-white/50 hover:bg-white/10'
                         }`}
                       >
-                        {st.label} ({customers.filter(c => (c as any).lastOrderStatus === st.key).length})
+                        {st.label} ({cpfEligibleCustomers.filter(c => (c as any).lastOrderStatus === st.key).length})
                       </button>
                     ))}
                   </div>
                   {waStatusFilter && (
                     <p className="text-xs text-yellow-300 font-bold">
-                      {customers.filter(c => (c as any).lastOrderStatus === waStatusFilter).length} cliente(s) com status “{statusTypes.find(s => s.key === waStatusFilter)?.label || waStatusFilter}”
+                      {cpfEligibleCustomers.filter(c => (c as any).lastOrderStatus === waStatusFilter).length} cliente(s) com status “{statusTypes.find(s => s.key === waStatusFilter)?.label || waStatusFilter}”
                     </p>
                   )}
                 </div>
@@ -497,7 +505,7 @@ export default function AdminBroadcast() {
                     </>
                   )}
                   {waSelectedPhones.length > 0 && (
-                    <p className="text-xs text-green-300 font-bold">{waSelectedPhones.length} cliente(s) selecionado(s)</p>
+                    <p className="text-xs text-green-300 font-bold">{waSelectedEligibleCount} cliente(s) elegível(is) selecionado(s)</p>
                   )}
                 </div>
               )}
@@ -521,7 +529,7 @@ export default function AdminBroadcast() {
                   >
                     <span className="flex items-center gap-2 font-bold">
                       <Users className="w-4 h-4" />
-                      Prévia: {previewTargets.length} cliente(s) serão notificados
+                      Prévia: {previewTargets.length} destinatário(s) para gerar links
                     </span>
                     {showWaPreview ? <ChevronUp className="w-4 h-4" /> : <ChevronDown className="w-4 h-4" />}
                   </button>
@@ -582,7 +590,7 @@ export default function AdminBroadcast() {
                     onClick={() => setWaViewMode('single')}
                     className={`px-3 py-1.5 rounded-lg text-xs font-bold transition-all ${waViewMode === 'single' ? 'bg-green-600/40 border border-green-500/60 text-green-200' : 'text-white/50 hover:text-white hover:bg-white/10'}`}
                   >
-                    Envio um por vez
+                    Abrir um por vez
                   </button>
                   <button
                     onClick={() => setWaViewMode('list')}
@@ -596,7 +604,7 @@ export default function AdminBroadcast() {
                 <div className="flex items-center justify-between bg-green-900/20 border border-green-500/30 rounded-xl px-4 py-2.5">
                   <div>
                     <p className="text-sm font-bold text-green-300">📋 Fila de Envio WhatsApp</p>
-                    <p className="text-xs text-white/50">{waPendingCount} pendente(s) de {waLinks.length} total</p>
+                    <p className="text-xs text-white/50">{waPendingCount} link(s) pendentes de {waLinks.length} gerados</p>
                   </div>
                   <button onClick={clearWaList} className="flex items-center gap-1 text-xs text-red-400 hover:text-red-300 border border-red-500/30 rounded-lg px-2 py-1 transition-all">
                     <X className="w-3 h-3" /> Limpar lista
@@ -642,7 +650,7 @@ export default function AdminBroadcast() {
                           disabled={!waCurrentLink || waTransitioning}
                           className="w-full h-12 flex items-center justify-center gap-2 bg-green-600 hover:bg-green-500 disabled:bg-green-900/40 disabled:text-white/50 disabled:cursor-not-allowed text-white rounded-xl text-sm font-bold transition-all"
                         >
-                          <Phone className="w-4 h-4" /> Enviar pelo WhatsApp
+                          <Phone className="w-4 h-4" /> Abrir conversa no WhatsApp
                         </button>
                       </div>
                     </div>
@@ -668,7 +676,7 @@ export default function AdminBroadcast() {
                           <p className="text-xs text-white/40">{l.phone}</p>
                         </div>
                         {l.sent ? (
-                          <span className="text-xs text-green-400 font-bold shrink-0">✅ Enviado</span>
+                          <span className="text-xs text-green-400 font-bold shrink-0">✓ Link acionado</span>
                         ) : (
                           <a
                             href={l.url}
@@ -677,7 +685,7 @@ export default function AdminBroadcast() {
                             onClick={() => markWaSent(l.phone)}
                             className="flex items-center gap-1.5 px-3 py-2 bg-green-600 hover:bg-green-500 text-white rounded-lg text-xs font-bold transition-all shrink-0 active:scale-95"
                           >
-                            <Phone className="w-3 h-3" /> Enviar
+                            <Phone className="w-3 h-3" /> Abrir
                           </a>
                         )}
                       </div>
@@ -687,13 +695,13 @@ export default function AdminBroadcast() {
 
                 {waLinks.every(l => l.sent) && (
                   <div className="text-center py-3 bg-green-900/20 border border-green-500/30 rounded-xl">
-                    <p className="text-green-300 font-bold text-sm">🎉 Todos os clientes foram notificados!</p>
+                    <p className="text-green-300 font-bold text-sm">✓ Todos os links da fila foram acionados.</p>
                     <button onClick={clearWaList} className="text-xs text-white/50 hover:text-white/70 mt-1 underline">Limpar lista</button>
                   </div>
                 )}
 
                 <p className="text-xs text-white/40 text-center">
-                  Clique em "Enviar" para abrir o WhatsApp com a mensagem. O cliente é marcado automaticamente como enviado.
+                  Clique em "Abrir" para acessar a conversa com a mensagem. Confirme o envio no WhatsApp: a fila registra apenas que o link foi acionado.
                 </p>
               </div>
             )}
@@ -829,6 +837,7 @@ export default function AdminBroadcast() {
             {/* Destinatários */}
             <div>
               <label className="block text-sm text-white/70 mb-2">Destinatários</label>
+              {cpfFilterControl}
               <div className="flex flex-wrap gap-2 mb-3">
                 <button
                   onClick={() => setTargetType('all')}
@@ -840,18 +849,18 @@ export default function AdminBroadcast() {
                   onClick={() => setTargetType('vip')}
                   className={`flex items-center gap-2 px-4 py-2 rounded-lg border text-sm font-bold transition-all ${targetType === 'vip' ? 'bg-amber-500/25 border-amber-400/55 text-amber-200' : 'bg-white/5 border-white/10 text-white/50 hover:bg-white/10'}`}
                 >
-                  <span aria-hidden="true">👑</span> Clientes VIP ({customers.filter(c => (c as any).isVip).length})
+                  <span aria-hidden="true">👑</span> Clientes VIP ({cpfEligibleCustomers.filter(c => (c as any).isVip).length})
                 </button>
                 <button
                   onClick={() => { setTargetType('selected'); setShowCustomerList(true); }}
                   className={`flex items-center gap-2 px-4 py-2 rounded-lg border text-sm font-bold transition-all ${targetType === 'selected' ? 'bg-purple-600/30 border-purple-500/50 text-purple-300' : 'bg-white/5 border-white/10 text-white/50 hover:bg-white/10'}`}
                 >
-                  <CheckCircle className="w-4 h-4" /> Individual {selectedPhones.length > 0 && `(${selectedPhones.length})`}
+                  <CheckCircle className="w-4 h-4" /> Individual {selectedEligibleCount > 0 && `(${selectedEligibleCount})`}
                 </button>
               </div>
               {targetType === 'vip' && (
                 <div className="mb-3 rounded-xl border border-amber-400/25 bg-amber-500/[0.07] px-3 py-2 text-xs font-bold text-amber-200">
-                  👑 {customers.filter(c => (c as any).isVip).length} cliente(s) VIP ativo(s) selecionado(s). O envio por e-mail alcançará apenas os que possuem e-mail cadastrado.
+                  👑 {cpfEligibleCustomers.filter(c => (c as any).isVip).length} cliente(s) VIP ativo(s) selecionado(s). O envio por e-mail alcançará apenas os que possuem e-mail cadastrado.
                 </div>
               )}
 
@@ -899,7 +908,7 @@ export default function AdminBroadcast() {
                     </>
                   )}
                   {selectedPhones.length > 0 && (
-                    <p className="text-xs text-blue-300 font-bold">{selectedPhones.length} cliente(s) selecionado(s)</p>
+                    <p className="text-xs text-blue-300 font-bold">{selectedEligibleCount} cliente(s) elegível(is) selecionado(s)</p>
                   )}
                 </div>
               )}
