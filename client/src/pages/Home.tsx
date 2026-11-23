@@ -4400,7 +4400,7 @@ export default function Home() {
                     </button>
                   </div>
                   {couponMessage && <p className={`text-xs mt-1 font-semibold ${couponValid && couponMatchesSelection ? 'text-green-400' : 'text-red-400'}`}>{couponMatchesSelection ? couponMessage : "Este cupom não vale para a opção selecionada. Escolha a opção correta ou remova o cupom."}</p>}
-                  {couponValid && couponMatchesSelection && <p className="text-amber-300 text-xs font-semibold mt-1">🏷️ Compras com cupom não geram comissão de indicação.</p>
+                  {couponValid && couponMatchesSelection && <p className="text-amber-300 text-xs font-semibold mt-1">🏷️ Compras com cupom não geram comissão de indicação.</p>}
                 </div>}
 
                 {/* Campo de cliente final para revendedores */}
