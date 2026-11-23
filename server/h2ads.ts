@@ -2,7 +2,7 @@ import { beginH2AdsInstanceDeletion, assertH2AdsInstanceNotDeleting, getH2AdsDel
 import { r2DeleteH2AdsInstanceSnapshotsVerified } from "./r2Storage";
 import { deleteH2AdsIpHistory } from "./h2adsIpHistory";
 import { createHash, randomBytes, timingSafeEqual } from "node:crypto";
-import { and, asc, desc, eq, gt, inArray, isNull, sql } from "drizzle-orm";
+import { and, asc, desc, eq, gt, inArray, isNull, lt, sql } from "drizzle-orm";
 import { h2AdsBrowserWorkers, h2AdsGroups, h2AdsInstanceBrowserRuns, h2AdsInstanceNetworkProfiles, h2AdsInstanceProxyCredentials, h2AdsInstances, h2AdsInstanceWorkerAssignments, h2AdsProxyPool, h2AdsWorkerBrowserCommands, h2AdsWorkerCommands, h2AdsWorkerPairingCodes, type H2AdsBrowserWorker, type H2AdsGroup, type H2AdsInstance, type H2AdsInstanceBrowserRun, type H2AdsInstanceNetworkProfile, type H2AdsInstanceWorkerAssignment } from "../drizzle/schema";
 import { getDb } from "./db";
 import { decryptH2AdsProxy } from "./h2adsProxySecurity";
