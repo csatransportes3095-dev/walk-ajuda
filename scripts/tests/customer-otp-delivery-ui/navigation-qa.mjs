@@ -1,4 +1,5 @@
-// Browser tab navigation for combined OTP. Local synthetic tRPC only.
+// OTP navigation regression: no temporary browser tab, no automatic WhatsApp
+// redirect. Synthetic APIs and no real personal data, OTP, SMTP or APK.
 import assert from 'node:assert/strict';
 import fs from 'node:fs/promises';
 import path from 'node:path';
@@ -19,7 +20,7 @@ const profiles = {
     userAgent:'Mozilla/5.0 (Linux; Android 14) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/130.0.0.0 Mobile Safari/537.36' },
 };
 const checks=[], errors=[];
-async function fixture(profile='desktop', popupBlocked=false) {
+async function fixture(profile='desktop', withWhatsapp=true) {
   const context = await browser.newContext(profiles[profile]);
   const urls=[];
   await context.route('**/*', route => {
@@ -33,8 +34,7 @@ async function fixture(profile='desktop', popupBlocked=false) {
   });
   const page=await context.newPage();
   page.on('pageerror', e=>errors.push(String(e)));
-  if (popupBlocked) await page.addInitScript(() => { window.open=()=>null; });
-  await page.request.post(base+'/test-control',{data:{reset:true,whatsappAvailable:true}});
+  await page.request.post(base+'/test-control',{data:{reset:true,whatsappAvailable:withWhatsapp}});
   const url=base+'/?initialPhone='+phone;
   await page.goto(url,{waitUntil:'networkidle'});
   const request=page.getByRole('button',{name:'RECEBER CÓDIGO',exact:true});
@@ -46,42 +46,59 @@ try {
   for (const profile of ['desktop','iphone','android']) {
     const f=await fixture(profile);
     await f.page.evaluate(()=>{window.__h2OriginalTabMarker='preserved'});
-    const popupPromise=f.context.waitForEvent('page');
     await f.request.click();
-    const popup=await popupPromise;
-    await popup.waitForURL('https://api.whatsapp.com/**');
     await f.page.getByLabel('Código de 6 números').waitFor();
-    assert.equal(f.page.url(),f.url);
+    assert.equal(f.page.url(),f.url,'Solicitação deve manter URL do login');
     assert.equal(await f.page.evaluate(()=>window.__h2OriginalTabMarker),'preserved');
-    assert.equal(await popup.evaluate(()=>window.opener===null),true);
+    assert.equal(f.context.pages().length,1,'Sem abas novas na solicitação');
+    assert.equal(f.urls.length,0,'Sem navegação automática para WhatsApp');
     assert.deepEqual((await f.state()).requestCalls,[{phone,channel:'both'}]);
-    assert.equal(f.urls.length,1);
-    assert.match(await f.page.locator('form').innerText(),/e-mail/i);
+    const open=f.page.getByTestId('h2-otp-open-whatsapp');
+    await open.waitFor();
+    const href=await open.getAttribute('href');
+    assert.equal(href?.includes('about:blank'),false);
+    const target=await open.getAttribute('target');
+    if(profile==='desktop'){
+      assert.ok(href.startsWith('https://api.whatsapp.com/send?'),href);
+      assert.equal(target,'_blank');
+      const popupPromise=f.context.waitForEvent('page');
+      await open.click();
+      const popup=await popupPromise;
+      await popup.waitForURL('https://api.whatsapp.com/**');
+      assert.equal(f.page.url(),f.url);
+      await popup.close();
+    }else{
+      // On Linux there is no installed iPhone/Android WhatsApp app. Validate
+      // the native handoff URL, not a fake success from an unregistered scheme.
+      assert.ok(href.startsWith('whatsapp://send?'),href);
+      assert.equal(target,null,'Não deve criar uma segunda aba no iPhone/Android');
+      const native=new URL(href);
+      assert.equal(native.searchParams.get('phone'),'5511999990099');
+      assert.equal(native.searchParams.get('text'),'Preciso receber meu código');
+    }
+    if(profile==='iphone') await f.page.screenshot({path:path.join(output,'navigation-iphone-code-entry.png'),fullPage:true});
+    await f.page.reload({waitUntil:'networkidle'});
+    await f.page.getByLabel('Código de 6 números').waitFor();
+    await f.page.getByTestId('h2-otp-open-whatsapp').waitFor();
+    assert.deepEqual((await f.state()).requestCalls,[{phone,channel:'both'}],'Voltar/recarregar não deve gerar outro código');
     assert.equal(await f.page.evaluate(()=>document.documentElement.scrollWidth <= innerWidth),true);
-    if(profile==='iphone') await f.page.screenshot({path:path.join(output,'navigation-iphone-return.png'),fullPage:true});
-    await popup.close();
-    await f.page.bringToFront();
     await f.page.getByLabel('Código de 6 números').fill('246810');
     await f.page.getByRole('button',{name:'CONFIRMAR E ACESSAR'}).click();
     await f.page.getByTestId('authenticated-phone').waitFor();
-    checks.push(profile+': nova aba para WhatsApp; aba H2 fixa e login com o mesmo OTP');
+    assert.deepEqual((await f.state()).verifyCalls,[{phone,code:'246810'}]);
+    checks.push(profile+': envio sem popup, link direto, código permanece na tela ao voltar e ao recarregar');
     await f.close();
   }
   {
-    const f=await fixture('iphone',true);
+    const f=await fixture('iphone',false);
     await f.request.click();
     await f.page.getByLabel('Código de 6 números').waitFor();
-    const fallback=f.page.getByRole('link',{name:'ABRIR WHATSAPP (SE NÃO ABRIU)'});
-    await fallback.waitFor();
-    assert.equal(await fallback.getAttribute('target'),'_blank');
-    assert.match(await fallback.getAttribute('rel'),/noopener/);
-    const before=(await f.state()).requestCalls.length;
+    assert.equal(await f.page.getByTestId('h2-otp-open-whatsapp').count(),0);
+    assert.equal(f.context.pages().length,1);
     await f.page.reload({waitUntil:'networkidle'});
     await f.page.getByLabel('Código de 6 números').waitFor();
-    assert.equal((await f.state()).requestCalls.length,before,'Recarregar não deve gerar novo código');
-    await f.page.getByRole('link',{name:'ABRIR WHATSAPP (SE NÃO ABRIU)'}).waitFor();
-    assert.equal(f.urls.length,0,'Popup bloqueado não deve navegar sozinho');
-    checks.push('Popup bloqueado e recarga: link seguro de recuperação sem novo código');
+    assert.deepEqual((await f.state()).requestCalls,[{phone,channel:'both'}]);
+    checks.push('WhatsApp indisponível: e-mail segue ativo e campo preservado, sem redirecionamento');
     await f.close();
   }
   assert.deepEqual(errors,[]);
