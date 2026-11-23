@@ -7,7 +7,7 @@ import path from "node:path";
 import { and, eq, lt } from "drizzle-orm";
 import { h2AdsWorkerBrowserCommands, h2AdsWorkerCommands } from "../drizzle/schema";
 import { getDb } from "./db";
-import { authenticateH2AdsWorker, claimH2AdsWorker, claimNextH2AdsWorkerCommand, completeH2AdsWorkerBrowserCommand, completeH2AdsWorkerPreparation, getH2AdsInstance, getH2AdsPreparedObservedIp, getH2AdsProxyCredential, recordH2AdsBrowserRuntimeState, recordH2AdsWorkerHeartbeat } from "./h2ads";
+import { authenticateH2AdsWorker, claimH2AdsWorker, claimNextH2AdsWorkerCommand, completeH2AdsWorkerBrowserCommand, completeH2AdsWorkerPreparation, expireH2AdsStalledPreparationsForWorker, getH2AdsInstance, getH2AdsPreparedObservedIp, getH2AdsProxyCredential, recordH2AdsBrowserRuntimeState, recordH2AdsWorkerHeartbeat } from "./h2ads";
 import { recordH2AdsRuntimeIp } from "./h2adsIpHistory";
 import { confirmH2AdsLocalRemoval, getNextH2AdsInstanceDeletion } from "./h2adsDeletionState";
 import { finalizeH2AdsInstancePermanentDeletion } from "./h2ads";
@@ -20,7 +20,6 @@ import { isSystemRestoreLocked } from "./backupRestoreService";
 
 const MAX_NAME_LENGTH = 128;
 const STALE_BROWSER_COMMAND_MS = 30_000;
-const STALE_PREPARATION_COMMAND_MS = 120_000;
 const MIN_BROWSER_AGENT_VERSION = "1.4.3";
 
 function compareVersions(a: string, b: string): number {
@@ -92,23 +91,9 @@ async function requeueStaleWorkerCommands(workerId: number): Promise<void> {
       lt(h2AdsWorkerBrowserCommands.createdAt, staleBrowserCutoff),
     ));
 
-  await db.update(h2AdsWorkerCommands)
-    .set({ status: "queued", claimedAt: null })
-    .where(and(
-      eq(h2AdsWorkerCommands.workerId, workerId),
-      eq(h2AdsWorkerCommands.command, "prepare_browser"),
-      eq(h2AdsWorkerCommands.status, "queued"),
-      lt(h2AdsWorkerCommands.createdAt, new Date(now - STALE_PREPARATION_COMMAND_MS)),
-    ));
-
-  await db.update(h2AdsWorkerCommands)
-    .set({ status: "queued", claimedAt: null })
-    .where(and(
-      eq(h2AdsWorkerCommands.workerId, workerId),
-      eq(h2AdsWorkerCommands.command, "prepare_browser"),
-      eq(h2AdsWorkerCommands.status, "claimed"),
-      lt(h2AdsWorkerCommands.claimedAt, new Date(now - STALE_PREPARATION_COMMAND_MS)),
-    ));
+  // Expired preparation must be reconciled with its run state. Never simply
+  // requeue a claimed command: a late Windows response could overwrite state.
+  await expireH2AdsStalledPreparationsForWorker(workerId);
 }
 
 export function registerH2AdsWorkerRoute(app: Express): void {

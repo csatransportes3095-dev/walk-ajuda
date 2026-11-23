@@ -2,11 +2,12 @@ import { beginH2AdsInstanceDeletion, assertH2AdsInstanceNotDeleting, getH2AdsDel
 import { r2DeleteH2AdsInstanceSnapshotsVerified } from "./r2Storage";
 import { deleteH2AdsIpHistory } from "./h2adsIpHistory";
 import { createHash, randomBytes, timingSafeEqual } from "node:crypto";
-import { and, asc, desc, eq, gt, inArray, isNull, sql } from "drizzle-orm";
+import { and, asc, desc, eq, gt, inArray, isNull, lt, sql } from "drizzle-orm";
 import { h2AdsBrowserWorkers, h2AdsGroups, h2AdsInstanceBrowserRuns, h2AdsInstanceNetworkProfiles, h2AdsInstanceProxyCredentials, h2AdsInstances, h2AdsInstanceWorkerAssignments, h2AdsProxyPool, h2AdsWorkerBrowserCommands, h2AdsWorkerCommands, h2AdsWorkerPairingCodes, type H2AdsBrowserWorker, type H2AdsGroup, type H2AdsInstance, type H2AdsInstanceBrowserRun, type H2AdsInstanceNetworkProfile, type H2AdsInstanceWorkerAssignment } from "../drizzle/schema";
 import { getDb } from "./db";
 import { decryptH2AdsProxy } from "./h2adsProxySecurity";
 import { H2ADS_REPREPARABLE_STATES, canRequestH2AdsPreparation, shouldWriteH2AdsBrowserCommandState } from "./h2adsSessionStateGuards";
+import { H2ADS_PREPARATION_RECOVERY_MS, isH2AdsPreparationStalled } from "../shared/h2adsOrderBrowserShortcut";
 
 export type H2AdsDashboard = {
   groups: H2AdsGroup[];
@@ -346,6 +347,102 @@ export async function assignH2AdsInstanceWorker(instanceId: number, workerId: nu
   await db.update(h2AdsInstanceWorkerAssignments).set({ workerId, assignedAt: new Date() }).where(eq(h2AdsInstanceWorkerAssignments.id, current.id));
 }
 
+/**
+ * Reconciles an expired preparation command and its run together. It NEVER
+ * replays an expired command (the Windows Worker might still be executing it).
+ * The ADM can explicitly queue a fresh preparation after the old command is
+ * fenced. Chrome sessions in browser_open/closed/proxy_verified are untouched.
+ */
+export async function expireH2AdsStalledPreparation(instanceId: number): Promise<boolean> {
+  const db = await requireH2AdsDb();
+  const cutoff = new Date(Date.now() - H2ADS_PREPARATION_RECOVERY_MS);
+  return db.transaction(async tx => {
+    const [run] = await tx.select({
+      instanceId: h2AdsInstanceBrowserRuns.instanceId,
+      workerId: h2AdsInstanceBrowserRuns.workerId,
+      state: h2AdsInstanceBrowserRuns.state,
+      lastChangedAt: h2AdsInstanceBrowserRuns.lastChangedAt,
+    }).from(h2AdsInstanceBrowserRuns)
+      .where(eq(h2AdsInstanceBrowserRuns.instanceId, instanceId))
+      .limit(1);
+    if (!run || !isH2AdsPreparationStalled(run.state, run.lastChangedAt)) return false;
+
+    const active = await tx.select({
+      id: h2AdsWorkerCommands.id, status: h2AdsWorkerCommands.status,
+      createdAt: h2AdsWorkerCommands.createdAt, claimedAt: h2AdsWorkerCommands.claimedAt,
+    }).from(h2AdsWorkerCommands)
+      .where(and(
+        eq(h2AdsWorkerCommands.instanceId, instanceId),
+        eq(h2AdsWorkerCommands.workerId, run.workerId),
+        eq(h2AdsWorkerCommands.command, "prepare_browser"),
+        inArray(h2AdsWorkerCommands.status, ["queued", "claimed"]),
+      )).orderBy(desc(h2AdsWorkerCommands.id)).limit(2);
+
+    // The Worker acknowledges a command and updates the browser run in two
+    // statements. Do not interpret that tiny transition as an orphaned run.
+    const [latest] = await tx.select({
+      status: h2AdsWorkerCommands.status,
+      completedAt: h2AdsWorkerCommands.completedAt,
+    }).from(h2AdsWorkerCommands)
+      .where(and(
+        eq(h2AdsWorkerCommands.instanceId, instanceId),
+        eq(h2AdsWorkerCommands.workerId, run.workerId),
+        eq(h2AdsWorkerCommands.command, "prepare_browser"),
+      )).orderBy(desc(h2AdsWorkerCommands.id)).limit(1);
+    if (!active.length && latest?.completedAt && latest.completedAt.getTime() > cutoff.getTime()) return false;
+
+    // A newly queued or claimed command is active; do not overtake it.
+    for (const command of active) {
+      const relevantTime = command.status === "claimed" ? command.claimedAt : command.createdAt;
+      if (!relevantTime || relevantTime.getTime() > cutoff.getTime()) return false;
+    }
+
+    // CAS fences the old worker acknowledgement. The entire operation rolls
+    // back if another request has already consumed the command/run.
+    for (const command of active) {
+      const marked = await tx.update(h2AdsWorkerCommands)
+        .set({ status: "cancelled", errorCategory: "preparation_timeout", completedAt: new Date() })
+        .where(and(
+          eq(h2AdsWorkerCommands.id, command.id),
+          eq(h2AdsWorkerCommands.instanceId, instanceId),
+          eq(h2AdsWorkerCommands.workerId, run.workerId),
+          eq(h2AdsWorkerCommands.status, command.status),
+          command.status === "claimed"
+            ? lt(h2AdsWorkerCommands.claimedAt, cutoff)
+            : lt(h2AdsWorkerCommands.createdAt, cutoff),
+        ));
+      if (Number(marked[0].affectedRows) !== 1) throw new Error("Preparação mudou durante a recuperação.");
+    }
+
+    const transitioned = await tx.update(h2AdsInstanceBrowserRuns)
+      .set({ state: "blocked", lastErrorCategory: "preparation_timeout", lastChangedAt: new Date() })
+      .where(and(
+        eq(h2AdsInstanceBrowserRuns.instanceId, instanceId),
+        eq(h2AdsInstanceBrowserRuns.workerId, run.workerId),
+        eq(h2AdsInstanceBrowserRuns.state, run.state),
+        lt(h2AdsInstanceBrowserRuns.lastChangedAt, cutoff),
+      ));
+    if (Number(transitioned[0].affectedRows) !== 1) throw new Error("Sessão mudou durante a recuperação.");
+    return true;
+  });
+}
+
+export async function expireH2AdsStalledPreparationsForWorker(workerId: number): Promise<void> {
+  const db = await requireH2AdsDb();
+  const cutoff = new Date(Date.now() - H2ADS_PREPARATION_RECOVERY_MS);
+  const stale = await db.select({ instanceId: h2AdsInstanceBrowserRuns.instanceId })
+    .from(h2AdsInstanceBrowserRuns)
+    .where(and(
+      eq(h2AdsInstanceBrowserRuns.workerId, workerId),
+      inArray(h2AdsInstanceBrowserRuns.state, ["queued", "preparing"]),
+      lt(h2AdsInstanceBrowserRuns.lastChangedAt, cutoff),
+    )).limit(25);
+  for (const item of stale) {
+    try { await expireH2AdsStalledPreparation(item.instanceId); }
+    catch { /* Keep the previous state when a concurrent Worker/ADM transition won. */ }
+  }
+}
+
 export type H2AdsBrowserPreparationRequest = { commandId: number; instanceId: number; workerId: number };
 type H2AdsWorkerCommandAction = "prepare_browser" | "launch_browser" | "close_browser";
 export type H2AdsClaimedWorkerCommand = { id: number; instanceId: number; workerId: number; command: H2AdsWorkerCommandAction };
@@ -416,7 +513,14 @@ export async function completeH2AdsWorkerPreparation(input: { workerId: number; 
   const commands = await db.select().from(h2AdsWorkerCommands).where(and(eq(h2AdsWorkerCommands.id, input.commandId), eq(h2AdsWorkerCommands.workerId, input.workerId), eq(h2AdsWorkerCommands.command, "prepare_browser"), eq(h2AdsWorkerCommands.status, "claimed"))).limit(1);
   const command = commands[0];
   if (!command) return false;
-  await db.update(h2AdsWorkerCommands).set({ status: input.state === "proxy_verified" ? "succeeded" : "failed", errorCategory: input.errorCategory ?? null, completedAt: new Date() }).where(eq(h2AdsWorkerCommands.id, command.id));
+  const acknowledged = await db.update(h2AdsWorkerCommands)
+    .set({ status: input.state === "proxy_verified" ? "succeeded" : "failed", errorCategory: input.errorCategory ?? null, completedAt: new Date() })
+    .where(and(
+      eq(h2AdsWorkerCommands.id, command.id),
+      eq(h2AdsWorkerCommands.workerId, input.workerId),
+      eq(h2AdsWorkerCommands.status, "claimed"),
+    ));
+  if (Number(acknowledged[0].affectedRows) !== 1) return false; // Comando expirado nao confirma nova preparacao.
   const transitioned = await db.update(h2AdsInstanceBrowserRuns).set({ state: input.state, observedIp: input.observedIp ?? null, lastErrorCategory: input.errorCategory ?? null, preparedAt: input.state === "proxy_verified" ? new Date() : null, lastChangedAt: new Date() }).where(and(eq(h2AdsInstanceBrowserRuns.instanceId, command.instanceId), eq(h2AdsInstanceBrowserRuns.workerId, input.workerId), eq(h2AdsInstanceBrowserRuns.state, "preparing")));
   if (Number(transitioned[0].affectedRows) !== 1) return true; // Resposta atrasada nao sobrescreve sessao em andamento.
   if (input.state === "proxy_verified") {

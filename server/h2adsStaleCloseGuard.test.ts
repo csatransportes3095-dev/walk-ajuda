@@ -21,11 +21,16 @@ describe("H2ADS stale close guard", () => {
     expect(source).toContain('lt(h2AdsWorkerBrowserCommands.createdAt, staleBrowserCutoff)');
   });
 
-  it("reenvia prepare_browser em fila ou claimed obsoleto antes de bloquear a proxima validacao", () => {
-    expect(source).toContain('eq(h2AdsWorkerCommands.command, "prepare_browser")');
-    expect(source).toContain('eq(h2AdsWorkerCommands.status, "queued")');
-    expect(source).toContain('lt(h2AdsWorkerCommands.createdAt, new Date(now - STALE_PREPARATION_COMMAND_MS))');
-    expect(source).toContain('eq(h2AdsWorkerCommands.status, "claimed")');
+  it("concilia prepare_browser vencido em vez de reenviar cegamente", () => {
+    const core = fs.readFileSync(path.resolve(process.cwd(), "server/h2ads.ts"), "utf8");
+    expect(source).toContain("expireH2AdsStalledPreparationsForWorker(workerId)");
+    expect(source).not.toContain('lt(h2AdsWorkerCommands.claimedAt, new Date(now - STALE_PREPARATION_COMMAND_MS))');
+    expect(core).toContain('errorCategory: "preparation_timeout"');
+    expect(core).toContain('lt(h2AdsInstanceBrowserRuns.lastChangedAt, cutoff)');
+    expect(core).toContain('eq(h2AdsWorkerCommands.status, command.status)');
+    expect(core).toContain('eq(h2AdsWorkerCommands.status, "claimed")');
+    expect(core).toContain("latest.completedAt.getTime() > cutoff.getTime()");
+    expect(core).toContain('eq(h2AdsInstanceBrowserRuns.state, "preparing")');
   });
 
   it("carrega a extensao de privacy guard para Google, Bing, Uber e outras paginas de challenge quando abre o Chrome", () => {

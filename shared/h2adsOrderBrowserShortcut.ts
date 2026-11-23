@@ -1,5 +1,20 @@
 import { normalizeH2AdsRoutingText } from "./h2adsGroupRouting";
 
+// Recuperacao conservadora: nao interfere em preparacoes ativas ou Chrome aberto.
+export const H2ADS_PREPARATION_RECOVERY_MS = 5 * 60_000;
+
+export function isH2AdsPreparationStalled(
+  state: string | null | undefined,
+  changedAt: Date | string | null | undefined,
+  now = Date.now(),
+): boolean {
+  if (state !== "queued" && state !== "preparing") return false;
+  if (!changedAt) return false;
+  const changedMs = changedAt instanceof Date ? changedAt.getTime() : Date.parse(changedAt);
+  return Number.isFinite(changedMs) && changedMs <= now - H2ADS_PREPARATION_RECOVERY_MS;
+}
+
+
 export type H2AdsOrderLinkLike = { instanceId: number; registrationId: number; subOrderIndex: number };
 export type H2AdsInstanceLike = { id: number; status: string };
 export type H2AdsAssignmentLike = { instanceId: number; workerId: number };
@@ -231,6 +246,8 @@ export function describeH2AdsOrderBrowserBlock(input: {
     testing_browser_admin_required: "Chrome for Testing precisa de instalação ou reparo administrativo",
     testing_browser_version_mismatch: "a versão do Chrome for Testing está incompatível",
     testing_browser_firewall_unavailable: "o firewall do Chrome for Testing não foi confirmado",
+    preparation_timeout: "o comando expirou sem confirmação do Worker",
+    preparation_recovered: "a preparação anterior foi substituída após expirar",
   };
   if (state === "blocked") return {
     message: errorCategory && Object.hasOwn(categoryHints, errorCategory)
