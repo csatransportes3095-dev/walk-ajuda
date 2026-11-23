@@ -116,7 +116,7 @@ export function CustomerOtpLogin({ title = "Acesso H2 Colombiano", initialPhone 
   const loginSettings = supportSettings;
   const supportNumber = normalizeOtpWhatsappDestination(String(supportSettings?.whatsapp_number || "5511978307371"));
 
-  function rememberCooldown(channel: OtpChannel, seconds: number, scope: "all" | "channel" = "channel") {
+  function rememberCooldown(channel: "email" | "whatsapp", seconds: number, scope: "all" | "channel" = "channel") {
     if (!Number.isFinite(seconds) || seconds <= 0) return;
     const until = Date.now() + Math.min(Math.ceil(seconds) * 1000, OTP_MAX_STORED_COOLDOWN_MS);
     if (scope === "all") {
