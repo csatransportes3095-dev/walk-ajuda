@@ -1,4 +1,5 @@
 import { emailBelongsToAnotherCustomer, CUSTOMER_EMAIL_IN_USE_MESSAGE } from "./customerEmailOwnership";
+import { couponAppliesToProductIds } from "../shared/couponProductScope";
 import { normalizeCustomerText } from "../shared/customerTextNormalization";
 import { TRPCError } from "@trpc/server";
 import { ensureStatusScopeSchema, withStatusScopeLock, archiveScopeDefinition, assertStatusCanBeRemoved, assertNotInitialStatus, scopeRows } from "./orderStatusScope";
@@ -355,6 +356,17 @@ async function ensureCouponScheduleInfrastructure(): Promise<void> {
           throw error;
         }
       }
+      // Coluna opcional: null preserva todos os cupons ja existentes.
+      try {
+        await db.execute(sql`ALTER TABLE coupons ADD COLUMN productId INT NULL AFTER discountValue`);
+      } catch (error) {
+        const outer = error as { code?: string; errno?: number; cause?: unknown };
+        const cause = (outer?.cause || {}) as { code?: string; errno?: number };
+        if ((outer?.code || cause?.code) !== "ER_DUP_FIELDNAME" && (outer?.errno || cause?.errno) !== 1060) {
+          console.error("[coupons] Falha ao garantir coluna productId:", error);
+          throw error;
+        }
+      }
     })().catch((error) => {
       couponScheduleInfrastructurePromise = null;
       throw error;
@@ -363,11 +375,11 @@ async function ensureCouponScheduleInfrastructure(): Promise<void> {
   return couponScheduleInfrastructurePromise;
 }
 
-export async function createCoupon(data: { code: string; discountType: 'percentage' | 'fixed'; discountValue: number; maxUses?: number; startsAt?: Date | null; expiresAt?: Date | null; }): Promise<Coupon> {
+export async function createCoupon(data: { code: string; discountType: 'percentage' | 'fixed'; discountValue: number; productId?: number | null; maxUses?: number; startsAt?: Date | null; expiresAt?: Date | null; }): Promise<Coupon> {
   const db = await getDb();
   if (!db) throw new Error('Database not available');
   await ensureCouponScheduleInfrastructure();
-  await db.insert(coupons).values({ code: data.code.toUpperCase(), discountType: data.discountType, discountValue: data.discountValue, maxUses: data.maxUses || 1, currentUses: 0, startsAt: data.startsAt || null, expiresAt: data.expiresAt || null, status: 'active' });
+  await db.insert(coupons).values({ code: data.code.toUpperCase(), discountType: data.discountType, discountValue: data.discountValue, productId: data.productId ?? null, maxUses: data.maxUses || 1, currentUses: 0, startsAt: data.startsAt || null, expiresAt: data.expiresAt || null, status: 'active' });
   const result = await db.select().from(coupons).where(eq(coupons.code, data.code.toUpperCase())).limit(1);
   return result[0];
 }
@@ -391,7 +403,7 @@ export async function toggleCoupon(id: number, status: 'active' | 'disabled'): P
   await db.update(coupons).set({ status }).where(eq(coupons.id, id));
 }
 
-export async function validateCoupon(code: string): Promise<{ valid: boolean; coupon?: Coupon; reason?: string; discountType?: 'percentage' | 'fixed'; discountValue?: number; }> {
+export async function validateCoupon(code: string, productIds?: readonly number[]): Promise<{ valid: boolean; coupon?: Coupon; reason?: string; discountType?: 'percentage' | 'fixed'; discountValue?: number; productId?: number | null; productName?: string | null; }> {
   const db = await getDb();
   if (!db) return { valid: false, reason: 'Banco de dados indisponível' };
   await ensureCouponScheduleInfrastructure();
@@ -403,7 +415,22 @@ export async function validateCoupon(code: string): Promise<{ valid: boolean; co
   if (coupon.status === 'used') return { valid: false, reason: 'Este cupom já foi utilizado' };
   if (coupon.expiresAt && new Date() > coupon.expiresAt) return { valid: false, reason: 'Este cupom expirou' };
   if (coupon.maxUses && coupon.currentUses && coupon.currentUses >= coupon.maxUses) return { valid: false, reason: 'Este cupom atingiu o limite de uso' };
-  return { valid: true, coupon, discountType: coupon.discountType, discountValue: coupon.discountValue };
+  let productName: string | null = null;
+  if (coupon.productId != null) {
+    const target = await db.select({ name: products.name, isActive: products.isActive })
+      .from(products).where(eq(products.id, coupon.productId)).limit(1);
+    if (!target[0] || target[0].isActive !== 1) {
+      return { valid: false, reason: "O produto vinculado a este cupom não está disponível.", productId: coupon.productId };
+    }
+    productName = target[0].name;
+    if (productIds && !couponAppliesToProductIds(coupon.productId, productIds)) {
+      return {
+        valid: false, productId: coupon.productId, productName,
+        reason: `Este cupom é válido somente para ${productName}. Selecione esse produto para receber o desconto.`,
+      };
+    }
+  }
+  return { valid: true, coupon, discountType: coupon.discountType, discountValue: coupon.discountValue, productId: coupon.productId ?? null, productName };
 }
 
 export async function consumeCoupon(code: string, usedBy?: string): Promise<void> {

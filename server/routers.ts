@@ -648,6 +648,7 @@ export const appRouter = router({
         code: z.string().min(2),
         discountType: z.enum(['percentage', 'fixed']),
         discountValue: z.number().min(1),
+        productId: z.number().int().positive().nullable().optional(),
         maxUses: z.number().min(1).default(1),
         startsAt: z.string().optional(),
         expiresAt: z.string().optional(),
@@ -662,8 +663,14 @@ export const appRouter = router({
           if (startsAt && expiresAt && expiresAt <= startsAt) {
             return { success: false, message: 'O fim deve ser posterior ao início.' };
           }
+          if (input.productId != null) {
+            const allowedProducts = await listActiveProducts();
+            if (!allowedProducts.some(product => product.id === input.productId)) {
+              return { success: false, message: "Selecione um produto ativo da vitrine." };
+            }
+          }
           const coupon = await createCoupon({
-            code: input.code, discountType: input.discountType,
+            code: input.code, productId: input.productId ?? null, discountType: input.discountType,
             discountValue: input.discountValue, maxUses: input.maxUses,
             startsAt, expiresAt,
           });
@@ -684,7 +691,19 @@ export const appRouter = router({
         }
       }),
 
-    list: adminProcedure.query(async () => await listCoupons()),
+    products: adminProcedure.query(async () => {
+      const active = await listActiveProducts();
+      return active.map(product => ({ id: product.id, name: product.name }));
+    }),
+
+    list: adminProcedure.query(async () => {
+      const [allCoupons, allProducts] = await Promise.all([listCoupons(), listProducts()]);
+      const names = new Map(allProducts.map(product => [product.id, product.name]));
+      return allCoupons.map(coupon => ({
+        ...coupon,
+        productName: coupon.productId == null ? null : names.get(coupon.productId) || "Produto não encontrado",
+      }));
+    }),
 
     delete: adminProcedure
       .input(z.object({ id: z.number() }))
@@ -695,8 +714,15 @@ export const appRouter = router({
       .mutation(async ({ input }) => { await toggleCoupon(input.id, input.status); return { success: true }; }),
 
     validate: publicProcedure
-      .input(z.object({ code: z.string().min(1) }))
-      .mutation(async ({ input }) => await validateCoupon(input.code)),
+      .input(z.object({
+        code: z.string().min(1),
+        productId: z.number().int().positive().optional(),
+        productIds: z.array(z.number().int().positive()).min(1).max(20).optional(),
+      }))
+      .mutation(async ({ input }) => await validateCoupon(
+        input.code,
+        input.productIds ?? (input.productId ? [input.productId] : undefined),
+      )),
   }),
 
   // === PRODUTOS / CARDS DE SERVIÍ"¡O ===
@@ -1598,9 +1624,16 @@ export const appRouter = router({
           // Cupom: o servidor é a fonte oficial do valor final.
           // Nunca confia no desconto calculado pelo navegador.
           if (!globalPromotionOverridesIndividual(globalPromo) && input.couponCode) {
-            const couponCheck = await validateCoupon(input.couponCode);
+            // Mesmo que o navegador omita o produto, um cupom restrito nao passa.
+            const couponCheck = await validateCoupon(input.couponCode, [input.productId || 0]);
             if (!couponCheck.valid || !couponCheck.discountType || couponCheck.discountValue == null) {
               return { success: false, message: couponCheck.reason || 'Cupom inválido ou indisponível.' };
+            }
+            if (couponCheck.productId != null) {
+              const selectedOptions = input.optionId ? await listProductOptions(couponCheck.productId) : [];
+              if (!selectedOptions.some(option => option.id === input.optionId && option.isActive === 1)) {
+                return { success: false, message: 'Este cupom só pode ser usado com uma opção do produto ' + (couponCheck.productName || 'selecionado') + '.' };
+              }
             }
 
             const parseMoney = (value?: string | null) => {

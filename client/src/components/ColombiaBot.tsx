@@ -532,7 +532,7 @@ export function ColombiaBot({ products, onStartNormal, onSelectProduct, onSelect
       else if (nextStep === 'documents') askDocuments(product, option);
       else if (nextStep === 'payment') {
         if (saved.couponCode && !sitePromoOverrides) {
-          void validateCouponMutation.mutateAsync({ code: saved.couponCode }).then(result => {
+          void validateCouponMutation.mutateAsync({ code: saved.couponCode, productId: product.id }).then(result => {
             if (!result.valid) { flowState.current.couponCode = ''; flowState.current.couponDiscount = null; askCoupon(product, option); return; }
             flowState.current.couponDiscount = {type: result.discountType || result.coupon?.discountType || 'fixed', value: result.discountValue ?? result.coupon?.discountValue ?? 0};
             askPix(product, option);
@@ -884,7 +884,7 @@ export function ColombiaBot({ products, onStartNormal, onSelectProduct, onSelect
           addMsgs({ type: 'user', id: uid(), text: code });
           setIsValidatingCoupon(true);
           try {
-            const result = await validateCouponMutation.mutateAsync({ code: code.trim() });
+            const result = await validateCouponMutation.mutateAsync({ code: code.trim(), productId: product.id });
             if (result.valid) {
               flowState.current.couponCode = code.trim();
               const discountType = result.discountType || result.coupon?.discountType || 'fixed';
@@ -893,7 +893,7 @@ export function ColombiaBot({ products, onStartNormal, onSelectProduct, onSelect
               const discountText = discountType === 'percentage'
                 ? `${discountValue}% de desconto`
                 : `R$ ${Number(discountValue).toFixed(2).replace('.', ',')} de desconto`;
-              addMsgs({ type: 'bot', id: uid(), text: `✅ Cupom aplicado! ${discountText}` });
+              addMsgs({ type: 'bot', id: uid(), text: `✅ Cupom aplicado! ${discountText}. ${result.productName ? 'Válido exclusivamente para: ' + result.productName : 'Válido para todos os produtos'}.` });
             } else {
               flowState.current.couponCode = '';
               flowState.current.couponDiscount = null;
