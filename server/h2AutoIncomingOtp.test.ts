@@ -29,7 +29,7 @@ describe("Customer-initiated WhatsApp OTP", () => {
     expect(login).toContain('channel}');
   });
   it("não confunde abrir WhatsApp com confirmação de entrega do OTP", () => {
-    expect(login).toContain("após receber a mensagem");
+    expect(login).toContain("ABRIR WHATSAPP");
     expect(login).toContain("Envie a mensagem pronta e volte a esta tela para digitar o código.");
     expect(login).toContain('href={whatsappUrl}');
     expect(login).toContain("Preciso receber meu código");
