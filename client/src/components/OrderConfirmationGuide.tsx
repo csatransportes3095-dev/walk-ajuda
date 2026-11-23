@@ -6,6 +6,7 @@ import { toast } from "sonner";
 import { trpc } from "@/lib/trpc";
 import { publicSiteUrl } from "@shared/publicLinks";
 import { buildWhatsappMessageUrl } from "@shared/whatsappUrl";
+import { DEFAULT_ORDER_CONFIRMATION_WHATSAPP_TEMPLATE, renderOrderConfirmationWhatsappMessage } from "@shared/orderConfirmationWhatsapp";
 
 type Block = { id: string; title: string; text: string; imageUrl: string; mediaType: "image" | "video"; videoUrl: string };
 const newBlock = (): Block => ({ id: crypto.randomUUID(), title: "", text: "", imageUrl: "", mediaType: "image", videoUrl: "" });
@@ -21,6 +22,9 @@ export default function OrderConfirmationGuide({ registrationId, subOrderIndex, 
   const utils = trpc.useUtils();
   const query = trpc.orderConfirmation.getGlobalGuide.useQuery(undefined, { staleTime: 0, refetchOnWindowFocus: true });
   const orderKey = { registrationId, subOrderIndex };
+  const waMessageQuery = trpc.orderConfirmation.getWhatsappMessage.useQuery(undefined, { staleTime: 0, refetchOnWindowFocus: true });
+  const [waMessage, setWaMessage] = useState(DEFAULT_ORDER_CONFIRMATION_WHATSAPP_TEMPLATE);
+  const [waMessageDirty, setWaMessageDirty] = useState(false);
   const orderQuery = trpc.orderConfirmation.getForOrder.useQuery(orderKey, { staleTime: 0, refetchOnWindowFocus: true });
   const [open, setOpen] = useState(false);
   const [title, setTitle] = useState("ATENÇÃO — CONFIRMAÇÃO DO PEDIDO");
@@ -40,6 +44,17 @@ export default function OrderConfirmationGuide({ registrationId, subOrderIndex, 
     setIntro(record.intro);
     setBlocks(record.blocks?.length ? record.blocks.map(block => normalizeBlock(block)) : [newBlock()]);
   }, [record?.updatedAt, dirty]);
+  useEffect(() => {
+    if (waMessageQuery.data !== undefined && !waMessageDirty) setWaMessage(waMessageQuery.data);
+  }, [waMessageQuery.data, waMessageDirty]);
+  const saveWaMessage = trpc.orderConfirmation.saveWhatsappMessage.useMutation({
+    onSuccess: async () => {
+      setWaMessageDirty(false);
+      toast.success("Mensagem de WhatsApp salva para todas as confirmações de pedido.");
+      await utils.orderConfirmation.getWhatsappMessage.invalidate();
+    },
+    onError: e => toast.error(e.message),
+  });
   const refresh = async () => {
     await utils.orderConfirmation.getGlobalGuide.invalidate();
     await query.refetch();
@@ -99,11 +114,15 @@ export default function OrderConfirmationGuide({ registrationId, subOrderIndex, 
     catch { toast.error("Não foi possível copiar."); }
   }
   function openWhatsapp() {
-    if (!link || dirty) return;
+    if (!link || dirty || waMessageDirty || waMessageQuery.isLoading || waMessageQuery.isError) {
+      if (waMessageDirty) toast.error("Salve a mensagem do WhatsApp antes de compartilhar.");
+      else if (waMessageQuery.isError) toast.error("Não foi possível carregar a mensagem salva. Tente novamente.");
+      return;
+    }
     const digits = (customerPhone || "").replace(/\D/g, "");
     const local = digits.startsWith("55") && (digits.length === 12 || digits.length === 13) ? digits.slice(2) : digits;
     if (local.length !== 10 && local.length !== 11) { toast.error("Telefone do cliente inválido."); return; }
-    const message = "Olá" + (customerName ? " " + customerName : "") + "! Confira as orientações da confirmação do seu pedido, com fotos, textos e vídeos: " + link;
+    const message = renderOrderConfirmationWhatsappMessage(waMessage, customerName, link);
     window.open(buildWhatsappMessageUrl("55" + local, message), "_blank", "noopener,noreferrer");
   }
 
@@ -162,6 +181,15 @@ export default function OrderConfirmationGuide({ registrationId, subOrderIndex, 
               </>}
             </section>
           ))}
+          <section className="space-y-3 rounded-xl border border-emerald-400/30 bg-emerald-500/5 p-3">
+            <h3 className="text-sm font-black text-emerald-200">MENSAGEM DO WHATSAPP — CONFIRMAÇÃO DO PEDIDO</h3>
+            <p className="text-xs leading-relaxed text-slate-300">Use Enter para quebrar linhas e deixe espaços entre os parágrafos. Mantenha <strong>{'{nome}'}</strong> e <strong>{'{link}'}</strong> para completar o nome do cliente e seu link exclusivo. A mensagem é global e independente do PEDIDO ENTREGUE.</p>
+            <textarea aria-label="Mensagem do WhatsApp de confirmação do pedido" value={waMessage} onChange={e => { setWaMessage(e.target.value); setWaMessageDirty(true); }} rows={13} maxLength={3500} spellCheck className="w-full resize-y rounded-lg border border-white/20 bg-slate-950 p-3 text-sm leading-relaxed text-white" />
+            <p className="text-xs font-bold text-emerald-300">PRÉ-VISUALIZAÇÃO NO CELULAR</p>
+            <div className="rounded-lg border border-emerald-600/30 bg-[#143b2a] p-3 text-sm leading-relaxed whitespace-pre-wrap break-words text-white">{renderOrderConfirmationWhatsappMessage(waMessage, customerName, link || "https://h2colombiano.com/confirmacao-orientacoes/SEU-LINK")}</div>
+            {waMessageDirty && <p role="status" className="text-xs font-bold text-amber-200">Mensagem alterada. Salve antes de enviar.</p>}
+            <button type="button" disabled={!waMessageDirty || saveWaMessage.isPending || !waMessage.includes("{nome}") || !waMessage.includes("{link}") || waMessage.length < 10} onClick={() => saveWaMessage.mutate({ message: waMessage })} className="flex min-h-11 w-full items-center justify-center gap-2 rounded-lg bg-emerald-400 px-3 text-sm font-black text-slate-950 disabled:opacity-40"><Save className="h-4 w-4"/>{saveWaMessage.isPending ? "SALVANDO..." : "SALVAR MENSAGEM DO WHATSAPP"}</button>
+          </section>
           {dirty && <p role="status" className="text-sm font-bold text-amber-200">Alterações globais não salvas. Salve antes de compartilhar.</p>}
           <button type="button" onClick={saveContent} disabled={save.isPending || uploading !== null} className="flex min-h-12 w-full items-center justify-center gap-2 rounded-xl bg-cyan-400 px-4 font-black text-slate-950 disabled:opacity-40">
             <Save className="h-5 w-5"/>{save.isPending ? "SALVANDO..." : "SALVAR ORIENTAÇÕES"}
@@ -176,7 +204,7 @@ export default function OrderConfirmationGuide({ registrationId, subOrderIndex, 
               {published && !link && <button type="button" disabled={dirty || createLink.isPending} onClick={() => createLink.mutate({ ...orderKey, customerPhone: customerPhone || "", customerName: customerName || null, orderNumber: orderNumber || null })} className="min-h-10 w-full rounded-lg border border-cyan-400/40 bg-cyan-400/15 px-3 text-sm font-bold text-cyan-200 disabled:opacity-40">{createLink.isPending ? "GERANDO..." : "GERAR LINK INDIVIDUAL DESTE PEDIDO"}</button>}
               {link && <div className="grid grid-cols-3 gap-2">
                 <button type="button" disabled={dirty} onClick={() => void copyLink()} className="rounded-lg border border-cyan-400/30 p-2 text-xs font-bold text-cyan-200 disabled:opacity-40"><ClipboardCopy className="mx-auto mb-1 h-4 w-4"/>COPIAR</button>
-                <button type="button" disabled={dirty || !customerPhone} onClick={openWhatsapp} className="rounded-lg border border-emerald-400/30 p-2 text-xs font-bold text-emerald-200 disabled:opacity-40"><MessageCircle className="mx-auto mb-1 h-4 w-4"/>WHATSAPP</button>
+                <button type="button" disabled={dirty || waMessageDirty || waMessageQuery.isLoading || waMessageQuery.isError || !customerPhone} onClick={openWhatsapp} className="rounded-lg border border-emerald-400/30 p-2 text-xs font-bold text-emerald-200 disabled:opacity-40"><MessageCircle className="mx-auto mb-1 h-4 w-4"/>WHATSAPP</button>
                 <button type="button" disabled={dirty} onClick={() => window.open(link,"_blank","noopener,noreferrer")} className="rounded-lg border border-violet-400/30 p-2 text-xs font-bold text-violet-200 disabled:opacity-40"><ExternalLink className="mx-auto mb-1 h-4 w-4"/>ABRIR</button>
               </div>}
             </section>
