@@ -8609,7 +8609,7 @@ export const appRouter = router({
       }),
 
     send: adminProcedure
-      .input(z.object({ id: z.number(), intervalSeconds: z.number().min(0).default(0) }))
+      .input(z.object({ id: z.number(), intervalSeconds: z.number().min(0).default(0), requireCpf: z.boolean().default(true) }))
       .mutation(async ({ input, ctx }) => {
         const allCustomers = await listCustomers();
         const broadcasts_list = await listBroadcasts();
@@ -8623,6 +8623,10 @@ export const appRouter = router({
         }
         // Filtrar clientes bloqueados — não recebem nenhuma comunicação
         recipients = recipients.filter(c => !(c as any).blocked || (c as any).blocked === 0);
+        // Aplicar o filtro na fonte, antes tanto do envio direto como da fila agendada.
+        if (input.requireCpf) {
+          recipients = recipients.filter(c => String(c.cpf || "").replace(/\D/g, "").length === 11);
+        }
         // Filtrar apenas clientes com e-mail
         const emailRecipients = recipients.filter(c => c.email && c.email.trim() !== '');
         const intervalSeconds = input.intervalSeconds ?? broadcast.sendIntervalSeconds ?? 0;
@@ -8809,6 +8813,8 @@ export const appRouter = router({
           name: c.name,
           phone: c.phone,
           email: c.email || null,
+          // Expor apenas a presenca do CPF, nunca o documento ao navegador.
+          hasCpf: String(c.cpf || "").replace(/\D/g, "").length === 11,
           isVip: Boolean(vipMembershipMap.get(Number(c.id))?.active),
           hasOrder: phonesWithOrders.has(digits),
           lastOrderStatus: phoneLastStatus.get(digits) || null,
