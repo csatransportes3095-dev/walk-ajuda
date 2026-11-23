@@ -14,6 +14,8 @@ on:
       - "server/siteAccessPolicy.ts"
       - "server/routers/orderConfirmation.ts"
       - "server/orderConfirmationGuide.test.ts"
+      - "server/orderConfirmationWhatsappEditor.test.ts"
+      - "shared/orderConfirmationWhatsapp.ts"
       - ".github/workflows/order-confirmation-guide-ci.yml"
   workflow_dispatch:
 permissions:
@@ -30,6 +32,6 @@ jobs:
           cache: pnpm
       - run: pnpm install --frozen-lockfile
       - name: Testar somente CONFIRMACAO DO PEDIDO
-        run: pnpm exec vitest run server/orderConfirmationGuide.test.ts
+        run: pnpm exec vitest run server/orderConfirmationGuide.test.ts server/orderConfirmationWhatsappEditor.test.ts
       - name: Compilar pagina e editor
         run: pnpm build

@@ -1,3 +1,4 @@
+import { DEFAULT_ORDER_CONFIRMATION_WHATSAPP_TEMPLATE } from "../../shared/orderConfirmationWhatsapp";
 import { randomBytes } from "crypto";
 import { sql } from "drizzle-orm";
 import { z } from "zod";
@@ -236,7 +237,23 @@ async function saveConfirmationGlobalGuide(value: ConfirmationGuide): Promise<Co
   return value;
 }
 
+const CONFIRMATION_WHATSAPP_MESSAGE_SETTING = "order_confirmation_whatsapp_message_v1";
+const confirmationWhatsappSchema = z.string().min(10).max(3500).superRefine((value, ctx) => {
+  if (!value.includes("{nome}")) ctx.addIssue({ code: "custom", message: "Mantenha o campo {nome} para identificar o cliente." });
+  if (!value.includes("{link}")) ctx.addIssue({ code: "custom", message: "Mantenha o campo {link} para compartilhar o link do pedido." });
+});
+
 export const orderConfirmationRouter = router({
+  // Editor isolado de WhatsApp: não interfere nos blocos, perguntas ou Pedido Entregue.
+  getWhatsappMessage: adminProcedure.query(async () =>
+    (await getSetting(CONFIRMATION_WHATSAPP_MESSAGE_SETTING)) || DEFAULT_ORDER_CONFIRMATION_WHATSAPP_TEMPLATE
+  ),
+  saveWhatsappMessage: adminProcedure
+    .input(z.object({ message: confirmationWhatsappSchema }))
+    .mutation(async ({ input }) => {
+      await upsertSetting(CONFIRMATION_WHATSAPP_MESSAGE_SETTING, input.message);
+      return { saved: true as const };
+    }),
 
   // Editor global de confirmação; os questionários antigos continuam preservados.
   getGlobalGuide: adminProcedure.query(async () => getConfirmationGlobalGuide()),
