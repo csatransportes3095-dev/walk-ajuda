@@ -23,8 +23,8 @@ describe("Customer-initiated WhatsApp OTP", () => {
     expect(routes).toContain("registerH2AutoIncomingOtpRoutes(app)");
   });
   it("does not send WhatsApp code when customer selects email", () => {
-    expect(access).toContain('if (channel === "email") await deliverOwnSiteCode(email,code,"customer-login")');
-    expect(access).toContain("else await enqueueIncomingWhatsappOtp(");
+    expect(access).toContain('if (channel !== "whatsapp") await deliverOwnSiteCode(email,code,"customer-login")');
+    expect(access).toContain("if (queueWhatsapp) {");
     expect(access).toMatch(/enqueueIncomingWhatsappOtp\([\s\S]*?\},\s*tx\)/);
     expect(login).toContain('channel}');
   });
@@ -35,7 +35,7 @@ describe("Customer-initiated WhatsApp OTP", () => {
     expect(login).toContain("whatsappTab.location.replace(");
     expect(login).toContain('target="_blank" rel="noopener noreferrer"');
     expect(login).toContain("Preciso receber meu código");
-    expect(login).toContain("RECEBER POR E-MAIL");
-    expect(login).toContain("RECEBER PELO WHATSAPP");
+    expect(login).toContain("RECEBER CÓDIGO");
+    expect(login).toContain('send("both")');
   });
 });
