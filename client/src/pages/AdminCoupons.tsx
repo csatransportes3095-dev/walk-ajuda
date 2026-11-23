@@ -27,6 +27,7 @@ export default function AdminCoupons() {
   const [newCode, setNewCode] = useState("");
   const [discountType, setDiscountType] = useState<"fixed" | "percentage">("fixed");
   const [discountValue, setDiscountValue] = useState("");
+  const [productId, setProductId] = useState("all");
   const [maxUses, setMaxUses] = useState("1");
   const [startsAt, setStartsAt] = useState("");
   const [expiresAt, setExpiresAt] = useState("");
@@ -34,6 +35,7 @@ export default function AdminCoupons() {
 
   const couponsQuery = trpc.coupons.list.useQuery(undefined, {
   });
+  const couponProductsQuery = trpc.coupons.products.useQuery();
 
   const createMutation = trpc.coupons.create.useMutation({
     onSuccess: (result) => {
@@ -41,6 +43,7 @@ export default function AdminCoupons() {
         toast.success("Cupom criado com sucesso!");
         setNewCode("");
         setDiscountValue("");
+        setProductId("all");
         setMaxUses("1");
         setStartsAt("");
         setExpiresAt("");
@@ -96,11 +99,16 @@ export default function AdminCoupons() {
       toast.error("O fim deve ser posterior ao início");
       return;
     }
+    if (productId !== "all" && !couponProductsQuery.data?.some(product => product.id === Number(productId))) {
+      toast.error("Selecione um produto ativo da vitrine.");
+      return;
+    }
     setIsCreating(true);
     createMutation.mutate({
       code: newCode,
       discountType,
       discountValue: Number(discountValue),
+      productId: productId === "all" ? null : Number(productId),
       maxUses: Number(maxUses) || 1,
       startsAt: startsAt ? new Date(startsAt).toISOString() : undefined,
       expiresAt: expiresAt ? new Date(expiresAt).toISOString() : undefined,
@@ -165,6 +173,17 @@ export default function AdminCoupons() {
                   Gerar
                 </Button>
               </div>
+            </div>
+            <div>
+              <label className="block text-sm text-white/70 mb-1">Este cupom é válido para</label>
+              <select value={productId} onChange={e => setProductId(e.target.value)}
+                style={whiteSelectStyle} aria-label="Produto permitido pelo cupom">
+                <option value="all">TODOS OS PRODUTOS</option>
+                {(couponProductsQuery.data || []).map(product => (
+                  <option key={product.id} value={product.id}>{product.name}</option>
+                ))}
+              </select>
+              {productId !== "all" && <p className="mt-1 text-xs text-amber-200">O desconto só será aceito para este produto. O cliente verá seu nome ao informar o cupom.</p>}
             </div>
             <div className="grid grid-cols-2 gap-3">
               <div>
@@ -302,6 +321,7 @@ export default function AdminCoupons() {
                       </div>
                     </div>
 
+                    <p className="text-xs font-bold text-cyan-200">🎯 {coupon.productId == null ? "Válido para todos os produtos" : "Somente: " + (coupon.productName || "Produto não encontrado")}</p>
                     {/* Info */}
                     <div className="grid grid-cols-2 gap-2 text-sm">
                       <div>
@@ -363,6 +383,7 @@ export default function AdminCoupons() {
                     <tr className="border-b border-white/10">
                       <th className="text-left py-3 px-4 text-white/70 text-sm font-medium">Código</th>
                       <th className="text-left py-3 px-4 text-white/70 text-sm font-medium">Desconto</th>
+                      <th className="text-left py-3 px-4 text-white/70 text-sm font-medium">Produto permitido</th>
                       <th className="text-left py-3 px-4 text-white/70 text-sm font-medium">Status</th>
                       <th className="text-left py-3 px-4 text-white/70 text-sm font-medium">Usos</th>
                       <th className="text-left py-3 px-4 text-white/70 text-sm font-medium">Início</th>
@@ -396,6 +417,9 @@ export default function AdminCoupons() {
                               {formatDiscount(coupon.discountType, coupon.discountValue)}
                             </span>
                           </div>
+                        </td>
+                        <td className="py-3 px-4 text-xs text-cyan-200 font-bold">
+                          {coupon.productId == null ? "TODOS OS PRODUTOS" : coupon.productName || "Produto não encontrado"}
                         </td>
                         <td className="py-3 px-4">
                           <span

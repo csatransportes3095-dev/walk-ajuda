@@ -72,6 +72,7 @@ export const coupons = mysqlTable("coupons", {
   code: varchar("code", { length: 64 }).notNull().unique(),
   discountType: mysqlEnum("discountType", ["percentage", "fixed"]).notNull().default("fixed"),
   discountValue: int("discountValue").notNull(),
+  productId: int("productId"), // null = cupom valido para todos os produtos
   status: mysqlEnum("status", ["active", "used", "disabled"]).notNull().default("active"),
   maxUses: int("maxUses").default(1),
   currentUses: int("currentUses").default(0),
