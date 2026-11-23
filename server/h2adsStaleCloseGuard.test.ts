@@ -29,6 +29,7 @@ describe("H2ADS stale close guard", () => {
     expect(core).toContain('lt(h2AdsInstanceBrowserRuns.lastChangedAt, cutoff)');
     expect(core).toContain('eq(h2AdsWorkerCommands.status, command.status)');
     expect(core).toContain('eq(h2AdsWorkerCommands.status, "claimed")');
+    expect(core).toContain("latest.completedAt.getTime() > cutoff.getTime()");
     expect(core).toContain('eq(h2AdsInstanceBrowserRuns.state, "preparing")');
   });
 
