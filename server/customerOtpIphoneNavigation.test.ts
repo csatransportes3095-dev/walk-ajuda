@@ -27,7 +27,7 @@ describe("H2 OTP iOS Safari - um clique e retorno ao codigo", () => {
     expect(login).toContain('initialState.step === "code" && initialState.channel === "whatsapp"');
     expect(login).toContain('showWhatsappFallback && (');
     expect(login).toContain("ABRIR WHATSAPP (SE NÃO ABRIU)");
-    expect(login).toContain('onClick={() => void send("email")}');
+    expect(login).toContain('onClick={() => void send("both")}');
     expect(login).toContain("await verifyCode.mutateAsync({ phone: cleanPhone, code: digits })");
   });
 });
