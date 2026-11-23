@@ -6,11 +6,14 @@ import path from 'node:path';
 import os from 'node:os';
 import { pathToFileURL } from 'node:url';
 
-if (!process.env.PLAYWRIGHT_MODULE || !process.env.CHROME_BIN) throw new Error('PLAYWRIGHT_MODULE and CHROME_BIN required');
+const browserEngine = process.env.PLAYWRIGHT_BROWSER === 'webkit' ? 'webkit' : 'chromium';
+if (!process.env.PLAYWRIGHT_MODULE || (browserEngine === 'chromium' && !process.env.CHROME_BIN)) throw new Error('Playwright module and browser executable required');
 const output = path.resolve(process.env.CUSTOMER_OTP_DELIVERY_UI_OUTPUT_DIR || path.join(os.tmpdir(), 'h2-customer-otp-delivery-ui'));
 await fs.mkdir(output, { recursive:true });
-const { chromium } = await import(pathToFileURL(path.resolve(process.env.PLAYWRIGHT_MODULE)).href);
-const browser = await chromium.launch({ executablePath:process.env.CHROME_BIN, headless:true, args:['--disable-dev-shm-usage'] });
+const { chromium, webkit } = await import(pathToFileURL(path.resolve(process.env.PLAYWRIGHT_MODULE)).href);
+const browser = browserEngine === 'webkit'
+  ? await webkit.launch({ headless:true })
+  : await chromium.launch({ executablePath:process.env.CHROME_BIN, headless:true, args:['--disable-dev-shm-usage'] });
 const base = 'http://127.0.0.1:4177', phone = '11999990001';
 const profiles = {
   desktop:{ viewport:{ width:1280,height:900 } },
