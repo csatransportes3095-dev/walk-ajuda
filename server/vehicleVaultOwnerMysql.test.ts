@@ -52,7 +52,7 @@ describe.skipIf(!testUrl)('Vehicle owner — isolated MySQL persistence and lega
     vi.stubEnv('JWT_SECRET', secret);
     await query('DROP TRIGGER IF EXISTS vehicle_owner_test_reject_update');
     for (const table of [...ownedTables, 'customers']) await query(`DROP TABLE IF EXISTS ${table}`);
-    await query(`CREATE TABLE customers (id INT PRIMARY KEY,name VARCHAR(128),phone VARCHAR(32),customerNumber INT,cpf VARCHAR(32),profilePhotoUrl TEXT) ENGINE=InnoDB`);
+    await query(`CREATE TABLE customers (id INT PRIMARY KEY,name VARCHAR(128),phone VARCHAR(32),customerNumber INT,cpf VARCHAR(32),profilePhotoUrl TEXT,deletedAt TIMESTAMP NULL) ENGINE=InnoDB`);
     // An actual pre-feature table: no ownerName or optional classification columns.
     await query(`CREATE TABLE vehicle_vault_documents (
       id INT NOT NULL AUTO_INCREMENT PRIMARY KEY,plate VARCHAR(7) NOT NULL UNIQUE,
@@ -83,6 +83,37 @@ describe.skipIf(!testUrl)('Vehicle owner — isolated MySQL persistence and lega
     expect(migratedColumn).toMatchObject({ Field: 'ownerName', Null: 'YES', Default: null });
     expect(migratedLegacy).toMatchObject({ plate: 'LEG1A23', ownerName: null, model: 'TESTE/LEGADO', modelYear: 2021,
       sourceText: 'LEGACY SOURCE MUST STAY INTACT', links: [], history: [], pdfs: [] });
+  });
+
+  it('shows the existing customer photo on a linked plate/chassis document without copying the image', async () => {
+    const customerPhoto = 'https://example.test/cliente-sintetico.jpg';
+    await query("INSERT INTO customers(id,name,phone,customerNumber,cpf,profilePhotoUrl) VALUES(?,?,?,?,?,?)",
+      [11, 'CLIENTE SINTÉTICO', '11988887777', 1234, '52998224725', customerPhoto]);
+    const doc = await caller().save(input('PROPRIETÁRIO SINTÉTICO'));
+    const found = await caller().findCustomers({ query: '1234' });
+    expect(found).toContainEqual(expect.objectContaining({
+      id: 11, name: 'CLIENTE SINTÉTICO', profilePhotoUrl: customerPhoto,
+    }));
+    await caller().linkCustomer({ vehicleId: doc.id, customerId: 11 });
+    const details = await caller().details({ id: doc.id });
+    expect(details.links).toContainEqual(expect.objectContaining({
+      customerId: 11, name: 'CLIENTE SINTÉTICO', profilePhotoUrl: customerPhoto,
+    }));
+    expect(details.pdfs).toHaveLength(0);
+    const before = await query("SELECT COUNT(*) AS total FROM vehicle_vault_history WHERE vehicleId=?", [doc.id]);
+    await caller().unlinkCustomer({ vehicleId: doc.id, customerId: 11 });
+    expect((await caller().details({ id: doc.id })).links.find((item:any) => item.customerId === 11)?.unlinkedAt).not.toBeNull();
+    expect((await query("SELECT COUNT(*) AS total FROM vehicle_vault_history WHERE vehicleId=?", [doc.id]))[0].total).toBe(before[0].total + 1);
+  });
+
+  it('keeps the document owner CPF/CNPJ separate from the linked customer CPF', async () => {
+    const cpfOwner = '11222333000181';
+    const doc = await caller().save(input('EMPRESA SINTÉTICA LTDA', { ownerCpfCnpj: cpfOwner }));
+    expect((await caller().details({ id: doc.id })).ownerCpfCnpj).toBe(cpfOwner);
+    await caller().save(input(undefined, { id: doc.id, ownerCpfCnpj: undefined, color: 'AZUL' }));
+    expect((await caller().details({ id: doc.id })).ownerCpfCnpj).toBe(cpfOwner);
+    await caller().save(input(undefined, { id: doc.id, ownerCpfCnpj: null }));
+    expect((await caller().details({ id: doc.id })).ownerCpfCnpj).toBeNull();
   });
 
   it('persists a corrected accented owner and reads it through both details and search', async () => {
