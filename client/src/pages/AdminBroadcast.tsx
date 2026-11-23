@@ -1,6 +1,6 @@
 import { encodeWhatsappMessage } from "@shared/whatsappMessageText";
 import { trpc } from "@/lib/trpc";
-import { useState } from "react";
+import { useEffect, useState } from "react";
 import { toast } from "sonner";
 import { Send, Trash2, Users, MessageSquare, Link, Image, UserPlus, Tag, CheckCircle, Clock, Search, X, ChevronDown, ChevronUp, Mail, Phone, Upload, ExternalLink, Timer, Loader2, Ban } from "lucide-react";
 import AdminHeader from "@/components/AdminHeader";
@@ -31,6 +31,7 @@ const textareaStyle: React.CSSProperties = {
 
 export default function AdminBroadcast() {
   const [sendMode, setSendMode] = useState<SendMode>('whatsapp');
+  const [requireCpf, setRequireCpf] = useState(true);
   const [title, setTitle] = useState('');
   const [messageType, setMessageType] = useState<MessageType>('text');
   const [message, setMessage] = useState('');
@@ -84,12 +85,25 @@ export default function AdminBroadcast() {
   });
 
   const customers = customersQuery.data || [];
+  const cpfEligibleCustomers = customers.filter(c => !requireCpf || c.hasCpf);
+  const cpfExcludedCount = requireCpf ? customers.length - cpfEligibleCustomers.length : 0;
+  // Uma lista antiga do navegador não pode contornar o filtro após recarregar a página.
+  useEffect(() => {
+    if (!requireCpf || !customersQuery.isSuccess) return;
+    const allowed = new Set((customersQuery.data || []).filter(c => c.hasCpf).map(c => c.phone));
+    setWaLinks(previous => {
+      const filtered = previous.filter(link => allowed.has(link.phone));
+      if (filtered.length === previous.length) return previous;
+      localStorage.setItem(WA_LIST_KEY, JSON.stringify(filtered));
+      return filtered;
+    });
+  }, [requireCpf, customersQuery.isSuccess, customersQuery.data]);
   const statusTypes = statusTypesQuery.data || [];
-  const filteredCustomers = customers.filter(c =>
+  const filteredCustomers = cpfEligibleCustomers.filter(c =>
     c.name.toLowerCase().includes(searchCustomer.toLowerCase()) ||
     c.phone.includes(searchCustomer)
   );
-  const waFilteredCustomers = customers.filter(c =>
+  const waFilteredCustomers = cpfEligibleCustomers.filter(c =>
     c.name.toLowerCase().includes(waSearchCustomer.toLowerCase()) ||
     c.phone.includes(waSearchCustomer)
   );
@@ -155,12 +169,13 @@ export default function AdminBroadcast() {
   // Gerar links wa.me para WhatsApp
   const generateWaLinks = () => {
     if (!waMessage.trim() && !waImageUrl.trim() && !waImageFile) { toast.error('Digite a mensagem ou adicione uma imagem'); return; }
-    const targets = waTargetType === 'all' ? customers
+    const rawTargets = waTargetType === 'all' ? customers
     : waTargetType === 'withOrders' ? customers.filter(c => (c as any).hasOrder)
     : waTargetType === 'withoutOrders' ? customers.filter(c => !(c as any).hasOrder)
     : waTargetType === 'vip' ? customers.filter(c => (c as any).isVip)
     : waTargetType === 'byStatus' ? customers.filter(c => waStatusFilter ? (c as any).lastOrderStatus === waStatusFilter : (c as any).hasOrder)
     : customers.filter(c => waSelectedPhones.includes(c.phone));
+    const targets = rawTargets.filter(c => !requireCpf || c.hasCpf);
     if (targets.length === 0) { toast.error('Nenhum cliente selecionado'); return; }
 
     // Montar mensagem com imagem (link) se houver
@@ -233,16 +248,16 @@ export default function AdminBroadcast() {
         linkLabel: linkLabel || undefined,
         imageUrl: imageUrl || undefined,
         emailImageUrl: finalEmailImageUrl,
-        targetType: (targetType === 'withOrders' || targetType === 'withoutOrders' || targetType === 'vip' || targetType === 'byStatus') ? 'selected' : targetType,
-        targetPhones: targetType === 'selected' ? selectedPhones
-          : targetType === 'withOrders' ? customers.filter(c => (c as any).hasOrder).map(c => c.phone)
-          : targetType === 'withoutOrders' ? customers.filter(c => !(c as any).hasOrder).map(c => c.phone)
-          : targetType === 'vip' ? customers.filter(c => (c as any).isVip).map(c => c.phone)
-          : targetType === 'byStatus' ? customers.filter(c => (c as any).lastOrderStatus === waStatusFilter).map(c => c.phone)
-          : undefined,
+        targetType: (requireCpf || targetType === 'withOrders' || targetType === 'withoutOrders' || targetType === 'vip' || targetType === 'byStatus') ? 'selected' : targetType,
+        targetPhones: targetType === 'selected' ? selectedPhones.filter(phone => cpfEligibleCustomers.some(c => c.phone === phone))
+          : targetType === 'withOrders' ? customers.filter(c => (c as any).hasOrder).filter(c => !requireCpf || c.hasCpf).map(c => c.phone)
+          : targetType === 'withoutOrders' ? customers.filter(c => !(c as any).hasOrder).filter(c => !requireCpf || c.hasCpf).map(c => c.phone)
+          : targetType === 'vip' ? customers.filter(c => (c as any).isVip).filter(c => !requireCpf || c.hasCpf).map(c => c.phone)
+          : targetType === 'byStatus' ? customers.filter(c => (c as any).lastOrderStatus === waStatusFilter).filter(c => !requireCpf || c.hasCpf).map(c => c.phone)
+          : requireCpf ? cpfEligibleCustomers.map(c => c.phone) : undefined,
       });
       if (result.success && result.broadcast) {
-        const sendResult = await sendMutation.mutateAsync({ id: result.broadcast.id, intervalSeconds });
+        const sendResult = await sendMutation.mutateAsync({ id: result.broadcast.id, intervalSeconds, requireCpf });
         if ('mode' in sendResult && sendResult.mode === 'queued') {
           const { emailRecipients: emailCount, intervalSeconds: ivSec } = sendResult as { emailRecipients: number; intervalSeconds: number; mode: string };
           const minLabel = ivSec >= 60 ? `${Math.ceil(ivSec / 60)} min` : `${ivSec}s`;
@@ -298,6 +313,19 @@ export default function AdminBroadcast() {
           </button>
         </div>
 
+        <div className="rounded-xl border border-amber-400/30 bg-amber-500/10 px-4 py-3 space-y-1">
+          <label className="flex items-center gap-3 text-sm font-bold text-amber-200 cursor-pointer">
+            <input type="checkbox" checked={requireCpf}
+              onChange={e => { setRequireCpf(e.target.checked); setWaLinks([]); setShowWaPreview(false); }}
+              className="w-4 h-4 accent-amber-500" />
+            Ignorar clientes sem CPF cadastrado
+          </label>
+          <p className="text-xs text-amber-100/70">
+            {requireCpf
+              ? `${cpfEligibleCustomers.length} cliente(s) com CPF serão considerados. ${cpfExcludedCount} sem CPF serão excluídos.`
+              : "Filtro desativado: clientes sem CPF também podem receber a mensagem."}
+          </p>
+        </div>
         {/* ===== MODO WHATSAPP ===== */}
         {sendMode === 'whatsapp' && (
           <div className="bg-black/40 backdrop-blur-md border border-green-500/30 rounded-2xl p-5 space-y-4">
@@ -365,7 +393,7 @@ export default function AdminBroadcast() {
                   onClick={() => { setWaTargetType('all'); setWaLinks([]); }}
                   className={`flex items-center gap-2 px-3 py-2 rounded-lg border text-sm font-bold transition-all ${waTargetType === 'all' ? 'bg-green-600/30 border-green-500/50 text-green-300' : 'bg-white/5 border-white/10 text-white/50 hover:bg-white/10'}`}
                 >
-                  <Users className="w-4 h-4" /> Todos ({customers.length})
+                  <Users className="w-4 h-4" /> Todos ({cpfEligibleCustomers.length})
                 </button>
                 <button
                   onClick={() => { setWaTargetType('withOrders'); setWaLinks([]); }}
@@ -477,12 +505,13 @@ export default function AdminBroadcast() {
 
             {/* Prévia dos clientes filtrados */}
             {(() => {
-              const previewTargets = waTargetType === 'all' ? customers
+              const previewTargetsUnfiltered = waTargetType === 'all' ? customers
                 : waTargetType === 'withOrders' ? customers.filter(c => (c as any).hasOrder)
                 : waTargetType === 'withoutOrders' ? customers.filter(c => !(c as any).hasOrder)
                 : waTargetType === 'vip' ? customers.filter(c => (c as any).isVip)
                 : waTargetType === 'byStatus' ? customers.filter(c => waStatusFilter ? (c as any).lastOrderStatus === waStatusFilter : (c as any).hasOrder)
                 : customers.filter(c => waSelectedPhones.includes(c.phone));
+              const previewTargets = previewTargetsUnfiltered.filter(c => !requireCpf || c.hasCpf);
               if (previewTargets.length === 0) return null;
               return (
                 <div className="bg-black/30 border border-white/10 rounded-xl overflow-hidden">
@@ -805,7 +834,7 @@ export default function AdminBroadcast() {
                   onClick={() => setTargetType('all')}
                   className={`flex items-center gap-2 px-4 py-2 rounded-lg border text-sm font-bold transition-all ${targetType === 'all' ? 'bg-blue-600/30 border-blue-500/50 text-blue-300' : 'bg-white/5 border-white/10 text-white/50 hover:bg-white/10'}`}
                 >
-                  <Users className="w-4 h-4" /> Todos ({customers.length})
+                  <Users className="w-4 h-4" /> Todos ({cpfEligibleCustomers.length})
                 </button>
                 <button
                   onClick={() => setTargetType('vip')}
