@@ -61,7 +61,7 @@ async function assertSimpleCodeStep(withWhatsappLink = false) {
   const form = page.locator('form').filter({ has: codeInput() });
   assert.equal(await form.getByRole('button').count(), 2, 'The normal code step must show only Confirm and the small help action');
   assert.equal(await form.locator('button[type="submit"]').count(), 1);
-  assert.equal(await form.getByRole('link').count(), withWhatsappLink ? 1 : 0, 'Only the WhatsApp delivery channel shows one explicit, safe external link');
+  assert.equal(await form.getByRole('link').count(), withWhatsappLink ? 1 : 0, 'Só o fallback de WhatsApp mostra um link externo; no fluxo normal ele não aparece');
   if (withWhatsappLink) assert.equal(await form.getByTestId('h2-otp-open-whatsapp').count(), 1);
 }
 async function openHelp() {
@@ -171,7 +171,7 @@ try {
   await codeInput().waitFor();
   await assertSimpleCodeStep(true);
   await openHelp();
-  await page.getByRole('link', { name: 'ABRIR WHATSAPP EM OUTRA ABA' }).waitFor();
+  await page.getByRole('link', { name: 'ABRIR WHATSAPP (SE NÃO ABRIU)' }).waitFor();
   assert.equal((await state()).requestCalls.length, 0);
   assert.equal(await codeInput().inputValue(), '');
   checks.push('A matching draft resumes its requested channel without creating another request or persisting the secret');
@@ -184,14 +184,13 @@ try {
   assert.equal(await whatsappResend().isEnabled(), true);
   assert.equal(await page.getByRole('link', { name: /PEDIR AJUDA NO WHATSAPP/ }).count(), 0);
   const automaticUrlsBefore = whatsappUrls.length;
-  await whatsappResend().click();
-  await page.getByText('Toque em Enviar na mensagem preenchida no WhatsApp.', { exact: false }).waitFor();
-  await assertSimpleCodeStep(true);
-  assert.equal(whatsappUrls.length, automaticUrlsBefore, 'Preparing a code must never open a blank tab');
   const automaticPopupPromise = context.waitForEvent('page');
-  await page.getByTestId('h2-otp-open-whatsapp').click();
+  await whatsappResend().click();
   const automaticPopup = await automaticPopupPromise;
-  await waitFor(() => Promise.resolve(whatsappUrls.length > automaticUrlsBefore), 'Explicit WhatsApp link was not opened');
+  await page.getByText('Toque em Enviar na mensagem preenchida no WhatsApp.', { exact: false }).waitFor();
+  await assertSimpleCodeStep(false);
+  await waitFor(() => Promise.resolve(whatsappUrls.length === automaticUrlsBefore + 1), 'Clique único do reenvio não abriu WhatsApp');
+  await automaticPopup.waitForURL('https://api.whatsapp.com/**');
   const automaticDestination = new URL(whatsappUrls.at(-1));
   assert.equal(automaticDestination.searchParams.get('phone'), '5511999990099');
   assert.equal(automaticDestination.searchParams.get('text'), 'Preciso receber meu código');
@@ -202,19 +201,18 @@ try {
   assert.equal(await page.evaluate(() => Number(localStorage.getItem('h2_otp_cooldown_11999990001_email')) > Date.now()), true);
   await automaticPopup.close();
   await page.bringToFront();
-  checks.push('Selecting WhatsApp inside help prepares the OTP without a blank tab; explicit link opens WhatsApp in another tab');
+  checks.push('Reenvio pelo WhatsApp abre segunda aba automaticamente; H2 preserva formulário e cota dos canais');
 
   await fresh();
   await phoneInput().fill('11999990001');
   const whatsappUrlsBefore = whatsappUrls.length;
-  await page.getByRole('button', { name: 'RECEBER PELO WHATSAPP', exact: true }).click();
-  await codeInput().waitFor();
-  await assertSimpleCodeStep(true);
-  assert.equal(whatsappUrls.length, whatsappUrlsBefore, 'No WhatsApp popup or blank tab during async OTP generation');
   const popupPromise = context.waitForEvent('page');
-  await page.getByTestId('h2-otp-open-whatsapp').click();
+  await page.getByRole('button', { name: 'RECEBER PELO WHATSAPP', exact: true }).click();
   const popup = await popupPromise;
-  await waitFor(() => Promise.resolve(whatsappUrls.length > whatsappUrlsBefore), 'Explicit WhatsApp link was not intercepted');
+  await codeInput().waitFor();
+  await assertSimpleCodeStep(false);
+  await waitFor(() => Promise.resolve(whatsappUrls.length === whatsappUrlsBefore + 1), 'Primeiro clique não redirecionou ao WhatsApp');
+  await popup.waitForURL('https://api.whatsapp.com/**');
   const destination = new URL(whatsappUrls.at(-1));
   assert.equal(destination.searchParams.get('phone'), '5511999990099');
   assert.equal(destination.searchParams.get('text'), 'Preciso receber meu código');
@@ -222,13 +220,13 @@ try {
   await popup.close();
   await page.bringToFront();
   await page.getByText('Toque em Enviar na mensagem preenchida no WhatsApp.', { exact: false }).waitFor();
-  await assertSimpleCodeStep(true);
+  await assertSimpleCodeStep(false);
   await page.setViewportSize({ width: 390, height: 844 });
   assert.equal(await page.evaluate(() => document.documentElement.scrollWidth <= innerWidth), true);
   await shot('mobile-whatsapp-instructions.png');
   await openHelp();
-  assert.match(await page.getByRole('link', { name: 'ABRIR WHATSAPP EM OUTRA ABA' }).getAttribute('href'), /phone=5511999990099/);
-  checks.push('The selected WhatsApp request opens the normalized support destination and clearly requires sending the prepared message');
+  assert.equal(await page.getByTestId('h2-otp-open-whatsapp').count(), 0, 'O segundo botão não deve aparecer no fluxo normal');
+  checks.push('Primeiro clique envia pedido OTP e abre WhatsApp em segunda aba; a tela do código continua fixa');
 
   assert.deepEqual(browserErrors, []);
   await fs.writeFile(path.join(output, 'qa-results.json'), JSON.stringify({ passed: checks.length, checks, browserErrors, externalWhatsappRequestsIntercepted: whatsappUrls.length }, null, 2));
