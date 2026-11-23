@@ -216,7 +216,10 @@ export function parseVehicleVaultOwnerCpfCnpj(raw: string): string {
   const identity = /(?<!\d)(?:\d{2}[.\s]?\d{3}[.\s]?\d{3}[\/\s]?\d{4}[-\s]?\d{2}|\d{3}[.\s]?\d{3}[.\s]?\d{3}[-\s]?\d{2})(?!\d)/gu;
   const matches = new Set<string>();
   for (let row = 0; row < lines.length; row++) {
-    const line = fold(lines[row]);
+    // Preserve original column offsets. `fold()` collapses repeated spaces,
+    // which shifts the CPF/CNPJ label in two-column CRLV layouts and makes
+    // the identity be read from the wrong column.
+    const line = lines[row].normalize("NFD").replace(/[\u0300-\u036f]/g, "").toUpperCase();
     if (otherParty.test(line)) continue;
     for (const label of line.matchAll(heading)) {
       const closest = nameRows.filter(index => Math.abs(index - row) <= 5)
