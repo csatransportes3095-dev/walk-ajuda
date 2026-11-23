@@ -19,7 +19,10 @@ describe("draft passwordless customer authentication stays closed until full mig
     expect(validSiteCode(code)).toBe(true);
     const source = readFileSync(new URL("./customerOtpAccess.ts", import.meta.url),"utf8");
     expect(source).toContain("const code = generateOwnSiteCode()");
-    expect(source).toContain('await deliverOwnSiteCode(email,code,"customer-login")');
+    expect(source).toContain('if (channel !== "whatsapp") await deliverOwnSiteCode(email,code,"customer-login")');
+    expect(source).toContain('if (queueWhatsapp) {');
+    expect(source).toContain('whatsappPrepared = true;');
+    expect(source).toContain('channel === "both" ? ["email", "whatsapp"] : [channel]');
     expect(source).not.toContain("randomInt(");
   });
 
