@@ -1,6 +1,6 @@
 import { encodeWhatsappMessage } from "@shared/whatsappMessageText";
 import { trpc } from "@/lib/trpc";
-import { useState } from "react";
+import { useEffect, useState } from "react";
 import { toast } from "sonner";
 import { Send, Trash2, Users, MessageSquare, Link, Image, UserPlus, Tag, CheckCircle, Clock, Search, X, ChevronDown, ChevronUp, Mail, Phone, Upload, ExternalLink, Timer, Loader2, Ban } from "lucide-react";
 import AdminHeader from "@/components/AdminHeader";
@@ -87,6 +87,17 @@ export default function AdminBroadcast() {
   const customers = customersQuery.data || [];
   const cpfEligibleCustomers = customers.filter(c => !requireCpf || c.hasCpf);
   const cpfExcludedCount = requireCpf ? customers.length - cpfEligibleCustomers.length : 0;
+  // Uma lista antiga do navegador não pode contornar o filtro após recarregar a página.
+  useEffect(() => {
+    if (!requireCpf || !customersQuery.isSuccess) return;
+    const allowed = new Set((customersQuery.data || []).filter(c => c.hasCpf).map(c => c.phone));
+    setWaLinks(previous => {
+      const filtered = previous.filter(link => allowed.has(link.phone));
+      if (filtered.length === previous.length) return previous;
+      localStorage.setItem(WA_LIST_KEY, JSON.stringify(filtered));
+      return filtered;
+    });
+  }, [requireCpf, customersQuery.isSuccess, customersQuery.data]);
   const statusTypes = statusTypesQuery.data || [];
   const filteredCustomers = cpfEligibleCustomers.filter(c =>
     c.name.toLowerCase().includes(searchCustomer.toLowerCase()) ||
@@ -382,7 +393,7 @@ export default function AdminBroadcast() {
                   onClick={() => { setWaTargetType('all'); setWaLinks([]); }}
                   className={`flex items-center gap-2 px-3 py-2 rounded-lg border text-sm font-bold transition-all ${waTargetType === 'all' ? 'bg-green-600/30 border-green-500/50 text-green-300' : 'bg-white/5 border-white/10 text-white/50 hover:bg-white/10'}`}
                 >
-                  <Users className="w-4 h-4" /> Todos ({customers.length})
+                  <Users className="w-4 h-4" /> Todos ({cpfEligibleCustomers.length})
                 </button>
                 <button
                   onClick={() => { setWaTargetType('withOrders'); setWaLinks([]); }}
@@ -823,7 +834,7 @@ export default function AdminBroadcast() {
                   onClick={() => setTargetType('all')}
                   className={`flex items-center gap-2 px-4 py-2 rounded-lg border text-sm font-bold transition-all ${targetType === 'all' ? 'bg-blue-600/30 border-blue-500/50 text-blue-300' : 'bg-white/5 border-white/10 text-white/50 hover:bg-white/10'}`}
                 >
-                  <Users className="w-4 h-4" /> Todos ({customers.length})
+                  <Users className="w-4 h-4" /> Todos ({cpfEligibleCustomers.length})
                 </button>
                 <button
                   onClick={() => setTargetType('vip')}

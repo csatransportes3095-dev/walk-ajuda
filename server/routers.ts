@@ -6,6 +6,7 @@ import { cpfVaultRouter } from "./routers/cpfVault";
 import { getCpfVaultOrderMetadata } from "./cpfVault";
 import { vehicleVaultRouter } from "./routers/vehicleVault";
 import { sql } from "drizzle-orm";
+import { hasRegisteredCpf } from "../shared/broadcastCpfFilter";
 import { cnhCodeSchema, globalOrderGroupSchema, resolveOrderGroupLink, loginOptionalFields, cleanLoginText, escapeLoginHtml } from '../shared/orderLoginPresentation';
 import { readOrderLoginDefaults, saveOrderGroupDefault, canReadOrderLoginExtras } from './orderLoginDefaults';
 import { isAdminJwtValid } from './_core/trpc';
@@ -8625,7 +8626,7 @@ export const appRouter = router({
         recipients = recipients.filter(c => !(c as any).blocked || (c as any).blocked === 0);
         // Aplicar o filtro na fonte, antes tanto do envio direto como da fila agendada.
         if (input.requireCpf) {
-          recipients = recipients.filter(c => String(c.cpf || "").replace(/\D/g, "").length === 11);
+          recipients = recipients.filter(c => hasRegisteredCpf(c.cpf));
         }
         // Filtrar apenas clientes com e-mail
         const emailRecipients = recipients.filter(c => c.email && c.email.trim() !== '');
@@ -8814,7 +8815,7 @@ export const appRouter = router({
           phone: c.phone,
           email: c.email || null,
           // Expor apenas a presenca do CPF, nunca o documento ao navegador.
-          hasCpf: String(c.cpf || "").replace(/\D/g, "").length === 11,
+          hasCpf: hasRegisteredCpf(c.cpf),
           isVip: Boolean(vipMembershipMap.get(Number(c.id))?.active),
           hasOrder: phonesWithOrders.has(digits),
           lastOrderStatus: phoneLastStatus.get(digits) || null,
