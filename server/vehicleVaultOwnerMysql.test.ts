@@ -52,7 +52,7 @@ describe.skipIf(!testUrl)('Vehicle owner — isolated MySQL persistence and lega
     vi.stubEnv('JWT_SECRET', secret);
     await query('DROP TRIGGER IF EXISTS vehicle_owner_test_reject_update');
     for (const table of [...ownedTables, 'customers']) await query(`DROP TABLE IF EXISTS ${table}`);
-    await query(`CREATE TABLE customers (id INT PRIMARY KEY,name VARCHAR(128),phone VARCHAR(32),customerNumber INT,cpf VARCHAR(32)) ENGINE=InnoDB`);
+    await query(`CREATE TABLE customers (id INT PRIMARY KEY,name VARCHAR(128),phone VARCHAR(32),customerNumber INT,cpf VARCHAR(32),profilePhotoUrl TEXT) ENGINE=InnoDB`);
     // An actual pre-feature table: no ownerName or optional classification columns.
     await query(`CREATE TABLE vehicle_vault_documents (
       id INT NOT NULL AUTO_INCREMENT PRIMARY KEY,plate VARCHAR(7) NOT NULL UNIQUE,
