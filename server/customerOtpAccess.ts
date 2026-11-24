@@ -1,6 +1,7 @@
 import { createHmac, randomBytes, timingSafeEqual } from "node:crypto";
 import type { Request } from "express";
 import { sql } from "drizzle-orm";
+import { isValidCPF, normalizeCpf } from "../shared/cpf";
 import { TRPCError } from "@trpc/server";
 import { getDb } from "./db";
 import { getRegistrationReviewStatus } from "./customerRegistrationReview";
@@ -27,6 +28,7 @@ import { CUSTOMER_SESSION_HOUR_MS, DEFAULT_CUSTOMER_SESSION_HOURS } from "../sha
 // Compatibility constant for the default; issuance reads the current ADM policy.
 export const CUSTOMER_SESSION_MS = DEFAULT_CUSTOMER_SESSION_HOURS * CUSTOMER_SESSION_HOUR_MS;
 export const CUSTOMER_CODE_MS = 10 * 60 * 1000;
+export const CUSTOMER_TRUSTED_DEVICE_MS = 30 * 24 * 60 * 60 * 1000;
 
 /** Never expose draft authentication in production before every customer
  * route and legacy password endpoint has passed the migration checklist.
@@ -48,6 +50,8 @@ const MAX_ATTEMPTS = 5;
 const OTP_LIMIT_WINDOW_MS = 60 * 60 * 1000;
 const GENERIC = "Se o telefone estiver cadastrado, enviaremos um código ao e-mail registrado.";
 const isToken = (v: string) => /^h2otp_[0-9a-f]{64}$/.test(v);
+const isDeviceToken = (v: string) => /^h2device_[0-9a-f]{64}$/.test(v);
+let trustedDevicesReady = false;
 
 function secret(): string {
   // Dedicated key preferred; existing server signing secret is an isolated
@@ -92,6 +96,21 @@ export async function ensureCustomerOtpTables(db: any): Promise<void> {
     await db.execute(sql`CREATE TABLE IF NOT EXISTS customerOtpUsedProofs (
       nonceKey CHAR(64) NOT NULL PRIMARY KEY, usedAt BIGINT NOT NULL
     ) ENGINE=InnoDB`);
+    // An optional companion table cannot be allowed to break the OTP login.
+    try {
+      await db.execute(sql`CREATE TABLE IF NOT EXISTS customerOtpTrustedDevices (
+        deviceKey CHAR(64) NOT NULL PRIMARY KEY,
+        customerId INT NOT NULL, phoneKey CHAR(64) NOT NULL,
+        emailKey CHAR(64) NOT NULL, cpfKey CHAR(64) NOT NULL,
+        createdAt BIGINT NOT NULL, lastUsedAt BIGINT NOT NULL, expiresAt BIGINT NOT NULL,
+        KEY idx_customerOtpTrusted_owner (customerId, lastUsedAt),
+        KEY idx_customerOtpTrusted_exp (expiresAt)
+      ) ENGINE=InnoDB`);
+      trustedDevicesReady = true;
+    } catch {
+      trustedDevicesReady = false;
+      console.warn("[CustomerOtp] trusted device storage unavailable; ordinary OTP remains active");
+    }
   })();
   try { await schemaPromise; }
   catch (error) { schemaPromise = null; throw error; }
@@ -138,6 +157,37 @@ async function takeAttemptLimits(db: any, limits: Array<{scope:string;maximum:nu
   });
 }
 
+// The full CPF is public identity information, never sufficient by itself.
+async function uniqueValidCustomerCpf(db: any, customer: any): Promise<string | null> {
+  const cpf = normalizeCpf(String(customer.cpf || ""));
+  if (!isValidCPF(cpf)) return null;
+  const matches = await rows(db, sql`SELECT id FROM customers
+    WHERE deletedAt IS NULL AND REGEXP_REPLACE(cpf,'[^0-9]','')=${cpf} LIMIT 2`);
+  return matches.length === 1 && Number(matches[0].id) === Number(customer.id) ? cpf : null;
+}
+
+async function issueTrustedDevice(tx: any, customer: any, now: number): Promise<string | undefined> {
+  if (!trustedDevicesReady) return undefined;
+  const cpf = await uniqueValidCustomerCpf(tx, customer);
+  if (!cpf) return undefined;
+  const token = "h2device_" + randomBytes(32).toString("hex");
+  const customerId = Number(customer.id);
+  await tx.execute(sql`INSERT INTO customerOtpTrustedDevices
+    (deviceKey,customerId,phoneKey,emailKey,cpfKey,createdAt,lastUsedAt,expiresAt)
+    VALUES (${digest("device",token)},${customerId},
+      ${digest("phone",normalizeCustomerPhone(customer.phone))},
+      ${digest("email",normalizeCustomerEmail(customer.email))},
+      ${digest("cpf",cpf)},${now},${now},${now+CUSTOMER_TRUSTED_DEVICE_MS})`);
+  // Retain up to four recent approved browsers, none past its expiry.
+  const existing = await rows(tx, sql`SELECT deviceKey FROM customerOtpTrustedDevices
+    WHERE customerId=${customerId} ORDER BY lastUsedAt DESC, deviceKey DESC LIMIT 100`);
+  for (const old of existing.slice(4)) {
+    await tx.execute(sql`DELETE FROM customerOtpTrustedDevices
+      WHERE deviceKey=${String(old.deviceKey)} AND customerId=${customerId}`);
+  }
+  return token;
+}
+
 async function issueSession(tx: any, customer: any, now: number) {
   const phone = normalizeCustomerPhone(customer.phone);
   const email = normalizeCustomerEmail(customer.email);
@@ -153,8 +203,11 @@ async function issueSession(tx: any, customer: any, now: number) {
   await tx.execute(sql`INSERT INTO customerOtpSessions (tokenHash,customerId,phoneKey,emailKey,expiresAt)
     VALUES (${digest("session",token)},${Number(customer.id)},${phoneKey},${emailKey},${expiresAtMs})`);
   await recordCustomerOtpLogin(tx, { customerId: Number(customer.id), phone, token, loggedInAtMs: now });
+  let deviceToken: string | undefined;
+  try { deviceToken = await issueTrustedDevice(tx,customer,now); }
+  catch { console.warn("[CustomerOtp] trusted device issuance failed; OTP session remains valid"); }
   const profileUpdateFields = getMissingCustomerProfileFields(customer);
-  return { success: true as const, token, profileUpdateRequired: profileUpdateFields.length > 0, profileUpdateFields };
+  return { success: true as const, token, deviceToken, profileUpdateRequired: profileUpdateFields.length > 0, profileUpdateFields };
 }
 
 export async function requestCustomerCode(phoneInput: string, request: Request, channel: "email" | "whatsapp" | "both" = "email"): Promise<{
@@ -309,6 +362,60 @@ export async function verifyCustomerCode(phoneInput: string, code: string) {
       return { success:false as const,message:"Seu cadastro está aguardando aprovação do administrador." };
     await tx.execute(sql`UPDATE customerOtpChallenges SET usedAt=${now},
       codeDigest='',expiresAt=0 WHERE phoneKey=${key}`);
+    return issueSession(tx,customer,now);
+  });
+}
+
+/**
+ * Fallback for customers who requested an OTP but cannot receive it.
+ * Full CPF + registered phone require a device key from an earlier verified OTP.
+ * All validation, rate limits and login history remain on the server.
+ */
+export async function loginWithCpfTrustedDevice(
+  phoneInput: string, cpfInput: string, deviceTokenInput: string, request: Request,
+) {
+  requireOtpMigrationEnabled();
+  const phone = normalizeCustomerPhone(phoneInput);
+  const cpf = normalizeCpf(cpfInput);
+  const deviceToken = String(deviceTokenInput || "").trim();
+  const failure = { success: false as const, message: "Acesso por CPF indisponível neste aparelho. Utilize o código recebido." };
+  const db = await getDb() as any;
+  if (!db) throw new TRPCError({ code:"SERVICE_UNAVAILABLE", message:"Serviço indisponível." });
+  await ensureCustomerOtpTables(db);
+  const source = resolveCustomerOtpRequestSource(request);
+  const now = Date.now();
+  const limits = [{ scope:"cpf-device-ip:"+source.ip, maximum:30 }];
+  if (phone && /^\d{11}$/.test(phone)) limits.push({ scope:"cpf-device-phone:"+phone, maximum:10 });
+  const cooldown = await takeAttemptLimits(db, limits, now);
+  if (cooldown > 0) return { ...failure, retryAfterSeconds:cooldown };
+  if (!trustedDevicesReady || !phone || !/^\d{11}$/.test(phone) || !isValidCPF(cpf) || !isDeviceToken(deviceToken))
+    return failure;
+  return db.transaction(async (tx: any) => {
+    const deviceKey = digest("device",deviceToken);
+    const [device] = await rows(tx,sql`SELECT * FROM customerOtpTrustedDevices
+      WHERE deviceKey=${deviceKey} FOR UPDATE`);
+    if (!device || Number(device.expiresAt)<=now) return failure;
+    const customer = await uniqueCustomer(tx,phone);
+    if (!customer || Number(device.customerId)!==Number(customer.id)) return failure;
+    const currentCpf = await uniqueValidCustomerCpf(tx,customer);
+    if (!currentCpf || !equalDigest(digest("cpf",cpf),digest("cpf",currentCpf)) ||
+      !equalDigest(String(device.cpfKey),digest("cpf",cpf)) ||
+      !equalDigest(String(device.phoneKey),digest("phone",phone)) ||
+      !equalDigest(String(device.emailKey),digest("email",normalizeCustomerEmail(customer.email))))
+      return failure;
+    if (await getRegistrationReviewStatus(tx,Number(customer.id)) !== "approved") return failure;
+    // Require a currently issued challenge; the CPF is offered AFTER requesting.
+    const [challenge] = await rows(tx,sql`SELECT customerId,emailKey,expiresAt,attempts,usedAt
+      FROM customerOtpChallenges WHERE phoneKey=${digest("phone",phone)} FOR UPDATE`);
+    if (!challenge || Number(challenge.customerId)!==Number(customer.id) ||
+        String(challenge.emailKey)!==digest("email",normalizeCustomerEmail(customer.email)) ||
+        Number(challenge.expiresAt)<=now || challenge.usedAt ||
+        Number(challenge.attempts)>=MAX_ATTEMPTS) return failure;
+    await tx.execute(sql`UPDATE customerOtpChallenges SET usedAt=${now},codeDigest='',expiresAt=0
+      WHERE phoneKey=${digest("phone",phone)}`);
+    // Rotate the browser key after each successful CPF login to prevent replay.
+    await tx.execute(sql`DELETE FROM customerOtpTrustedDevices
+      WHERE deviceKey=${deviceKey} AND customerId=${Number(customer.id)}`);
     return issueSession(tx,customer,now);
   });
 }
