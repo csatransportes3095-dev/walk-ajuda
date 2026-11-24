@@ -13,6 +13,7 @@ vi.mock("./siteAccessCodeDelivery", () => ({ deliverOwnSiteCode: isolated.delive
 import { ensureCustomerOtpTables, requestCustomerCode, verifyCustomerCode, redeemNewRegistrationProof,
   getVerifiedCustomerOtpSession, revokeCustomerOtpSession } from "./customerOtpAccess";
 import { ensureCustomerPasskeyLoginTables } from "./customerPasskeyLogin";
+import { biometricBridgeBinding, isBiometricBridgeActive } from "./customerPasskeyBridge";
 import { issueLoginEmailProof } from "./customerLoginEmailProof";
 import { ensureRegistrationReviewSchema } from "./customerRegistrationReview";
 import { migrateCustomerLoginHistory } from "./customerLoginHistorySchema";
@@ -215,6 +216,11 @@ describe.skipIf(!testUrl)("Customer session policy — isolated MySQL and real O
       await assertLifetime(biometric.token,1);
       await assertLifetime(first.token,720);
       expect(await getVerifiedCustomerOtpSession(isolated.db,biometric.token)).not.toBeNull();
+      const cardBinding = await biometricBridgeBinding(isolated.db,biometric.token,101);
+      expect(cardBinding).toBe(createHash("sha256").update(biometric.token).digest("hex"));
+      expect(await isBiometricBridgeActive(isolated.db,cardBinding,phone)).toBe(true);
+      expect(await isBiometricBridgeActive(isolated.db,cardBinding,"11999990002")).toBe(false);
+      expect(await biometricBridgeBinding(isolated.db,first.token,101)).toBeNull();
       await expect(caller.finishPasskeyLogin({phone,challengeId:challenge.challengeId,response})).rejects.toMatchObject({code:"UNAUTHORIZED"});
       const rollbackCounter = await caller.beginPasskeyLogin({phone,remember:false});
       await expect(caller.finishPasskeyLogin({phone,challengeId:rollbackCounter.challengeId,response:assertion(rollbackCounter.options.challenge,1)})).rejects.toMatchObject({code:"UNAUTHORIZED"});
@@ -227,6 +233,7 @@ describe.skipIf(!testUrl)("Customer session policy — isolated MySQL and real O
       expect(await admin().revokeCustomerPasskeys({customerId:101,expectedPhone:phone,confirm:true})).toMatchObject({credentialsRevoked:1,sessionsRevoked:1});
       expect(await getVerifiedCustomerOtpSession(isolated.db,biometric.token)).toBeNull();
       expect(await session(biometric.token)).toBeNull();
+      expect(await isBiometricBridgeActive(isolated.db,cardBinding,phone)).toBe(false);
       expect(await getVerifiedCustomerOtpSession(isolated.db,first.token)).not.toBeNull();
       expect(await query("SELECT * FROM customerPasskeyCredentials")).toHaveLength(0);
       expect(await query("SELECT administrator,credentialsRevoked,sessionsRevoked FROM customerPasskeyRevocations")).toEqual([expect.objectContaining({administrator:"session-policy-test",credentialsRevoked:1,sessionsRevoked:1})]);
