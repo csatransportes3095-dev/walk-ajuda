@@ -317,7 +317,7 @@ async function cardSession(req: Request, res: Response) {
 
   // A derived login cannot outlive the OTP session that authorized it. Legacy
   // password sessions retain their existing 30-day card-session limit.
-  const expiresAtMs = Math.floor(Math.min(Date.now() + CC_SESSION_MS, auth.sessionExpiresAtMs ?? Infinity) / 1000) * 1000;
+  const expiresAtMs = Math.floor((auth.sessionExpiresAtMs ?? Date.now() + CC_SESSION_MS) / 1000) * 1000;
   if (expiresAtMs <= Date.now()) {
     res.status(401).json({ code: "UNAUTHORIZED", message: "Sessão central inválida ou expirada." });
     return;

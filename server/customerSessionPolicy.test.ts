@@ -12,7 +12,7 @@ import { readCustomerSessionPolicy, saveCustomerSessionPolicy } from "./customer
 import { customerPasswordRouter } from "./routers/customerPassword";
 
 const secret = "isolated-customer-session-policy-secret-never-production-20261119";
-const policy = (hours: number) => ({ hours, minHours: 1, maxHours: 720, appliesTo: "new_logins" });
+const policy = (hours: number) => ({ hours, minHours: 1, maxHours: 2160, appliesTo: "new_logins" });
 function context(cookie = ""): TrpcContext {
   return { user: null, req: { headers: { cookie } } as TrpcContext["req"], res: {} as TrpcContext["res"] };
 }
@@ -25,19 +25,23 @@ beforeEach(() => {
 afterEach(() => { vi.unstubAllEnvs(); vi.restoreAllMocks(); });
 
 describe("Customer session duration policy", () => {
-  it("keeps 24 hours as the default with a bounded integer-hour range", () => {
-    expect(DEFAULT_CUSTOMER_SESSION_HOURS).toBe(24);
+  it("keeps 30 days as the default with a bounded integer-hour range", () => {
+    expect(DEFAULT_CUSTOMER_SESSION_HOURS).toBe(720);
     expect(MIN_CUSTOMER_SESSION_HOURS).toBe(1);
-    expect(MAX_CUSTOMER_SESSION_HOURS).toBe(720);
+    expect(MAX_CUSTOMER_SESSION_HOURS).toBe(2160);
     expect(CUSTOMER_SESSION_HOUR_MS).toBe(3_600_000);
   });
 
-  it.each([1, 48, 720, "1", "48", " 48 ", "720"])("reads an accepted persisted duration: %j", value => {
+  it.each([1, 48, 720, 721, 2160, "1", "48", " 48 ", "720", "2160"])("reads an accepted persisted duration: %j", value => {
     expect(parseCustomerSessionHours(value)).toBe(Number(value));
   });
 
-  it.each([undefined, null, "", " ", 0, -1, 1.5, 721, NaN, Infinity, "1e2", "48.0", "0720", {}, "invalid"])
-    ("uses the existing 24-hour default for invalid historical data: %j", value => {
+  it.each([undefined, null])("uses the 30-day initial duration for missing configuration: %j", value => {
+    expect(parseCustomerSessionHours(value)).toBe(720);
+  });
+
+  it.each(["", " ", 0, -1, 1.5, 2161, NaN, Infinity, "1e2", "48.0", "0720", {}, "invalid"])
+    ("uses the conservative 24-hour fallback for invalid historical data: %j", value => {
       expect(parseCustomerSessionHours(value)).toBe(24);
     });
 
@@ -45,7 +49,7 @@ describe("Customer session duration policy", () => {
     const execute = vi.fn().mockResolvedValueOnce([[]]).mockResolvedValueOnce([[{ value: "48" }]])
       .mockResolvedValueOnce([[{ value: "bad legacy value" }]]);
     const db = { execute };
-    expect(await readCustomerSessionPolicy(db)).toEqual(policy(24));
+    expect(await readCustomerSessionPolicy(db)).toEqual(policy(720));
     expect(await readCustomerSessionPolicy(db)).toEqual(policy(48));
     expect(await readCustomerSessionPolicy(db)).toEqual(policy(24));
     expect(execute).toHaveBeenCalledTimes(3);
@@ -86,11 +90,12 @@ describe("Administrative session-policy API", () => {
 
   it("allows a signed administrator to read and save the explicit new-logins policy", async () => {
     const caller = customerPasswordRouter.createCaller(context(adminCookie()));
-    expect(await caller.getSessionPolicy()).toEqual(policy(24));
+    expect(await caller.getSessionPolicy()).toEqual(policy(720));
     expect(await caller.updateSessionPolicy({ hours: 48 })).toEqual(policy(48));
+    expect(await caller.updateSessionPolicy({ hours: 2160 })).toEqual(policy(2160));
   });
 
-  it.each([0, -1, 1.5, 721, NaN, Infinity, "48", null])("rejects invalid admin input before accessing the database: %j", async hours => {
+  it.each([0, -1, 1.5, 2161, NaN, Infinity, "48", null])("rejects invalid admin input before accessing the database: %j", async hours => {
     const caller = customerPasswordRouter.createCaller(context(adminCookie()));
     await expect(caller.updateSessionPolicy({ hours } as any)).rejects.toMatchObject({ code: "BAD_REQUEST" });
     expect(state.getDb).not.toHaveBeenCalled();

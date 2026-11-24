@@ -68,7 +68,7 @@ beforeEach(() => {
 afterEach(() => vi.useRealTimers());
 
 describe("Derived customer login expiry", () => {
-  it.each([1, 48, 720])("limits the new cookie and signed JWT to the %i-hour OTP deadline", async hours => {
+  it.each([1, 48, 720, 2160])("limits the new cookie and signed JWT to the %i-hour OTP deadline", async hours => {
     const deadline = now + hours * hour;
     state.verified.mockResolvedValue({ customerId: 19, phone, bindingExpires: deadline, sessionExpiresAtMs: deadline });
     const result = await prepareCardSession();

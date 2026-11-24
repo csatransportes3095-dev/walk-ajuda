@@ -28,7 +28,7 @@ const settingKey = "customer_session_hours";
 let connection: Connection | undefined;
 let now = epoch;
 const combinedRouter = router({ customerPassword: customerPasswordRouter });
-const policy = (hours: number) => ({ hours, minHours: 1, maxHours: 720, appliesTo: "new_logins" });
+const policy = (hours: number) => ({ hours, minHours: 1, maxHours: 2160, appliesTo: "new_logins" });
 const hash = (scope: string, value: string) => createHmac("sha256", secret)
   .update("customer-otp-v2:" + scope + ":" + value).digest("hex");
 
@@ -137,19 +137,29 @@ describe.skipIf(!testUrl)("Customer session policy — isolated MySQL and real O
   });
 
   it("persists 48 hours and both valid limits through the real admin API without changing other settings", async () => {
-    expect(await admin().getSessionPolicy()).toEqual(policy(24));
+    expect(await admin().getSessionPolicy()).toEqual(policy(720));
     await query("INSERT INTO appSettings (`key`,value) VALUES ('unrelated_fixture','keep')");
-    for (const hours of [48, 1, 720]) {
+    for (const hours of [48, 1, 720, 2160]) {
       expect(await admin().updateSessionPolicy({ hours })).toEqual(policy(hours));
       expect(await admin().getSessionPolicy()).toEqual(policy(hours));
     }
-    expect(await query("SELECT value FROM appSettings WHERE `key`=?", [settingKey])).toEqual([expect.objectContaining({ value: "720" })]);
+    expect(await query("SELECT value FROM appSettings WHERE `key`=?", [settingKey])).toEqual([expect.objectContaining({ value: "2160" })]);
     expect((await query("SELECT value FROM appSettings WHERE `key`='unrelated_fixture'"))[0].value).toBe("keep");
   });
 
-  it("issues the existing 24-hour duration when no policy was stored", async () => {
-    const { token } = await login(); await assertLifetime(token, 24);
+  it("issues the initial 30-day duration when no policy was stored", async () => {
+    const { token } = await login(); await assertLifetime(token, 720);
     expect(await query("SELECT * FROM appSettings")).toHaveLength(0);
+  });
+
+  it("enforces the 90-day upper duration and expires at its exact deadline", async () => {
+    await admin().updateSessionPolicy({ hours: 2160 });
+    const { token } = await login();
+    await assertLifetime(token, 2160);
+    await clock(epoch + 2160 * hour - 1);
+    expect(await getVerifiedCustomerOtpSession(isolated.db, token)).toMatchObject({ phone });
+    await clock(epoch + 2160 * hour);
+    expect(await getVerifiedCustomerOtpSession(isolated.db, token)).toBeNull();
   });
 
   it("uses 24 hours for an invalid historical value without overwriting that setting", async () => {
@@ -210,6 +220,7 @@ describe.skipIf(!testUrl)("Customer session policy — isolated MySQL and real O
   });
 
   it("increases only future sessions and never resurrects the old 24-hour token", async () => {
+    await admin().updateSessionPolicy({ hours: 24 });
     const first = await login(); await assertLifetime(first.token, 24);
     const firstSnapshot = await session(first.token);
     await clock(epoch + 2 * hour); await admin().updateSessionPolicy({ hours: 48 });
@@ -274,7 +285,7 @@ describe.skipIf(!testUrl)("Customer session policy — isolated MySQL and real O
     } finally { await query("RENAME TABLE session_policy_test_hidden_settings TO appSettings"); }
     const result = await redeemNewRegistrationProof(phone, proof);
     expect(result.success).toBe(true); if (!result.success) throw new Error("The rolled-back proof was not reusable");
-    await assertLifetime(result.token, 24);
+    await assertLifetime(result.token, 720);
   });
 
   it("keeps the saved value when MySQL rejects an administrative update", async () => {

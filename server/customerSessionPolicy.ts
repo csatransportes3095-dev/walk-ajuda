@@ -38,7 +38,7 @@ export async function readCustomerSessionPolicy(db: any): Promise<CustomerSessio
 /** Only changes the policy for future logins, never existing session rows. */
 export async function saveCustomerSessionPolicy(db: any, hours: number): Promise<CustomerSessionPolicy> {
   if (!Number.isInteger(hours) || hours < MIN_CUSTOMER_SESSION_HOURS || hours > MAX_CUSTOMER_SESSION_HOURS) {
-    throw new TRPCError({ code: "BAD_REQUEST", message: "Informe um número inteiro de 1 a 720 horas." });
+    throw new TRPCError({ code: "BAD_REQUEST", message: `Informe um número inteiro de ${MIN_CUSTOMER_SESSION_HOURS} a ${MAX_CUSTOMER_SESSION_HOURS} horas.` });
   }
   requireDatabase(db);
   try {
