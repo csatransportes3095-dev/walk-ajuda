@@ -35,6 +35,7 @@ import { readCustomerSessionPolicy, saveCustomerSessionPolicy } from "../custome
 import { readCustomerPasskeyPermission, saveCustomerPasskeyPermission } from "../customerPasskeyPolicy";
 import { canEnrollCustomerPasskey, preparePasskeyEnrollmentAfterOtp, finishCustomerPasskeyEnrollment, registrationProofSchema } from "../customerPasskeyEnrollment";
 import { authenticationProofSchema, beginCustomerPasskeyLogin, canLoginWithCustomerPasskey, finishCustomerPasskeyLogin } from "../customerPasskeyLogin";
+import { getCustomerPasskeyRevocationTarget, revokeCustomerPasskeys } from "../customerPasskeyRevocation";
 import { MIN_CUSTOMER_SESSION_HOURS, MAX_CUSTOMER_SESSION_HOURS } from "../../shared/customerSessionPolicy";
 
 const SESSION_DURATION_MS = 90 * 24 * 60 * 60 * 1000; // 90 dias
@@ -204,6 +205,12 @@ export const customerPasswordRouter = router({
   getPasskeyPermission: adminProcedure.query(async () => readCustomerPasskeyPermission(await getDb())),
   updatePasskeyPermission: adminProcedure.input(z.object({ allowed: z.boolean() }))
     .mutation(async ({ input }) => saveCustomerPasskeyPermission(await getDb(), input.allowed)),
+  getPasskeyRevocationTarget: adminProcedure
+    .input(z.object({customerId:z.number().int().positive().max(2147483647)}))
+    .query(async ({input,ctx}) => getCustomerPasskeyRevocationTarget(await getDb(),input.customerId,ctx.req)),
+  revokeCustomerPasskeys: adminProcedure
+    .input(z.object({customerId:z.number().int().positive().max(2147483647),expectedPhone:z.string().regex(/^\d{10,11}$/),confirm:z.literal(true)}))
+    .mutation(async ({input,ctx}) => revokeCustomerPasskeys(await getDb(),input.customerId,input.expectedPhone,ctx.req)),
   updateSessionPolicy: adminProcedure
     .input(z.object({ hours: z.number().int().min(MIN_CUSTOMER_SESSION_HOURS).max(MAX_CUSTOMER_SESSION_HOURS) }))
     .mutation(async ({ input }) => saveCustomerSessionPolicy(await getDb(), input.hours)),

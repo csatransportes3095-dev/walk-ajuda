@@ -33,13 +33,14 @@ export async function canLoginWithCustomerPasskey(db: any) {
 async function rows(db: any, statement: any): Promise<any[]> {
   return (await db.execute(statement))?.[0] || [];
 }
-async function ensureLoginTables(db: any) {
+export async function ensureCustomerPasskeyLoginTables(db: any) {
   await ensureCustomerOtpTables(db);
   await ensureCustomerPasskeyEnrollmentTables(db);
   await ensureRegistrationReviewSchema(db);
   let pending = initialized.get(db);
   if (!pending) {
-    pending = db.execute(sql`CREATE TABLE IF NOT EXISTS customerPasskeyLoginChallenges (
+    pending = (async () => {
+      await db.execute(sql`CREATE TABLE IF NOT EXISTS customerPasskeyLoginChallenges (
       challengeId CHAR(64) PRIMARY KEY,
       challenge VARCHAR(255) CHARACTER SET ascii COLLATE ascii_bin NOT NULL,
       phoneKey CHAR(64) NOT NULL,
@@ -47,7 +48,15 @@ async function ensureLoginTables(db: any) {
       rpID VARCHAR(253) CHARACTER SET ascii COLLATE ascii_bin NOT NULL,
       rememberSession TINYINT NOT NULL, expiresAt BIGINT NOT NULL,
       KEY idx_passkey_login_expiry (expiresAt), KEY idx_passkey_login_phone (phoneKey)
-    ) ENGINE=InnoDB`).then(() => undefined);
+    ) ENGINE=InnoDB`);
+      // Store session provenance without storing a second bearer token.
+      await db.execute(sql`CREATE TABLE IF NOT EXISTS customerPasskeySessions (
+        sessionId BIGINT UNSIGNED PRIMARY KEY, customerId INT NOT NULL,
+        tokenHash CHAR(64) NOT NULL UNIQUE, tokenFingerprint CHAR(64) NOT NULL UNIQUE,
+        expiresAt BIGINT NOT NULL,
+        KEY idx_passkey_session_customer (customerId), KEY idx_passkey_session_expiry (expiresAt)
+      ) ENGINE=InnoDB`);
+    })();
     initialized.set(db, pending!);
   }
   try { await pending; } catch (error) { initialized.delete(db); throw error; }
@@ -64,7 +73,7 @@ export async function beginCustomerPasskeyLogin(db: any, phoneInput: string, rem
   const phone = normalizeCustomerPhone(phoneInput);
   const site = trustedEnrollmentOrigin(req.headers.origin);
   if (!site || !/^\d{11}$/.test(phone) || !await canLoginWithCustomerPasskey(db)) throw rejected();
-  await ensureLoginTables(db);
+  await ensureCustomerPasskeyLoginTables(db);
   await limit(db,req,phone,"begin");
   // Discoverable credential: no account lookup or credential list on this
   // endpoint, preventing it from exposing whether a phone has a Passkey.
@@ -83,7 +92,7 @@ export async function finishCustomerPasskeyLogin(db: any, phoneInput: string, ch
   const phone = normalizeCustomerPhone(phoneInput);
   const site = trustedEnrollmentOrigin(req.headers.origin);
   if (!site || !/^\d{11}$/.test(phone) || !await canLoginWithCustomerPasskey(db)) throw rejected();
-  await ensureLoginTables(db);
+  await ensureCustomerPasskeyLoginTables(db);
   await limit(db,req,phone,"finish");
   const challenge = await db.transaction(async (tx: any) => {
     const key = hash(challengeId);
@@ -134,6 +143,13 @@ export async function finishCustomerPasskeyLogin(db: any, phoneInput: string, ch
     if (!rollout() || (permission && permission.value !== "1") || Number(challenge.expiresAt) <= Date.now()) throw rejected();
     await tx.execute(sql`UPDATE customerPasskeyCredentials SET signCount=${nextCounter} WHERE credentialKey=${credentialKey}`);
     const session = await issueSession(tx,customer,Date.now(),Number(challenge.rememberSession)===1);
+    const [central] = await rows(tx,sql`SELECT id,UNIX_TIMESTAMP(expiresAt)*1000 AS expiresAt
+      FROM customerPasswordSessions WHERE token=${session.token} FOR UPDATE`);
+    const sessionId = Number(central?.id), expiresAt = Number(central?.expiresAt);
+    if (!Number.isSafeInteger(sessionId) || sessionId <= 0 || !Number.isSafeInteger(expiresAt) || expiresAt <= Date.now()) throw rejected();
+    await tx.execute(sql`INSERT INTO customerPasskeySessions
+      (sessionId,customerId,tokenHash,tokenFingerprint,expiresAt)
+      VALUES (${sessionId},${customerId},${digest("session",session.token)},${hash(session.token)},${expiresAt})`);
     return {...session,phone};
   });
 }

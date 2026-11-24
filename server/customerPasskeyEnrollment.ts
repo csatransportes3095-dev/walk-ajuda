@@ -5,7 +5,7 @@ import { z } from "zod";
 import { generateRegistrationOptions, verifyRegistrationResponse, type RegistrationResponseJSON } from "@simplewebauthn/server";
 import { getVerifiedCustomerOtpSession, isCustomerOtpModeEnabled, uniqueCustomer } from "./customerOtpAccess";
 import { normalizeCustomerPhone, normalizeCustomerEmail } from "./customerAccess";
-import { readCustomerPasskeyPermission } from "./customerPasskeyPolicy";
+import { CUSTOMER_PASSKEY_PERMISSION_KEY, readCustomerPasskeyPermission } from "./customerPasskeyPolicy";
 
 const TTL_MS = 5 * 60_000;
 const MAX_CREDENTIALS = 10;
@@ -55,6 +55,12 @@ export async function ensureCustomerPasskeyEnrollmentTables(db: any) {
         signCount BIGINT UNSIGNED NOT NULL, createdAt BIGINT NOT NULL,
         KEY idx_passkey_customer_rp (customerId,rpID)
       ) ENGINE=InnoDB`);
+      await db.execute(sql`CREATE TABLE IF NOT EXISTS customerPasskeyRevocations (
+        id BIGINT UNSIGNED AUTO_INCREMENT PRIMARY KEY, customerId INT NOT NULL,
+        administrator VARCHAR(120) NOT NULL, revokedAt BIGINT NOT NULL,
+        credentialsRevoked INT NOT NULL, sessionsRevoked INT NOT NULL,
+        KEY idx_passkey_revoked_customer (customerId,id)
+      ) ENGINE=InnoDB`);
     })();
     schemaPromises.set(db, pending);
   }
@@ -74,7 +80,20 @@ async function currentAccount(tx: any, token: string, rpID: string) {
       normalizeCustomerPhone(locked.phone) !== session.phone || normalizeCustomerEmail(locked.email) !== session.email) return null;
   const current = await uniqueCustomer(tx,session.phone);
   if (!current || Number(current.id) !== Number(session.customerId)) return null;
+  // Revocation serializes against this customer lock. An OTP session created
+  // before the last revocation cannot be used to prepare another enrollment.
+  const [lastRevocation] = await rows(tx,sql`SELECT revokedAt FROM customerPasskeyRevocations
+    WHERE customerId=${Number(session.customerId)} ORDER BY id DESC LIMIT 1 FOR SHARE`);
+  const [central] = await rows(tx,sql`SELECT UNIX_TIMESTAMP(createdAt)*1000 AS createdMs
+    FROM customerPasswordSessions WHERE token=${token} AND expiresAt>NOW() FOR SHARE`);
+  if (!central || (lastRevocation && Number(central.createdMs) <= Number(lastRevocation.revokedAt))) return null;
   return { id:Number(session.customerId), handle:customerPasskeyUserHandle(session,rpID) };
+}
+
+async function enrollmentStillAllowed(tx: any) {
+  if (!isCustomerOtpModeEnabled() || process.env.H2_CUSTOMER_PASSKEY_ENROLLMENT_ENABLED !== "true") return false;
+  const [permission] = await rows(tx,sql`SELECT value FROM appSettings WHERE \`key\`=${CUSTOMER_PASSKEY_PERMISSION_KEY} FOR SHARE`);
+  return !permission || permission.value === "1";
 }
 
 /** Only called by the OTP-verification procedure immediately after successful
@@ -86,7 +105,7 @@ export async function preparePasskeyEnrollmentAfterOtp(db: any, token: string, r
   return db.transaction(async (tx: any) => {
     if (!await canEnrollCustomerPasskey(tx)) return null;
     const account = await currentAccount(tx,token,site.rpID);
-    if (!account) return null;
+    if (!account || !await enrollmentStillAllowed(tx)) return null;
     const existing = await rows(tx,sql`SELECT credentialId FROM customerPasskeyCredentials
       WHERE customerId=${account.id} AND rpID=${site.rpID} LIMIT ${MAX_CREDENTIALS}`);
     if (existing.length >= MAX_CREDENTIALS) return null;
@@ -115,24 +134,25 @@ export async function finishCustomerPasskeyEnrollment(db: any, token: string, ch
   const site = trustedEnrollmentOrigin(requestOrigin);
   if (!site || !await canEnrollCustomerPasskey(db)) throw failure();
   await ensureCustomerPasskeyEnrollmentTables(db);
-  const challenge = await db.transaction(async (tx: any) => {
-    const [row] = await rows(tx,sql`SELECT * FROM customerPasskeyEnrollments
-      WHERE tokenHash=${hash(token)} AND challengeId=${challengeId} FOR UPDATE`);
-    if (!row || row.origin !== site.origin || row.rpID !== site.rpID) return null;
-    // Consume before verification; failed proofs cannot be replayed.
-    await tx.execute(sql`DELETE FROM customerPasskeyEnrollments WHERE tokenHash=${hash(token)} AND challengeId=${challengeId}`);
-    return Number(row.expiresAt) > Date.now() ? row : null;
-  });
-  if (!challenge || response.id !== response.rawId) throw failure();
-  const credential = await verifyRegistrationResponse({
-    response, expectedChallenge:String(challenge.challenge), expectedOrigin:site.origin, expectedRPID:site.rpID,
-    requireUserVerification:true, supportedAlgorithmIDs:[-7,-257],
-  }).then(result => result.verified ? result.registrationInfo?.credential : undefined, () => undefined);
-  if (!credential || credential.id !== response.id) throw failure();
   const stored = await db.transaction(async (tx: any) => {
-    if (!await canEnrollCustomerPasskey(tx)) return false;
+    // Keep the customer lock through consumption and storage. A concurrent
+    // revocation either deletes the pending challenge first or removes the
+    // newly stored key after this transaction. Invalid proofs consume the
+    // challenge too: return false instead of rolling back the DELETE.
     const account = await currentAccount(tx,token,site.rpID);
-    if (!account || account.id !== Number(challenge.customerId) || account.handle.toString("base64url") !== challenge.userHandle) return false;
+    if (!account) return false;
+    const [challenge] = await rows(tx,sql`SELECT * FROM customerPasskeyEnrollments
+      WHERE tokenHash=${hash(token)} AND challengeId=${challengeId} FOR UPDATE`);
+    if (!challenge || challenge.origin !== site.origin || challenge.rpID !== site.rpID) return false;
+    await tx.execute(sql`DELETE FROM customerPasskeyEnrollments WHERE tokenHash=${hash(token)} AND challengeId=${challengeId}`);
+    if (Number(challenge.expiresAt) <= Date.now() || response.id !== response.rawId ||
+        account.id !== Number(challenge.customerId) || account.handle.toString("base64url") !== challenge.userHandle) return false;
+    const credential = await verifyRegistrationResponse({
+      response, expectedChallenge:String(challenge.challenge), expectedOrigin:site.origin, expectedRPID:site.rpID,
+      requireUserVerification:true, supportedAlgorithmIDs:[-7,-257],
+    }).then(result => result.verified ? result.registrationInfo?.credential : undefined, () => undefined);
+    if (!credential || credential.id !== response.id || Number(challenge.expiresAt) <= Date.now() ||
+        !await enrollmentStillAllowed(tx)) return false;
     const existing = await rows(tx,sql`SELECT credentialId FROM customerPasskeyCredentials WHERE customerId=${account.id} AND rpID=${site.rpID} LIMIT ${MAX_CREDENTIALS}`);
     if (existing.length >= MAX_CREDENTIALS) return false;
     const inserted = await tx.execute(sql`INSERT IGNORE INTO customerPasskeyCredentials
