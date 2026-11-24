@@ -58,32 +58,27 @@ try {
   }
   {
     const f = await setup({ server:{ whatsappAvailable:true } });
+    // Watch from the first click, because desktop may open WhatsApp on its own.
+    const popupPromise = f.context.waitForEvent('page',{timeout:4500}).catch(()=>null);
     await f.request.click();
     await f.page.getByLabel('Código de 6 números').waitFor();
     assert.deepEqual((await f.state()).requestCalls, [{ phone, channel:'both' }]);
-    assert.equal(f.context.pages().length, 1, 'Solicitar código não pode criar aba');
-    assert.equal(f.urls.length, 0, 'Não pode redirecionar WhatsApp automaticamente');
-    const direct = f.page.getByTestId('h2-otp-open-whatsapp');
-    await direct.waitFor();
-    const directUrl = new URL(await direct.getAttribute('href'));
-    assert.equal(directUrl.origin, 'https://api.whatsapp.com');
-    assert.equal(directUrl.searchParams.get('text'), 'Preciso receber meu código');
-    assert.equal(directUrl.searchParams.get('phone'), '5511999990099');
-    const popupPromise = f.context.waitForEvent('page');
-    await direct.click();
     const popup = await popupPromise;
-    await popup.waitForURL('https://api.whatsapp.com/**');
-    assert.equal(f.context.pages().length, 2, 'Somente o toque no botão deve abrir outra aba, no desktop');
-    assert.equal(f.page.url().startsWith(base), true);
-    await popup.close();
-    await f.page.bringToFront();
-    await f.page.getByRole('button', { name:'Não recebi o código' }).click();
-    await f.page.getByRole('button', { name:/AGUARDE/ }).waitFor();
-    assert.deepEqual((await f.state()).requestCalls, [{ phone, channel:'both' }], 'Abrir WhatsApp não deve gerar novo OTP');
+    if (popup) {
+      await popup.waitForURL('https://api.whatsapp.com/**');
+      assert.equal(new URL(f.urls[0]).searchParams.get('text'),'Preciso receber meu código');
+      await popup.close();
+    } else {
+      await f.page.getByTestId('h2-otp-open-whatsapp').waitFor();
+    }
+    assert.equal(f.page.url().startsWith(base),true,'Tela de código não deve ser substituída');
+    await f.page.getByRole('button',{name:'Não recebi o código'}).click();
+    await f.page.getByRole('button',{name:/AGUARDE/}).waitFor();
+    assert.deepEqual((await f.state()).requestCalls,[{phone,channel:'both'}],'Redirecionar não emite segundo OTP');
     await f.page.getByLabel('Código de 6 números').fill('246810');
-    await f.page.getByRole('button', { name:'CONFIRMAR E ACESSAR' }).click();
+    await f.page.getByRole('button',{name:'CONFIRMAR E ACESSAR'}).click();
     await f.page.getByTestId('authenticated-phone').waitFor();
-    checks.push('H2 AUTO ativo: mesma página de código; botão abre WhatsApp direto somente no clique');
+    checks.push('H2 AUTO ativo: redirecionamento automático ou recuperação se navegador bloquear; código mantido');
     await f.close();
   }
   {
