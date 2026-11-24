@@ -288,7 +288,7 @@ export function CustomerOtpLogin({ title = "Acesso H2 Colombiano", initialPhone 
         setShowCpfLogin(true);
         setShowHelp(false);
       }
-      toast.error(accountConfirmed ? "Não foi possível entregar o código. Você pode tentar entrar com CPF." : (err?.message || "Não foi possível solicitar o código."));
+      toast.error(err?.message || "Não foi possível solicitar o código.");
     } finally {
       setBusy(false);
     }
