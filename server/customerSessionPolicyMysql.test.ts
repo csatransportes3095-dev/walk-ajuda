@@ -11,7 +11,7 @@ const isolated = vi.hoisted(() => ({ db: null as any, delivery: vi.fn() }));
 vi.mock("./db", () => ({ getDb: async () => isolated.db }));
 vi.mock("./siteAccessCodeDelivery", () => ({ deliverOwnSiteCode: isolated.delivery }));
 import { ensureCustomerOtpTables, requestCustomerCode, verifyCustomerCode, redeemNewRegistrationProof,
-  getVerifiedCustomerOtpSession, revokeCustomerOtpSession } from "./customerOtpAccess";
+  getVerifiedCustomerOtpSession, revokeCustomerOtpSession, verifyCustomerCpf } from "./customerOtpAccess";
 import { issueLoginEmailProof } from "./customerLoginEmailProof";
 import { ensureRegistrationReviewSchema } from "./customerRegistrationReview";
 import { migrateCustomerLoginHistory } from "./customerLoginHistorySchema";
@@ -134,6 +134,45 @@ describe.skipIf(!testUrl)("Customer session policy — isolated MySQL and real O
     if (connection) { await query("DROP TRIGGER IF EXISTS session_policy_test_reject_update"); await query("SET timestamp = 0"); }
     await connection?.end(); isolated.db = null;
     vi.useRealTimers(); vi.restoreAllMocks(); vi.unstubAllEnvs();
+  });
+
+  it("permite CPF completo cadastrado sem receber OTP, com a mesma sessão e sem consumir desafio", async () => {
+    const previous = await query("SELECT COUNT(*) AS n FROM customerOtpChallenges");
+    const call = { headers:{}, ip:"198.51.100.45", socket:{remoteAddress:"198.51.100.45"} } as any;
+    const result = await verifyCustomerCpf(phone, "90000000175", call);
+    expect(result.success).toBe(true);
+    if (!result.success) throw new Error("CPF sintético deveria conferir");
+    await assertLifetime(result.token,24);
+    expect(await query("SELECT COUNT(*) AS n FROM customerOtpChallenges")).toEqual(previous);
+    expect(isolated.delivery).not.toHaveBeenCalled();
+    const session = await getVerifiedCustomerOtpSession(isolated.db,result.token);
+    expect(Number(session?.id)).toBe(101);
+  });
+
+  it("não libera telefone inválido, CPF incorreto ou clientes sem CPF", async () => {
+    const caller = {headers:{},ip:"198.51.100.46",socket:{remoteAddress:"198.51.100.46"}} as any;
+    const invalid = await verifyCustomerCpf(phone, "90000000176", caller);
+    expect(invalid.success).toBe(false);
+    await query("UPDATE customers SET cpf=NULL WHERE id=101");
+    const missing = await verifyCustomerCpf(phone, "90000000175", caller);
+    expect(missing.success).toBe(false);
+    expect(await query("SELECT COUNT(*) AS n FROM customerOtpSessions")).toEqual([{n:0}]);
+  });
+
+  it("bloqueia repetição de tentativas por telefone e não cria sessão", async () => {
+    const caller = {headers:{},ip:"198.51.100.47",socket:{remoteAddress:"198.51.100.47"}} as any;
+    for (let i=0;i<5;i++) expect((await verifyCustomerCpf(phone,"00000000000",caller)).success).toBe(false);
+    const limited = await verifyCustomerCpf(phone,"90000000175",caller);
+    expect(limited).toMatchObject({success:false});
+    expect(Number(limited.retryAfterSeconds)).toBeGreaterThan(0);
+    expect(await query("SELECT COUNT(*) AS n FROM customerOtpSessions")).toEqual([{n:0}]);
+  });
+
+  it("não autentica CPF duplicado em outro cadastro", async () => {
+    await query("INSERT INTO customers (id,phone,email,name,cpf) VALUES (102,'11999990002','other@example.test','Outro cliente','900.000.001-75')");
+    const caller = {headers:{},ip:"198.51.100.48",socket:{remoteAddress:"198.51.100.48"}} as any;
+    expect((await verifyCustomerCpf(phone,"90000000175",caller)).success).toBe(false);
+    expect(await query("SELECT COUNT(*) AS n FROM customerOtpSessions")).toEqual([{n:0}]);
   });
 
   it("persists 48 hours and both valid limits through the real admin API without changing other settings", async () => {
