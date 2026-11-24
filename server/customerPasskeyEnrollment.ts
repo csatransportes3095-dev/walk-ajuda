@@ -84,16 +84,16 @@ async function currentAccount(tx: any, token: string, rpID: string) {
   // Revocation serializes against this customer lock. An OTP session created
   // before the last revocation cannot be used to prepare another enrollment.
   const [lastRevocation] = await rows(tx,sql`SELECT revokedAt FROM customerPasskeyRevocations
-    WHERE customerId=${Number(session.customerId)} ORDER BY id DESC LIMIT 1 FOR SHARE`);
+    WHERE customerId=${Number(session.customerId)} ORDER BY id DESC LIMIT 1 FOR UPDATE`);
   const [central] = await rows(tx,sql`SELECT UNIX_TIMESTAMP(createdAt)*1000 AS createdMs
-    FROM customerPasswordSessions WHERE token=${token} AND expiresAt>NOW() FOR SHARE`);
+    FROM customerPasswordSessions WHERE token=${token} AND expiresAt>NOW() FOR UPDATE`);
   if (!central || (lastRevocation && Number(central.createdMs) <= Number(lastRevocation.revokedAt))) return null;
   return { id:Number(session.customerId), handle:customerPasskeyUserHandle(session,rpID) };
 }
 
 async function enrollmentStillAllowed(tx: any) {
   if (!isCustomerOtpModeEnabled() || process.env.H2_CUSTOMER_PASSKEY_ENROLLMENT_ENABLED !== "true") return false;
-  const [permission] = await rows(tx,sql`SELECT value FROM appSettings WHERE \`key\`=${CUSTOMER_PASSKEY_PERMISSION_KEY} FOR SHARE`);
+  const [permission] = await rows(tx,sql`SELECT value FROM appSettings WHERE \`key\`=${CUSTOMER_PASSKEY_PERMISSION_KEY} FOR UPDATE`);
   return !permission || permission.value === "1";
 }
 

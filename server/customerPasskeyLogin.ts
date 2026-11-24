@@ -139,7 +139,7 @@ export async function finishCustomerPasskeyLogin(db: any, phoneInput: string, ch
         ((counter !== 0 || nextCounter !== 0) && nextCounter <= counter)) throw rejected();
     // Recheck the live ADM permission with a locking read immediately before
     // issuing the session. Disabled or malformed settings fail closed.
-    const [permission] = await rows(tx,sql`SELECT value FROM appSettings WHERE \`key\`=${CUSTOMER_PASSKEY_PERMISSION_KEY} FOR SHARE`);
+    const [permission] = await rows(tx,sql`SELECT value FROM appSettings WHERE \`key\`=${CUSTOMER_PASSKEY_PERMISSION_KEY} FOR UPDATE`);
     if (!rollout() || (permission && permission.value !== "1") || Number(challenge.expiresAt) <= Date.now()) throw rejected();
     await tx.execute(sql`UPDATE customerPasskeyCredentials SET signCount=${nextCounter} WHERE credentialKey=${credentialKey}`);
     const session = await issueSession(tx,customer,Date.now(),Number(challenge.rememberSession)===1);

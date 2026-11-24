@@ -264,8 +264,13 @@ export const customerPasswordRouter = router({
       try {
         const enrollment = await preparePasskeyEnrollmentAfterOtp(await getDb(), result.token, ctx.req.headers.origin);
         return { ...result, enrollment };
-      } catch {
-        console.warn("[customer-passkey] Optional enrollment unavailable");
+      } catch (error) {
+        // Log only a bounded driver error category; never SQL, parameters,
+        // OTPs, session tokens, customer data or credential material.
+        const known = new Set(["ER_PARSE_ERROR","ER_NOT_SUPPORTED_YET","ER_TABLEACCESS_DENIED_ERROR","ER_DBACCESS_DENIED_ERROR","ER_SPECIFIC_ACCESS_DENIED_ERROR","ER_NO_SUCH_TABLE","ER_BAD_FIELD_ERROR","ER_LOCK_DEADLOCK","ER_LOCK_WAIT_TIMEOUT"]);
+        const e = error as {code?:string;cause?:{code?:string}} | null;
+        const code = [e?.cause?.code,e?.code].find(value => typeof value === "string" && known.has(value)) || "UNKNOWN";
+        console.warn("[customer-passkey] Optional enrollment unavailable:",code);
         return { ...result, enrollment: null };
       }
     }),
