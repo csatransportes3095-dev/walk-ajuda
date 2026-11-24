@@ -1,3 +1,4 @@
+import { isValidCustomerBirthDate } from "../shared/customerBirthDate";
 import { getStatusVisibilityRule, listStatusVisibilityRules, saveStatusVisibilityRule, getOrderStatusVisibilityForClient } from "./orderStatusVisibility";
 import { siteSecurityRouter } from "./siteSecurityRouter";
 import { vinRegistryRouter } from "./routers/vinRegistry";
@@ -2770,6 +2771,7 @@ export const appRouter = router({
         phone: z.string().min(1),
         email: z.string().email("E-mail obrigatório e inválido").min(1, "E-mail obrigatório"),
         cpf: z.string().min(11, "CPF inválido").max(18),
+        birthDate: z.string().max(10).refine(isValidCustomerBirthDate, "Informe uma data de nascimento válida."),
         cep: z.string().trim().transform(value => value.replace(/\D/g, '')).refine(value => /^\d{8}$/.test(value), "CEP obrigatório e inválido"),
         street: z.string().trim().min(2, "Rua / Logradouro é obrigatório").max(255),
         addressNumber: z.string().trim().min(1, "Número é obrigatório").max(30),
@@ -3586,6 +3588,7 @@ export const appRouter = router({
         phone: z.string().regex(/^\d{10,11}$/, 'Telefone inválido (somente dígitos, 10 ou 11)'),
         email: z.string().email('E-mail obrigatório e inválido').min(1, 'E-mail obrigatório'),
         cpf: z.string().transform(value => value.replace(/\D/g, '')).refine(value => /^\d{11}$/.test(value), 'CPF obrigatório e inválido'),
+        birthDate: z.string().max(10).refine(isValidCustomerBirthDate, 'Informe uma data de nascimento válida.'),
         profilePhotoUrl: z.string().url('Foto de perfil obrigatória').min(1, 'Foto de perfil obrigatória'),
         referredBy: z.string().trim().min(1).optional(),
         referredByPhone: z.string().regex(/^\d{10,11}$/, 'Informe o telefone válido do indicador cadastrado'),
@@ -3604,6 +3607,7 @@ export const appRouter = router({
           phone: normalizeCustomerPhone(input.phone),
           email: normalizeCustomerEmail(input.email),
           cpf: normalizeCustomerCpf(input.cpf),
+          birthDate: input.birthDate,
           cep: input.cep ? input.cep.replace(/\D/g, "").replace(/^(\d{5})(\d{3})$/, "$1-$2") : undefined,
           street: input.street?.trim() || undefined,
           addressNumber: input.addressNumber?.trim() || undefined,
