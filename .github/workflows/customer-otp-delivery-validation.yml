@@ -6,6 +6,8 @@ on:
     paths:
       - '.github/workflows/customer-otp-delivery-validation.yml'
       - 'server/customerOtp*.ts'
+      - 'server/customerCpfFallback.test.ts'
+      - 'server/routers/customerPassword.ts'
       - 'server/h2-auto-incoming-otp.ts'
       - 'server/h2-auto-otp-apk.ts'
       - 'server/siteAccessCodeDelivery.ts'
@@ -45,6 +47,8 @@ jobs:
         run: |
           npm install -g pnpm@10.4.1
           pnpm install --frozen-lockfile
+      - name: Verify CPF fallback stays on OTP screen with strict authentication guards
+        run: pnpm exec vitest run server/customerCpfFallback.test.ts
       - name: Verify OTP quotas, atomic delivery and trusted client IP
         env:
           CUSTOMER_OTP_DELIVERY_TEST_DB_URL: mysql://root:isolated-otp-delivery-test@127.0.0.1:3306/h2_customer_otp_delivery_test
