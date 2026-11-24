@@ -4,7 +4,7 @@ import { deliverIncompleteCustomerLoginCode } from "../incompleteCustomerLoginDe
 
 import { createHash, randomBytes, randomInt, timingSafeEqual } from "crypto";
 import { issueLoginEmailProof, assertLoginEmailProof } from "../customerLoginEmailProof";
-import { requestCustomerCode, verifyCustomerCode, verifyCustomerCpf, redeemNewRegistrationProof, isCustomerOtpModeEnabled, getVerifiedCustomerOtpSession, revokeCustomerOtpSession, ensureCustomerOtpTables } from "../customerOtpAccess";
+import { requestCustomerCode, verifyCustomerCode, verifyCustomerCpfBirthDate, redeemNewRegistrationProof, isCustomerOtpModeEnabled, getVerifiedCustomerOtpSession, revokeCustomerOtpSession, ensureCustomerOtpTables } from "../customerOtpAccess";
 import { isH2AutoApkOtpReady } from "../h2-auto-otp-apk";
 import { validSiteCode } from "../../shared/siteAccessCodePolicy";
 import { getAdminJwtSecret } from "../adminJwt";
@@ -237,8 +237,8 @@ export const customerPasswordRouter = router({
     .input(z.object({ phone: z.string().min(10).max(32), code: z.string().regex(/^\d{6}$/) }))
     .mutation(async ({ input }) => verifyCustomerCode(input.phone, input.code)),
   verifyCustomerCpf: publicProcedure
-    .input(z.object({ phone: z.string().min(10).max(32), cpf: z.string().regex(/^\d{11}$/) }))
-    .mutation(async ({ input, ctx }) => verifyCustomerCpf(input.phone, input.cpf, ctx.req)),
+    .input(z.object({ cpf: z.string().regex(/^\d{11}$/), birthDate: z.string().regex(/^\d{4}-\d{2}-\d{2}$/) }))
+    .mutation(async ({ input, ctx }) => verifyCustomerCpfBirthDate(input.cpf, input.birthDate, ctx.req)),
   finishRegistrationWithoutPassword: publicProcedure
     .input(z.object({ phone: z.string().min(10).max(32), emailVerificationToken: z.string().min(75).max(1500) }))
     .mutation(async ({ input }) => redeemNewRegistrationProof(input.phone, input.emailVerificationToken)),

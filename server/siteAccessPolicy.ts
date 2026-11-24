@@ -42,14 +42,13 @@ export function isSecurityPublicPath(pathname: string): boolean {
     )
   )
     return true;
-  // Scripts and worker APIs are governed by H2ADS' own existing authentication.
-  // Pareamento usa codigo temporario; os demais endpoints validam o token proprio do agente.
+  // Scripts e worker APIs usam a autenticação própria do agente.
+  // Pareamento usa código temporário; os demais endpoints validam o token do agente.
   if (
     pathname === "/api/h2-android/agent/claim" ||
     pathname === "/api/h2-android/agent/heartbeat" ||
-    pathname === "/api/h2-android/agent/pull" ||
-    pathname === "/api/h2-android/agent/finish" ||
-    pathname === "/api/h2-android/agent/frame"
+    pathname === "/api/h2-android/agent/next" ||
+    pathname === "/api/h2-android/agent/complete"
   ) return true;
   // Download validado pelo cookie ADM dentro da rota Express.
   if (pathname === "/api/h2-android/agent/windows-agent.ps1" || pathname === "/api/h2-android/agent/installer.zip" || pathname === "/api/h2-android/agent/first-avd.zip") return true;

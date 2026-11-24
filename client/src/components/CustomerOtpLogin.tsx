@@ -1,4 +1,5 @@
 import { buildWhatsappMessageUrl } from "@shared/whatsappUrl";
+import { birthDateToday, isValidCustomerBirthDate } from "@shared/customerBirthDate";
 import { useEffect, useState } from "react";
 import { flushSync } from "react-dom";
 
@@ -129,6 +130,7 @@ export function CustomerOtpLogin({ title = "Acesso H2 Colombiano", initialPhone 
   const [code, setCode] = useState("");
   const [showCpfLogin, setShowCpfLogin] = useState(false);
   const [cpf, setCpf] = useState("");
+  const [birthDate, setBirthDate] = useState("");
   const [showHelp, setShowHelp] = useState(false);
   const [showWhatsappLink, setShowWhatsappLink] = useState(initialState.step === "code" && initialState.whatsappPrepared);
   const [busy, setBusy] = useState(false);
@@ -301,23 +303,28 @@ export function CustomerOtpLogin({ title = "Acesso H2 Colombiano", initialPhone 
       toast.error("Informe seu CPF completo com 11 números.");
       return;
     }
+    if (!isValidCustomerBirthDate(birthDate)) {
+      toast.error("Informe uma data de nascimento válida.");
+      return;
+    }
     setBusy(true);
     try {
-      const result = await verifyCpf.mutateAsync({ phone:cleanPhone, cpf:digits });
+      const result = await verifyCpf.mutateAsync({ cpf:digits, birthDate });
       if (!result.success || !result.token) {
-        toast.error(result.message || "CPF não confere com o cadastro.");
+        toast.error(result.message || "CPF ou data não conferem com o cadastro.");
         return;
       }
       await onAuthenticated({
         token: result.token,
-        phone: cleanPhone,
+        phone: result.phone || "",
         profileUpdateRequired: result.profileUpdateRequired,
         profileUpdateFields: result.profileUpdateFields || [],
       });
       localStorage.setItem("cp_token",result.token);
-      localStorage.setItem("walk_client_phone",cleanPhone);
+      localStorage.setItem("walk_client_phone",result.phone || "");
       clearOtpDraft();
       setCpf("");
+      setBirthDate("");
       toast.success("Acesso confirmado!");
     } catch (error: any) {
       toast.error(error?.message || "Não foi possível confirmar o CPF.");
@@ -410,6 +417,26 @@ export function CustomerOtpLogin({ title = "Acesso H2 Colombiano", initialPhone 
                   : ""}
               </p>
             </div>
+            <button type="button" disabled={busy} onClick={() => setShowCpfLogin(previous => !previous)}
+              className="w-full py-2 text-sm font-bold text-cyan-300">
+              {showCpfLogin ? "OCULTAR LOGIN ALTERNATIVO" : "ENTRAR COM CPF E DATA DE NASCIMENTO"}
+            </button>
+            {showCpfLogin && (
+              <div className="space-y-3 rounded-2xl border-2 border-blue-400 bg-slate-900 p-4" data-testid="h2-cpf-birth-login">
+                <p className="text-center text-xs text-slate-300">Informe os dados já cadastrados. A validação ocorre no servidor.</p>
+                <label htmlFor="h2-cpf-direct" className="block text-sm font-semibold">CPF completo</label>
+                <input id="h2-cpf-direct" type="text" inputMode="numeric" autoComplete="off" maxLength={11} value={cpf} disabled={busy}
+                  onChange={event => setCpf(event.target.value.replace(/\D/g, "").slice(0, 11))}
+                  placeholder="00000000000" className="w-full rounded-xl border border-white/20 bg-slate-900 p-4 text-center text-xl font-bold tracking-widest outline-none focus:border-cyan-400" />
+                <label htmlFor="h2-birth-direct" className="block text-sm font-semibold">Data de nascimento</label>
+                <input id="h2-birth-direct" type="date" autoComplete="bday" lang="pt-BR" min="1900-01-01" max={birthDateToday()} value={birthDate} disabled={busy}
+                  onChange={event => setBirthDate(event.target.value)} className="w-full rounded-xl border border-white/20 bg-slate-900 p-4 text-center text-lg font-bold outline-none focus:border-cyan-400" />
+                <button type="button" disabled={busy || cpf.replace(/\D/g, "").length !== 11 || !birthDate} onClick={event => { void confirmCpf(event); }}
+                  className="flex min-h-12 w-full items-center justify-center rounded-xl bg-cyan-500 p-3 text-sm font-black text-slate-950 disabled:opacity-50">
+                  {busy ? "CONFERINDO..." : "CONFIRMAR CPF E DATA"}
+                </button>
+              </div>
+            )}
             {onRegister && (
               <button type="button" className="flex min-h-12 w-full items-center justify-center rounded-xl border border-cyan-400/40 bg-cyan-400/10 px-4 py-3 text-center text-sm font-black text-cyan-200 transition-colors hover:bg-cyan-400/20" onClick={startRegistration}>
                 Ainda não tenho cadastro
@@ -459,7 +486,7 @@ export function CustomerOtpLogin({ title = "Acesso H2 Colombiano", initialPhone 
             <div className="rounded-2xl border-2 border-blue-400 bg-slate-900 p-4 shadow-[0_0_18px_rgba(59,130,246,0.35)]">
               <ShieldCheck aria-hidden="true" className="mx-auto mb-2 h-7 w-7 text-blue-400" />
               <p className="text-center text-base font-black text-white">Não recebeu o código?</p>
-              <p className="mb-3 mt-1 text-center text-sm text-slate-300">Utilize seu CPF cadastrado para acessar sua conta.</p>
+              <p className="mb-3 mt-1 text-center text-sm text-slate-300">Utilize seu CPF e sua data de nascimento cadastrados para acessar sua conta.</p>
               <button type="button" onClick={() => { setShowCpfLogin(previous => !previous); setShowHelp(false); }}
                 aria-expanded={showCpfLogin} aria-controls="h2-otp-cpf-option"
                 aria-label="Não recebeu o código? Entrar com CPF"
@@ -468,7 +495,7 @@ export function CustomerOtpLogin({ title = "Acesso H2 Colombiano", initialPhone 
               </button>
               {showCpfLogin && (
                 <div id="h2-otp-cpf-option" className="mt-3 space-y-3" data-testid="h2-otp-cpf-login">
-                  <p className="text-center text-xs text-slate-300">Disponível somente para clientes com CPF cadastrado. Informe os 11 números do CPF.</p>
+                  <p className="text-center text-xs text-slate-300">Disponível somente para clientes com CPF e data cadastrados.</p>
                   <label htmlFor="h2-otp-cpf" className="block text-sm font-semibold">CPF completo</label>
                   <input id="h2-otp-cpf" type="text" inputMode="numeric" autoComplete="off"
                     maxLength={11} value={cpf} disabled={busy}
@@ -476,6 +503,9 @@ export function CustomerOtpLogin({ title = "Acesso H2 Colombiano", initialPhone 
                     placeholder="00000000000"
                     className="w-full rounded-xl border border-white/20 bg-slate-900 p-4 text-center text-xl font-bold tracking-widest outline-none focus:border-cyan-400"
                   />
+                  <label htmlFor="h2-otp-birth-date" className="block text-sm font-semibold">Data de nascimento</label>
+                  <input id="h2-otp-birth-date" type="date" autoComplete="bday" lang="pt-BR" min="1900-01-01" max={birthDateToday()} value={birthDate} disabled={busy}
+                    onChange={event => setBirthDate(event.target.value)} className="w-full rounded-xl border border-white/20 bg-slate-900 p-4 text-center text-lg font-bold outline-none focus:border-cyan-400" />
                   <button type="button" disabled={busy || cpf.length !== 11} onClick={event => { void confirmCpf(event); }}
                     className="flex min-h-12 w-full items-center justify-center rounded-xl bg-cyan-500 p-3 text-sm font-black text-slate-950 disabled:opacity-50">
                     {busy ? "Conferindo..." : "ENTRAR COM CPF"}

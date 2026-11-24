@@ -1,4 +1,4 @@
-import { bigint, decimal, index, int, mysqlEnum, mysqlTable, text, timestamp, uniqueIndex, varchar } from "drizzle-orm/mysql-core";
+import { bigint, char, decimal, index, int, mysqlEnum, mysqlTable, text, timestamp, uniqueIndex, varchar } from "drizzle-orm/mysql-core";
 
 export const users = mysqlTable("users", {
   id: int("id").autoincrement().primaryKey(),
@@ -246,6 +246,12 @@ export const customers = mysqlTable("customers", {
 
 export type Customer = typeof customers.$inferSelect;
 export type InsertCustomer = typeof customers.$inferInsert;
+
+export const customerBirthDates = mysqlTable("customerBirthDates", {
+  customerId: int("customerId").primaryKey().references(() => customers.id, { onDelete: "cascade" }),
+  birthDate: char("birthDate", { length: 10 }).notNull(),
+});
+export type CustomerBirthDate = typeof customerBirthDates.$inferSelect;
 
 // HistÃ³rico de status dos pedidos
 export const orderStatusHistory = mysqlTable("orderStatusHistory", {

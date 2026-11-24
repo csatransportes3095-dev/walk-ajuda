@@ -11,7 +11,7 @@ const isolated = vi.hoisted(() => ({ db: null as any, delivery: vi.fn() }));
 vi.mock("./db", () => ({ getDb: async () => isolated.db }));
 vi.mock("./siteAccessCodeDelivery", () => ({ deliverOwnSiteCode: isolated.delivery }));
 import { ensureCustomerOtpTables, requestCustomerCode, verifyCustomerCode, redeemNewRegistrationProof,
-  getVerifiedCustomerOtpSession, revokeCustomerOtpSession, verifyCustomerCpf } from "./customerOtpAccess";
+  getVerifiedCustomerOtpSession, revokeCustomerOtpSession, verifyCustomerCpfBirthDate } from "./customerOtpAccess";
 import { issueLoginEmailProof } from "./customerLoginEmailProof";
 import { ensureRegistrationReviewSchema } from "./customerRegistrationReview";
 import { migrateCustomerLoginHistory } from "./customerLoginHistorySchema";
@@ -98,7 +98,7 @@ describe.skipIf(!testUrl)("Customer session policy — isolated MySQL and real O
     for (const [name, value] of Object.entries({ JWT_SECRET: secret, H2_SITE_ACCESS_SECRET: secret, H2_CUSTOMER_OTP_V2_ENABLED: "true", RENDER: "false" })) vi.stubEnv(name, value);
     await query("DROP TRIGGER IF EXISTS session_policy_test_reject_update");
     await query("DROP TABLE IF EXISTS session_policy_test_hidden_settings");
-    for (const table of ["customerLoginHistory", "customerPasswordSessions", "customerOtpSessions", "customerOtpChallenges", "customerOtpLimits", "customerOtpUsedProofs", "customerRegistrationReviews", "customerRegistrationReviewConfig", "customers", "appSettings"]) await query(`DROP TABLE IF EXISTS ${table}`);
+    for (const table of ["customerLoginHistory", "customerPasswordSessions", "customerOtpSessions", "customerOtpChallenges", "customerOtpLimits", "customerOtpUsedProofs", "customerBirthDates", "customerRegistrationReviews", "customerRegistrationReviewConfig", "customers", "appSettings"]) await query(`DROP TABLE IF EXISTS ${table}`);
     await query("CREATE TABLE appSettings (id INT NOT NULL AUTO_INCREMENT PRIMARY KEY,`key` VARCHAR(128) NOT NULL UNIQUE,value TEXT NOT NULL,updatedAt TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP) ENGINE=InnoDB");
     await query(`CREATE TABLE customers (
       id INT NOT NULL PRIMARY KEY,phone VARCHAR(32) NOT NULL,email VARCHAR(320) NOT NULL,name VARCHAR(128) NOT NULL,
@@ -124,10 +124,11 @@ describe.skipIf(!testUrl)("Customer session policy — isolated MySQL and real O
     await query("SET time_zone = '+00:00'"); await clock(epoch);
     isolated.delivery.mockReset().mockResolvedValue({ channel: "smtp", messageId: "isolated-session-policy" });
     await query("DROP TRIGGER IF EXISTS session_policy_test_reject_update");
-    for (const table of ["customerLoginHistory", "customerPasswordSessions", "customerOtpSessions", "customerOtpChallenges", "customerOtpLimits", "customerOtpUsedProofs", "customerRegistrationReviews", "customers", "appSettings"]) await query(`DELETE FROM ${table}`);
+    for (const table of ["customerLoginHistory", "customerPasswordSessions", "customerOtpSessions", "customerOtpChallenges", "customerOtpLimits", "customerOtpUsedProofs", "customerBirthDates", "customerRegistrationReviews", "customers", "appSettings"]) await query(`DELETE FROM ${table}`);
     await query("UPDATE customerRegistrationReviewConfig SET mode='automatico',manualSince=NULL WHERE id=1");
     await query(`INSERT INTO customers (id,phone,email,name,cpf,cep,street,addressNumber,neighborhood,city,uf,profilePhotoUrl)
       VALUES (101,?,?,'Cliente sintético','90000000175','01000000','Rua de teste','1','Teste','São Paulo','SP','https://example.test/profile.png')`, [phone, email]);
+    await query("INSERT INTO customerBirthDates (customerId,birthDate) VALUES (101,'1990-01-15')");
   });
 
   afterAll(async () => {
@@ -136,10 +137,10 @@ describe.skipIf(!testUrl)("Customer session policy — isolated MySQL and real O
     vi.useRealTimers(); vi.restoreAllMocks(); vi.unstubAllEnvs();
   });
 
-  it("permite CPF completo cadastrado sem receber OTP, com a mesma sessão e sem consumir desafio", async () => {
+  it("permite CPF e data cadastrados sem receber OTP, com a mesma sessão e sem consumir desafio", async () => {
     const previous = await query("SELECT COUNT(*) AS n FROM customerOtpChallenges");
     const call = { headers:{}, ip:"198.51.100.45", socket:{remoteAddress:"198.51.100.45"} } as any;
-    const result = await verifyCustomerCpf(phone, "90000000175", call);
+    const result = await verifyCustomerCpfBirthDate("90000000175", "1990-01-15", call);
     expect(result.success).toBe(true);
     if (!result.success) throw new Error("CPF sintético deveria conferir");
     await assertLifetime(result.token,24);
@@ -149,20 +150,22 @@ describe.skipIf(!testUrl)("Customer session policy — isolated MySQL and real O
     expect(Number(session?.id)).toBe(101);
   });
 
-  it("não libera telefone inválido, CPF incorreto ou clientes sem CPF", async () => {
+  it("não libera CPF incorreto, data incorreta ou clientes sem CPF", async () => {
     const caller = {headers:{},ip:"198.51.100.46",socket:{remoteAddress:"198.51.100.46"}} as any;
-    const invalid = await verifyCustomerCpf(phone, "90000000176", caller);
+    const invalid = await verifyCustomerCpfBirthDate("90000000176", "1990-01-15", caller);
     expect(invalid.success).toBe(false);
+    const wrongBirthDate = await verifyCustomerCpfBirthDate("90000000175", "1990-01-16", caller);
+    expect(wrongBirthDate.success).toBe(false);
     await query("UPDATE customers SET cpf=NULL WHERE id=101");
-    const missing = await verifyCustomerCpf(phone, "90000000175", caller);
+    const missing = await verifyCustomerCpfBirthDate("90000000175", "1990-01-15", caller);
     expect(missing.success).toBe(false);
     expect(await query("SELECT COUNT(*) AS n FROM customerOtpSessions")).toEqual([{n:0}]);
   });
 
-  it("bloqueia repetição de tentativas por telefone e não cria sessão", async () => {
+  it("bloqueia repetição de tentativas por CPF e não cria sessão", async () => {
     const caller = {headers:{},ip:"198.51.100.47",socket:{remoteAddress:"198.51.100.47"}} as any;
-    for (let i=0;i<5;i++) expect((await verifyCustomerCpf(phone,"00000000000",caller)).success).toBe(false);
-    const limited = await verifyCustomerCpf(phone,"90000000175",caller);
+    for (let i=0;i<5;i++) expect((await verifyCustomerCpfBirthDate("00000000000","1990-01-15",caller)).success).toBe(false);
+    const limited = await verifyCustomerCpfBirthDate("90000000175","1990-01-15",caller);
     expect(limited).toMatchObject({success:false});
     expect(Number(limited.retryAfterSeconds)).toBeGreaterThan(0);
     expect(await query("SELECT COUNT(*) AS n FROM customerOtpSessions")).toEqual([{n:0}]);
@@ -171,7 +174,7 @@ describe.skipIf(!testUrl)("Customer session policy — isolated MySQL and real O
   it("não autentica CPF duplicado em outro cadastro", async () => {
     await query("INSERT INTO customers (id,phone,email,name,cpf) VALUES (102,'11999990002','other@example.test','Outro cliente','900.000.001-75')");
     const caller = {headers:{},ip:"198.51.100.48",socket:{remoteAddress:"198.51.100.48"}} as any;
-    expect((await verifyCustomerCpf(phone,"90000000175",caller)).success).toBe(false);
+    expect((await verifyCustomerCpfBirthDate("90000000175","1990-01-15",caller)).success).toBe(false);
     expect(await query("SELECT COUNT(*) AS n FROM customerOtpSessions")).toEqual([{n:0}]);
   });
 

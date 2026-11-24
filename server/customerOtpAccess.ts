@@ -2,6 +2,7 @@ import { createHmac, randomBytes, timingSafeEqual } from "node:crypto";
 import type { Request } from "express";
 import { sql } from "drizzle-orm";
 import { normalizeCpf, isValidCPF } from "../shared/cpf";
+import { isValidCustomerBirthDate } from "../shared/customerBirthDate";
 import { TRPCError } from "@trpc/server";
 import { getDb } from "./db";
 import { getRegistrationReviewStatus } from "./customerRegistrationReview";
@@ -158,7 +159,7 @@ async function issueSession(tx: any, customer: any, now: number) {
   await recordCustomerOtpLogin(tx, { customerId: Number(customer.id), phone, token, loggedInAtMs: now });
   const birthDateRegistered = !!(await readCustomerBirthDate(tx, Number(customer.id)));
   const profileUpdateFields = getMissingCustomerProfileFields(customer, birthDateRegistered);
-  return { success: true as const, token, profileUpdateRequired: profileUpdateFields.length > 0, profileUpdateFields };
+  return { success: true as const, token, phone, profileUpdateRequired: profileUpdateFields.length > 0, profileUpdateFields };
 }
 
 export async function requestCustomerCode(phoneInput: string, request: Request, channel: "email" | "whatsapp" | "both" = "email"): Promise<{
@@ -318,14 +319,14 @@ export async function verifyCustomerCode(phoneInput: string, code: string) {
 }
 
 /**
- * CPF completo como alternativa ao código, apenas para cadastros existentes.
- * CPF não é um segredo: limitamos tentativas e nunca mostramos dados da conta.
+ * CPF + data de nascimento como alternativa ao código, apenas para cadastros
+ * existentes. A resposta é sempre genérica para não enumerar contas.
  */
-export async function verifyCustomerCpf(phoneInput: string, cpfInput: string, request: Request) {
+export async function verifyCustomerCpfBirthDate(cpfInput: string, birthDateInput: string, request: Request) {
   requireOtpMigrationEnabled();
-  const phone = normalizeCustomerPhone(phoneInput);
   const cpf = normalizeCpf(cpfInput);
-  const failure = { success: false as const, message: "Telefone ou CPF não conferem com o cadastro, ou acesso indisponível." };
+  const birthDate = String(birthDateInput || "");
+  const failure = { success: false as const, message: "CPF ou data de nascimento não conferem com o cadastro, ou acesso indisponível." };
   const db = await getDb() as any;
   if (!db) throw new TRPCError({ code:"SERVICE_UNAVAILABLE", message:"Serviço indisponível." });
   await ensureCustomerOtpTables(db);
@@ -333,27 +334,28 @@ export async function verifyCustomerCpf(phoneInput: string, cpfInput: string, re
   const source = resolveCustomerOtpRequestSource(request);
   // Every request counts even if a client or CPF is invalid.
   const limits: Array<{scope:string;maximum:number}> = [
-    { scope:"cpf-auth-ip:" + source.ip, maximum:25 },
+    { scope:"cpf-birth-auth-ip:" + source.ip, maximum:20 },
   ];
-  if (phone && /^\d{11}$/.test(phone)) limits.push({ scope:"cpf-auth-phone:" + phone, maximum:5 });
+  if (/^\d{11}$/.test(cpf)) limits.push({ scope:"cpf-birth-auth-cpf:" + cpf, maximum:5 });
   const wait = await takeAttemptLimits(db,limits,now);
   if (wait > 0) return {...failure,retryAfterSeconds:wait};
-  if (!phone || !/^\d{11}$/.test(phone) || !/^\d{11}$/.test(cpf) || !isValidCPF(cpf))
+  if (!/^\d{11}$/.test(cpf) || !isValidCPF(cpf) || !isValidCustomerBirthDate(birthDate))
     return failure;
   return db.transaction(async (tx:any) => {
-    const customer = await uniqueCustomer(tx,phone);
-    if (!customer) return failure;
+    const matching = await rows(tx,sql`SELECT id, customerNumber, name, phone, email, cpf,
+      cep, street, addressNumber, neighborhood, city, uf, profilePhotoUrl, blocked, deletedAt
+      FROM customers WHERE deletedAt IS NULL
+      AND REGEXP_REPLACE(cpf,'[^0-9]','')=${cpf} LIMIT 2`);
+    if (matching.length !== 1) return failure;
+    const customer = matching[0];
     const savedCpf = normalizeCpf(customer.cpf);
     if (!isValidCPF(savedCpf) || !equalDigest(digest("cpf",savedCpf),digest("cpf",cpf)))
       return failure;
-    // No login when multiple records share the same CPF, including formatted copies.
-    const matching = await rows(tx,sql`SELECT id FROM customers
-      WHERE deletedAt IS NULL AND REGEXP_REPLACE(cpf,'[^0-9]','')=${cpf}
-      LIMIT 2`);
-    if (matching.length !== 1 || Number(matching[0].id) !== Number(customer.id)) return failure;
+    if (Number(customer.blocked || 0) !== 0 || !normalizeCustomerPhone(customer.phone) || !normalizeCustomerEmail(customer.email)) return failure;
+    const storedBirthDate = await readCustomerBirthDate(tx, Number(customer.id));
+    if (!storedBirthDate || !equalDigest(digest("birth-date",storedBirthDate),digest("birth-date",birthDate))) return failure;
     if (await getRegistrationReviewStatus(tx,Number(customer.id)) !== "approved") return failure;
-    // The issued session has the same server-side binding/expiry as an OTP login.
-    // No OTP challenge, WhatsApp queue or email is created or altered.
+    // The issued session has the same server-side expiry and route checks as OTP.
     return issueSession(tx,customer,now);
   });
 }
