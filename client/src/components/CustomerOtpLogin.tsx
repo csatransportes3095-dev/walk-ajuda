@@ -456,11 +456,15 @@ export function CustomerOtpLogin({ title = "Acesso H2 Colombiano", initialPhone 
               onClick={() => setShowHelp(previous => !previous)}>
               Não recebi o código
             </button>
-            <div className="rounded-xl border border-cyan-400/25 bg-cyan-500/5 p-3">
+            <div className="rounded-2xl border-2 border-blue-400 bg-slate-900 p-4 shadow-[0_0_18px_rgba(59,130,246,0.35)]">
+              <ShieldCheck aria-hidden="true" className="mx-auto mb-2 h-7 w-7 text-blue-400" />
+              <p className="text-center text-base font-black text-white">Não recebeu o código?</p>
+              <p className="mb-3 mt-1 text-center text-sm text-slate-300">Utilize seu CPF cadastrado para acessar sua conta.</p>
               <button type="button" onClick={() => { setShowCpfLogin(previous => !previous); setShowHelp(false); }}
                 aria-expanded={showCpfLogin} aria-controls="h2-otp-cpf-option"
-                disabled={busy} className="w-full text-center text-sm font-bold text-cyan-200">
-                Não recebeu o código? Entrar com CPF
+                aria-label="Não recebeu o código? Entrar com CPF"
+                disabled={busy} className="flex min-h-14 w-full items-center justify-center gap-2 rounded-xl bg-blue-600 px-4 py-3 text-base font-black text-white hover:bg-blue-500 disabled:opacity-50">
+                ENTRAR COM CPF <span aria-hidden="true">→</span>
               </button>
               {showCpfLogin && (
                 <div id="h2-otp-cpf-option" className="mt-3 space-y-3" data-testid="h2-otp-cpf-login">
