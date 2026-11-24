@@ -9,6 +9,7 @@ import AdminHeader from "@/components/AdminHeader";
 import { RouteRestrictionModal } from "@/components/RouteRestrictionModal";
 import { useTimezone } from "@/hooks/useTimezone";
 import { useLocation } from "wouter";
+import { birthDateToday, isValidCustomerBirthDate } from "@shared/customerBirthDate";
 
 type Customer = {
   id: number;
@@ -35,6 +36,7 @@ type Customer = {
   latestStatus?: string | null;
   isBlocked?: boolean;
   cpf?: string | null;
+  birthDate?: string | null;
   blocked?: number;
   blockReason?: string | null;
   blockedAt?: number | Date | null;
@@ -353,6 +355,7 @@ export default function AdminCustomers() {
   const [editReferredBy, setEditReferredBy] = useState("");
   const [editReferredByPhone, setEditReferredByPhone] = useState("");
   const [editCpf, setEditCpf] = useState("");
+  const [editBirthDate, setEditBirthDate] = useState("");
   const [editCustomerNumber, setEditCustomerNumber] = useState<string>("");
   // Valores originais: o update envia somente o que o ADM realmente modificar.
   const [editOriginal, setEditOriginal] = useState<Record<string, string> | null>(null);
@@ -902,6 +905,7 @@ export default function AdminCustomers() {
       referredBy: String(c.referredBy || '').trim(),
       referredByPhone: String(c.referredByPhone || '').replace(/\D/g, ''),
       cpf: String((c as any).cpf || '').replace(/\D/g, ''),
+      birthDate: String((c as any).birthDate || '').trim(),
       customerNumber: (c as any).customerNumber ? String((c as any).customerNumber) : '',
     });
     setEditingId(c.id);
@@ -919,6 +923,7 @@ export default function AdminCustomers() {
     setEditReferredBy(c.referredBy || "");
     setEditReferredByPhone(c.referredByPhone || "");
     setEditCpf((c as any).cpf || "");
+    setEditBirthDate(String((c as any).birthDate || '').trim());
     setEditCustomerNumber((c as any).customerNumber ? String((c as any).customerNumber) : "");
     setEditIsReseller(!!(c as any).isReseller);
     setEditResellerDiscountType(((c as any).resellerDiscountType as 'percent' | 'fixed') || 'percent');
@@ -981,6 +986,7 @@ export default function AdminCustomers() {
     const referredBy = editReferredBy.trim();
     const referredByPhone = editReferredByPhone.replace(/\D/g, '');
     const cpf = editCpf.replace(/\D/g, '');
+    const birthDate = editBirthDate.trim();
     const customerNumber = parsedCustomerNumber ? String(parsedCustomerNumber) : '';
 
     if (changed('name', name)) payload.name = name;
@@ -997,6 +1003,13 @@ export default function AdminCustomers() {
     if (changed('referredBy', referredBy)) payload.referredBy = referredBy;
     if (changed('referredByPhone', referredByPhone)) payload.referredByPhone = referredByPhone;
     if (changed('cpf', cpf)) payload.cpf = cpf;
+    if (changed('birthDate', birthDate)) {
+      if (!isValidCustomerBirthDate(birthDate)) {
+        toast.error('Informe uma data de nascimento válida.');
+        return;
+      }
+      payload.birthDate = birthDate;
+    }
     if (changed('customerNumber', customerNumber)) payload.customerNumber = parsedCustomerNumber;
 
     if (Object.keys(payload).length === 1) {
@@ -1858,6 +1871,19 @@ export default function AdminCustomers() {
                       placeholder="000.000.000-00"
                       maxLength={14}
                     />
+                  </div>
+                  <div>
+                    <label htmlFor="admin-customer-birth-date" className="text-xs text-muted-foreground">Data de nascimento <span className="text-red-400">*</span></label>
+                    <input
+                      id="admin-customer-birth-date"
+                      type="date"
+                      value={editBirthDate}
+                      min="1900-01-01"
+                      max={birthDateToday()}
+                      onChange={(e) => setEditBirthDate(e.target.value)}
+                      className="w-full px-2 py-1.5 bg-background border border-border rounded-lg text-sm text-foreground mt-0.5 focus:outline-none focus:ring-1 focus:ring-primary/50"
+                    />
+                    {!editBirthDate && <p className="mt-1 text-[11px] text-amber-300">Obrigatória para autenticação por CPF + data de nascimento.</p>}
                   </div>
                   <div>
                     <label className="text-xs text-muted-foreground">Email</label>

@@ -1,4 +1,5 @@
 import { isValidCustomerBirthDate } from "../shared/customerBirthDate";
+import { ensureCustomerBirthDateTable, saveCustomerBirthDate } from './customerBirthDate';
 import { getStatusVisibilityRule, listStatusVisibilityRules, saveStatusVisibilityRule, getOrderStatusVisibilityForClient } from "./orderStatusVisibility";
 import { siteSecurityRouter } from "./siteSecurityRouter";
 import { vinRegistryRouter } from "./routers/vinRegistry";
@@ -2911,7 +2912,7 @@ export const appRouter = router({
       }
       // Buscar clientes com flag indicando se têm pedido finalizado
       const rows = await db.execute(`
-        SELECT c.*,
+        SELECT c.*, cbd.birthDate,
           UNIX_TIMESTAMP(CONVERT_TZ(c.lastAccessAt, @@session.time_zone, '+00:00')) * 1000 AS lastAccessAtMs,
           UNIX_TIMESTAMP(CONVERT_TZ(c.createdAt, @@session.time_zone, '+00:00')) * 1000 AS createdAtMs,
           CASE WHEN EXISTS (
@@ -2949,6 +2950,7 @@ export const appRouter = router({
               AND bl.phone IS NOT NULL AND bl.phone != ''
           ) THEN 1 ELSE 0 END AS isBlocked
         FROM customers c
+        LEFT JOIN customerBirthDates cbd ON cbd.customerId = c.id
         WHERE c.deletedAt IS NULL
         ORDER BY c.createdAt DESC
       `);
@@ -3026,9 +3028,10 @@ export const appRouter = router({
         profilePhotoUrl: z.string().optional(),
         customerNumber: z.number().int().positive().nullable().optional(),
         cpf: z.string().optional(),
+        birthDate: z.string().max(10).refine(isValidCustomerBirthDate, 'Informe uma data de nascimento válida.').optional(),
       }))
       .mutation(async ({ input }) => {
-        const { id, ...rawData } = input;
+        const { id, birthDate, ...rawData } = input;
         const data = {
           ...rawData,
           phone: rawData.phone !== undefined ? normalizeCustomerPhone(rawData.phone) : undefined,
@@ -3041,6 +3044,7 @@ export const appRouter = router({
         const db = await (await import('./db')).getDb() as any;
         if (!db) throw new TRPCError({ code: 'INTERNAL_SERVER_ERROR', message: 'Banco indisponível' });
 
+        if (birthDate !== undefined) await ensureCustomerBirthDateTable(db);
         const custRows = await db.execute(sql`SELECT phone, cpf FROM customers WHERE id = ${id} LIMIT 1`);
         const current = (custRows[0] as unknown as Array<{ phone: string; cpf?: string | null }>)[0];
         if (!current) throw new TRPCError({ code: 'NOT_FOUND', message: 'Cliente não encontrado' });
@@ -3069,6 +3073,7 @@ export const appRouter = router({
         // Primeiro grava o cadastro principal.
         const updated = await updateCustomer(id, data);
         if (!updated) throw new TRPCError({ code: 'NOT_FOUND', message: 'Cliente não encontrado' });
+        if (birthDate !== undefined) await saveCustomerBirthDate(db, id, birthDate);
 
         if (phoneChanged) {
           const registrationRows = await db.execute(sql`
