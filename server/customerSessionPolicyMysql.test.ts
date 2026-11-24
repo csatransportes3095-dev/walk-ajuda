@@ -152,6 +152,18 @@ describe.skipIf(!testUrl)("Customer session policy — isolated MySQL and real O
     expect(await query("SELECT * FROM appSettings")).toHaveLength(0);
   });
 
+  it("caps the explicitly shortened session at one hour under a 90-day ADM policy", async () => {
+    await admin().updateSessionPolicy({ hours: 2160 });
+    const code = await issue();
+    const result = await verifyCustomerCode(phone, code, false);
+    expect(result.success).toBe(true);
+    if (!result.success) throw new Error("Synthetic OTP login failed");
+    await assertLifetime(result.token, 1);
+    await clock(epoch + hour);
+    expect(await getVerifiedCustomerOtpSession(isolated.db, result.token)).toBeNull();
+    expect((await verifyCustomerCode(phone, code)).success).toBe(false);
+  });
+
   it("enforces the 90-day upper duration and expires at its exact deadline", async () => {
     await admin().updateSessionPolicy({ hours: 2160 });
     const { token } = await login();

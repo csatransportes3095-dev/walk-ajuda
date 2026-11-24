@@ -38,7 +38,7 @@ const router = t.router({
       return { success: true, message: mode === 'blocked' ? 'Limite temporário para teste.' : 'Solicitação recebida para teste.',
         resendBlocked: mode === 'blocked', retryAfterSeconds: state.retryAfterSeconds, cooldownScope: input.channel === 'both' ? 'all' : state.cooldownScope, whatsappPrepared: input.channel !== 'email' && state.whatsappAvailable };
     }),
-    verifyCustomerCode: t.procedure.input(z.object({ phone: z.string(), code: z.string() })).mutation(({ input }) => {
+    verifyCustomerCode: t.procedure.input(z.object({ phone: z.string(), code: z.string(), remember: z.boolean().optional() })).mutation(({ input }) => {
       state.verifyCalls.push({ ...input });
       return input.code === '246810'
         ? { success: true, token: 'synthetic_otp_session', profileUpdateRequired: false, profileUpdateFields: [] }

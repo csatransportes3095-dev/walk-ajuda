@@ -226,8 +226,8 @@ export const customerPasswordRouter = router({
     }))
     .mutation(async ({ input, ctx }) => requestCustomerCode(input.phone, ctx.req, input.channel)),
   verifyCustomerCode: publicProcedure
-    .input(z.object({ phone: z.string().min(10).max(32), code: z.string().regex(/^\d{6}$/) }))
-    .mutation(async ({ input }) => verifyCustomerCode(input.phone, input.code)),
+    .input(z.object({ phone: z.string().min(10).max(32), code: z.string().regex(/^\d{6}$/), remember: z.boolean().optional() }))
+    .mutation(async ({ input }) => verifyCustomerCode(input.phone, input.code, input.remember)),
   finishRegistrationWithoutPassword: publicProcedure
     .input(z.object({ phone: z.string().min(10).max(32), emailVerificationToken: z.string().min(75).max(1500) }))
     .mutation(async ({ input }) => redeemNewRegistrationProof(input.phone, input.emailVerificationToken)),

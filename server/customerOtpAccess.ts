@@ -138,7 +138,7 @@ async function takeAttemptLimits(db: any, limits: Array<{scope:string;maximum:nu
   });
 }
 
-async function issueSession(tx: any, customer: any, now: number) {
+async function issueSession(tx: any, customer: any, now: number, remember = true) {
   const phone = normalizeCustomerPhone(customer.phone);
   const email = normalizeCustomerEmail(customer.email);
   if (!phone || !email) throw new TRPCError({ code: "UNAUTHORIZED", message: "Cadastro inválido." });
@@ -146,7 +146,7 @@ async function issueSession(tx: any, customer: any, now: number) {
   const token = "h2otp_" + randomBytes(32).toString("hex");
   // The existing TIMESTAMP column has second precision. Store one absolute
   // expiry in both tables, independent of the connection/driver time zone.
-  const expiresAtMs = Math.floor(now / 1000) * 1000 + sessionPolicy.hours * CUSTOMER_SESSION_HOUR_MS;
+  const expiresAtMs = Math.floor(now / 1000) * 1000 + (remember ? sessionPolicy.hours : Math.min(1, sessionPolicy.hours)) * CUSTOMER_SESSION_HOUR_MS;
   const phoneKey = digest("phone", phone), emailKey = digest("email", email);
   await tx.execute(sql`INSERT INTO customerPasswordSessions (phone,token,expiresAt,createdAt,lastAccessAt)
     VALUES (${phone},${token},FROM_UNIXTIME(${expiresAtMs} / 1000),FROM_UNIXTIME(FLOOR(${now} / 1000)),FROM_UNIXTIME(FLOOR(${now} / 1000)))`);
@@ -284,7 +284,7 @@ export async function requestCustomerCode(phoneInput: string, request: Request, 
     cooldownScope:channel === "both" ? "all" : "channel",whatsappPrepared};
 }
 
-export async function verifyCustomerCode(phoneInput: string, code: string) {
+export async function verifyCustomerCode(phoneInput: string, code: string, remember = true) {
   requireOtpMigrationEnabled();
   const phone = normalizeCustomerPhone(phoneInput);
   if (!phone || phone.length !== 11 || !/^\d{6}$/.test(code)) {
@@ -309,7 +309,7 @@ export async function verifyCustomerCode(phoneInput: string, code: string) {
       return { success:false as const,message:"Seu cadastro está aguardando aprovação do administrador." };
     await tx.execute(sql`UPDATE customerOtpChallenges SET usedAt=${now},
       codeDigest='',expiresAt=0 WHERE phoneKey=${key}`);
-    return issueSession(tx,customer,now);
+    return issueSession(tx,customer,now,remember);
   });
 }
 

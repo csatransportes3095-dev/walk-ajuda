@@ -52,7 +52,7 @@ try {
     await f.page.getByLabel('Código de 6 números').fill('246810');
     await f.page.getByRole('button', { name:'CONFIRMAR E ACESSAR' }).click();
     await f.page.getByTestId('authenticated-phone').waitFor();
-    assert.deepEqual((await f.state()).verifyCalls, [{ phone, code:'246810' }]);
+    assert.deepEqual((await f.state()).verifyCalls, [{ phone, code:'246810', remember:true }]);
     checks.push('Sem H2 AUTO: um clique gera OTP pelo e-mail, sem popup; validação na aba original');
     await f.close();
   }
@@ -79,6 +79,23 @@ try {
     await f.page.getByRole('button',{name:'CONFIRMAR E ACESSAR'}).click();
     await f.page.getByTestId('authenticated-phone').waitFor();
     checks.push('H2 AUTO ativo: redirecionamento automático ou recuperação se navegador bloquear; código mantido');
+    await f.close();
+  }
+  {
+    const f = await setup({ server:{ whatsappAvailable:false } });
+    const keep = f.page.getByRole('checkbox', { name:/Manter conectado neste aparelho/ });
+    assert.equal(await keep.isChecked(), true);
+    await keep.uncheck();
+    await f.request.click();
+    await f.page.getByLabel('Código de 6 números').waitFor();
+    await f.page.reload({waitUntil:'networkidle'});
+    await f.page.getByLabel('Código de 6 números').waitFor();
+    assert.equal(await keep.isChecked(), false);
+    await f.page.getByLabel('Código de 6 números').fill('246810');
+    await f.page.getByRole('button', { name:'CONFIRMAR E ACESSAR' }).click();
+    await f.page.getByTestId('authenticated-phone').waitFor();
+    assert.deepEqual((await f.state()).verifyCalls, [{ phone, code:'246810', remember:false }]);
+    checks.push('A opção desmarcada é preservada no retorno à tela e enviada ao servidor');
     await f.close();
   }
   {

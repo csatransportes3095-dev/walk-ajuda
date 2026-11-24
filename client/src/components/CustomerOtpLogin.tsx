@@ -7,7 +7,7 @@ const OTP_DRAFT_TTL_MS = 10 * 60 * 1000;
 const OTP_RESEND_COOLDOWN_MS = 60 * 1000;
 const OTP_MAX_STORED_COOLDOWN_MS = 24 * 60 * 60 * 1000;
 type OtpChannel = "email" | "whatsapp" | "both";
-type OtpDraft = { phone: string; step: "phone" | "code"; channel: OtpChannel; whatsappPrepared: boolean };
+type OtpDraft = { phone: string; step: "phone" | "code"; channel: OtpChannel; whatsappPrepared: boolean; remember: boolean };
 function cooldownKey(phone: string, channel: OtpChannel): string { return "h2_otp_cooldown_" + phone + "_" + channel; }
 function savedCooldown(phone: string, channel: OtpChannel): number {
   if (!/^\d{11}$/.test(phone)) return 0;
@@ -46,6 +46,7 @@ function readOtpDraft(): OtpDraft | null {
           step: draft.step === "code" ? "code" : "phone",
           channel: draft.channel === "both" ? "both" : draft.channel === "whatsapp" ? "whatsapp" : "email",
           whatsappPrepared: draft.whatsappPrepared === true,
+          remember: draft.remember !== false,
         };
       }
       storage.removeItem(OTP_DRAFT_KEY);
@@ -53,8 +54,8 @@ function readOtpDraft(): OtpDraft | null {
   }
   return null;
 }
-function saveOtpDraft(phone: string, step: "phone" | "code", channel: OtpChannel = "both", whatsappPrepared = false) {
-  const draft = JSON.stringify({phone, step, channel, whatsappPrepared, expiresAt: Date.now() + OTP_DRAFT_TTL_MS});
+function saveOtpDraft(phone: string, step: "phone" | "code", channel: OtpChannel = "both", whatsappPrepared = false, remember = true) {
+  const draft = JSON.stringify({phone, step, channel, whatsappPrepared, remember, expiresAt: Date.now() + OTP_DRAFT_TTL_MS});
   for (const kind of ["session", "local"] as const) {
     try { (kind === "session" ? window.sessionStorage : window.localStorage).setItem(OTP_DRAFT_KEY, draft); } catch {}
   }
@@ -121,7 +122,7 @@ export function CustomerOtpLogin({ title = "Acesso H2 Colombiano", initialPhone 
     const selectedPhone = normalizeOtpPhone(initialPhone) || draft?.phone || "";
     const matchingDraft = draft?.phone === selectedPhone ? draft : null;
     if (draft && !matchingDraft) clearOtpDraft();
-    return { phone: selectedPhone, step: matchingDraft?.step || "phone", channel: matchingDraft?.channel || "both", whatsappPrepared: matchingDraft?.whatsappPrepared === true };
+    return { phone: selectedPhone, step: matchingDraft?.step || "phone", channel: matchingDraft?.channel || "both", whatsappPrepared: matchingDraft?.whatsappPrepared === true, remember: matchingDraft?.remember !== false };
   });
   const [phone, setPhone] = useState(initialState.phone);
   const [step, setStep] = useState<"phone" | "code">(initialState.step);
@@ -130,6 +131,7 @@ export function CustomerOtpLogin({ title = "Acesso H2 Colombiano", initialPhone 
   const [showHelp, setShowHelp] = useState(false);
   const [showWhatsappLink, setShowWhatsappLink] = useState(initialState.step === "code" && initialState.whatsappPrepared);
   const [busy, setBusy] = useState(false);
+  const [remember, setRemember] = useState(initialState.remember);
   const [clockNow, setClockNow] = useState(() => Date.now());
   const [cooldowns, setCooldowns] = useState<{email:number;whatsapp:number}>(() => {
     const selectedPhone = initialState.phone;
@@ -233,7 +235,7 @@ export function CustomerOtpLogin({ title = "Acesso H2 Colombiano", initialPhone 
       const whatsappPrepared = channel !== "email" && result.whatsappPrepared === true;
       // Commit and persist the OTP input BEFORE handing off to WhatsApp.
       // This must be the page Safari shows when the customer returns.
-      saveOtpDraft(cleanPhone, "code", channel, whatsappPrepared);
+      saveOtpDraft(cleanPhone, "code", channel, whatsappPrepared, remember);
       flushSync(() => {
         setCode("");
         setDeliveryChannel(channel);
@@ -291,7 +293,7 @@ export function CustomerOtpLogin({ title = "Acesso H2 Colombiano", initialPhone 
     }
     setBusy(true);
     try {
-      const result = await verifyCode.mutateAsync({ phone: cleanPhone, code: digits });
+      const result = await verifyCode.mutateAsync({ phone: cleanPhone, code: digits, remember });
       if (!result.success) {
         toast.error(result.message || "Código inválido ou expirado.");
         return;
@@ -334,6 +336,19 @@ export function CustomerOtpLogin({ title = "Acesso H2 Colombiano", initialPhone 
           {loginSettings?.login_subtitle?.trim() || "Acesso seguro com telefone e código. Nenhuma senha é necessária."}
         </p>}
 
+        <label className="mt-5 flex items-start gap-3 rounded-xl border border-slate-700 bg-slate-900 p-3 text-sm">
+          <input type="checkbox" checked={remember} disabled={busy} className="mt-1 h-4 w-4 accent-emerald-500"
+            onChange={event => {
+              const checked = event.target.checked;
+              setRemember(checked);
+              if (cleanPhone.length === 11) saveOtpDraft(cleanPhone, step, deliveryChannel, showWhatsappLink, checked);
+            }} />
+          <span>Manter conectado neste aparelho
+            <span className="mt-1 block text-xs text-slate-400">
+              {remember ? "Prazo definido pela administração." : "Sessão de até 1 hora, mesmo ao reabrir o navegador."}
+            </span>
+          </span>
+        </label>
         {step === "phone" ? (
           <form onSubmit={event => { event.preventDefault(); void send("both"); }} className="mt-7 space-y-4">
             <label htmlFor="h2-otp-phone" className="flex items-center gap-2 text-sm font-semibold">
@@ -347,7 +362,7 @@ export function CustomerOtpLogin({ title = "Acesso H2 Colombiano", initialPhone 
               className="w-full rounded-xl border border-white/20 bg-slate-900 p-4 text-center text-xl font-bold outline-none focus:border-cyan-400"
               placeholder="(11) 99999-9999"
               value={phone}
-              onChange={e => { const next = normalizeOtpPhone(e.target.value); setPhone(next); setCooldowns({email:savedCooldown(next,"email"),whatsapp:savedCooldown(next,"whatsapp")}); saveOtpDraft(next, "phone", deliveryChannel); }}
+              onChange={e => { const next = normalizeOtpPhone(e.target.value); setPhone(next); setCooldowns({email:savedCooldown(next,"email"),whatsapp:savedCooldown(next,"whatsapp")}); saveOtpDraft(next, "phone", deliveryChannel, false, remember); }}
               disabled={busy}
               required
             />
@@ -426,7 +441,7 @@ export function CustomerOtpLogin({ title = "Acesso H2 Colombiano", initialPhone 
                   </button>
                 </div>
                 <button type="button" className="w-full py-2 text-sm text-cyan-300" disabled={busy}
-                  onClick={() => { setStep("phone"); setCode(""); setShowHelp(false); saveOtpDraft(cleanPhone, "phone", deliveryChannel); }}>
+                  onClick={() => { setStep("phone"); setCode(""); setShowHelp(false); saveOtpDraft(cleanPhone, "phone", deliveryChannel, false, remember); }}>
                   Alterar telefone
                 </button>
                 <a href="https://h2colombiano.com/" className="block py-2 text-center text-sm text-cyan-300">
