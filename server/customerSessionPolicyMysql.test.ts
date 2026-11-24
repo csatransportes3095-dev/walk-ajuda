@@ -13,6 +13,7 @@ vi.mock("./siteAccessCodeDelivery", () => ({ deliverOwnSiteCode: isolated.delive
 import { ensureCustomerOtpTables, requestCustomerCode, verifyCustomerCode, redeemNewRegistrationProof,
   getVerifiedCustomerOtpSession, revokeCustomerOtpSession, verifyCustomerCpfBirthDate } from "./customerOtpAccess";
 import { issueLoginEmailProof } from "./customerLoginEmailProof";
+import { correctCustomerBirthDateByAdmin, ensureAdminCustomerBirthDateAuditTable, readCustomerBirthDate, saveCustomerBirthDate } from "./customerBirthDate";
 import { ensureRegistrationReviewSchema } from "./customerRegistrationReview";
 import { migrateCustomerLoginHistory } from "./customerLoginHistorySchema";
 import { requireCustomerSession } from "./customerSession";
@@ -98,7 +99,7 @@ describe.skipIf(!testUrl)("Customer session policy — isolated MySQL and real O
     for (const [name, value] of Object.entries({ JWT_SECRET: secret, H2_SITE_ACCESS_SECRET: secret, H2_CUSTOMER_OTP_V2_ENABLED: "true", RENDER: "false" })) vi.stubEnv(name, value);
     await query("DROP TRIGGER IF EXISTS session_policy_test_reject_update");
     await query("DROP TABLE IF EXISTS session_policy_test_hidden_settings");
-    for (const table of ["customerLoginHistory", "customerPasswordSessions", "customerOtpSessions", "customerOtpChallenges", "customerOtpLimits", "customerOtpUsedProofs", "customerBirthDates", "customerRegistrationReviews", "customerRegistrationReviewConfig", "customers", "appSettings"]) await query(`DROP TABLE IF EXISTS ${table}`);
+    for (const table of ["customerBirthDateAdminAudit", "customerLoginHistory", "customerPasswordSessions", "customerOtpSessions", "customerOtpChallenges", "customerOtpLimits", "customerOtpUsedProofs", "customerBirthDates", "customerRegistrationReviews", "customerRegistrationReviewConfig", "customers", "appSettings"]) await query(`DROP TABLE IF EXISTS ${table}`);
     await query("CREATE TABLE appSettings (id INT NOT NULL AUTO_INCREMENT PRIMARY KEY,`key` VARCHAR(128) NOT NULL UNIQUE,value TEXT NOT NULL,updatedAt TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP) ENGINE=InnoDB");
     await query(`CREATE TABLE customers (
       id INT NOT NULL PRIMARY KEY,phone VARCHAR(32) NOT NULL,email VARCHAR(320) NOT NULL,name VARCHAR(128) NOT NULL,
@@ -115,6 +116,7 @@ describe.skipIf(!testUrl)("Customer session policy — isolated MySQL and real O
       ipAddress VARCHAR(64) NULL,userAgent VARCHAR(512) NULL
     ) ENGINE=InnoDB`);
     await ensureCustomerOtpTables(isolated.db);
+    await ensureAdminCustomerBirthDateAuditTable(isolated.db);
     await ensureRegistrationReviewSchema(isolated.db);
     await migrateCustomerLoginHistory(isolated.db);
   }, 30_000);
@@ -124,7 +126,7 @@ describe.skipIf(!testUrl)("Customer session policy — isolated MySQL and real O
     await query("SET time_zone = '+00:00'"); await clock(epoch);
     isolated.delivery.mockReset().mockResolvedValue({ channel: "smtp", messageId: "isolated-session-policy" });
     await query("DROP TRIGGER IF EXISTS session_policy_test_reject_update");
-    for (const table of ["customerLoginHistory", "customerPasswordSessions", "customerOtpSessions", "customerOtpChallenges", "customerOtpLimits", "customerOtpUsedProofs", "customerBirthDates", "customerRegistrationReviews", "customers", "appSettings"]) await query(`DELETE FROM ${table}`);
+    for (const table of ["customerBirthDateAdminAudit", "customerLoginHistory", "customerPasswordSessions", "customerOtpSessions", "customerOtpChallenges", "customerOtpLimits", "customerOtpUsedProofs", "customerBirthDates", "customerRegistrationReviews", "customers", "appSettings"]) await query(`DELETE FROM ${table}`);
     await query("UPDATE customerRegistrationReviewConfig SET mode='automatico',manualSince=NULL WHERE id=1");
     await query(`INSERT INTO customers (id,phone,email,name,cpf,cep,street,addressNumber,neighborhood,city,uf,profilePhotoUrl)
       VALUES (101,?,?,'Cliente sintético','90000000175','01000000','Rua de teste','1','Teste','São Paulo','SP','https://example.test/profile.png')`, [phone, email]);
@@ -169,6 +171,36 @@ describe.skipIf(!testUrl)("Customer session policy — isolated MySQL and real O
     expect(limited).toMatchObject({success:false});
     expect(Number(limited.retryAfterSeconds)).toBeGreaterThan(0);
     expect(await query("SELECT COUNT(*) AS n FROM customerOtpSessions")).toEqual([{n:0}]);
+  });
+
+  it("preserva a data registrada pelo cliente e só autentica a nova data após correção ADM", async () => {
+    await saveCustomerBirthDate(isolated.db, 101, "1991-02-20");
+    expect(await readCustomerBirthDate(isolated.db, 101)).toBe("1990-01-15");
+    const correct = (date: string) => isolated.db.transaction((tx: any) =>
+      correctCustomerBirthDateByAdmin(tx, 101, date, "session-policy-test"));
+    await expect(correct("1991-02-30")).rejects.toThrow("data de nascimento");
+    expect(await correct("1990-01-15")).toBe(false);
+    expect(await query("SELECT COUNT(*) AS n FROM customerBirthDateAdminAudit")).toEqual([{n:0}]);
+    expect(await correct("1991-02-20")).toBe(true);
+    expect(await readCustomerBirthDate(isolated.db, 101)).toBe("1991-02-20");
+    expect(await query("SELECT customerId,adminSubject,action FROM customerBirthDateAdminAudit"))
+      .toEqual([{customerId:101,adminSubject:"session-policy-test",action:"corrected"}]);
+    const caller = {headers:{},ip:"198.51.100.49",socket:{remoteAddress:"198.51.100.49"}} as any;
+    expect((await verifyCustomerCpfBirthDate("90000000175", "1990-01-15", caller)).success).toBe(false);
+    expect((await verifyCustomerCpfBirthDate("90000000175", "1991-02-20", caller)).success).toBe(true);
+    expect(await correct("1991-02-20")).toBe(false);
+    expect(await query("SELECT COUNT(*) AS n FROM customerBirthDateAdminAudit")).toEqual([{n:1}]);
+  });
+
+  it("não altera a data sem identidade ADM e reverte correção e auditoria na falha da transação", async () => {
+    await expect(isolated.db.transaction((tx: any) =>
+      correctCustomerBirthDateByAdmin(tx, 101, "1991-02-20", ""))).rejects.toThrow("Administrador");
+    await expect(isolated.db.transaction(async (tx: any) => {
+      await correctCustomerBirthDateByAdmin(tx, 101, "1991-02-20", "session-policy-test");
+      throw new Error("rollback-test");
+    })).rejects.toThrow("rollback-test");
+    expect(await readCustomerBirthDate(isolated.db, 101)).toBe("1990-01-15");
+    expect(await query("SELECT COUNT(*) AS n FROM customerBirthDateAdminAudit")).toEqual([{n:0}]);
   });
 
   it("não autentica CPF duplicado em outro cadastro", async () => {
