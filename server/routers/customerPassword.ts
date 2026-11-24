@@ -33,6 +33,7 @@ import { getCustomerLoginHistory } from "../customerLoginHistory";
 import { emailBelongsToAnotherCustomer, CUSTOMER_EMAIL_IN_USE_MESSAGE } from "../customerEmailOwnership";
 import { readCustomerSessionPolicy, saveCustomerSessionPolicy } from "../customerSessionPolicy";
 import { readCustomerPasskeyPermission, saveCustomerPasskeyPermission } from "../customerPasskeyPolicy";
+import { canEnrollCustomerPasskey, preparePasskeyEnrollmentAfterOtp, finishCustomerPasskeyEnrollment, registrationProofSchema } from "../customerPasskeyEnrollment";
 import { MIN_CUSTOMER_SESSION_HOURS, MAX_CUSTOMER_SESSION_HOURS } from "../../shared/customerSessionPolicy";
 
 const SESSION_DURATION_MS = 90 * 24 * 60 * 60 * 1000; // 90 dias
@@ -229,9 +230,31 @@ export const customerPasswordRouter = router({
       channel: z.enum(["email","whatsapp","both"]).optional().default("email"),
     }))
     .mutation(async ({ input, ctx }) => requestCustomerCode(input.phone, ctx.req, input.channel)),
+  passkeyEnrollmentAvailable: publicProcedure.query(async () => ({
+    available: await canEnrollCustomerPasskey(await getDb()),
+  })),
   verifyCustomerCode: publicProcedure
-    .input(z.object({ phone: z.string().min(10).max(32), code: z.string().regex(/^\d{6}$/), remember: z.boolean().optional() }))
-    .mutation(async ({ input }) => verifyCustomerCode(input.phone, input.code, input.remember)),
+    .input(z.object({ phone: z.string().min(10).max(32), code: z.string().regex(/^\d{6}$/), remember: z.boolean().optional(), enrollPasskey: z.boolean().optional() }))
+    .mutation(async ({ input, ctx }) => {
+      const result = await verifyCustomerCode(input.phone, input.code, input.remember);
+      if (!result.success || !input.enrollPasskey) return result;
+      // The OTP was already validated and consumed. An optional enrollment
+      // problem must never discard the successfully issued normal session.
+      try {
+        const enrollment = await preparePasskeyEnrollmentAfterOtp(await getDb(), result.token, ctx.req.headers.origin);
+        return { ...result, enrollment };
+      } catch {
+        console.warn("[customer-passkey] Optional enrollment unavailable");
+        return { ...result, enrollment: null };
+      }
+    }),
+  finishPasskeyEnrollment: publicProcedure
+    .input(z.object({
+      token: z.string().regex(/^h2otp_[0-9a-f]{64}$/),
+      challengeId: z.string().regex(/^[0-9a-f]{64}$/),
+      response: registrationProofSchema,
+    }))
+    .mutation(async ({ input, ctx }) => finishCustomerPasskeyEnrollment(await getDb(), input.token, input.challengeId, input.response, ctx.req.headers.origin)),
   finishRegistrationWithoutPassword: publicProcedure
     .input(z.object({ phone: z.string().min(10).max(32), emailVerificationToken: z.string().min(75).max(1500) }))
     .mutation(async ({ input }) => redeemNewRegistrationProof(input.phone, input.emailVerificationToken)),

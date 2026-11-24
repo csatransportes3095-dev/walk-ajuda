@@ -28,7 +28,7 @@ describe("H2 OTP iPhone: redirecionamento automático sem página em branco",()=
     expect(login).toContain('kind === "session" ? window.sessionStorage : window.localStorage');
     expect(login).toContain('matchingDraft?.step || "phone"');
     expect(login).toContain('autoComplete="one-time-code"');
-    expect(login).toContain('await verifyCode.mutateAsync({ phone: cleanPhone, code: digits, remember })');
+    expect(login).toContain('await verifyCode.mutateAsync({ phone: cleanPhone, code: digits, remember, enrollPasskey: enrollPasskey && canEnrollPasskey })');
     expect(login).toContain('data-testid="h2-otp-open-whatsapp"');
     expect(login).toContain('WhatsApp não abriu? Abrir novamente');
   });

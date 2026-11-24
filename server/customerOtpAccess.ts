@@ -98,7 +98,7 @@ export async function ensureCustomerOtpTables(db: any): Promise<void> {
 }
 
 type IneligibleReason = "phone_invalid" | "customer_not_found" | "phone_not_unique" | "blocked" | "email_invalid" | "email_shared";
-async function uniqueCustomer(db: any, normalized: string, onIneligible?: (reason: IneligibleReason) => void): Promise<any | null> {
+export async function uniqueCustomer(db: any, normalized: string, onIneligible?: (reason: IneligibleReason) => void): Promise<any | null> {
   const reject = (reason: IneligibleReason) => { onIneligible?.(reason); return null; };
   if (!/^\d{11}$/.test(normalized)) return reject("phone_invalid");
   const found = await rows(db, sql`SELECT id, phone, email, blocked, deletedAt, name, cpf,

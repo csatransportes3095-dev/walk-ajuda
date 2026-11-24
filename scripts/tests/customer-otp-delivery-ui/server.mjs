@@ -16,7 +16,7 @@ const defaults = () => ({
   checkMode: 'success',
   requestMode: 'success', retryAfterSeconds: 60, cooldownScope: 'channel',
   whatsappAvailable: true, supportNumber: '11999990099', delayMs: 0,
-  checkCalls: [], requestCalls: [], verifyCalls: [],
+  checkCalls: [], requestCalls: [], verifyCalls: [], passkeyAvailable:false, finishEnrollmentCalls:[],
 });
 let state = defaults();
 const t = initTRPC.create({ transformer: superjson });
@@ -29,6 +29,8 @@ const router = t.router({
     return { exists: true, customerBlocked: false, blocked: false, customer: { email: 'fixture@example.invalid' } };
   }) }),
   customerPassword: t.router({
+    passkeyEnrollmentAvailable: t.procedure.query(() => ({available:state.passkeyAvailable})),
+    finishPasskeyEnrollment: t.procedure.input(z.object({token:z.string(),challengeId:z.string(),response:z.unknown()})).mutation(({input}) => { state.finishEnrollmentCalls.push({token:input.token,challengeId:input.challengeId}); return {enrolled:true}; }),
     h2AutoOtpAvailable: t.procedure.query(() => ({ available: state.whatsappAvailable })),
     requestCustomerCode: t.procedure.input(z.object({ phone: z.string(), channel: z.enum(['email', 'whatsapp', 'both']) })).mutation(async ({ input }) => {
       state.requestCalls.push({ ...input });
@@ -38,10 +40,10 @@ const router = t.router({
       return { success: true, message: mode === 'blocked' ? 'Limite temporário para teste.' : 'Solicitação recebida para teste.',
         resendBlocked: mode === 'blocked', retryAfterSeconds: state.retryAfterSeconds, cooldownScope: input.channel === 'both' ? 'all' : state.cooldownScope, whatsappPrepared: input.channel !== 'email' && state.whatsappAvailable };
     }),
-    verifyCustomerCode: t.procedure.input(z.object({ phone: z.string(), code: z.string(), remember: z.boolean().optional() })).mutation(({ input }) => {
+    verifyCustomerCode: t.procedure.input(z.object({ phone: z.string(), code: z.string(), remember: z.boolean().optional(), enrollPasskey: z.boolean().optional() })).mutation(({ input }) => {
       state.verifyCalls.push({ ...input });
       return input.code === '246810'
-        ? { success: true, token: 'synthetic_otp_session', profileUpdateRequired: false, profileUpdateFields: [] }
+        ? { success: true, token: 'synthetic_otp_session', profileUpdateRequired: false, profileUpdateFields: [], enrollment: input.enrollPasskey && state.passkeyAvailable ? {challengeId:'synthetic-challenge',options:{challenge:'c3ludGhldGlj',rp:{name:'Synthetic test',id:'127.0.0.1'},user:{id:'dGVzdA',name:'test',displayName:'Test'},pubKeyCredParams:[{type:'public-key',alg:-7}],timeout:1000,attestation:'none',authenticatorSelection:{residentKey:'required',userVerification:'required'}}} : null }
         : { success: false, message: 'Código de teste inválido.' };
     }),
   }),
@@ -52,7 +54,7 @@ app.use(express.json());
 app.get('/test-control', (_req, res) => res.json(state));
 app.post('/test-control', (req, res) => {
   if (req.body.reset) state = defaults();
-  for (const key of ['checkMode', 'requestMode', 'retryAfterSeconds', 'cooldownScope', 'whatsappAvailable', 'supportNumber', 'delayMs']) {
+  for (const key of ['checkMode', 'requestMode', 'retryAfterSeconds', 'cooldownScope', 'whatsappAvailable', 'supportNumber', 'delayMs', 'passkeyAvailable']) {
     if (key in req.body) state[key] = req.body[key];
   }
   res.json(state);

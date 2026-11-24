@@ -52,7 +52,7 @@ try {
     await f.page.getByLabel('Código de 6 números').fill('246810');
     await f.page.getByRole('button', { name:'CONFIRMAR E ACESSAR' }).click();
     await f.page.getByTestId('authenticated-phone').waitFor();
-    assert.deepEqual((await f.state()).verifyCalls, [{ phone, code:'246810', remember:true }]);
+    assert.deepEqual((await f.state()).verifyCalls, [{ phone, code:'246810', remember:true, enrollPasskey:false }]);
     checks.push('Sem H2 AUTO: um clique gera OTP pelo e-mail, sem popup; validação na aba original');
     await f.close();
   }
@@ -94,8 +94,27 @@ try {
     await f.page.getByLabel('Código de 6 números').fill('246810');
     await f.page.getByRole('button', { name:'CONFIRMAR E ACESSAR' }).click();
     await f.page.getByTestId('authenticated-phone').waitFor();
-    assert.deepEqual((await f.state()).verifyCalls, [{ phone, code:'246810', remember:false }]);
+    assert.deepEqual((await f.state()).verifyCalls, [{ phone, code:'246810', remember:false, enrollPasskey:false }]);
     checks.push('A opção desmarcada é preservada no retorno à tela e enviada ao servidor');
+    await f.close();
+  }
+  {
+    const f = await setup({ server:{ whatsappAvailable:false, passkeyAvailable:true } });
+    await f.request.click();
+    await f.page.getByLabel('Código de 6 números').waitFor();
+    const opt = f.page.getByRole('checkbox', {name:/Cadastrar biometria neste aparelho/});
+    await opt.waitFor();
+    assert.equal(await opt.isChecked(),false);
+    await opt.check();
+    await f.page.getByLabel('Código de 6 números').fill('246810');
+    await f.page.getByRole('button',{name:'CONFIRMAR E ACESSAR'}).click();
+    await f.page.getByRole('button',{name:'CADASTRAR BIOMETRIA',exact:true}).waitFor();
+    assert.equal(await f.page.getByTestId('authenticated-phone').count(),0);
+    await f.page.getByRole('button',{name:'Continuar sem cadastrar'}).click();
+    await f.page.getByTestId('authenticated-phone').waitFor();
+    assert.deepEqual((await f.state()).verifyCalls,[{phone,code:'246810',remember:true,enrollPasskey:true}]);
+    assert.deepEqual((await f.state()).finishEnrollmentCalls,[]);
+    checks.push('Cadastro de Passkey exige escolha explícita; continuar sem cadastrar mantém o login OTP');
     await f.close();
   }
   {

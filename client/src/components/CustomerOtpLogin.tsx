@@ -67,7 +67,8 @@ function clearOtpDraft() {
 }
 import { trpc } from "@/lib/trpc";
 import { toast } from "sonner";
-import { CheckCircle2, Mail, MessageCircle, Phone, ShieldCheck } from "lucide-react";
+import { CheckCircle2, Fingerprint, Mail, MessageCircle, Phone, ShieldCheck } from "lucide-react";
+import { browserSupportsWebAuthn, startRegistration } from "@simplewebauthn/browser";
 
 export type CustomerOtpResult = {
   token: string;
@@ -142,6 +143,11 @@ export function CustomerOtpLogin({ title = "Acesso H2 Colombiano", initialPhone 
   const requestCode = trpc.customerPassword.requestCustomerCode.useMutation();
   const {data: h2AutoDelivery} = trpc.customerPassword.h2AutoOtpAvailable.useQuery();
   const verifyCode = trpc.customerPassword.verifyCustomerCode.useMutation();
+  const enrollmentAvailability = trpc.customerPassword.passkeyEnrollmentAvailable.useQuery(undefined, { retry: false });
+  const finishEnrollment = trpc.customerPassword.finishPasskeyEnrollment.useMutation();
+  const [enrollPasskey, setEnrollPasskey] = useState(false);
+  const [pendingEnrollment, setPendingEnrollment] = useState<null | { result: CustomerOtpResult; challengeId: string; options: Parameters<typeof startRegistration>[0]["optionsJSON"] }>(null);
+  const canEnrollPasskey = enrollmentAvailability.data?.available === true && browserSupportsWebAuthn();
   const cleanPhone = normalizeOtpPhone(phone);
   const remainingEmail = remainingSeconds(Math.max(cooldowns.email,savedCooldown(cleanPhone,"email")),clockNow);
   const remainingWhatsapp = remainingSeconds(Math.max(cooldowns.whatsapp,savedCooldown(cleanPhone,"whatsapp")),clockNow);
@@ -284,6 +290,36 @@ export function CustomerOtpLogin({ title = "Acesso H2 Colombiano", initialPhone 
     }
   }
 
+  async function completeLogin(result: CustomerOtpResult) {
+    // Keep the existing route-specific authorization before caching the token.
+    await onAuthenticated(result);
+    localStorage.setItem("cp_token", result.token);
+    localStorage.setItem("walk_client_phone", cleanPhone);
+    clearOtpDraft();
+    toast.success("Identidade confirmada!");
+  }
+
+  async function confirmEnrollment(activate: boolean) {
+    if (!pendingEnrollment || busy) return;
+    const pending = pendingEnrollment;
+    setBusy(true);
+    try {
+      if (activate) {
+        try {
+          const response = await startRegistration({ optionsJSON: pending.options });
+          await finishEnrollment.mutateAsync({ token: pending.result.token, challengeId: pending.challengeId, response });
+          toast.success("Chave de acesso cadastrada!");
+        } catch {
+          toast.info("Biometria não cadastrada. O acesso por código continua disponível.");
+        }
+      }
+      await completeLogin(pending.result);
+      setPendingEnrollment(null);
+    } catch (err: any) {
+      toast.error(err?.message || "Não foi possível concluir o acesso.");
+    } finally { setBusy(false); }
+  }
+
   async function confirm(event: React.FormEvent) {
     event.preventDefault();
     const digits = code.replace(/\D/g, "").slice(0, 6);
@@ -293,7 +329,7 @@ export function CustomerOtpLogin({ title = "Acesso H2 Colombiano", initialPhone 
     }
     setBusy(true);
     try {
-      const result = await verifyCode.mutateAsync({ phone: cleanPhone, code: digits, remember });
+      const result = await verifyCode.mutateAsync({ phone: cleanPhone, code: digits, remember, enrollPasskey: enrollPasskey && canEnrollPasskey });
       if (!result.success) {
         toast.error(result.message || "Código inválido ou expirado.");
         return;
@@ -302,22 +338,19 @@ export function CustomerOtpLogin({ title = "Acesso H2 Colombiano", initialPhone 
         toast.error("Não foi possível confirmar o acesso.");
         return;
       }
-      // Only the server can issue the session after consuming a valid code.
-      // Local storage alone is never used to authorize a protected route.
-      await onAuthenticated({
-        token: result.token,
-        phone: cleanPhone,
+      const loginResult: CustomerOtpResult = {
+        token: result.token, phone: cleanPhone,
         profileUpdateRequired: result.profileUpdateRequired,
         profileUpdateFields: result.profileUpdateFields || [],
-      });
-      // Store only after the route-specific server authorization callback
-      // succeeds, preventing failed permissions from leaving a cached token.
-      localStorage.setItem("cp_token", result.token);
-      // Order, raffle, appointments and old site modules still read the
-      // canonical phone. It is NOT an authorization credential.
-      localStorage.setItem("walk_client_phone", cleanPhone);
-      clearOtpDraft();
-      toast.success("Identidade confirmada!");
+      };
+      if ("enrollment" in result && result.enrollment) {
+        setPendingEnrollment({ result: loginResult, ...result.enrollment });
+        clearOtpDraft();
+        setCode("");
+        return;
+      }
+      if (enrollPasskey && canEnrollPasskey) toast.info("Não foi possível preparar o cadastro da biometria. O acesso por código continua disponível.");
+      await completeLogin(loginResult);
     } catch (err: any) {
       toast.error(err?.message || "Falha ao verificar o código.");
     } finally {
@@ -336,7 +369,7 @@ export function CustomerOtpLogin({ title = "Acesso H2 Colombiano", initialPhone 
           {loginSettings?.login_subtitle?.trim() || "Acesso seguro com telefone e código. Nenhuma senha é necessária."}
         </p>}
 
-        <label className="mt-5 flex items-start gap-3 rounded-xl border border-slate-700 bg-slate-900 p-3 text-sm">
+        {!pendingEnrollment && <label className="mt-5 flex items-start gap-3 rounded-xl border border-slate-700 bg-slate-900 p-3 text-sm">
           <input type="checkbox" checked={remember} disabled={busy} className="mt-1 h-4 w-4 accent-emerald-500"
             onChange={event => {
               const checked = event.target.checked;
@@ -348,8 +381,15 @@ export function CustomerOtpLogin({ title = "Acesso H2 Colombiano", initialPhone 
               {remember ? "Prazo definido pela administração." : "Sessão de até 1 hora, mesmo ao reabrir o navegador."}
             </span>
           </span>
-        </label>
-        {step === "phone" ? (
+        </label>}
+        {pendingEnrollment ? (
+          <section aria-label="Cadastrar chave de acesso" className="mt-7 space-y-4 rounded-xl border border-emerald-500/30 bg-slate-900 p-4">
+            <p className="text-sm text-emerald-200">Código confirmado. Cadastre a chave protegida pelo seu aparelho. Esta escolha é opcional.</p>
+            <button type="button" disabled={busy} onClick={() => void confirmEnrollment(true)} className="flex min-h-12 w-full items-center justify-center gap-2 rounded-xl bg-emerald-500 p-3 font-bold text-slate-950 disabled:opacity-50"><Fingerprint className="h-5 w-5" /> CADASTRAR BIOMETRIA</button>
+            <button type="button" disabled={busy} onClick={() => void confirmEnrollment(false)} className="w-full rounded-xl border border-slate-600 p-3 text-sm font-semibold disabled:opacity-50">Continuar sem cadastrar</button>
+            <p className="text-xs text-slate-400">O H2 não recebe seu rosto, digital ou PIN. O acesso por código continua disponível.</p>
+          </section>
+        ) : step === "phone" ? (
           <form onSubmit={event => { event.preventDefault(); void send("both"); }} className="mt-7 space-y-4">
             <label htmlFor="h2-otp-phone" className="flex items-center gap-2 text-sm font-semibold">
               <Phone className="h-4 w-4" /> Telefone com DDD
@@ -418,6 +458,10 @@ export function CustomerOtpLogin({ title = "Acesso H2 Colombiano", initialPhone 
                 </p>
               </div>
             )}
+            {canEnrollPasskey && <label className="flex items-start gap-2 rounded-xl border border-emerald-500/30 p-3 text-sm">
+              <input type="checkbox" checked={enrollPasskey} disabled={busy} onChange={event => setEnrollPasskey(event.target.checked)} className="mt-1 h-4 w-4 accent-emerald-500" />
+              <span>Cadastrar biometria neste aparelho após confirmar o código (opcional)</span>
+            </label>}
             <button type="submit" disabled={busy || code.length !== 6}
               className="flex w-full items-center justify-center gap-2 rounded-xl bg-emerald-500 p-4 font-black text-slate-950 disabled:opacity-50">
               <CheckCircle2 className="h-5 w-5" /> {busy ? "Validando..." : "CONFIRMAR E ACESSAR"}
