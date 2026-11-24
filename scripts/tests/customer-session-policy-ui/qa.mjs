@@ -45,14 +45,14 @@ async function saved(hours) {
 try {
   await control({ reset: true });
   await page.goto(base, { waitUntil: 'networkidle' });
-  await input.waitFor(); await value(24);
+  await input.waitFor(); await value(720);
   assert.equal(await input.getAttribute('min'), '1');
-  assert.equal(await input.getAttribute('max'), '720');
+  assert.equal(await input.getAttribute('max'), '2160');
   assert.equal(await save.isDisabled(), true);
   assert.match(await section.innerText(), /Aplica aos próximos logins\. Sessões já abertas mantêm seu vencimento\./);
   assert.match(await section.innerText(), /10 minutos.*uma única vez/);
   assert.equal((await state()).writeCalls.length, 0);
-  checks.push('The real component loads 24 hours and explains that existing sessions and OTP lifetime are unchanged');
+  checks.push('The real component loads 720 hours and explains that existing sessions and OTP lifetime are unchanged');
 
   await control({ writeDelayMs: 200 });
   await input.fill('48'); await save.click();
@@ -66,14 +66,17 @@ try {
   checks.push('Saving 48 hours persists on the fixture server and survives a full page reload');
 
   await control({ writeDelayMs: 0 });
+  await input.fill('2160'); await save.click(); await saved(2160);
+  await page.reload({ waitUntil: 'networkidle' }); await value(2160);
+  checks.push('ADM can persist the 90-day maximum');
   await input.fill('12'); await save.click(); await saved(12);
   await page.reload({ waitUntil: 'networkidle' }); await value(12);
   checks.push('Reducing the policy to 12 hours is saved and read back without changing its new-logins meaning');
 
   const invalidWritesBefore = (await state()).writeCalls.length;
-  for (const invalid of ['', '0', '-1', '1.5', '721']) {
+  for (const invalid of ['', '0', '-1', '1.5', '2161']) {
     await input.fill(invalid);
-    await section.getByRole('alert').filter({ hasText: 'Informe um número inteiro entre 1 e 720 horas.' }).waitFor();
+    await section.getByRole('alert').filter({ hasText: 'Informe um número inteiro entre 1 e 2160 horas.' }).waitFor();
     assert.equal(await input.getAttribute('aria-invalid'), 'true');
     assert.equal(await save.isDisabled(), true);
   }

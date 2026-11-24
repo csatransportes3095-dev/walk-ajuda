@@ -13,9 +13,9 @@ import { fileURLToPath } from 'node:url';
 
 const root = fileURLToPath(new URL('.', import.meta.url));
 const repo = fileURLToPath(new URL('../../../', import.meta.url));
-const defaults = () => ({ hours: 24, readFail: false, writeFail: false, readDelayMs: 0, writeDelayMs: 0, readCalls: 0, writeCalls: [], auxiliaryCalls: [] });
+const defaults = () => ({ hours: 720, readFail: false, writeFail: false, readDelayMs: 0, writeDelayMs: 0, readCalls: 0, writeCalls: [], auxiliaryCalls: [] });
 let state = defaults();
-const policy = hours => ({ hours, minHours: 1, maxHours: 720, appliesTo: 'new_logins' });
+const policy = hours => ({ hours, minHours: 1, maxHours: 2160, appliesTo: 'new_logins' });
 const t = initTRPC.create({ transformer: superjson });
 const auxiliary = (name, value) => t.procedure.query(() => { state.auxiliaryCalls.push(name); return value; });
 const router = t.router({
@@ -27,7 +27,7 @@ const router = t.router({
       if (fail) throw new TRPCError({ code: 'SERVICE_UNAVAILABLE', message: 'Falha simulada ao consultar.' });
       return policy(hours);
     }),
-    updateSessionPolicy: t.procedure.input(z.object({ hours: z.number().int().min(1).max(720) })).mutation(async ({ input }) => {
+    updateSessionPolicy: t.procedure.input(z.object({ hours: z.number().int().min(1).max(2160) })).mutation(async ({ input }) => {
       state.writeCalls.push({ ...input });
       if (state.writeDelayMs) await new Promise(resolve => setTimeout(resolve, state.writeDelayMs));
       if (state.writeFail) throw new TRPCError({ code: 'SERVICE_UNAVAILABLE', message: 'Falha simulada ao salvar.' });

@@ -1,6 +1,6 @@
-export const DEFAULT_CUSTOMER_SESSION_HOURS = 24;
+export const DEFAULT_CUSTOMER_SESSION_HOURS = 720;
 export const MIN_CUSTOMER_SESSION_HOURS = 1;
-export const MAX_CUSTOMER_SESSION_HOURS = 720;
+export const MAX_CUSTOMER_SESSION_HOURS = 2160;
 export const CUSTOMER_SESSION_HOUR_MS = 60 * 60 * 1000;
 
 export type CustomerSessionPolicy = {
@@ -10,14 +10,15 @@ export type CustomerSessionPolicy = {
   appliesTo: "new_logins";
 };
 
-/** Missing or invalid historical settings preserve the existing 24-hour policy. */
+/** New installations default to 30 days; malformed stored values fail safe at 24 hours. */
 export function parseCustomerSessionHours(value: unknown): number {
+  if (value === undefined || value === null) return DEFAULT_CUSTOMER_SESSION_HOURS;
   const raw = typeof value === "string" ? value.trim() : value;
-  if (typeof raw !== "number" && (typeof raw !== "string" || !/^\d{1,3}$/.test(raw))) {
-    return DEFAULT_CUSTOMER_SESSION_HOURS;
+  if (typeof raw !== "number" && (typeof raw !== "string" || !/^[1-9]\d{0,3}$/.test(raw))) {
+    return 24;
   }
   const hours = Number(raw);
   return Number.isInteger(hours) && hours >= MIN_CUSTOMER_SESSION_HOURS && hours <= MAX_CUSTOMER_SESSION_HOURS
     ? hours
-    : DEFAULT_CUSTOMER_SESSION_HOURS;
+    : 24;
 }

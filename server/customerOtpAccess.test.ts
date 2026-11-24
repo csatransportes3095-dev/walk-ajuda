@@ -48,8 +48,8 @@ describe("draft passwordless customer authentication stays closed until full mig
     expect(() => requireOtpMigrationEnabled()).not.toThrow();
   });
 
-  it("uses 10-minute single-use email code and 24-hour bound session", () => {
+  it("uses 10-minute single-use email code and 30-day bound session", () => {
     expect(CUSTOMER_CODE_MS).toBe(10 * 60 * 1000);
-    expect(CUSTOMER_SESSION_MS).toBe(24 * 60 * 60 * 1000);
+    expect(CUSTOMER_SESSION_MS).toBe(30 * 24 * 60 * 60 * 1000);
   });
 });

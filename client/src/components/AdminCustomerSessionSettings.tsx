@@ -48,7 +48,7 @@ export function AdminCustomerSessionSettings() {
       <h3 id="customer-session-title" className="flex items-center gap-2 text-lg font-bold text-cyan-200">
         <Clock className="h-5 w-5 shrink-0" aria-hidden /> Tempo conectado do cliente
       </h3>
-      <p className="text-sm text-slate-300">Defina por quantas horas o cliente permanece conectado após confirmar o código.</p>
+      <p className="text-sm text-slate-300">Defina por quantas horas o cliente permanece conectado após confirmar o código. O padrão inicial é de 30 dias (720 horas), com limite de 90 dias.</p>
 
       {policy.isPending && <p role="status" className="text-sm text-slate-300">Carregando tempo conectado...</p>}
       {policy.isError && (
@@ -62,7 +62,7 @@ export function AdminCustomerSessionSettings() {
       )}
       {policy.data && (
         <form onSubmit={save} className="space-y-3">
-          <p className="text-sm text-cyan-100">Duração atual: <strong>{policy.data.hours} horas.</strong></p>
+          <p className="text-sm text-cyan-100">Duração atual: <strong>{policy.data.hours} horas.</strong>{policy.data.hours % 24 === 0 && <span> ({policy.data.hours / 24} dias)</span>}</p>
           <div className="flex flex-col gap-3 sm:flex-row sm:items-end">
             <div className="min-w-0 flex-1">
               <label htmlFor="customer-session-hours" className="mb-1 block text-sm font-semibold text-slate-200">
@@ -85,8 +85,8 @@ export function AdminCustomerSessionSettings() {
               <Save className="h-4 w-4" aria-hidden /> {update.isPending ? "Salvando..." : "Salvar"}
             </button>
           </div>
-          <p id="customer-session-range" className="text-xs text-slate-400">De {MIN_CUSTOMER_SESSION_HOURS} a {MAX_CUSTOMER_SESSION_HOURS} horas.</p>
-          {showInvalid && <p id="customer-session-invalid" role="alert" className="text-sm text-amber-200">Informe um número inteiro entre 1 e 720 horas.</p>}
+          <p id="customer-session-range" className="text-xs text-slate-400">De {MIN_CUSTOMER_SESSION_HOURS} a {MAX_CUSTOMER_SESSION_HOURS} horas (até 90 dias).</p>
+          {showInvalid && <p id="customer-session-invalid" role="alert" className="text-sm text-amber-200">Informe um número inteiro entre {MIN_CUSTOMER_SESSION_HOURS} e {MAX_CUSTOMER_SESSION_HOURS} horas.</p>}
           {saveError && <p role="alert" className="text-sm text-rose-300">{saveError}</p>}
           {savedHours !== null && <p role="status" className="text-sm text-emerald-300">Salvo: {savedHours} horas para os próximos logins.</p>}
         </form>
