@@ -560,7 +560,7 @@ export function CustomerOtpLogin({ title = "Acesso H2 Colombiano", initialPhone 
                 <span className="block text-xs leading-snug text-emerald-100">Cadastrar biometria neste aparelho após confirmar o código (opcional)</span>
               </span>
               <input type="checkbox" checked={enrollPasskey} disabled={busy} onChange={event => setEnrollPasskey(event.target.checked)} className="h-6 w-6 shrink-0 cursor-pointer accent-emerald-400" />
-            </label>
+            </label>}
             <button type="submit" disabled={busy || code.length !== 6}
               className="flex w-full items-center justify-center gap-2 rounded-xl bg-emerald-500 p-4 font-black text-slate-950 disabled:opacity-50">
               <CheckCircle2 className="h-5 w-5" /> {busy ? "Validando..." : "CONFIRMAR E ACESSAR"}
