@@ -12,6 +12,7 @@ import { enqueueIncomingWhatsappOtp, ensureIncomingWhatsappOtpQueue } from "./h2
 import { isH2AutoApkOtpReady } from "./h2-auto-otp-apk";
 import { generateOwnSiteCode } from "./siteAccessOwnCodes";
 import { getMissingCustomerProfileFields } from "./customerProfileRequirements";
+import { ensureCustomerBirthDateTable, readCustomerBirthDate } from "./customerBirthDate";
 import { assertLoginEmailProof } from "./customerLoginEmailProof";
 import { getAdminJwtSecret } from "./adminJwt";
 import { recordCustomerOtpLogin } from "./customerLoginHistory";
@@ -71,6 +72,7 @@ async function rows(db: any, q: any): Promise<any[]> {
 
 let schemaPromise: Promise<void> | null = null;
 export async function ensureCustomerOtpTables(db: any): Promise<void> {
+  await ensureCustomerBirthDateTable(db);
   if (!schemaPromise) schemaPromise = (async () => {
     await db.execute(sql`CREATE TABLE IF NOT EXISTS customerOtpChallenges (
       phoneKey CHAR(64) NOT NULL PRIMARY KEY,
@@ -154,7 +156,8 @@ async function issueSession(tx: any, customer: any, now: number) {
   await tx.execute(sql`INSERT INTO customerOtpSessions (tokenHash,customerId,phoneKey,emailKey,expiresAt)
     VALUES (${digest("session",token)},${Number(customer.id)},${phoneKey},${emailKey},${expiresAtMs})`);
   await recordCustomerOtpLogin(tx, { customerId: Number(customer.id), phone, token, loggedInAtMs: now });
-  const profileUpdateFields = getMissingCustomerProfileFields(customer);
+  const birthDateRegistered = !!(await readCustomerBirthDate(tx, Number(customer.id)));
+  const profileUpdateFields = getMissingCustomerProfileFields(customer, birthDateRegistered);
   return { success: true as const, token, profileUpdateRequired: profileUpdateFields.length > 0, profileUpdateFields };
 }
 
@@ -403,7 +406,8 @@ export async function getVerifiedCustomerOtpSession(db:any, tokenInput:string) {
       phone!==normalizeCustomerPhone(session.sessionPhone) ||
       session.phoneKey!==digest("phone",phone) || session.emailKey!==digest("email",email))
     return null;
-  return { ...session, phone, email };
+  const birthDateRegistered = !!(await readCustomerBirthDate(db, Number(session.customerId)));
+  return { ...session, phone, email, birthDateRegistered };
 }
 
 export async function revokeCustomerOtpSession(db:any, tokenInput:string) {
