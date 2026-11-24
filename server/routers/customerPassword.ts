@@ -4,7 +4,7 @@ import { deliverIncompleteCustomerLoginCode } from "../incompleteCustomerLoginDe
 
 import { createHash, randomBytes, randomInt, timingSafeEqual } from "crypto";
 import { issueLoginEmailProof, assertLoginEmailProof } from "../customerLoginEmailProof";
-import { requestCustomerCode, verifyCustomerCode, verifyCustomerCpfBirthDate, redeemNewRegistrationProof, isCustomerOtpModeEnabled, getVerifiedCustomerOtpSession, revokeCustomerOtpSession, ensureCustomerOtpTables } from "../customerOtpAccess";
+import { requestCustomerCode, verifyCustomerCode, redeemNewRegistrationProof, isCustomerOtpModeEnabled, getVerifiedCustomerOtpSession, revokeCustomerOtpSession, ensureCustomerOtpTables } from "../customerOtpAccess";
 import { isH2AutoApkOtpReady } from "../h2-auto-otp-apk";
 import { validSiteCode } from "../../shared/siteAccessCodePolicy";
 import { getAdminJwtSecret } from "../adminJwt";
@@ -27,7 +27,6 @@ import { eq, and, sql, or } from "drizzle-orm";
 import bcrypt from "bcryptjs";
 import { ensureCustomerIdentityInfrastructure, findMainCustomerByIdentity, getRouteAccess, setCustomerRoutePermissions, type CustomerRoute } from "../customerAccess";
 import { getMissingCustomerProfileFields } from "../customerProfileRequirements";
-import { ensureCustomerBirthDateTable, readCustomerBirthDate } from "../customerBirthDate";
 import { deliverOwnSiteCode } from "../siteAccessCodeDelivery";
 import { generateOwnSiteCode } from "../siteAccessOwnCodes";
 import { getCustomerLoginHistory } from "../customerLoginHistory";
@@ -63,15 +62,8 @@ function loginEmailCodeHash(phone: string, email: string, code: string) {
   return createHash("sha256").update("h2-login-email|" + phone + "|" + email.trim().toLowerCase() + "|" + code).digest("hex");
 }
 
-async function getProfileUpdateMeta(customer: any) {
-  if (!customer) return { profileUpdateRequired: false, profileUpdateFields: [] };
-  let birthDateRegistered = customer.birthDateRegistered;
-  if (typeof birthDateRegistered !== "boolean") {
-    const db = await getDb();
-    await ensureCustomerBirthDateTable(db);
-    birthDateRegistered = !!(await readCustomerBirthDate(db, Number(customer.id)));
-  }
-  const fields = getMissingCustomerProfileFields(customer, birthDateRegistered);
+function getProfileUpdateMeta(customer: any) {
+  const fields = customer ? getMissingCustomerProfileFields(customer) : [];
   return { profileUpdateRequired: fields.length > 0, profileUpdateFields: fields };
 }
 
@@ -158,7 +150,7 @@ async function authenticateVerifiedCustomer(db: any, phone: string, password: st
     });
     try { await tx.insert(customerLoginHistory).values({ phone, loginAt: new Date() }); } catch {}
     // Signed proof expires automatically.
-    return { success: true, token, ...(await getProfileUpdateMeta(customer)) };
+    return { success: true, token, ...getProfileUpdateMeta(customer) };
   });
 }
 
@@ -236,9 +228,6 @@ export const customerPasswordRouter = router({
   verifyCustomerCode: publicProcedure
     .input(z.object({ phone: z.string().min(10).max(32), code: z.string().regex(/^\d{6}$/) }))
     .mutation(async ({ input }) => verifyCustomerCode(input.phone, input.code)),
-  verifyCustomerCpf: publicProcedure
-    .input(z.object({ cpf: z.string().regex(/^\d{11}$/), birthDate: z.string().regex(/^\d{4}-\d{2}-\d{2}$/) }))
-    .mutation(async ({ input, ctx }) => verifyCustomerCpfBirthDate(input.cpf, input.birthDate, ctx.req)),
   finishRegistrationWithoutPassword: publicProcedure
     .input(z.object({ phone: z.string().min(10).max(32), emailVerificationToken: z.string().min(75).max(1500) }))
     .mutation(async ({ input }) => redeemNewRegistrationProof(input.phone, input.emailVerificationToken)),
@@ -307,7 +296,7 @@ export const customerPasswordRouter = router({
       const key = loginEmailKey(cleanPhone, email);
       const current = loginEmailPending.get(key);
       const now = Date.now();
-      const incomplete = !!customer && (await getProfileUpdateMeta(customer)).profileUpdateRequired;
+      const incomplete = !!customer && getProfileUpdateMeta(customer).profileUpdateRequired;
       const resendMs = incomplete ? INCOMPLETE_EMAIL_RESEND_MS : LOGIN_EMAIL_CODE_RESEND_MS;
 
       if (current && current.expiresAt > now) {
@@ -352,7 +341,7 @@ export const customerPasswordRouter = router({
       });
 
       try {
-        await deliverIncompleteCustomerLoginCode(email, code, !!customer && (await getProfileUpdateMeta(customer)).profileUpdateRequired);
+        await deliverIncompleteCustomerLoginCode(email, code, !!customer && getProfileUpdateMeta(customer).profileUpdateRequired);
       } catch (error) {
         loginEmailPending.delete(key);
         console.error("[customerPassword] login email code delivery failed", error instanceof Error ? error.message : String(error));
@@ -425,7 +414,7 @@ export const customerPasswordRouter = router({
       if ((cust as any).blocked === 1) return { status: "blocked" as const, blockReason: (cust as any).blockReason || 'Acesso bloqueado' };
 
       const pwd = await getActivePassword(resolvedPhone);
-      const profileUpdateMeta = await getProfileUpdateMeta(cust);
+      const profileUpdateMeta = getProfileUpdateMeta(cust);
       if (!pwd) return { status: "no_password" as const, phone: resolvedPhone, hasCpf: !!(cust.cpf), name: cust.name, ...profileUpdateMeta };
       if (pwd.pendingApproval === 1) return { status: "pending_approval" as const, phone: resolvedPhone, hasCpf: !!(cust.cpf), name: cust.name, ...profileUpdateMeta };
       if (!pwd.expiresAt) return { status: "pending_approval" as const, phone: resolvedPhone, hasCpf: !!(cust.cpf), name: cust.name, ...profileUpdateMeta };
@@ -447,7 +436,7 @@ export const customerPasswordRouter = router({
       if ((cust as any).blocked === 1) return { status: "blocked" as const, blockReason: (cust as any).blockReason || 'Acesso bloqueado' };
 
       const pwd = await getActivePassword(resolvedPhone);
-      const profileUpdateMeta = await getProfileUpdateMeta(cust);
+      const profileUpdateMeta = getProfileUpdateMeta(cust);
       if (!pwd) return { status: "no_password" as const, phone: resolvedPhone, hasCpf: !!(cust.cpf), name: cust.name, ...profileUpdateMeta };
       if (pwd.pendingApproval === 1) return { status: "pending_approval" as const, phone: resolvedPhone, hasCpf: !!(cust.cpf), name: cust.name, ...profileUpdateMeta };
       if (!pwd.expiresAt) return { status: "pending_approval" as const, phone: resolvedPhone, hasCpf: !!(cust.cpf), name: cust.name, ...profileUpdateMeta };
@@ -675,7 +664,7 @@ export const customerPasswordRouter = router({
       if (isCustomerOtpModeEnabled()) {
         const verified = await getVerifiedCustomerOtpSession(db, cleanToken);
         if (!verified) return { valid: false, reason: 'expired' as const };
-        return { valid: true, source: 'customer' as const, phone: verified.phone, ...(await getProfileUpdateMeta(verified)) };
+        return { valid: true, source: 'customer' as const, phone: verified.phone, ...getProfileUpdateMeta(verified) };
       }
 
       const rows = await db.select().from(customerPasswordSessions)
@@ -707,7 +696,7 @@ export const customerPasswordRouter = router({
       if (customerForSession && (customerForSession as any).blocked === 1) {
         return { valid: false, blocked: true, reason: 'blocked' as const, blockReason: (customerForSession as any).blockReason || 'Acesso bloqueado' };
       }
-      const profileUpdateMeta = await getProfileUpdateMeta(customerForSession);
+      const profileUpdateMeta = getProfileUpdateMeta(customerForSession);
 
       try {
         const newExpiry = new Date(Date.now() + SESSION_DURATION_MS);

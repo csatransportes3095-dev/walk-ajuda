@@ -1,5 +1,3 @@
-import { isValidCustomerBirthDate } from "../shared/customerBirthDate";
-import { ensureCustomerBirthDateTable, saveCustomerBirthDate } from "./customerBirthDate";
 import { emailBelongsToAnotherCustomer, CUSTOMER_EMAIL_IN_USE_MESSAGE } from "./customerEmailOwnership";
 import { couponAppliesToProductIds, couponAppliesToOptionIds } from "../shared/couponProductScope";
 import { normalizeCustomerText } from "../shared/customerTextNormalization";
@@ -1119,7 +1117,6 @@ export type MainCustomerProfileInput = {
   phone: string;
   email?: string;
   cpf?: string;
-  birthDate?: string;
   cep?: string;
   street?: string;
   addressNumber?: string;
@@ -1172,9 +1169,6 @@ export async function createCustomer(data: MainCustomerProfileInput): Promise<Cu
   const db = await getDb();
   if (!db) throw new Error('Database not available');
   const required = validateMainCustomerProfile(data);
-  const birthDate = data.birthDate;
-  if (!isValidCustomerBirthDate(birthDate)) throw new Error('Informe uma data de nascimento válida.');
-  await ensureCustomerBirthDateTable(db);
   if (await emailBelongsToAnotherCustomer(db, required.email)) throw new Error(CUSTOMER_EMAIL_IN_USE_MESSAGE);
   // Mesma fonte oficial usada pelo ADM e por qualquer cadastro novo.
   const nextNum = await generateNextCustomerNumber(db);
@@ -1196,7 +1190,6 @@ export async function createCustomer(data: MainCustomerProfileInput): Promise<Cu
     referredByPhone: data.referredByPhone ? normalizeMainCustomerPhone(data.referredByPhone) : null,
     profilePhotoUrl: required.photoUrl,
   }).$returningId();
-  await saveCustomerBirthDate(tx, created.id, birthDate);
   // Colunas de identidade foram adicionadas de modo compatível para proteger novas criações.
   try {
     await tx.execute(sql`UPDATE customers SET normalizedPhone=${required.phone}, normalizedCpf=${required.cpf}, normalizedEmail=${required.email} WHERE id=${created.id}`);

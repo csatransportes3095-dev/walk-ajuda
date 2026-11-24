@@ -1,8 +1,6 @@
 import { createHmac, randomBytes, timingSafeEqual } from "node:crypto";
 import type { Request } from "express";
 import { sql } from "drizzle-orm";
-import { normalizeCpf, isValidCPF } from "../shared/cpf";
-import { isValidCustomerBirthDate } from "../shared/customerBirthDate";
 import { TRPCError } from "@trpc/server";
 import { getDb } from "./db";
 import { getRegistrationReviewStatus } from "./customerRegistrationReview";
@@ -13,7 +11,6 @@ import { enqueueIncomingWhatsappOtp, ensureIncomingWhatsappOtpQueue } from "./h2
 import { isH2AutoApkOtpReady } from "./h2-auto-otp-apk";
 import { generateOwnSiteCode } from "./siteAccessOwnCodes";
 import { getMissingCustomerProfileFields } from "./customerProfileRequirements";
-import { ensureCustomerBirthDateTable, readCustomerBirthDate } from "./customerBirthDate";
 import { assertLoginEmailProof } from "./customerLoginEmailProof";
 import { getAdminJwtSecret } from "./adminJwt";
 import { recordCustomerOtpLogin } from "./customerLoginHistory";
@@ -73,7 +70,6 @@ async function rows(db: any, q: any): Promise<any[]> {
 
 let schemaPromise: Promise<void> | null = null;
 export async function ensureCustomerOtpTables(db: any): Promise<void> {
-  await ensureCustomerBirthDateTable(db);
   if (!schemaPromise) schemaPromise = (async () => {
     await db.execute(sql`CREATE TABLE IF NOT EXISTS customerOtpChallenges (
       phoneKey CHAR(64) NOT NULL PRIMARY KEY,
@@ -157,9 +153,8 @@ async function issueSession(tx: any, customer: any, now: number) {
   await tx.execute(sql`INSERT INTO customerOtpSessions (tokenHash,customerId,phoneKey,emailKey,expiresAt)
     VALUES (${digest("session",token)},${Number(customer.id)},${phoneKey},${emailKey},${expiresAtMs})`);
   await recordCustomerOtpLogin(tx, { customerId: Number(customer.id), phone, token, loggedInAtMs: now });
-  const birthDateRegistered = !!(await readCustomerBirthDate(tx, Number(customer.id)));
-  const profileUpdateFields = getMissingCustomerProfileFields(customer, birthDateRegistered);
-  return { success: true as const, token, phone, profileUpdateRequired: profileUpdateFields.length > 0, profileUpdateFields };
+  const profileUpdateFields = getMissingCustomerProfileFields(customer);
+  return { success: true as const, token, profileUpdateRequired: profileUpdateFields.length > 0, profileUpdateFields };
 }
 
 export async function requestCustomerCode(phoneInput: string, request: Request, channel: "email" | "whatsapp" | "both" = "email"): Promise<{
@@ -318,48 +313,6 @@ export async function verifyCustomerCode(phoneInput: string, code: string) {
   });
 }
 
-/**
- * CPF + data de nascimento como alternativa ao código, apenas para cadastros
- * existentes. A resposta é sempre genérica para não enumerar contas.
- */
-export async function verifyCustomerCpfBirthDate(cpfInput: string, birthDateInput: string, request: Request) {
-  requireOtpMigrationEnabled();
-  const cpf = normalizeCpf(cpfInput);
-  const birthDate = String(birthDateInput || "");
-  const failure = { success: false as const, message: "CPF ou data de nascimento não conferem com o cadastro, ou acesso indisponível." };
-  const db = await getDb() as any;
-  if (!db) throw new TRPCError({ code:"SERVICE_UNAVAILABLE", message:"Serviço indisponível." });
-  await ensureCustomerOtpTables(db);
-  const now = Date.now();
-  const source = resolveCustomerOtpRequestSource(request);
-  // Every request counts even if a client or CPF is invalid.
-  const limits: Array<{scope:string;maximum:number}> = [
-    { scope:"cpf-birth-auth-ip:" + source.ip, maximum:20 },
-  ];
-  if (/^\d{11}$/.test(cpf)) limits.push({ scope:"cpf-birth-auth-cpf:" + cpf, maximum:5 });
-  const wait = await takeAttemptLimits(db,limits,now);
-  if (wait > 0) return {...failure,retryAfterSeconds:wait};
-  if (!/^\d{11}$/.test(cpf) || !isValidCPF(cpf) || !isValidCustomerBirthDate(birthDate))
-    return failure;
-  return db.transaction(async (tx:any) => {
-    const matching = await rows(tx,sql`SELECT id, customerNumber, name, phone, email, cpf,
-      cep, street, addressNumber, neighborhood, city, uf, profilePhotoUrl, blocked, deletedAt
-      FROM customers WHERE deletedAt IS NULL
-      AND REGEXP_REPLACE(cpf,'[^0-9]','')=${cpf} LIMIT 2`);
-    if (matching.length !== 1) return failure;
-    const customer = matching[0];
-    const savedCpf = normalizeCpf(customer.cpf);
-    if (!isValidCPF(savedCpf) || !equalDigest(digest("cpf",savedCpf),digest("cpf",cpf)))
-      return failure;
-    if (Number(customer.blocked || 0) !== 0 || !normalizeCustomerPhone(customer.phone) || !normalizeCustomerEmail(customer.email)) return failure;
-    const storedBirthDate = await readCustomerBirthDate(tx, Number(customer.id));
-    if (!storedBirthDate || !equalDigest(digest("birth-date",storedBirthDate),digest("birth-date",birthDate))) return failure;
-    if (await getRegistrationReviewStatus(tx,Number(customer.id)) !== "approved") return failure;
-    // The issued session has the same server-side expiry and route checks as OTP.
-    return issueSession(tx,customer,now);
-  });
-}
-
 /** Proof previously generated by the existing new-registration email verifier. */
 export async function redeemNewRegistrationProof(phoneInput:string,proofToken:string) {
   requireOtpMigrationEnabled();
@@ -408,8 +361,7 @@ export async function getVerifiedCustomerOtpSession(db:any, tokenInput:string) {
       phone!==normalizeCustomerPhone(session.sessionPhone) ||
       session.phoneKey!==digest("phone",phone) || session.emailKey!==digest("email",email))
     return null;
-  const birthDateRegistered = !!(await readCustomerBirthDate(db, Number(session.customerId)));
-  return { ...session, phone, email, birthDateRegistered };
+  return { ...session, phone, email };
 }
 
 export async function revokeCustomerOtpSession(db:any, tokenInput:string) {

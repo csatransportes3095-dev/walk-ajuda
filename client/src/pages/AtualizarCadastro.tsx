@@ -1,4 +1,3 @@
-import { birthDateToday, isValidCustomerBirthDate } from "@shared/customerBirthDate";
 import { useEffect, useRef, useState } from "react";
 import type { FormEvent } from "react";
 import { CheckCircle2, Eye, EyeOff, LockKeyhole, Phone, ShieldCheck, Upload, UserRoundCog } from "lucide-react";
@@ -60,7 +59,6 @@ export default function AtualizarCadastro() {
   const [name, setName] = useState("");
   const [email, setEmail] = useState("");
   const [cpf, setCpf] = useState("");
-  const [birthDate, setBirthDate] = useState("");
   const [cep, setCep] = useState("");
   const [street, setStreet] = useState("");
   const [addressNumber, setAddressNumber] = useState("");
@@ -222,19 +220,15 @@ export default function AtualizarCadastro() {
 
   async function saveProfile(event: FormEvent) {
     event.preventDefault();
-    if (isRequired("birthDate") && !isValidCustomerBirthDate(birthDate)) return toast.error("Informe uma data de nascimento válida.");
-    if (!onlyBirthDate && isRequired("cpf") && !isValidCPF(normalizeCpf(cpf))) return toast.error("Digite um CPF válido.");
-    if (!onlyBirthDate) {
+    if (isRequired("cpf") && !isValidCPF(normalizeCpf(cpf))) return toast.error("Digite um CPF válido.");
     if (cep.replace(/\D/g, "").length !== 8) return toast.error("Digite um CEP válido.");
     if (street.trim().length < 2) return toast.error("Informe a rua / logradouro.");
     if (!addressNumber.trim()) return toast.error("Informe o número do endereço.");
     if (neighborhood.trim().length < 2) return toast.error("Informe o bairro.");
     if (city.trim().length < 2 || uf.trim().length !== 2) return toast.error("Informe cidade e estado.");
     if (!photoUrl) return toast.error("Envie sua foto de perfil.");
-    }
     try {
-      await saveMutation.mutateAsync(onlyBirthDate ? { token, birthDate } : { token, name, email, cpf, birthDate: isRequired("birthDate") ? birthDate : undefined, cep: formatCep(cep), street, addressNumber, neighborhood, addressComplement, city, uf });
-      setBirthDate("");
+      await saveMutation.mutateAsync({ token, name, email, cpf, cep: formatCep(cep), street, addressNumber, neighborhood, addressComplement, city, uf });
       localStorage.removeItem(TOKEN_KEY);
       setToken("");
       setStep("done");
@@ -270,14 +264,12 @@ export default function AtualizarCadastro() {
   }
 
   const requiredFields = profileQuery.data?.requiredFields || [];
-  const onlyBirthDate = requiredFields.length === 1 && requiredFields[0] === "birthDate";
   const isRequired = (field: string) => requiredFields.includes(field as never);
   const requiredLabels = requiredFields.map((field) => ({
     name: "Nome completo",
     phone: "Telefone",
     email: "E-mail",
     cpf: "CPF",
-    birthDate: "Data de nascimento",
     cep: "CEP",
     street: "Rua / Logradouro",
     addressNumber: "Número",
@@ -361,11 +353,6 @@ export default function AtualizarCadastro() {
             <form onSubmit={saveProfile} className="space-y-5">
               <div className="flex items-center justify-between gap-3"><div><h2 className="text-xl font-black">Complete seus dados</h2><p className="text-xs text-slate-400">Telefone confirmado: {formatPhone(profileQuery.data.phone)}</p></div><button type="button" onClick={exitUpdate} className="rounded-lg border border-red-400/30 bg-red-500/10 px-3 py-2 text-xs font-black text-red-200 hover:bg-red-500/20">SAIR</button></div>
               {requiredFields.length > 0 ? <div className="rounded-xl border border-amber-400/20 bg-amber-400/10 p-3 text-xs text-amber-100"><p className="font-black">Complete os dados obrigatórios que estão faltando.</p><p className="mt-1">Revise: {requiredLabels.join(", ")}.</p></div> : <p className="rounded-xl border border-emerald-400/20 bg-emerald-400/10 p-3 text-xs text-emerald-100">Confira os dados abaixo para concluir sua atualização.</p>}
-              {isRequired("birthDate") && <div className="rounded-2xl border border-blue-400/50 bg-blue-500/10 p-4 space-y-3">
-                <Field label="Data de nascimento · obrigatória"><input type="date" autoComplete="bday" lang="pt-BR" min="1900-01-01" max={birthDateToday()} value={birthDate} onChange={e => setBirthDate(e.target.value)} className={`${INPUT_CLASS} min-w-0`} required /></Field>
-                <p className="text-xs text-slate-300">Informe sua data de nascimento para concluir a atualização do cadastro. Este dado não é usado como senha.</p>
-              </div>}
-              {!onlyBirthDate && <>
               <label className="block cursor-pointer rounded-2xl border border-dashed border-violet-400/50 bg-violet-400/5 p-4 text-center hover:bg-violet-400/10">
                 {photoUrl ? <img src={photoUrl} alt="Foto de perfil" className="mx-auto h-24 w-24 rounded-full object-cover ring-2 ring-violet-400" /> : <Upload className="mx-auto h-9 w-9 text-violet-300" />}
                 <span className="mt-2 block text-sm font-bold">{uploadPhotoMutation.isPending ? "Enviando foto..." : photoUrl ? "Trocar foto de perfil" : "Enviar foto de perfil"}</span>
@@ -380,8 +367,7 @@ export default function AtualizarCadastro() {
               <div className="grid grid-cols-[120px_1fr] gap-3"><Field label="Número · obrigatório"><input value={addressNumber} onChange={(e) => setAddressNumber(e.target.value)} className={INPUT_CLASS} required placeholder="123 ou S/N" /></Field><Field label="Bairro · obrigatório"><input value={neighborhood} onChange={(e) => setNeighborhood(e.target.value)} className={INPUT_CLASS} required /></Field></div>
               <Field label="Complemento · opcional"><input value={addressComplement} onChange={(e) => setAddressComplement(e.target.value)} className={INPUT_CLASS} placeholder="Apto, bloco, fundos..." /></Field>
               <div className="grid grid-cols-[1fr_92px] gap-3"><Field label={`Cidade${isRequired("city") ? " · obrigatório nesta revisão" : ""}`}><input value={city} onChange={(e) => setCity(e.target.value)} className={`${INPUT_CLASS} ${!isRequired("city") ? "bg-slate-200/80" : ""}`} required={isRequired("city")} readOnly={!isRequired("city")} /></Field><Field label={`UF${isRequired("uf") ? " · obrigatório nesta revisão" : ""}`}><select value={uf} onChange={(e) => setUf(e.target.value)} className={INPUT_CLASS} required={isRequired("uf")} disabled={!isRequired("uf")}><option value="">UF</option>{UFS.map((item) => <option key={item} value={item}>{item}</option>)}</select></Field></div>
-              </>}
-              <PrimaryButton busy={saveMutation.isPending || uploadPhotoMutation.isPending}>{onlyBirthDate ? "SALVAR E CONTINUAR" : "SALVAR EM TODO O SISTEMA"}</PrimaryButton>
+              <PrimaryButton busy={saveMutation.isPending || uploadPhotoMutation.isPending}>SALVAR EM TODO O SISTEMA</PrimaryButton>
               <button type="button" onClick={exitUpdate} className="w-full rounded-xl border border-white/10 px-4 py-3 text-sm font-bold text-slate-400 transition hover:border-red-400/30 hover:bg-red-500/10 hover:text-red-200">NÃO QUERO ATUALIZAR AGORA · SAIR</button>
             </form>
           )}
