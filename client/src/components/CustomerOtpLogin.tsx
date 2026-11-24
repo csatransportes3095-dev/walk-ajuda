@@ -1,5 +1,6 @@
 import { buildWhatsappMessageUrl } from "@shared/whatsappUrl";
 import { useEffect, useState } from "react";
+import { flushSync } from "react-dom";
 
 const OTP_DRAFT_KEY = "h2_customer_otp_login_draft";
 const OTP_DRAFT_TTL_MS = 10 * 60 * 1000;
@@ -230,12 +231,50 @@ export function CustomerOtpLogin({ title = "Acesso H2 Colombiano", initialPhone 
         rememberCooldown(channel, result.retryAfterSeconds || OTP_RESEND_COOLDOWN_MS / 1000, result.cooldownScope || "channel");
       }
       const whatsappPrepared = channel !== "email" && result.whatsappPrepared === true;
-      setCode("");
-      setDeliveryChannel(channel);
-      setStep("code");
-      setShowHelp(false);
-      setShowWhatsappLink(whatsappPrepared);
+      // Commit and persist the OTP input BEFORE handing off to WhatsApp.
+      // This must be the page Safari shows when the customer returns.
       saveOtpDraft(cleanPhone, "code", channel, whatsappPrepared);
+      flushSync(() => {
+        setCode("");
+        setDeliveryChannel(channel);
+        setStep("code");
+        setShowHelp(false);
+        setShowWhatsappLink(false);
+      });
+      if (whatsappPrepared) {
+        // On phones, use the native app URI IN THIS TAB. This does not
+        // create an about:blank tab or replace the /login document on success.
+        // The OTP challenge already exists: the robot can answer immediately.
+        if (nativeWhatsapp) {
+          let switchedToWhatsapp = document.visibilityState === "hidden";
+          const recordSwitch = () => {
+            if (document.visibilityState === "hidden") switchedToWhatsapp = true;
+          };
+          document.addEventListener("visibilitychange", recordSwitch);
+          try {
+            window.location.assign(whatsappUrl);
+          } catch {
+            setShowWhatsappLink(true);
+          }
+          // Some iOS in-app browsers refuse app links after an async request.
+          // Only in that case reveal a small recovery link; no intermediary page.
+          window.setTimeout(() => {
+            document.removeEventListener("visibilitychange", recordSwitch);
+            if (!switchedToWhatsapp && document.visibilityState === "visible") {
+              setShowWhatsappLink(true);
+            }
+          }, 1600);
+        } else {
+          // Desktop keeps the original code page while opening the WhatsApp
+          // destination directly. No blank waiting tab is ever created.
+          const chatWindow = window.open(whatsappUrl, "_blank");
+          if (chatWindow) {
+            try { chatWindow.opener = null; } catch {}
+          } else {
+            setShowWhatsappLink(true);
+          }
+        }
+      }
     } catch (err: any) {
       toast.error(err?.message || "Não foi possível solicitar o código.");
     } finally {
@@ -321,9 +360,9 @@ export function CustomerOtpLogin({ title = "Acesso H2 Colombiano", initialPhone 
                   : busy ? "Solicitando..." : "RECEBER CÓDIGO"}
               </button>
               <p className="text-center text-xs leading-relaxed text-slate-300">
-                Enviaremos o código ao e-mail cadastrado.
+                O código será enviado ao e-mail cadastrado.
                 {h2AutoDelivery?.available === true
-                  ? " Para receber também pelo WhatsApp, use o botão na tela do código."
+                  ? " O WhatsApp abrirá automaticamente quando o código estiver pronto."
                   : ""}
               </p>
             </div>
@@ -338,9 +377,9 @@ export function CustomerOtpLogin({ title = "Acesso H2 Colombiano", initialPhone 
             <div className="flex items-center gap-2 text-sm text-cyan-100">
               {deliveryChannel !== "email" ? <MessageCircle className="h-5 w-5 text-[#ff6060]" /> : <Mail className="h-5 w-5" />}
               <span>{deliveryChannel === "both"
-                ? "Seu código já foi solicitado. Digite os 6 números abaixo. Para receber também no WhatsApp, toque em ABRIR WHATSAPP."
+                ? "Digite os 6 números do código aqui. Ele também foi enviado ao e-mail cadastrado."
                 : deliveryChannel === "whatsapp"
-                ? "Digite os 6 números abaixo. Se precisar do WhatsApp, toque em ABRIR WHATSAPP e envie a mensagem pronta."
+                ? "Envie a mensagem pronta no WhatsApp e volte aqui para digitar os 6 números."
                 : "Digite o código recebido no e-mail cadastrado. Confira também a pasta de spam."}</span>
             </div>
             <label htmlFor="h2-otp-code" className="block text-sm font-semibold">Código de 6 números</label>
@@ -356,11 +395,11 @@ export function CustomerOtpLogin({ title = "Acesso H2 Colombiano", initialPhone 
                   target={nativeWhatsapp ? undefined : "_blank"}
                   rel={nativeWhatsapp ? undefined : "noopener noreferrer"}
                   data-testid="h2-otp-open-whatsapp"
-                  className="flex min-h-14 w-full items-center justify-center gap-2 rounded-xl bg-[#128C4A] px-4 py-3 text-center text-sm font-black text-white hover:bg-[#0b783a]">
-                  <MessageCircle className="h-5 w-5" /> ABRIR WHATSAPP
+                  className="flex min-h-10 w-full items-center justify-center gap-2 rounded-xl border border-emerald-400/40 px-3 py-2 text-center text-xs font-bold text-emerald-100 hover:bg-emerald-500/20">
+                  <MessageCircle className="h-4 w-4" /> WhatsApp não abriu? Abrir novamente
                 </a>
                 <p className="text-center text-xs text-slate-100">
-                  Envie a mensagem pronta e volte a esta tela para digitar o código.
+                  Volte ao campo acima para digitar o código recebido.
                 </p>
               </div>
             )}
