@@ -102,7 +102,7 @@ describe.skipIf(!testUrl)("Customer session policy — isolated MySQL and real O
     for (const table of ["customerBirthDateAdminAudit", "customerLoginHistory", "customerPasswordSessions", "customerOtpSessions", "customerOtpChallenges", "customerOtpLimits", "customerOtpUsedProofs", "customerBirthDates", "customerRegistrationReviews", "customerRegistrationReviewConfig", "customers", "appSettings"]) await query(`DROP TABLE IF EXISTS ${table}`);
     await query("CREATE TABLE appSettings (id INT NOT NULL AUTO_INCREMENT PRIMARY KEY,`key` VARCHAR(128) NOT NULL UNIQUE,value TEXT NOT NULL,updatedAt TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP) ENGINE=InnoDB");
     await query(`CREATE TABLE customers (
-      id INT NOT NULL PRIMARY KEY,phone VARCHAR(32) NOT NULL,email VARCHAR(320) NOT NULL,name VARCHAR(128) NOT NULL,
+      id INT NOT NULL PRIMARY KEY,customerNumber INT NULL,phone VARCHAR(32) NOT NULL,email VARCHAR(320) NOT NULL,name VARCHAR(128) NOT NULL,
       blocked INT NOT NULL DEFAULT 0,deletedAt TIMESTAMP NULL,cpf VARCHAR(32),cep VARCHAR(16),street VARCHAR(255),
       addressNumber VARCHAR(32),neighborhood VARCHAR(128),city VARCHAR(128),uf VARCHAR(2),profilePhotoUrl TEXT,
       lastAccessAt TIMESTAMP NULL,createdAt TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP
@@ -166,7 +166,7 @@ describe.skipIf(!testUrl)("Customer session policy — isolated MySQL and real O
 
   it("bloqueia repetição de tentativas por CPF e não cria sessão", async () => {
     const caller = {headers:{},ip:"198.51.100.47",socket:{remoteAddress:"198.51.100.47"}} as any;
-    for (let i=0;i<5;i++) expect((await verifyCustomerCpfBirthDate("00000000000","1990-01-15",caller)).success).toBe(false);
+    for (let i=0;i<5;i++) expect((await verifyCustomerCpfBirthDate("90000000175","1990-01-16",caller)).success).toBe(false);
     const limited = await verifyCustomerCpfBirthDate("90000000175","1990-01-15",caller);
     expect(limited).toMatchObject({success:false});
     expect(Number(limited.retryAfterSeconds)).toBeGreaterThan(0);
