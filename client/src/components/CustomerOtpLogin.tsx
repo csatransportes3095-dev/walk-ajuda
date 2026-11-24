@@ -199,6 +199,7 @@ export function CustomerOtpLogin({ title = "Acesso H2 Colombiano", initialPhone 
       toast.error("WhatsApp temporariamente indisponível. Use o código enviado ao e-mail.");
       return;
     }
+    let accountConfirmed = false;
     setBusy(true);
     try {
       const account = await checkCustomer.mutateAsync({ phone: cleanPhone });
@@ -220,6 +221,7 @@ export function CustomerOtpLogin({ title = "Acesso H2 Colombiano", initialPhone 
         toast.error("Seu cadastro está sem e-mail. Entre em contato com o atendimento.");
         return;
       }
+      accountConfirmed = true;
       const result = await requestCode.mutateAsync({phone: cleanPhone, channel});
       if (result.resendBlocked) {
         const wait = Math.max(0, result.retryAfterSeconds || 0);
@@ -279,7 +281,14 @@ export function CustomerOtpLogin({ title = "Acesso H2 Colombiano", initialPhone 
         }
       }
     } catch (err: any) {
-      toast.error(err?.message || "Não foi possível solicitar o código.");
+      if (accountConfirmed) {
+        saveOtpDraft(cleanPhone, "code", channel, false);
+        setDeliveryChannel(channel);
+        setStep("code");
+        setShowCpfLogin(true);
+        setShowHelp(false);
+      }
+      toast.error(accountConfirmed ? "Não foi possível entregar o código. Você pode tentar entrar com CPF." : (err?.message || "Não foi possível solicitar o código."));
     } finally {
       setBusy(false);
     }
