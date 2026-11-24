@@ -32,6 +32,7 @@ import { generateOwnSiteCode } from "../siteAccessOwnCodes";
 import { getCustomerLoginHistory } from "../customerLoginHistory";
 import { emailBelongsToAnotherCustomer, CUSTOMER_EMAIL_IN_USE_MESSAGE } from "../customerEmailOwnership";
 import { readCustomerSessionPolicy, saveCustomerSessionPolicy } from "../customerSessionPolicy";
+import { readCustomerPasskeyPermission, saveCustomerPasskeyPermission } from "../customerPasskeyPolicy";
 import { MIN_CUSTOMER_SESSION_HOURS, MAX_CUSTOMER_SESSION_HOURS } from "../../shared/customerSessionPolicy";
 
 const SESSION_DURATION_MS = 90 * 24 * 60 * 60 * 1000; // 90 dias
@@ -198,6 +199,9 @@ function requireLegacyPasswordMode(): void {
 export const customerPasswordRouter = router({
   authMode: publicProcedure.query(() => ({ passwordless: isCustomerOtpModeEnabled() })),
   getSessionPolicy: adminProcedure.query(async () => readCustomerSessionPolicy(await getDb())),
+  getPasskeyPermission: adminProcedure.query(async () => readCustomerPasskeyPermission(await getDb())),
+  updatePasskeyPermission: adminProcedure.input(z.object({ allowed: z.boolean() }))
+    .mutation(async ({ input }) => saveCustomerPasskeyPermission(await getDb(), input.allowed)),
   updateSessionPolicy: adminProcedure
     .input(z.object({ hours: z.number().int().min(MIN_CUSTOMER_SESSION_HOURS).max(MAX_CUSTOMER_SESSION_HOURS) }))
     .mutation(async ({ input }) => saveCustomerSessionPolicy(await getDb(), input.hours)),

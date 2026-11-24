@@ -136,6 +136,18 @@ describe.skipIf(!testUrl)("Customer session policy — isolated MySQL and real O
     vi.useRealTimers(); vi.restoreAllMocks(); vi.unstubAllEnvs();
   });
 
+  it("persists the ADM Passkey preference independently of the session duration", async () => {
+    expect(await admin().getPasskeyPermission()).toEqual({allowed:true});
+    await admin().updatePasskeyPermission({allowed:false});
+    expect(await admin().getPasskeyPermission()).toEqual({allowed:false});
+    expect(await admin().getSessionPolicy()).toEqual(policy(720));
+    await admin().updateSessionPolicy({hours:2160});
+    expect(await admin().getPasskeyPermission()).toEqual({allowed:false});
+    await admin().updatePasskeyPermission({allowed:true});
+    expect(await query("SELECT value FROM appSettings WHERE `key`=?",["customer_passkey_allowed"])).toEqual([expect.objectContaining({value:"1"})]);
+    expect(await admin().getSessionPolicy()).toEqual(policy(2160));
+  });
+
   it("persists 48 hours and both valid limits through the real admin API without changing other settings", async () => {
     expect(await admin().getSessionPolicy()).toEqual(policy(720));
     await query("INSERT INTO appSettings (`key`,value) VALUES ('unrelated_fixture','keep')");

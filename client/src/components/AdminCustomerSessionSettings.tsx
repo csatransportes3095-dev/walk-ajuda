@@ -1,10 +1,15 @@
 import { useState, type FormEvent } from "react";
-import { Clock, Save } from "lucide-react";
+import { Clock, Save, Fingerprint } from "lucide-react";
 import { trpc } from "@/lib/trpc";
 import { MAX_CUSTOMER_SESSION_HOURS, MIN_CUSTOMER_SESSION_HOURS } from "@shared/customerSessionPolicy";
 
 export function AdminCustomerSessionSettings() {
   const utils = trpc.useUtils();
+  const permission = trpc.customerPassword.getPasskeyPermission.useQuery(undefined, { retry: false, refetchOnWindowFocus: true });
+  const permissionUpdate = trpc.customerPassword.updatePasskeyPermission.useMutation({
+    onMutate: async () => { await utils.customerPassword.getPasskeyPermission.cancel(); },
+    onSuccess: data => { utils.customerPassword.getPasskeyPermission.setData(undefined, data); },
+  });
   const policy = trpc.customerPassword.getSessionPolicy.useQuery(undefined, {
     retry: false,
     refetchOnWindowFocus: true,
@@ -92,6 +97,23 @@ export function AdminCustomerSessionSettings() {
         </form>
       )}
 
+      <section aria-labelledby="passkey-permission-title" className="space-y-3 rounded-xl border border-emerald-500/30 bg-slate-900 p-4">
+        <h4 id="passkey-permission-title" className="flex items-center gap-2 text-sm font-bold text-emerald-200">
+          <Fingerprint className="h-5 w-5" aria-hidden /> Biometria (Passkey)
+        </h4>
+        <p className="text-xs text-slate-300">Permissão para o futuro acesso por Face ID, digital ou PIN do aparelho. A integração de autenticação ainda não está disponível neste estágio.</p>
+        {permission.isPending && <p className="text-xs text-slate-400">Consultando permissão...</p>}
+        {permission.isError && <div><p className="text-sm text-amber-200" role="alert">Não foi possível consultar a permissão de biometria.</p><button type="button" onClick={() => void permission.refetch()} className="text-sm text-cyan-200">Consultar novamente</button></div>}
+        {permission.data && <label className="flex items-center gap-3 text-sm text-slate-100">
+          <input type="checkbox" checked={permission.data.allowed} disabled={permissionUpdate.isPending || permission.isFetching}
+            onChange={event => permissionUpdate.mutate({ allowed: event.target.checked })}
+            className="h-5 w-5 accent-emerald-500" />
+          Permitir biometria quando disponível
+        </label>}
+        {permissionUpdate.error && <p role="alert" className="text-sm text-rose-300">{permissionUpdate.error.message}</p>}
+        {permissionUpdate.isSuccess && <p role="status" className="text-sm text-emerald-300">Permissão de biometria salva.</p>}
+        <p className="text-xs text-slate-400">A alteração salva somente a preferência administrativa; não ativa uma autenticação ainda não validada.</p>
+      </section>
       <div className="space-y-1 text-xs leading-relaxed text-slate-300">
         <p>Aplica aos próximos logins. Sessões já abertas mantêm seu vencimento.</p>
         <p>O código continua válido por 10 minutos e pode ser usado uma única vez.</p>
