@@ -1,3 +1,4 @@
+import { birthDateToday, isValidCustomerBirthDate } from "@shared/customerBirthDate";
 import { useEffect, useState, useRef } from 'react';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
@@ -125,6 +126,7 @@ function LegacyGastosLoginPage({ onLoginSuccess, sourceRoute, requiredProfilePho
   const [regName, setRegName] = useState('');
   const [regPhone, setRegPhone] = useState('');
   const [regCpf, setRegCpf] = useState('');
+  const [regBirthDate, setRegBirthDate] = useState('');
   const regCpfDigits = normalizeCpf(regCpf);
   const regCpfValid = isValidCPF(regCpfDigits);
   const regCpfInvalid = regCpfDigits.length === 11 && !regCpfValid;
@@ -278,6 +280,7 @@ function LegacyGastosLoginPage({ onLoginSuccess, sourceRoute, requiredProfilePho
 
     if (isMissingProfileField('name') && !regName.trim()) { setError('Informe seu nome completo'); return; }
     if (isMissingProfileField('phone') && cleanPhone.length < 10) { setError('Informe um telefone válido'); return; }
+    if (!profileUpdateLookup && !isValidCustomerBirthDate(regBirthDate)) { setError('Informe uma data de nascimento válida.'); return; }
     if (isMissingProfileField('cpf') && !isValidCPF(cleanCpf)) { setError('CPF inválido. Digite um CPF válido para continuar.'); return; }
     if (isMissingProfileField('email') && (!regEmail.trim() || !regEmail.includes('@'))) { setError('Informe um e-mail válido'); return; }
     if (isMissingProfileField('city') && !regCity.trim()) { setError('Informe sua cidade'); return; }
@@ -314,6 +317,7 @@ function LegacyGastosLoginPage({ onLoginSuccess, sourceRoute, requiredProfilePho
         ? await completeProfileMutation.mutateAsync({ ...payload, lookupIdentifier: profileUpdateLookup.identifier, lookupIsCpf: profileUpdateLookup.isCpf })
         : await registerMutation.mutateAsync({
           ...payload,
+          birthDate: regBirthDate,
           city: regCity.trim(),
           uf: regUf.toUpperCase().slice(0, 2),
           referredByPhone: cleanReferralPhone,
@@ -624,6 +628,10 @@ function LegacyGastosLoginPage({ onLoginSuccess, sourceRoute, requiredProfilePho
                 {regCpfInvalid && <p className="mt-1 text-xs font-medium text-red-400">CPF inválido. Digite um CPF válido para continuar.</p>}
               </div>}
 
+              {!profileUpdateLookup && <div>
+                <label htmlFor="gastos-registration-birth" className="block text-xs font-medium text-foreground mb-1">Data de nascimento *</label>
+                <Input id="gastos-registration-birth" type="date" autoComplete="bday" lang="pt-BR" required min="1900-01-01" max={birthDateToday()} value={regBirthDate} onChange={e => setRegBirthDate(e.target.value)} disabled={isLoading} className="h-10 bg-input border-border text-foreground text-sm" />
+              </div>}
               {/* Email */}
               {isMissingProfileField('email') && <div>
                 <label className="block text-xs font-medium text-foreground mb-1">
