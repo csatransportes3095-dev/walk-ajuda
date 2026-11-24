@@ -307,7 +307,19 @@ export function CustomerOtpLogin({ title = "Acesso H2 Colombiano", initialPhone 
       if (activate) {
         try {
           const response = await startPasskeyRegistration({ optionsJSON: pending.options });
-          await finishEnrollment.mutateAsync({ token: pending.result.token, challengeId: pending.challengeId, response });
+          // The server requests no client extensions; send only the bounded
+          // registration proof fields needed to verify the WebAuthn ceremony.
+          await finishEnrollment.mutateAsync({
+            token: pending.result.token, challengeId: pending.challengeId,
+            response: {
+              id: response.id, rawId: response.rawId, type: "public-key",
+              response: {
+                clientDataJSON: response.response.clientDataJSON,
+                attestationObject: response.response.attestationObject,
+              },
+              clientExtensionResults: {},
+            },
+          });
           toast.success("Chave de acesso cadastrada!");
         } catch {
           toast.info("Biometria não cadastrada. O acesso por código continua disponível.");
