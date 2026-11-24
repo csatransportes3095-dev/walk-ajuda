@@ -68,7 +68,7 @@ function clearOtpDraft() {
 import { trpc } from "@/lib/trpc";
 import { toast } from "sonner";
 import { CheckCircle2, Fingerprint, Mail, MessageCircle, Phone, ShieldCheck } from "lucide-react";
-import { browserSupportsWebAuthn, startRegistration } from "@simplewebauthn/browser";
+import { browserSupportsWebAuthn, startRegistration as startPasskeyRegistration } from "@simplewebauthn/browser";
 
 export type CustomerOtpResult = {
   token: string;
@@ -146,7 +146,7 @@ export function CustomerOtpLogin({ title = "Acesso H2 Colombiano", initialPhone 
   const enrollmentAvailability = trpc.customerPassword.passkeyEnrollmentAvailable.useQuery(undefined, { retry: false });
   const finishEnrollment = trpc.customerPassword.finishPasskeyEnrollment.useMutation();
   const [enrollPasskey, setEnrollPasskey] = useState(false);
-  const [pendingEnrollment, setPendingEnrollment] = useState<null | { result: CustomerOtpResult; challengeId: string; options: Parameters<typeof startRegistration>[0]["optionsJSON"] }>(null);
+  const [pendingEnrollment, setPendingEnrollment] = useState<null | { result: CustomerOtpResult; challengeId: string; options: Parameters<typeof startPasskeyRegistration>[0]["optionsJSON"] }>(null);
   const canEnrollPasskey = enrollmentAvailability.data?.available === true && browserSupportsWebAuthn();
   const cleanPhone = normalizeOtpPhone(phone);
   const remainingEmail = remainingSeconds(Math.max(cooldowns.email,savedCooldown(cleanPhone,"email")),clockNow);
@@ -306,7 +306,7 @@ export function CustomerOtpLogin({ title = "Acesso H2 Colombiano", initialPhone 
     try {
       if (activate) {
         try {
-          const response = await startRegistration({ optionsJSON: pending.options });
+          const response = await startPasskeyRegistration({ optionsJSON: pending.options });
           await finishEnrollment.mutateAsync({ token: pending.result.token, challengeId: pending.challengeId, response });
           toast.success("Chave de acesso cadastrada!");
         } catch {
