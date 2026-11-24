@@ -103,11 +103,8 @@ try {
     const f = await setup({ server:{ requestMode:'failure', whatsappAvailable:false } });
     await f.request.click();
     await f.page.getByText('Falha de entrega para teste.', { exact:true }).waitFor();
-    await f.page.getByLabel('Código de 6 números').waitFor();
-    await f.page.getByTestId('h2-otp-cpf-login').waitFor();
-    assert.equal((await f.state()).requestCalls.length, 1);
-    assert.equal(await f.page.getByTestId('authenticated-phone').count(),0);
-    checks.push('Falha de entrega preserva a mensagem original e oferece CPF sem autenticar automaticamente');
+    assert.equal(await f.page.getByLabel('Código de 6 números').count(), 0);
+    checks.push('Falha de entrega não simula sucesso nem confirma acesso');
     await f.close();
   }
   assert.deepEqual(errors, []);

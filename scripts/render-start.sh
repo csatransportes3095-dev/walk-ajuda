@@ -26,7 +26,6 @@ run_boot_step "db-migrate-order-login-improvements" pnpm exec tsx scripts/apply-
 run_boot_step "db-migrate-order-multi-login" pnpm exec tsx scripts/apply-order-multi-login-migration.ts
 run_boot_step "db-migrate-cpf-vault" pnpm exec tsx scripts/apply-cpf-vault-migration.ts
 run_boot_step "db-migrate-customer-login-history" pnpm exec tsx scripts/apply-customer-login-history-migration.ts
-run_boot_step "db-migrate-customer-birth-date" pnpm exec tsx scripts/apply-customer-birth-date-migration.ts
 run_boot_step "db-migrate-admin-authenticator-vault" pnpm run db:migrate:admin-authenticator-vault
 run_boot_step "db-migrate-admin-authenticator-order-links" pnpm run db:migrate:admin-authenticator-order-links
 run_boot_step "db-migrate-option-card-appearance" pnpm run db:migrate:option-card-appearance
@@ -76,3 +75,4 @@ run_boot_step "db-migrate-colombiabot" pnpm exec tsx scripts/apply-colombiabot-r
 echo "[BOOT-DIAG] START server timestamp=$(date -u +%Y-%m-%dT%H:%M:%SZ)"
 echo "Iniciando servidor..."
 exec node dist/index.js
+

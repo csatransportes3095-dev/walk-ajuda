@@ -1,9 +1,8 @@
-import { birthDateToday, isValidCustomerBirthDate } from "@shared/customerBirthDate";
 import { useMemo, useState } from "react";
 import { ArrowLeft, Camera, Eye, EyeOff, KeyRound } from "lucide-react";
 import { trpc } from "@/lib/trpc";
 
-const steps = ['route', 'name', 'phone', 'cpf', 'birthDate', 'email', 'cep', 'street', 'addressNumber', 'neighborhood', 'city', 'uf', 'referrer', 'photo', 'confirm', 'password'] as const;
+const steps = ['route', 'name', 'phone', 'cpf', 'email', 'cep', 'street', 'addressNumber', 'neighborhood', 'city', 'uf', 'referrer', 'photo', 'confirm', 'password'] as const;
 type Step = typeof steps[number];
 type Route = 'site' | 'acompanhar' | 'gastos' | 'emprestimo';
 type Props = { conversationId: number; visitorId: string; onBack: () => void; onDone: () => void; initialRoute?: 'gastos' | 'emprestimo' | null };
@@ -38,7 +37,7 @@ async function uploadRegistrationProfilePhoto(file: File, phone: string) {
 export function OnlineRegistrationPanel({ conversationId, visitorId, onBack, onDone, initialRoute = null }: Props) {
   const [index, setIndex] = useState(initialRoute ? 1 : 0);
   const [route, setRoute] = useState<Route>(initialRoute || 'site');
-  const [data, setData] = useState({ name: '', phone: '', cpf: '', birthDate: '', email: '', cep: '', street: '', addressNumber: '', neighborhood: '', city: '', uf: '', referrerPhone: '', profilePhotoUrl: '' });
+  const [data, setData] = useState({ name: '', phone: '', cpf: '', email: '', cep: '', street: '', addressNumber: '', neighborhood: '', city: '', uf: '', referrerPhone: '', profilePhotoUrl: '' });
   const [value, setValue] = useState('');
   const [file, setFile] = useState<File | null>(null);
   const [isUploadingPhoto, setIsUploadingPhoto] = useState(false);
@@ -64,7 +63,6 @@ export function OnlineRegistrationPanel({ conversationId, visitorId, onBack, onD
     name: 'Qual é seu nome completo?',
     phone: 'Informe seu telefone com DDD',
     cpf: 'Informe seu CPF',
-    birthDate: 'Informe sua data de nascimento',
     email: 'Informe seu e-mail',
     cep: 'Informe seu CEP',
     street: 'Informe sua rua / logradouro',
@@ -114,19 +112,10 @@ export function OnlineRegistrationPanel({ conversationId, visitorId, onBack, onD
       }
       return;
     }
-    if (step === 'birthDate') {
-      if (!isValidCustomerBirthDate(value)) { setError('Informe uma data de nascimento válida.'); return; }
-      setData(old => ({ ...old, birthDate: value }));
-      setValue('');
-      setIndex(index + 1);
-      return;
-    }
     if (step === 'confirm') {
-      if (!isValidCustomerBirthDate(data.birthDate)) { setError('Informe uma data de nascimento válida.'); setIndex(steps.indexOf('birthDate')); return; }
       const result = await register.mutateAsync({ ...data, phone: data.phone.replace(/\D/g, ''), referredByPhone: data.referrerPhone, sourceRoute: route });
       if (!result.success) { setError(result.message || 'Não foi possível concluir o cadastro.'); return; }
-      const { birthDate: privateBirthDate, ...draftData } = data;
-      await saveDraft.mutateAsync({ conversationId, visitorId, requestedRoute: route, step: 'confirm', data: { ...draftData, route } });
+      await saveDraft.mutateAsync({ conversationId, visitorId, requestedRoute: route, step: 'confirm', data: { ...data, route } });
       if (authMode.data?.passwordless) {
         sessionStorage.setItem("h2_customer_return_to", route === "site" ? "/" : "/"+route);
         window.location.assign("/login");
@@ -214,10 +203,8 @@ export function OnlineRegistrationPanel({ conversationId, visitorId, onBack, onD
         </div>
       ) : step === 'photo' ? (
         <label style={{ ...choice, display: 'block', textAlign: 'center' }}><Camera size={22} style={{ marginBottom: 6 }} /><div>{file ? file.name : 'Escolher foto'}</div><input type="file" accept="image/*" capture="user" onChange={e => { setFile(e.target.files?.[0] || null); setError(''); }} style={{ display: 'none' }} /></label>
-      ) : step === 'birthDate' ? (
-        <input aria-label="Data de nascimento" type="date" autoComplete="bday" lang="pt-BR" required min="1900-01-01" max={birthDateToday()} value={value} onChange={e => { setValue(e.target.value); setError(''); }} style={input} />
       ) : step === 'confirm' ? (
-        <div style={{ fontSize: 12, color: 'rgba(255,255,255,.7)', lineHeight: 1.7 }}><div><b>Área:</b> {route}</div><div><b>Nome:</b> {data.name}</div><div><b>Telefone:</b> {data.phone}</div><div><b>CPF:</b> {data.cpf}</div><div><b>Data de nascimento:</b> {data.birthDate.split('-').reverse().join('/')}</div><div><b>E-mail:</b> {data.email}</div><div><b>CEP:</b> {data.cep}</div><div><b>Rua:</b> {data.street}</div><div><b>Número:</b> {data.addressNumber}</div><div><b>Bairro:</b> {data.neighborhood}</div><div><b>Cidade/UF:</b> {data.city}/{data.uf}</div><div><b>Indicador:</b> {data.referrerPhone}</div></div>
+        <div style={{ fontSize: 12, color: 'rgba(255,255,255,.7)', lineHeight: 1.7 }}><div><b>Área:</b> {route}</div><div><b>Nome:</b> {data.name}</div><div><b>Telefone:</b> {data.phone}</div><div><b>CPF:</b> {data.cpf}</div><div><b>E-mail:</b> {data.email}</div><div><b>CEP:</b> {data.cep}</div><div><b>Rua:</b> {data.street}</div><div><b>Número:</b> {data.addressNumber}</div><div><b>Bairro:</b> {data.neighborhood}</div><div><b>Cidade/UF:</b> {data.city}/{data.uf}</div><div><b>Indicador:</b> {data.referrerPhone}</div></div>
       ) : step === 'password' ? (
         passwordCompleted ? (
           <div style={{ marginTop: 8, padding: 12, borderRadius: 10, background: 'rgba(34,197,94,.12)', border: '1px solid rgba(74,222,128,.45)', color: '#dcfce7', fontSize: 13, lineHeight: 1.5 }}>

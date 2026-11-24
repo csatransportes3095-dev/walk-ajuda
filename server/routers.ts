@@ -1,5 +1,3 @@
-import { isValidCustomerBirthDate } from "../shared/customerBirthDate";
-import { ensureAdminCustomerBirthDateAuditTable, correctCustomerBirthDateByAdmin } from './customerBirthDate';
 import { getStatusVisibilityRule, listStatusVisibilityRules, saveStatusVisibilityRule, getOrderStatusVisibilityForClient } from "./orderStatusVisibility";
 import { siteSecurityRouter } from "./siteSecurityRouter";
 import { vinRegistryRouter } from "./routers/vinRegistry";
@@ -2772,7 +2770,6 @@ export const appRouter = router({
         phone: z.string().min(1),
         email: z.string().email("E-mail obrigatório e inválido").min(1, "E-mail obrigatório"),
         cpf: z.string().min(11, "CPF inválido").max(18),
-        birthDate: z.string().max(10).refine(isValidCustomerBirthDate, "Informe uma data de nascimento válida."),
         cep: z.string().trim().transform(value => value.replace(/\D/g, '')).refine(value => /^\d{8}$/.test(value), "CEP obrigatório e inválido"),
         street: z.string().trim().min(2, "Rua / Logradouro é obrigatório").max(255),
         addressNumber: z.string().trim().min(1, "Número é obrigatório").max(30),
@@ -2912,7 +2909,7 @@ export const appRouter = router({
       }
       // Buscar clientes com flag indicando se têm pedido finalizado
       const rows = await db.execute(`
-        SELECT c.*, cbd.birthDate,
+        SELECT c.*,
           UNIX_TIMESTAMP(CONVERT_TZ(c.lastAccessAt, @@session.time_zone, '+00:00')) * 1000 AS lastAccessAtMs,
           UNIX_TIMESTAMP(CONVERT_TZ(c.createdAt, @@session.time_zone, '+00:00')) * 1000 AS createdAtMs,
           CASE WHEN EXISTS (
@@ -2950,7 +2947,6 @@ export const appRouter = router({
               AND bl.phone IS NOT NULL AND bl.phone != ''
           ) THEN 1 ELSE 0 END AS isBlocked
         FROM customers c
-        LEFT JOIN customerBirthDates cbd ON cbd.customerId = c.id
         WHERE c.deletedAt IS NULL
         ORDER BY c.createdAt DESC
       `);
@@ -3028,10 +3024,9 @@ export const appRouter = router({
         profilePhotoUrl: z.string().optional(),
         customerNumber: z.number().int().positive().nullable().optional(),
         cpf: z.string().optional(),
-        birthDate: z.string().max(10).refine(isValidCustomerBirthDate, 'Informe uma data de nascimento válida.').optional(),
       }))
-      .mutation(async ({ input, ctx }) => {
-        const { id, birthDate, ...rawData } = input;
+      .mutation(async ({ input }) => {
+        const { id, ...rawData } = input;
         const data = {
           ...rawData,
           phone: rawData.phone !== undefined ? normalizeCustomerPhone(rawData.phone) : undefined,
@@ -3044,22 +3039,6 @@ export const appRouter = router({
         const db = await (await import('./db')).getDb() as any;
         if (!db) throw new TRPCError({ code: 'INTERNAL_SERVER_ERROR', message: 'Banco indisponível' });
 
-        let birthDateAdminSubject: string | undefined;
-        if (birthDate !== undefined) {
-          const token = parseCookieHeader(ctx.req.headers.cookie || '').admin_token;
-          const secret = getAdminJwtSecret();
-          if (!token || !secret) throw new TRPCError({ code: 'FORBIDDEN', message: 'Administrador não identificado.' });
-          try {
-            const payload = jwt.verify(token, secret);
-            if (typeof payload === 'string' || payload.role !== 'admin' || typeof payload.sub !== 'string' || !payload.sub.trim() || payload.sub.length > 255) {
-              throw new Error('Invalid admin identity');
-            }
-            birthDateAdminSubject = payload.sub;
-          } catch {
-            throw new TRPCError({ code: 'FORBIDDEN', message: 'Administrador não identificado.' });
-          }
-          await ensureAdminCustomerBirthDateAuditTable(db);
-        }
         const custRows = await db.execute(sql`SELECT phone, cpf FROM customers WHERE id = ${id} LIMIT 1`);
         const current = (custRows[0] as unknown as Array<{ phone: string; cpf?: string | null }>)[0];
         if (!current) throw new TRPCError({ code: 'NOT_FOUND', message: 'Cliente não encontrado' });
@@ -3088,11 +3067,6 @@ export const appRouter = router({
         // Primeiro grava o cadastro principal.
         const updated = await updateCustomer(id, data);
         if (!updated) throw new TRPCError({ code: 'NOT_FOUND', message: 'Cliente não encontrado' });
-        if (birthDate !== undefined && birthDateAdminSubject !== undefined) {
-          await db.transaction(async (tx: any) => {
-            await correctCustomerBirthDateByAdmin(tx, id, birthDate, birthDateAdminSubject);
-          });
-        }
 
         if (phoneChanged) {
           const registrationRows = await db.execute(sql`
@@ -3612,7 +3586,6 @@ export const appRouter = router({
         phone: z.string().regex(/^\d{10,11}$/, 'Telefone inválido (somente dígitos, 10 ou 11)'),
         email: z.string().email('E-mail obrigatório e inválido').min(1, 'E-mail obrigatório'),
         cpf: z.string().transform(value => value.replace(/\D/g, '')).refine(value => /^\d{11}$/.test(value), 'CPF obrigatório e inválido'),
-        birthDate: z.string().max(10).refine(isValidCustomerBirthDate, 'Informe uma data de nascimento válida.'),
         profilePhotoUrl: z.string().url('Foto de perfil obrigatória').min(1, 'Foto de perfil obrigatória'),
         referredBy: z.string().trim().min(1).optional(),
         referredByPhone: z.string().regex(/^\d{10,11}$/, 'Informe o telefone válido do indicador cadastrado'),
@@ -3631,7 +3604,6 @@ export const appRouter = router({
           phone: normalizeCustomerPhone(input.phone),
           email: normalizeCustomerEmail(input.email),
           cpf: normalizeCustomerCpf(input.cpf),
-          birthDate: input.birthDate,
           cep: input.cep ? input.cep.replace(/\D/g, "").replace(/^(\d{5})(\d{3})$/, "$1-$2") : undefined,
           street: input.street?.trim() || undefined,
           addressNumber: input.addressNumber?.trim() || undefined,
