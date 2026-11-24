@@ -37,3 +37,57 @@ export async function saveCustomerBirthDate(db: any, customerId: number, date: s
   await db.execute(sql`INSERT INTO customerBirthDates (customerId,birthDate)
     VALUES (${customerId},${date}) ON DUPLICATE KEY UPDATE customerId=customerId`);
 }
+
+// The audit table is only initialized at boot or before an ADM correction,
+// never as part of a public CPF login or within a transaction (DDL can commit).
+const adminAuditInitialization = new WeakMap<object, Promise<void>>();
+
+export async function ensureAdminCustomerBirthDateAuditTable(db: any): Promise<void> {
+  await ensureCustomerBirthDateTable(db);
+  let pending = adminAuditInitialization.get(db);
+  if (!pending) {
+    pending = (async () => {
+      await db.execute(sql`CREATE TABLE IF NOT EXISTS customerBirthDateAdminAudit (
+        id BIGINT UNSIGNED NOT NULL AUTO_INCREMENT PRIMARY KEY,
+        customerId INT NOT NULL,
+        adminSubject VARCHAR(255) NOT NULL,
+        action ENUM('created','corrected') NOT NULL,
+        createdAt TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP,
+        KEY idx_customerBirthDateAdminAudit_customer (customerId,createdAt)
+      ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4`);
+    })();
+    adminAuditInitialization.set(db, pending);
+  }
+  try { await pending; } catch (error) {
+    adminAuditInitialization.delete(db);
+    throw error;
+  }
+}
+
+/**
+ * ADM only: the caller must authenticate the admin and use an active
+ * transaction. Keep the normal customer save insert-only. Do not record
+ * birth dates, CPF or session tokens in the audit trail.
+ */
+export async function correctCustomerBirthDateByAdmin(
+  tx: any, customerId: number, date: string, adminSubject: string,
+): Promise<boolean> {
+  if (!isValidCustomerBirthDate(date)) throw new Error("Informe uma data de nascimento válida.");
+  if (!Number.isSafeInteger(customerId) || customerId <= 0) throw new Error("Cliente inválido.");
+  if (typeof adminSubject !== "string" || !adminSubject.trim() || adminSubject.length > 255) {
+    throw new Error("Administrador não identificado.");
+  }
+  const customer = await tx.execute(sql`SELECT id FROM customers
+    WHERE id=${customerId} AND deletedAt IS NULL FOR UPDATE`);
+  if (!customer?.[0]?.[0]) throw new Error("Cliente não encontrado.");
+  const result = await tx.execute(sql`SELECT birthDate FROM customerBirthDates
+    WHERE customerId=${customerId} FOR UPDATE`);
+  const previous = result?.[0]?.[0];
+  if (previous?.birthDate === date) return false;
+
+  await tx.execute(sql`INSERT INTO customerBirthDates (customerId,birthDate)
+    VALUES (${customerId},${date}) ON DUPLICATE KEY UPDATE birthDate=${date}`);
+  await tx.execute(sql`INSERT INTO customerBirthDateAdminAudit (customerId,adminSubject,action)
+    VALUES (${customerId},${adminSubject},${previous ? "corrected" : "created"})`);
+  return true;
+}
