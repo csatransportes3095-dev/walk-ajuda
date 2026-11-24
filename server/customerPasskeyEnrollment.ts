@@ -63,7 +63,7 @@ export async function ensureCustomerPasskeyEnrollmentTables(db: any) {
 
 // No personal information in the WebAuthn user handle. Bind to the same
 // keyed phone and email digests already verified by the OTP session.
-function userHandle(session: any, rpID: string) {
+export function customerPasskeyUserHandle(session: any, rpID: string) {
   return createHash("sha256").update(JSON.stringify(["h2-passkey-v1",rpID,Number(session.customerId),session.phoneKey,session.emailKey])).digest();
 }
 async function currentAccount(tx: any, token: string, rpID: string) {
@@ -74,7 +74,7 @@ async function currentAccount(tx: any, token: string, rpID: string) {
       normalizeCustomerPhone(locked.phone) !== session.phone || normalizeCustomerEmail(locked.email) !== session.email) return null;
   const current = await uniqueCustomer(tx,session.phone);
   if (!current || Number(current.id) !== Number(session.customerId)) return null;
-  return { id:Number(session.customerId), handle:userHandle(session,rpID) };
+  return { id:Number(session.customerId), handle:customerPasskeyUserHandle(session,rpID) };
 }
 
 /** Only called by the OTP-verification procedure immediately after successful

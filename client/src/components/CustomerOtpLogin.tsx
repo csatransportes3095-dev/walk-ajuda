@@ -68,7 +68,7 @@ function clearOtpDraft() {
 import { trpc } from "@/lib/trpc";
 import { toast } from "sonner";
 import { CheckCircle2, Fingerprint, Mail, MessageCircle, Phone, ShieldCheck } from "lucide-react";
-import { browserSupportsWebAuthn, startRegistration as startPasskeyRegistration } from "@simplewebauthn/browser";
+import { browserSupportsWebAuthn, startAuthentication, startRegistration as startPasskeyRegistration } from "@simplewebauthn/browser";
 
 export type CustomerOtpResult = {
   token: string;
@@ -82,11 +82,6 @@ type Props = {
   initialPhone?: string;
   onAuthenticated: (result: CustomerOtpResult) => void | Promise<void>;
   onRegister?: () => void;
-  // Supplied only when the server-side Passkey login ceremony is ready.
-  passkeyLogin?: {
-    available: boolean;
-    authenticate: (phone: string, remember: boolean) => Promise<CustomerOtpResult>;
-  };
 };
 
 export function normalizeOtpPhone(input: string): string {
@@ -122,7 +117,7 @@ function supportsNativeOtpWhatsappHandoff(): boolean {
     (navigator.platform === "MacIntel" && navigator.maxTouchPoints > 1);
 }
 
-export function CustomerOtpLogin({ title = "Acesso H2 Colombiano", initialPhone = "", onAuthenticated, onRegister, passkeyLogin }: Props) {
+export function CustomerOtpLogin({ title = "Acesso H2 Colombiano", initialPhone = "", onAuthenticated, onRegister }: Props) {
   const [initialState] = useState<OtpDraft>(() => {
     const draft = readOtpDraft();
     const selectedPhone = normalizeOtpPhone(initialPhone) || draft?.phone || "";
@@ -154,7 +149,10 @@ export function CustomerOtpLogin({ title = "Acesso H2 Colombiano", initialPhone 
   const [enrollPasskey, setEnrollPasskey] = useState(false);
   const [pendingEnrollment, setPendingEnrollment] = useState<null | { result: CustomerOtpResult; challengeId: string; options: Parameters<typeof startPasskeyRegistration>[0]["optionsJSON"] }>(null);
   const canEnrollPasskey = enrollmentAvailability.data?.available === true && browserSupportsWebAuthn();
-  const canLoginWithPasskey = passkeyLogin?.available === true && browserSupportsWebAuthn();
+  const loginAvailability = trpc.customerPassword.passkeyLoginAvailable.useQuery(undefined, { retry: false, refetchOnWindowFocus: true });
+  const beginPasskey = trpc.customerPassword.beginPasskeyLogin.useMutation();
+  const finishPasskey = trpc.customerPassword.finishPasskeyLogin.useMutation();
+  const canLoginWithPasskey = loginAvailability.data?.available === true && browserSupportsWebAuthn();
   const cleanPhone = normalizeOtpPhone(phone);
   const remainingEmail = remainingSeconds(Math.max(cooldowns.email,savedCooldown(cleanPhone,"email")),clockNow);
   const remainingWhatsapp = remainingSeconds(Math.max(cooldowns.whatsapp,savedCooldown(cleanPhone,"whatsapp")),clockNow);
@@ -307,13 +305,26 @@ export function CustomerOtpLogin({ title = "Acesso H2 Colombiano", initialPhone 
   }
 
   async function enterWithPasskey() {
-    if (!passkeyLogin || !canLoginWithPasskey || busy || cleanPhone.length !== 11) return;
+    if (!canLoginWithPasskey || busy || cleanPhone.length !== 11) return;
     setBusy(true);
     setPasskeyBusy(true);
     try {
-      // The adapter must return a session issued by the server after successful
-      // WebAuthn verification. The button never creates its own session.
-      const result = await passkeyLogin.authenticate(cleanPhone, remember);
+      const challenge = await beginPasskey.mutateAsync({phone:cleanPhone,remember});
+      const assertion = await startAuthentication({optionsJSON:challenge.options});
+      if (!assertion.response.userHandle) throw new Error("Missing discoverable credential user handle");
+      const result = await finishPasskey.mutateAsync({
+        phone:cleanPhone,challengeId:challenge.challengeId,
+        response:{
+          id:assertion.id,rawId:assertion.rawId,type:"public-key",
+          response:{
+            clientDataJSON:assertion.response.clientDataJSON,
+            authenticatorData:assertion.response.authenticatorData,
+            signature:assertion.response.signature,
+            userHandle:assertion.response.userHandle,
+          },
+          clientExtensionResults:{},
+        },
+      });
       if (!result.token || result.phone !== cleanPhone) {
         throw new Error("Passkey response does not match the selected account");
       }

@@ -56,7 +56,7 @@ function secret(): string {
   if (key.length < 32) throw new TRPCError({ code: "SERVICE_UNAVAILABLE", message: "Autenticação temporariamente indisponível." });
   return key;
 }
-function digest(scope: string, value: string): string {
+export function digest(scope: string, value: string): string {
   return createHmac("sha256", secret()).update("customer-otp-v2:" + scope + ":" + value).digest("hex");
 }
 function equalDigest(a: string, b: string): boolean {
@@ -116,7 +116,7 @@ export async function uniqueCustomer(db: any, normalized: string, onIneligible?:
   return c;
 }
 
-async function takeAttemptLimits(db: any, limits: Array<{scope:string;maximum:number}>, now: number): Promise<number> {
+export async function takeAttemptLimits(db: any, limits: Array<{scope:string;maximum:number}>, now: number): Promise<number> {
   // Attempt protection commits independently of delivery: failed/cooldown
   // attempts still count against abuse limits, never the six successful sends.
   return db.transaction(async (tx: any) => {
@@ -138,7 +138,7 @@ async function takeAttemptLimits(db: any, limits: Array<{scope:string;maximum:nu
   });
 }
 
-async function issueSession(tx: any, customer: any, now: number, remember = true) {
+export async function issueSession(tx: any, customer: any, now: number, remember = true) {
   const phone = normalizeCustomerPhone(customer.phone);
   const email = normalizeCustomerEmail(customer.email);
   if (!phone || !email) throw new TRPCError({ code: "UNAUTHORIZED", message: "Cadastro inválido." });

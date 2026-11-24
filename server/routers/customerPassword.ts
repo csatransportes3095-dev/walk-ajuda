@@ -34,6 +34,7 @@ import { emailBelongsToAnotherCustomer, CUSTOMER_EMAIL_IN_USE_MESSAGE } from "..
 import { readCustomerSessionPolicy, saveCustomerSessionPolicy } from "../customerSessionPolicy";
 import { readCustomerPasskeyPermission, saveCustomerPasskeyPermission } from "../customerPasskeyPolicy";
 import { canEnrollCustomerPasskey, preparePasskeyEnrollmentAfterOtp, finishCustomerPasskeyEnrollment, registrationProofSchema } from "../customerPasskeyEnrollment";
+import { authenticationProofSchema, beginCustomerPasskeyLogin, canLoginWithCustomerPasskey, finishCustomerPasskeyLogin } from "../customerPasskeyLogin";
 import { MIN_CUSTOMER_SESSION_HOURS, MAX_CUSTOMER_SESSION_HOURS } from "../../shared/customerSessionPolicy";
 
 const SESSION_DURATION_MS = 90 * 24 * 60 * 60 * 1000; // 90 dias
@@ -230,6 +231,19 @@ export const customerPasswordRouter = router({
       channel: z.enum(["email","whatsapp","both"]).optional().default("email"),
     }))
     .mutation(async ({ input, ctx }) => requestCustomerCode(input.phone, ctx.req, input.channel)),
+  passkeyLoginAvailable: publicProcedure.query(async () => ({
+    available: await canLoginWithCustomerPasskey(await getDb()),
+  })),
+  beginPasskeyLogin: publicProcedure
+    .input(z.object({ phone: z.string().min(10).max(32), remember: z.boolean() }))
+    .mutation(async ({input,ctx}) => beginCustomerPasskeyLogin(await getDb(),input.phone,input.remember,ctx.req)),
+  finishPasskeyLogin: publicProcedure
+    .input(z.object({
+      phone: z.string().min(10).max(32),
+      challengeId: z.string().regex(/^[0-9a-f]{64}$/),
+      response: authenticationProofSchema,
+    }))
+    .mutation(async ({input,ctx}) => finishCustomerPasskeyLogin(await getDb(),input.phone,input.challengeId,input.response,ctx.req)),
   passkeyEnrollmentAvailable: publicProcedure.query(async () => ({
     available: await canEnrollCustomerPasskey(await getDb()),
   })),

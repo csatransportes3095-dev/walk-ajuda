@@ -29,6 +29,7 @@ const router = t.router({
     return { exists: true, customerBlocked: false, blocked: false, customer: { email: 'fixture@example.invalid' } };
   }) }),
   customerPassword: t.router({
+    passkeyLoginAvailable: t.procedure.query(() => ({available:false})),
     passkeyEnrollmentAvailable: t.procedure.query(() => ({available:state.passkeyAvailable})),
     finishPasskeyEnrollment: t.procedure.input(z.object({token:z.string(),challengeId:z.string(),response:z.unknown()})).mutation(({input}) => { state.finishEnrollmentCalls.push({token:input.token,challengeId:input.challengeId}); return {enrolled:true}; }),
     h2AutoOtpAvailable: t.procedure.query(() => ({ available: state.whatsappAvailable })),
