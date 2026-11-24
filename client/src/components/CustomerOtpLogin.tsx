@@ -418,11 +418,23 @@ export function CustomerOtpLogin({ title = "Acesso H2 Colombiano", initialPhone 
               </p>
             </div>
             <button type="button" disabled={busy} onClick={() => setShowCpfLogin(previous => !previous)}
-              className="w-full py-2 text-sm font-bold text-cyan-300">
-              {showCpfLogin ? "OCULTAR LOGIN ALTERNATIVO" : "ENTRAR COM CPF E DATA DE NASCIMENTO"}
+              aria-expanded={showCpfLogin} aria-controls="h2-cpf-birth-direct-panel"
+              aria-label={showCpfLogin ? "OCULTAR LOGIN ALTERNATIVO" : "ENTRAR COM CPF E DATA DE NASCIMENTO"}
+              aria-describedby="h2-cpf-birth-direct-description"
+              className="flex w-full min-h-20 items-center gap-3 rounded-2xl border-2 border-red-500 bg-red-950 px-4 py-4 text-left text-white shadow-[0_0_18px_rgba(239,68,68,0.18)] transition-colors hover:bg-red-900 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-red-300 focus-visible:ring-offset-2 focus-visible:ring-offset-slate-950 disabled:opacity-50">
+              <ShieldCheck aria-hidden="true" className="h-7 w-7 shrink-0 text-red-300" />
+              <span className="min-w-0 flex-1">
+                <span className="block text-sm font-black leading-snug">
+                  {showCpfLogin ? "OCULTAR LOGIN ALTERNATIVO" : "ENTRAR COM CPF E DATA DE NASCIMENTO"}
+                </span>
+                <span id="h2-cpf-birth-direct-description" className="mt-1 block text-xs font-medium leading-relaxed text-red-100">
+                  Acesse com os dados cadastrados, sem precisar receber o código.
+                </span>
+              </span>
+              <span aria-hidden="true" className="shrink-0 text-lg font-bold text-red-200">{showCpfLogin ? "−" : "→"}</span>
             </button>
             {showCpfLogin && (
-              <div className="space-y-3 rounded-2xl border-2 border-blue-400 bg-slate-900 p-4" data-testid="h2-cpf-birth-login">
+              <div id="h2-cpf-birth-direct-panel" className="space-y-3 rounded-2xl border-2 border-blue-400 bg-slate-900 p-4" data-testid="h2-cpf-birth-login">
                 <p className="text-center text-xs text-slate-300">Informe os dados já cadastrados. A validação ocorre no servidor.</p>
                 <label htmlFor="h2-cpf-direct" className="block text-sm font-semibold">CPF completo</label>
                 <input id="h2-cpf-direct" type="text" inputMode="numeric" autoComplete="off" maxLength={11} value={cpf} disabled={busy}
