@@ -82,6 +82,11 @@ type Props = {
   initialPhone?: string;
   onAuthenticated: (result: CustomerOtpResult) => void | Promise<void>;
   onRegister?: () => void;
+  // Supplied only when the server-side Passkey login ceremony is ready.
+  passkeyLogin?: {
+    available: boolean;
+    authenticate: (phone: string, remember: boolean) => Promise<CustomerOtpResult>;
+  };
 };
 
 export function normalizeOtpPhone(input: string): string {
@@ -117,7 +122,7 @@ function supportsNativeOtpWhatsappHandoff(): boolean {
     (navigator.platform === "MacIntel" && navigator.maxTouchPoints > 1);
 }
 
-export function CustomerOtpLogin({ title = "Acesso H2 Colombiano", initialPhone = "", onAuthenticated, onRegister }: Props) {
+export function CustomerOtpLogin({ title = "Acesso H2 Colombiano", initialPhone = "", onAuthenticated, onRegister, passkeyLogin }: Props) {
   const [initialState] = useState<OtpDraft>(() => {
     const draft = readOtpDraft();
     const selectedPhone = normalizeOtpPhone(initialPhone) || draft?.phone || "";
@@ -132,6 +137,7 @@ export function CustomerOtpLogin({ title = "Acesso H2 Colombiano", initialPhone 
   const [showHelp, setShowHelp] = useState(false);
   const [showWhatsappLink, setShowWhatsappLink] = useState(initialState.step === "code" && initialState.whatsappPrepared);
   const [busy, setBusy] = useState(false);
+  const [passkeyBusy, setPasskeyBusy] = useState(false);
   const [remember, setRemember] = useState(initialState.remember);
   const [clockNow, setClockNow] = useState(() => Date.now());
   const [cooldowns, setCooldowns] = useState<{email:number;whatsapp:number}>(() => {
@@ -148,6 +154,7 @@ export function CustomerOtpLogin({ title = "Acesso H2 Colombiano", initialPhone 
   const [enrollPasskey, setEnrollPasskey] = useState(false);
   const [pendingEnrollment, setPendingEnrollment] = useState<null | { result: CustomerOtpResult; challengeId: string; options: Parameters<typeof startPasskeyRegistration>[0]["optionsJSON"] }>(null);
   const canEnrollPasskey = enrollmentAvailability.data?.available === true && browserSupportsWebAuthn();
+  const canLoginWithPasskey = passkeyLogin?.available === true && browserSupportsWebAuthn();
   const cleanPhone = normalizeOtpPhone(phone);
   const remainingEmail = remainingSeconds(Math.max(cooldowns.email,savedCooldown(cleanPhone,"email")),clockNow);
   const remainingWhatsapp = remainingSeconds(Math.max(cooldowns.whatsapp,savedCooldown(cleanPhone,"whatsapp")),clockNow);
@@ -299,6 +306,26 @@ export function CustomerOtpLogin({ title = "Acesso H2 Colombiano", initialPhone 
     toast.success("Identidade confirmada!");
   }
 
+  async function enterWithPasskey() {
+    if (!passkeyLogin || !canLoginWithPasskey || busy || cleanPhone.length !== 11) return;
+    setBusy(true);
+    setPasskeyBusy(true);
+    try {
+      // The adapter must return a session issued by the server after successful
+      // WebAuthn verification. The button never creates its own session.
+      const result = await passkeyLogin.authenticate(cleanPhone, remember);
+      if (!result.token || result.phone !== cleanPhone) {
+        throw new Error("Passkey response does not match the selected account");
+      }
+      await completeLogin(result);
+    } catch {
+      toast.error("Não foi possível entrar com biometria. Você pode continuar pelo código.");
+    } finally {
+      setPasskeyBusy(false);
+      setBusy(false);
+    }
+  }
+
   async function confirmEnrollment(activate: boolean) {
     if (!pendingEnrollment || busy) return;
     const pending = pendingEnrollment;
@@ -418,6 +445,19 @@ export function CustomerOtpLogin({ title = "Acesso H2 Colombiano", initialPhone 
               disabled={busy}
               required
             />
+            {canLoginWithPasskey && (
+              <section className="space-y-2" aria-label="Acesso com biometria">
+                <button type="button" onClick={() => void enterWithPasskey()}
+                  disabled={busy || cleanPhone.length !== 11}
+                  data-testid="customer-passkey-login"
+                  className="flex min-h-14 w-full items-center justify-center gap-2 rounded-xl bg-emerald-500 p-4 font-black text-slate-950 transition-colors hover:bg-emerald-400 focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-emerald-300 disabled:opacity-50">
+                  <Fingerprint className="h-6 w-6 shrink-0" aria-hidden />
+                  {passkeyBusy ? "CONFIRMANDO BIOMETRIA..." : "ENTRAR COM BIOMETRIA"}
+                </button>
+                <p className="text-center text-xs leading-relaxed text-slate-300">Use o Face ID, digital ou PIN do seu aparelho, se já cadastrou uma chave de acesso.</p>
+                <div className="flex items-center gap-3 text-xs text-slate-400" aria-hidden><span className="h-px flex-1 bg-slate-700" /> ou <span className="h-px flex-1 bg-slate-700" /></div>
+              </section>
+            )}
             <div className="space-y-3" aria-label="Recebimento do código">
               <button type="submit" disabled={busy || cleanPhone.length !== 11 || remainingEmail > 0 || remainingWhatsapp > 0}
                 className="flex min-h-14 w-full items-center justify-center gap-2 rounded-xl bg-cyan-500 p-4 font-black text-slate-950 transition-colors hover:bg-cyan-400 disabled:opacity-50">
