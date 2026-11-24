@@ -127,6 +127,8 @@ export function CustomerOtpLogin({ title = "Acesso H2 Colombiano", initialPhone 
   const [step, setStep] = useState<"phone" | "code">(initialState.step);
   const [deliveryChannel, setDeliveryChannel] = useState<OtpChannel>(initialState.channel);
   const [code, setCode] = useState("");
+  const [showCpfLogin, setShowCpfLogin] = useState(false);
+  const [cpf, setCpf] = useState("");
   const [showHelp, setShowHelp] = useState(false);
   const [showWhatsappLink, setShowWhatsappLink] = useState(initialState.step === "code" && initialState.whatsappPrepared);
   const [busy, setBusy] = useState(false);
@@ -140,6 +142,7 @@ export function CustomerOtpLogin({ title = "Acesso H2 Colombiano", initialPhone 
   const requestCode = trpc.customerPassword.requestCustomerCode.useMutation();
   const {data: h2AutoDelivery} = trpc.customerPassword.h2AutoOtpAvailable.useQuery();
   const verifyCode = trpc.customerPassword.verifyCustomerCode.useMutation();
+  const verifyCpf = trpc.customerPassword.verifyCustomerCpf.useMutation();
   const cleanPhone = normalizeOtpPhone(phone);
   const remainingEmail = remainingSeconds(Math.max(cooldowns.email,savedCooldown(cleanPhone,"email")),clockNow);
   const remainingWhatsapp = remainingSeconds(Math.max(cooldowns.whatsapp,savedCooldown(cleanPhone,"whatsapp")),clockNow);
@@ -282,6 +285,38 @@ export function CustomerOtpLogin({ title = "Acesso H2 Colombiano", initialPhone 
     }
   }
 
+  async function confirmCpf(event: React.FormEvent) {
+    event.preventDefault();
+    const digits = cpf.replace(/\D/g,"").slice(0,11);
+    if (digits.length !== 11) {
+      toast.error("Informe seu CPF completo com 11 números.");
+      return;
+    }
+    setBusy(true);
+    try {
+      const result = await verifyCpf.mutateAsync({ phone:cleanPhone, cpf:digits });
+      if (!result.success || !result.token) {
+        toast.error(result.message || "CPF não confere com o cadastro.");
+        return;
+      }
+      await onAuthenticated({
+        token: result.token,
+        phone: cleanPhone,
+        profileUpdateRequired: result.profileUpdateRequired,
+        profileUpdateFields: result.profileUpdateFields || [],
+      });
+      localStorage.setItem("cp_token",result.token);
+      localStorage.setItem("walk_client_phone",cleanPhone);
+      clearOtpDraft();
+      setCpf("");
+      toast.success("Acesso confirmado!");
+    } catch (error: any) {
+      toast.error(error?.message || "Não foi possível confirmar o CPF.");
+    } finally {
+      setBusy(false);
+    }
+  }
+
   async function confirm(event: React.FormEvent) {
     event.preventDefault();
     const digits = code.replace(/\D/g, "").slice(0, 6);
@@ -412,6 +447,29 @@ export function CustomerOtpLogin({ title = "Acesso H2 Colombiano", initialPhone 
               onClick={() => setShowHelp(previous => !previous)}>
               Não recebi o código
             </button>
+            <div className="rounded-xl border border-cyan-400/25 bg-cyan-500/5 p-3">
+              <button type="button" onClick={() => { setShowCpfLogin(previous => !previous); setShowHelp(false); }}
+                aria-expanded={showCpfLogin} aria-controls="h2-otp-cpf-option"
+                disabled={busy} className="w-full text-center text-sm font-bold text-cyan-200">
+                Não recebeu o código? Entrar com CPF
+              </button>
+              {showCpfLogin && (
+                <div id="h2-otp-cpf-option" className="mt-3 space-y-3" data-testid="h2-otp-cpf-login">
+                  <p className="text-center text-xs text-slate-300">Disponível somente para clientes com CPF cadastrado. Informe os 11 números do CPF.</p>
+                  <label htmlFor="h2-otp-cpf" className="block text-sm font-semibold">CPF completo</label>
+                  <input id="h2-otp-cpf" type="text" inputMode="numeric" autoComplete="off"
+                    maxLength={11} value={cpf} disabled={busy}
+                    onChange={event => setCpf(event.target.value.replace(/\D/g, "").slice(0,11))}
+                    placeholder="00000000000"
+                    className="w-full rounded-xl border border-white/20 bg-slate-900 p-4 text-center text-xl font-bold tracking-widest outline-none focus:border-cyan-400"
+                  />
+                  <button type="button" disabled={busy || cpf.length !== 11} onClick={event => { void confirmCpf(event); }}
+                    className="flex min-h-12 w-full items-center justify-center rounded-xl bg-cyan-500 p-3 text-sm font-black text-slate-950 disabled:opacity-50">
+                    {busy ? "Conferindo..." : "ENTRAR COM CPF"}
+                  </button>
+                </div>
+              )}
+            </div>
             {showHelp && (
               <div id="h2-otp-help" role="region" aria-label="Ajuda para receber o código" className="space-y-3">
                 <div className="space-y-2 rounded-xl border border-white/10 p-3" aria-label="Solicitar outro código">
