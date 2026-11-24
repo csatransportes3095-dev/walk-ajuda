@@ -20,6 +20,8 @@ const t = initTRPC.create({ transformer: superjson });
 const auxiliary = (name, value) => t.procedure.query(() => { state.auxiliaryCalls.push(name); return value; });
 const router = t.router({
   customerPassword: t.router({
+    getPasskeyRevocationTarget: t.procedure.input(z.object({customerId:z.number()})).query(({input}) => ({customerId:input.customerId,name:"Cliente sintético",phone:"11999990001",credentialCount:1,activeSessionCount:1})),
+    revokeCustomerPasskeys: t.procedure.input(z.object({customerId:z.number(),expectedPhone:z.string(),confirm:z.literal(true)})).mutation(({input}) => ({customerId:input.customerId,credentialsRevoked:1,sessionsRevoked:1,revokedAt:Date.now()})),
     getPasskeyPermission: t.procedure.query(() => ({allowed:state.passkeyAllowed})),
     updatePasskeyPermission: t.procedure.input(z.object({allowed:z.boolean()})).mutation(({input}) => {
       state.passkeyWrites.push(input.allowed);

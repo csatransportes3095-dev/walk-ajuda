@@ -3,7 +3,8 @@ import { sql } from "drizzle-orm";
 import { TRPCError } from "@trpc/server";
 import { z } from "zod";
 import { generateRegistrationOptions, verifyRegistrationResponse, type RegistrationResponseJSON } from "@simplewebauthn/server";
-import { getVerifiedCustomerOtpSession, isCustomerOtpModeEnabled, uniqueCustomer } from "./customerOtpAccess";
+import { ensureRegistrationReviewSchema } from "./customerRegistrationReview";
+import { ensureCustomerOtpTables, getVerifiedCustomerOtpSession, isCustomerOtpModeEnabled, uniqueCustomer } from "./customerOtpAccess";
 import { normalizeCustomerPhone, normalizeCustomerEmail } from "./customerAccess";
 import { CUSTOMER_PASSKEY_PERMISSION_KEY, readCustomerPasskeyPermission } from "./customerPasskeyPolicy";
 
@@ -101,6 +102,8 @@ async function enrollmentStillAllowed(tx: any) {
 export async function preparePasskeyEnrollmentAfterOtp(db: any, token: string, requestOrigin: unknown) {
   const site = trustedEnrollmentOrigin(requestOrigin);
   if (!site || !await canEnrollCustomerPasskey(db)) return null;
+  await ensureCustomerOtpTables(db);
+  await ensureRegistrationReviewSchema(db);
   await ensureCustomerPasskeyEnrollmentTables(db);
   return db.transaction(async (tx: any) => {
     if (!await canEnrollCustomerPasskey(tx)) return null;
@@ -133,6 +136,8 @@ export async function finishCustomerPasskeyEnrollment(db: any, token: string, ch
   const failure = () => new TRPCError({code:"BAD_REQUEST",message:"Não foi possível cadastrar a chave. Confirme um novo código para tentar novamente."});
   const site = trustedEnrollmentOrigin(requestOrigin);
   if (!site || !await canEnrollCustomerPasskey(db)) throw failure();
+  await ensureCustomerOtpTables(db);
+  await ensureRegistrationReviewSchema(db);
   await ensureCustomerPasskeyEnrollmentTables(db);
   const stored = await db.transaction(async (tx: any) => {
     // Keep the customer lock through consumption and storage. A concurrent

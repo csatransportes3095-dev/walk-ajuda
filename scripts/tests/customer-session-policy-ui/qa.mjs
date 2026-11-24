@@ -22,7 +22,7 @@ const control = async data => (await page.request.post(base + '/test-control', {
 const state = async () => (await page.request.get(base + '/test-control')).json();
 const section = page.getByRole('region', { name: 'Tempo conectado do cliente', exact: true });
 const input = section.getByLabel('Tempo conectado do cliente (horas)', { exact: true });
-const save = section.locator('button[type="submit"]');
+const save = section.getByRole('button', {name:/^(Salvar|Salvando\.\.\.)$/});
 const shot = name => page.screenshot({ path: path.join(output, name), fullPage: true, animations: 'disabled' });
 const waitFor = async (condition, message) => {
   const end = Date.now() + 12_000;
