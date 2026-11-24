@@ -13,13 +13,22 @@ import { fileURLToPath } from 'node:url';
 
 const root = fileURLToPath(new URL('.', import.meta.url));
 const repo = fileURLToPath(new URL('../../../', import.meta.url));
-const defaults = () => ({ hours: 720, readFail: false, writeFail: false, readDelayMs: 0, writeDelayMs: 0, readCalls: 0, writeCalls: [], auxiliaryCalls: [] });
+const defaults = () => ({ hours: 720, passkeyAllowed: true, passkeyWrites: [], passkeyWriteFail: false, readFail: false, writeFail: false, readDelayMs: 0, writeDelayMs: 0, readCalls: 0, writeCalls: [], auxiliaryCalls: [] });
 let state = defaults();
 const policy = hours => ({ hours, minHours: 1, maxHours: 2160, appliesTo: 'new_logins' });
 const t = initTRPC.create({ transformer: superjson });
 const auxiliary = (name, value) => t.procedure.query(() => { state.auxiliaryCalls.push(name); return value; });
 const router = t.router({
   customerPassword: t.router({
+    getPasskeyRevocationTarget: t.procedure.input(z.object({customerId:z.number()})).query(({input}) => ({customerId:input.customerId,name:"Cliente sintético",phone:"11999990001",credentialCount:1,activeSessionCount:1})),
+    revokeCustomerPasskeys: t.procedure.input(z.object({customerId:z.number(),expectedPhone:z.string(),confirm:z.literal(true)})).mutation(({input}) => ({customerId:input.customerId,credentialsRevoked:1,sessionsRevoked:1,revokedAt:Date.now()})),
+    getPasskeyPermission: t.procedure.query(() => ({allowed:state.passkeyAllowed})),
+    updatePasskeyPermission: t.procedure.input(z.object({allowed:z.boolean()})).mutation(({input}) => {
+      state.passkeyWrites.push(input.allowed);
+      if (state.passkeyWriteFail) throw new TRPCError({code:"SERVICE_UNAVAILABLE",message:"Falha simulada ao salvar biometria."});
+      state.passkeyAllowed = input.allowed;
+      return {allowed:state.passkeyAllowed};
+    }),
     getSessionPolicy: t.procedure.query(async () => {
       state.readCalls++;
       const hours = state.hours, fail = state.readFail;
@@ -48,7 +57,7 @@ app.use(express.json());
 app.get('/test-control', (_req, res) => res.json(state));
 app.post('/test-control', (req, res) => {
   if (req.body.reset) state = defaults();
-  for (const key of ['hours', 'readFail', 'writeFail', 'readDelayMs', 'writeDelayMs']) if (key in req.body) state[key] = req.body[key];
+  for (const key of ['hours', 'readFail', 'writeFail', 'readDelayMs', 'writeDelayMs', 'passkeyAllowed', 'passkeyWriteFail']) if (key in req.body) state[key] = req.body[key];
   res.json(state);
 });
 const vite = await createServer({

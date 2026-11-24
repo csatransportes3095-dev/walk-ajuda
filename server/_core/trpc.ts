@@ -73,7 +73,7 @@ const customerEntryNotification = t.middleware(async ({ next, path, getRawInput 
   let sessionToken = "";
 
   try {
-    if (['customerPassword.login', 'customerPassword.verifyCustomerCode', 'customerPassword.finishRegistrationWithoutPassword', 'customerPassword.checkSession'].includes(path)) {
+    if (['customerPassword.login', 'customerPassword.verifyCustomerCode', 'customerPassword.finishPasskeyLogin', 'customerPassword.finishRegistrationWithoutPassword', 'customerPassword.checkSession'].includes(path)) {
       rawInput = await getRawInput();
     }
 
@@ -89,7 +89,7 @@ const customerEntryNotification = t.middleware(async ({ next, path, getRawInput 
   const data = resultAny.data as any;
   const enteredAt = new Date();
 
-  if (['customerPassword.login', 'customerPassword.verifyCustomerCode', 'customerPassword.finishRegistrationWithoutPassword'].includes(path) && data?.success === true) {
+  if (['customerPassword.login', 'customerPassword.verifyCustomerCode', 'customerPassword.finishPasskeyLogin', 'customerPassword.finishRegistrationWithoutPassword'].includes(path) && data?.success === true) {
     const phone = String(rawInput?.phone || '').replace(/\D/g, '');
     if (phone) {
       void sendCustomerEntryNotification(phone, enteredAt);

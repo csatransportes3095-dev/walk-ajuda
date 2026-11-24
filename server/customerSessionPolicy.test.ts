@@ -9,6 +9,7 @@ import {
 const state = vi.hoisted(() => ({ getDb: vi.fn() }));
 vi.mock("./db", () => ({ getDb: state.getDb }));
 import { readCustomerSessionPolicy, saveCustomerSessionPolicy } from "./customerSessionPolicy";
+import { readCustomerPasskeyPermission, saveCustomerPasskeyPermission } from "./customerPasskeyPolicy";
 import { customerPasswordRouter } from "./routers/customerPassword";
 
 const secret = "isolated-customer-session-policy-secret-never-production-20261119";
@@ -106,5 +107,35 @@ describe("Administrative session-policy API", () => {
     const caller = customerPasswordRouter.createCaller(context(adminCookie()));
     await expect(caller.getSessionPolicy()).rejects.toMatchObject({ code: "SERVICE_UNAVAILABLE" });
     await expect(caller.updateSessionPolicy({ hours: 48 })).rejects.toMatchObject({ code: "SERVICE_UNAVAILABLE" });
+  });
+});
+
+describe("Administrative Passkey preference", () => {
+  it("defaults to permission for the planned rollout and treats invalid stored data as disabled", async () => {
+    const db = { execute: vi.fn().mockResolvedValueOnce([[]]).mockResolvedValueOnce([[{value:"1"}]]).mockResolvedValueOnce([[{value:"0"}]]).mockResolvedValueOnce([[{value:"invalid"}]]) };
+    expect(await readCustomerPasskeyPermission(db)).toEqual({allowed:true});
+    expect(await readCustomerPasskeyPermission(db)).toEqual({allowed:true});
+    expect(await readCustomerPasskeyPermission(db)).toEqual({allowed:false});
+    expect(await readCustomerPasskeyPermission(db)).toEqual({allowed:false});
+  });
+  it("requires signed administrative access and never contacts the database for an unauthorized request", async () => {
+    const caller = customerPasswordRouter.createCaller(context());
+    await expect(caller.getPasskeyPermission()).rejects.toMatchObject({code:"FORBIDDEN"});
+    await expect(caller.updatePasskeyPermission({allowed:false})).rejects.toMatchObject({code:"FORBIDDEN"});
+    expect(state.getDb).not.toHaveBeenCalled();
+  });
+  it("allows the signed administrator to change the stored preference", async () => {
+    const caller = customerPasswordRouter.createCaller(context(adminCookie()));
+    expect(await caller.getPasskeyPermission()).toEqual({allowed:true});
+    expect(await caller.updatePasskeyPermission({allowed:false})).toEqual({allowed:false});
+    expect(await caller.updatePasskeyPermission({allowed:true})).toEqual({allowed:true});
+  });
+  it("rejects nonboolean input and reports storage failures instead of claiming a save", async () => {
+    const caller = customerPasswordRouter.createCaller(context(adminCookie()));
+    await expect(caller.updatePasskeyPermission({allowed:"false"} as any)).rejects.toMatchObject({code:"BAD_REQUEST"});
+    await expect(saveCustomerPasskeyPermission(null,true)).rejects.toMatchObject({code:"SERVICE_UNAVAILABLE"});
+    const failing = {execute:vi.fn().mockRejectedValue(new Error("isolated database failure"))};
+    await expect(saveCustomerPasskeyPermission(failing,false)).rejects.toMatchObject({code:"SERVICE_UNAVAILABLE"});
+    await expect(readCustomerPasskeyPermission(failing)).rejects.toMatchObject({code:"SERVICE_UNAVAILABLE"});
   });
 });
