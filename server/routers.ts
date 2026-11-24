@@ -1,5 +1,5 @@
 import { isValidCustomerBirthDate } from "../shared/customerBirthDate";
-import { ensureCustomerBirthDateTable, saveCustomerBirthDate } from './customerBirthDate';
+import { ensureAdminCustomerBirthDateAuditTable, correctCustomerBirthDateByAdmin } from './customerBirthDate';
 import { getStatusVisibilityRule, listStatusVisibilityRules, saveStatusVisibilityRule, getOrderStatusVisibilityForClient } from "./orderStatusVisibility";
 import { siteSecurityRouter } from "./siteSecurityRouter";
 import { vinRegistryRouter } from "./routers/vinRegistry";
@@ -3030,7 +3030,7 @@ export const appRouter = router({
         cpf: z.string().optional(),
         birthDate: z.string().max(10).refine(isValidCustomerBirthDate, 'Informe uma data de nascimento válida.').optional(),
       }))
-      .mutation(async ({ input }) => {
+      .mutation(async ({ input, ctx }) => {
         const { id, birthDate, ...rawData } = input;
         const data = {
           ...rawData,
@@ -3044,7 +3044,22 @@ export const appRouter = router({
         const db = await (await import('./db')).getDb() as any;
         if (!db) throw new TRPCError({ code: 'INTERNAL_SERVER_ERROR', message: 'Banco indisponível' });
 
-        if (birthDate !== undefined) await ensureCustomerBirthDateTable(db);
+        let birthDateAdminSubject: string | undefined;
+        if (birthDate !== undefined) {
+          const token = parseCookieHeader(ctx.req.headers.cookie || '').admin_token;
+          const secret = getAdminJwtSecret();
+          if (!token || !secret) throw new TRPCError({ code: 'FORBIDDEN', message: 'Administrador não identificado.' });
+          try {
+            const payload = jwt.verify(token, secret);
+            if (typeof payload === 'string' || payload.role !== 'admin' || typeof payload.sub !== 'string' || !payload.sub.trim() || payload.sub.length > 255) {
+              throw new Error('Invalid admin identity');
+            }
+            birthDateAdminSubject = payload.sub;
+          } catch {
+            throw new TRPCError({ code: 'FORBIDDEN', message: 'Administrador não identificado.' });
+          }
+          await ensureAdminCustomerBirthDateAuditTable(db);
+        }
         const custRows = await db.execute(sql`SELECT phone, cpf FROM customers WHERE id = ${id} LIMIT 1`);
         const current = (custRows[0] as unknown as Array<{ phone: string; cpf?: string | null }>)[0];
         if (!current) throw new TRPCError({ code: 'NOT_FOUND', message: 'Cliente não encontrado' });
@@ -3073,7 +3088,11 @@ export const appRouter = router({
         // Primeiro grava o cadastro principal.
         const updated = await updateCustomer(id, data);
         if (!updated) throw new TRPCError({ code: 'NOT_FOUND', message: 'Cliente não encontrado' });
-        if (birthDate !== undefined) await saveCustomerBirthDate(db, id, birthDate);
+        if (birthDate !== undefined && birthDateAdminSubject !== undefined) {
+          await db.transaction(async (tx: any) => {
+            await correctCustomerBirthDateByAdmin(tx, id, birthDate, birthDateAdminSubject);
+          });
+        }
 
         if (phoneChanged) {
           const registrationRows = await db.execute(sql`
