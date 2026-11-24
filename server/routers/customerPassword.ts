@@ -27,6 +27,7 @@ import { eq, and, sql, or } from "drizzle-orm";
 import bcrypt from "bcryptjs";
 import { ensureCustomerIdentityInfrastructure, findMainCustomerByIdentity, getRouteAccess, setCustomerRoutePermissions, type CustomerRoute } from "../customerAccess";
 import { getMissingCustomerProfileFields } from "../customerProfileRequirements";
+import { ensureCustomerBirthDateTable, readCustomerBirthDate } from "../customerBirthDate";
 import { deliverOwnSiteCode } from "../siteAccessCodeDelivery";
 import { generateOwnSiteCode } from "../siteAccessOwnCodes";
 import { getCustomerLoginHistory } from "../customerLoginHistory";
@@ -62,8 +63,15 @@ function loginEmailCodeHash(phone: string, email: string, code: string) {
   return createHash("sha256").update("h2-login-email|" + phone + "|" + email.trim().toLowerCase() + "|" + code).digest("hex");
 }
 
-function getProfileUpdateMeta(customer: any) {
-  const fields = customer ? getMissingCustomerProfileFields(customer) : [];
+async function getProfileUpdateMeta(customer: any) {
+  if (!customer) return { profileUpdateRequired: false, profileUpdateFields: [] };
+  let birthDateRegistered = customer.birthDateRegistered;
+  if (typeof birthDateRegistered !== "boolean") {
+    const db = await getDb();
+    await ensureCustomerBirthDateTable(db);
+    birthDateRegistered = !!(await readCustomerBirthDate(db, Number(customer.id)));
+  }
+  const fields = getMissingCustomerProfileFields(customer, birthDateRegistered);
   return { profileUpdateRequired: fields.length > 0, profileUpdateFields: fields };
 }
 
@@ -150,7 +158,7 @@ async function authenticateVerifiedCustomer(db: any, phone: string, password: st
     });
     try { await tx.insert(customerLoginHistory).values({ phone, loginAt: new Date() }); } catch {}
     // Signed proof expires automatically.
-    return { success: true, token, ...getProfileUpdateMeta(customer) };
+    return { success: true, token, ...(await getProfileUpdateMeta(customer)) };
   });
 }
 
@@ -299,7 +307,7 @@ export const customerPasswordRouter = router({
       const key = loginEmailKey(cleanPhone, email);
       const current = loginEmailPending.get(key);
       const now = Date.now();
-      const incomplete = !!customer && getProfileUpdateMeta(customer).profileUpdateRequired;
+      const incomplete = !!customer && (await getProfileUpdateMeta(customer)).profileUpdateRequired;
       const resendMs = incomplete ? INCOMPLETE_EMAIL_RESEND_MS : LOGIN_EMAIL_CODE_RESEND_MS;
 
       if (current && current.expiresAt > now) {
@@ -344,7 +352,7 @@ export const customerPasswordRouter = router({
       });
 
       try {
-        await deliverIncompleteCustomerLoginCode(email, code, !!customer && getProfileUpdateMeta(customer).profileUpdateRequired);
+        await deliverIncompleteCustomerLoginCode(email, code, !!customer && (await getProfileUpdateMeta(customer)).profileUpdateRequired);
       } catch (error) {
         loginEmailPending.delete(key);
         console.error("[customerPassword] login email code delivery failed", error instanceof Error ? error.message : String(error));
@@ -417,7 +425,7 @@ export const customerPasswordRouter = router({
       if ((cust as any).blocked === 1) return { status: "blocked" as const, blockReason: (cust as any).blockReason || 'Acesso bloqueado' };
 
       const pwd = await getActivePassword(resolvedPhone);
-      const profileUpdateMeta = getProfileUpdateMeta(cust);
+      const profileUpdateMeta = await getProfileUpdateMeta(cust);
       if (!pwd) return { status: "no_password" as const, phone: resolvedPhone, hasCpf: !!(cust.cpf), name: cust.name, ...profileUpdateMeta };
       if (pwd.pendingApproval === 1) return { status: "pending_approval" as const, phone: resolvedPhone, hasCpf: !!(cust.cpf), name: cust.name, ...profileUpdateMeta };
       if (!pwd.expiresAt) return { status: "pending_approval" as const, phone: resolvedPhone, hasCpf: !!(cust.cpf), name: cust.name, ...profileUpdateMeta };
@@ -439,7 +447,7 @@ export const customerPasswordRouter = router({
       if ((cust as any).blocked === 1) return { status: "blocked" as const, blockReason: (cust as any).blockReason || 'Acesso bloqueado' };
 
       const pwd = await getActivePassword(resolvedPhone);
-      const profileUpdateMeta = getProfileUpdateMeta(cust);
+      const profileUpdateMeta = await getProfileUpdateMeta(cust);
       if (!pwd) return { status: "no_password" as const, phone: resolvedPhone, hasCpf: !!(cust.cpf), name: cust.name, ...profileUpdateMeta };
       if (pwd.pendingApproval === 1) return { status: "pending_approval" as const, phone: resolvedPhone, hasCpf: !!(cust.cpf), name: cust.name, ...profileUpdateMeta };
       if (!pwd.expiresAt) return { status: "pending_approval" as const, phone: resolvedPhone, hasCpf: !!(cust.cpf), name: cust.name, ...profileUpdateMeta };
@@ -667,7 +675,7 @@ export const customerPasswordRouter = router({
       if (isCustomerOtpModeEnabled()) {
         const verified = await getVerifiedCustomerOtpSession(db, cleanToken);
         if (!verified) return { valid: false, reason: 'expired' as const };
-        return { valid: true, source: 'customer' as const, phone: verified.phone, ...getProfileUpdateMeta(verified) };
+        return { valid: true, source: 'customer' as const, phone: verified.phone, ...(await getProfileUpdateMeta(verified)) };
       }
 
       const rows = await db.select().from(customerPasswordSessions)
@@ -699,7 +707,7 @@ export const customerPasswordRouter = router({
       if (customerForSession && (customerForSession as any).blocked === 1) {
         return { valid: false, blocked: true, reason: 'blocked' as const, blockReason: (customerForSession as any).blockReason || 'Acesso bloqueado' };
       }
-      const profileUpdateMeta = getProfileUpdateMeta(customerForSession);
+      const profileUpdateMeta = await getProfileUpdateMeta(customerForSession);
 
       try {
         const newExpiry = new Date(Date.now() + SESSION_DURATION_MS);

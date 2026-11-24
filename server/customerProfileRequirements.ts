@@ -6,6 +6,7 @@ export const REQUIRED_CUSTOMER_PROFILE_FIELDS = [
   "name",
   "email",
   "cpf",
+  "birthDate",
   "cep",
   "street",
   "addressNumber",
@@ -17,13 +18,15 @@ export const REQUIRED_CUSTOMER_PROFILE_FIELDS = [
 
 export type RequiredCustomerProfileField = (typeof REQUIRED_CUSTOMER_PROFILE_FIELDS)[number];
 
-export function getMissingCustomerProfileFields(customer: any): RequiredCustomerProfileField[] {
+// The private birth-date table is checked explicitly by authenticated account callers.
+export function getMissingCustomerProfileFields(customer: any, birthDateRegistered?: boolean): RequiredCustomerProfileField[] {
   const missing: RequiredCustomerProfileField[] = [];
   const name = String(customer?.name || "").trim();
   if (name.length < 2 || isRecoveredCustomerName(name)) missing.push("name");
   if (!normalizeCustomerEmail(customer?.email)) missing.push("email");
   const cpf = normalizeCustomerCpf(customer?.cpf);
   if (!cpf || !isValidCPF(cpf)) missing.push("cpf");
+  if (birthDateRegistered === false) missing.push("birthDate");
   if (String(customer?.cep || "").replace(/\D/g, "").length !== 8) missing.push("cep");
   if (String(customer?.street || "").trim().length < 2) missing.push("street");
   if (String(customer?.addressNumber || "").trim().length < 1) missing.push("addressNumber");

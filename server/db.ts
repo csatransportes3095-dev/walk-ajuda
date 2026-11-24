@@ -1,3 +1,5 @@
+import { isValidCustomerBirthDate } from "../shared/customerBirthDate";
+import { ensureCustomerBirthDateTable, saveCustomerBirthDate } from "./customerBirthDate";
 import { emailBelongsToAnotherCustomer, CUSTOMER_EMAIL_IN_USE_MESSAGE } from "./customerEmailOwnership";
 import { couponAppliesToProductIds, couponAppliesToOptionIds } from "../shared/couponProductScope";
 import { normalizeCustomerText } from "../shared/customerTextNormalization";
@@ -1117,6 +1119,7 @@ export type MainCustomerProfileInput = {
   phone: string;
   email?: string;
   cpf?: string;
+  birthDate?: string;
   cep?: string;
   street?: string;
   addressNumber?: string;
@@ -1169,10 +1172,14 @@ export async function createCustomer(data: MainCustomerProfileInput): Promise<Cu
   const db = await getDb();
   if (!db) throw new Error('Database not available');
   const required = validateMainCustomerProfile(data);
+  const birthDate = data.birthDate;
+  if (!isValidCustomerBirthDate(birthDate)) throw new Error('Informe uma data de nascimento válida.');
+  await ensureCustomerBirthDateTable(db);
   if (await emailBelongsToAnotherCustomer(db, required.email)) throw new Error(CUSTOMER_EMAIL_IN_USE_MESSAGE);
   // Mesma fonte oficial usada pelo ADM e por qualquer cadastro novo.
   const nextNum = await generateNextCustomerNumber(db);
-  await db.insert(customers).values({
+  return db.transaction(async tx => {
+  const [created] = await tx.insert(customers).values({
     customerNumber: nextNum,
     name: data.name ? normalizeCustomerText(data.name) : data.name,
     phone: required.phone,
@@ -1188,13 +1195,16 @@ export async function createCustomer(data: MainCustomerProfileInput): Promise<Cu
     referredBy: data.referredBy ? normalizeCustomerText(data.referredBy) : null,
     referredByPhone: data.referredByPhone ? normalizeMainCustomerPhone(data.referredByPhone) : null,
     profilePhotoUrl: required.photoUrl,
-  });
+  }).$returningId();
+  await saveCustomerBirthDate(tx, created.id, birthDate);
   // Colunas de identidade foram adicionadas de modo compatível para proteger novas criações.
   try {
-    await db.execute(sql`UPDATE customers SET normalizedPhone=${required.phone}, normalizedCpf=${required.cpf}, normalizedEmail=${required.email} WHERE phone=${required.phone}`);
+    await tx.execute(sql`UPDATE customers SET normalizedPhone=${required.phone}, normalizedCpf=${required.cpf}, normalizedEmail=${required.email} WHERE id=${created.id}`);
   } catch { /* infraestrutura ainda será inicializada no startup */ }
-  const result = await db.select().from(customers).where(eq(customers.phone, required.phone)).limit(1);
+  const result = await tx.select().from(customers).where(eq(customers.id, created.id)).limit(1);
+  if (!result[0]) throw new Error('Cadastro não encontrado após gravação.');
   return result[0];
+  });
 }
 
 export async function listCustomers(): Promise<Customer[]> {

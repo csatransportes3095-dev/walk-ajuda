@@ -1,3 +1,4 @@
+import { birthDateToday, isValidCustomerBirthDate } from "@shared/customerBirthDate";
 import { encodeWhatsappMessage } from "@shared/whatsappMessageText";
 import { useState, useEffect, useRef, useMemo } from "react";
 import { ESTADOS_BR, CIDADES_POR_UF } from "@/lib/brasilData";
@@ -133,6 +134,7 @@ export default function PasswordGate({ children, registrationOnly = false }: Pas
   const [regName, setRegName] = useState("");
   const [regEmail, setRegEmail] = useState("");
   const [regCpf, setRegCpf] = useState("");
+  const [regBirthDate, setRegBirthDate] = useState("");
   const [regPhone, setRegPhone] = useState(""); // telefone editável quando entrou pelo CPF
   const [enteredByCpf, setEnteredByCpf] = useState(false); // true quando o acesso foi feito via CPF
   const [cpfDuplicado, setCpfDuplicado] = useState(false);
@@ -818,6 +820,7 @@ export default function PasswordGate({ children, registrationOnly = false }: Pas
     if (!/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(loginEmail.trim())) { toast.error("E-mail confirmado inválido. Volte e confirme novamente."); return; }
     if (!regCpf.trim() || regCpf.replace(/\D/g,'').length !== 11) { toast.error("Preencha o CPF"); return; }
     if (!isValidCPF(regCpf)) { toast.error("CPF inválido. Verifique os números e tente novamente."); return; }
+    if (!isValidCustomerBirthDate(regBirthDate)) { toast.error("Informe uma data de nascimento válida."); return; }
     if (!enteredByCpf && cpfDuplicado) { toast.error("Este CPF já está cadastrado no sistema."); return; }
     if (regCep.replace(/\D/g, '').length !== 8) { toast.error("Preencha um CEP válido com 8 dígitos"); return; }
     if (regStreet.trim().length < 2) { toast.error("Preencha a rua / logradouro"); return; }
@@ -891,6 +894,7 @@ export default function PasswordGate({ children, registrationOnly = false }: Pas
         phone: clientPhoneDigits,
         email: loginEmail.trim().toLowerCase(),
         cpf: regCpf.trim(),
+        birthDate: regBirthDate,
         cep: regCep.trim(),
         street: regStreet.trim(),
         addressNumber: regAddressNumber.trim(),
@@ -2301,6 +2305,11 @@ export default function PasswordGate({ children, registrationOnly = false }: Pas
                   {!enteredByCpf && cpfDuplicado && (
                     <p className="text-red-400 text-xs mt-1">Este CPF já está cadastrado. Entre em contato pelo WhatsApp.</p>
                   )}
+                </div>
+
+                <div>
+                  <label htmlFor="registration-birth-date" className="text-white mb-2 block text-sm font-medium">Data de nascimento <span className="text-red-400">*</span></label>
+                  <input id="registration-birth-date" type="date" autoComplete="bday" lang="pt-BR" required min="1900-01-01" max={birthDateToday()} value={regBirthDate} onChange={e => setRegBirthDate(e.target.value)} className="w-full min-w-0 px-4 py-4 bg-white text-black text-base rounded-xl border-2 border-black focus:border-primary outline-none" />
                 </div>
 
                 {/* CEP */}

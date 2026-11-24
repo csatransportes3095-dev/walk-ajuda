@@ -18,6 +18,8 @@ import {
 import { syncUnifiedCustomerRegistry } from "../customerIdentity";
 import { storagePut } from "../storage";
 import { getMissingCustomerProfileFields } from "../customerProfileRequirements";
+import { ensureCustomerBirthDateTable, readCustomerBirthDate, saveCustomerBirthDate } from "../customerBirthDate";
+import { isValidCustomerBirthDate } from "../../shared/customerBirthDate";
 import { generateNextCustomerNumber } from "../customerNumberSequence";
 import { getVerifiedCustomerOtpSession, isCustomerOtpModeEnabled } from "../customerOtpAccess";
 
@@ -31,8 +33,9 @@ async function rows(db: any, query: any): Promise<any[]> {
   return (result[0] || result || []) as any[];
 }
 
-function missingFields(customer: any) {
-  return getMissingCustomerProfileFields(customer);
+async function missingFields(db: any, customer: any) {
+  await ensureCustomerBirthDateTable(db);
+  return getMissingCustomerProfileFields(customer, !!(await readCustomerBirthDate(db, Number(customer.id))));
 }
 
 async function passwordRows(db: any, phone: string) {
@@ -58,8 +61,8 @@ async function ensureCustomerUpdateCompletionInfrastructure(db: any) {
   `);
 }
 
-async function customerUpdateAlreadyCompleted(_db: any, customer: any) {
-  return missingFields(customer).length === 0;
+async function customerUpdateAlreadyCompleted(db: any, customer: any) {
+  return (await missingFields(db, customer)).length === 0;
 }
 
 function alreadyUpdatedError() {
@@ -184,9 +187,9 @@ export const customerUpdateRouter = router({
     .query(async ({ input }) => {
       const { db, customer } = await requireCustomerSession(input.token);
       const name = String(customer.name || "").trim();
-      const requiredFields = missingFields(customer);
+      const requiredFields = await missingFields(db, customer);
       return {
-        completed: await customerUpdateAlreadyCompleted(db, customer),
+        completed: requiredFields.length === 0,
         policyEnabled: false,
         requiredFields,
         pendingFields: requiredFields,
@@ -352,7 +355,7 @@ export const customerUpdateRouter = router({
         console.warn('[customerUpdate.adminCreatePartial] sincronização unificada não aplicada:', error?.message);
       }
       const customer = await findMainCustomerByIdentity({ phone }, db);
-      return { success: true, customer, incomplete: customer ? missingFields(customer).length > 0 : true };
+      return { success: true, customer, incomplete: customer ? (await missingFields(db, customer)).length > 0 : true };
     }),
 
   // O telefone pode ser corrigido somente pelo ADM. A troca preserva o mesmo
@@ -462,6 +465,7 @@ export const customerUpdateRouter = router({
       name: z.string().trim().max(128).optional(),
       email: z.string().trim().max(320).optional(),
       cpf: z.string().max(18).optional(),
+      birthDate: z.string().max(10).optional(),
       cep: z.string().trim().max(9).optional(),
       street: z.string().trim().max(255).optional(),
       addressNumber: z.string().trim().max(30).optional(),
@@ -472,8 +476,17 @@ export const customerUpdateRouter = router({
     }))
     .mutation(async ({ input }) => {
       const { db, customer } = await requireCustomerSession(input.token);
-      if (await customerUpdateAlreadyCompleted(db, customer)) throw alreadyUpdatedError();
-      const selected = new Set([...missingFields(customer), "cep", "street", "addressNumber", "neighborhood", "city", "uf"]);
+      const pending = await missingFields(db, customer);
+      if (!pending.length) throw alreadyUpdatedError();
+      if (pending.includes("birthDate") && !isValidCustomerBirthDate(input.birthDate)) {
+        throw new TRPCError({ code: "BAD_REQUEST", message: "Informe uma data de nascimento válida." });
+      }
+      // When only the new field is missing, preserve every existing profile field.
+      if (pending.length === 1 && pending[0] === "birthDate") {
+        await saveCustomerBirthDate(db, Number(customer.id), input.birthDate!);
+        return { success: true, synchronization: null };
+      }
+      const selected = new Set([...pending, "cep", "street", "addressNumber", "neighborhood", "city", "uf"]);
       await ensureCustomerIdentityInfrastructure(db);
       const name = normalizeCustomerText(selected.has("name") ? String(input.name || "") : String(customer.name || ""));
       const phone = normalizeCustomerPhone(customer.phone);
@@ -512,7 +525,8 @@ export const customerUpdateRouter = router({
 
       // Grava os dados atuais do perfil antes de concluir a atualização.
       // O telefone não participa do UPDATE: continua sendo a identidade fixa do cliente.
-      await db.execute(sql`
+      await db.transaction(async (tx: any) => {
+      await tx.execute(sql`
         UPDATE customers SET
           name=${normalizeCustomerText(name)},
           email=${email},
@@ -529,6 +543,8 @@ export const customerUpdateRouter = router({
           updatedAt=NOW()
         WHERE id=${customer.id} AND deletedAt IS NULL
       `);
+      if (selected.has("birthDate")) await saveCustomerBirthDate(tx, Number(customer.id), input.birthDate!);
+      });
 
       const synchronization = await syncUnifiedCustomerRegistry([previousIdentity]);
       await ensureCustomerUpdateCompletionInfrastructure(db);
