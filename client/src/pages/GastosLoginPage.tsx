@@ -131,6 +131,10 @@ function LegacyGastosLoginPage({ onLoginSuccess, sourceRoute, requiredProfilePho
   const regCpfValid = isValidCPF(regCpfDigits);
   const regCpfInvalid = regCpfDigits.length === 11 && !regCpfValid;
   const [regEmail, setRegEmail] = useState('');
+  const [regCep, setRegCep] = useState('');
+  const [regStreet, setRegStreet] = useState('');
+  const [regAddressNumber, setRegAddressNumber] = useState('');
+  const [regNeighborhood, setRegNeighborhood] = useState('');
   const [regCity, setRegCity] = useState('');
   const [regUf, setRegUf] = useState('');
   const [regPhoto, setRegPhoto] = useState<File | null>(null);
@@ -281,6 +285,7 @@ function LegacyGastosLoginPage({ onLoginSuccess, sourceRoute, requiredProfilePho
     if (isMissingProfileField('name') && !regName.trim()) { setError('Informe seu nome completo'); return; }
     if (isMissingProfileField('phone') && cleanPhone.length < 10) { setError('Informe um telefone válido'); return; }
     if (!profileUpdateLookup && !isValidCustomerBirthDate(regBirthDate)) { setError('Informe uma data de nascimento válida.'); return; }
+    if (!profileUpdateLookup && (regCep.replace(/\D/g, '').length !== 8 || regStreet.trim().length < 2 || !regAddressNumber.trim() || regNeighborhood.trim().length < 2)) { setError('Preencha o CEP, rua, número e bairro obrigatórios do cadastro.'); return; }
     if (isMissingProfileField('cpf') && !isValidCPF(cleanCpf)) { setError('CPF inválido. Digite um CPF válido para continuar.'); return; }
     if (isMissingProfileField('email') && (!regEmail.trim() || !regEmail.includes('@'))) { setError('Informe um e-mail válido'); return; }
     if (isMissingProfileField('city') && !regCity.trim()) { setError('Informe sua cidade'); return; }
@@ -318,6 +323,10 @@ function LegacyGastosLoginPage({ onLoginSuccess, sourceRoute, requiredProfilePho
         : await registerMutation.mutateAsync({
           ...payload,
           birthDate: regBirthDate,
+          cep: regCep.replace(/\D/g, ''),
+          street: regStreet.trim(),
+          addressNumber: regAddressNumber.trim(),
+          neighborhood: regNeighborhood.trim(),
           city: regCity.trim(),
           uf: regUf.toUpperCase().slice(0, 2),
           referredByPhone: cleanReferralPhone,
@@ -647,6 +656,11 @@ function LegacyGastosLoginPage({ onLoginSuccess, sourceRoute, requiredProfilePho
 
 
 
+              {!profileUpdateLookup && <div className="space-y-3">
+                <div><label htmlFor="gastos-reg-cep" className="block text-xs font-medium mb-1">CEP *</label><Input id="gastos-reg-cep" inputMode="numeric" autoComplete="postal-code" value={regCep} maxLength={8} onChange={e => setRegCep(e.target.value.replace(/\D/g, '').slice(0, 8))} required disabled={isLoading} /></div>
+                <div><label htmlFor="gastos-reg-street" className="block text-xs font-medium mb-1">Rua / Logradouro *</label><Input id="gastos-reg-street" value={regStreet} onChange={e => setRegStreet(e.target.value)} minLength={2} maxLength={255} required disabled={isLoading} /></div>
+                <div className="grid grid-cols-2 gap-2"><div><label htmlFor="gastos-reg-number" className="block text-xs font-medium mb-1">Número *</label><Input id="gastos-reg-number" value={regAddressNumber} onChange={e => setRegAddressNumber(e.target.value)} maxLength={30} required disabled={isLoading} /></div><div><label htmlFor="gastos-reg-neighborhood" className="block text-xs font-medium mb-1">Bairro *</label><Input id="gastos-reg-neighborhood" value={regNeighborhood} onChange={e => setRegNeighborhood(e.target.value)} minLength={2} maxLength={150} required disabled={isLoading} /></div></div>
+              </div>}
               {/* Cidade + UF */}
               {!profileUpdateLookup && <div className="grid grid-cols-3 gap-2">
                 <div className="col-span-2">
