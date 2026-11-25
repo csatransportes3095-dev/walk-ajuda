@@ -22,7 +22,7 @@ const control = async data => (await page.request.post(base + '/test-control', {
 const state = async () => (await page.request.get(base + '/test-control')).json();
 const section = page.getByRole('region', { name: 'Tempo conectado do cliente', exact: true });
 const input = section.getByLabel('Tempo conectado do cliente (horas)', { exact: true });
-const save = section.getByRole('button', {name:/^(Salvar|Salvando\.\.\.)$/});
+const save = section.locator('button[type="submit"]');
 const shot = name => page.screenshot({ path: path.join(output, name), fullPage: true, animations: 'disabled' });
 const waitFor = async (condition, message) => {
   const end = Date.now() + 12_000;
@@ -140,23 +140,6 @@ try {
   await shot('admin-settings-login-policy-integration.png');
   checks.push('The real AdminSettings deep-link opens Tela de Login, scrolls to the policy and places it above the existing preview');
 
-  const permission = section.getByRole('region', {name:'Biometria (Passkey)', exact:true});
-  const toggle = permission.getByRole('checkbox', {name:'Permitir biometria quando disponível'});
-  await toggle.waitFor();
-  assert.equal(await toggle.isChecked(), true);
-  await toggle.click();
-  await permission.getByRole('status').filter({hasText:'Permissão de biometria salva.'}).waitFor();
-  assert.equal((await state()).passkeyAllowed, false);
-  await page.reload({waitUntil:'networkidle'});
-  await toggle.waitFor();
-  assert.equal(await toggle.isChecked(), false);
-  await control({passkeyWriteFail:true});
-  await toggle.click();
-  await permission.getByRole('alert').filter({hasText:'Falha simulada ao salvar biometria.'}).waitFor();
-  assert.equal(await toggle.isChecked(), false);
-  assert.equal((await state()).passkeyAllowed, false);
-  assert.deepEqual((await state()).passkeyWrites, [false,true]);
-  checks.push('The real ADM Passkey preference persists, survives reload and never reports a failed write as saved');
   assert.deepEqual(browserErrors, []);
   const result = { passed: checks.length, checks, browserErrors };
   await fs.writeFile(path.join(output, 'qa-results.json'), JSON.stringify(result, null, 2));

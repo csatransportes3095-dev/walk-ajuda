@@ -23,7 +23,7 @@ describe("H2 OTP: abertura automática de WhatsApp após solicitação",()=>{
     expect(send).toContain('window.location.assign(whatsappUrl)');
     expect(send).toContain('window.open(whatsappUrl, "_blank")');
     expect(send).not.toContain('window.open("",');
-    expect(send).toContain('saveOtpDraft(cleanPhone, "code", channel, whatsappPrepared, remember)');
+    expect(send).toContain('saveOtpDraft(cleanPhone, "code", channel, whatsappPrepared)');
     expect(login).toContain('setShowWhatsappLink(true)');
     expect(login).toContain('href={whatsappUrl}');
     expect(login).not.toContain('openWhatsappWaitingTab');

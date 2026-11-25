@@ -21,7 +21,6 @@ import bcrypt from "bcryptjs";
 import { bootstrapCardInvoices, createExpenseInvoiceLink, getCardInvoices, getCurrentInvoice, getNextInvoice, getOverdueInvoices, markInvoiceAsPaid, refreshInvoice, reverseInvoicePayment } from "../cardsBilling";
 import { historicalPaidInvoice, historicalPaymentDate } from "../cartaoRetroactiveRules";
 import { isCustomerOtpModeEnabled } from "../customerOtpAccess";
-import { isBiometricBridgeActive } from "../customerPasskeyBridge";
 import { buildInstallmentSchedule, saoPauloDateOnly } from "../cartaoInstallmentSchedule";
 
 const CC_JWT_SECRET = new TextEncoder().encode(
@@ -40,11 +39,6 @@ async function signCcToken(payload: { userId: number; phone: string }) {
 async function verifyCcToken(token: string): Promise<{ userId: number; phone: string } | null> {
   try {
     const { payload } = await jose.jwtVerify(token, CC_JWT_SECRET);
-    // A Passkey-derived cookie is revocable, even if the global feature is
-    // later disabled. Untagged historical/OTP cookies retain existing rules.
-    if ("passkeyBinding" in payload || "passkeyPhone" in payload) {
-      if (!await isBiometricBridgeActive(await getDb(), payload.passkeyBinding, payload.passkeyPhone)) return null;
-    }
     return payload as any;
   } catch {
     return null;

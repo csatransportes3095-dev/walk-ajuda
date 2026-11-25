@@ -30,23 +30,10 @@ try {
 
   const fresh = Date.parse('2026-11-19T19:01:02Z');
   const previous = await state();
-  await control({ total: 4, recent: [fresh, ...previous.recent], delayMs: 0 });
-  // Hold the actual next request until React commits its fetching state.
-  // The old fixed 350ms delay could expire before the assertion ran on CI.
-  let releaseRequest;
-  const requestGate = new Promise(resolve => { releaseRequest = resolve; });
-  await page.route('**/api/trpc/customerPassword.adminGetLoginHistory**', async route => {
-    await requestGate;
-    await route.continue();
-  }, { times: 1 });
-  try {
-    await update.click();
-    await section.locator('button[aria-label="Atualizar histórico de acessos"]:disabled').waitFor({ state: 'visible' });
-    assert.equal(await update.isDisabled(), true);
-    assert.equal(await section.getByText('Acesso 3', { exact: true }).count(), 1);
-  } finally {
-    releaseRequest();
-  }
+  await control({ total: 4, recent: [fresh, ...previous.recent], delayMs: 350 });
+  await update.click();
+  assert.equal(await update.isDisabled(), true);
+  assert.equal(await section.getByText('Acesso 3', { exact: true }).count(), 1);
   await section.getByText(format(fresh), { exact: false }).waitFor();
   assert.equal((await state()).calls, previous.calls + 1);
   assert.match(await section.innerText(), /4\s+total/);

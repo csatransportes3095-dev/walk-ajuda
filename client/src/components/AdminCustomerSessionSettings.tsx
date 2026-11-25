@@ -1,27 +1,10 @@
 import { useState, type FormEvent } from "react";
-import { Clock, Save, Fingerprint } from "lucide-react";
+import { Clock, Save } from "lucide-react";
 import { trpc } from "@/lib/trpc";
 import { MAX_CUSTOMER_SESSION_HOURS, MIN_CUSTOMER_SESSION_HOURS } from "@shared/customerSessionPolicy";
 
 export function AdminCustomerSessionSettings() {
   const utils = trpc.useUtils();
-  const [customerIdInput, setCustomerIdInput] = useState("");
-  const [lookupId, setLookupId] = useState<number | null>(null);
-  const [confirmRevoke, setConfirmRevoke] = useState(false);
-  const [revoked, setRevoked] = useState<{customerId:number;credentialsRevoked:number;sessionsRevoked:number} | null>(null);
-  const target = trpc.customerPassword.getPasskeyRevocationTarget.useQuery({customerId:lookupId ?? 1},{enabled:lookupId !== null,retry:false,refetchOnWindowFocus:false});
-  const revocation = trpc.customerPassword.revokeCustomerPasskeys.useMutation({
-    onSuccess: data => { setRevoked(data); setConfirmRevoke(false); void utils.customerPassword.getPasskeyRevocationTarget.invalidate({customerId:data.customerId}); },
-    onError: () => setConfirmRevoke(false),
-  });
-  const parsedId = Number(customerIdInput);
-  const validCustomerId = /^\d+$/.test(customerIdInput) && Number.isSafeInteger(parsedId) && parsedId > 0 && parsedId <= 2147483647;
-  const selectedCustomer = lookupId === parsedId && !target.isFetching && !target.isError && target.data?.customerId === lookupId ? target.data : undefined;
-  const permission = trpc.customerPassword.getPasskeyPermission.useQuery(undefined, { retry: false, refetchOnWindowFocus: true });
-  const permissionUpdate = trpc.customerPassword.updatePasskeyPermission.useMutation({
-    onMutate: async () => { await utils.customerPassword.getPasskeyPermission.cancel(); },
-    onSuccess: data => { utils.customerPassword.getPasskeyPermission.setData(undefined, data); },
-  });
   const policy = trpc.customerPassword.getSessionPolicy.useQuery(undefined, {
     retry: false,
     refetchOnWindowFocus: true,
@@ -109,63 +92,6 @@ export function AdminCustomerSessionSettings() {
         </form>
       )}
 
-      <section aria-labelledby="passkey-permission-title" className="space-y-3 rounded-xl border border-emerald-500/30 bg-slate-900 p-4">
-        <h4 id="passkey-permission-title" className="flex items-center gap-2 text-sm font-bold text-emerald-200">
-          <Fingerprint className="h-5 w-5" aria-hidden /> Biometria (Passkey)
-        </h4>
-        <p className="text-xs text-slate-300">Permissão para o futuro acesso por Face ID, digital ou PIN do aparelho. A integração de autenticação ainda não está disponível neste estágio.</p>
-        {permission.isPending && <p className="text-xs text-slate-400">Consultando permissão...</p>}
-        {permission.isError && <div><p className="text-sm text-amber-200" role="alert">Não foi possível consultar a permissão de biometria.</p><button type="button" onClick={() => void permission.refetch()} className="text-sm text-cyan-200">Consultar novamente</button></div>}
-        {permission.data && <label className="flex items-center gap-3 text-sm text-slate-100">
-          <input type="checkbox" checked={permission.data.allowed} disabled={permissionUpdate.isPending || permission.isFetching}
-            onChange={event => permissionUpdate.mutate({ allowed: event.target.checked })}
-            className="h-5 w-5 accent-emerald-500" />
-          Permitir biometria quando disponível
-        </label>}
-        {permissionUpdate.error && <p role="alert" className="text-sm text-rose-300">{permissionUpdate.error.message}</p>}
-        {permissionUpdate.isSuccess && <p role="status" className="text-sm text-emerald-300">Permissão de biometria salva.</p>}
-        <p className="text-xs text-slate-400">A alteração salva somente a preferência administrativa; não ativa uma autenticação ainda não validada.</p>
-      </section>
-      <section aria-labelledby="passkey-revocation-title" className="space-y-3 rounded-xl border border-rose-500/30 bg-slate-900 p-4">
-        <h4 id="passkey-revocation-title" className="text-sm font-bold text-rose-200">Revogar biometria de um cliente</h4>
-        <p className="text-xs text-slate-300">Remove as chaves cadastradas e encerra as sessões centrais iniciadas por biometria somente deste cliente. O acesso por código permanece disponível.</p>
-        <form className="space-y-2" onSubmit={event => {
-          event.preventDefault();
-          if (!validCustomerId || revocation.isPending) return;
-          setRevoked(null); setConfirmRevoke(false); revocation.reset();
-          if (lookupId === parsedId) void target.refetch(); else setLookupId(parsedId);
-        }}>
-          <label htmlFor="passkey-revoke-customer-id" className="block text-sm">ID do cliente no cadastro</label>
-          <div className="flex gap-2">
-            <input id="passkey-revoke-customer-id" type="text" inputMode="numeric" pattern="[0-9]+" value={customerIdInput}
-              disabled={revocation.isPending} onChange={event => { setCustomerIdInput(event.target.value); setLookupId(null); setConfirmRevoke(false); setRevoked(null); revocation.reset(); }}
-              className="min-w-0 flex-1 rounded-lg border border-slate-600 bg-slate-950 px-3 py-2 text-white" placeholder="Ex.: 101" />
-            <button type="submit" disabled={!validCustomerId || revocation.isPending || (lookupId !== null && target.isFetching)}
-              className="rounded-lg border border-cyan-500/50 px-3 py-2 text-sm font-bold text-cyan-200 disabled:opacity-50">Consultar</button>
-          </div>
-        </form>
-        {lookupId !== null && target.isFetching && <p className="text-xs text-slate-400">Consultando cliente...</p>}
-        {lookupId !== null && target.isError && <p role="alert" className="text-sm text-rose-300">{target.error.message}</p>}
-        {selectedCustomer && <div className="space-y-3 rounded-lg border border-slate-700 bg-slate-950 p-3">
-          <div className="space-y-1 text-sm">
-            <p className="font-bold text-white">{selectedCustomer.name}</p>
-            <p className="text-slate-300">ID: {selectedCustomer.customerId} · Telefone: {selectedCustomer.phone}</p>
-            <p className="text-slate-300">Chaves: {selectedCustomer.credentialCount} · Sessões biométricas centrais ativas: {selectedCustomer.activeSessionCount}</p>
-          </div>
-          <label className="flex items-start gap-2 text-sm text-rose-200">
-            <input type="checkbox" checked={confirmRevoke} disabled={revocation.isPending} onChange={event => setConfirmRevoke(event.target.checked)} className="mt-1 h-4 w-4 accent-rose-500" />
-            Confirmo que desejo revogar todas as chaves deste cliente.
-          </label>
-          <button type="button" disabled={!confirmRevoke || !selectedCustomer.phone || revocation.isPending || target.isFetching}
-            onClick={() => revocation.mutate({customerId:selectedCustomer.customerId,expectedPhone:selectedCustomer.phone,confirm:true})}
-            className="w-full rounded-lg bg-rose-700 px-4 py-3 text-sm font-bold text-white hover:bg-rose-600 disabled:opacity-50">
-            {revocation.isPending ? "Revogando..." : "REVOGAR BIOMETRIA"}
-          </button>
-        </div>}
-        {revocation.isError && <p role="alert" className="text-sm text-rose-300">{revocation.error.message}</p>}
-        {revoked && <p role="status" className="text-sm text-emerald-300">Cliente {revoked.customerId}: {revoked.credentialsRevoked} chave(s) e {revoked.sessionsRevoked} sessão(ões) biométrica(s) central(is) revogadas.</p>}
-        <p className="text-xs text-slate-400">O cliente poderá cadastrar uma nova chave após confirmar um novo código. Sessões por código não são revogadas por esta ação.</p>
-      </section>
       <div className="space-y-1 text-xs leading-relaxed text-slate-300">
         <p>Aplica aos próximos logins. Sessões já abertas mantêm seu vencimento.</p>
         <p>O código continua válido por 10 minutos e pode ser usado uma única vez.</p>
