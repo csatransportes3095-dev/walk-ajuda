@@ -14,7 +14,6 @@ import {
 import { requireCompleteMainCustomerProfile } from "./customerIdentity";
 import { getCustomerProfileUpdateState } from "./customerProfileUpdatePolicy";
 import { getVerifiedCustomerOtpSession, isCustomerOtpModeEnabled } from "./customerOtpAccess";
-import { biometricBridgeBinding } from "./customerPasskeyBridge";
 
 const SPREADSHEET_SESSION_MS = 90 * 24 * 60 * 60 * 1000;
 const CC_SESSION_MS = 30 * 24 * 60 * 60 * 1000;
@@ -70,7 +69,7 @@ function cookieOptions(req: Request) {
   };
 }
 
-async function signCardToken(payload: { userId: number; phone: string; passkeyBinding?: string; passkeyPhone?: string }, expiresAtMs: number) {
+async function signCardToken(payload: { userId: number; phone: string }, expiresAtMs: number) {
   return new jose.SignJWT(payload as any)
     .setProtectedHeader({ alg: "HS256" })
     .setIssuedAt()
@@ -323,25 +322,7 @@ async function cardSession(req: Request, res: Response) {
     res.status(401).json({ code: "UNAUTHORIZED", message: "Sessão central inválida ou expirada." });
     return;
   }
-  // Only Passkey-derived cookies receive a revocable central-session binding.
-  // Recheck the central proof AFTER the provenance lookup: a revocation
-  // racing the bridge must not downgrade the cookie to an unbound OTP cookie.
-  let binding: string | null = null;
-  if (auth.sessionExpiresAtMs !== null) {
-    const centralToken = bearerToken(req);
-    binding = await biometricBridgeBinding(db, centralToken, Number(customer.id));
-    const current = await getVerifiedCustomerOtpSession(db, centralToken);
-    if (!current || Number(current.customerId) !== Number(customer.id) || current.phone !== phone ||
-        Math.min(Number(current.bindingExpires),Number(current.sessionExpiresAtMs)) < expiresAtMs ||
-        expiresAtMs <= Date.now()) {
-      res.status(401).json({code:"UNAUTHORIZED",message:"Sessão central inválida ou revogada."});
-      return;
-    }
-  }
-  const token = await signCardToken({
-    userId: Number(user.id), phone: String(user.phone || phone),
-    ...(binding ? {passkeyBinding:binding,passkeyPhone:phone} : {}),
-  }, expiresAtMs);
+  const token = await signCardToken({ userId: Number(user.id), phone: String(user.phone || phone) }, expiresAtMs);
   res.cookie(CC_COOKIE, token, { ...cookieOptions(req), maxAge: Math.max(0, expiresAtMs - Date.now()) });
   res.setHeader("Cache-Control", "no-store");
   res.status(200).json({

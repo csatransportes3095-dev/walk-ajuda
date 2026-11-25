@@ -1,11 +1,10 @@
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import { decodeJwt, jwtVerify } from "jose";
-import { createHash } from "node:crypto";
 import { MySqlDialect } from "drizzle-orm/mysql-core";
 
 const state = vi.hoisted(() => ({
   getDb: vi.fn(), isIpBlocked: vi.fn(), verified: vi.fn(), otpMode: vi.fn(),
-  findCustomer: vi.fn(), profileState: vi.fn(), completeProfile: vi.fn(), provenance: vi.fn(),
+  findCustomer: vi.fn(), profileState: vi.fn(), completeProfile: vi.fn(),
 }));
 vi.mock("./db", () => ({ getDb: state.getDb, isIpBlocked: state.isIpBlocked }));
 vi.mock("./customerOtpAccess", () => ({
@@ -52,7 +51,6 @@ beforeEach(() => {
   vi.setSystemTime(now);
   vi.clearAllMocks();
   state.otpMode.mockReturnValue(true);
-  state.provenance.mockResolvedValue([]);
   state.isIpBlocked.mockResolvedValue(false);
   state.findCustomer.mockResolvedValue({ id: 19, phone, name: "Cliente de teste", blocked: 0 });
   state.profileState.mockResolvedValue({ pending: false, effectiveFields: [] });
@@ -62,7 +60,6 @@ beforeEach(() => {
   });
   state.getDb.mockResolvedValue({ execute: vi.fn(async query => {
     const text = dialect.sqlToQuery(query).sql;
-    if (text.includes("FROM customerPasskeySessions")) return [await state.provenance()];
     if (text.includes("FROM cc_app_users")) return [[{ id: 7, phone, name: "Cliente de teste" }]];
     if (text.includes("FROM customerPasswordSessions")) return [[{ phone, expiresAt: new Date(now + 90 * 24 * hour) }]];
     throw new Error("Unexpected SQL in isolated session bridge test");
@@ -82,25 +79,6 @@ describe("Derived customer login expiry", () => {
     const verified = await jwtVerify(token, secret, { currentDate: new Date(deadline - 1) });
     expect(verified.payload.exp).toBe(deadline / 1000);
     await expect(jwtVerify(token, secret, { currentDate: new Date(deadline) })).rejects.toMatchObject({ code: "ERR_JWT_EXPIRED" });
-  });
-
-  it("binds only biometric cookies to the opaque central session fingerprint", async () => {
-    const otp = await prepareCardSession();
-    expect(decodeJwt(otp.cookie!.token).passkeyBinding).toBeUndefined();
-    state.provenance.mockResolvedValue([{customerId:19}]);
-    const biometric = await prepareCardSession();
-    expect(biometric.status).toBe(200);
-    const claims = decodeJwt(biometric.cookie!.token);
-    expect(claims.passkeyBinding).toBe(createHash("sha256").update("h2otp_"+"a".repeat(64)).digest("hex"));
-    expect(claims.passkeyPhone).toBe(phone);
-    expect(JSON.stringify(claims)).not.toContain("h2otp_");
-  });
-
-  it("does not issue an unbound cookie if the central session is revoked during the provenance lookup", async () => {
-    state.provenance.mockImplementationOnce(async () => {state.verified.mockResolvedValue(null);return [];});
-    const result = await prepareCardSession();
-    expect(result.status).toBe(401);
-    expect(result.cookie).toBeUndefined();
   });
 
   it("uses the remaining lifetime, without restarting 48 hours at the bridge", async () => {

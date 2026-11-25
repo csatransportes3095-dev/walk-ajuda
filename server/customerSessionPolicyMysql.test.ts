@@ -1,5 +1,5 @@
 import { afterAll, beforeAll, beforeEach, describe, expect, it, vi } from "vitest";
-import { createHash, createHmac, generateKeyPairSync, randomBytes, sign } from "node:crypto";
+import { createHmac } from "node:crypto";
 import { createConnection, type Connection } from "mysql2/promise";
 import { drizzle } from "drizzle-orm/mysql2";
 import jwt from "jsonwebtoken";
@@ -12,8 +12,6 @@ vi.mock("./db", () => ({ getDb: async () => isolated.db }));
 vi.mock("./siteAccessCodeDelivery", () => ({ deliverOwnSiteCode: isolated.delivery }));
 import { ensureCustomerOtpTables, requestCustomerCode, verifyCustomerCode, redeemNewRegistrationProof,
   getVerifiedCustomerOtpSession, revokeCustomerOtpSession } from "./customerOtpAccess";
-import { ensureCustomerPasskeyLoginTables } from "./customerPasskeyLogin";
-import { biometricBridgeBinding, isBiometricBridgeActive } from "./customerPasskeyBridge";
 import { issueLoginEmailProof } from "./customerLoginEmailProof";
 import { ensureRegistrationReviewSchema } from "./customerRegistrationReview";
 import { migrateCustomerLoginHistory } from "./customerLoginHistorySchema";
@@ -54,7 +52,7 @@ async function clock(value: number) {
 function context(admin = false): TrpcContext {
   return {
     user: null,
-    req: { ip: "127.0.0.1", socket: {remoteAddress:"127.0.0.1"}, headers: { cookie: admin ? "admin_token=" + jwt.sign({ sub: "session-policy-test", role: "admin" }, secret) : "" } } as TrpcContext["req"],
+    req: { headers: { cookie: admin ? "admin_token=" + jwt.sign({ sub: "session-policy-test", role: "admin" }, secret) : "" } } as TrpcContext["req"],
     res: {} as TrpcContext["res"],
   };
 }
@@ -100,7 +98,7 @@ describe.skipIf(!testUrl)("Customer session policy — isolated MySQL and real O
     for (const [name, value] of Object.entries({ JWT_SECRET: secret, H2_SITE_ACCESS_SECRET: secret, H2_CUSTOMER_OTP_V2_ENABLED: "true", RENDER: "false" })) vi.stubEnv(name, value);
     await query("DROP TRIGGER IF EXISTS session_policy_test_reject_update");
     await query("DROP TABLE IF EXISTS session_policy_test_hidden_settings");
-    for (const table of ["customerPasskeySessions", "customerPasskeyLoginChallenges", "customerPasskeyRevocations", "customerPasskeyEnrollments", "customerPasskeyCredentials", "customerLoginHistory", "customerPasswordSessions", "customerOtpSessions", "customerOtpChallenges", "customerOtpLimits", "customerOtpUsedProofs", "customerRegistrationReviews", "customerRegistrationReviewConfig", "customers", "appSettings"]) await query(`DROP TABLE IF EXISTS ${table}`);
+    for (const table of ["customerLoginHistory", "customerPasswordSessions", "customerOtpSessions", "customerOtpChallenges", "customerOtpLimits", "customerOtpUsedProofs", "customerRegistrationReviews", "customerRegistrationReviewConfig", "customers", "appSettings"]) await query(`DROP TABLE IF EXISTS ${table}`);
     await query("CREATE TABLE appSettings (id INT NOT NULL AUTO_INCREMENT PRIMARY KEY,`key` VARCHAR(128) NOT NULL UNIQUE,value TEXT NOT NULL,updatedAt TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP) ENGINE=InnoDB");
     await query(`CREATE TABLE customers (
       id INT NOT NULL PRIMARY KEY,phone VARCHAR(32) NOT NULL,email VARCHAR(320) NOT NULL,name VARCHAR(128) NOT NULL,
@@ -117,7 +115,6 @@ describe.skipIf(!testUrl)("Customer session policy — isolated MySQL and real O
       ipAddress VARCHAR(64) NULL,userAgent VARCHAR(512) NULL
     ) ENGINE=InnoDB`);
     await ensureCustomerOtpTables(isolated.db);
-    await ensureCustomerPasskeyLoginTables(isolated.db);
     await ensureRegistrationReviewSchema(isolated.db);
     await migrateCustomerLoginHistory(isolated.db);
   }, 30_000);
@@ -127,7 +124,7 @@ describe.skipIf(!testUrl)("Customer session policy — isolated MySQL and real O
     await query("SET time_zone = '+00:00'"); await clock(epoch);
     isolated.delivery.mockReset().mockResolvedValue({ channel: "smtp", messageId: "isolated-session-policy" });
     await query("DROP TRIGGER IF EXISTS session_policy_test_reject_update");
-    for (const table of ["customerPasskeySessions", "customerPasskeyLoginChallenges", "customerPasskeyRevocations", "customerPasskeyEnrollments", "customerPasskeyCredentials", "customerLoginHistory", "customerPasswordSessions", "customerOtpSessions", "customerOtpChallenges", "customerOtpLimits", "customerOtpUsedProofs", "customerRegistrationReviews", "customers", "appSettings"]) await query(`DELETE FROM ${table}`);
+    for (const table of ["customerLoginHistory", "customerPasswordSessions", "customerOtpSessions", "customerOtpChallenges", "customerOtpLimits", "customerOtpUsedProofs", "customerRegistrationReviews", "customers", "appSettings"]) await query(`DELETE FROM ${table}`);
     await query("UPDATE customerRegistrationReviewConfig SET mode='automatico',manualSince=NULL WHERE id=1");
     await query(`INSERT INTO customers (id,phone,email,name,cpf,cep,street,addressNumber,neighborhood,city,uf,profilePhotoUrl)
       VALUES (101,?,?,'Cliente sintético','90000000175','01000000','Rua de teste','1','Teste','São Paulo','SP','https://example.test/profile.png')`, [phone, email]);
@@ -137,130 +134,6 @@ describe.skipIf(!testUrl)("Customer session policy — isolated MySQL and real O
     if (connection) { await query("DROP TRIGGER IF EXISTS session_policy_test_reject_update"); await query("SET timestamp = 0"); }
     await connection?.end(); isolated.db = null;
     vi.useRealTimers(); vi.restoreAllMocks(); vi.unstubAllEnvs();
-  });
-
-  it("only prepares optional enrollment after fresh OTP with the rollout and ADM permission", async () => {
-    const ctx = context();
-    ctx.req.headers.origin = "https://h2colombiano.com";
-    const caller = customerPasswordRouter.createCaller(ctx);
-    vi.stubEnv("H2_CUSTOMER_PASSKEY_ENROLLMENT_ENABLED","true");
-    try {
-      expect(await caller.passkeyEnrollmentAvailable()).toEqual({available:true});
-      const code = await issue();
-      const result = await caller.verifyCustomerCode({phone,code,remember:true,enrollPasskey:true});
-      expect(result.success).toBe(true);
-      if (!result.success || !("enrollment" in result) || !result.enrollment) throw new Error("Enrollment unavailable");
-      expect(result.enrollment.options.rp.id).toBe("h2colombiano.com");
-      expect(result.enrollment.options.authenticatorSelection?.userVerification).toBe("required");
-      expect(await query("SELECT customerId,expiresAt FROM customerPasskeyEnrollments")).toEqual([expect.objectContaining({customerId:101})]);
-      expect(Number((await query("SELECT expiresAt FROM customerPasskeyEnrollments"))[0].expiresAt)).toBe(epoch+300000);
-      expect((await caller.verifyCustomerCode({phone,code,enrollPasskey:true})).success).toBe(false);
-      const proof = {id:"YWJj",rawId:"YWJj",type:"public-key" as const,response:{clientDataJSON:"YWJj",attestationObject:"YWJj"},clientExtensionResults:{}};
-      await expect(caller.finishPasskeyEnrollment({token:result.token,challengeId:result.enrollment.challengeId,response:proof})).rejects.toMatchObject({code:"BAD_REQUEST"});
-      expect(await query("SELECT * FROM customerPasskeyEnrollments")).toHaveLength(0);
-      expect(await query("SELECT * FROM customerPasskeyCredentials")).toHaveLength(0);
-      await expect(caller.finishPasskeyEnrollment({token:result.token,challengeId:result.enrollment.challengeId,response:proof})).rejects.toMatchObject({code:"BAD_REQUEST"});
-      await assertLifetime(result.token,720);
-    } finally { vi.stubEnv("H2_CUSTOMER_PASSKEY_ENROLLMENT_ENABLED","false"); }
-  });
-
-  it("verifies real ES256 registration and login, rejects invalid proofs, and revokes only biometric central sessions", async () => {
-    const ctx = context();
-    ctx.req.headers.origin = "https://h2colombiano.com";
-    const caller = customerPasswordRouter.createCaller(ctx);
-    vi.stubEnv("H2_CUSTOMER_PASSKEY_ENROLLMENT_ENABLED","true");
-    vi.stubEnv("H2_CUSTOMER_PASSKEY_LOGIN_ENABLED","true");
-    try {
-      const first = await caller.verifyCustomerCode({phone,code:await issue(),remember:true,enrollPasskey:true});
-      if (!first.success || !("enrollment" in first) || !first.enrollment) throw new Error("Enrollment unavailable");
-      const registration = first.enrollment.options;
-      const {privateKey,publicKey} = generateKeyPairSync("ec",{namedCurve:"prime256v1"});
-      const jwk = publicKey.export({format:"jwk"});
-      const credentialId = randomBytes(32);
-      const id = credentialId.toString("base64url");
-      const rpHash = createHash("sha256").update("h2colombiano.com").digest();
-      const counter = (n:number) => { const buf=Buffer.alloc(4);buf.writeUInt32BE(n);return buf; };
-      const cose = Buffer.concat([Buffer.from("a5010203262001215820","hex"),Buffer.from(jwk.x!,"base64url"),Buffer.from("225820","hex"),Buffer.from(jwk.y!,"base64url")]);
-      const authData = Buffer.concat([rpHash,Buffer.from([0x45]),counter(0),Buffer.alloc(16),Buffer.from([0,credentialId.length]),credentialId,cose]);
-      const text = (s:string) => Buffer.concat([Buffer.from([0x60+Buffer.byteLength(s)]),Buffer.from(s)]);
-      const bytes = (b:Buffer) => Buffer.concat([b.length<256?Buffer.from([0x58,b.length]):Buffer.from([0x59,b.length>>8,b.length&255]),b]);
-      const attestationObject = Buffer.concat([Buffer.from([0xa3]),text("fmt"),text("none"),text("attStmt"),Buffer.from([0xa0]),text("authData"),bytes(authData)]);
-      const clientData = (type:string,challenge:string,origin="https://h2colombiano.com") => Buffer.from(JSON.stringify({type,challenge,origin,crossOrigin:false}));
-      const registered = await caller.finishPasskeyEnrollment({token:first.token,challengeId:first.enrollment.challengeId,response:{
-        id,rawId:id,type:"public-key",response:{clientDataJSON:clientData("webauthn.create",registration.challenge).toString("base64url"),attestationObject:attestationObject.toString("base64url")},clientExtensionResults:{}
-      }});
-      expect(registered).toEqual({enrolled:true});
-      expect(await query("SELECT customerId,signCount FROM customerPasskeyCredentials")).toEqual([expect.objectContaining({customerId:101,signCount:0})]);
-      expect(await query("SELECT * FROM customerPasskeyEnrollments")).toHaveLength(0);
-      const assertion = (challenge:string,n:number,flags=0x05,origin="https://h2colombiano.com",key=privateKey) => {
-        const data=Buffer.concat([rpHash,Buffer.from([flags]),counter(n)]);
-        const client=clientData("webauthn.get",challenge,origin);
-        const signature=sign("sha256",Buffer.concat([data,createHash("sha256").update(client).digest()]),key);
-        return {id,rawId:id,type:"public-key" as const,response:{authenticatorData:data.toString("base64url"),clientDataJSON:client.toString("base64url"),signature:signature.toString("base64url"),userHandle:registration.user.id},clientExtensionResults:{}};
-      };
-      expect(await caller.passkeyLoginAvailable()).toEqual({available:true});
-      const invalid = await caller.beginPasskeyLogin({phone,remember:false});
-      await expect(caller.finishPasskeyLogin({phone,challengeId:invalid.challengeId,response:assertion(invalid.options.challenge,1,0x01)})).rejects.toMatchObject({code:"UNAUTHORIZED"});
-      await expect(caller.finishPasskeyLogin({phone,challengeId:invalid.challengeId,response:assertion(invalid.options.challenge,1)})).rejects.toMatchObject({code:"UNAUTHORIZED"});
-      const wrongOrigin = await caller.beginPasskeyLogin({phone,remember:false});
-      await expect(caller.finishPasskeyLogin({phone,challengeId:wrongOrigin.challengeId,response:assertion(wrongOrigin.options.challenge,1,0x05,"https://example.invalid")})).rejects.toMatchObject({code:"UNAUTHORIZED"});
-      const wrongKey = await caller.beginPasskeyLogin({phone,remember:false});
-      await expect(caller.finishPasskeyLogin({phone,challengeId:wrongKey.challengeId,response:assertion(wrongKey.options.challenge,1,0x05,"https://h2colombiano.com",generateKeyPairSync("ec",{namedCurve:"prime256v1"}).privateKey)})).rejects.toMatchObject({code:"UNAUTHORIZED"});
-      const otherPhone = await caller.beginPasskeyLogin({phone:"11999990002",remember:false});
-      await expect(caller.finishPasskeyLogin({phone:"11999990002",challengeId:otherPhone.challengeId,response:assertion(otherPhone.options.challenge,1)})).rejects.toMatchObject({code:"UNAUTHORIZED"});
-      const challenge = await caller.beginPasskeyLogin({phone,remember:false});
-      const response = assertion(challenge.options.challenge,1);
-      const biometric = await caller.finishPasskeyLogin({phone,challengeId:challenge.challengeId,response});
-      expect(biometric.success).toBe(true);
-      expect(biometric.phone).toBe(phone);
-      await assertLifetime(biometric.token,1);
-      await assertLifetime(first.token,720);
-      expect(await getVerifiedCustomerOtpSession(isolated.db,biometric.token)).not.toBeNull();
-      const cardBinding = await biometricBridgeBinding(isolated.db,biometric.token,101);
-      expect(cardBinding).toBe(createHash("sha256").update(biometric.token).digest("hex"));
-      expect(await isBiometricBridgeActive(isolated.db,cardBinding,phone)).toBe(true);
-      expect(await isBiometricBridgeActive(isolated.db,cardBinding,"11999990002")).toBe(false);
-      expect(await biometricBridgeBinding(isolated.db,first.token,101)).toBeNull();
-      await expect(caller.finishPasskeyLogin({phone,challengeId:challenge.challengeId,response})).rejects.toMatchObject({code:"UNAUTHORIZED"});
-      const rollbackCounter = await caller.beginPasskeyLogin({phone,remember:false});
-      await expect(caller.finishPasskeyLogin({phone,challengeId:rollbackCounter.challengeId,response:assertion(rollbackCounter.options.challenge,1)})).rejects.toMatchObject({code:"UNAUTHORIZED"});
-      expect(await query("SELECT * FROM customerPasskeySessions")).toHaveLength(1);
-      await expect(caller.getPasskeyRevocationTarget({customerId:101})).rejects.toMatchObject({code:"FORBIDDEN"});
-      await expect(caller.revokeCustomerPasskeys({customerId:101,expectedPhone:phone,confirm:true})).rejects.toMatchObject({code:"FORBIDDEN"});
-      expect(await admin().getPasskeyRevocationTarget({customerId:101})).toMatchObject({credentialCount:1,activeSessionCount:1});
-      await expect(admin().revokeCustomerPasskeys({customerId:101,expectedPhone:"11999990002",confirm:true})).rejects.toMatchObject({code:"CONFLICT"});
-      const pending = await caller.beginPasskeyLogin({phone,remember:true});
-      expect(await admin().revokeCustomerPasskeys({customerId:101,expectedPhone:phone,confirm:true})).toMatchObject({credentialsRevoked:1,sessionsRevoked:1});
-      expect(await getVerifiedCustomerOtpSession(isolated.db,biometric.token)).toBeNull();
-      expect(await session(biometric.token)).toBeNull();
-      expect(await isBiometricBridgeActive(isolated.db,cardBinding,phone)).toBe(false);
-      expect(await getVerifiedCustomerOtpSession(isolated.db,first.token)).not.toBeNull();
-      expect(await query("SELECT * FROM customerPasskeyCredentials")).toHaveLength(0);
-      expect(await query("SELECT administrator,credentialsRevoked,sessionsRevoked FROM customerPasskeyRevocations")).toEqual([expect.objectContaining({administrator:"session-policy-test",credentialsRevoked:1,sessionsRevoked:1})]);
-      await expect(caller.finishPasskeyLogin({phone,challengeId:pending.challengeId,response:assertion(pending.options.challenge,2)})).rejects.toMatchObject({code:"UNAUTHORIZED"});
-      await admin().updatePasskeyPermission({allowed:false});
-      expect(await caller.passkeyLoginAvailable()).toEqual({available:false});
-      await expect(caller.beginPasskeyLogin({phone,remember:true})).rejects.toMatchObject({code:"UNAUTHORIZED"});
-      await clock(epoch+61_000);
-      const recovery = await caller.verifyCustomerCode({phone,code:await issue(),remember:true,enrollPasskey:true});
-      expect(recovery.success).toBe(true);
-      expect("enrollment" in recovery ? recovery.enrollment : undefined).toBeFalsy();
-    } finally {
-      vi.stubEnv("H2_CUSTOMER_PASSKEY_ENROLLMENT_ENABLED","false");
-      vi.stubEnv("H2_CUSTOMER_PASSKEY_LOGIN_ENABLED","false");
-    }
-  });
-
-  it("persists the ADM Passkey preference independently of the session duration", async () => {
-    expect(await admin().getPasskeyPermission()).toEqual({allowed:true});
-    await admin().updatePasskeyPermission({allowed:false});
-    expect(await admin().getPasskeyPermission()).toEqual({allowed:false});
-    expect(await admin().getSessionPolicy()).toEqual(policy(720));
-    await admin().updateSessionPolicy({hours:2160});
-    expect(await admin().getPasskeyPermission()).toEqual({allowed:false});
-    await admin().updatePasskeyPermission({allowed:true});
-    expect(await query("SELECT value FROM appSettings WHERE `key`=?",["customer_passkey_allowed"])).toEqual([expect.objectContaining({value:"1"})]);
-    expect(await admin().getSessionPolicy()).toEqual(policy(2160));
   });
 
   it("persists 48 hours and both valid limits through the real admin API without changing other settings", async () => {
@@ -277,18 +150,6 @@ describe.skipIf(!testUrl)("Customer session policy — isolated MySQL and real O
   it("issues the initial 30-day duration when no policy was stored", async () => {
     const { token } = await login(); await assertLifetime(token, 720);
     expect(await query("SELECT * FROM appSettings")).toHaveLength(0);
-  });
-
-  it("caps the explicitly shortened session at one hour under a 90-day ADM policy", async () => {
-    await admin().updateSessionPolicy({ hours: 2160 });
-    const code = await issue();
-    const result = await verifyCustomerCode(phone, code, false);
-    expect(result.success).toBe(true);
-    if (!result.success) throw new Error("Synthetic OTP login failed");
-    await assertLifetime(result.token, 1);
-    await clock(epoch + hour);
-    expect(await getVerifiedCustomerOtpSession(isolated.db, result.token)).toBeNull();
-    expect((await verifyCustomerCode(phone, code)).success).toBe(false);
   });
 
   it("enforces the 90-day upper duration and expires at its exact deadline", async () => {

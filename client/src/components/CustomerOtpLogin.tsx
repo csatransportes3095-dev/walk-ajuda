@@ -7,7 +7,7 @@ const OTP_DRAFT_TTL_MS = 10 * 60 * 1000;
 const OTP_RESEND_COOLDOWN_MS = 60 * 1000;
 const OTP_MAX_STORED_COOLDOWN_MS = 24 * 60 * 60 * 1000;
 type OtpChannel = "email" | "whatsapp" | "both";
-type OtpDraft = { phone: string; step: "phone" | "code"; channel: OtpChannel; whatsappPrepared: boolean; remember: boolean };
+type OtpDraft = { phone: string; step: "phone" | "code"; channel: OtpChannel; whatsappPrepared: boolean };
 function cooldownKey(phone: string, channel: OtpChannel): string { return "h2_otp_cooldown_" + phone + "_" + channel; }
 function savedCooldown(phone: string, channel: OtpChannel): number {
   if (!/^\d{11}$/.test(phone)) return 0;
@@ -46,7 +46,6 @@ function readOtpDraft(): OtpDraft | null {
           step: draft.step === "code" ? "code" : "phone",
           channel: draft.channel === "both" ? "both" : draft.channel === "whatsapp" ? "whatsapp" : "email",
           whatsappPrepared: draft.whatsappPrepared === true,
-          remember: draft.remember !== false,
         };
       }
       storage.removeItem(OTP_DRAFT_KEY);
@@ -54,8 +53,8 @@ function readOtpDraft(): OtpDraft | null {
   }
   return null;
 }
-function saveOtpDraft(phone: string, step: "phone" | "code", channel: OtpChannel = "both", whatsappPrepared = false, remember = true) {
-  const draft = JSON.stringify({phone, step, channel, whatsappPrepared, remember, expiresAt: Date.now() + OTP_DRAFT_TTL_MS});
+function saveOtpDraft(phone: string, step: "phone" | "code", channel: OtpChannel = "both", whatsappPrepared = false) {
+  const draft = JSON.stringify({phone, step, channel, whatsappPrepared, expiresAt: Date.now() + OTP_DRAFT_TTL_MS});
   for (const kind of ["session", "local"] as const) {
     try { (kind === "session" ? window.sessionStorage : window.localStorage).setItem(OTP_DRAFT_KEY, draft); } catch {}
   }
@@ -67,8 +66,7 @@ function clearOtpDraft() {
 }
 import { trpc } from "@/lib/trpc";
 import { toast } from "sonner";
-import { CheckCircle2, Fingerprint, Mail, MessageCircle, Phone, ShieldCheck } from "lucide-react";
-import { browserSupportsWebAuthn, startAuthentication, startRegistration as startPasskeyRegistration } from "@simplewebauthn/browser";
+import { CheckCircle2, Mail, MessageCircle, Phone, ShieldCheck } from "lucide-react";
 
 export type CustomerOtpResult = {
   token: string;
@@ -123,7 +121,7 @@ export function CustomerOtpLogin({ title = "Acesso H2 Colombiano", initialPhone 
     const selectedPhone = normalizeOtpPhone(initialPhone) || draft?.phone || "";
     const matchingDraft = draft?.phone === selectedPhone ? draft : null;
     if (draft && !matchingDraft) clearOtpDraft();
-    return { phone: selectedPhone, step: matchingDraft?.step || "phone", channel: matchingDraft?.channel || "both", whatsappPrepared: matchingDraft?.whatsappPrepared === true, remember: matchingDraft?.remember !== false };
+    return { phone: selectedPhone, step: matchingDraft?.step || "phone", channel: matchingDraft?.channel || "both", whatsappPrepared: matchingDraft?.whatsappPrepared === true };
   });
   const [phone, setPhone] = useState(initialState.phone);
   const [step, setStep] = useState<"phone" | "code">(initialState.step);
@@ -132,8 +130,6 @@ export function CustomerOtpLogin({ title = "Acesso H2 Colombiano", initialPhone 
   const [showHelp, setShowHelp] = useState(false);
   const [showWhatsappLink, setShowWhatsappLink] = useState(initialState.step === "code" && initialState.whatsappPrepared);
   const [busy, setBusy] = useState(false);
-  const [passkeyBusy, setPasskeyBusy] = useState(false);
-  const [remember, setRemember] = useState(initialState.remember);
   const [clockNow, setClockNow] = useState(() => Date.now());
   const [cooldowns, setCooldowns] = useState<{email:number;whatsapp:number}>(() => {
     const selectedPhone = initialState.phone;
@@ -144,16 +140,6 @@ export function CustomerOtpLogin({ title = "Acesso H2 Colombiano", initialPhone 
   const requestCode = trpc.customerPassword.requestCustomerCode.useMutation();
   const {data: h2AutoDelivery} = trpc.customerPassword.h2AutoOtpAvailable.useQuery();
   const verifyCode = trpc.customerPassword.verifyCustomerCode.useMutation();
-  const enrollmentAvailability = trpc.customerPassword.passkeyEnrollmentAvailable.useQuery(undefined, { retry: false });
-  const finishEnrollment = trpc.customerPassword.finishPasskeyEnrollment.useMutation();
-  const [enrollPasskey, setEnrollPasskey] = useState(false);
-  const [pendingEnrollment, setPendingEnrollment] = useState<null | { result: CustomerOtpResult; challengeId: string; options: Parameters<typeof startPasskeyRegistration>[0]["optionsJSON"] }>(null);
-  const [enrollmentFailure, setEnrollmentFailure] = useState<CustomerOtpResult | null>(null);
-  const canEnrollPasskey = enrollmentAvailability.data?.available === true && browserSupportsWebAuthn();
-  const loginAvailability = trpc.customerPassword.passkeyLoginAvailable.useQuery(undefined, { retry: false, refetchOnWindowFocus: true });
-  const beginPasskey = trpc.customerPassword.beginPasskeyLogin.useMutation();
-  const finishPasskey = trpc.customerPassword.finishPasskeyLogin.useMutation();
-  const canLoginWithPasskey = loginAvailability.data?.available === true && browserSupportsWebAuthn();
   const cleanPhone = normalizeOtpPhone(phone);
   const remainingEmail = remainingSeconds(Math.max(cooldowns.email,savedCooldown(cleanPhone,"email")),clockNow);
   const remainingWhatsapp = remainingSeconds(Math.max(cooldowns.whatsapp,savedCooldown(cleanPhone,"whatsapp")),clockNow);
@@ -247,7 +233,7 @@ export function CustomerOtpLogin({ title = "Acesso H2 Colombiano", initialPhone 
       const whatsappPrepared = channel !== "email" && result.whatsappPrepared === true;
       // Commit and persist the OTP input BEFORE handing off to WhatsApp.
       // This must be the page Safari shows when the customer returns.
-      saveOtpDraft(cleanPhone, "code", channel, whatsappPrepared, remember);
+      saveOtpDraft(cleanPhone, "code", channel, whatsappPrepared);
       flushSync(() => {
         setCode("");
         setDeliveryChannel(channel);
@@ -296,94 +282,6 @@ export function CustomerOtpLogin({ title = "Acesso H2 Colombiano", initialPhone 
     }
   }
 
-  async function completeLogin(result: CustomerOtpResult) {
-    // Keep the existing route-specific authorization before caching the token.
-    await onAuthenticated(result);
-    localStorage.setItem("cp_token", result.token);
-    localStorage.setItem("walk_client_phone", cleanPhone);
-    clearOtpDraft();
-    toast.success("Identidade confirmada!");
-  }
-
-  async function enterWithPasskey() {
-    if (!canLoginWithPasskey || busy || cleanPhone.length !== 11) return;
-    setBusy(true);
-    setPasskeyBusy(true);
-    try {
-      const challenge = await beginPasskey.mutateAsync({phone:cleanPhone,remember});
-      const assertion = await startAuthentication({optionsJSON:challenge.options});
-      if (!assertion.response.userHandle) throw new Error("Missing discoverable credential user handle");
-      const result = await finishPasskey.mutateAsync({
-        phone:cleanPhone,challengeId:challenge.challengeId,
-        response:{
-          id:assertion.id,rawId:assertion.rawId,type:"public-key",
-          response:{
-            clientDataJSON:assertion.response.clientDataJSON,
-            authenticatorData:assertion.response.authenticatorData,
-            signature:assertion.response.signature,
-            userHandle:assertion.response.userHandle,
-          },
-          clientExtensionResults:{},
-        },
-      });
-      if (!result.token || result.phone !== cleanPhone) {
-        throw new Error("Passkey response does not match the selected account");
-      }
-      await completeLogin(result);
-    } catch {
-      toast.error("Não foi possível entrar com biometria. Você pode continuar pelo código.");
-    } finally {
-      setPasskeyBusy(false);
-      setBusy(false);
-    }
-  }
-
-  async function confirmEnrollment(activate: boolean) {
-    if (!pendingEnrollment || busy) return;
-    const pending = pendingEnrollment;
-    setBusy(true);
-    try {
-      if (activate) {
-        try {
-          const response = await startPasskeyRegistration({ optionsJSON: pending.options });
-          // The server requests no client extensions; send only the bounded
-          // registration proof fields needed to verify the WebAuthn ceremony.
-          await finishEnrollment.mutateAsync({
-            token: pending.result.token, challengeId: pending.challengeId,
-            response: {
-              id: response.id, rawId: response.rawId, type: "public-key",
-              response: {
-                clientDataJSON: response.response.clientDataJSON,
-                attestationObject: response.response.attestationObject,
-              },
-              clientExtensionResults: {},
-            },
-          });
-          toast.success("Chave de acesso cadastrada!");
-        } catch {
-          setEnrollmentFailure(pending.result);
-          setPendingEnrollment(null);
-          return;
-        }
-      }
-      await completeLogin(pending.result);
-      setPendingEnrollment(null);
-    } catch (err: any) {
-      toast.error(err?.message || "Não foi possível concluir o acesso.");
-    } finally { setBusy(false); }
-  }
-
-  async function continueAfterEnrollmentFailure() {
-    if (!enrollmentFailure || busy) return;
-    setBusy(true);
-    try {
-      await completeLogin(enrollmentFailure);
-      setEnrollmentFailure(null);
-    } catch (err: any) {
-      toast.error(err?.message || "Não foi possível concluir o acesso.");
-    } finally { setBusy(false); }
-  }
-
   async function confirm(event: React.FormEvent) {
     event.preventDefault();
     const digits = code.replace(/\D/g, "").slice(0, 6);
@@ -393,7 +291,7 @@ export function CustomerOtpLogin({ title = "Acesso H2 Colombiano", initialPhone 
     }
     setBusy(true);
     try {
-      const result = await verifyCode.mutateAsync({ phone: cleanPhone, code: digits, remember, enrollPasskey: enrollPasskey && canEnrollPasskey });
+      const result = await verifyCode.mutateAsync({ phone: cleanPhone, code: digits });
       if (!result.success) {
         toast.error(result.message || "Código inválido ou expirado.");
         return;
@@ -402,27 +300,22 @@ export function CustomerOtpLogin({ title = "Acesso H2 Colombiano", initialPhone 
         toast.error("Não foi possível confirmar o acesso.");
         return;
       }
-      const loginResult: CustomerOtpResult = {
-        token: result.token, phone: cleanPhone,
+      // Only the server can issue the session after consuming a valid code.
+      // Local storage alone is never used to authorize a protected route.
+      await onAuthenticated({
+        token: result.token,
+        phone: cleanPhone,
         profileUpdateRequired: result.profileUpdateRequired,
         profileUpdateFields: result.profileUpdateFields || [],
-      };
-      if ("enrollment" in result && result.enrollment) {
-        setPendingEnrollment({ result: loginResult, ...result.enrollment });
-        clearOtpDraft();
-        setCode("");
-        return;
-      }
-      if (enrollPasskey) {
-        // OTP succeeded, but enrollment did not. Do not silently navigate.
-        // Retain the verified result only in component state until the
-        // customer explicitly continues without registering a credential.
-        setEnrollmentFailure(loginResult);
-        clearOtpDraft();
-        setCode("");
-        return;
-      }
-      await completeLogin(loginResult);
+      });
+      // Store only after the route-specific server authorization callback
+      // succeeds, preventing failed permissions from leaving a cached token.
+      localStorage.setItem("cp_token", result.token);
+      // Order, raffle, appointments and old site modules still read the
+      // canonical phone. It is NOT an authorization credential.
+      localStorage.setItem("walk_client_phone", cleanPhone);
+      clearOtpDraft();
+      toast.success("Identidade confirmada!");
     } catch (err: any) {
       toast.error(err?.message || "Falha ao verificar o código.");
     } finally {
@@ -441,34 +334,7 @@ export function CustomerOtpLogin({ title = "Acesso H2 Colombiano", initialPhone 
           {loginSettings?.login_subtitle?.trim() || "Acesso seguro com telefone e código. Nenhuma senha é necessária."}
         </p>}
 
-        {!pendingEnrollment && !enrollmentFailure && <label className="mt-5 flex items-start gap-3 rounded-xl border border-slate-700 bg-slate-900 p-3 text-sm">
-          <input type="checkbox" checked={remember} disabled={busy} className="mt-1 h-4 w-4 accent-emerald-500"
-            onChange={event => {
-              const checked = event.target.checked;
-              setRemember(checked);
-              if (cleanPhone.length === 11) saveOtpDraft(cleanPhone, step, deliveryChannel, showWhatsappLink, checked);
-            }} />
-          <span>Manter conectado neste aparelho
-            <span className="mt-1 block text-xs text-slate-400">
-              {remember ? "Prazo definido pela administração." : "Sessão de até 1 hora, mesmo ao reabrir o navegador."}
-            </span>
-          </span>
-        </label>}
-        {enrollmentFailure ? (
-          <section aria-label="Cadastro biométrico não concluído" className="mt-7 space-y-4 rounded-2xl border-2 border-amber-400 bg-amber-950/40 p-5">
-            <h2 role="alert" className="text-lg font-black text-amber-200">BIOMETRIA NÃO CADASTRADA</h2>
-            <p className="text-sm text-slate-100">Seu código foi confirmado, mas não foi possível cadastrar a chave neste aparelho.</p>
-            <p className="text-sm text-slate-300">Você pode continuar com segurança pelo código. Para tentar cadastrar a biometria novamente, saia da conta e solicite um novo código.</p>
-            <button type="button" disabled={busy} onClick={() => void continueAfterEnrollmentFailure()} className="min-h-12 w-full rounded-xl bg-emerald-500 p-3 font-bold text-slate-950 disabled:opacity-50">CONTINUAR SEM BIOMETRIA</button>
-          </section>
-        ) : pendingEnrollment ? (
-          <section aria-label="Cadastrar chave de acesso" className="mt-7 space-y-4 rounded-xl border border-emerald-500/30 bg-slate-900 p-4">
-            <p className="text-sm text-emerald-200">Código confirmado. Cadastre a chave protegida pelo seu aparelho. Esta escolha é opcional.</p>
-            <button type="button" disabled={busy} onClick={() => void confirmEnrollment(true)} className="flex min-h-12 w-full items-center justify-center gap-2 rounded-xl bg-emerald-500 p-3 font-bold text-slate-950 disabled:opacity-50"><Fingerprint className="h-5 w-5" /> CADASTRAR BIOMETRIA</button>
-            <button type="button" disabled={busy} onClick={() => void confirmEnrollment(false)} className="w-full rounded-xl border border-slate-600 p-3 text-sm font-semibold disabled:opacity-50">Continuar sem cadastrar</button>
-            <p className="text-xs text-slate-400">O H2 não recebe seu rosto, digital ou PIN. O acesso por código continua disponível.</p>
-          </section>
-        ) : step === "phone" ? (
+        {step === "phone" ? (
           <form onSubmit={event => { event.preventDefault(); void send("both"); }} className="mt-7 space-y-4">
             <label htmlFor="h2-otp-phone" className="flex items-center gap-2 text-sm font-semibold">
               <Phone className="h-4 w-4" /> Telefone com DDD
@@ -481,23 +347,10 @@ export function CustomerOtpLogin({ title = "Acesso H2 Colombiano", initialPhone 
               className="w-full rounded-xl border border-white/20 bg-slate-900 p-4 text-center text-xl font-bold outline-none focus:border-cyan-400"
               placeholder="(11) 99999-9999"
               value={phone}
-              onChange={e => { const next = normalizeOtpPhone(e.target.value); setPhone(next); setCooldowns({email:savedCooldown(next,"email"),whatsapp:savedCooldown(next,"whatsapp")}); saveOtpDraft(next, "phone", deliveryChannel, false, remember); }}
+              onChange={e => { const next = normalizeOtpPhone(e.target.value); setPhone(next); setCooldowns({email:savedCooldown(next,"email"),whatsapp:savedCooldown(next,"whatsapp")}); saveOtpDraft(next, "phone", deliveryChannel); }}
               disabled={busy}
               required
             />
-            {canLoginWithPasskey && (
-              <section className="space-y-2" aria-label="Acesso com biometria">
-                <button type="button" onClick={() => void enterWithPasskey()}
-                  disabled={busy || cleanPhone.length !== 11}
-                  data-testid="customer-passkey-login"
-                  className="flex min-h-14 w-full items-center justify-center gap-2 rounded-xl bg-emerald-500 p-4 font-black text-slate-950 transition-colors hover:bg-emerald-400 focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-emerald-300 disabled:opacity-50">
-                  <Fingerprint className="h-6 w-6 shrink-0" aria-hidden />
-                  {passkeyBusy ? "CONFIRMANDO BIOMETRIA..." : "ENTRAR COM BIOMETRIA"}
-                </button>
-                <p className="text-center text-xs leading-relaxed text-slate-300">Use o Face ID, digital ou PIN do seu aparelho, se já cadastrou uma chave de acesso.</p>
-                <div className="flex items-center gap-3 text-xs text-slate-400" aria-hidden><span className="h-px flex-1 bg-slate-700" /> ou <span className="h-px flex-1 bg-slate-700" /></div>
-              </section>
-            )}
             <div className="space-y-3" aria-label="Recebimento do código">
               <button type="submit" disabled={busy || cleanPhone.length !== 11 || remainingEmail > 0 || remainingWhatsapp > 0}
                 className="flex min-h-14 w-full items-center justify-center gap-2 rounded-xl bg-cyan-500 p-4 font-black text-slate-950 transition-colors hover:bg-cyan-400 disabled:opacity-50">
@@ -550,17 +403,6 @@ export function CustomerOtpLogin({ title = "Acesso H2 Colombiano", initialPhone 
                 </p>
               </div>
             )}
-            {canEnrollPasskey && <label className="flex min-h-20 cursor-pointer items-center gap-3 rounded-2xl border-2 border-emerald-400 bg-emerald-950 p-4 text-emerald-50 shadow-md shadow-emerald-500/20 transition-colors hover:bg-emerald-900 focus-within:ring-2 focus-within:ring-emerald-300">
-              <span className="flex h-12 w-12 shrink-0 items-center justify-center rounded-xl bg-emerald-400 text-emerald-950">
-                <Fingerprint className="h-7 w-7" aria-hidden="true" />
-              </span>
-              <span className="min-w-0 flex-1 space-y-1">
-                <span className="block text-base font-black leading-tight text-emerald-200">ATIVAR BIOMETRIA</span>
-                <span className="block text-xs font-medium leading-snug">Face ID, digital ou PIN do aparelho</span>
-                <span className="block text-xs leading-snug text-emerald-100">Cadastrar biometria neste aparelho após confirmar o código (opcional)</span>
-              </span>
-              <input type="checkbox" checked={enrollPasskey} disabled={busy} onChange={event => setEnrollPasskey(event.target.checked)} className="h-6 w-6 shrink-0 cursor-pointer accent-emerald-400" />
-            </label>}
             <button type="submit" disabled={busy || code.length !== 6}
               className="flex w-full items-center justify-center gap-2 rounded-xl bg-emerald-500 p-4 font-black text-slate-950 disabled:opacity-50">
               <CheckCircle2 className="h-5 w-5" /> {busy ? "Validando..." : "CONFIRMAR E ACESSAR"}
@@ -584,7 +426,7 @@ export function CustomerOtpLogin({ title = "Acesso H2 Colombiano", initialPhone 
                   </button>
                 </div>
                 <button type="button" className="w-full py-2 text-sm text-cyan-300" disabled={busy}
-                  onClick={() => { setStep("phone"); setCode(""); setShowHelp(false); saveOtpDraft(cleanPhone, "phone", deliveryChannel, false, remember); }}>
+                  onClick={() => { setStep("phone"); setCode(""); setShowHelp(false); saveOtpDraft(cleanPhone, "phone", deliveryChannel); }}>
                   Alterar telefone
                 </button>
                 <a href="https://h2colombiano.com/" className="block py-2 text-center text-sm text-cyan-300">
