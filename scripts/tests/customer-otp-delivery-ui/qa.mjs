@@ -118,6 +118,24 @@ try {
     await f.close();
   }
   {
+    const f = await setup({ mobile:true, server:{whatsappAvailable:false,passkeyAvailable:true,passkeyPrepareFails:true} });
+    await f.request.click();
+    await f.page.getByLabel('Código de 6 números').waitFor();
+    await f.page.getByText('ATIVAR BIOMETRIA',{exact:true}).waitFor();
+    await f.page.getByRole('checkbox',{name:/Cadastrar biometria neste aparelho/}).check();
+    await f.page.getByLabel('Código de 6 números').fill('246810');
+    await f.page.getByRole('button',{name:'CONFIRMAR E ACESSAR'}).click();
+    await f.page.getByRole('alert').filter({hasText:'BIOMETRIA NÃO CADASTRADA'}).waitFor();
+    assert.equal(await f.page.getByTestId('authenticated-phone').count(),0);
+    assert.deepEqual((await f.state()).verifyCalls,[{phone,code:'246810',remember:true,enrollPasskey:true}]);
+    await f.page.screenshot({path:path.join(output,'mobile-passkey-failure.png'),fullPage:true});
+    await f.page.getByRole('button',{name:'CONTINUAR SEM BIOMETRIA'}).click();
+    await f.page.getByTestId('authenticated-phone').waitFor();
+    assert.deepEqual((await f.state()).finishEnrollmentCalls,[]);
+    checks.push('Falha de preparação não redireciona silenciosamente; cliente escolhe continuar pelo OTP confirmado');
+    await f.close();
+  }
+  {
     const f = await setup({ server:{ requestMode:'blocked', retryAfterSeconds:3600, whatsappAvailable:false } });
     await f.request.click();
     await f.page.getByText('Limite temporário para teste.', { exact:true }).waitFor();

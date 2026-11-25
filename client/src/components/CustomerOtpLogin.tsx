@@ -148,6 +148,7 @@ export function CustomerOtpLogin({ title = "Acesso H2 Colombiano", initialPhone 
   const finishEnrollment = trpc.customerPassword.finishPasskeyEnrollment.useMutation();
   const [enrollPasskey, setEnrollPasskey] = useState(false);
   const [pendingEnrollment, setPendingEnrollment] = useState<null | { result: CustomerOtpResult; challengeId: string; options: Parameters<typeof startPasskeyRegistration>[0]["optionsJSON"] }>(null);
+  const [enrollmentFailure, setEnrollmentFailure] = useState<CustomerOtpResult | null>(null);
   const canEnrollPasskey = enrollmentAvailability.data?.available === true && browserSupportsWebAuthn();
   const loginAvailability = trpc.customerPassword.passkeyLoginAvailable.useQuery(undefined, { retry: false, refetchOnWindowFocus: true });
   const beginPasskey = trpc.customerPassword.beginPasskeyLogin.useMutation();
@@ -360,11 +361,24 @@ export function CustomerOtpLogin({ title = "Acesso H2 Colombiano", initialPhone 
           });
           toast.success("Chave de acesso cadastrada!");
         } catch {
-          toast.info("Biometria não cadastrada. O acesso por código continua disponível.");
+          setEnrollmentFailure(pending.result);
+          setPendingEnrollment(null);
+          return;
         }
       }
       await completeLogin(pending.result);
       setPendingEnrollment(null);
+    } catch (err: any) {
+      toast.error(err?.message || "Não foi possível concluir o acesso.");
+    } finally { setBusy(false); }
+  }
+
+  async function continueAfterEnrollmentFailure() {
+    if (!enrollmentFailure || busy) return;
+    setBusy(true);
+    try {
+      await completeLogin(enrollmentFailure);
+      setEnrollmentFailure(null);
     } catch (err: any) {
       toast.error(err?.message || "Não foi possível concluir o acesso.");
     } finally { setBusy(false); }
@@ -399,7 +413,15 @@ export function CustomerOtpLogin({ title = "Acesso H2 Colombiano", initialPhone 
         setCode("");
         return;
       }
-      if (enrollPasskey && canEnrollPasskey) toast.info("Não foi possível preparar o cadastro da biometria. O acesso por código continua disponível.");
+      if (enrollPasskey) {
+        // OTP succeeded, but enrollment did not. Do not silently navigate.
+        // Retain the verified result only in component state until the
+        // customer explicitly continues without registering a credential.
+        setEnrollmentFailure(loginResult);
+        clearOtpDraft();
+        setCode("");
+        return;
+      }
       await completeLogin(loginResult);
     } catch (err: any) {
       toast.error(err?.message || "Falha ao verificar o código.");
@@ -419,7 +441,7 @@ export function CustomerOtpLogin({ title = "Acesso H2 Colombiano", initialPhone 
           {loginSettings?.login_subtitle?.trim() || "Acesso seguro com telefone e código. Nenhuma senha é necessária."}
         </p>}
 
-        {!pendingEnrollment && <label className="mt-5 flex items-start gap-3 rounded-xl border border-slate-700 bg-slate-900 p-3 text-sm">
+        {!pendingEnrollment && !enrollmentFailure && <label className="mt-5 flex items-start gap-3 rounded-xl border border-slate-700 bg-slate-900 p-3 text-sm">
           <input type="checkbox" checked={remember} disabled={busy} className="mt-1 h-4 w-4 accent-emerald-500"
             onChange={event => {
               const checked = event.target.checked;
@@ -432,7 +454,14 @@ export function CustomerOtpLogin({ title = "Acesso H2 Colombiano", initialPhone 
             </span>
           </span>
         </label>}
-        {pendingEnrollment ? (
+        {enrollmentFailure ? (
+          <section aria-label="Cadastro biométrico não concluído" className="mt-7 space-y-4 rounded-2xl border-2 border-amber-400 bg-amber-950/40 p-5">
+            <h2 role="alert" className="text-lg font-black text-amber-200">BIOMETRIA NÃO CADASTRADA</h2>
+            <p className="text-sm text-slate-100">Seu código foi confirmado, mas não foi possível cadastrar a chave neste aparelho.</p>
+            <p className="text-sm text-slate-300">Você pode continuar com segurança pelo código. Para tentar cadastrar a biometria novamente, saia da conta e solicite um novo código.</p>
+            <button type="button" disabled={busy} onClick={() => void continueAfterEnrollmentFailure()} className="min-h-12 w-full rounded-xl bg-emerald-500 p-3 font-bold text-slate-950 disabled:opacity-50">CONTINUAR SEM BIOMETRIA</button>
+          </section>
+        ) : pendingEnrollment ? (
           <section aria-label="Cadastrar chave de acesso" className="mt-7 space-y-4 rounded-xl border border-emerald-500/30 bg-slate-900 p-4">
             <p className="text-sm text-emerald-200">Código confirmado. Cadastre a chave protegida pelo seu aparelho. Esta escolha é opcional.</p>
             <button type="button" disabled={busy} onClick={() => void confirmEnrollment(true)} className="flex min-h-12 w-full items-center justify-center gap-2 rounded-xl bg-emerald-500 p-3 font-bold text-slate-950 disabled:opacity-50"><Fingerprint className="h-5 w-5" /> CADASTRAR BIOMETRIA</button>
@@ -521,9 +550,16 @@ export function CustomerOtpLogin({ title = "Acesso H2 Colombiano", initialPhone 
                 </p>
               </div>
             )}
-            {canEnrollPasskey && <label className="flex items-start gap-2 rounded-xl border border-emerald-500/30 p-3 text-sm">
-              <input type="checkbox" checked={enrollPasskey} disabled={busy} onChange={event => setEnrollPasskey(event.target.checked)} className="mt-1 h-4 w-4 accent-emerald-500" />
-              <span>Cadastrar biometria neste aparelho após confirmar o código (opcional)</span>
+            {canEnrollPasskey && <label className="flex min-h-20 cursor-pointer items-center gap-3 rounded-2xl border-2 border-emerald-400 bg-emerald-950 p-4 text-emerald-50 shadow-md shadow-emerald-500/20 transition-colors hover:bg-emerald-900 focus-within:ring-2 focus-within:ring-emerald-300">
+              <span className="flex h-12 w-12 shrink-0 items-center justify-center rounded-xl bg-emerald-400 text-emerald-950">
+                <Fingerprint className="h-7 w-7" aria-hidden="true" />
+              </span>
+              <span className="min-w-0 flex-1 space-y-1">
+                <span className="block text-base font-black leading-tight text-emerald-200">ATIVAR BIOMETRIA</span>
+                <span className="block text-xs font-medium leading-snug">Face ID, digital ou PIN do aparelho</span>
+                <span className="block text-xs leading-snug text-emerald-100">Cadastrar biometria neste aparelho após confirmar o código (opcional)</span>
+              </span>
+              <input type="checkbox" checked={enrollPasskey} disabled={busy} onChange={event => setEnrollPasskey(event.target.checked)} className="h-6 w-6 shrink-0 cursor-pointer accent-emerald-400" />
             </label>}
             <button type="submit" disabled={busy || code.length !== 6}
               className="flex w-full items-center justify-center gap-2 rounded-xl bg-emerald-500 p-4 font-black text-slate-950 disabled:opacity-50">
