@@ -106,7 +106,9 @@ describe("OTP-only shared customer route cutover",()=>{
   });
   it("retains protected server OTP session and rejection of legacy customer password endpoints",()=>{
     const server=file("server/routers/customerPassword.ts");
-    expect(server).toContain("getVerifiedCustomerOtpSession(db, cleanToken)");
+    expect(server).toContain("renewVerifiedCustomerOtpSession(db, cleanToken)");
+    const otp=file("server/customerOtpAccess.ts");
+    expect(otp).toContain("const verified = await getVerifiedCustomerOtpSession(db, token);");
     expect(server).toContain("requireLegacyPasswordMode()");
     expect(server).toContain("authMode: publicProcedure");
     const spending=file("server/routers/spreadsheet.ts");
