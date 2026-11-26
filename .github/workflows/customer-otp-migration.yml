@@ -5,6 +5,23 @@ on:
   pull_request:
     branches:
       - recovery/organizar-salvos-2026-08-24
+    # Somente autenticacao por codigo; nao acionar em PR de outros modulos.
+    paths:
+      - 'server/customerOtp*.ts'
+      - 'server/customerLoginEmailProof*.ts'
+      - 'server/h2AutoOtp*.ts'
+      - 'server/h2AutoIncomingOtp*.ts'
+      - 'server/h2-auto-otp*.ts'
+      - 'server/h2-auto-incoming-otp.ts'
+      - 'server/h2-auto-code-jobs.ts'
+      - 'server/h2-auto-access.ts'
+      - 'server/siteAccess*.ts'
+      - 'client/src/components/CustomerOtp*.tsx'
+      - 'client/src/pages/SiteAccess.tsx'
+      - 'client/src/lib/siteAccessSessionClient.ts'
+      - 'shared/siteAccessCodePolicy.ts'
+      - 'shared/customerOtp*.ts'
+      - '.github/workflows/customer-otp-migration.yml'
   workflow_dispatch:
 
 permissions:

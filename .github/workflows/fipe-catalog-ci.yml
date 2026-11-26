@@ -10,7 +10,6 @@ on:
       - 'server/_core/index.ts'
       - 'client/src/pages/GeradorChassiPublico.tsx'
       - '.github/workflows/fipe-catalog-ci.yml'
-      - '.github/workflows/customer-otp-migration.yml'
       - 'server/customerRouteAudit.test.ts'
   workflow_dispatch:
 
