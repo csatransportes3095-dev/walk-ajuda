@@ -208,15 +208,40 @@ describe.skipIf(!testUrl)("Customer session policy — isolated MySQL and real O
     await expect(requireCustomerSession(token, phone)).rejects.toMatchObject({ code: "UNAUTHORIZED" });
   });
 
-  it("does not extend either expiry or create a new login when checkSession is polled", async () => {
+  it("renews both expirations on valid checkSession without creating a new login", async () => {
     await admin().updateSessionPolicy({ hours: 48 }); const { token } = await login();
     const before = await session(token), caller = combinedRouter.createCaller(context());
-    for (let index = 1; index <= 3; index++) {
-      await clock(epoch + index * hour);
+    for (const offset of [hour / 4, hour, 47 * hour, 90 * hour]) {
+      await clock(epoch + offset);
       expect(await caller.customerPassword.checkSession({ token })).toMatchObject({ valid: true, phone, source: "customer" });
+      const current = await session(token);
+      const deadline = offset < hour ? before!.otpExpiryMs : epoch + offset + 48 * hour;
+      expect(current).toEqual({ ...before, passwordExpiryMs: deadline, otpExpiryMs: deadline });
     }
-    expect(await session(token)).toEqual(before);
     expect((await counts()).customerLoginHistory).toBe(1);
+    expect(isolated.delivery).toHaveBeenCalledTimes(1);
+    await clock(epoch + 138 * hour);
+    expect(await caller.customerPassword.checkSession({ token })).toMatchObject({ valid: false });
+  });
+
+  it("renews even a one-hour inactivity policy and does not resurrect a logged-out token", async () => {
+    await admin().updateSessionPolicy({ hours: 1 }); const { token } = await login();
+    const caller = combinedRouter.createCaller(context()).customerPassword;
+    await clock(epoch + hour / 2);
+    expect(await caller.checkSession({ token })).toMatchObject({ valid: true });
+    expect((await session(token))?.otpExpiryMs).toBe(epoch + 1.5 * hour);
+    await caller.logout({ token });
+    expect(await caller.checkSession({ token })).toMatchObject({ valid: false });
+    expect(await session(token)).toBeNull();
+  });
+
+  it("rejects blocked customers without extending either expiry", async () => {
+    const { token } = await login();
+    const before = await session(token);
+    await clock(epoch + 2 * hour);
+    await query("UPDATE customers SET blocked=1 WHERE id=101");
+    expect(await combinedRouter.createCaller(context()).customerPassword.checkSession({ token })).toMatchObject({ valid: false });
+    expect(await session(token)).toEqual(before);
   });
 
   it("increases only future sessions and never resurrects the old 24-hour token", async () => {

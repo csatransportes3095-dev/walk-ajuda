@@ -4,7 +4,7 @@ import { deliverIncompleteCustomerLoginCode } from "../incompleteCustomerLoginDe
 
 import { createHash, randomBytes, randomInt, timingSafeEqual } from "crypto";
 import { issueLoginEmailProof, assertLoginEmailProof } from "../customerLoginEmailProof";
-import { requestCustomerCode, verifyCustomerCode, redeemNewRegistrationProof, isCustomerOtpModeEnabled, getVerifiedCustomerOtpSession, revokeCustomerOtpSession, ensureCustomerOtpTables } from "../customerOtpAccess";
+import { requestCustomerCode, verifyCustomerCode, redeemNewRegistrationProof, isCustomerOtpModeEnabled, getVerifiedCustomerOtpSession, renewVerifiedCustomerOtpSession, revokeCustomerOtpSession, ensureCustomerOtpTables } from "../customerOtpAccess";
 import { isH2AutoApkOtpReady } from "../h2-auto-otp-apk";
 import { validSiteCode } from "../../shared/siteAccessCodePolicy";
 import { getAdminJwtSecret } from "../adminJwt";
@@ -662,7 +662,7 @@ export const customerPasswordRouter = router({
       const cleanToken = input.token.trim();
       if (!cleanToken) return { valid: false, reason: 'missing' as const };
       if (isCustomerOtpModeEnabled()) {
-        const verified = await getVerifiedCustomerOtpSession(db, cleanToken);
+        const verified = await renewVerifiedCustomerOtpSession(db, cleanToken);
         if (!verified) return { valid: false, reason: 'expired' as const };
         return { valid: true, source: 'customer' as const, phone: verified.phone, ...getProfileUpdateMeta(verified) };
       }

@@ -49,7 +49,7 @@ try {
   assert.equal(await input.getAttribute('min'), '1');
   assert.equal(await input.getAttribute('max'), '2160');
   assert.equal(await save.isDisabled(), true);
-  assert.match(await section.innerText(), /Aplica aos próximos logins\. Sessões já abertas mantêm seu vencimento\./);
+  assert.match(await section.innerText(), /A duração vale para novos logins e renovações de sessões válidas\./);
   assert.match(await section.innerText(), /10 minutos.*uma única vez/);
   assert.equal((await state()).writeCalls.length, 0);
   checks.push('The real component loads 720 hours and explains that existing sessions and OTP lifetime are unchanged');
