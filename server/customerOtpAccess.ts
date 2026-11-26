@@ -361,7 +361,47 @@ export async function getVerifiedCustomerOtpSession(db:any, tokenInput:string) {
       phone!==normalizeCustomerPhone(session.sessionPhone) ||
       session.phoneKey!==digest("phone",phone) || session.emailKey!==digest("email",email))
     return null;
-  return { ...session, phone, email };
+  return { ...session, rawSessionCustomerPhone: session.phone, rawSessionCustomerEmail: session.email, phone, email };
+}
+
+/**
+ * Refresh only a session which is currently valid, never revive an expired or
+ * revoked token. The current ADM duration is the inactivity window. Keep both
+ * durable expiry records synchronized in a single conditional SQL statement.
+ * Normal authentication and derived-session reads remain read-only.
+ */
+export async function renewVerifiedCustomerOtpSession(db:any, tokenInput:string) {
+  const token = String(tokenInput || "").trim();
+  const verified = await getVerifiedCustomerOtpSession(db, token);
+  if (!verified) return null;
+  // Limit refresh writes to approximately one quarter of the configured
+  // interval (at most one hour). Short policies must also be renewable.
+  const { hours } = await readCustomerSessionPolicy(db);
+  const durationMs = hours * CUSTOMER_SESSION_HOUR_MS;
+  const now = Date.now();
+  const currentExpiry = Math.min(Number(verified.bindingExpires), Number(verified.sessionExpiresAtMs));
+  if (!Number.isFinite(currentExpiry) || currentExpiry <= now) return null;
+  const expiresAtMs = Math.floor(now / 1000) * 1000 + durationMs;
+  const threshold = Math.min(CUSTOMER_SESSION_HOUR_MS, durationMs / 4);
+  if (expiresAtMs - currentExpiry < threshold) return verified;
+  const tokenHash = digest("session", token);
+  // An existing token is only updated, never inserted. The JOIN protects
+  // against concurrent logout and a missing/expired record on either side.
+  await db.execute(sql`UPDATE customerPasswordSessions s
+    INNER JOIN customerOtpSessions b ON b.tokenHash=${tokenHash}
+    INNER JOIN customers c ON c.id=b.customerId
+    SET s.expiresAt=FROM_UNIXTIME(${expiresAtMs} / 1000),
+        s.lastAccessAt=NOW(), b.expiresAt=${expiresAtMs}
+    WHERE s.token=${token} AND b.expiresAt>${now} AND s.expiresAt>NOW()
+      AND b.customerId=${Number(verified.customerId)}
+      AND b.phoneKey=${verified.phoneKey} AND b.emailKey=${verified.emailKey}
+      AND s.phone=${verified.sessionPhone}
+      AND c.phone=${verified.rawSessionCustomerPhone}
+      AND c.email=${verified.rawSessionCustomerEmail}
+      AND c.deletedAt IS NULL AND COALESCE(c.blocked,0)=0
+      AND LEAST(b.expiresAt,UNIX_TIMESTAMP(s.expiresAt)*1000)<=${expiresAtMs-threshold}
+      AND GREATEST(b.expiresAt,UNIX_TIMESTAMP(s.expiresAt)*1000)<=${expiresAtMs}`);
+  return getVerifiedCustomerOtpSession(db, token);
 }
 
 export async function revokeCustomerOtpSession(db:any, tokenInput:string) {

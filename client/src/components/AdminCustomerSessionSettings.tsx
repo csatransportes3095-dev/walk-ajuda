@@ -93,7 +93,7 @@ export function AdminCustomerSessionSettings() {
       )}
 
       <div className="space-y-1 text-xs leading-relaxed text-slate-300">
-        <p>Aplica aos próximos logins. Sessões já abertas mantêm seu vencimento.</p>
+        <p>A duração vale para novos logins e renovações de sessões válidas. O cliente permanece conectado enquanto acessar dentro desse prazo de inatividade.</p>
         <p>O código continua válido por 10 minutos e pode ser usado uma única vez.</p>
       </div>
     </section>
