@@ -253,3 +253,12 @@ describe("H2ADS retoma configuração no card", () => {
     expect(result.guidance).toContain("nenhuma nova rota");
   });
 });
+
+
+describe("H2ADS status resumido", () => {
+  it.each([["proxy_google_access_denied", "403"], ["proxy_google_rate_limited", "429"]])("diferencia %s sem liberar rota", (errorCategory, expected) => {
+    const result = describeH2AdsOrderBrowserBlock({ state: "not_prepared", reason: null, proxyConfigured: false, missingProxyDiagnostic: { status: "failed", errorCategory } });
+    expect(result.message).toContain(expected);
+    expect(result.guidance).toContain("nenhuma nova rota");
+  });
+});

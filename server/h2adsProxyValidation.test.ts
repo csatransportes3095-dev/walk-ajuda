@@ -43,6 +43,17 @@ describe("validação pontual de rota H2 Ads", () => {
     await expect(validateH2AdsGoogleAccess({ protocol: "socks5", host: "edge.example", port: 1080, username: "user_test", password: "pass_test" })).rejects.toThrow("proxy_google_challenge");
   });
 
+  it.each([[403, "proxy_google_access_denied"], [429, "proxy_google_rate_limited"], [500, "proxy_google_unavailable"]])("mantém HTTP %s bloqueado e informa a categoria correta", async (status, category) => {
+    axiosGet.mockResolvedValue({ status, data: "<html>Resposta sem indicação explícita de CAPTCHA</html>" });
+    const proxy = { protocol: "socks5" as const, host: "edge.example", port: 1080, username: "user_test", password: "pass_test" };
+    await expect(validateH2AdsGoogleAccess(proxy)).rejects.toThrow(category as string);
+    expect(classifyH2AdsRouteFailure(new Error(category as string)).code).toBe(category);
+    expect(axiosGet).toHaveBeenCalledTimes(1);
+  });
+  it("mantém desafio explícito bloqueado mesmo com HTTP 200", async () => {
+    axiosGet.mockResolvedValue({ status: 200, data: "<html>Não sou robô</html>" });
+    await expect(validateH2AdsGoogleAccess({ protocol: "socks5", host: "edge.example", port: 1080, username: "user_test", password: "pass_test" })).rejects.toThrow("proxy_google_challenge");
+  });
   it("aceita acesso Google normal através de SOCKS5", async () => {
     axiosGet.mockResolvedValue({ status: 200, data: "<html><title>Google</title></html>" });
     await expect(validateH2AdsGoogleAccess({ protocol: "socks5", host: "edge.example", port: 1080, username: "user_test", password: "pass_test" })).resolves.toBeUndefined();
