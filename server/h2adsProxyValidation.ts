@@ -100,6 +100,30 @@ export async function validateH2AdsProxyRoute(proxy: ParsedH2AdsProxy): Promise<
   };
 }
 
+// Restricted audit metadata only. Never log the response body, full URL,
+// request headers, proxy address, credentials, cookies, or tokens.
+function auditGoogleAccessRejection(response: { status: number; request?: unknown }, category: H2AdsRouteFailure["code"]) {
+  const request = response.request as { res?: { responseUrl?: unknown } } | undefined;
+  let destination = "unknown";
+  let googleSecurityPage = false;
+  const finalUrl = request?.res?.responseUrl;
+  if (typeof finalUrl === "string") {
+    try {
+      const parsed = new URL(finalUrl);
+      const knownGoogleHosts = ["google.com", "www.google.com", "google.com.br", "www.google.com.br"];
+      const isGoogle = knownGoogleHosts.includes(parsed.hostname);
+      destination = isGoogle ? parsed.hostname : "other";
+      googleSecurityPage = isGoogle && /^\/sorry(?:\/|$)/.test(parsed.pathname);
+    } catch { /* Missing or invalid URL: leave destination unknown. */ }
+  }
+  console.warn("[H2ADS] google_access_audit " + JSON.stringify({
+    status: response.status,
+    destination,
+    googleSecurityPage,
+    category,
+  }));
+}
+
 export async function validateH2AdsGoogleAccess(proxy: ParsedH2AdsProxy): Promise<void> {
   if (proxy.protocol !== "socks5") throw new Error("proxy_protocol_not_socks5");
   const address = await resolvePublicProxyAddress(proxy.host);
@@ -115,12 +139,22 @@ export async function validateH2AdsGoogleAccess(proxy: ParsedH2AdsProxy): Promis
       headers: { "User-Agent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 Chrome/131 Safari/537.36", Accept: "text/html" },
     });
     const body = typeof response.data === "string" ? response.data.toLowerCase() : "";
-    if (response.status === 403) throw new Error("proxy_google_access_denied");
-    if (response.status === 429) throw new Error("proxy_google_rate_limited");
+    if (response.status === 403) {
+      auditGoogleAccessRejection(response, "proxy_google_access_denied");
+      throw new Error("proxy_google_access_denied");
+    }
+    if (response.status === 429) {
+      auditGoogleAccessRejection(response, "proxy_google_rate_limited");
+      throw new Error("proxy_google_rate_limited");
+    }
     if (/\/sorry(?:[/?#]|$)|unusual traffic|not a robot|não sou robô|nao sou robo/.test(body)) {
+      auditGoogleAccessRejection(response, "proxy_google_challenge");
       throw new Error("proxy_google_challenge");
     }
-    if (response.status < 200 || response.status >= 300) throw new Error("proxy_google_unavailable");
+    if (response.status < 200 || response.status >= 300) {
+      auditGoogleAccessRejection(response, "proxy_google_unavailable");
+      throw new Error("proxy_google_unavailable");
+    }
   } catch (error) {
     if (error instanceof Error && (
       error.message === "proxy_google_challenge" ||
