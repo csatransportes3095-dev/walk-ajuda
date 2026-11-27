@@ -8,6 +8,9 @@ on:
       - "client/src/pages/Home.tsx"
       - "client/src/components/StorefrontFilters.tsx"
       - "server/storefrontCompactMobileHeader.test.ts"
+      - "client/public/h2-main-route-cards-v2.css"
+      - "client/index.html"
+      - "scripts/check-storefront-mobile-browser.mjs"
       - "server/storefrontProductCardVisual.test.ts"
       - ".github/workflows/storefront-mobile-card-visual-ci.yml"
 permissions:
@@ -36,3 +39,17 @@ jobs:
         run: |
           node scripts/patch-media-local-export-20260910.mjs
           pnpm build
+      - name: Install isolated Chromium tooling
+        run: |
+          npm install --prefix /tmp/h2-storefront-browser --no-package-lock playwright@1.56.1
+          /tmp/h2-storefront-browser/node_modules/.bin/playwright install --with-deps chromium
+      - name: Validate rendered shortcuts and filters at real mobile widths
+        env:
+          H2_PLAYWRIGHT_MODULE: /tmp/h2-storefront-browser/node_modules/playwright/index.mjs
+        run: node scripts/check-storefront-mobile-browser.mjs
+      - uses: actions/upload-artifact@v4
+        if: always()
+        with:
+          name: storefront-mobile-browser-evidence
+          path: /tmp/storefront-mobile-evidence
+          retention-days: 3

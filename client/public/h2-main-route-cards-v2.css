@@ -19,18 +19,18 @@ header button[aria-label="Planilha de gastos"] > span {
 @media (max-width: 639px) {
   /* O menu ficou grande demais para permanecer sticky no celular.
      Deixa o cabeçalho rolar normalmente para não cobrir os cards do conteúdo. */
-  header:has(button[aria-label="Acompanhar pedido"]) {
+  header:not(:has(.h2-storefront-quick-services)):has(button[aria-label="Acompanhar pedido"]) {
     position: relative !important;
     top: auto !important;
   }
 
-  header .container > .grid:has(> button[aria-label="Acompanhar pedido"]) {
+  header:not(:has(.h2-storefront-quick-services)) .container > .grid:has(> button[aria-label="Acompanhar pedido"]) {
     grid-template-columns: repeat(2, minmax(0, 1fr)) !important;
     gap: 10px !important;
   }
 
-  header button[aria-label="Acompanhar pedido"],
-  header button[aria-label="Empréstimo"] {
+  header:not(:has(.h2-storefront-quick-services)) button[aria-label="Acompanhar pedido"],
+  header:not(:has(.h2-storefront-quick-services)) button[aria-label="Empréstimo"] {
     min-height: 94px !important;
     padding: 11px 8px !important;
     flex-direction: column !important;
@@ -40,7 +40,7 @@ header button[aria-label="Planilha de gastos"] > span {
     text-align: center !important;
   }
 
-  header button[aria-label="Planilha de gastos"] {
+  header:not(:has(.h2-storefront-quick-services)) button[aria-label="Planilha de gastos"] {
     grid-column: 1 / -1 !important;
     min-height: 76px !important;
     padding: 11px 16px !important;
@@ -50,17 +50,17 @@ header button[aria-label="Planilha de gastos"] > span {
     text-align: left !important;
   }
 
-  header button[aria-label="Acompanhar pedido"] > span:first-child,
-  header button[aria-label="Empréstimo"] > span:first-child,
-  header button[aria-label="Planilha de gastos"] > span:first-child {
+  header:not(:has(.h2-storefront-quick-services)) button[aria-label="Acompanhar pedido"] > span:first-child,
+  header:not(:has(.h2-storefront-quick-services)) button[aria-label="Empréstimo"] > span:first-child,
+  header:not(:has(.h2-storefront-quick-services)) button[aria-label="Planilha de gastos"] > span:first-child {
     width: 40px !important;
     height: 40px !important;
     flex: 0 0 40px !important;
     border-radius: 13px !important;
   }
 
-  header button[aria-label="Acompanhar pedido"] > span:last-child,
-  header button[aria-label="Empréstimo"] > span:last-child {
+  header:not(:has(.h2-storefront-quick-services)) button[aria-label="Acompanhar pedido"] > span:last-child,
+  header:not(:has(.h2-storefront-quick-services)) button[aria-label="Empréstimo"] > span:last-child {
     width: 100% !important;
     display: flex !important;
     flex-direction: column !important;
@@ -69,16 +69,16 @@ header button[aria-label="Planilha de gastos"] > span {
     text-align: center !important;
   }
 
-  header button[aria-label="Planilha de gastos"] > span:last-child {
+  header:not(:has(.h2-storefront-quick-services)) button[aria-label="Planilha de gastos"] > span:last-child {
     display: flex !important;
     flex-direction: column !important;
     justify-content: center !important;
     text-align: left !important;
   }
 
-  header button[aria-label="Acompanhar pedido"] > span:last-child > span:first-child,
-  header button[aria-label="Empréstimo"] > span:last-child > span:first-child,
-  header button[aria-label="Planilha de gastos"] > span:last-child > span:first-child {
+  header:not(:has(.h2-storefront-quick-services)) button[aria-label="Acompanhar pedido"] > span:last-child > span:first-child,
+  header:not(:has(.h2-storefront-quick-services)) button[aria-label="Empréstimo"] > span:last-child > span:first-child,
+  header:not(:has(.h2-storefront-quick-services)) button[aria-label="Planilha de gastos"] > span:last-child > span:first-child {
     display: block !important;
     font-size: 11px !important;
     line-height: 1.15 !important;
@@ -87,9 +87,9 @@ header button[aria-label="Planilha de gastos"] > span {
     word-break: normal !important;
   }
 
-  header button[aria-label="Acompanhar pedido"] > span:last-child > span:last-child,
-  header button[aria-label="Empréstimo"] > span:last-child > span:last-child,
-  header button[aria-label="Planilha de gastos"] > span:last-child > span:last-child {
+  header:not(:has(.h2-storefront-quick-services)) button[aria-label="Acompanhar pedido"] > span:last-child > span:last-child,
+  header:not(:has(.h2-storefront-quick-services)) button[aria-label="Empréstimo"] > span:last-child > span:last-child,
+  header:not(:has(.h2-storefront-quick-services)) button[aria-label="Planilha de gastos"] > span:last-child > span:last-child {
     display: block !important;
     margin-top: 4px !important;
     font-size: 9px !important;
@@ -97,9 +97,9 @@ header button[aria-label="Planilha de gastos"] > span {
     opacity: .68;
   }
 
-  header button[aria-label="Acompanhar pedido"]::before,
-  header button[aria-label="Empréstimo"]::before,
-  header button[aria-label="Planilha de gastos"]::before {
+  header:not(:has(.h2-storefront-quick-services)) button[aria-label="Acompanhar pedido"]::before,
+  header:not(:has(.h2-storefront-quick-services)) button[aria-label="Empréstimo"]::before,
+  header:not(:has(.h2-storefront-quick-services)) button[aria-label="Planilha de gastos"]::before {
     content: "";
     position: absolute;
     top: 0;
@@ -116,5 +116,189 @@ header button[aria-label="Planilha de gastos"] > span {
   header button[aria-label="Empréstimo"],
   header button[aria-label="Planilha de gastos"] {
     min-height: 88px !important;
+  }
+}
+
+/* Vitrine autenticada: o layout compacto usa identificadores estáveis,
+   e nunca depende dos textos ou logos configurados pelo ADM. */
+@media (max-width: 639px) {
+  header:has(.h2-storefront-quick-services) {
+    position: relative;
+    top: auto;
+  }
+
+  .h2-storefront-quick-services > .grid {
+    display: grid;
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+    gap: 6px;
+  }
+
+  .h2-storefront-quick-services [data-h2-service] {
+    display: flex;
+    flex-direction: row;
+    align-items: center;
+    justify-content: flex-start;
+    grid-column: auto;
+    min-width: 0;
+    min-height: 48px;
+    height: auto;
+    padding: 6px 9px;
+    gap: 7px;
+    border-radius: 11px;
+    text-align: left;
+    box-sizing: border-box;
+    box-shadow: none;
+    --service-bg: linear-gradient(135deg, #12304b, #071b30);
+    --service-border: #38bdf8;
+    --service-icon: #a5f3fc;
+    background: var(--service-bg);
+    border: 1px solid var(--service-border);
+  }
+
+  .h2-storefront-quick-services [data-h2-service="orders"] {
+    --service-bg: linear-gradient(135deg, #145a85, #102c50);
+    --service-border: #38bdf8;
+    --service-icon: #a5f3fc;
+  }
+
+  .h2-storefront-quick-services [data-h2-service="loan"] {
+    --service-bg: linear-gradient(135deg, #77520b, #39230d);
+    --service-border: #f4bd50;
+    --service-icon: #fde68a;
+  }
+
+  .h2-storefront-quick-services [data-h2-service="gastos"] {
+    --service-bg: linear-gradient(135deg, #11614f, #0a302d);
+    --service-border: #34d399;
+    --service-icon: #a7f3d0;
+  }
+
+  .h2-storefront-quick-services [data-h2-service="vip"] {
+    --service-bg: linear-gradient(135deg, #884016, #44200d);
+    --service-border: #fb923c;
+    --service-icon: #fed7aa;
+  }
+
+  .h2-storefront-quick-services [data-h2-service="schedule"] {
+    grid-column: 1 / -1;
+    --service-bg: linear-gradient(135deg, #46316d, #221b38);
+    --service-border: #a78bfa;
+    --service-icon: #ddd6fe;
+  }
+
+  .h2-storefront-quick-services [data-h2-service="schedule"].h2-schedule-card-confirmed {
+    --service-bg: linear-gradient(135deg, #176b45, #0d3526);
+    --service-border: #4ade80;
+    --service-icon: #bbf7d0;
+  }
+
+  .h2-storefront-quick-services [data-h2-service="schedule"].h2-schedule-card-available {
+    --service-bg: linear-gradient(135deg, #135e73, #0e344b);
+    --service-border: #22d3ee;
+    --service-icon: #a5f3fc;
+  }
+
+  .h2-storefront-quick-services [data-h2-service] > span:first-child {
+    display: flex;
+    flex: 0 0 26px;
+    width: 26px;
+    height: 26px;
+    align-items: center;
+    justify-content: center;
+    border-radius: 7px;
+    color: var(--service-icon);
+    background: rgba(255,255,255,.12);
+    box-shadow: none;
+  }
+
+  .h2-storefront-quick-services [data-h2-service] > span:nth-child(2) {
+    flex: 1 1 0;
+    min-width: 0;
+    text-align: left;
+  }
+
+  .h2-storefront-quick-services [data-h2-service] > span:nth-child(2) > span:first-child {
+    display: block;
+    font-size: 12px;
+    line-height: 1.2;
+    font-weight: 750;
+    white-space: normal;
+    overflow-wrap: anywhere;
+    color: #fff;
+  }
+
+  .h2-storefront-quick-services [data-h2-service] > span:nth-child(2) > span:nth-child(2) {
+    display: none;
+  }
+
+  .h2-storefront-quick-services [data-h2-service]:focus-visible,
+  [data-testid="storefront-category-strip"] > button:focus-visible {
+    outline: 2px solid white;
+    outline-offset: -3px;
+  }
+
+  /* Categorias: nenhuma rolagem horizontal, contagem em uma linha própria.
+     Até 374px, 4 categorias em 2x2. De 375px em diante, as quatro cabem juntas.
+     Se houver 5 ou 6 categorias, usa duas linhas sem esconder nenhuma. */
+  [data-testid="storefront-category-strip"] {
+    display: grid;
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+    gap: 6px;
+    margin: 0;
+    padding: 1px;
+    overflow: visible;
+    min-width: 0;
+  }
+
+  [data-testid="storefront-category-strip"][data-category-count="1"] {
+    grid-template-columns: minmax(0, 1fr);
+  }
+
+  [data-testid="storefront-category-strip"][data-category-count="3"],
+  [data-testid="storefront-category-strip"][data-category-count="5"],
+  [data-testid="storefront-category-strip"][data-category-count="6"] {
+    grid-template-columns: repeat(3, minmax(0, 1fr));
+  }
+
+  [data-testid="storefront-category-strip"] > button {
+    width: 100%;
+    min-width: 0;
+    min-height: 46px;
+    padding: 4px 3px;
+    border-radius: 10px;
+    box-sizing: border-box;
+    overflow: visible;
+    text-align: center;
+  }
+
+  [data-testid="storefront-category-strip"] > button > span:nth-child(2) {
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    justify-content: center;
+    width: 100%;
+    min-width: 0;
+    gap: 2px;
+  }
+
+  [data-testid="storefront-category-strip"] > button > span:nth-child(2) > span:first-child {
+    max-width: 100%;
+    font-size: 12px;
+    line-height: 1.15;
+    font-weight: 750;
+    white-space: normal;
+    overflow-wrap: anywhere;
+  }
+
+  [data-testid="storefront-category-strip"] > button > span:nth-child(2) > span:nth-child(2) {
+    font-size: 10px;
+    line-height: 1.1;
+    padding: 1px 6px;
+  }
+}
+
+@media (min-width: 375px) and (max-width: 639px) {
+  [data-testid="storefront-category-strip"][data-category-count="4"] {
+    grid-template-columns: repeat(4, minmax(0, 1fr));
   }
 }
