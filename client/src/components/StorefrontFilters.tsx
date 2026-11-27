@@ -34,7 +34,7 @@ export function StorefrontFilters({
           </button>
         )}
       </label>
-      <div data-testid="storefront-category-strip" className="-mx-1 flex gap-1.5 overflow-x-auto px-1 py-1 sm:mx-0 sm:grid sm:grid-cols-3 sm:gap-2.5 sm:overflow-visible sm:p-0 lg:grid-cols-5" role="group" aria-label="Categorias com produtos disponíveis">
+      <div data-testid="storefront-category-strip" data-category-count={categories.length} className="grid grid-cols-2 gap-1.5 sm:grid-cols-3 sm:gap-2.5 lg:grid-cols-5" role="group" aria-label="Categorias com produtos disponíveis">
         {categories.map((category) => {
           const active = category === activeCategory;
           const count = categoryCounts[category] || 0;
@@ -54,14 +54,14 @@ export function StorefrontFilters({
               key={category}
               aria-pressed={active}
               onClick={() => onCategoryChange(category)}
-              className={`group relative flex min-h-[44px] min-w-0 shrink-0 flex-1 items-center justify-center rounded-xl border bg-gradient-to-br px-2 py-1.5 text-left text-white transition-all duration-200 hover:brightness-110 focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-white active:scale-[0.98] sm:min-h-[104px] sm:flex-col sm:items-start sm:justify-between sm:overflow-hidden sm:rounded-2xl sm:p-4 sm:shadow-lg sm:hover:-translate-y-0.5 ${palette[category] || palette.Outros} ${active ? "ring-1 ring-inset ring-white brightness-110 sm:ring-2 sm:ring-offset-2 sm:ring-offset-slate-950" : "opacity-90"}`}
+              className={`group relative flex min-h-[46px] min-w-0 items-center justify-center rounded-xl border bg-gradient-to-br px-2 py-1.5 text-left text-white transition-all duration-200 hover:brightness-110 focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-white active:scale-[0.98] sm:min-h-[104px] sm:flex-col sm:items-start sm:justify-between sm:overflow-hidden sm:rounded-2xl sm:p-4 sm:shadow-lg sm:hover:-translate-y-0.5 ${palette[category] || palette.Outros} ${active ? "ring-1 ring-inset ring-white brightness-110 sm:ring-2 sm:ring-offset-2 sm:ring-offset-slate-950" : "opacity-90"}`}
             >
               <span className="hidden w-full items-center justify-between gap-2 sm:flex">
                 <Icon className="h-6 w-6 shrink-0 sm:h-7 sm:w-7" aria-hidden="true" />
                 <ArrowUpRight className="h-4 w-4 opacity-70 transition-transform group-hover:translate-x-0.5 group-hover:-translate-y-0.5" aria-hidden="true" />
               </span>
               <span className="flex items-center justify-center gap-1 sm:w-full sm:flex-wrap sm:items-end sm:justify-between sm:gap-1.5">
-                <span className="whitespace-nowrap text-[12px] font-bold leading-tight sm:text-lg sm:font-black">{category}</span>
+                <span className="text-[12px] font-bold leading-tight sm:text-lg sm:font-black">{category}</span>
                 <span className="rounded-full border border-white/25 bg-black/20 px-1.5 py-0.5 text-[10px] font-bold tabular-nums sm:px-2 sm:text-[11px]">{count}</span>
               </span>
             </button>
