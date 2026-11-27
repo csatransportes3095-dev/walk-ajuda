@@ -6,7 +6,7 @@ import { ServicosExtras } from "@/components/ServicosExtras";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
-import { MessageCircle, Zap, Phone, Clock, Users, Upload, FileUp, Ticket, Copy, Check, ImageIcon, AlertTriangle, Camera, Car, Loader2, UserCircle, X, KeyRound, ShoppingCart, Trash2, LogOut, HelpCircle, ChevronDown, CalendarDays, CreditCard } from "lucide-react";
+import { MessageCircle, Zap, Phone, Clock, Users, Upload, FileUp, Ticket, Copy, Check, ImageIcon, AlertTriangle, Camera, Car, Loader2, UserCircle, X, KeyRound, ShoppingCart, Trash2, LogOut, HelpCircle, ChevronDown, CalendarDays, CreditCard, Package, Wallet, BarChart3 } from "lucide-react";
 import { useState, useEffect, useCallback, useRef, useMemo } from "react";
 import { toast } from "sonner";
 import { trpc } from "@/lib/trpc";
@@ -5091,7 +5091,7 @@ export default function Home() {
 
       {/* Header */}
       <header className="relative bg-black/40 backdrop-blur-md shadow-sm border-b border-primary/30">
-        <div className="container flex flex-col gap-3 py-4 sm:flex-row sm:items-center sm:justify-between">
+        <div className="container flex flex-col gap-2 py-2 sm:flex-row sm:items-center sm:justify-between sm:gap-3 sm:py-4">
           <div className="flex items-center gap-2">
             <div className="w-10 h-10 bg-gradient-to-br from-primary to-purple-600 rounded-lg flex items-center justify-center">
               {SITE_LOGO_URL ? <img src={SITE_LOGO_URL} alt={SITE_NAME} className="h-full w-full rounded-lg object-contain" /> : <Zap className="w-6 h-6 text-white" />}
@@ -5147,19 +5147,36 @@ export default function Home() {
           </div>
         </div>
 
-        <div className="container pb-4">
-          <div className="grid grid-cols-2 gap-2 sm:gap-3">
-            <button onClick={() => { window.location.href = settings?.home_btn2_url?.startsWith('/') && !settings.home_btn2_url.startsWith('//') ? settings.home_btn2_url : '/acompanhar'; }} className="group flex min-h-[78px] items-center gap-2 rounded-2xl border border-cyan-400/35 bg-gradient-to-br from-cyan-500/15 to-blue-500/10 px-3 py-3 text-left shadow-[0_0_18px_rgba(34,211,238,0.08)] transition-all hover:border-cyan-300/60 hover:bg-cyan-500/20 active:scale-[0.98] sm:min-h-[86px] sm:gap-3 sm:px-4" aria-label={settings?.home_btn2_text || "Acompanhar pedido"} title={settings?.home_btn2_text || "Acompanhar pedido"}>
-              <span className="flex h-9 w-9 shrink-0 items-center justify-center rounded-xl bg-cyan-400/15 text-cyan-200 ring-1 ring-cyan-300/25 sm:h-10 sm:w-10">{settings?.home_btn2_logo_url ? <img src={settings.home_btn2_logo_url} alt="" className="h-7 w-7 object-contain" /> : <Clock className="h-5 w-5" />}</span>
-              <span className="min-w-0"><span className="block text-[10px] font-black uppercase leading-tight tracking-wide text-white sm:text-xs">{settings?.home_btn2_text || "Acompanhar pedido"}</span><span className="mt-1 hidden whitespace-pre-line text-[10px] leading-tight text-cyan-100/60 sm:block">{settings?.home_btn2_subtitle || "Ver andamento"}</span></span>
+        <div data-testid="storefront-quick-services" className="h2-storefront-quick-services container pb-2 sm:pb-4">
+          <p className="mb-1.5 text-[11px] font-bold uppercase tracking-wide text-slate-400 sm:hidden">Meus serviços</p>
+          <div className="grid grid-cols-2 gap-1.5 sm:gap-3">
+            <button data-h2-service="orders" onClick={() => { window.location.href = settings?.home_btn2_url?.startsWith('/') && !settings.home_btn2_url.startsWith('//') ? settings.home_btn2_url : '/acompanhar'; }} className="group flex min-h-[44px] min-w-0 items-center gap-2 rounded-xl sm:rounded-2xl border border-cyan-400/35 bg-gradient-to-br from-cyan-500/15 to-blue-500/10 px-2.5 py-1.5 text-left sm:py-3 shadow-[0_0_18px_rgba(34,211,238,0.08)] transition-all hover:border-cyan-300/60 hover:bg-cyan-500/20 active:scale-[0.98] sm:min-h-[86px] sm:gap-3 sm:px-4" aria-label={settings?.home_btn2_text || "Acompanhar pedido"} title={settings?.home_btn2_text || "Acompanhar pedido"}>
+              <span className="flex h-6 w-6 shrink-0 items-center justify-center rounded-md sm:rounded-xl bg-cyan-400/15 text-cyan-200 ring-1 ring-cyan-300/25 sm:h-10 sm:w-10"><Package className="h-4 w-4 sm:hidden" aria-hidden="true" />{settings?.home_btn2_logo_url ? <img src={settings.home_btn2_logo_url} alt="" className="hidden h-7 w-7 object-contain sm:block" /> : <Clock className="hidden h-5 w-5 sm:block" />}</span>
+              <span className="min-w-0"><span className="block break-words text-[11px] font-bold leading-tight text-white sm:text-xs sm:font-black sm:uppercase sm:tracking-wide">{settings?.home_btn2_text || "Acompanhar pedido"}</span><span className="mt-1 hidden whitespace-pre-line text-[10px] leading-tight text-cyan-100/60 sm:block">{settings?.home_btn2_subtitle || "Ver andamento"}</span></span>
             </button>
-            <button onClick={() => { window.location.href = shortcutUrl('loan', '/emprestimo'); }} className="group flex min-h-[78px] items-center gap-2 rounded-2xl border border-amber-400/35 bg-gradient-to-br from-amber-500/15 to-orange-500/10 px-3 py-3 text-left shadow-[0_0_18px_rgba(251,191,36,0.08)] transition-all hover:border-amber-300/60 hover:bg-amber-500/20 active:scale-[0.98] sm:min-h-[86px] sm:gap-3 sm:px-4" aria-label={shortcutLabel("loan", "Empréstimo")} title={shortcutLabel("loan", "Empréstimo")}>
-              <span className="flex h-9 w-9 shrink-0 items-center justify-center rounded-xl bg-amber-400/15 text-amber-200 ring-1 ring-amber-300/25 sm:h-10 sm:w-10">{shortcutLogo("loan") ? <img src={shortcutLogo("loan")} alt="" className="h-7 w-7 object-contain" /> : <Ticket className="h-5 w-5" />}</span>
-              <span className="min-w-0"><span className="block text-[10px] font-black uppercase leading-tight tracking-wide text-white sm:text-xs">{shortcutLabel("loan", "Empréstimo")}</span><span className="mt-1 hidden whitespace-pre-line text-[10px] leading-tight text-amber-100/60 sm:block">{shortcutSubtitle("loan", "Consultar e solicitar")}</span></span>
+            <button data-h2-service="loan" onClick={() => { window.location.href = shortcutUrl('loan', '/emprestimo'); }} className="group flex min-h-[44px] min-w-0 items-center gap-2 rounded-xl sm:rounded-2xl border border-amber-400/35 bg-gradient-to-br from-amber-500/15 to-orange-500/10 px-2.5 py-1.5 text-left sm:py-3 shadow-[0_0_18px_rgba(251,191,36,0.08)] transition-all hover:border-amber-300/60 hover:bg-amber-500/20 active:scale-[0.98] sm:min-h-[86px] sm:gap-3 sm:px-4" aria-label={shortcutLabel("loan", "Empréstimo")} title={shortcutLabel("loan", "Empréstimo")}>
+              <span className="flex h-6 w-6 shrink-0 items-center justify-center rounded-md sm:rounded-xl bg-amber-400/15 text-amber-200 ring-1 ring-amber-300/25 sm:h-10 sm:w-10"><Wallet className="h-4 w-4 sm:hidden" aria-hidden="true" />{shortcutLogo("loan") ? <img src={shortcutLogo("loan")} alt="" className="hidden h-7 w-7 object-contain sm:block" /> : <Ticket className="hidden h-5 w-5 sm:block" />}</span>
+              <span className="min-w-0"><span className="block break-words text-[11px] font-bold leading-tight text-white sm:text-xs sm:font-black sm:uppercase sm:tracking-wide">{shortcutLabel("loan", "Empréstimo")}</span><span className="mt-1 hidden whitespace-pre-line text-[10px] leading-tight text-amber-100/60 sm:block">{shortcutSubtitle("loan", "Consultar e solicitar")}</span></span>
             </button>
-            <button onClick={() => { window.location.href = shortcutUrl('gastos', '/gastos'); }} className="group col-span-2 flex min-h-[78px] items-center gap-2 rounded-2xl border border-emerald-400/35 bg-gradient-to-br from-emerald-500/15 to-green-500/10 px-3 py-3 text-left shadow-[0_0_18px_rgba(52,211,153,0.08)] transition-all hover:border-emerald-300/60 hover:bg-emerald-500/20 active:scale-[0.98] sm:min-h-[86px] sm:gap-3 sm:px-4" aria-label={shortcutLabel("gastos", "Planilha de gastos")} title={shortcutLabel("gastos", "Planilha de gastos")}>
-              <span className="flex h-9 w-9 shrink-0 items-center justify-center rounded-xl bg-emerald-400/15 text-emerald-200 ring-1 ring-emerald-300/25 sm:h-10 sm:w-10">{shortcutLogo("gastos") ? <img src={shortcutLogo("gastos")} alt="" className="h-7 w-7 object-contain" /> : <FileUp className="h-5 w-5" />}</span>
-              <span className="min-w-0"><span className="block text-[10px] font-black uppercase leading-tight tracking-wide text-white sm:text-xs">{shortcutLabel("gastos", "Planilha de gastos")}</span><span className="mt-1 hidden whitespace-pre-line text-[10px] leading-tight text-emerald-100/60 sm:block">{shortcutSubtitle("gastos", "Controle diário")}</span></span>
+            <button data-h2-service="gastos" onClick={() => { window.location.href = shortcutUrl('gastos', '/gastos'); }} className="group flex min-h-[44px] min-w-0 items-center gap-2 rounded-xl sm:col-span-2 sm:rounded-2xl border border-emerald-400/35 bg-gradient-to-br from-emerald-500/15 to-green-500/10 px-2.5 py-1.5 text-left sm:py-3 shadow-[0_0_18px_rgba(52,211,153,0.08)] transition-all hover:border-emerald-300/60 hover:bg-emerald-500/20 active:scale-[0.98] sm:min-h-[86px] sm:gap-3 sm:px-4" aria-label={shortcutLabel("gastos", "Planilha de gastos")} title={shortcutLabel("gastos", "Planilha de gastos")}>
+              <span className="flex h-6 w-6 shrink-0 items-center justify-center rounded-md sm:rounded-xl bg-emerald-400/15 text-emerald-200 ring-1 ring-emerald-300/25 sm:h-10 sm:w-10"><BarChart3 className="h-4 w-4 sm:hidden" aria-hidden="true" />{shortcutLogo("gastos") ? <img src={shortcutLogo("gastos")} alt="" className="hidden h-7 w-7 object-contain sm:block" /> : <FileUp className="hidden h-5 w-5 sm:block" />}</span>
+              <span className="min-w-0"><span className="block break-words text-[11px] font-bold leading-tight text-white sm:text-xs sm:font-black sm:uppercase sm:tracking-wide">{shortcutLabel("gastos", "Planilha de gastos")}</span><span className="mt-1 hidden whitespace-pre-line text-[10px] leading-tight text-emerald-100/60 sm:block">{shortcutSubtitle("gastos", "Controle diário")}</span></span>
+            </button>
+            <button
+              type="button"
+              data-h2-service="vip"
+              onClick={() => { window.location.href = shortcutUrl('vip', '/parcelas-vip'); }}
+              className="group flex min-h-[44px] w-full min-w-0 items-center gap-2 rounded-xl sm:order-5 sm:rounded-2xl border border-amber-300/55 bg-gradient-to-br from-amber-500/22 to-orange-500/10 px-2.5 py-1.5 text-left sm:py-3 shadow-[0_0_24px_rgba(251,191,36,0.16)] transition-all hover:border-amber-200/80 hover:bg-amber-500/28 active:scale-[0.99] sm:min-h-[90px] sm:gap-3 sm:px-4"
+              aria-label={shortcutLabel("vip", "Pague suas parcelas")}
+              title={shortcutLabel("vip", "Pague suas parcelas")}
+            >
+              <span className="flex h-6 w-6 shrink-0 items-center justify-center rounded-md sm:h-10 sm:w-10 sm:rounded-xl bg-amber-400/15 text-amber-200 ring-1 ring-amber-300/35">
+                <CreditCard className="h-4 w-4 sm:hidden" aria-hidden="true" />{shortcutLogo("vip") ? <img src={shortcutLogo("vip")} alt="" className="hidden h-7 w-7 object-contain sm:block" /> : <CreditCard className="hidden h-5 w-5 sm:block" />}
+              </span>
+              <span className="min-w-0 flex-1">
+                <span className="block break-words text-[11px] font-bold leading-tight text-white sm:text-xs sm:font-black sm:uppercase sm:tracking-wide">{shortcutLabel("vip", "PAGUE SUAS PARCELAS")}</span>
+                <span className="mt-1 hidden text-[10px] leading-tight text-amber-100/75 sm:block">{shortcutSubtitle("vip", "Acesse suas parcelas VIP e faça o pagamento")}</span>
+              </span>
             </button>
             {(() => {
               const schedule = myActiveScheduleQuery.data;
@@ -5176,12 +5193,12 @@ export default function Home() {
                 : isActive ? 'Clique para agendar agora' : shortcutSubtitle('schedule', 'Aguardando liberação do ADM');
 
               return (
-                <div className="col-span-2 grid grid-cols-2 gap-2">
-                  <button
+                <button
                     type="button"
+                    data-h2-service="schedule"
                     disabled={!isActive}
                     onClick={() => { if (isActive) window.location.href = `/agendar/${schedule.token}`; }}
-                    className={`group flex min-h-[82px] w-full items-center gap-2 rounded-2xl border px-3 py-3 text-left transition-all sm:min-h-[90px] sm:gap-3 sm:px-4 ${isConfirmed
+                    className={`group col-span-2 flex min-h-[44px] w-full min-w-0 items-center gap-2 rounded-xl border px-2.5 py-1.5 text-left transition-all sm:order-4 sm:col-span-1 sm:rounded-2xl sm:py-3 sm:min-h-[90px] sm:gap-3 sm:px-4 ${isConfirmed
                       ? 'h2-schedule-card-confirmed border-green-400/70 bg-gradient-to-br from-green-500/24 to-emerald-500/12 shadow-[0_0_24px_rgba(74,222,128,0.20)] hover:border-green-300/90 hover:bg-green-500/28 active:scale-[0.99]'
                       : isActive
                         ? 'h2-schedule-card-available border-cyan-400/70 bg-gradient-to-br from-cyan-500/22 to-sky-500/10 shadow-[0_0_24px_rgba(34,211,238,0.20)] hover:border-cyan-300/90 hover:bg-cyan-500/26 active:scale-[0.99]'
@@ -5190,35 +5207,19 @@ export default function Home() {
                     aria-label={title}
                     title={title}
                   >
-                    <span className={`flex h-10 w-10 shrink-0 items-center justify-center rounded-xl ring-1 ${isConfirmed
+                    <span className={`flex h-6 w-6 shrink-0 items-center justify-center rounded-md ring-1 sm:h-10 sm:w-10 sm:rounded-xl ${isConfirmed
                       ? 'bg-green-400/15 text-green-200 ring-green-300/40'
                       : isActive
                         ? 'bg-cyan-400/15 text-cyan-200 ring-cyan-300/40'
                         : 'bg-violet-400/15 text-violet-200 ring-violet-300/30'}`}>
-                      {shortcutLogo("schedule") ? <img src={shortcutLogo("schedule")} alt="" className="h-7 w-7 object-contain" /> : <CalendarDays className="h-5 w-5" />}
+                      <CalendarDays className="h-4 w-4 sm:hidden" aria-hidden="true" />{shortcutLogo("schedule") ? <img src={shortcutLogo("schedule")} alt="" className="hidden h-7 w-7 object-contain sm:block" /> : <CalendarDays className="hidden h-5 w-5 sm:block" />}
                     </span>
                     <span className="min-w-0 flex-1">
-                      <span className="block text-[10px] font-black uppercase leading-tight tracking-wide text-white sm:text-xs">{title}</span>
+                      <span className="block break-words text-[11px] font-bold leading-tight text-white sm:text-xs sm:font-black sm:uppercase sm:tracking-wide">{title}</span>
                       <span className={`mt-1 hidden text-[10px] leading-tight sm:block ${isConfirmed ? 'text-green-100/80' : isActive ? 'text-cyan-100/80' : 'text-violet-100/75'}`}>{subtitle}</span>
                     </span>
-                  </button>
-
-                  <button
-                    type="button"
-                    onClick={() => { window.location.href = shortcutUrl('vip', '/parcelas-vip'); }}
-                    className="group flex min-h-[82px] w-full items-center gap-2 rounded-2xl border border-amber-300/55 bg-gradient-to-br from-amber-500/22 to-orange-500/10 px-3 py-3 text-left shadow-[0_0_24px_rgba(251,191,36,0.16)] transition-all hover:border-amber-200/80 hover:bg-amber-500/28 active:scale-[0.99] sm:min-h-[90px] sm:gap-3 sm:px-4"
-                    aria-label={shortcutLabel("vip", "Pague suas parcelas")}
-                    title={shortcutLabel("vip", "Pague suas parcelas")}
-                  >
-                    <span className="flex h-10 w-10 shrink-0 items-center justify-center rounded-xl bg-amber-400/15 text-amber-200 ring-1 ring-amber-300/35">
-                      {shortcutLogo("vip") ? <img src={shortcutLogo("vip")} alt="" className="h-7 w-7 object-contain" /> : <CreditCard className="h-5 w-5" />}
-                    </span>
-                    <span className="min-w-0 flex-1">
-                      <span className="block text-[10px] font-black uppercase leading-tight tracking-wide text-white sm:text-xs">{shortcutLabel("vip", "PAGUE SUAS PARCELAS")}</span>
-                      <span className="mt-1 hidden text-[10px] leading-tight text-amber-100/75 sm:block">{shortcutSubtitle("vip", "Acesse suas parcelas VIP e faça o pagamento")}</span>
-                    </span>
-                  </button>
-                </div>
+                    <ChevronDown aria-hidden="true" className="h-4 w-4 shrink-0 -rotate-90 text-slate-300 sm:hidden" />
+                </button>
               );
             })()}
           </div>
@@ -5258,6 +5259,12 @@ export default function Home() {
         .h2-schedule-card-confirmed {
           animation: h2ScheduleConfirmedPulse 2.1s ease-in-out infinite;
         }
+        @media (max-width: 639px) {
+          .h2-storefront-quick-services .h2-schedule-card-available,
+          .h2-storefront-quick-services .h2-schedule-card-confirmed {
+            animation: none;
+          }
+        }
         @media (prefers-reduced-motion: reduce) {
           .h2-schedule-card-available,
           .h2-schedule-card-confirmed {
@@ -5282,7 +5289,7 @@ export default function Home() {
       `}</style>
 
       {/* Hero Section */}
-      <section className="relative overflow-hidden py-4 md:py-20">
+      <section className="relative overflow-hidden py-2 md:py-20">
         <div className="container">
           <div className={`grid grid-cols-1 gap-8 md:gap-12 items-center ${VIDEO_URL && !videoError ? 'md:grid-cols-2' : 'md:grid-cols-1'}`}>
             {/* Vídeo mobile — só exibe se houver URL e não houver erro */}
@@ -5400,8 +5407,8 @@ export default function Home() {
       {/* Seção de Serviços */}
       <section className="pt-2 pb-16 md:pt-3 md:pb-24 bg-black/10">
         <div className="container">
-          <div className="text-center mb-5">
-            {SERVICES_TITLE && <h2 className="text-3xl md:text-4xl font-bold mb-3 neon-lightning" style={{ color: '#00FFFF' }}>{SERVICES_TITLE}</h2>}
+          <div className="mb-2 text-center sm:mb-5">
+            {SERVICES_TITLE && <h2 className="mb-1 text-2xl font-bold neon-lightning sm:mb-3 sm:text-3xl md:text-4xl" style={{ color: '#00FFFF' }}>{SERVICES_TITLE}</h2>}
             {SERVICES_SUBTITLE && <p className="text-lg text-white/70">{SERVICES_SUBTITLE}</p>}
           </div>
 

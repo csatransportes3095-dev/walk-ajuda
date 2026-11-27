@@ -5,6 +5,9 @@ on:
       - recovery/organizar-salvos-2026-08-24
     paths:
       - "client/src/components/StorefrontProductCard.tsx"
+      - "client/src/pages/Home.tsx"
+      - "client/src/components/StorefrontFilters.tsx"
+      - "server/storefrontCompactMobileHeader.test.ts"
       - "server/storefrontProductCardVisual.test.ts"
       - ".github/workflows/storefront-mobile-card-visual-ci.yml"
 permissions:
@@ -22,11 +25,11 @@ jobs:
           cache: pnpm
       - run: pnpm install --frozen-lockfile
       - name: Visual component behavior regression
-        run: pnpm exec vitest run server/storefrontProductCardVisual.test.ts
+        run: pnpm exec vitest run server/storefrontProductCardVisual.test.ts server/storefrontCompactMobileHeader.test.ts server/storefrontCategories.test.ts server/storefrontResponsiveAndVipInstallment.test.ts
       - name: Typecheck edited card
         run: |
           pnpm exec tsc --noEmit > /tmp/storefront-card-types.log 2>&1 || true
-          if grep -F 'client/src/components/StorefrontProductCard.tsx(' /tmp/storefront-card-types.log; then
+          if grep -E 'client/src/(components/(StorefrontProductCard|StorefrontFilters))\.tsx\(' /tmp/storefront-card-types.log; then
             exit 1
           fi
       - name: Production build
