@@ -101,7 +101,12 @@ async function attachAndValidateReservedProxy(instanceId: number, reserved: { id
   const profile = await getH2AdsNetworkProfile(instanceId);
   let observed;
   try {
-    observed = await validateH2AdsProxyRoute(decryptH2AdsProxy(reserved.encryptedPayload));
+    const candidate = decryptH2AdsProxy(reserved.encryptedPayload);
+    if (candidate.protocol !== "socks5") {
+      await markH2AdsProxyFailed(reserved.id, "proxy_protocol_not_socks5");
+      return { ok: false as const, error: "A rotação automática exige um proxy SOCKS5." };
+    }
+    observed = await validateH2AdsProxyRoute(candidate);
     const mismatches = getH2AdsRouteMismatches(observed, {
       expectedIsp: profile?.expectedIsp ?? null,
       expectedAsn: profile?.expectedAsn ?? null,
@@ -135,7 +140,7 @@ async function attachAndValidateReservedProxy(instanceId: number, reserved: { id
 }
 
 export async function autoProvisionH2AdsInstance(instanceId: number): Promise<H2AdsAutoProvisionResult> {
-  const reserved = await reserveH2AdsProxyForInstance(instanceId);
+  const reserved = await reserveH2AdsProxyForInstance(instanceId, false, "socks5");
   if (!reserved) {
     return {
       status: "awaiting_proxy",
@@ -199,7 +204,7 @@ export async function rotateH2AdsInstanceProxy(instanceId: number): Promise<H2Ad
     }
   }
 
-  const reserved = await reserveH2AdsProxyForInstance(instanceId, true);
+  const reserved = await reserveH2AdsProxyForInstance(instanceId, true, "socks5");
   if (!reserved) {
     return {
       status: "awaiting_proxy",

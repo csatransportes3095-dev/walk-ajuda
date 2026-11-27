@@ -115,6 +115,7 @@ export async function listH2AdsProxyPool() {
   };
 }
 
+<<<<<<< HEAD
 /**
  * Delete inactive pool history so the admin can upload new proxies.
  * Protect every currently configured route by comparing the encrypted
@@ -193,9 +194,12 @@ export async function deleteUnusedH2AdsProxyPool(): Promise<{
   });
 }
 
-export async function reserveH2AdsProxyForInstance(instanceId: number, retainPrevious = false): Promise<H2AdsReservedProxy | null> {
+export async function reserveH2AdsProxyForInstance(
+  instanceId: number,
+  retainPrevious = false,
+  requiredProtocol: H2AdsProxyProtocol = "socks5",
+): Promise<H2AdsReservedProxy | null> {
   const db = await requireDb();
-
   for (let attempt = 0; attempt < 8; attempt += 1) {
     const candidates = await db
       .select({
@@ -204,7 +208,10 @@ export async function reserveH2AdsProxyForInstance(instanceId: number, retainPre
         protocol: h2AdsProxyPool.protocol,
       })
       .from(h2AdsProxyPool)
-      .where(eq(h2AdsProxyPool.status, "available"))
+      .where(and(
+        eq(h2AdsProxyPool.status, "available"),
+        eq(h2AdsProxyPool.protocol, requiredProtocol),
+      ))
       .orderBy(asc(h2AdsProxyPool.id))
       .limit(1);
 
