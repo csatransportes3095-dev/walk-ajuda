@@ -209,3 +209,30 @@ describe("H2ADS pedido - diagnostico de abertura", () => {
     expect(issue.guidance).not.toContain("Troque o proxy");
   });
 });
+
+describe("H2ADS pedido - provisionamento incompleto", () => {
+  it("não orienta preparar repetidamente quando a credencial está ausente", () => {
+    const result = describeH2AdsOrderBrowserBlock({ state: "not_prepared", reason: null, proxyConfigured: false });
+    expect(result.message).toContain("Nenhuma credencial");
+    expect(result.guidance).toContain("não associa");
+    expect(result.guidance).toContain("Preserve esta instância");
+  });
+  it("distingue a falha de validação da ausência de associação", () => {
+    const result = describeH2AdsOrderBrowserBlock({ state: "not_prepared", reason: null, proxyConfigured: false, missingProxyDiagnostic: { status: "failed", errorCategory: "proxy_timeout" } });
+    expect(result.message).toContain("tempo de espera");
+  });
+  it("não autoriza contornar verificação humana", () => {
+    const result = describeH2AdsOrderBrowserBlock({ state: "not_prepared", reason: null, proxyConfigured: false, missingProxyDiagnostic: { status: "failed", errorCategory: "proxy_google_challenge" } });
+    expect(result.message).toContain("Google");
+    expect(result.guidance).toContain("não tente contornar");
+  });
+  it("não exibe dados arbitrários de diagnóstico", () => {
+    const result = describeH2AdsOrderBrowserBlock({ state: "not_prepared", reason: null, proxyConfigured: false, missingProxyDiagnostic: { status: "failed", errorCategory: "user:password@example.com" } });
+    expect(result.message).toBe("O provisionamento da rota falhou.");
+    expect(JSON.stringify(result)).not.toContain("password");
+  });
+  it("preserva preparação de rotas já associadas", () => {
+    const result = describeH2AdsOrderBrowserBlock({ state: "not_prepared", reason: null, proxyConfigured: true });
+    expect(result.guidance).toContain("PREPARAR NOVAMENTE");
+  });
+});

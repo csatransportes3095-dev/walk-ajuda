@@ -14,6 +14,7 @@ export type H2AdsDashboard = {
   instances: H2AdsInstance[];
   networkProfiles: H2AdsInstanceNetworkProfile[];
   proxyCredentialStatuses: Array<{ instanceId: number; updatedAt: Date; rotationMinutes: number | null }>;
+  missingProxyDiagnostics: Array<{ instanceId: number; status: string; errorCategory: string | null }>;
   browserWorkers: H2AdsBrowserWorkerSummary[];
   instanceWorkerAssignments: H2AdsInstanceWorkerAssignmentSummary[];
   instanceBrowserRuns: H2AdsInstanceBrowserRunSummary[];
@@ -72,7 +73,7 @@ async function repairH2AdsSnapshotProfileStates() {
 export async function listH2AdsDashboard(): Promise<H2AdsDashboard> {
   const db = await requireH2AdsDb();
   await repairH2AdsSnapshotProfileStates();
-  const [groups, instances, networkProfiles, proxyCredentialStatuses, browserWorkers, instanceWorkerAssignments, instanceBrowserRuns] = await Promise.all([
+  const [groups, instances, networkProfiles, proxyCredentialStatuses, browserWorkers, instanceWorkerAssignments, instanceBrowserRuns, missingProxyHistory] = await Promise.all([
     db.select().from(h2AdsGroups).orderBy(asc(h2AdsGroups.sortOrder), asc(h2AdsGroups.id)),
     db.select().from(h2AdsInstances).orderBy(asc(h2AdsInstances.groupId), asc(h2AdsInstances.sortOrder), asc(h2AdsInstances.id)),
     db.select().from(h2AdsInstanceNetworkProfiles).orderBy(asc(h2AdsInstanceNetworkProfiles.instanceId)),
@@ -80,12 +81,29 @@ export async function listH2AdsDashboard(): Promise<H2AdsDashboard> {
     db.select({ id: h2AdsBrowserWorkers.id, workerKey: h2AdsBrowserWorkers.workerKey, name: h2AdsBrowserWorkers.name, operatingSystem: h2AdsBrowserWorkers.operatingSystem, status: h2AdsBrowserWorkers.status, capacity: h2AdsBrowserWorkers.capacity, computerName: h2AdsBrowserWorkers.computerName, agentVersion: h2AdsBrowserWorkers.agentVersion, lastSeenAt: h2AdsBrowserWorkers.lastSeenAt, revokedAt: h2AdsBrowserWorkers.revokedAt, createdAt: h2AdsBrowserWorkers.createdAt, updatedAt: h2AdsBrowserWorkers.updatedAt }).from(h2AdsBrowserWorkers).orderBy(asc(h2AdsBrowserWorkers.name), asc(h2AdsBrowserWorkers.id)),
     db.select({ instanceId: h2AdsInstanceWorkerAssignments.instanceId, workerId: h2AdsInstanceWorkerAssignments.workerId, profileState: h2AdsInstanceWorkerAssignments.profileState, profileVersion: h2AdsInstanceWorkerAssignments.profileVersion, lastSnapshotAt: h2AdsInstanceWorkerAssignments.lastSnapshotAt, assignedAt: h2AdsInstanceWorkerAssignments.assignedAt, updatedAt: h2AdsInstanceWorkerAssignments.updatedAt }).from(h2AdsInstanceWorkerAssignments).orderBy(asc(h2AdsInstanceWorkerAssignments.instanceId)),
     db.select({ instanceId: h2AdsInstanceBrowserRuns.instanceId, workerId: h2AdsInstanceBrowserRuns.workerId, state: h2AdsInstanceBrowserRuns.state, observedIp: h2AdsInstanceBrowserRuns.observedIp, lastErrorCategory: h2AdsInstanceBrowserRuns.lastErrorCategory, preparedAt: h2AdsInstanceBrowserRuns.preparedAt, lastChangedAt: h2AdsInstanceBrowserRuns.lastChangedAt }).from(h2AdsInstanceBrowserRuns).orderBy(asc(h2AdsInstanceBrowserRuns.instanceId)),
+    // Read-only diagnostic for existing instances with no attached credential.
+    // Select only non-secret status fields, never proxy credentials or addresses.
+    db.select({ instanceId: h2AdsInstances.id, status: h2AdsProxyPool.status, errorCategory: h2AdsProxyPool.lastErrorCategory })
+      .from(h2AdsProxyPool)
+      .innerJoin(h2AdsInstances, eq(h2AdsProxyPool.assignedInstanceId, h2AdsInstances.id))
+      .leftJoin(h2AdsInstanceProxyCredentials, eq(h2AdsInstanceProxyCredentials.instanceId, h2AdsInstances.id))
+      .where(isNull(h2AdsInstanceProxyCredentials.id))
+      .orderBy(desc(h2AdsProxyPool.assignedAt), desc(h2AdsProxyPool.id)),
   ]);
+  const missingProxyDiagnostics = new Map<number, H2AdsDashboard["missingProxyDiagnostics"][number]>();
+  for (const row of missingProxyHistory) {
+    if (!missingProxyDiagnostics.has(row.instanceId)) missingProxyDiagnostics.set(row.instanceId, {
+      instanceId: row.instanceId,
+      status: row.status,
+      errorCategory: row.errorCategory && /^[a-z0-9_]{1,64}$/i.test(row.errorCategory) ? row.errorCategory : null,
+    });
+  }
   const now = Date.now();
   return {
     groups,
     instances,
     networkProfiles,
+    missingProxyDiagnostics: [...missingProxyDiagnostics.values()],
 proxyCredentialStatuses: proxyCredentialStatuses.map(({ encryptedPayload, ...credential }) => {
   try {
     return { ...credential, rotationMinutes: decryptH2AdsProxy(encryptedPayload).rotationMinutes };

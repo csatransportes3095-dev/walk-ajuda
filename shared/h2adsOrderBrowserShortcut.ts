@@ -194,8 +194,10 @@ export function describeH2AdsOrderBrowserBlock(input: {
   reason: string | null;
   errorCategory?: string | null;
   networkHealthStatus?: string | null;
+  proxyConfigured?: boolean;
+  missingProxyDiagnostic?: { status: string; errorCategory: string | null } | null;
 }): { message: string; guidance: string } {
-  const { state, reason, errorCategory, networkHealthStatus } = input;
+  const { state, reason, errorCategory, networkHealthStatus, proxyConfigured, missingProxyDiagnostic } = input;
   if (reason === "Worker offline.") return {
     message: "Worker offline.",
     guidance: "Confira o Worker no Windows e o status ONLINE no H2ADS. Não crie outra instância.",
@@ -216,6 +218,32 @@ export function describeH2AdsOrderBrowserBlock(input: {
     message: "Chrome já registrado como aberto.",
     guidance: "Confira a janela no Windows. Não prepare novamente enquanto estiver aberto.",
   };
+  if (proxyConfigured === false) {
+    const category = missingProxyDiagnostic?.errorCategory;
+    const messages: Record<string, string> = {
+      proxy_google_challenge: "O Google apresentou uma verificação de segurança. A rota não foi aprovada.",
+      proxy_google_unavailable: "A verificação de acesso ao Google não foi concluída.",
+      proxy_authentication: "A autenticação do proxy foi recusada.",
+      proxy_timeout: "A validação do proxy excedeu o tempo de espera.",
+      proxy_unreachable: "A conexão com o proxy falhou.",
+      proxy_dns: "O endereço do proxy não pôde ser resolvido.",
+      invalid_route_response: "A rota não retornou um endereço público válido.",
+      route_mismatch: "A rota divergiu dos metadados esperados.",
+      proxy_protocol_not_socks5: "O protocolo da rota não atende à configuração obrigatória.",
+      route_check_failed: "A validação da rota não foi concluída.",
+    };
+    const knownError = category && Object.hasOwn(messages, category) ? messages[category] : null;
+    return {
+      message: knownError || (missingProxyDiagnostic?.status === "assigned"
+        ? "Proxy reservado, mas não associado à instância."
+        : missingProxyDiagnostic?.status === "failed"
+          ? "O provisionamento da rota falhou."
+          : "Nenhuma credencial de proxy associada à instância."),
+      guidance: category === "proxy_google_challenge"
+        ? "A verificação de segurança deve ser respeitada. A instância continua bloqueada; não tente contornar o desafio."
+        : "Consulte o provisionamento na Fila de Proxies H2ADS. Preparar novamente não associa uma credencial ausente. Preserve esta instância e o vínculo com o pedido.",
+    };
+  }
   if (networkHealthStatus && networkHealthStatus !== "healthy") return {
     message: "Rota do proxy não aprovada (" + networkHealthStatus + ").",
     guidance: "Use PREPARAR NOVAMENTE: o sistema verificará a rota antes de preparar. Não troque o proxy sem confirmar a falha.",
