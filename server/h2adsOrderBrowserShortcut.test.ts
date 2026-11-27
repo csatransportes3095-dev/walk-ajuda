@@ -214,8 +214,8 @@ describe("H2ADS pedido - provisionamento incompleto", () => {
   it("não orienta preparar repetidamente quando a credencial está ausente", () => {
     const result = describeH2AdsOrderBrowserBlock({ state: "not_prepared", reason: null, proxyConfigured: false });
     expect(result.message).toContain("Nenhuma credencial");
-    expect(result.guidance).toContain("não associa");
-    expect(result.guidance).toContain("Preserve esta instância");
+    expect(result.guidance).toContain("CONCLUIR CONFIGURAÇÃO");
+    expect(result.guidance).toContain("mesma instância");
   });
   it("distingue a falha de validação da ausência de associação", () => {
     const result = describeH2AdsOrderBrowserBlock({ state: "not_prepared", reason: null, proxyConfigured: false, missingProxyDiagnostic: { status: "failed", errorCategory: "proxy_timeout" } });
@@ -234,5 +234,22 @@ describe("H2ADS pedido - provisionamento incompleto", () => {
   it("preserva preparação de rotas já associadas", () => {
     const result = describeH2AdsOrderBrowserBlock({ state: "not_prepared", reason: null, proxyConfigured: true });
     expect(result.guidance).toContain("PREPARAR NOVAMENTE");
+  });
+});
+
+describe("H2ADS retoma configuração no card", () => {
+  it("prioriza o motivo da rota ausente sobre Worker ainda não atribuído", () => {
+    const result = describeH2AdsOrderBrowserBlock({ state: "not_prepared", reason: "Worker ainda não atribuído.", proxyConfigured: false, missingProxyDiagnostic: {status:"failed",errorCategory:"proxy_google_challenge"} });
+    expect(result.message).toContain("Google");
+    expect(result.guidance).toContain("não tente contornar");
+  });
+  it("orienta concluir no próprio card quando Worker não foi atribuído", () => {
+    const result = describeH2AdsOrderBrowserBlock({ state: "not_prepared", reason: "Worker ainda não atribuído.", proxyConfigured: true });
+    expect(result.guidance).toContain("CONCLUIR CONFIGURAÇÃO");
+    expect(result.guidance).not.toContain("painel");
+  });
+  it("mantém reprovada a rota anterior sem selecionar substituta", () => {
+    const result = describeH2AdsOrderBrowserBlock({ state: "not_prepared", reason: null, proxyConfigured: false, missingProxyDiagnostic: {status:"failed",errorCategory:"proxy_timeout"} });
+    expect(result.guidance).toContain("nenhuma nova rota");
   });
 });

@@ -202,10 +202,6 @@ export function describeH2AdsOrderBrowserBlock(input: {
     message: "Worker offline.",
     guidance: "Confira o Worker no Windows e o status ONLINE no H2ADS. Não crie outra instância.",
   };
-  if (reason === "Worker ainda não atribuído.") return {
-    message: "Instância sem Worker atribuído.",
-    guidance: "Atribua o Worker desta instância no painel H2ADS.",
-  };
   if (reason === "Instância H2ADS arquivada.") return {
     message: "Instância arquivada.",
     guidance: "Confira o status da instância no painel H2ADS antes de tentar abrir.",
@@ -241,9 +237,15 @@ export function describeH2AdsOrderBrowserBlock(input: {
           : "Nenhuma credencial de proxy associada à instância."),
       guidance: category === "proxy_google_challenge"
         ? "A verificação de segurança deve ser respeitada. A instância continua bloqueada; não tente contornar o desafio."
-        : "Consulte o provisionamento na Fila de Proxies H2ADS. Preparar novamente não associa uma credencial ausente. Preserve esta instância e o vínculo com o pedido.",
+        : missingProxyDiagnostic && missingProxyDiagnostic.status !== "assigned"
+          ? "A rota anterior não foi aprovada. Preserve esta instância; nenhuma nova rota será selecionada automaticamente."
+          : "Use CONCLUIR CONFIGURAÇÃO neste card. O sistema retomará a configuração inicial da mesma instância, sem duplicar o pedido.",
     };
   }
+  if (reason === "Worker ainda não atribuído.") return {
+    message: "Configuração do Worker pendente.",
+    guidance: "Use CONCLUIR CONFIGURAÇÃO neste card. O Worker será atribuído automaticamente após validação.",
+  };
   if (networkHealthStatus && networkHealthStatus !== "healthy") return {
     message: "Rota do proxy não aprovada (" + networkHealthStatus + ").",
     guidance: "Use PREPARAR NOVAMENTE: o sistema verificará a rota antes de preparar. Não troque o proxy sem confirmar a falha.",

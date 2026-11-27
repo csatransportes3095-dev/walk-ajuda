@@ -33,6 +33,7 @@ export default function OrderH2AdsBrowserShortcut({ registrationId, subOrderInde
   const closeBrowser = trpc.h2Ads.closeBrowser.useMutation();
   const validateProxy = trpc.h2Ads.validateProxy.useMutation();
   const prepareBrowser = trpc.h2Ads.prepareBrowser.useMutation();
+  const resumeOrderProvisioning = trpc.h2Ads.resumeOrderProvisioning.useMutation();
   const recoverStalledPreparation = trpc.h2Ads.recoverStalledPreparation.useMutation();
   const updateInstance = trpc.h2Ads.updateInstance.useMutation();
   const setOrderLink = trpc.h2Ads.setOrderLink.useMutation();
@@ -91,6 +92,8 @@ export default function OrderH2AdsBrowserShortcut({ registrationId, subOrderInde
   const missingProxyDiagnostic = shortcut && !proxyConfigured
     ? (dashboard?.missingProxyDiagnostics ?? []).find(item => item.instanceId === shortcut.instanceId)
     : undefined;
+  const initialProvisionIncomplete = !proxyConfigured || !linkedAssignment;
+  const previousRouteRejected = !proxyConfigured && Boolean(missingProxyDiagnostic && missingProxyDiagnostic.status !== "assigned");
   const preparationStalled = Boolean(linkedRun && isH2AdsPreparationStalled(linkedRun.state, linkedRun.lastChangedAt));
   const preparationRecoverable = preparationStalled || (linkedRun?.state === "blocked" && linkedRun.lastErrorCategory === "preparation_timeout");
   const readyToOpen = Boolean(shortcut?.canOpen && proxyConfigured && networkProfile?.healthStatus === "healthy"
@@ -115,7 +118,7 @@ export default function OrderH2AdsBrowserShortcut({ registrationId, subOrderInde
     groups: (dashboard?.groups ?? []) as any[],
   });
 
-  const pending = launchBrowser.isPending || closeBrowser.isPending || validateProxy.isPending || prepareBrowser.isPending || recoverStalledPreparation.isPending || updateInstance.isPending || setOrderLink.isPending || createInstanceLinkedOrderAuto.isPending || rotateProxyAuto.isPending || deleteInstance.isPending;
+  const pending = launchBrowser.isPending || closeBrowser.isPending || validateProxy.isPending || prepareBrowser.isPending || resumeOrderProvisioning.isPending || recoverStalledPreparation.isPending || updateInstance.isPending || setOrderLink.isPending || createInstanceLinkedOrderAuto.isPending || rotateProxyAuto.isPending || deleteInstance.isPending;
 
   const refresh = async () => {
     await Promise.all([
@@ -228,14 +231,17 @@ export default function OrderH2AdsBrowserShortcut({ registrationId, subOrderInde
       toast.error("O Chrome está registrado como aberto. Encerre a sessão antes de preparar novamente.");
       return;
     }
-    if (!proxyConfigured) {
-      const diagnosis = describeH2AdsOrderBrowserBlock({
-        state: shortcut.state, reason: shortcut.reason, proxyConfigured: false, missingProxyDiagnostic,
-      });
-      toast.error(diagnosis.message);
-      return;
-    }
     try {
+      if (initialProvisionIncomplete) {
+        if (previousRouteRejected) return;
+        const result = await resumeOrderProvisioning.mutateAsync({
+          instanceId: shortcut.instanceId, registrationId, subOrderIndex,
+        });
+        if (result.status === "preparing") toast.success(result.message);
+        else toast.warning(result.message);
+        await refresh();
+        return;
+      }
       // Validação não substitui a confirmação de saída pelo Worker. Mantém o proxy
       // existente: nenhuma troca automática nem abertura antes de confirmar rota.
       if (networkProfile?.healthStatus !== "healthy") {
@@ -575,11 +581,11 @@ export default function OrderH2AdsBrowserShortcut({ registrationId, subOrderInde
     <button
       type="button"
       onClick={prepareAgain}
-      disabled={pending || !proxyConfigured || shortcut.state === "queued" || shortcut.state === "preparing" || shortcut.state === "browser_open"}
+      disabled={pending || previousRouteRejected || linkedInstance?.status === "archived" || shortcut.state === "queued" || shortcut.state === "preparing" || shortcut.state === "browser_open"}
       className="inline-flex min-h-8 items-center justify-center gap-1.5 rounded-lg border border-sky-400/35 bg-sky-400/15 px-2.5 py-1.5 text-[10px] font-black text-sky-100 transition hover:bg-sky-400/25 disabled:cursor-not-allowed disabled:opacity-30 sm:min-h-9 sm:px-3 sm:text-[11px] lg:min-h-10 lg:px-3.5 lg:text-xs"
-      title={proxyConfigured ? "Revalidar e restaurar a conexão sem fechar a instância" : "Sem credencial associada. Consulte o diagnóstico acima."}
+      title={previousRouteRejected ? "Rota anterior reprovada; nenhuma substituição automática" : initialProvisionIncomplete ? "Concluir a configuração da mesma instância" : "Revalidar e restaurar a conexão sem fechar a instância"}
     >
-      <RefreshCw className="h-3.5 w-3.5 lg:h-4 lg:w-4" />PREPARAR NOVAMENTE
+      <RefreshCw className="h-3.5 w-3.5 lg:h-4 lg:w-4" />{resumeOrderProvisioning.isPending ? "CONFIGURANDO..." : initialProvisionIncomplete ? "CONCLUIR CONFIGURAÇÃO" : "PREPARAR NOVAMENTE"}
     </button>
     {preparationRecoverable && <button
       type="button"
