@@ -115,7 +115,6 @@ export async function listH2AdsProxyPool() {
   };
 }
 
-<<<<<<< HEAD
 /**
  * Delete inactive pool history so the admin can upload new proxies.
  * Protect every currently configured route by comparing the encrypted
