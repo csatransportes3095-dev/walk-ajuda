@@ -54,6 +54,34 @@ describe("validação pontual de rota H2 Ads", () => {
     axiosGet.mockResolvedValue({ status: 200, data: "<html>Não sou robô</html>" });
     await expect(validateH2AdsGoogleAccess({ protocol: "socks5", host: "edge.example", port: 1080, username: "user_test", password: "pass_test" })).rejects.toThrow("proxy_google_challenge");
   });
+  it("registra somente metadados restritos da resposta bloqueada", async () => {
+    const warn = vi.spyOn(console, "warn").mockImplementation(() => {});
+    try {
+      axiosGet.mockResolvedValue({
+        status: 200,
+        data: "<html>unusual traffic sensitive-body-value</html>",
+        request: { res: { responseUrl: "https://www.google.com/sorry/index?secret=sensitive-query-value" } },
+      });
+      const proxy = { protocol: "socks5" as const, host: "edge.example", port: 1080, username: "user_test", password: "pass_test" };
+      await expect(validateH2AdsGoogleAccess(proxy)).rejects.toThrow("proxy_google_challenge");
+      expect(warn).toHaveBeenCalledWith('[H2ADS] google_access_audit {"status":200,"destination":"www.google.com","googleSecurityPage":true,"category":"proxy_google_challenge"}');
+      const log = JSON.stringify(warn.mock.calls);
+      for (const secret of ["sensitive-body-value", "sensitive-query-value", "edge.example", "user_test", "pass_test"]) expect(log).not.toContain(secret);
+      expect(axiosGet).toHaveBeenCalledTimes(1);
+    } finally { warn.mockRestore(); }
+  });
+  it("não registra URL nem hostname arbitrário", async () => {
+    const warn = vi.spyOn(console, "warn").mockImplementation(() => {});
+    try {
+      axiosGet.mockResolvedValue({
+        status: 403, data: "<html>Forbidden</html>",
+        request: { res: { responseUrl: "https://private-host.example/secret-path" } },
+      });
+      await expect(validateH2AdsGoogleAccess({ protocol: "socks5", host: "edge.example", port: 1080, username: "user_test", password: "pass_test" })).rejects.toThrow("proxy_google_access_denied");
+      expect(warn).toHaveBeenCalledWith('[H2ADS] google_access_audit {"status":403,"destination":"other","googleSecurityPage":false,"category":"proxy_google_access_denied"}');
+      expect(JSON.stringify(warn.mock.calls)).not.toContain("private-host.example");
+    } finally { warn.mockRestore(); }
+  });
   it("aceita acesso Google normal através de SOCKS5", async () => {
     axiosGet.mockResolvedValue({ status: 200, data: "<html><title>Google</title></html>" });
     await expect(validateH2AdsGoogleAccess({ protocol: "socks5", host: "edge.example", port: 1080, username: "user_test", password: "pass_test" })).resolves.toBeUndefined();
