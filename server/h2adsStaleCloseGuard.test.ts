@@ -33,13 +33,14 @@ describe("H2ADS stale close guard", () => {
     expect(core).toContain('eq(h2AdsInstanceBrowserRuns.state, "preparing")');
   });
 
-  it("carrega a extensao de privacy guard para Google, Bing, Uber e outras paginas de challenge quando abre o Chrome", () => {
+  it("carrega o privacy guard restrito ao Google /sorry sem interceptar desafios de outros sites", () => {
     expect(browserSessionSource).toContain("createGoogleSorryPrivacyGuard");
     expect(browserSessionSource).toContain("--load-extension=");
-    expect(browserSessionSource).toContain("*://*/*");
-    expect(browserSessionSource).toContain("not-a-bot");
-    expect(browserSessionSource).toContain("confirm");
-    expect(browserSessionSource).toContain("captcha|challenge|verify|verification");
+    expect(browserSessionSource).toContain("*://www.google.com/*");
+    expect(browserSessionSource).toContain("*://www.google.com.br/*");
+    expect(browserSessionSource).toContain("google\\\\.(?:com|com\\\\.br)/sorry");
+    expect(browserSessionSource).toContain("Validacoes humanas de outros sites");
+    expect(browserSessionSource).not.toContain("*://*/*");
     expect(browserSessionSource).toContain("googleSorryPrivacyGuard: \"enabled\"");
   });
 

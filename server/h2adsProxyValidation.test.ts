@@ -6,7 +6,7 @@ vi.mock("axios", () => ({ default: { get: axiosGet } }));
 vi.mock("node:dns/promises", () => ({ default: { lookup } }));
 vi.mock("socks-proxy-agent", () => ({ SocksProxyAgent: socksProxyAgent }));
 
-import { classifyH2AdsRouteFailure, getH2AdsRouteMismatches, validateH2AdsProxyRoute } from "./h2adsProxyValidation";
+import { classifyH2AdsRouteFailure, getH2AdsRouteMismatches, validateH2AdsGoogleAccess, validateH2AdsProxyRoute } from "./h2adsProxyValidation";
 
 describe("validação pontual de rota H2 Ads", () => {
   beforeEach(() => {
@@ -36,6 +36,16 @@ describe("validação pontual de rota H2 Ads", () => {
     expect(socksProxyAgent).toHaveBeenCalledTimes(2);
     expect(socksProxyAgent).toHaveBeenCalledWith(expect.stringMatching(/^socks5:\/\//));
     expect(axiosGet).toHaveBeenCalledWith("https://ipapi.co/json/", expect.objectContaining({ proxy: false, httpAgent: expect.anything(), httpsAgent: expect.anything() }));
+  });
+
+  it("rejeita SOCKS5 que já devolve desafio Google", async () => {
+    axiosGet.mockResolvedValue({ status: 200, data: "<html>Our systems have detected unusual traffic</html>" });
+    await expect(validateH2AdsGoogleAccess({ protocol: "socks5", host: "edge.example", port: 1080, username: "user_test", password: "pass_test" })).rejects.toThrow("proxy_google_challenge");
+  });
+
+  it("aceita acesso Google normal através de SOCKS5", async () => {
+    axiosGet.mockResolvedValue({ status: 200, data: "<html><title>Google</title></html>" });
+    await expect(validateH2AdsGoogleAccess({ protocol: "socks5", host: "edge.example", port: 1080, username: "user_test", password: "pass_test" })).resolves.toBeUndefined();
   });
 
   it("preserva HTTPS no caminho de proxy suportado pelo cliente HTTP", async () => {

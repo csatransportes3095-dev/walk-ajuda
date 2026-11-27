@@ -24,7 +24,7 @@ export type H2AdsObservedRoute = {
 };
 
 export type H2AdsRouteFailure = {
-  code: "proxy_authentication" | "proxy_timeout" | "proxy_unreachable" | "proxy_dns" | "invalid_route_response" | "route_check_failed";
+  code: "proxy_authentication" | "proxy_timeout" | "proxy_unreachable" | "proxy_dns" | "invalid_route_response" | "proxy_google_challenge" | "proxy_google_unavailable" | "route_check_failed";
   message: string;
 };
 
@@ -37,6 +37,8 @@ export function classifyH2AdsRouteFailure(error: unknown): H2AdsRouteFailure {
   if (code === "ENOTFOUND" || code === "EAI_AGAIN") return { code: "proxy_dns", message: "Não foi possível resolver o endereço do proxy." };
   if (code === "ECONNREFUSED" || code === "ECONNRESET" || code === "EHOSTUNREACH" || code === "ENETUNREACH") return { code: "proxy_unreachable", message: "O proxy recusou ou não permitiu a conexão." };
   if (error instanceof Error && /não retornou um ip público válido|endereço público elegível/i.test(error.message)) return { code: "invalid_route_response", message: "A rota não devolveu um IP público válido para verificação." };
+  if (error instanceof Error && error.message === "proxy_google_challenge") return { code: "proxy_google_challenge", message: "A rota foi rejeitada porque o Google apresentou um desafio de tráfego automatizado." };
+  if (error instanceof Error && error.message === "proxy_google_unavailable") return { code: "proxy_google_unavailable", message: "Não foi possível verificar o acesso ao Google através desta rota." };
   return { code: "route_check_failed", message: "Não foi possível validar a rota. Confirme o formato e tente novamente." };
 }
 
@@ -94,6 +96,31 @@ export async function validateH2AdsProxyRoute(proxy: ParsedH2AdsProxy): Promise<
     isp: data.org ?? null,
     latencyMs: Date.now() - start,
   };
+}
+
+export async function validateH2AdsGoogleAccess(proxy: ParsedH2AdsProxy): Promise<void> {
+  if (proxy.protocol !== "socks5") throw new Error("proxy_protocol_not_socks5");
+  const address = await resolvePublicProxyAddress(proxy.host);
+  const agent = new SocksProxyAgent(`socks5://${encodeURIComponent(proxy.username)}:${encodeURIComponent(proxy.password)}@${address}:${proxy.port}`);
+  try {
+    const response = await axios.get<string>("https://www.google.com/", {
+      timeout: 12_000,
+      proxy: false,
+      httpAgent: agent,
+      httpsAgent: agent,
+      responseType: "text",
+      validateStatus: () => true,
+      headers: { "User-Agent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 Chrome/131 Safari/537.36", Accept: "text/html" },
+    });
+    const body = typeof response.data === "string" ? response.data.toLowerCase() : "";
+    if (response.status === 429 || response.status === 403 || /\/sorry(?:[/?#]|$)|unusual traffic|not a robot|não sou robô|nao sou robo/.test(body)) {
+      throw new Error("proxy_google_challenge");
+    }
+    if (response.status < 200 || response.status >= 300) throw new Error("proxy_google_unavailable");
+  } catch (error) {
+    if (error instanceof Error && (error.message === "proxy_google_challenge" || error.message === "proxy_google_unavailable")) throw error;
+    throw new Error("proxy_google_unavailable", { cause: error });
+  }
 }
 
 export function getH2AdsRouteMismatches(observed: H2AdsObservedRoute, expected: { expectedIsp: string | null; expectedAsn: string | null }) {
