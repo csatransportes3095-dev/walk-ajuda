@@ -98,13 +98,14 @@ export default function OrderH2AdsBrowserShortcut({ registrationId, subOrderInde
   const preparationRecoverable = preparationStalled || (linkedRun?.state === "blocked" && linkedRun.lastErrorCategory === "preparation_timeout");
   const readyToOpen = Boolean(shortcut?.canOpen && proxyConfigured && networkProfile?.healthStatus === "healthy"
     && (linkedAssignment?.profileState === "local_only" || linkedAssignment?.profileState === "snapshot_ready"));
+  const configuring = resumeOrderProvisioning.isPending || validateProxy.isPending || prepareBrowser.isPending || recoverStalledPreparation.isPending
+    || shortcut?.state === "queued" || shortcut?.state === "preparing";
   const browserStage = shortcut?.state === "browser_open" ? "CHROME ABERTO"
-    : readyToOpen ? "PRONTA PARA ABRIR"
-    : preparationStalled ? "PREPARAÇÃO TRAVADA"
-    : shortcut?.state === "queued" ? "NA FILA"
-    : shortcut?.state === "preparing" ? "PREPARANDO"
-    : shortcut?.state === "blocked" ? "BLOQUEADA"
-    : shortcut ? "CRIADA — NÃO PRONTA" : "SEM INSTÂNCIA";
+    : readyToOpen ? "PRONTA"
+    : preparationStalled ? "BLOQUEADA"
+    : configuring ? "CONFIGURANDO"
+    : previousRouteRejected || shortcut?.state === "blocked" || linkedWorker?.connectionStatus === "offline" || networkProfile?.healthStatus === "failed" || networkProfile?.healthStatus === "blocked" ? "BLOQUEADA"
+    : shortcut ? "CONFIGURAÇÃO PENDENTE" : "SEM INSTÂNCIA";
 
   const repairCandidate = shortcut ? null : resolveH2AdsOrderLinkRepairCandidate({
     registrationId,
@@ -544,22 +545,11 @@ export default function OrderH2AdsBrowserShortcut({ registrationId, subOrderInde
     <span className="flex w-full flex-wrap items-center gap-1.5 border-t border-white/10 pt-1.5 sm:gap-2 sm:pt-2">
       {linkExistingPanel}
       {createPanel}
-      <div className="flex w-full flex-wrap items-center gap-1.5 rounded-lg border border-white/10 bg-black/20 px-2 py-2 text-[10px] font-bold text-slate-200" aria-label="Diagnóstico da instância H2ADS">
-        <span className={readyToOpen ? "text-emerald-300" : "text-amber-200"}>{browserStage}</span>
-        <span>INSTÂNCIA #{shortcut.instanceId}</span>
-        <span>PROXY: {proxyConfigured ? networkProfile?.healthStatus === "healthy" ? "VALIDADO" : "PENDENTE" : "AUSENTE"}</span>
-        <span>WORKER: {linkedWorker?.connectionStatus === "online" ? "ONLINE" : linkedWorker ? "OFFLINE" : "NÃO ATRIBUÍDO"}</span>
-        <span>PERFIL: {linkedAssignment?.profileState === "local_only" || linkedAssignment?.profileState === "snapshot_ready" ? "PRONTO" : "PENDENTE"}</span>
-        <span>COMANDO: {preparationStalled ? "EXPIRADO" : shortcut.state === "preparing" ? "EM EXECUÇÃO" : shortcut.state === "queued" ? "NA FILA" : "SEM PENDÊNCIA"}</span>
-        {linkedRun?.lastErrorCategory && <span>FALHA: {linkedRun.lastErrorCategory}</span>}
+      <div role="status" aria-live="polite" aria-label="Status H2ADS" className="flex w-full min-w-0 flex-wrap items-center gap-x-2 gap-y-0.5 px-1 text-[11px] leading-snug text-slate-300">
+        <span className={readyToOpen || shortcut.state === "browser_open" ? "font-black text-emerald-300" : browserStage === "BLOQUEADA" ? "font-black text-rose-300" : "font-black text-amber-200"}>{browserStage}</span>
+        <span className="text-slate-500">#{shortcut.instanceId}</span>
+        {preparationStalled ? <span>Preparação expirada.</span> : !configuring && blockedDetails && <span className="min-w-0 break-words">{blockedDetails.message}</span>}
       </div>
-      {preparationStalled && <div role="status" className="w-full rounded-lg border border-amber-400/30 bg-amber-500/[0.08] px-3 py-2 text-left text-[11px] font-bold text-amber-100">
-        Preparação expirada. Use RECUPERAR PREPARAÇÃO. Não crie outra instância nem troque o proxy.
-      </div>}
-      {blockedDetails && <div role="status" className="w-full rounded-lg border border-amber-400/30 bg-amber-500/[0.08] px-3 py-2 text-left text-[11px] leading-5 text-amber-100">
-        <strong className="block font-black">ABRIR indisponível — {blockedDetails.message}</strong>
-        <span className="block text-amber-100/80">{blockedDetails.guidance}</span>
-      </div>}
       <button
       type="button"
       onClick={openBrowser}

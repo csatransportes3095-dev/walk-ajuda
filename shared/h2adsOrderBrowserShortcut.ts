@@ -217,7 +217,9 @@ export function describeH2AdsOrderBrowserBlock(input: {
   if (proxyConfigured === false) {
     const category = missingProxyDiagnostic?.errorCategory;
     const messages: Record<string, string> = {
-      proxy_google_challenge: "O Google apresentou uma verificação de segurança. A rota não foi aprovada.",
+      proxy_google_challenge: "Acesso ao Google reprovado. Rota bloqueada.",
+      proxy_google_access_denied: "Acesso ao Google recusado (403).",
+      proxy_google_rate_limited: "Limite de acesso ao Google (429).",
       proxy_google_unavailable: "A verificação de acesso ao Google não foi concluída.",
       proxy_authentication: "A autenticação do proxy foi recusada.",
       proxy_timeout: "A validação do proxy excedeu o tempo de espera.",

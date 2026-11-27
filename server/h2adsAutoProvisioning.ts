@@ -122,6 +122,7 @@ async function attachAndValidateReservedProxy(instanceId: number, reserved: { id
     await validateH2AdsGoogleAccess(candidate);
   } catch (error) {
     const failure = classifyH2AdsRouteFailure(error);
+    console.warn("[H2ADS] provisionamento de rota bloqueado", { instanceId, poolId: reserved.id, category: failure.code });
     await markH2AdsProxyFailed(reserved.id, failure.code || "proxy_unavailable");
     return { ok: false as const, error: failure.message };
   }
@@ -196,6 +197,7 @@ async function verifyExistingProvisionRoute(instanceId: number, encryptedPayload
     return { ok: true as const };
   } catch (error) {
     const failure = classifyH2AdsRouteFailure(error);
+    console.warn("[H2ADS] validação da rota existente bloqueada", { instanceId, category: failure.code });
     // No alternative proxy is selected after failure, and no verification is skipped.
     if (await getH2AdsProxyCredential(instanceId) === encryptedPayload) {
       await assertInitialProvisionSafe(instanceId);
