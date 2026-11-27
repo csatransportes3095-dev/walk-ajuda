@@ -15,7 +15,7 @@ import {
 } from "./h2ads";
 import { assignH2AdsInstanceWorkerPortable } from "./h2adsProfilePortability";
 import { decryptH2AdsProxy } from "./h2adsProxySecurity";
-import { classifyH2AdsRouteFailure, getH2AdsRouteMismatches, validateH2AdsProxyRoute } from "./h2adsProxyValidation";
+import { classifyH2AdsRouteFailure, getH2AdsRouteMismatches, validateH2AdsGoogleAccess, validateH2AdsProxyRoute } from "./h2adsProxyValidation";
 import {
   markH2AdsProxyFailed,
   markH2AdsOtherAssignedProxiesUsed,
@@ -115,6 +115,7 @@ async function attachAndValidateReservedProxy(instanceId: number, reserved: { id
       await markH2AdsProxyFailed(reserved.id, "route_mismatch");
       return { ok: false as const, error: "O novo proxy divergiu da rota esperada." };
     }
+    await validateH2AdsGoogleAccess(candidate);
   } catch (error) {
     const failure = classifyH2AdsRouteFailure(error);
     await markH2AdsProxyFailed(reserved.id, failure.code || "proxy_unavailable");
