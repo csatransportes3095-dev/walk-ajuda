@@ -5,6 +5,18 @@ const card = readFileSync(new URL("../client/src/components/StorefrontProductCar
 const page = readFileSync(new URL("../client/src/pages/Home.tsx", import.meta.url), "utf8");
 
 describe("vitrine publica: legibilidade do card mobile sem mudar o mecanismo", () => {
+  it("esclarece a garantia antes das opcoes em um unico aviso compacto", () => {
+    const marker = 'data-testid="storefront-warranty-clarification"';
+    expect(card.split(marker)).toHaveLength(2);
+    expect(card).toContain("{hasWarrantyNotice && (");
+    expect(card).toContain("const hasWarrantyNotice = tiers.length > 0");
+    expect(card).toContain("A conta acaba quando termina a garantia?");
+    expect(card).toContain("NÃO!</strong> Se a conta estiver funcionando, você continua utilizando normalmente, mesmo após o fim da garantia.");
+    expect(card.indexOf(marker)).toBeLessThan(card.indexOf('className={`h2-text-fit__options'));
+    expect(card.indexOf(marker)).toBeLessThan(card.indexOf('value={tierId ?? ""}'));
+    expect(card).toContain("mb-2.5 rounded-lg border border-emerald-400/35 bg-emerald-500/10 px-2.5 py-2 text-[12px]");
+  });
+
   it("mantem os tres cards de planos selecionaveis e as mesmas regras de preco e VIP", () => {
     expect(card).toContain("priceModels.map((model, index) =>");
     expect(card).toContain("aria-pressed={isSelected}");

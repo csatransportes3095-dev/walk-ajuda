@@ -200,6 +200,10 @@ function StorefrontProductCardComponent({
   const [tierId, setTierId] = useState<number | null>(tiers[0]?.id ?? null);
   const selectedTier = tiers.find((tier) => tier.id === tierId) || null;
   const priceModels = item.option.priceModels || [];
+  const hasWarrantyNotice = tiers.length > 0
+    || Boolean(item.option.warranty?.trim() && !/^\s*sem garantia\b/i.test(item.option.warranty))
+    || priceModels.some(model => !/\bsem garantia\b/i.test(model.label)
+      && (/\bgarantia\b/i.test(model.label) || (/\bcorridas?\b/i.test(model.label) && /\bdias?\b/i.test(model.label))));
   const { isVipCustomer } = useVipMembership();
   const selectablePriceModels = priceModels.filter(model => !isVipOnlyLocked(model, isVipCustomer));
   // A seleção automática sempre começa pela opção de menor valor, exibida à esquerda.
@@ -330,6 +334,12 @@ function StorefrontProductCardComponent({
       </div>
 
       <div className="p-3.5 sm:p-4">
+        {hasWarrantyNotice && (
+          <div data-testid="storefront-warranty-clarification" className="mb-2.5 rounded-lg border border-emerald-400/35 bg-emerald-500/10 px-2.5 py-2 text-[12px] leading-snug text-emerald-50 sm:text-[13px]">
+            <p className="font-black text-emerald-200">A conta acaba quando termina a garantia?</p>
+            <p className="mt-0.5 font-semibold"><strong className="font-black text-emerald-300">NÃO!</strong> Se a conta estiver funcionando, você continua utilizando normalmente, mesmo após o fim da garantia.</p>
+          </div>
+        )}
         {priceModels.length > 0 && (
           <div>
             <div className="flex items-start gap-2.5">
