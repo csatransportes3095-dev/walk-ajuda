@@ -88,6 +88,9 @@ export default function OrderH2AdsBrowserShortcut({ registrationId, subOrderInde
   const linkedAssignment = shortcut ? (dashboard?.instanceWorkerAssignments ?? []).find(assignment => assignment.instanceId === shortcut.instanceId) : undefined;
   const linkedWorker = linkedAssignment ? (dashboard?.browserWorkers ?? []).find(worker => worker.id === linkedAssignment.workerId) : undefined;
   const proxyConfigured = shortcut ? (dashboard?.proxyCredentialStatuses ?? []).some(item => item.instanceId === shortcut.instanceId) : false;
+  const missingProxyDiagnostic = shortcut && !proxyConfigured
+    ? (dashboard?.missingProxyDiagnostics ?? []).find(item => item.instanceId === shortcut.instanceId)
+    : undefined;
   const preparationStalled = Boolean(linkedRun && isH2AdsPreparationStalled(linkedRun.state, linkedRun.lastChangedAt));
   const preparationRecoverable = preparationStalled || (linkedRun?.state === "blocked" && linkedRun.lastErrorCategory === "preparation_timeout");
   const readyToOpen = Boolean(shortcut?.canOpen && proxyConfigured && networkProfile?.healthStatus === "healthy"
@@ -223,6 +226,13 @@ export default function OrderH2AdsBrowserShortcut({ registrationId, subOrderInde
     if (!shortcut || pending) return;
     if (shortcut.state === "browser_open") {
       toast.error("O Chrome está registrado como aberto. Encerre a sessão antes de preparar novamente.");
+      return;
+    }
+    if (!proxyConfigured) {
+      const diagnosis = describeH2AdsOrderBrowserBlock({
+        state: shortcut.state, reason: shortcut.reason, proxyConfigured: false, missingProxyDiagnostic,
+      });
+      toast.error(diagnosis.message);
       return;
     }
     try {
@@ -495,11 +505,13 @@ export default function OrderH2AdsBrowserShortcut({ registrationId, subOrderInde
   }
 
   const statusTitle = shortcut.reason || (shortcut.state === "browser_open" ? "Browser H2ADS aberto" : "Browser H2ADS pronto");
-  const blockedDetails = shortcut.canOpen || shortcut.canClose || preparationStalled ? null : describeH2AdsOrderBrowserBlock({
+  const blockedDetails = readyToOpen || shortcut.canClose || preparationStalled ? null : describeH2AdsOrderBrowserBlock({
     state: shortcut.state,
     reason: shortcut.reason,
     errorCategory: linkedRun?.lastErrorCategory ?? null,
     networkHealthStatus: networkProfile?.healthStatus ?? null,
+    proxyConfigured,
+    missingProxyDiagnostic,
   });
   const alreadyDelivered = Boolean(deliveredGroup && linkedInstance?.groupId === deliveredGroup.id);
   const deliveredTitle = !deliveredGroup
@@ -563,9 +575,9 @@ export default function OrderH2AdsBrowserShortcut({ registrationId, subOrderInde
     <button
       type="button"
       onClick={prepareAgain}
-      disabled={pending || shortcut.state === "queued" || shortcut.state === "preparing" || shortcut.state === "browser_open"}
+      disabled={pending || !proxyConfigured || shortcut.state === "queued" || shortcut.state === "preparing" || shortcut.state === "browser_open"}
       className="inline-flex min-h-8 items-center justify-center gap-1.5 rounded-lg border border-sky-400/35 bg-sky-400/15 px-2.5 py-1.5 text-[10px] font-black text-sky-100 transition hover:bg-sky-400/25 disabled:cursor-not-allowed disabled:opacity-30 sm:min-h-9 sm:px-3 sm:text-[11px] lg:min-h-10 lg:px-3.5 lg:text-xs"
-      title="Revalidar e restaurar a conexão sem fechar a instância"
+      title={proxyConfigured ? "Revalidar e restaurar a conexão sem fechar a instância" : "Sem credencial associada. Consulte o diagnóstico acima."}
     >
       <RefreshCw className="h-3.5 w-3.5 lg:h-4 lg:w-4" />PREPARAR NOVAMENTE
     </button>
