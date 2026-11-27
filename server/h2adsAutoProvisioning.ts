@@ -2,17 +2,20 @@ import { and, eq, inArray } from "drizzle-orm";
 import {
   h2AdsBrowserWorkers,
   h2AdsInstanceBrowserRuns,
+  h2AdsInstanceWorkerAssignments,
   h2AdsWorkerBrowserCommands,
   h2AdsWorkerCommands,
 } from "../drizzle/schema";
 import { getDb } from "./db";
 import {
   getH2AdsNetworkProfile,
+  getH2AdsProxyCredential,
   recordH2AdsNetworkValidation,
   requestH2AdsBrowserPreparation,
   saveH2AdsNetworkProfile,
   saveH2AdsProxyCredential,
 } from "./h2ads";
+import { assertH2AdsInstanceNotDeleting } from "./h2adsDeletionState";
 import { assignH2AdsInstanceWorkerPortable } from "./h2adsProfilePortability";
 import { decryptH2AdsProxy } from "./h2adsProxySecurity";
 import { classifyH2AdsRouteFailure, getH2AdsRouteMismatches, validateH2AdsGoogleAccess, validateH2AdsProxyRoute } from "./h2adsProxyValidation";
@@ -20,6 +23,7 @@ import {
   markH2AdsProxyFailed,
   markH2AdsOtherAssignedProxiesUsed,
   reserveH2AdsProxyForInstance,
+  reserveInitialH2AdsProxyForInstance,
 } from "./h2adsProxyPool";
 
 export type H2AdsAutoProvisionResult = {
@@ -140,50 +144,123 @@ async function attachAndValidateReservedProxy(instanceId: number, reserved: { id
   return { ok: true as const };
 }
 
+// The same instance cannot run two provisioning or rotation operations in one
+// server process. Initial reservation itself is also serialized in MySQL.
+const activeProvisioning = new Set<number>();
+async function withProvisioningGuard<T>(instanceId: number, run: () => Promise<T>): Promise<T> {
+  if (activeProvisioning.has(instanceId)) throw new Error("A configuração desta instância já está em andamento.");
+  activeProvisioning.add(instanceId);
+  try { return await run(); }
+  finally { activeProvisioning.delete(instanceId); }
+}
+
+async function resolveProvisionWorker(instanceId: number) {
+  const db = await requireDb();
+  const [assignment] = await db.select({ workerId: h2AdsInstanceWorkerAssignments.workerId })
+    .from(h2AdsInstanceWorkerAssignments).where(eq(h2AdsInstanceWorkerAssignments.instanceId, instanceId)).limit(1);
+  if (!assignment) return resolveWalk1Worker();
+  // A partially configured instance may already have an assigned Worker.
+  // Never migrate its local browser profile just to finish provisioning.
+  const [worker] = await db.select().from(h2AdsBrowserWorkers)
+    .where(and(eq(h2AdsBrowserWorkers.id, assignment.workerId), eq(h2AdsBrowserWorkers.status, "active"))).limit(1);
+  if (!worker) return null;
+  return { ...worker, online: Boolean(worker.lastSeenAt && Date.now() - worker.lastSeenAt.getTime() <= 70_000) };
+}
+
+async function assertInitialProvisionSafe(instanceId: number) {
+  await assertH2AdsInstanceNotDeleting(instanceId);
+  await assertProxySwapAllowed(instanceId);
+  const db = await requireDb();
+  const [run] = await db.select({ state: h2AdsInstanceBrowserRuns.state })
+    .from(h2AdsInstanceBrowserRuns).where(eq(h2AdsInstanceBrowserRuns.instanceId, instanceId)).limit(1);
+  if (run?.state === "browser_open") throw new Error("Encerre o navegador antes de concluir a configuração.");
+}
+
+async function verifyExistingProvisionRoute(instanceId: number, encryptedPayload: string) {
+  const profile = await getH2AdsNetworkProfile(instanceId);
+  try {
+    const candidate = decryptH2AdsProxy(encryptedPayload);
+    if (candidate.protocol !== "socks5") throw new Error("proxy_protocol_not_socks5");
+    const observed = await validateH2AdsProxyRoute(candidate);
+    if (getH2AdsRouteMismatches(observed, {
+      expectedIsp: profile?.expectedIsp ?? null, expectedAsn: profile?.expectedAsn ?? null,
+    }).length) throw new Error("route_mismatch");
+    await validateH2AdsGoogleAccess(candidate);
+    await assertInitialProvisionSafe(instanceId);
+    if (await getH2AdsProxyCredential(instanceId) !== encryptedPayload) throw new Error("route_changed");
+    await recordH2AdsNetworkValidation(instanceId, {
+      healthStatus: "healthy", observedIp: observed.ip, observedCountryCode: observed.countryCode,
+      observedCity: observed.city, observedIsp: observed.isp, observedAsn: observed.asn,
+      latencyMs: observed.latencyMs, lastCheckMessage: "Rota existente validada para concluir a configuração.",
+    });
+    return { ok: true as const };
+  } catch (error) {
+    const failure = classifyH2AdsRouteFailure(error);
+    // No alternative proxy is selected after failure, and no verification is skipped.
+    if (await getH2AdsProxyCredential(instanceId) === encryptedPayload) {
+      await assertInitialProvisionSafe(instanceId);
+      await recordH2AdsNetworkValidation(instanceId, {
+        healthStatus: "failed", observedIp: null, observedCountryCode: null, observedCity: null,
+        observedIsp: null, observedAsn: null, latencyMs: null, lastCheckMessage: failure.message,
+      });
+    }
+    return { ok: false as const, error: failure.message };
+  }
+}
+
 export async function autoProvisionH2AdsInstance(instanceId: number): Promise<H2AdsAutoProvisionResult> {
-  const reserved = await reserveH2AdsProxyForInstance(instanceId, false, "socks5");
-  if (!reserved) {
-    return {
-      status: "awaiting_proxy",
-      instanceId,
-      message: "Instância criada. A fila de proxies está vazia.",
+  return withProvisioningGuard(instanceId, async () => {
+    await assertInitialProvisionSafe(instanceId);
+    const worker = await resolveProvisionWorker(instanceId);
+    if (!worker?.online) return {
+      status: "worker_unavailable", instanceId, workerId: worker?.id,
+      message: worker ? "O Worker atribuído está offline." : "Worker automático WALK1 indisponível.",
     };
-  }
 
-  const checked = await attachAndValidateReservedProxy(instanceId, reserved);
-  if (!checked.ok) {
-    return {
-      status: "proxy_failed",
-      instanceId,
-      proxyPoolId: reserved.id,
-      message: checked.error,
+    let proxyPoolId: number | undefined;
+    let existingCredential = await getH2AdsProxyCredential(instanceId);
+    if (!existingCredential) {
+      const reservation = await reserveInitialH2AdsProxyForInstance(instanceId);
+      if (reservation.status === "unavailable") return {
+        status: "awaiting_proxy", instanceId, message: "Nenhum proxy SOCKS5 disponível para a configuração inicial.",
+      };
+      if (reservation.status === "previous_failure") return {
+        status: "proxy_failed", instanceId,
+        message: "A rota anterior não foi aprovada. A instância foi preservada; nenhuma troca automática será realizada.",
+      };
+      if (reservation.status === "configured") {
+        existingCredential = await getH2AdsProxyCredential(instanceId);
+        if (!existingCredential) throw new Error("A configuração mudou. Nenhuma nova rota foi atribuída.");
+      } else if (reservation.status === "reserved") {
+        proxyPoolId = reservation.proxy.id;
+        const checked = await attachAndValidateReservedProxy(instanceId, reservation.proxy);
+        if (!checked.ok) return { status: "proxy_failed", instanceId, proxyPoolId, message: checked.error };
+      }
+    }
+    if (existingCredential) {
+      const checked = await verifyExistingProvisionRoute(instanceId, existingCredential);
+      if (!checked.ok) return { status: "proxy_failed", instanceId, message: checked.error };
+    }
+    await assertInitialProvisionSafe(instanceId);
+    const currentWorker = await resolveProvisionWorker(instanceId);
+    if (!currentWorker?.online || currentWorker.id !== worker.id) return {
+      status: "worker_unavailable", instanceId, proxyPoolId,
+      message: "O Worker deixou de estar disponível. A rota existente foi preservada.",
     };
-  }
-
-  const worker = await resolveWalk1Worker();
-  if (!worker || !worker.online) {
+    await assignH2AdsInstanceWorkerPortable(instanceId, worker.id);
+    await requestH2AdsBrowserPreparation(instanceId);
     return {
-      status: "worker_unavailable",
-      instanceId,
-      proxyPoolId: reserved.id,
-      workerId: worker?.id,
-      message: worker ? "WALK1 está offline." : "Worker WALK1 não foi encontrado.",
+      status: "preparing", instanceId, proxyPoolId, workerId: worker.id,
+      message: "Configuração concluída na mesma instância. Preparação enviada ao Worker.",
     };
-  }
-
-  await assignH2AdsInstanceWorkerPortable(instanceId, worker.id);
-  await requestH2AdsBrowserPreparation(instanceId);
-
-  return {
-    status: "preparing",
-    instanceId,
-    proxyPoolId: reserved.id,
-    workerId: worker.id,
-    message: "Proxy validado, WALK1 atribuído e preparação enviada.",
-  };
+  });
 }
 
 export async function rotateH2AdsInstanceProxy(instanceId: number): Promise<H2AdsAutoProvisionResult> {
+  return withProvisioningGuard(instanceId, () => rotateH2AdsInstanceProxyInternal(instanceId));
+}
+
+async function rotateH2AdsInstanceProxyInternal(instanceId: number): Promise<H2AdsAutoProvisionResult> {
   await assertProxySwapAllowed(instanceId);
   const db = await requireDb();
   const runRows = await db

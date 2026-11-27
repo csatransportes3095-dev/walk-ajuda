@@ -1,6 +1,6 @@
 import { createHash } from "node:crypto";
-import { and, asc, eq, inArray, ne, sql } from "drizzle-orm";
-import { h2AdsInstanceProxyCredentials, h2AdsProxyPool, type H2AdsProxyPool } from "../drizzle/schema";
+import { and, asc, desc, eq, inArray, ne, sql } from "drizzle-orm";
+import { h2AdsInstances, h2AdsInstanceProxyCredentials, h2AdsProxyPool, type H2AdsProxyPool } from "../drizzle/schema";
 import { getDb } from "./db";
 import { decryptH2AdsProxy, encryptH2AdsProxy, parseH2AdsProxyInput } from "./h2adsProxySecurity";
 import type { H2AdsProxyProtocol } from "../shared/h2adsProxyInput";
@@ -190,6 +190,48 @@ export async function deleteUnusedH2AdsProxyPool(): Promise<{
       protected: candidates.length - eligibleIds.length,
       examined: candidates.length,
     };
+  });
+}
+
+/**
+ * Initial provisioning is resumable, not a rotation. Serialize reservations
+ * by instance, reuse its one pending reservation, and never choose a different
+ * proxy after a previous rejection (including security challenges).
+ */
+export async function reserveInitialH2AdsProxyForInstance(instanceId: number): Promise<
+  | { status: "reserved"; proxy: H2AdsReservedProxy }
+  | { status: "unavailable" | "previous_failure" | "configured" }
+> {
+  const db = await requireDb();
+  return db.transaction(async tx => {
+    const [instance] = await tx.select({ id: h2AdsInstances.id, status: h2AdsInstances.status })
+      .from(h2AdsInstances).where(eq(h2AdsInstances.id, instanceId)).for("update");
+    if (!instance || instance.status === "archived") throw new Error("Instância H2ADS indisponível.");
+    const [credential] = await tx.select({ id: h2AdsInstanceProxyCredentials.id })
+      .from(h2AdsInstanceProxyCredentials).where(eq(h2AdsInstanceProxyCredentials.instanceId, instanceId)).limit(1);
+    if (credential) return { status: "configured" };
+    const history = await tx.select({
+      id: h2AdsProxyPool.id, encryptedPayload: h2AdsProxyPool.encryptedPayload,
+      protocol: h2AdsProxyPool.protocol, status: h2AdsProxyPool.status,
+    }).from(h2AdsProxyPool).where(eq(h2AdsProxyPool.assignedInstanceId, instanceId))
+      .orderBy(desc(h2AdsProxyPool.assignedAt), desc(h2AdsProxyPool.id)).limit(1);
+    if (history[0]) {
+      const previous = history[0];
+      if (previous.status === "assigned" && previous.protocol === "socks5") {
+        return { status: "reserved", proxy: previous };
+      }
+      return { status: "previous_failure" };
+    }
+    const [candidate] = await tx.select({
+      id: h2AdsProxyPool.id, encryptedPayload: h2AdsProxyPool.encryptedPayload, protocol: h2AdsProxyPool.protocol,
+    }).from(h2AdsProxyPool).where(and(eq(h2AdsProxyPool.status, "available"), eq(h2AdsProxyPool.protocol, "socks5")))
+      .orderBy(asc(h2AdsProxyPool.id)).limit(1).for("update");
+    if (!candidate) return { status: "unavailable" };
+    const result = await tx.update(h2AdsProxyPool).set({
+      status: "assigned", assignedInstanceId: instanceId, assignedAt: new Date(), consumedAt: null, lastErrorCategory: null,
+    }).where(and(eq(h2AdsProxyPool.id, candidate.id), eq(h2AdsProxyPool.status, "available")));
+    if (Number(result[0].affectedRows) !== 1) throw new Error("Reserva de proxy concorrente. Tente concluir novamente.");
+    return { status: "reserved", proxy: candidate };
   });
 }
 

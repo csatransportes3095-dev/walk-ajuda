@@ -333,6 +333,24 @@ export const h2AdsRouter = {
     }
   }),
 
+  // Resume only the exact instance already linked to this order/suborder.
+  // The same initial provisioning service is used for creation and recovery.
+  resumeOrderProvisioning: adminProcedure.input(z.object({
+    instanceId: z.number().int().positive(),
+    registrationId: z.number().int().positive(),
+    subOrderIndex: z.number().int().min(0),
+  }).strict()).mutation(async ({ input }) => {
+    await requireConfigurableInstance(input.instanceId);
+    const linked = (await listH2AdsOrderLinks()).some(link =>
+      link.instanceId === input.instanceId && link.registrationId === input.registrationId && link.subOrderIndex === input.subOrderIndex);
+    if (!linked) throw new TRPCError({ code: "CONFLICT", message: "O vínculo com este pedido mudou. Nenhuma configuração foi alterada." });
+    try {
+      return { success: true, ...(await autoProvisionH2AdsInstance(input.instanceId)) };
+    } catch (error) {
+      throw new TRPCError({ code: "CONFLICT", message: error instanceof Error ? error.message : "Não foi possível concluir a configuração." });
+    }
+  }),
+
   recoverStalledPreparation: adminProcedure.input(h2AdsPrepareBrowserSchema).mutation(async ({ input }) => {
     await requireConfigurableInstance(input.instanceId);
     try {

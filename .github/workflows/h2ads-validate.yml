@@ -64,7 +64,7 @@ jobs:
         run: node --test workers/windows/browser-session-recovery.test.mjs workers/windows/browser-session-manual-swap.test.mjs
 
       - name: Run H2 Ads tests
-        run: pnpm vitest run server/h2adsExtensionSync.test.ts server/h2adsWorkerRoute.test.ts server/h2adsWorkerFoundation.test.ts server/h2adsWorkerErrorGuard.test.ts server/h2adsOrderBrowserShortcut.test.ts server/h2adsMobileRemoteBridge.test.ts server/h2adsEntryRoute.test.ts server/h2adsMobilePhase2Wiring.test.ts server/h2adsSessionStateGuards.test.ts server/h2adsProxyRotationGuard.test.ts server/h2adsReopenAfterClose.test.ts server/h2adsStaleCloseGuard.test.ts
+        run: pnpm vitest run server/h2adsExtensionSync.test.ts server/h2adsWorkerRoute.test.ts server/h2adsWorkerFoundation.test.ts server/h2adsWorkerErrorGuard.test.ts server/h2adsOrderBrowserShortcut.test.ts server/h2adsMobileRemoteBridge.test.ts server/h2adsEntryRoute.test.ts server/h2adsMobilePhase2Wiring.test.ts server/h2adsSessionStateGuards.test.ts server/h2adsProxyRotationGuard.test.ts server/h2adsReopenAfterClose.test.ts server/h2adsStaleCloseGuard.test.ts server/h2adsProxyValidation.test.ts server/h2adsFinalPrivacyGuard.test.ts server/h2adsInitialProvisioningResume.test.ts
 
       - name: Build production bundle
         run: pnpm build
