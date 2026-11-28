@@ -8882,6 +8882,25 @@ export const appRouter = router({
 
   // === CONTAS PIX ===
   pix: router({
+    checkoutProvider: publicProcedure.query(async () => {
+      const { CHECKOUT_PROVIDER_KEY, parseCheckoutProvider, VALIDRA_CHECKOUT_READY } = await import("./checkoutPaymentProvider");
+      const { getDb } = await import("./db");
+      if (!await getDb()) throw new TRPCError({ code: "SERVICE_UNAVAILABLE" });
+      return { provider: parseCheckoutProvider(await getSystemConfig(CHECKOUT_PROVIDER_KEY)), validraReady: VALIDRA_CHECKOUT_READY };
+    }),
+    setCheckoutProvider: adminProcedure
+      .input(z.object({ provider: z.enum(["manual", "validrapay"]), editPassword: z.string().min(1) }))
+      .mutation(async ({ input }) => {
+        if (!isLoanEditPasswordValid(input.editPassword)) throw new TRPCError({ code: "FORBIDDEN", message: "Senha interna inválida ou não configurada." });
+        const { CHECKOUT_PROVIDER_KEY, VALIDRA_CHECKOUT_READY } = await import("./checkoutPaymentProvider");
+        if (input.provider === "validrapay" && !VALIDRA_CHECKOUT_READY) throw new TRPCError({ code: "PRECONDITION_FAILED", message: "ValidraPay ainda não liberada para checkout." });
+        const { getDb } = await import("./db");
+        if (!await getDb()) throw new TRPCError({ code: "SERVICE_UNAVAILABLE" });
+        await setSystemConfig(CHECKOUT_PROVIDER_KEY, input.provider);
+        if (await getSystemConfig(CHECKOUT_PROVIDER_KEY) !== input.provider) throw new TRPCError({ code: "CONFLICT", message: "Não foi possível confirmar a alteração." });
+        return { provider: input.provider };
+      }),
+
     authorize: adminProcedure
       .input(z.object({ password: z.string().min(1) }))
       .mutation(({ input }) => {

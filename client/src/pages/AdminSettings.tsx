@@ -81,6 +81,13 @@ export default function AdminSettings() {
   // === PIX ACCOUNTS ===
   type PixAccount = { id: number; label: string; pixKey: string; pixType: string; pixName: string; pixBank: string; isActive: number; createdAt: Date };
   const { data: pixAccounts = [], refetch: refetchPix } = trpc.pix.list.useQuery();
+  const providerQuery = trpc.pix.checkoutProvider.useQuery();
+  const [providerPasswordOpen, setProviderPasswordOpen] = useState(false);
+  const [nextProvider, setNextProvider] = useState<"manual" | "validrapay">("manual");
+  const providerMutation = trpc.pix.setCheckoutProvider.useMutation({
+    onSuccess: () => { setProviderPasswordOpen(false); void providerQuery.refetch(); toast.success("Forma de pagamento atualizada."); },
+    onError: error => toast.error(error.message),
+  });
   const [showNewPixForm, setShowNewPixForm] = useState(false);
   const [newPix, setNewPix] = useState({ label: '', pixKey: '', pixType: 'TELEFONE', pixName: '', pixBank: '' });
   const [editingPixId, setEditingPixId] = useState<number | null>(null);
@@ -1271,6 +1278,22 @@ export default function AdminSettings() {
         {/* PIX TAB */}
         {activeTab === "pix" && (
           <div className="space-y-4">
+            <div className="bg-[#111128] border border-purple-500/40 rounded-xl p-4 space-y-3">
+              <h2 className="text-lg font-bold text-white">Forma de pagamento</h2>
+              {providerQuery.isError ? <p className="text-red-300 text-sm">Não foi possível consultar a configuração.</p> : !providerQuery.data ? <p className="text-white/60 text-sm">Carregando...</p> : (
+                <div className="grid gap-2">
+                  {(["manual", "validrapay"] as const).map(provider => (
+                    <button key={provider} type="button" disabled={providerMutation.isPending || providerQuery.data?.provider === provider || (provider === "validrapay" && !providerQuery.data?.validraReady)}
+                      onClick={() => { setNextProvider(provider); setProviderPasswordOpen(true); }}
+                      className="flex justify-between items-center rounded-lg border border-purple-500/30 p-3 text-white disabled:opacity-70">
+                      <span>{provider === "manual" ? "PIX atual" : "ValidraPay"}</span>
+                      <span className="text-xs">{providerQuery.data?.provider === provider ? "ATIVO" : provider === "validrapay" && !providerQuery.data?.validraReady ? "EM INTEGRAÇÃO" : "INATIVO"}</span>
+                    </button>
+                  ))}
+                </div>
+              )}
+              <AdminActionPasswordDialog open={providerPasswordOpen} onOpenChange={setProviderPasswordOpen} onConfirm={password => providerMutation.mutate({ provider: nextProvider, editPassword: password })} />
+            </div>
             <div className="flex items-center justify-between">
               <h2 className="text-lg font-bold text-white">Contas PIX</h2>
               <Button onClick={() => showNewPixForm ? setShowNewPixForm(false) : setPixPasswordAction('openCreate')} className="bg-purple-600 hover:bg-purple-700 text-white text-xs px-3 py-1.5 h-auto flex items-center gap-1">
