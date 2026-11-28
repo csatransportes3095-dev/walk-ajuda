@@ -18,6 +18,11 @@ jobs:
         with:
           node-version: '22'
           cache: pnpm
+      - name: Validate historical workflow syntax without executing patches
+        run: |
+          python3 -m venv /tmp/validra-yaml-check
+          /tmp/validra-yaml-check/bin/python -m pip install --disable-pip-version-check PyYAML==6.0.2
+          /tmp/validra-yaml-check/bin/python scripts/validate-historical-workflows.py
       - run: pnpm install --frozen-lockfile
       - run: pnpm exec vitest run server/validraPay.test.ts server/validraOrderPersistence.test.ts server/orderPersistence.test.ts server/validraCheckout.test.ts server/validraCartTotals.test.ts server/validraEventWorker.test.ts server/validraCartPublic.test.ts server/autoScheduleIsolation.test.ts server/autoScheduleActivationWiring.test.ts server/autoScheduleLegacyProduct.test.ts
   mysql-integration:

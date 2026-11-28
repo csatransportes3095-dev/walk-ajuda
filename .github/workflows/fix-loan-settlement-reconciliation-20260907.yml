@@ -45,29 +45,29 @@ jobs:
           helper_anchor = "function getBrazilHour(): number {\n  return getBrazilClock().hour;\n}\n"
           helper = r'''
 
-// Reconciliacao defensiva: corrige emprestimos legados que ficaram ativos
-// depois da quitacao. "pago_juros" e historico de juros; o principal rolado
-// permanece representado por outra parcela. Portanto ele nao pode impedir a
-// baixa final quando todas as parcelas de principal ja foram pagas.
-async function reconcileSettledLoanStatuses(db: any): Promise<void> {
-  await db.execute(drizzleSql`
-    UPDATE loans l
-    SET l.status='pago',
-        l.paidAt=COALESCE(l.paidAt, NOW()),
-        l.paidBy=COALESCE(NULLIF(l.paidBy, ''), 'reconciliacao_automatica')
-    WHERE l.status NOT IN ('pago','cancelado','reprovado','pendente')
-      AND EXISTS (
-        SELECT 1 FROM loanInstallments liPaid
-        WHERE liPaid.loanId=l.id AND liPaid.status='pago'
-      )
-      AND NOT EXISTS (
-        SELECT 1 FROM loanInstallments liOpen
-        WHERE liOpen.loanId=l.id
-          AND liOpen.status NOT IN ('pago','pago_juros')
-      )
-  `);
-}
-'''
+          // Reconciliacao defensiva: corrige emprestimos legados que ficaram ativos
+          // depois da quitacao. "pago_juros" e historico de juros; o principal rolado
+          // permanece representado por outra parcela. Portanto ele nao pode impedir a
+          // baixa final quando todas as parcelas de principal ja foram pagas.
+          async function reconcileSettledLoanStatuses(db: any): Promise<void> {
+            await db.execute(drizzleSql`
+              UPDATE loans l
+              SET l.status='pago',
+                  l.paidAt=COALESCE(l.paidAt, NOW()),
+                  l.paidBy=COALESCE(NULLIF(l.paidBy, ''), 'reconciliacao_automatica')
+              WHERE l.status NOT IN ('pago','cancelado','reprovado','pendente')
+                AND EXISTS (
+                  SELECT 1 FROM loanInstallments liPaid
+                  WHERE liPaid.loanId=l.id AND liPaid.status='pago'
+                )
+                AND NOT EXISTS (
+                  SELECT 1 FROM loanInstallments liOpen
+                  WHERE liOpen.loanId=l.id
+                    AND liOpen.status NOT IN ('pago','pago_juros')
+                )
+            `);
+          }
+          '''
           if 'async function reconcileSettledLoanStatuses' not in loans:
               if loans.count(helper_anchor) != 1:
                   raise SystemExit('Could not find getBrazilHour helper anchor')
@@ -100,20 +100,20 @@ async function reconcileSettledLoanStatuses(db: any): Promise<void> {
           audit = Path('audit/check_loan_settlement_reconciliation.mjs')
           audit.write_text(r'''import fs from "node:fs";
 
-const loans = fs.readFileSync("server/routers/loans.ts", "utf8");
-const admin = fs.readFileSync("client/src/pages/AdminLoans.tsx", "utf8");
+          const loans = fs.readFileSync("server/routers/loans.ts", "utf8");
+          const admin = fs.readFileSync("client/src/pages/AdminLoans.tsx", "utf8");
 
-const checks = [
-  ["closure ignores pago_juros", (loans.match(/status NOT IN \('pago','pago_juros'\)/g) || []).length >= 2],
-  ["legacy reconciliation exists", loans.includes("async function reconcileSettledLoanStatuses")],
-  ["client reconciliation", loans.includes("getClientLoanInfo") && loans.includes("await reconcileSettledLoanStatuses(db);")],
-  ["admin search crosses statuses", admin.includes("search.trim() ? 'todos' : loanTab")],
-];
+          const checks = [
+            ["closure ignores pago_juros", (loans.match(/status NOT IN \('pago','pago_juros'\)/g) || []).length >= 2],
+            ["legacy reconciliation exists", loans.includes("async function reconcileSettledLoanStatuses")],
+            ["client reconciliation", loans.includes("getClientLoanInfo") && loans.includes("await reconcileSettledLoanStatuses(db);")],
+            ["admin search crosses statuses", admin.includes("search.trim() ? 'todos' : loanTab")],
+          ];
 
-const failed = checks.filter(([, ok]) => !ok);
-for (const [name, ok] of checks) console.log(`${ok ? "OK" : "FAIL"} - ${name}`);
-if (failed.length) process.exit(1);
-''', encoding='utf-8')
+          const failed = checks.filter(([, ok]) => !ok);
+          for (const [name, ok] of checks) console.log(`${ok ? "OK" : "FAIL"} - ${name}`);
+          if (failed.length) process.exit(1);
+          ''', encoding='utf-8')
 
       - name: Run settlement audit
         run: node audit/check_loan_settlement_reconciliation.mjs

@@ -31,66 +31,66 @@ jobs:
           text = path.read_text(encoding='utf-8')
 
           old_auth = '''async function authenticateRequest(req: Request, res: Response) {
-  const authorization = req.header("authorization");
-  const workerToken = authorization?.startsWith("Bearer ") ? authorization.slice(7).trim() : null;
-  const workerKey = workerString(req.header("x-h2ads-worker-key"), 64);
-  if (!workerToken || !workerKey) {
-    res.status(401).json({ error: "Worker não autorizado." });
-    return null;
-  }
-  const worker = await authenticateH2AdsWorker(workerKey, workerToken);
-  if (!worker) {
-    res.status(401).json({ error: "Worker não autorizado." });
-    return null;
-  }
-  return worker;
-}
-'''
+            const authorization = req.header("authorization");
+            const workerToken = authorization?.startsWith("Bearer ") ? authorization.slice(7).trim() : null;
+            const workerKey = workerString(req.header("x-h2ads-worker-key"), 64);
+            if (!workerToken || !workerKey) {
+              res.status(401).json({ error: "Worker não autorizado." });
+              return null;
+            }
+            const worker = await authenticateH2AdsWorker(workerKey, workerToken);
+            if (!worker) {
+              res.status(401).json({ error: "Worker não autorizado." });
+              return null;
+            }
+            return worker;
+          }
+          '''
           new_auth = '''async function authenticateRequest(req: Request, res: Response) {
-  const authorization = req.header("authorization");
-  const workerToken = authorization?.startsWith("Bearer ") ? authorization.slice(7).trim() : null;
-  const workerKey = workerString(req.header("x-h2ads-worker-key"), 64);
-  if (!workerToken || !workerKey) {
-    res.status(401).json({ error: "Worker não autorizado." });
-    return null;
-  }
-  try {
-    const worker = await authenticateH2AdsWorker(workerKey, workerToken);
-    if (!worker) {
-      res.status(401).json({ error: "Worker não autorizado." });
-      return null;
-    }
-    return worker;
-  } catch (error) {
-    console.error("[H2ADS Worker] falha temporária ao autenticar worker:", error instanceof Error ? error.message : String(error));
-    if (!res.headersSent) res.status(503).json({ error: "Worker temporariamente indisponível. Tente novamente." });
-    return null;
-  }
-}
-'''
+            const authorization = req.header("authorization");
+            const workerToken = authorization?.startsWith("Bearer ") ? authorization.slice(7).trim() : null;
+            const workerKey = workerString(req.header("x-h2ads-worker-key"), 64);
+            if (!workerToken || !workerKey) {
+              res.status(401).json({ error: "Worker não autorizado." });
+              return null;
+            }
+            try {
+              const worker = await authenticateH2AdsWorker(workerKey, workerToken);
+              if (!worker) {
+                res.status(401).json({ error: "Worker não autorizado." });
+                return null;
+              }
+              return worker;
+            } catch (error) {
+              console.error("[H2ADS Worker] falha temporária ao autenticar worker:", error instanceof Error ? error.message : String(error));
+              if (!res.headersSent) res.status(503).json({ error: "Worker temporariamente indisponível. Tente novamente." });
+              return null;
+            }
+          }
+          '''
           if text.count(old_auth) != 1:
               raise SystemExit(f'ABORT: authenticateRequest block count={text.count(old_auth)}')
           text = text.replace(old_auth, new_auth, 1)
 
           old_heartbeat = '''    const accepted = await recordH2AdsWorkerHeartbeat({ workerKey, workerToken, computerName, agentVersion });
-    if (!accepted) {
-      res.status(401).json({ error: "Worker não autorizado." });
-      return;
-    }
-    res.status(204).end();
-'''
+              if (!accepted) {
+                res.status(401).json({ error: "Worker não autorizado." });
+                return;
+              }
+              res.status(204).end();
+          '''
           new_heartbeat = '''    try {
-      const accepted = await recordH2AdsWorkerHeartbeat({ workerKey, workerToken, computerName, agentVersion });
-      if (!accepted) {
-        res.status(401).json({ error: "Worker não autorizado." });
-        return;
-      }
-      res.status(204).end();
-    } catch (error) {
-      console.error("[H2ADS Worker] heartbeat indisponível:", error instanceof Error ? error.message : String(error));
-      if (!res.headersSent) res.status(503).json({ error: "Worker temporariamente indisponível. Tente novamente." });
-    }
-'''
+                const accepted = await recordH2AdsWorkerHeartbeat({ workerKey, workerToken, computerName, agentVersion });
+                if (!accepted) {
+                  res.status(401).json({ error: "Worker não autorizado." });
+                  return;
+                }
+                res.status(204).end();
+              } catch (error) {
+                console.error("[H2ADS Worker] heartbeat indisponível:", error instanceof Error ? error.message : String(error));
+                if (!res.headersSent) res.status(503).json({ error: "Worker temporariamente indisponível. Tente novamente." });
+              }
+          '''
           if text.count(old_heartbeat) != 1:
               raise SystemExit(f'ABORT: heartbeat block count={text.count(old_heartbeat)}')
           text = text.replace(old_heartbeat, new_heartbeat, 1)

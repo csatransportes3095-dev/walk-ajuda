@@ -300,7 +300,11 @@ describe.skipIf(!dbUrl)("ValidraPay real MySQL integration (simulated provider)"
     expect(headPrivateValidraObject).not.toHaveBeenCalled();
     await pool.execute("UPDATE validra_document_uploads SET customer_id=21,customer_phone=?",[phone]);
     snapshot.orders[0].documents=[{...doc,fileUrl:"https://other.example.test/"+doc.fileKey}];
-    await expect(runValidraCartCheckout(f.input.externalId,snapshot,true,f.client)).rejects.toThrow("validra_document_not_authorized");
+    // The private URL is now checked by snapshot validation, before registry
+    // lookup or any storage/provider call. Keep the strict rejection.
+    await expect(runValidraCartCheckout(f.input.externalId,snapshot,true,f.client)).rejects.toThrow("validra_invalid_cart_snapshot");
+    expect(headPrivateValidraObject).not.toHaveBeenCalled();
+    expect(f.transport).not.toHaveBeenCalled();
     snapshot.orders[0].documents=[doc];
     vi.mocked(headPrivateValidraObject).mockResolvedValueOnce({httpStatus:200,contentLength:16,etag:"changed-etag"});
     await expect(runValidraCartCheckout(f.input.externalId,snapshot,true,f.client)).rejects.toThrow("validra_document_storage_unavailable");
