@@ -23,6 +23,7 @@ import { runValidraCartCheckout } from "./validraCartCheckout";
 import { assembleValidraCartForms } from "./validraCartPublic";
 import type { ValidraItemRequirements } from "../shared/validraCartForms";
 import { ensureValidraScheduleStorage, processNextValidraSchedule } from "./validraScheduleWorker";
+import { processNextValidraNotice } from "./validraNoticeWorker";
 import type { ensureAutomaticScheduleForOrder } from "./autoSchedule";
 
 // A real disposable MySQL service in CI, never DATABASE_URL or production.
@@ -31,11 +32,12 @@ const dbUrl = process.env.VALIDRA_TEST_DATABASE_URL;
 const key = "vpk_live_" + "A".repeat(26) + "_" + "B".repeat(52);
 const phone = "11999990000";
 const fixtureSchema = [
+  "CREATE TABLE IF NOT EXISTS referralCommissionAttributions (id INT AUTO_INCREMENT PRIMARY KEY,referrerCustomerId INT,referrerPhone VARCHAR(32) NOT NULL,referrerName VARCHAR(128),referredCustomerId INT NOT NULL,referredPhone VARCHAR(32) NOT NULL,referredName VARCHAR(128),source VARCHAR(32) NOT NULL,sourceReference VARCHAR(128),registrationId INT NOT NULL,orderStatusId INT NOT NULL UNIQUE,orderNumber INT,productId INT,optionId INT,serviceName VARCHAR(256),serviceOption VARCHAR(256),commissionRule VARCHAR(32) NOT NULL,commissionValue INT NOT NULL,status VARCHAR(32) NOT NULL,invalidReason VARCHAR(512),invalidatedAt TIMESTAMP NULL,eligibleAt TIMESTAMP NULL,paidAt TIMESTAMP NULL,paidBy VARCHAR(128),paymentReference VARCHAR(256),createdAt TIMESTAMP DEFAULT CURRENT_TIMESTAMP,updatedAt TIMESTAMP DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP) ENGINE=InnoDB",
   "CREATE TABLE IF NOT EXISTS productOptions (id INT PRIMARY KEY, productId INT NOT NULL, autoScheduleEnabled INT NOT NULL DEFAULT 0) ENGINE=InnoDB",
   "CREATE TABLE IF NOT EXISTS scheduleAppointments (id INT AUTO_INCREMENT PRIMARY KEY, token VARCHAR(64) NOT NULL UNIQUE, registrationId INT NOT NULL, subOrderIndex INT NOT NULL DEFAULT 0, customerPhone VARCHAR(32) NOT NULL, customerName VARCHAR(128), customerEmail VARCHAR(320), customerPhotoUrl TEXT, serviceName VARCHAR(256), templateId INT, slotId INT, slotDate VARCHAR(16), slotTime VARCHAR(8), status ENUM('pending','confirmed','cancelled','completed') NOT NULL DEFAULT 'pending', instructions TEXT, sentByEmail INT NOT NULL DEFAULT 0, confirmedAt TIMESTAMP NULL, adminSeenConfirmedAt TIMESTAMP NULL, hasScheduleNotification INT NOT NULL DEFAULT 0, createdAt TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP, updatedAt TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP, INDEX fixture_schedule_registration(registrationId,subOrderIndex)) ENGINE=InnoDB",
   "CREATE TABLE IF NOT EXISTS orderFiles (id INT AUTO_INCREMENT PRIMARY KEY, registrationId INT NOT NULL, customerPhone VARCHAR(32) NOT NULL, label VARCHAR(256) NOT NULL, fileUrl TEXT NOT NULL, fileKey VARCHAR(512) NOT NULL, mimeType VARCHAR(128) NOT NULL DEFAULT 'image/jpeg', fromAdmin INT NOT NULL DEFAULT 0, addedByAdmin INT NOT NULL DEFAULT 0, createdAt TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP, CHECK (label <> 'FAIL_TEST_DOCUMENT')) ENGINE=InnoDB",
   "CREATE TABLE IF NOT EXISTS financialSales (id INT AUTO_INCREMENT PRIMARY KEY, registrationId INT, customerName VARCHAR(256) NOT NULL DEFAULT '', customerPhone VARCHAR(32) NOT NULL DEFAULT '', productName VARCHAR(256) NOT NULL DEFAULT '', productOption VARCHAR(256) NOT NULL DEFAULT '', saleValue INT NOT NULL DEFAULT 0, costValue INT NOT NULL DEFAULT 0, paymentMethod VARCHAR(64) NOT NULL DEFAULT 'pix', status VARCHAR(32) NOT NULL DEFAULT 'pendente', saleDate BIGINT NOT NULL, receivedDate BIGINT, notes TEXT, createdAt TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP, updatedAt TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP) ENGINE=InnoDB",
-  "CREATE TABLE IF NOT EXISTS customers (id INT PRIMARY KEY, phone VARCHAR(32) NOT NULL, blocked INT NOT NULL DEFAULT 0, deletedAt TIMESTAMP NULL) ENGINE=InnoDB",
+  "CREATE TABLE IF NOT EXISTS customers (id INT PRIMARY KEY, phone VARCHAR(32) NOT NULL, email VARCHAR(320), referredByPhone VARCHAR(32), blocked INT NOT NULL DEFAULT 0, deletedAt TIMESTAMP NULL) ENGINE=InnoDB",
   "CREATE TABLE IF NOT EXISTS accessCodes (id INT AUTO_INCREMENT PRIMARY KEY, code VARCHAR(64) NOT NULL UNIQUE, type ENUM('general','vip') NOT NULL DEFAULT 'vip', status ENUM('active','used','disabled') NOT NULL DEFAULT 'active', clientName TEXT, usedAt TIMESTAMP NULL, usedBy TEXT, accessedByPhone VARCHAR(32), maxUses INT DEFAULT 1, currentUses INT DEFAULT 0, expiresAt TIMESTAMP NULL, timeOnly INT NOT NULL DEFAULT 0, allowedProductIds TEXT, createdAt TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP) ENGINE=InnoDB",
   "CREATE TABLE IF NOT EXISTS accessCodePhones (id INT AUTO_INCREMENT PRIMARY KEY, codeId INT NOT NULL, phone VARCHAR(32) NOT NULL, consumed INT DEFAULT 0, archived INT NOT NULL DEFAULT 0, rgCnhApproved INT NOT NULL DEFAULT 0, orderSource VARCHAR(16) NOT NULL DEFAULT 'auto', accessedAt TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP, refCode VARCHAR(64), refExpiresAt BIGINT, refOwnerName VARCHAR(128), deletedAt TIMESTAMP NULL, deletedReason VARCHAR(256), thirdPartyName VARCHAR(128), thirdPartyPhone VARCHAR(32), resellerDiscountApplied DECIMAL(10,2), cartGroupId VARCHAR(64), cartTotal DECIMAL(10,2), cartCouponCode VARCHAR(64), cartCouponDiscount DECIMAL(10,2), cartItemIndex INT DEFAULT 0) ENGINE=InnoDB",
   "CREATE TABLE IF NOT EXISTS orderCounter (id INT AUTO_INCREMENT PRIMARY KEY, createdAt TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP) ENGINE=InnoDB",
@@ -74,7 +76,7 @@ function makeFixture(serviceName = "Produto de teste") {
 
 describe.skipIf(!dbUrl)("ValidraPay real MySQL integration (simulated provider)", () => {
   let pool: Pool;
-  async function count(table: "orderStatusHistory" | "accessCodePhones" | "orderCounter" | "validra_webhook_events" | "orderFiles" | "financialSales" | "validra_schedule_jobs" | "scheduleAppointments") {
+  async function count(table: "orderStatusHistory" | "accessCodePhones" | "orderCounter" | "validra_webhook_events" | "orderFiles" | "financialSales" | "validra_schedule_jobs" | "scheduleAppointments" | "validra_notice_jobs" | "referralCommissionAttributions") {
     const [rows] = await pool.query<RowDataPacket[]>("SELECT COUNT(*) AS total FROM " + table);
     return Number(rows[0].total);
   }
@@ -96,7 +98,7 @@ describe.skipIf(!dbUrl)("ValidraPay real MySQL integration (simulated provider)"
     vi.mocked(headPrivateValidraObject).mockReset().mockResolvedValue({httpStatus:200,contentLength:16,etag:"fixture-etag"});
     vi.mocked(putPrivateValidraObject).mockReset().mockResolvedValue(undefined);
     vi.mocked(getPrivateValidraObject).mockReset().mockResolvedValue(Buffer.from("%PDF-fixture-123"));
-    for (const table of ["validra_document_uploads", "validra_schedule_jobs", "scheduleAppointments", "productOptions", "orderFiles", "financialSales", "validra_payment_reviews", "validra_event_jobs", "validra_webhook_events", "validra_order_followup", "validra_cart_orders", "validra_cart_snapshots", "validra_checkout_attempts", "orderStatusHistory", "accessCodePhones", "accessCodes", "orderCounter", "customers", "orderStatusTypes"]) await pool.query("DELETE FROM " + table);
+    for (const table of ["validra_notice_jobs","referralCommissionAttributions","validra_document_uploads", "validra_schedule_jobs", "scheduleAppointments", "productOptions", "orderFiles", "financialSales", "validra_payment_reviews", "validra_event_jobs", "validra_webhook_events", "validra_order_followup", "validra_cart_orders", "validra_cart_snapshots", "validra_checkout_attempts", "orderStatusHistory", "accessCodePhones", "accessCodes", "orderCounter", "customers", "orderStatusTypes"]) await pool.query("DELETE FROM " + table);
     await pool.execute("INSERT INTO customers (id, phone) VALUES (21, ?)", [phone]);
     await pool.execute("INSERT INTO orderStatusTypes (`key`) VALUES ('pedido_recebido')");
     await pool.execute("INSERT INTO productOptions(id,productId,autoScheduleEnabled) VALUES (11,1,1),(22,2,0)");
@@ -181,6 +183,51 @@ describe.skipIf(!dbUrl)("ValidraPay real MySQL integration (simulated provider)"
         [doc.fileKey,customerId,customerPhone,doc.label,doc.fileUrl,doc.mimeType,16,"fixture-etag"]);
     }
   }
+
+  it("freezes a first-order referral and queues one notice per audience without paying commission",async()=>{
+    const f=makeFixture(),snapshot=cartFixture(f);
+    const referrerPhone="11999990001";
+    await pool.execute("INSERT INTO customers(id,phone) VALUES(22,?)",[referrerPhone]);
+    await pool.execute("UPDATE customers SET referredByPhone=?,email=? WHERE id=21",[referrerPhone,"customer@example.test"]);
+    snapshot.quote.items[0]={...snapshot.quote.items[0],commissionValue:500};
+    snapshot.referral={referrerCustomerId:22,referrerPhone,referrerName:"Referrer",commissionValue:500,promotionNoCommission:false};
+    await runValidraCartCheckout(f.input.externalId,snapshot,true,f.client);
+    expect(await count("validra_notice_jobs")).toBe(0);
+    expect(await count("referralCommissionAttributions")).toBe(0);
+    const paid=await persistPaidValidraCart(f.input.externalId,f.paid());
+    await persistPaidValidraCart(f.input.externalId,f.paid());
+    const [commissions]=await pool.query<RowDataPacket[]>("SELECT registrationId,commissionValue,status,commissionRule,paidAt FROM referralCommissionAttributions");
+    expect(commissions).toMatchObject([{registrationId:paid.orders[0].registration_id,commissionValue:500,status:"em_analise",commissionRule:"fixed_option",paidAt:null}]);
+    const send=vi.fn(async()=>{});
+    const deps={send,adminEmail:"admin@example.test"};
+    expect(await count("validra_notice_jobs")).toBe(2);
+    for(let i=0;i<3;i++)await processNextValidraNotice(deps);
+    expect(send).toHaveBeenCalledTimes(2);
+    const [notices]=await pool.query<RowDataPacket[]>("SELECT recipient_kind,state FROM validra_notice_jobs ORDER BY recipient_kind");
+    expect(notices).toMatchObject([{recipient_kind:"admin",state:"accepted"},{recipient_kind:"customer",state:"accepted"}]);
+    const another=makeFixture(),second=cartFixture(another);
+    second.quote.items[0]={...second.quote.items[0],commissionValue:500};second.referral=snapshot.referral;
+    await runValidraCartCheckout(another.input.externalId,second,true,another.client);
+    await persistPaidValidraCart(another.input.externalId,another.paid());
+    expect(await count("referralCommissionAttributions")).toBe(1);
+  });
+
+  it("records promotional referral as ineligible and does not retry uncertain email delivery",async()=>{
+    const f=makeFixture(),snapshot=cartFixture(f);
+    await pool.execute("INSERT INTO customers(id,phone) VALUES(22,?)",["11999990001"]);
+    await pool.execute("UPDATE customers SET referredByPhone=? WHERE id=21",["11999990001"]);
+    snapshot.quote.items[0]={...snapshot.quote.items[0],commissionValue:500,promotional:true};
+    snapshot.referral={referrerCustomerId:22,referrerPhone:"11999990001",referrerName:null,commissionValue:0,promotionNoCommission:true};
+    await runValidraCartCheckout(f.input.externalId,snapshot,true,f.client);
+    await persistPaidValidraCart(f.input.externalId,f.paid());
+    const [commissions]=await pool.query<RowDataPacket[]>("SELECT commissionValue,status,commissionRule FROM referralCommissionAttributions");
+    expect(commissions).toMatchObject([{commissionValue:0,status:"nao_elegivel",commissionRule:"promotion_no_commission"}]);
+    const send=vi.fn(async()=>{throw new Error("ambiguous transport");});
+    for(let i=0;i<4;i++)await processNextValidraNotice({send,adminEmail:"admin@example.test"});
+    expect(send).toHaveBeenCalledTimes(1);
+    const [notices]=await pool.query<RowDataPacket[]>("SELECT recipient_kind,state FROM validra_notice_jobs ORDER BY recipient_kind");
+    expect(notices).toMatchObject([{recipient_kind:"admin",state:"review"},{recipient_kind:"customer",state:"skipped"}]);
+  });
 
   it("persists distinct answers and owned documents for repeated option positions",async()=>{
     const f=makeFixture(),snapshot=cartFixture(f);

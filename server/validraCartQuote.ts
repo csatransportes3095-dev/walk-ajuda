@@ -43,7 +43,9 @@ export async function resolveValidraCartQuote(input: { cpToken: string; phone?: 
     const resellerEligible=Boolean(customer.isReseller&&!globalPromotion&&!hasActiveProductPromotion(source,now));
     const resellerPercent=resellerEligible ? productPercent>0?productPercent:customer.resellerDiscountType==="percent"?Number(customer.resellerDiscountValue||0):0 : 0;
     const serviceOption=option.label+(model?" — "+model.label:"")+(tier?" - Garantia: "+(tier.warrantyValue>0?tier.warrantyValue+" "+tier.warrantyType+(tier.warrantyLabel?" "+tier.warrantyLabel:""):tier.warrantyLabel||tier.warrantyType):"");
-    items.push({...selection,serviceName:product.name,serviceOption,baseCents,resellerEligible,resellerPercent,promotional:globalPromotion||hasActiveProductPromotion(source,now)});
+    const commissionValue=Number(option.commissionValue||0);
+    if(!Number.isSafeInteger(commissionValue)||commissionValue<0||commissionValue>2147483647)throw new Error("validra_cart_requirements_not_ready");
+    items.push({...selection,serviceName:product.name,serviceOption,baseCents,resellerEligible,resellerPercent,commissionValue,promotional:globalPromotion||hasActiveProductPromotion(source,now)});
   }
   let coupon: ValidraCouponQuote|null=null;
   if (!globalPromotion&&input.couponCode?.trim()) {

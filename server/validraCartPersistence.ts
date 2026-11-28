@@ -6,6 +6,8 @@ import { validraPurchaseDigest } from "./validraCheckout";
 import { validraAmount, validraChargeIsPaid, type ValidraCharge } from "./validraPay";
 import type { ValidraCartQuote } from "./validraCartQuote";
 import { privateValidraFileUrl } from "./validraPrivateStorage";
+import { validateValidraReferral,persistValidraReferral,type ValidraReferralSnapshot } from "./validraCartReferral";
+import { ensureValidraNoticeStorage,enqueueValidraPaidNotices } from "./validraNoticeWorker";
 
 import { ensureValidraDocumentStorage, preflightValidraDocuments, bindValidraDocuments, type ValidraCartDocument } from "./validraDocumentStorage";
 export type { ValidraCartDocument } from "./validraDocumentStorage";
@@ -17,6 +19,7 @@ type ValidraCartOrder = TrustedPaidOrderInput["order"] & { documents?: ValidraCa
 export type ValidraCartSnapshot = {
   quote: ValidraCartQuote;
   orders: ValidraCartOrder[];
+  referral?:ValidraReferralSnapshot;
 };
 
 function validDocuments(documents: ValidraCartDocument[] | undefined): boolean {
@@ -46,6 +49,7 @@ type Attempt = { customer_id: number; purchase_digest: string; amount_cents: num
 export async function ensureValidraCartStorage() {
   const db=await ensureValidraAttemptStorage();
   await ensureValidraDocumentStorage(db);
+  await ensureValidraNoticeStorage(db);
   await db.execute(sql`CREATE TABLE IF NOT EXISTS validra_cart_snapshots (
     external_id VARCHAR(64) CHARACTER SET ascii COLLATE ascii_bin PRIMARY KEY,
     snapshot_json MEDIUMTEXT NOT NULL, coupon_id INT NULL,
@@ -71,7 +75,7 @@ export async function ensureValidraCartStorage() {
 function validateSnapshot(snapshot: ValidraCartSnapshot) {
   const {quote,orders}=snapshot;
   validraAmount(quote.amountCents);
-  if (!orders.length||orders.length!==quote.items.length||orders.length>30||
+  if (!orders.length||orders.length!==quote.items.length||orders.length>30||!validateValidraReferral(snapshot.referral,quote)||
       quote.items.some(i=>!Number.isSafeInteger(i.amountCents)||i.amountCents<0||i.amountCents>2147483647)||
       quote.items.reduce((sum,i)=>sum+i.amountCents,0)!==quote.amountCents||
       orders.some((o,i)=>o.effectivePhone!==quote.phone||o.productId!==quote.items[i].productId||o.serviceName!==quote.items[i].serviceName||o.serviceOption!==quote.items[i].serviceOption||!validDocuments(o.documents)||(o.clientName?.length??0)>256||!Number.isSafeInteger(quote.items[i].optionId)||quote.items[i].optionId<=0)) throw new Error("validra_invalid_cart_snapshot");
@@ -192,6 +196,7 @@ export async function persistPaidValidraCart(externalId: string, charge: Validra
       const {documents,...order}=orders[i];
       const persisted=await persistValidraOrderInTransaction(tx,order,item.amountCents);
       if (!persisted.orderNumber) throw new Error("validra_order_persistence_failed");
+      if(i===0&&snapshot.referral)await persistValidraReferral(tx,snapshot.referral,quote,persisted,order.clientName??null);
       // Same transaction and registration as the initial status. Any document
       // or financial failure rolls back every item and charge consumption.
       if (documents?.length) await tx.insert(orderFiles).values(documents.map(doc=>({
@@ -212,6 +217,7 @@ export async function persistPaidValidraCart(externalId: string, charge: Validra
       results.push({registration_id:persisted.registrationId,order_status_id:persisted.orderStatusId,order_number:persisted.orderNumber});
     }
     await tx.execute(sql`UPDATE validra_checkout_attempts SET state='consumed',registration_id=${results[0].registration_id} WHERE external_id=${externalId}`);
+    await enqueueValidraPaidNotices(tx,externalId);
     if (quote.coupon) {
       await tx.execute(sql`UPDATE validra_cart_snapshots SET coupon_state='consumed' WHERE external_id=${externalId}`);
       await tx.update(coupons).set({usedAt:new Date(),usedBy:orders[0].clientName||null}).where(eq(coupons.id,quote.coupon.id));

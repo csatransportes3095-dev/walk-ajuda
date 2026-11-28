@@ -3,6 +3,7 @@ import { customers } from "../drizzle/schema";
 import { loadValidraItemRequirements,validateValidraItemForm } from "./validraCartForms";
 import { resolveOwnedValidraDocument } from "./validraDocumentStorage";
 import type { ValidraItemRequirements,ValidraItemFormInput } from "../shared/validraCartForms";
+import { freezeValidraReferral } from "./validraCartReferral";
 import { getDb } from "./db";
 import { resolveValidraCartQuote,type CartSelection } from "./validraCartQuote";
 import { createSqlOrderPersistenceStore } from "./orderPersistence";
@@ -55,7 +56,7 @@ export async function checkoutPublicValidraCart(input:PublicCartInput,allowNew:b
   }else{
     if(!input.items?.length)return {kind:"not_started" as const};
     if(!allowNew)throw new Error("validra_new_attempts_disabled");
-    if(input.items.length<2||customer.isReseller||customer.referredByPhone||customer.referredBy)
+    if(input.items.length<2||customer.isReseller||(customer.referredBy&&!customer.referredByPhone))
       throw new Error("validra_cart_requirements_not_ready");
     await createSqlOrderPersistenceStore(db as unknown as Parameters<typeof createSqlOrderPersistenceStore>[0]).assertNoOpenVipInstallmentDebt?.(owner.phone);
     const quote=await resolveValidraCartQuote({cpToken:input.cpToken,phone:owner.phone,items:input.items,couponCode:input.couponCode});
@@ -65,7 +66,8 @@ export async function checkoutPublicValidraCart(input:PublicCartInput,allowNew:b
     const specs=await loadValidraItemRequirements(quote.items);
     if(specs.length!==quote.items.length||specs.some((spec,index)=>spec.productId!==quote.items[index].productId||spec.optionId!==quote.items[index].optionId))throw new Error("validra_selection_unavailable");
     const forms=await assembleValidraCartForms(specs,input.forms,owner,input.externalId);
-    snapshot={quote,orders:quote.items.map((item,index)=>({
+    const referral=await freezeValidraReferral(customer,quote);
+    snapshot={quote,...(referral?{referral}:{}),orders:quote.items.map((item,index)=>({
       effectivePhone:owner.phone,clientName:customer.name,productId:item.productId,
       serviceName:item.serviceName,serviceOption:item.serviceOption,answers:forms[index].answers,
       documents:forms[index].documents,

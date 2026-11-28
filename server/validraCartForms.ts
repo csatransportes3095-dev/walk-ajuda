@@ -39,7 +39,7 @@ function choicesFor(q:Question,rules:BlockingRule[]){
 export function buildValidraItemRequirements(product:Product,option:Option,questions:Question[],documents:Document[],rules:BlockingRule[]=[]):ValidraItemRequirements{
   if(option.productId!==product.id||!["standard","pdf_only","pdf-only","pdf"].includes(option.type??"")||
       option.requireVehicle2016||product.requireVehicle2016||option.showYearField||product.showYearField||
-      option.docNameMode!=="none"||option.commissionValue||questions.length>60||documents.length>30)throw unavailable();
+      option.docNameMode!=="none"||questions.length>60||documents.length>30)throw unavailable();
   const questionIds=new Set(questions.map(q=>q.id));
   if(questionIds.size!==questions.length)throw unavailable();
   const byId=new Map(questions.map(q=>[q.id,q]));
