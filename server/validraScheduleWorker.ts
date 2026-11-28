@@ -29,17 +29,39 @@ export async function ensureValidraScheduleStorage() {
   return db;
 }
 
+function isScheduleLockConflict(error:unknown):boolean {
+  let current:unknown=error;
+  for(let depth=0;current&&typeof current==="object"&&depth<5;depth++){
+    const e=current as {code?:string;errno?:number;cause?:unknown};
+    if(e.code==="ER_LOCK_DEADLOCK"||e.code==="ER_LOCK_WAIT_TIMEOUT"||e.errno===1213||e.errno===1205)return true;
+    current=e.cause;
+  }
+  return false;
+}
+
+// InnoDB can abort a claim even with SKIP LOCKED when concurrent seeding or
+// updates contend on secondary indexes. Retry only the rolled-back operation.
+async function retryScheduleLockConflict<T>(operation:()=>Promise<T>):Promise<T>{
+  for(let attempt=0;;attempt++){
+    try{return await operation();}
+    catch(error){
+      if(!isScheduleLockConflict(error)||attempt>=4)throw error;
+      await new Promise<void>(resolve=>setTimeout(resolve,25*(attempt+1)+Math.floor(Math.random()*25)));
+    }
+  }
+}
+
 export async function processNextValidraSchedule(scheduleOverride?: ScheduleRoutine) {
   const db = await ensureValidraScheduleStorage();
   // The source follow-up was inserted atomically with a confirmed paid cart.
   // Recover older rows too, without re-enqueuing finished or review jobs.
-  await db.execute(sql`INSERT IGNORE INTO validra_schedule_jobs(registration_id,external_id,item_index)
+  await retryScheduleLockConflict(()=>db.execute(sql`INSERT IGNORE INTO validra_schedule_jobs(registration_id,external_id,item_index)
     SELECT f.registration_id,f.external_id,f.item_index FROM validra_order_followup f
     INNER JOIN validra_checkout_attempts a ON a.external_id=f.external_id AND a.state='consumed'
     INNER JOIN validra_cart_orders o ON o.external_id=f.external_id AND o.item_index=f.item_index AND o.registration_id=f.registration_id
     LEFT JOIN validra_schedule_jobs j ON j.registration_id=f.registration_id
-    WHERE j.registration_id IS NULL ORDER BY f.registration_id LIMIT 100`);
-  const job = await db.transaction(async tx => {
+    WHERE j.registration_id IS NULL ORDER BY f.registration_id LIMIT 100`));
+  const job = await retryScheduleLockConflict(()=>db.transaction(async tx => {
     const [rows] = await tx.execute(sql`SELECT registration_id,external_id,item_index,attempts
       FROM validra_schedule_jobs
       WHERE (state='queued' AND next_run_at<=CURRENT_TIMESTAMP(3))
@@ -52,7 +74,7 @@ export async function processNextValidraSchedule(scheduleOverride?: ScheduleRout
       lease_token=${leaseToken},lease_until=CURRENT_TIMESTAMP(3)+INTERVAL 90 SECOND
       WHERE registration_id=${row.registration_id}`);
     return {...row,attempts:Number(row.attempts)+1,leaseToken};
-  });
+  },{isolationLevel:"read committed"}));
   if (!job) return false;
 
   try {
@@ -128,10 +150,10 @@ export async function processNextValidraSchedule(scheduleOverride?: ScheduleRout
     // retry cannot overwrite a newer lease, and exhausted jobs remain visible.
     const exhausted=job.attempts>=12;
     const delay=Math.min(3600,Math.max(10,2**Math.min(job.attempts,10)));
-    await db.execute(sql`UPDATE validra_schedule_jobs SET state=${exhausted?"review":"queued"},
+    await retryScheduleLockConflict(()=>db.execute(sql`UPDATE validra_schedule_jobs SET state=${exhausted?"review":"queued"},
       result_code=${exhausted?"retries_exhausted":"temporary_failure"},
       next_run_at=DATE_ADD(CURRENT_TIMESTAMP(3),INTERVAL ${delay} SECOND),lease_token=NULL,lease_until=NULL
-      WHERE registration_id=${job.registration_id} AND lease_token=${job.leaseToken}`);
+      WHERE registration_id=${job.registration_id} AND lease_token=${job.leaseToken}`));
   }
   return true;
 }
