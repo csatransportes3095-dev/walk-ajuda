@@ -44,7 +44,7 @@ export function validatePaidOrderBinding(row: AttemptRow | undefined, input: Pic
  * or schema DDL inside the transaction. Notify only after commit, and never
  * from the duplicate response. */
 export async function persistPaidValidraOrder(input: TrustedPaidOrderInput, client = new ValidraPayClient(), verifiedServerCharge?: ValidraCharge) {
-  const amount = validraAmount(input.amountCents);
+  validraAmount(input.amountCents);
   if (!/^[A-Za-z0-9_-]{1,64}$/.test(input.externalId) || !/^[a-f0-9]{64}$/.test(input.purchaseDigest)) throw new Error("validra_invalid_attempt");
   const db = await ensureValidraAttemptStorage();
   const [preRows] = await db.execute(sql`SELECT customer_id, purchase_digest, amount_cents, charge_id, registration_id, state
@@ -68,6 +68,21 @@ export async function persistPaidValidraOrder(input: TrustedPaidOrderInput, clie
     if (!customer || customer.deletedAt || Number(customer.blocked) !== 0 ||
       customer.phone.replace(/\D/g, "") !== input.order.effectivePhone.replace(/\D/g, "")) throw new Error("validra_customer_mismatch");
 
+    const persisted = await persistValidraOrderInTransaction(tx, input.order, input.amountCents);
+    await tx.execute(sql`UPDATE validra_checkout_attempts SET state = 'consumed', registration_id = ${persisted.registrationId}
+      WHERE external_id = ${input.externalId} AND state = 'pending' AND registration_id IS NULL AND charge_id = ${verified.chargeId}`);
+    const [committedRows] = await tx.execute(sql`SELECT registration_id, state FROM validra_checkout_attempts WHERE external_id = ${input.externalId}`);
+    const committed = (committedRows as unknown as Array<{ registration_id: number; state: string }>)[0];
+    if (committed?.state !== "consumed" || Number(committed.registration_id) !== persisted.registrationId) throw new Error("validra_order_binding_failed");
+    return { duplicate: false as const, ...persisted };
+  });
+}
+
+export type ValidraTransaction = Parameters<Parameters<Awaited<ReturnType<typeof ensureValidraAttemptStorage>>["transaction"]>[0]>[0];
+
+/** Same transactional persistence adapter for each item of a paid cart. */
+export async function persistValidraOrderInTransaction(tx: ValidraTransaction, order: TrustedPaidOrderInput["order"], amountCents: number) {
+  if (!Number.isSafeInteger(amountCents) || amountCents < 0) throw new Error("validra_invalid_item_amount");
     const store = createSqlOrderPersistenceStore(tx as unknown as Parameters<typeof createSqlOrderPersistenceStore>[0]);
     // Use insertId, not SELECT latest by phone; concurrent independent orders
     // may otherwise attach documents/status to the wrong registration.
@@ -80,9 +95,9 @@ export async function persistPaidValidraOrder(input: TrustedPaidOrderInput, clie
       return positiveId(result.insertId);
     };
     const persisted = await persistPublicOrder({
-      ...input.order,
+      ...order,
       cpTokenValid: true,
-      pricePaid: "R$ " + amount.replace(".", ","),
+      pricePaid: "R$ " + (amountCents / 100).toFixed(2).replace(".", ","),
     }, {
       store,
       generateOrderNumber: async () => {
@@ -97,11 +112,5 @@ export async function persistPaidValidraOrder(input: TrustedPaidOrderInput, clie
       },
     });
     if (!persisted.orderNumber) throw new Error("validra_order_persistence_failed");
-    await tx.execute(sql`UPDATE validra_checkout_attempts SET state = 'consumed', registration_id = ${persisted.registrationId}
-      WHERE external_id = ${input.externalId} AND state = 'pending' AND registration_id IS NULL AND charge_id = ${verified.chargeId}`);
-    const [committedRows] = await tx.execute(sql`SELECT registration_id, state FROM validra_checkout_attempts WHERE external_id = ${input.externalId}`);
-    const committed = (committedRows as unknown as Array<{ registration_id: number; state: string }>)[0];
-    if (committed?.state !== "consumed" || Number(committed.registration_id) !== persisted.registrationId) throw new Error("validra_order_binding_failed");
-    return { duplicate: false as const, ...persisted };
-  });
+    return persisted;
 }
