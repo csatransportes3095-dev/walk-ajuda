@@ -1,3 +1,4 @@
+import { reserveValidraRecovery,loadOwnedValidraRecovery,completeValidraRecovery,type ValidraRecoverySnapshot,type ValidraPricing } from "./validraPaymentRecovery";
 import { getStatusVisibilityRule, listStatusVisibilityRules, saveStatusVisibilityRule, getOrderStatusVisibilityForClient } from "./orderStatusVisibility";
 import { siteSecurityRouter } from "./siteSecurityRouter";
 import { vinRegistryRouter } from "./routers/vinRegistry";
@@ -1548,9 +1549,32 @@ export const appRouter = router({
           if (usingValidra && (!VALIDRA_CHECKOUT_READY || !input.validraAttemptId)) {
             return { success: false, message: "Checkout ValidraPay ainda não disponível. Nenhuma cobrança foi criada." };
           }
-          // Validar acesso: aceitar accessCode (sistema antigo) OU cpToken (novo sistema)
+          let recoverySnapshot:ValidraRecoverySnapshot|undefined=ctx.validraRecovery?.snapshot;
+          if(usingValidra&&input.validraAttemptId&&!recoverySnapshot){
+            const identity=await (await import("./customerSession")).requireCustomerSession(input.cpToken,input.phone);
+            const prior=await loadOwnedValidraRecovery(input.validraAttemptId,identity.phone);
+            if(prior?.kind==="consumed"){
+              if(!prior.complete)return {success:false,pendingReview:true,message:"Pagamento recebido. Consulte seu pedido; não pague novamente."};
+              return {success:true,persisted:true,registrationId:prior.registrationId,message:"Pedido já registrado."};
+            }
+            if(prior?.kind==="pending")recoverySnapshot=prior.snapshot;
+          }
+          // A stored recovery snapshot comes only from an authenticated lookup
+          // or the internal worker, never from a public input field.
           let cpTokenValid = false;
           let cpTokenPhone = '';
+          let promotionalOrderAtCheckout = false;
+          let couponAppliedAtCheckout = false;
+          let validraContext:ValidraPricing|null=null;
+          if(recoverySnapshot){
+            if(!usingValidra||recoverySnapshot.input.validraAttemptId!==input.validraAttemptId)throw new Error("validra_attempt_conflict");
+            input=recoverySnapshot.input as typeof input;
+            validraContext=recoverySnapshot.pricing;
+            cpTokenValid=true;cpTokenPhone=validraContext.phone;
+            promotionalOrderAtCheckout=recoverySnapshot.promotionalOrderAtCheckout;
+            couponAppliedAtCheckout=recoverySnapshot.couponAppliedAtCheckout;
+          }else{
+          // Validar acesso: aceitar accessCode (sistema antigo) OU cpToken (novo sistema)
           if (input.cpToken) {
             // Verificar se o cpToken é válido via banco
             try {
@@ -1608,8 +1632,6 @@ export const appRouter = router({
           // Promoção geral sempre vence os descontos de cupom, VIP e revendedor.
           // O backend não confia no valor enviado pelo navegador.
           const globalPromo = parseGlobalPromotionConfig(await getSetting("global_promotion_config_v1"));
-          let promotionalOrderAtCheckout = false;
-          let couponAppliedAtCheckout = false;
           if (globalPromotionOverridesIndividual(globalPromo)) {
             if (!input.optionId || !input.productId) {
               return { success: false, message: "Seleção do produto ausente. Reabra a compra para confirmar a promoção geral." };
@@ -1725,7 +1747,7 @@ export const appRouter = router({
             }
           }
 
-          const validraContext = usingValidra ? await (await import("./validraCheckoutPricing")).resolveValidraSingleCheckout(input, isVipModelAccess) : null;
+          validraContext = usingValidra ? await (await import("./validraCheckoutPricing")).resolveValidraSingleCheckout(input, isVipModelAccess) : null;
           if (validraContext) {
             input.phone = validraContext.phone;
             input.service = validraContext.service;
@@ -1734,6 +1756,7 @@ export const appRouter = router({
             input.paymentProof = undefined;
             input.paymentProofUrl = undefined;
             input.paymentProofMime = undefined;
+          }
           }
 
           const emailTo = await getSetting('email_to') || 'h2@h2colombiano.com';
@@ -1823,7 +1846,9 @@ export const appRouter = router({
           // validação de áudio quando o cliente efetivamente enviou uma referência
           // de fluxo ou rascunho de áudio.
           const hasAudioSubmission = Boolean(input.questionAudioFlowId || input.audioDraftIds?.length);
-          if (hasAudioSubmission) {
+          if(recoverySnapshot){
+            audioDraftsForOrder=recoverySnapshot.audioDrafts;
+          }else if (hasAudioSubmission) {
             if (!input.productId || !input.optionId || !input.questionAudioFlowId) {
               return { success: false, message: 'Dados incompletos para validar a resposta em áudio.' };
             }
@@ -1934,18 +1959,23 @@ export const appRouter = router({
             persistenceDb = await (await import('./db')).getDb();
             if (persistenceDb && effectivePhone) {
               if (validraContext && input.validraAttemptId) {
-                const { runValidraCheckout, validraPurchaseDigest } = await import("./validraCheckout");
-                const { cpToken: _token, accessCode: _code, validraAttemptId: _attempt, originalPrice: _original, price: _price, ...purchase } = input;
-                const outcome = await runValidraCheckout({
-                  externalId: input.validraAttemptId,
-                  customerId: validraContext.customerId,
-                  purchaseDigest: validraPurchaseDigest({ purchase, amountCents: validraContext.amountCents }),
-                  amountCents: validraContext.amountCents,
-                  order: { effectivePhone, clientName: input.clientName, serviceName: input.service, serviceOption: input.nameOption, productId: input.productId, answers: input.answers },
-                }, paymentProvider === "validrapay");
-                if (outcome.kind === "payment") return { success: false, message: "Aguardando confirmação do PIX.", validraPayment: outcome.payment };
-                if (outcome.kind === "duplicate") return { success: true, persisted: true, registrationId: outcome.registrationId, message: "Pedido já registrado. Nenhuma duplicidade criada." };
-                persistedOrder = outcome.order;
+                const { runValidraCheckout } = await import("./validraCheckout");
+                if(!recoverySnapshot){
+                  const {cpToken:_token,accessCode:_code,...purchase}=input;
+                  recoverySnapshot={version:1,input:purchase,pricing:validraContext,audioDrafts:audioDraftsForOrder,promotionalOrderAtCheckout,couponAppliedAtCheckout};
+                }
+                const purchaseDigest=await reserveValidraRecovery(recoverySnapshot,paymentProvider==="validrapay"&&!ctx.validraRecovery);
+                const paymentInput={
+                  externalId:input.validraAttemptId,customerId:validraContext.customerId,purchaseDigest,amountCents:validraContext.amountCents,
+                  order:{effectivePhone,clientName:input.clientName,serviceName:input.service,serviceOption:input.nameOption,productId:input.productId,answers:input.answers},
+                };
+                const outcome=ctx.validraRecovery?await (async()=>{
+                  const paid=await (await import("./validraOrderPersistence")).persistPaidValidraOrder(paymentInput,undefined,ctx.validraRecovery!.charge);
+                  return paid.duplicate?{kind:"duplicate" as const,registrationId:paid.registrationId}:{kind:"persisted" as const,order:paid};
+                })():await runValidraCheckout(paymentInput,paymentProvider==="validrapay");
+                if(outcome.kind==="payment")return {success:false,message:"Aguardando confirmação do PIX.",validraPayment:outcome.payment};
+                if(outcome.kind==="duplicate")return {success:false,pendingReview:true,message:"Pagamento recebido. Consulte o pedido; não pague novamente."};
+                persistedOrder=outcome.order;
               } else persistedOrder = await persistPublicOrder({
                 effectivePhone,
                 cpTokenValid,
@@ -2484,6 +2514,7 @@ export const appRouter = router({
             }
           }
 
+          if(validraContext&&input.validraAttemptId)await completeValidraRecovery(input.validraAttemptId);
           return {
             success: true,
             message: emailSent ? 'Pedido enviado com sucesso!' : 'Pedido registrado! (email será reenviado em breve)',

@@ -64,7 +64,7 @@ async function bindValidraCharge(externalId: string, customerId: number, charge:
   if ((bound as unknown as Array<{charge_id: string}>)[0]?.charge_id !== charge.id) throw new Error("validra_charge_conflict");
 }
 
-export async function reconcileValidraAttempt(externalId: string, customerId: number, client = new ValidraPayClient()) {
+export async function fetchBoundValidraCharge(externalId: string, customerId: number, client = new ValidraPayClient()) {
   const db = await ensureValidraAttemptStorage();
   const [rows] = await db.execute(sql`SELECT amount_cents, charge_id FROM validra_checkout_attempts WHERE external_id = ${externalId} AND customer_id = ${customerId}`);
   const row = (rows as unknown as Array<{amount_cents: string | number; charge_id: string | null}>)[0];
@@ -72,5 +72,11 @@ export async function reconcileValidraAttempt(externalId: string, customerId: nu
   const attempt = { externalId, amountCents: Number(row.amount_cents) };
   const charge = row.charge_id ? await client.getCharge({...attempt, chargeId: row.charge_id}) : await client.getChargeByExternalId(attempt);
   await bindValidraCharge(externalId, customerId, charge);
-  return { chargeId: charge.id, confirmedPaid: validraChargeIsPaid(charge, attempt), paidAt:charge.payment?.paid_at };
+  return charge;
+}
+export async function reconcileValidraAttempt(externalId:string,customerId:number,client=new ValidraPayClient()){
+  const charge=await fetchBoundValidraCharge(externalId,customerId,client);
+  // fetchBoundValidraCharge already verifies the immutable expected amount.
+  const amountCents=Math.round(Number(charge.amount)*100);
+  return {chargeId:charge.id,confirmedPaid:validraChargeIsPaid(charge,{externalId,amountCents}),paidAt:charge.payment?.paid_at};
 }

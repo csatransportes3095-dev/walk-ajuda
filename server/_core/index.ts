@@ -7,6 +7,8 @@ process.env.TZ = "UTC";
 import "dotenv/config";
 import express from "express";
 import { registerValidraWebhook } from "../validraWebhook";
+import { startValidraRecoveryWorker } from "../validraPaymentRecovery";
+import type { TrpcContext } from "./context";
 import { registerSiteIdentity } from "../siteAccessIdentity";
 import { createSiteAccessGateway } from "../siteAccessGateway";
 import { createServer } from "http";
@@ -755,6 +757,16 @@ async function startServer() {
     }
     // Notificações de empréstimos: filas persistentes e reenvio sem alterar pagamentos.
     startLoanAdminEmailWorker();
+    // In-process caller reuses the original procedure; there is no HTTP
+    // endpoint that can supply the trusted recovery context.
+    startValidraRecoveryWorker(async recovery=>{
+      const context:TrpcContext={
+        req:{headers:{},socket:{}} as TrpcContext["req"],
+        res:{} as TrpcContext["res"],user:null,validraRecovery:recovery,
+      };
+      const caller=appRouter.createCaller(context);
+      return caller.uploads.submitFiles(recovery.snapshot.input as Parameters<typeof caller.uploads.submitFiles>[0]);
+    });
     // Empréstimos: reconcilia multas sem depender do ADM aberto.
     // Reutiliza a rotina do painel e os bloqueios de concorrência do MySQL.
     const reconcileLateFees = () => {

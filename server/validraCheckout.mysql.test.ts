@@ -11,6 +11,7 @@ import { persistPaidValidraOrder } from "./validraOrderPersistence";
 import { runValidraCheckout, validraPurchaseDigest } from "./validraCheckout";
 import { ValidraPayClient, type ValidraCharge } from "./validraPay";
 import { registerValidraWebhook } from "./validraWebhook";
+import { reserveValidraRecovery,ensureValidraRecoveryStorage,processNextValidraRecovery,completeValidraRecovery,loadOwnedValidraRecovery,type ValidraRecoverySnapshot } from "./validraPaymentRecovery";
 
 // A real disposable MySQL service in CI, never DATABASE_URL or production.
 // All payment provider calls are in-process fake responses.
@@ -72,9 +73,10 @@ describe.skipIf(!dbUrl)("ValidraPay real MySQL integration (simulated provider)"
     vi.mocked(getDb).mockResolvedValue(drizzle(pool));
     for (const ddl of fixtureSchema) await pool.query(ddl);
     await ensureValidraAttemptStorage();
+    await ensureValidraRecoveryStorage();
   }, 30000);
   beforeEach(async () => {
-    for (const table of ["financialSales","validra_checkout_attempts", "orderStatusHistory", "accessCodePhones", "accessCodes", "orderCounter", "customers", "orderStatusTypes"]) await pool.query("DELETE FROM " + table);
+    for (const table of ["validra_payment_recovery","financialSales","validra_checkout_attempts", "orderStatusHistory", "accessCodePhones", "accessCodes", "orderCounter", "customers", "orderStatusTypes"]) await pool.query("DELETE FROM " + table);
     await pool.execute("INSERT INTO customers (id, phone) VALUES (21, ?)", [phone]);
     await pool.execute("INSERT INTO orderStatusTypes (`key`) VALUES ('pedido_recebido')");
   });
@@ -101,6 +103,36 @@ describe.skipIf(!dbUrl)("ValidraPay real MySQL integration (simulated provider)"
     const [sales]=await pool.query<RowDataPacket[]>("SELECT registrationId,saleValue,status,paymentMethod,receivedDate FROM financialSales");
     expect(sales).toHaveLength(1);
     expect(sales[0]).toMatchObject({registrationId:paid.order.registrationId,saleValue:4990,status:"pago",paymentMethod:"pix",receivedDate:Date.parse("2026-11-28T16:10:00Z")});
+  });
+
+  it("recovers a paid attempt with no browser, using the frozen order and GET only",async()=>{
+    const f=makeFixture();
+    const snapshot:ValidraRecoverySnapshot={version:1,input:{validraAttemptId:f.input.externalId,phone,clientName:"Cliente teste",service:"Produto de teste",nameOption:"Opcao teste"},pricing:{customerId:21,phone,amountCents:4990,service:"Produto de teste",nameOption:"Opcao teste",price:"R$ 49,90"},audioDrafts:[],promotionalOrderAtCheckout:false,couponAppliedAtCheckout:false};
+    await expect(reserveValidraRecovery({...snapshot,input:{...snapshot.input,cpToken:"secret"}},true)).rejects.toThrow("validra_recovery_unsupported_payload");
+    const purchaseDigest=await reserveValidraRecovery(snapshot,true);
+    const input={...f.input,purchaseDigest};
+    await runValidraCheckout(input,true,f.client);
+    expect(await loadOwnedValidraRecovery(f.input.externalId,"11999990001")).toBeNull();
+    expect(await loadOwnedValidraRecovery(f.input.externalId,phone)).toMatchObject({kind:"pending",snapshot});
+    const due=async()=>pool.execute("UPDATE validra_payment_recovery SET next_check_at=CURRENT_TIMESTAMP(3)-INTERVAL 1 SECOND");
+    await due();
+    const resume=vi.fn(async recovery=>{
+      expect(recovery.snapshot).toEqual(snapshot);
+      const paid=await persistPaidValidraOrder(input,f.client,recovery.charge);
+      expect(paid.duplicate).toBe(false);
+      await completeValidraRecovery(f.input.externalId);
+    });
+    expect(await processNextValidraRecovery(resume,f.client)).toBe(true);
+    expect(resume).not.toHaveBeenCalled();
+    f.paid();await due();
+    expect(await processNextValidraRecovery(resume,f.client)).toBe(true);
+    expect(resume).toHaveBeenCalledTimes(1);
+    expect(await processNextValidraRecovery(resume,f.client)).toBe(false);
+    expect(await count("orderStatusHistory")).toBe(1);
+    expect(await count("financialSales")).toBe(1);
+    expect(f.transport.mock.calls.filter(([,init])=>init?.method==="POST")).toHaveLength(1);
+    const [rows]=await pool.query<RowDataPacket[]>("SELECT state,snapshot_json FROM validra_payment_recovery");
+    expect(rows).toMatchObject([{state:"complete",snapshot_json:null}]);
   });
 
   it("serializes two simultaneous confirmations of the same charge", async () => {

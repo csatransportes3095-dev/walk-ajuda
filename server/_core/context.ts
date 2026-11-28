@@ -6,6 +6,8 @@ export type TrpcContext = {
   req: CreateExpressContextOptions["req"];
   res: CreateExpressContextOptions["res"];
   user: User | null;
+  // Set only by the in-process recovery worker; never by createContext/HTTP.
+  validraRecovery?: import("../validraPaymentRecovery").ValidraRecoveryContext;
 };
 
 export async function createContext(
