@@ -11,6 +11,9 @@ import { persistPaidValidraOrder } from "./validraOrderPersistence";
 import { runValidraCheckout, validraPurchaseDigest } from "./validraCheckout";
 import { ValidraPayClient, type ValidraCharge } from "./validraPay";
 import { registerValidraWebhook } from "./validraWebhook";
+import { ensureValidraCartStorage, reserveValidraCart, persistPaidValidraCart, type ValidraCartSnapshot } from "./validraCartPersistence";
+import { ensureValidraEventStorage, enqueueValidraEvent, processNextValidraEvent } from "./validraEventWorker";
+import { runValidraCartCheckout } from "./validraCartCheckout";
 
 // A real disposable MySQL service in CI, never DATABASE_URL or production.
 // All payment provider calls are in-process fake responses.
@@ -71,9 +74,11 @@ describe.skipIf(!dbUrl)("ValidraPay real MySQL integration (simulated provider)"
     vi.mocked(getDb).mockResolvedValue(drizzle(pool));
     for (const ddl of fixtureSchema) await pool.query(ddl);
     await ensureValidraAttemptStorage();
+    await ensureValidraCartStorage();
+    await ensureValidraEventStorage();
   }, 30000);
   beforeEach(async () => {
-    for (const table of ["validra_checkout_attempts", "orderStatusHistory", "accessCodePhones", "accessCodes", "orderCounter", "customers", "orderStatusTypes"]) await pool.query("DELETE FROM " + table);
+    for (const table of ["validra_payment_reviews", "validra_event_jobs", "validra_webhook_events", "validra_order_followup", "validra_cart_orders", "validra_cart_snapshots", "validra_checkout_attempts", "orderStatusHistory", "accessCodePhones", "accessCodes", "orderCounter", "customers", "orderStatusTypes"]) await pool.query("DELETE FROM " + table);
     await pool.execute("INSERT INTO customers (id, phone) VALUES (21, ?)", [phone]);
     await pool.execute("INSERT INTO orderStatusTypes (`key`) VALUES ('pedido_recebido')");
   });
@@ -143,6 +148,46 @@ describe.skipIf(!dbUrl)("ValidraPay real MySQL integration (simulated provider)"
     expect(await count("orderCounter")).toBe(0);
     const [rows] = await pool.execute<RowDataPacket[]>("SELECT registration_id, state FROM validra_checkout_attempts WHERE external_id = ?", [f.input.externalId]);
     expect(rows[0]).toMatchObject({ registration_id: null, state: "pending" });
+  });
+
+  function cartFixture(f:ReturnType<typeof makeFixture>):ValidraCartSnapshot {
+    const first={productId:1,optionId:11,serviceName:"Produto A",serviceOption:"Opcao A",baseCents:2000,amountCents:2000,couponCents:0,resellerCents:0,resellerEligible:false,resellerPercent:0,promotional:false};
+    const second={...first,productId:2,optionId:22,serviceName:"Produto B",serviceOption:"Opcao B",baseCents:2990,amountCents:2990};
+    return {quote:{customerId:21,phone,coupon:null,globalPromotion:false,subtotalCents:4990,couponCents:0,resellerCents:0,amountCents:4990,items:[first,second]},orders:[first,second].map(i=>({...f.input.order,productId:i.productId,serviceName:i.serviceName,serviceOption:i.serviceOption}))};
+  }
+
+  it("reconciles a signed-inbox cart payment into all orders exactly once",async()=>{
+    const f=makeFixture(), snapshot=cartFixture(f);
+    expect(await runValidraCartCheckout(f.input.externalId,snapshot,true,f.client)).toMatchObject({kind:"payment"});
+    expect(await count("orderStatusHistory")).toBe(0);
+    const paid=f.paid();
+    await enqueueValidraEvent({event_id:"evt_"+"C".repeat(26),event_type:"charge.paid",charge_id:paid.id,external_id:f.input.externalId,occurred_at:paid.updated_at});
+    await releaseTestPoll(f.input.externalId);
+    expect(await processNextValidraEvent(f.client)).toBe(true);
+    expect(await count("orderStatusHistory")).toBe(2);
+    const [lines]=await pool.query<RowDataPacket[]>("SELECT pricePaid FROM orderStatusHistory ORDER BY id");
+    expect(lines.map(row=>row.pricePaid)).toEqual(["R$ 20,00","R$ 29,90"]);
+    const [followup]=await pool.query<RowDataPacket[]>("SELECT COUNT(*) AS total FROM validra_order_followup");
+    expect(Number(followup[0].total)).toBe(2);
+    await enqueueValidraEvent({event_id:"evt_"+"C".repeat(26),event_type:"charge.paid",charge_id:paid.id,external_id:f.input.externalId,occurred_at:paid.updated_at});
+    expect(await processNextValidraEvent(f.client)).toBe(false);
+    await enqueueValidraEvent({event_id:"evt_"+"D".repeat(26),event_type:"charge.expired",charge_id:paid.id,external_id:f.input.externalId,occurred_at:paid.updated_at});
+    await releaseTestPoll(f.input.externalId);
+    expect(await processNextValidraEvent(f.client)).toBe(true);
+    expect(await count("orderStatusHistory")).toBe(2);
+    expect(f.transport.mock.calls.filter(([,init])=>init?.method==="POST")).toHaveLength(1);
+  });
+
+  it("records refund review without creating another order",async()=>{
+    const f=makeFixture(),snapshot=cartFixture(f);
+    await runValidraCartCheckout(f.input.externalId,snapshot,true,f.client);
+    const paid=f.paid({status:"partially_refunded",amount_refunded:"1.00"});
+    await enqueueValidraEvent({event_id:"evt_"+"E".repeat(26),event_type:"charge.paid",charge_id:paid.id,external_id:f.input.externalId,occurred_at:paid.updated_at});
+    await releaseTestPoll(f.input.externalId);
+    await processNextValidraEvent(f.client);
+    const [reviews]=await pool.query<RowDataPacket[]>("SELECT reason FROM validra_payment_reviews");
+    expect(reviews[0]?.reason).toBe("refund_review");
+    expect(await count("orderStatusHistory")).toBe(0);
   });
 
   it("accepts a signed HTTP webhook only once and rejects tampered bytes", async () => {

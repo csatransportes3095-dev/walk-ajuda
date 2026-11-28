@@ -26,6 +26,13 @@ export async function ensureValidraCartStorage() {
     order_status_id INT NOT NULL UNIQUE, order_number INT NOT NULL UNIQUE,
     PRIMARY KEY(external_id,item_index)
   ) ENGINE=InnoDB`);
+  await db.execute(sql`CREATE TABLE IF NOT EXISTS validra_order_followup (
+    external_id VARCHAR(64) CHARACTER SET ascii COLLATE ascii_bin NOT NULL,
+    item_index INT NOT NULL, registration_id INT NOT NULL UNIQUE,
+    state VARCHAR(24) NOT NULL DEFAULT 'pending',
+    created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+    PRIMARY KEY(external_id,item_index)
+  ) ENGINE=InnoDB`);
   return db;
 }
 
@@ -41,12 +48,16 @@ function validateSnapshot(snapshot: ValidraCartSnapshot) {
 
 /** Reserve the coupon and freeze the complete server-validated cart before
  * creating a Pix. No network I/O inside the transaction. Internal only. */
-export async function reserveValidraCart(externalId: string, snapshot: ValidraCartSnapshot) {
+export async function reserveValidraCart(externalId: string, snapshot: ValidraCartSnapshot, allowNew = true) {
   if (!/^[A-Za-z0-9_-]{1,64}$/.test(externalId)) throw new Error("validra_invalid_attempt");
   const purchaseDigest=validateSnapshot(snapshot);
   const {quote}=snapshot;
   const db=await ensureValidraCartStorage();
   return db.transaction(async tx=>{
+    if (!allowNew) {
+      const [existing]=await tx.execute(sql`SELECT external_id FROM validra_cart_snapshots WHERE external_id=${externalId}`);
+      if (!(existing as unknown[]).length) throw new Error("validra_new_attempts_disabled");
+    }
     await tx.execute(sql`INSERT INTO validra_checkout_attempts(external_id,customer_id,purchase_digest,amount_cents)
       VALUES(${externalId},${quote.customerId},${purchaseDigest},${quote.amountCents})
       ON DUPLICATE KEY UPDATE external_id=external_id`);
@@ -104,6 +115,8 @@ export async function persistPaidValidraCart(externalId: string, charge: Validra
       await tx.update(accessCodePhones).set({cartGroupId:externalId,cartTotal:(quote.subtotalCents/100).toFixed(2),cartCouponCode:quote.coupon?.code??null,cartCouponDiscount:(quote.couponCents/100).toFixed(2),cartItemIndex:i,resellerDiscountApplied:(item.resellerCents/100).toFixed(2)}).where(eq(accessCodePhones.id,persisted.registrationId));
       await tx.execute(sql`INSERT INTO validra_cart_orders(external_id,item_index,registration_id,order_status_id,order_number)
         VALUES(${externalId},${i},${persisted.registrationId},${persisted.orderStatusId},${persisted.orderNumber})`);
+      await tx.execute(sql`INSERT INTO validra_order_followup(external_id,item_index,registration_id)
+        VALUES(${externalId},${i},${persisted.registrationId})`);
       results.push({registration_id:persisted.registrationId,order_status_id:persisted.orderStatusId,order_number:persisted.orderNumber});
     }
     await tx.execute(sql`UPDATE validra_checkout_attempts SET state='consumed',registration_id=${results[0].registration_id} WHERE external_id=${externalId}`);

@@ -19,7 +19,7 @@ jobs:
           node-version: '22'
           cache: pnpm
       - run: pnpm install --frozen-lockfile
-      - run: pnpm exec vitest run server/validraPay.test.ts server/validraOrderPersistence.test.ts server/orderPersistence.test.ts server/validraCheckout.test.ts
+      - run: pnpm exec vitest run server/validraPay.test.ts server/validraOrderPersistence.test.ts server/orderPersistence.test.ts server/validraCheckout.test.ts server/validraCartTotals.test.ts server/validraEventWorker.test.ts
   mysql-integration:
     runs-on: ubuntu-24.04
     timeout-minutes: 20

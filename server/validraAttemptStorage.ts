@@ -46,16 +46,20 @@ export async function getOrCreateValidraCharge(input: { externalId: string; cust
     WHERE external_id = ${input.externalId} AND customer_id = ${input.customerId} AND state = 'pending'
     AND (last_query_at IS NULL OR last_query_at <= CURRENT_TIMESTAMP(3) - INTERVAL 5 SECOND)`);
   if (Number((claim as unknown as {affectedRows: number}).affectedRows) !== 1) throw new Error("validra_wait_before_retry");
+  // Read again after the claim. An earlier caller may have bound the charge
+  // while this request was waiting. Never start a fresh POST in manual mode.
+  const [freshRows] = await db.execute(sql`SELECT charge_id FROM validra_checkout_attempts WHERE external_id = ${input.externalId} AND customer_id = ${input.customerId}`);
+  const boundId = (freshRows as unknown as Array<{charge_id:string|null}>)[0]?.charge_id;
   const attempt = { externalId: input.externalId, amountCents: input.amountCents };
   // Reuse the exact external_id and idempotency key after a transport failure.
-  const charge = row.charge_id
-    ? await client.getCharge({ ...attempt, chargeId: row.charge_id })
-    : await client.createCharge(attempt);
+  const charge = boundId
+    ? await client.getCharge({ ...attempt, chargeId: boundId })
+    : allowNew ? await client.createCharge(attempt) : await client.getChargeByExternalId(attempt);
   await bindValidraCharge(input.externalId, input.customerId, charge);
   return { kind: "charge" as const, charge };
 }
 
-async function bindValidraCharge(externalId: string, customerId: number, charge: ValidraCharge) {
+export async function bindValidraCharge(externalId: string, customerId: number, charge: ValidraCharge) {
   const db = await ensureValidraAttemptStorage();
   await db.execute(sql`UPDATE validra_checkout_attempts SET charge_id = ${charge.id}
     WHERE external_id = ${externalId} AND customer_id = ${customerId}
