@@ -1292,7 +1292,7 @@ export default function AdminSettings() {
                   ))}
                 </div>
               )}
-              <AdminActionPasswordDialog open={providerPasswordOpen} onOpenChange={setProviderPasswordOpen} onConfirm={password => providerMutation.mutate({ provider: nextProvider, editPassword: password })} />
+              <AdminActionPasswordDialog open={providerPasswordOpen} description="Digite a senha para alterar a forma de pagamento." onCancel={() => setProviderPasswordOpen(false)} isPending={providerMutation.isPending} onConfirm={password => providerMutation.mutate({ provider: nextProvider, editPassword: password })} />
             </div>
             <div className="flex items-center justify-between">
               <h2 className="text-lg font-bold text-white">Contas PIX</h2>
