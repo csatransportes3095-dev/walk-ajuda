@@ -28,6 +28,7 @@ import { ENV } from "./_core/env";
 import { getAdminJwtSecret } from "./adminJwt";
 import { isValidH2AutoApkVersionName } from "./h2-auto-apk-release";
 import { getCustomerSessionTokenFromRequest, requireCustomerSession } from "./customerSession";
+import { VALIDRA_CHECKOUT_READY } from "./checkoutPaymentProvider";
 
 const jsonParser = express.json({ limit: "2mb" });
 // Limite maior para upload base64 (imagem comprimida ~base64 cresce ~33%)
@@ -2508,6 +2509,24 @@ export function registerUploadRoute(app: Express) {
     } catch (err: any) {
       const status = err?.code === "UNAUTHORIZED" ? 401 : err?.code === "FORBIDDEN" ? 403 : 500;
       res.status(status).json({ error: err?.message || "Upload failed" });
+    }
+  });
+
+  // Isolated Validra upload. Manual/legacy upload routes above are unchanged.
+  // The release gate runs before parsing any body or touching storage.
+  app.post("/api/upload/validra-order-file-base64", (_req,res,next)=>{
+    if(!VALIDRA_CHECKOUT_READY){res.status(503).json({error:"Checkout ValidraPay indisponivel."});return;}
+    next();
+  }, jsonParserBig, async (req:Request,res:Response)=>{
+    try{
+      const identity=await requireCustomerSession(getCustomerSessionTokenFromRequest(req));
+      const {createValidraDocumentUpload}=await import("./validraDocumentStorage");
+      const doc=await createValidraDocumentUpload(identity.phone,req.body?.label,req.body?.data);
+      res.json({success:true,...doc});
+    }catch(error){
+      const e=error as {code?:string;message?:string};
+      const status=e.code==="UNAUTHORIZED"?401:e.code==="FORBIDDEN"||e.message==="validra_customer_mismatch"?403:e.message==="validra_invalid_document"?400:503;
+      res.status(status).json({error:"Nao foi possivel registrar o documento."});
     }
   });
 

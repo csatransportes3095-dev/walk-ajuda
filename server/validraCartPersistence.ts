@@ -6,15 +6,11 @@ import { validraPurchaseDigest } from "./validraCheckout";
 import { validraAmount, validraChargeIsPaid, type ValidraCharge } from "./validraPay";
 import type { ValidraCartQuote } from "./validraCartQuote";
 
-// Internal contract: references must be resolved from authenticated, server-verified
-// uploads before calling reserveValidraCart. A URL or key from the browser alone
-// is not evidence of ownership. No raw file bytes or credentials in the snapshot.
-export type ValidraCartDocument = {
-  label: string;
-  fileKey: string;
-  fileUrl: string;
-  mimeType: string;
-};
+import { ensureValidraDocumentStorage, preflightValidraDocuments, bindValidraDocuments, type ValidraCartDocument } from "./validraDocumentStorage";
+export type { ValidraCartDocument } from "./validraDocumentStorage";
+
+// Only metadata registered by the authenticated upload is accepted. Raw
+// bytes and credentials never enter the immutable purchase snapshot.
 type ValidraCartOrder = TrustedPaidOrderInput["order"] & { documents?: ValidraCartDocument[] };
 
 export type ValidraCartSnapshot = {
@@ -48,6 +44,7 @@ type Attempt = { customer_id: number; purchase_digest: string; amount_cents: num
 
 export async function ensureValidraCartStorage() {
   const db=await ensureValidraAttemptStorage();
+  await ensureValidraDocumentStorage(db);
   await db.execute(sql`CREATE TABLE IF NOT EXISTS validra_cart_snapshots (
     external_id VARCHAR(64) CHARACTER SET ascii COLLATE ascii_bin PRIMARY KEY,
     snapshot_json MEDIUMTEXT NOT NULL, coupon_id INT NULL,
@@ -85,8 +82,10 @@ function validateSnapshot(snapshot: ValidraCartSnapshot) {
 export async function reserveValidraCart(externalId: string, snapshot: ValidraCartSnapshot, allowNew = true) {
   if (!/^[A-Za-z0-9_-]{1,64}$/.test(externalId)) throw new Error("validra_invalid_attempt");
   const purchaseDigest=validateSnapshot(snapshot);
-  const {quote}=snapshot;
+  const {quote,orders}=snapshot;
+  const documents=orders.flatMap(o=>o.documents??[]);
   const db=await ensureValidraCartStorage();
+  await preflightValidraDocuments(db,documents,quote,externalId);
   return db.transaction(async tx=>{
     if (!allowNew) {
       const [existing]=await tx.execute(sql`SELECT external_id FROM validra_cart_snapshots WHERE external_id=${externalId}`);
@@ -99,7 +98,12 @@ export async function reserveValidraCart(externalId: string, snapshot: ValidraCa
     const attempt=(rows as unknown as Attempt[])[0];
     if (!attempt||Number(attempt.customer_id)!==quote.customerId||attempt.purchase_digest!==purchaseDigest||Number(attempt.amount_cents)!==quote.amountCents) throw new Error("validra_attempt_conflict");
     const [prior]=await tx.execute(sql`SELECT external_id FROM validra_cart_snapshots WHERE external_id=${externalId}`);
-    if (!(prior as unknown[]).length) {
+    const hasSnapshot=(prior as unknown[]).length>0;
+    const [ownerRows]=await tx.execute(sql`SELECT phone,blocked,deletedAt FROM customers WHERE id=${quote.customerId} FOR UPDATE`);
+    const owner=(ownerRows as unknown as Array<{phone:string;blocked:number;deletedAt:Date|null}>)[0];
+    if(!owner||owner.deletedAt||Number(owner.blocked)!==0||owner.phone.replace(/\D/g,"")!==quote.phone)throw new Error("validra_customer_mismatch");
+    await bindValidraDocuments(tx,documents,quote,externalId,!hasSnapshot);
+    if (!hasSnapshot) {
       if (attempt.state!=="pending"||attempt.charge_id||attempt.registration_id) throw new Error("validra_attempt_conflict");
       if (quote.coupon) {
         const expected=quote.coupon;
@@ -141,6 +145,9 @@ export async function persistPaidValidraCart(externalId: string, charge: Validra
     const [customerRows]=await tx.execute(sql`SELECT phone,blocked,deletedAt FROM customers WHERE id=${quote.customerId} FOR UPDATE`);
     const customer=(customerRows as unknown as Array<{phone:string;blocked:number;deletedAt:Date|null}>)[0];
     if (!customer||customer.deletedAt||Number(customer.blocked)!==0||customer.phone.replace(/\D/g,"")!==quote.phone) throw new Error("validra_customer_mismatch");
+    // A legacy pending snapshot without a registered reservation must be
+    // reviewed, not fulfilled with an unproven document reference.
+    await bindValidraDocuments(tx,orders.flatMap(o=>o.documents??[]),quote,externalId,false);
     const paidAt=Date.parse(charge.payment?.paid_at??"");
     if (!Number.isSafeInteger(paidAt)||paidAt<=0) throw new Error("validra_invalid_paid_at");
     const results=[];

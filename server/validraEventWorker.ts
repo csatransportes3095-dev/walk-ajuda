@@ -137,7 +137,7 @@ export async function processNextValidraEvent(client:ValidraPayClient){
   }catch(error){
     const retryAfter=error instanceof ValidraApiError?Number(error.retryAfter||0):0;
     const delay=Math.min(3600,Math.max(10,Number.isFinite(retryAfter)?retryAfter:0,Math.pow(2,Math.min(event.attempts,10))));
-    const permanent=error instanceof Error&&["validra_charge_mismatch","validra_charge_conflict","validra_attempt_conflict","validra_customer_mismatch","validra_invalid_cart_snapshot","validra_cart_snapshot_missing","validra_invalid_paid_at"].includes(error.message);
+    const permanent=error instanceof Error&&["validra_charge_mismatch","validra_charge_conflict","validra_attempt_conflict","validra_customer_mismatch","validra_invalid_cart_snapshot","validra_cart_snapshot_missing","validra_invalid_paid_at","validra_document_not_authorized"].includes(error.message);
     if(permanent||event.attempts>=12)await finish(event,"review",permanent?"binding_conflict":"retries_exhausted");
     else await finish(event,"queued","temporary_failure",delay);
   }

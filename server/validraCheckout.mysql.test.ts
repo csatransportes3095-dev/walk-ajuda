@@ -6,6 +6,9 @@ import type { AddressInfo } from "node:net";
 import express from "express";
 vi.mock("./db", () => ({ getDb: vi.fn(), addOrderStatus: vi.fn(), generateOrderNumber: vi.fn() }));
 import { getDb } from "./db";
+vi.mock("./r2Storage",()=>({r2PutObject:vi.fn(),r2HeadObject:vi.fn()}));
+import { r2PutObject,r2HeadObject } from "./r2Storage";
+import { createValidraDocumentUpload } from "./validraDocumentStorage";
 import { ensureValidraAttemptStorage } from "./validraAttemptStorage";
 import { persistPaidValidraOrder } from "./validraOrderPersistence";
 import { runValidraCheckout, validraPurchaseDigest } from "./validraCheckout";
@@ -85,7 +88,9 @@ describe.skipIf(!dbUrl)("ValidraPay real MySQL integration (simulated provider)"
     await ensureValidraScheduleStorage();
   }, 30000);
   beforeEach(async () => {
-    for (const table of ["validra_schedule_jobs", "scheduleAppointments", "productOptions", "orderFiles", "financialSales", "validra_payment_reviews", "validra_event_jobs", "validra_webhook_events", "validra_order_followup", "validra_cart_orders", "validra_cart_snapshots", "validra_checkout_attempts", "orderStatusHistory", "accessCodePhones", "accessCodes", "orderCounter", "customers", "orderStatusTypes"]) await pool.query("DELETE FROM " + table);
+    vi.mocked(r2HeadObject).mockReset().mockResolvedValue({httpStatus:200,contentLength:16,etag:"fixture-etag"});
+    vi.mocked(r2PutObject).mockReset().mockImplementation(async key=>({key,url:"https://storage.example.test/"+key}));
+    for (const table of ["validra_document_uploads", "validra_schedule_jobs", "scheduleAppointments", "productOptions", "orderFiles", "financialSales", "validra_payment_reviews", "validra_event_jobs", "validra_webhook_events", "validra_order_followup", "validra_cart_orders", "validra_cart_snapshots", "validra_checkout_attempts", "orderStatusHistory", "accessCodePhones", "accessCodes", "orderCounter", "customers", "orderStatusTypes"]) await pool.query("DELETE FROM " + table);
     await pool.execute("INSERT INTO customers (id, phone) VALUES (21, ?)", [phone]);
     await pool.execute("INSERT INTO orderStatusTypes (`key`) VALUES ('pedido_recebido')");
     await pool.execute("INSERT INTO productOptions(id,productId,autoScheduleEnabled) VALUES (11,1,1),(22,2,0)");
@@ -164,9 +169,17 @@ describe.skipIf(!dbUrl)("ValidraPay real MySQL integration (simulated provider)"
     return {quote:{customerId:21,phone,coupon:null,globalPromotion:false,subtotalCents:4990,couponCents:0,resellerCents:0,amountCents:4990,items:[first,second]},orders:[first,second].map(i=>({...f.input.order,productId:i.productId,serviceName:i.serviceName,serviceOption:i.serviceOption}))};
   }
 
+  async function registerFixtureDocuments(snapshot:ValidraCartSnapshot,customerId=21,customerPhone=phone){
+    for(const order of snapshot.orders)for(const doc of order.documents??[]){
+      await pool.execute("INSERT INTO validra_document_uploads(file_key,customer_id,customer_phone,label,file_url,mime_type,byte_length,etag) VALUES (?,?,?,?,?,?,?,?)",
+        [doc.fileKey,customerId,customerPhone,doc.label,doc.fileUrl,doc.mimeType,16,"fixture-etag"]);
+    }
+  }
+
   it("reconciles a signed-inbox cart payment into all orders exactly once",async()=>{
     const f=makeFixture(), snapshot=cartFixture(f);
     snapshot.orders[0].documents=[{label:"Documento A",fileKey:"order-docs/fixture-a.pdf",fileUrl:"https://storage.example.test/order-docs/fixture-a.pdf",mimeType:"application/pdf"}];
+    await registerFixtureDocuments(snapshot);
     expect(await runValidraCartCheckout(f.input.externalId,snapshot,true,f.client)).toMatchObject({kind:"payment"});
     expect(await count("orderStatusHistory")).toBe(0);
     expect(await count("orderFiles")).toBe(0);
@@ -205,6 +218,7 @@ describe.skipIf(!dbUrl)("ValidraPay real MySQL integration (simulated provider)"
     const f=makeFixture(),snapshot=cartFixture(f);
     snapshot.orders[0].documents=[{label:"Documento A",fileKey:"order-docs/fixture-a.pdf",fileUrl:"https://storage.example.test/order-docs/fixture-a.pdf",mimeType:"application/pdf"}];
     snapshot.orders[1].documents=[{label:"FAIL_TEST_DOCUMENT",fileKey:"order-docs/fixture-b.pdf",fileUrl:"https://storage.example.test/order-docs/fixture-b.pdf",mimeType:"application/pdf"}];
+    await registerFixtureDocuments(snapshot);
     await runValidraCartCheckout(f.input.externalId,snapshot,true,f.client);
     await expect(persistPaidValidraCart(f.input.externalId,f.paid())).rejects.toThrow();
     for(const table of ["orderStatusHistory","accessCodePhones","orderCounter","orderFiles","financialSales"] as const)expect(await count(table)).toBe(0);
@@ -219,6 +233,63 @@ describe.skipIf(!dbUrl)("ValidraPay real MySQL integration (simulated provider)"
     snapshot.orders[0].documents=[{label:"Documento",fileKey:"order-docs/fixture.pdf",fileUrl:"javascript:alert(1)",mimeType:"application/pdf"}];
     await expect(runValidraCartCheckout(f.input.externalId,snapshot,true,f.client)).rejects.toThrow("validra_invalid_cart_snapshot");
     expect(f.transport).not.toHaveBeenCalled();
+  });
+
+  it("registers an authenticated upload, binds it to one attempt and blocks reuse",async()=>{
+    const f=makeFixture(),snapshot=cartFixture(f);
+    const bytes=Buffer.from("%PDF-fixture-123");
+    expect(bytes.length).toBe(16);
+    const doc=await createValidraDocumentUpload(phone,"Documento",bytes.toString("base64"));
+    expect(doc.fileKey).toMatch(/^order-docs\/validra-[a-f0-9-]+\.pdf$/);
+    const [ownership]=await pool.execute<RowDataPacket[]>("SELECT customer_id,customer_phone,reserved_external_id FROM validra_document_uploads WHERE file_key=?",[doc.fileKey]);
+    expect(ownership[0]).toMatchObject({customer_id:21,customer_phone:phone,reserved_external_id:null});
+    snapshot.orders[0].documents=[doc];
+    await runValidraCartCheckout(f.input.externalId,snapshot,true,f.client);
+    const [reserved]=await pool.execute<RowDataPacket[]>("SELECT reserved_external_id FROM validra_document_uploads WHERE file_key=?",[doc.fileKey]);
+    expect(reserved[0].reserved_external_id).toBe(f.input.externalId);
+    const another=makeFixture();
+    await expect(runValidraCartCheckout(another.input.externalId,snapshot,true,another.client)).rejects.toThrow("validra_document_not_authorized");
+    expect(another.transport).not.toHaveBeenCalled();
+    await releaseTestPoll(f.input.externalId);
+    f.paid();
+    expect(await runValidraCartCheckout(f.input.externalId,snapshot,false,f.client)).toMatchObject({kind:"persisted"});
+    expect(await count("orderFiles")).toBe(1);
+  });
+
+  it("rejects another customer's document and unregistered or altered references before charging",async()=>{
+    const f=makeFixture(),snapshot=cartFixture(f);
+    const doc={label:"Documento",fileKey:"order-docs/fixture.pdf",fileUrl:"https://storage.example.test/order-docs/fixture.pdf",mimeType:"application/pdf"};
+    snapshot.orders[0].documents=[doc];
+    await expect(runValidraCartCheckout(f.input.externalId,snapshot,true,f.client)).rejects.toThrow("validra_document_not_authorized");
+    await pool.execute("INSERT INTO customers(id,phone) VALUES (22,?)",["11999990001"]);
+    await registerFixtureDocuments(snapshot,22,"11999990001");
+    await expect(runValidraCartCheckout(f.input.externalId,snapshot,true,f.client)).rejects.toThrow("validra_document_not_authorized");
+    expect(r2HeadObject).not.toHaveBeenCalled();
+    await pool.execute("UPDATE validra_document_uploads SET customer_id=21,customer_phone=?",[phone]);
+    snapshot.orders[0].documents=[{...doc,fileUrl:"https://other.example.test/"+doc.fileKey}];
+    await expect(runValidraCartCheckout(f.input.externalId,snapshot,true,f.client)).rejects.toThrow("validra_document_not_authorized");
+    snapshot.orders[0].documents=[doc];
+    vi.mocked(r2HeadObject).mockResolvedValueOnce({httpStatus:200,contentLength:16,etag:"changed-etag"});
+    await expect(runValidraCartCheckout(f.input.externalId,snapshot,true,f.client)).rejects.toThrow("validra_document_storage_unavailable");
+    expect(f.transport).not.toHaveBeenCalled();
+    const [attempts]=await pool.query<RowDataPacket[]>("SELECT COUNT(*) AS total FROM validra_checkout_attempts");
+    expect(Number(attempts[0].total)).toBe(0);
+  });
+
+  it("sends a paid attempt with a missing ownership binding to review without creating orders",async()=>{
+    const f=makeFixture(),snapshot=cartFixture(f);
+    snapshot.orders[0].documents=[{label:"Documento",fileKey:"order-docs/fixture.pdf",fileUrl:"https://storage.example.test/order-docs/fixture.pdf",mimeType:"application/pdf"}];
+    await registerFixtureDocuments(snapshot);
+    await runValidraCartCheckout(f.input.externalId,snapshot,true,f.client);
+    await pool.query("DELETE FROM validra_document_uploads");
+    const paid=f.paid();
+    await enqueueValidraEvent({event_id:"evt_"+"F".repeat(26),event_type:"charge.paid",charge_id:paid.id,external_id:f.input.externalId,occurred_at:paid.updated_at});
+    await releaseTestPoll(f.input.externalId);
+    expect(await processNextValidraEvent(f.client)).toBe(true);
+    const [reviews]=await pool.query<RowDataPacket[]>("SELECT reason FROM validra_payment_reviews");
+    expect(reviews[0]?.reason).toBe("binding_conflict");
+    expect(await count("orderStatusHistory")).toBe(0);
+    expect(await count("orderFiles")).toBe(0);
   });
 
   const scheduleStub:typeof ensureAutomaticScheduleForOrder=async(input,store)=>{
