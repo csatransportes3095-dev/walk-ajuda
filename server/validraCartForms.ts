@@ -4,10 +4,11 @@ import { getDb,getSetting } from "./db";
 import { getVehicleQuestionKind } from "../shared/vehicleCatalog";
 import { normalizeValidraAnswer,resolveValidraQuestionFlow,type ValidraItemRequirements,type ValidraItemFormInput,type ValidraFormQuestion,type ValidraFormDocument } from "../shared/validraCartForms";
 import type { CartSelection } from "./validraCartQuote";
+import { validraAudioKey,validraAudioScopeLabel } from "./validraAudioFormat";
 
 type Option=Pick<typeof productOptions.$inferSelect,"id"|"productId"|"label"|"type"|"requireProfilePhoto"|"requireCarDocument"|"requireAlvara"|"requireCondutaxi"|"requireVehicle2016"|"isPdfOnly"|"showYearField"|"docNameMode"|"commissionValue">;
 type Product=Pick<typeof products.$inferSelect,"id"|"name"|"requireVehicle2016"|"isPdfOnly"|"showYearField">;
-type Question=Pick<typeof productQuestions.$inferSelect,"id"|"question"|"fieldType"|"options"|"isRequired"|"sortOrder"|"parentQuestionId"|"triggerOption"|"questionPresentation">;
+type Question=Pick<typeof productQuestions.$inferSelect,"id"|"question"|"fieldType"|"options"|"isRequired"|"sortOrder"|"parentQuestionId"|"triggerOption"|"questionPresentation">&Partial<Pick<typeof productQuestions.$inferSelect,"audioMinDurationSeconds"|"audioMaxDurationSeconds"|"allowAudioRerecord"|"allowAudioFileUpload"|"helpText">>;
 type Document=Pick<typeof optionDocuments.$inferSelect,"id"|"label"|"inputSource"|"sortOrder">;
 type BlockingRule={questionId?:unknown;answer?:unknown;enabled?:unknown};
 const unavailable=()=>new Error("validra_cart_requirements_not_ready");
@@ -44,8 +45,11 @@ export function buildValidraItemRequirements(product:Product,option:Option,quest
   if(questionIds.size!==questions.length)throw unavailable();
   const byId=new Map(questions.map(q=>[q.id,q]));
   const specs:ValidraFormQuestion[]=questions.map(q=>{
-    if(q.fieldType==="audio"||q.questionPresentation==="audio"||getVehicleQuestionKind(q.question)||
-        !["text","textarea","select"].includes(q.fieldType)||!q.question.trim())throw unavailable();
+    if(q.questionPresentation==="audio"||getVehicleQuestionKind(q.question)||
+        !["text","textarea","select","audio"].includes(q.fieldType)||!q.question.trim())throw unavailable();
+    if(q.parentQuestionId!==null&&byId.get(q.parentQuestionId)?.fieldType==="audio")throw unavailable();
+    const min=q.audioMinDurationSeconds??1,max=q.audioMaxDurationSeconds??120;
+    if(q.fieldType==="audio"&&(!Number.isSafeInteger(min)||!Number.isSafeInteger(max)||min<1||max<min||max>300))throw unavailable();
     const chain=new Set([q.id]);
     let parent=q.parentQuestionId;
     while(parent!==null){
@@ -54,7 +58,8 @@ export function buildValidraItemRequirements(product:Product,option:Option,quest
       chain.add(parent);parent=ancestor.parentQuestionId;
     }
     return {id:q.id,question:q.question,fieldType:q.fieldType as ValidraFormQuestion["fieldType"],required:q.isRequired===1,
-      parentQuestionId:q.parentQuestionId,triggerOption:q.triggerOption,sortOrder:q.sortOrder,choices:choicesFor(q,rules)};
+      parentQuestionId:q.parentQuestionId,triggerOption:q.triggerOption,sortOrder:q.sortOrder,choices:choicesFor(q,rules),
+      ...(q.fieldType==="audio"?{audio:{min,max,allowRerecord:q.allowAudioRerecord===1,allowFileUpload:q.allowAudioFileUpload===1,helpText:q.helpText??null}}:{})};
   });
   for(const q of specs)for(const choice of q.choices){
     if(choice.action==="jump"&&!questionIds.has(choice.targetQuestionId!))throw unavailable();
@@ -112,6 +117,10 @@ export function validateValidraItemForm(spec:ValidraItemRequirements,input:Valid
     if(!question||seen.has(question.id)||typeof entry.answer!=="string"||entry.answer.length>2000)throw invalid();
     seen.add(question.id);
     const value=entry.answer.trim();
+    if(question.fieldType==="audio"&&value){
+      if(!validraAudioKey(value)||!question.audio||!submitted.audioFlowId)throw invalid();
+      validraAudioScopeLabel({flowId:submitted.audioFlowId,itemIndex:0,productId:spec.productId,optionId:spec.optionId,questionId:question.id});
+    }
     if(question.fieldType==="select"&&value){
       const selected=question.choices.find(choice=>normalizeValidraAnswer(choice.label)===normalizeValidraAnswer(value));
       if(!selected||selected.blocked)throw invalid();
@@ -127,7 +136,8 @@ export function validateValidraItemForm(spec:ValidraItemRequirements,input:Valid
     const depth=q.parentQuestionId===null?0:(depths.get(q.parentQuestionId)??0)+1;
     depths.set(q.id,depth);
     if(!answers[q.id])return [];
-    return [{questionId:q.id,question:q.question,answer:answers[q.id],depth,
+    return [{questionId:q.id,question:q.question,answer:q.fieldType==="audio"?"Áudio anexado":answers[q.id],depth,
+      ...(q.fieldType==="audio"?{answerType:"audio"}:{}),
       ...(q.fieldType==="select"?{optionsMeta:JSON.stringify(q.choices.map(choice=>({label:choice.label})))}:{})}];
   });
   const serialized=JSON.stringify(canonical);
@@ -139,5 +149,8 @@ export function validateValidraItemForm(spec:ValidraItemRequirements,input:Valid
     files.set(entry.fieldId,entry.fileKey);
   }
   if(spec.documents.some(doc=>!files.has(doc.fieldId))||new Set(files.values()).size!==files.size)throw invalid();
-  return {answers:serialized,documents:spec.documents.map(doc=>({...doc,fileKey:files.get(doc.fieldId)!}))};
+  const audio=visible.filter(q=>q.fieldType==="audio"&&answers[q.id]).map(q=>({
+    questionId:q.id,flowId:submitted.audioFlowId!,fileKey:answers[q.id],min:q.audio!.min,max:q.audio!.max,
+  }));
+  return {answers:serialized,documents:spec.documents.map(doc=>({...doc,fileKey:files.get(doc.fieldId)!})),audio};
 }

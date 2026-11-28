@@ -1,13 +1,14 @@
 // Shared form description; the server is authoritative and reconstructs all
 // persisted labels, choices and document references from the current catalogue.
 export type ValidraFormQuestion={
-  id:number;question:string;fieldType:"text"|"textarea"|"select";required:boolean;
+  id:number;question:string;fieldType:"text"|"textarea"|"select"|"audio";required:boolean;
+  audio?:{min:number;max:number;allowRerecord:boolean;allowFileUpload:boolean;helpText?:string|null};
   parentQuestionId:number|null;triggerOption:string|null;sortOrder:number;
   choices:{label:string;blocked:boolean;action?:"continue"|"jump"|"finish"|"message";targetQuestionId?:number;message?:string}[];
 };
 export type ValidraFormDocument={fieldId:string;label:string;pdfOnly:boolean;imageOnly:boolean;inputSource:"both"|"camera"|"gallery"};
 export type ValidraItemRequirements={productId:number;optionId:number;service:string;option:string;questions:ValidraFormQuestion[];documents:ValidraFormDocument[]};
-export type ValidraItemFormInput={answers:{questionId:number;answer:string}[];documents:{fieldId:string;fileKey:string}[]};
+export type ValidraItemFormInput={audioFlowId?:string;answers:{questionId:number;answer:string}[];documents:{fieldId:string;fileKey:string}[]};
 export type ValidraAnswerMap=Record<number,string>;
 export const normalizeValidraAnswer=(value:string|null|undefined)=>String(value||"").normalize("NFD").replace(/[\u0300-\u036f]/g,"").trim().replace(/\s+/g," ").toUpperCase();
 export function resolveValidraQuestionFlow(questions:ValidraFormQuestion[],answers:ValidraAnswerMap){

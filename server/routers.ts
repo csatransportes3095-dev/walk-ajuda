@@ -1494,6 +1494,7 @@ export const appRouter = router({
         cpToken:z.string().min(32).max(256),phone:z.string().max(32),externalId:z.string().uuid(),
         items:z.array(z.object({productId:z.number().int().positive(),optionId:z.number().int().positive(),priceModelId:z.number().int().positive().optional(),warrantyTierId:z.number().int().positive().optional()}).strict()).min(2).max(30).optional(),
         forms:z.array(z.object({
+          audioFlowId:z.string().uuid().optional(),
           answers:z.array(z.object({questionId:z.number().int().positive(),answer:z.string().max(2000)}).strict()).max(60),
           documents:z.array(z.object({fieldId:z.string().min(1).max(64),fileKey:z.string().min(1).max(512)}).strict()).max(30),
         }).strict()).min(2).max(30).optional(),

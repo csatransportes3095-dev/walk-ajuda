@@ -3,8 +3,10 @@ import { sql } from "drizzle-orm";
 import { getDb } from "./db";
 import { putPrivateValidraObject, headPrivateValidraObject, getPrivateValidraObject, privateValidraFileUrl } from "./validraPrivateStorage";
 import type { ValidraTransaction } from "./validraOrderPersistence";
+import { validateValidraWav,validraWavDuration,validraAudioKey,validraAudioScopeLabel,VALIDRA_AUDIO_MAX_BYTES,type ValidraAudioScope } from "./validraAudioFormat";
 
 export type ValidraCartDocument = {label:string;fileKey:string;fileUrl:string;mimeType:string};
+export type ValidraCartAudio=ValidraCartDocument&ValidraAudioScope&{fileSize:number;durationSeconds:number};
 type Owner={customerId:number;phone:string};
 type StoredDocument={customer_id:number;customer_phone:string;label:string;file_url:string;mime_type:string;
   byte_length:number|string;etag:string;reserved_external_id:string|null};
@@ -70,6 +72,11 @@ function requireBinding(row:StoredDocument|undefined,doc:ValidraCartDocument,own
       (row.reserved_external_id!==externalId&&!(allowUnreserved&&row.reserved_external_id===null))||
       !Number.isSafeInteger(Number(row.byte_length))||Number(row.byte_length)<=0||Number(row.byte_length)>MAX_DOCUMENT_BYTES||!row.etag)
     throw new Error("validra_document_not_authorized");
+  if(doc.mimeType==="audio/wav"){
+    const audio=doc as ValidraCartAudio;
+    if(!validraAudioKey(audio.fileKey)||audio.label!==validraAudioScopeLabel(audio)||Number(row.byte_length)!==audio.fileSize||
+      Math.round(validraWavDuration(audio.fileSize))!==audio.durationSeconds)throw new Error("validra_document_not_authorized");
+  }
   return row;
 }
 
@@ -122,7 +129,7 @@ export async function resolveOwnedValidraDocument(input:{fileKey:string;label:st
   if(!row||row.label!==input.label)throw new Error("validra_document_not_authorized");
   const doc={fileKey:input.fileKey,label:input.label,fileUrl:row.file_url,mimeType:row.mime_type};
   requireBinding(row,doc,owner,externalId,true);
-  if((input.pdfOnly&&doc.mimeType!=="application/pdf")||(input.imageOnly&&!/^image\/(jpeg|png|webp)$/.test(doc.mimeType)))
+  if(!/^(image\/(jpeg|png|webp)|application\/pdf)$/.test(doc.mimeType)||(input.pdfOnly&&doc.mimeType!=="application/pdf")||(input.imageOnly&&!/^image\/(jpeg|png|webp)$/.test(doc.mimeType)))
     throw new Error("validra_cart_form_invalid");
   return doc;
 }
@@ -135,7 +142,7 @@ export async function readAuthorizedValidraDocument(fileKey:string,access:{owner
   const [rows]=await db.execute(sql`SELECT * FROM validra_document_uploads WHERE file_key=${fileKey}`);
   const row=(rows as unknown as StoredDocument[])[0];
   const denied=()=>new Error("validra_document_not_authorized");
-  if(!row||row.file_url!==url||! /^(image\/(jpeg|png|webp)|application\/pdf)$/.test(row.mime_type)||
+  if(!row||row.file_url!==url||! /^(image\/(jpeg|png|webp)|application\/pdf|audio\/wav)$/.test(row.mime_type)||
     !Number.isSafeInteger(Number(row.byte_length))||Number(row.byte_length)<=0||Number(row.byte_length)>MAX_DOCUMENT_BYTES||!row.etag)throw denied();
   if(access.admin){
     if(!row.reserved_external_id)throw denied();
@@ -147,4 +154,50 @@ export async function readAuthorizedValidraDocument(fileKey:string,access:{owner
     if(!(customers as unknown[]).length)throw denied();
   }
   return {mimeType:row.mime_type,buffer:await getPrivateValidraObject(fileKey,{etag:row.etag,byteLength:Number(row.byte_length),mimeType:row.mime_type})};
+}
+
+/** Audio uses a separate, immutable scope label and the same private object
+ * registry. Source is a UI declaration, not proof of microphone origin. */
+export async function createValidraAudioUpload(authenticatedPhone:string,scope:ValidraAudioScope,source:unknown,data:unknown,settings:{min:number;max:number;allowRerecord:boolean;allowFileUpload:boolean}){
+  const label=validraAudioScopeLabel(scope);
+  if((source!=="recording"&&source!=="file")||(source==="file"&&!settings.allowFileUpload)||
+      typeof data!=="string"||data.length>Math.ceil(VALIDRA_AUDIO_MAX_BYTES/3)*4||
+      data.length%4!==0||!/^[A-Za-z0-9+/]+={0,2}$/.test(data))throw new Error("validra_invalid_document");
+  const buffer=Buffer.from(data,"base64");
+  const duration=validateValidraWav(buffer);
+  if(duration<settings.min||duration>settings.max)throw new Error("validra_invalid_document");
+  const db=await ensureValidraDocumentStorage();
+  const [rows]=await db.execute(sql`SELECT id,phone,blocked,deletedAt FROM customers WHERE phone=${authenticatedPhone} LIMIT 2`);
+  const owners=rows as unknown as Array<{id:number;phone:string;blocked:number;deletedAt:unknown}>;
+  const owner=owners[0];
+  if(owners.length!==1||!owner||owner.blocked||owner.deletedAt||owner.phone!==authenticatedPhone)throw new Error("validra_customer_mismatch");
+  const fileKey="order-docs/validra-audio-"+randomUUID()+".wav";
+  const fileUrl=privateValidraFileUrl(fileKey),mimeType="audio/wav";
+  await putPrivateValidraObject(fileKey,buffer,mimeType);
+  const head=await headPrivateValidraObject(fileKey);
+  if(head.httpStatus!==200||head.contentLength!==buffer.length||!head.etag||head.etag.length>256)throw new Error("validra_document_storage_unavailable");
+  await db.transaction(async tx=>{
+    const [locked]=await tx.execute(sql`SELECT id FROM customers WHERE id=${owner.id} AND phone=${authenticatedPhone} AND blocked=0 AND deletedAt IS NULL FOR UPDATE`);
+    if(!(locked as unknown[]).length)throw new Error("validra_customer_mismatch");
+    if(!settings.allowRerecord){
+      const [prior]=await tx.execute(sql`SELECT file_key FROM validra_document_uploads WHERE customer_id=${owner.id} AND label=${label} AND mime_type='audio/wav' LIMIT 1`);
+      if((prior as unknown[]).length)throw new Error("validra_cart_form_invalid");
+    }
+    await tx.execute(sql`INSERT INTO validra_document_uploads(file_key,customer_id,customer_phone,label,file_url,mime_type,byte_length,etag)
+      VALUES(${fileKey},${owner.id},${authenticatedPhone},${label},${fileUrl},${mimeType},${buffer.length},${head.etag})`);
+  },{isolationLevel:"read committed"});
+  return {fileKey,durationSeconds:Math.round(duration),mimeType};
+}
+export async function resolveOwnedValidraAudio(scope:ValidraAudioScope,fileKey:string,settings:{min:number;max:number},owner:Owner,externalId:string):Promise<ValidraCartAudio>{
+  const label=validraAudioScopeLabel(scope);
+  if(!validraAudioKey(fileKey))throw new Error("validra_document_not_authorized");
+  const db=await ensureValidraDocumentStorage();
+  const [rows]=await db.execute(sql`SELECT * FROM validra_document_uploads WHERE file_key=${fileKey}`);
+  const row=(rows as unknown as StoredDocument[])[0];
+  if(!row||row.mime_type!=="audio/wav")throw new Error("validra_document_not_authorized");
+  const fileSize=Number(row.byte_length),duration=validraWavDuration(fileSize);
+  if(duration<settings.min||duration>settings.max)throw new Error("validra_cart_form_invalid");
+  const doc={...scope,label,fileKey,fileUrl:row.file_url,mimeType:row.mime_type,fileSize,durationSeconds:Math.round(duration)};
+  requireBinding(row,doc,owner,externalId,true);
+  return doc;
 }

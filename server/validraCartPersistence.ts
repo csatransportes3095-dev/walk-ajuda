@@ -1,5 +1,5 @@
 import { eq, sql } from "drizzle-orm";
-import { accessCodePhones, coupons, financialSales, orderFiles } from "../drizzle/schema";
+import { accessCodePhones, coupons, financialSales, orderFiles, orderQuestionAudioAnswers } from "../drizzle/schema";
 import { ensureValidraAttemptStorage } from "./validraAttemptStorage";
 import { persistValidraOrderInTransaction, type TrustedPaidOrderInput } from "./validraOrderPersistence";
 import { validraPurchaseDigest } from "./validraCheckout";
@@ -9,12 +9,13 @@ import { privateValidraFileUrl } from "./validraPrivateStorage";
 import { validateValidraReferral,persistValidraReferral,type ValidraReferralSnapshot } from "./validraCartReferral";
 import { ensureValidraNoticeStorage,enqueueValidraPaidNotices } from "./validraNoticeWorker";
 
-import { ensureValidraDocumentStorage, preflightValidraDocuments, bindValidraDocuments, type ValidraCartDocument } from "./validraDocumentStorage";
+import { validraAudioKey,validraAudioScopeLabel,validraWavDuration } from "./validraAudioFormat";
+import { ensureValidraDocumentStorage, preflightValidraDocuments, bindValidraDocuments, type ValidraCartDocument,type ValidraCartAudio } from "./validraDocumentStorage";
 export type { ValidraCartDocument } from "./validraDocumentStorage";
 
 // Only metadata registered by the authenticated upload is accepted. Raw
 // bytes and credentials never enter the immutable purchase snapshot.
-type ValidraCartOrder = TrustedPaidOrderInput["order"] & { documents?: ValidraCartDocument[] };
+type ValidraCartOrder = TrustedPaidOrderInput["order"] & { documents?: ValidraCartDocument[];audioAnswers?:ValidraCartAudio[] };
 
 export type ValidraCartSnapshot = {
   quote: ValidraCartQuote;
@@ -44,6 +45,24 @@ function validDocuments(documents: ValidraCartDocument[] | undefined): boolean {
   }
   return true;
 }
+function validAudio(order:ValidraCartOrder,productId:number,optionId:number,index:number){
+  try{
+    const audios=order.audioAnswers??[];
+    if(!Array.isArray(audios)||audios.length>60)return false;
+    const ids=new Set<number>(),keys=new Set<string>();
+    const answers=JSON.parse(order.answers||"[]") as Array<{questionId:number;answerType?:string;audioUrl?:string;durationSeconds?:number}>;
+    if(!Array.isArray(answers)||answers.filter(a=>a?.answerType==="audio").length!==audios.length)return false;
+    for(const a of audios){
+      if(!a||a.itemIndex!==index||a.productId!==productId||a.optionId!==optionId||a.mimeType!=="audio/wav"||
+          !validraAudioKey(a.fileKey)||a.fileUrl!==privateValidraFileUrl(a.fileKey)||a.label!==validraAudioScopeLabel(a)||
+          Math.round(validraWavDuration(a.fileSize))!==a.durationSeconds||ids.has(a.questionId)||keys.has(a.fileKey))return false;
+      if(!answers.some(answer=>answer.questionId===a.questionId&&answer.answerType==="audio"&&answer.audioUrl===a.fileUrl&&answer.durationSeconds===a.durationSeconds))return false;
+      ids.add(a.questionId);keys.add(a.fileKey);
+    }
+    return true;
+  }catch{return false;}
+}
+const cartUploads=(orders:ValidraCartOrder[])=>orders.flatMap(o=>[...(o.documents??[]),...(o.audioAnswers??[])]);
 type Attempt = { customer_id: number; purchase_digest: string; amount_cents: number|string; charge_id: string|null; registration_id: number|null; state: string };
 
 export async function ensureValidraCartStorage() {
@@ -78,7 +97,7 @@ function validateSnapshot(snapshot: ValidraCartSnapshot) {
   if (!orders.length||orders.length!==quote.items.length||orders.length>30||!validateValidraReferral(snapshot.referral,quote)||
       quote.items.some(i=>!Number.isSafeInteger(i.amountCents)||i.amountCents<0||i.amountCents>2147483647)||
       quote.items.reduce((sum,i)=>sum+i.amountCents,0)!==quote.amountCents||
-      orders.some((o,i)=>o.effectivePhone!==quote.phone||o.productId!==quote.items[i].productId||o.serviceName!==quote.items[i].serviceName||o.serviceOption!==quote.items[i].serviceOption||!validDocuments(o.documents)||(o.clientName?.length??0)>256||!Number.isSafeInteger(quote.items[i].optionId)||quote.items[i].optionId<=0)) throw new Error("validra_invalid_cart_snapshot");
+      orders.some((o,i)=>o.effectivePhone!==quote.phone||o.productId!==quote.items[i].productId||o.serviceName!==quote.items[i].serviceName||o.serviceOption!==quote.items[i].serviceOption||!validDocuments(o.documents)||!validAudio(o,quote.items[i].productId,quote.items[i].optionId,i)||(o.clientName?.length??0)>256||!Number.isSafeInteger(quote.items[i].optionId)||quote.items[i].optionId<=0)) throw new Error("validra_invalid_cart_snapshot");
   return validraPurchaseDigest(snapshot);
 }
 
@@ -88,7 +107,7 @@ export async function reserveValidraCart(externalId: string, snapshot: ValidraCa
   if (!/^[A-Za-z0-9_-]{1,64}$/.test(externalId)) throw new Error("validra_invalid_attempt");
   const purchaseDigest=validateSnapshot(snapshot);
   const {quote,orders}=snapshot;
-  const documents=orders.flatMap(o=>o.documents??[]);
+  const documents=cartUploads(orders);
   const db=await ensureValidraCartStorage();
   await preflightValidraDocuments(db,documents,quote,externalId);
   return db.transaction(async tx=>{
@@ -187,13 +206,13 @@ export async function persistPaidValidraCart(externalId: string, charge: Validra
     if (!customer||customer.deletedAt||Number(customer.blocked)!==0||customer.phone.replace(/\D/g,"")!==quote.phone) throw new Error("validra_customer_mismatch");
     // A legacy pending snapshot without a registered reservation must be
     // reviewed, not fulfilled with an unproven document reference.
-    await bindValidraDocuments(tx,orders.flatMap(o=>o.documents??[]),quote,externalId,false);
+    await bindValidraDocuments(tx,cartUploads(orders),quote,externalId,false);
     const paidAt=Date.parse(charge.payment?.paid_at??"");
     if (!Number.isSafeInteger(paidAt)||paidAt<=0) throw new Error("validra_invalid_paid_at");
     const results=[];
     for (let i=0;i<orders.length;i++) {
       const item=quote.items[i];
-      const {documents,...order}=orders[i];
+      const {documents,audioAnswers,...order}=orders[i];
       const persisted=await persistValidraOrderInTransaction(tx,order,item.amountCents);
       if (!persisted.orderNumber) throw new Error("validra_order_persistence_failed");
       if(i===0&&snapshot.referral)await persistValidraReferral(tx,snapshot.referral,quote,persisted,order.clientName??null);
@@ -202,6 +221,11 @@ export async function persistPaidValidraCart(externalId: string, charge: Validra
       if (documents?.length) await tx.insert(orderFiles).values(documents.map(doc=>({
         registrationId:persisted.registrationId,customerPhone:quote.phone,
         label:doc.label,fileKey:doc.fileKey,fileUrl:doc.fileUrl,mimeType:doc.mimeType,
+      })));
+      if(audioAnswers?.length)await tx.insert(orderQuestionAudioAnswers).values(audioAnswers.map(audio=>({
+        registrationId:persisted.registrationId,orderStatusId:persisted.orderStatusId,customerPhone:quote.phone,
+        productId:audio.productId,optionId:audio.optionId,questionId:audio.questionId,storageKey:audio.fileKey,
+        audioUrl:audio.fileUrl,mimeType:audio.mimeType,fileSize:audio.fileSize,durationSeconds:audio.durationSeconds,
       })));
       await tx.insert(financialSales).values({
         registrationId:persisted.registrationId,customerName:order.clientName??"",

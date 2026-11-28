@@ -23,6 +23,8 @@ type Props = {
   value?: AudioDraft;
   onConfirmed: (draft: AudioDraft) => void;
   onClear?: () => void;
+  privateUpload?: (file:File,source:"recording"|"file")=>Promise<AudioDraft>;
+  privateDuration?: (file:File)=>Promise<number>;
 };
 
 const MAX_FILE_SIZE = 12 * 1024 * 1024;
@@ -83,6 +85,8 @@ export function QuestionAudioRecorder({
   value,
   onConfirmed,
   onClear,
+  privateUpload,
+  privateDuration,
 }: Props) {
   const uploadMutation = trpc.questionAudio.uploadDraft.useMutation();
   const fileInputRef = useRef<HTMLInputElement>(null);
@@ -100,17 +104,19 @@ export function QuestionAudioRecorder({
   const [candidateDuration, setCandidateDuration] = useState(0);
   const [candidateSource, setCandidateSource] = useState<"recording" | "file">("recording");
   const [error, setError] = useState<string | null>(null);
+  const [privatePending,setPrivatePending]=useState(false);
+  const uploading=uploadMutation.isPending||privatePending;
 
   const hasConfirmedAudio = Boolean(value?.audioUrl);
-  const isBusy = isRecording || uploadMutation.isPending;
+  const isBusy = isRecording || uploading;
   const canReplace = !hasConfirmedAudio || allowRerecord;
   const effectiveMax = Math.min(300, Math.max(minDurationSeconds, maxDurationSeconds));
 
   const statusLabel = useMemo(() => {
     if (isRecording) return `Gravando ${formatDuration(elapsedSeconds)} / ${formatDuration(effectiveMax)}`;
-    if (uploadMutation.isPending) return "Anexando áudio com segurança...";
+    if (uploading) return "Anexando áudio com segurança...";
     return null;
-  }, [effectiveMax, elapsedSeconds, isRecording, uploadMutation.isPending]);
+  }, [effectiveMax, elapsedSeconds, isRecording, uploading]);
 
   const clearTimer = () => {
     if (intervalRef.current !== null) {
@@ -149,7 +155,7 @@ export function QuestionAudioRecorder({
       return;
     }
     try {
-      const duration = await getAudioDuration(file);
+      const duration = privateDuration?await privateDuration(file):await getAudioDuration(file);
       if (!duration || duration > effectiveMax + 1) {
         setError(`O áudio deve ter no máximo ${formatDuration(effectiveMax)}.`);
         return;
@@ -233,7 +239,8 @@ export function QuestionAudioRecorder({
       return;
     }
     try {
-      const draft = await uploadMutation.mutateAsync({
+      if(privateUpload)setPrivatePending(true);
+      const draft = privateUpload?await privateUpload(candidateFile,candidateSource):await uploadMutation.mutateAsync({
         flowId,
         productId,
         optionId,
@@ -250,7 +257,7 @@ export function QuestionAudioRecorder({
       clearCandidate();
     } catch (uploadError: any) {
       setError(uploadError?.message || "Não foi possível anexar o áudio. Sua gravação continua disponível para tentar novamente.");
-    }
+    }finally{setPrivatePending(false);}
   };
 
   return (
@@ -270,7 +277,7 @@ export function QuestionAudioRecorder({
       {hasConfirmedAudio && value ? (
         <div className="rounded-lg border border-emerald-400/30 bg-emerald-500/10 p-2.5 space-y-2">
           <p className="flex items-center gap-1.5 text-xs font-bold text-emerald-300"><CheckCircle2 className="w-4 h-4" /> ÁUDIO ANEXADO · {formatDuration(value.durationSeconds)}</p>
-          <audio controls preload="metadata" className="w-full h-9" src={value.audioUrl}>Seu navegador não suporta reprodução de áudio.</audio>
+          {!privateUpload&&<audio controls preload="metadata" className="w-full h-9" src={value.audioUrl}>Seu navegador não suporta reprodução de áudio.</audio>}
           {allowRerecord && <button type="button" onClick={onClear} disabled={isBusy} className="w-full rounded-lg border border-sky-300/40 bg-sky-500/10 px-3 py-2 text-xs font-bold text-sky-100 hover:bg-sky-500/20 disabled:opacity-50"><RotateCcw className="inline w-3.5 h-3.5 mr-1" /> GRAVAR NOVAMENTE</button>}
         </div>
       ) : (
@@ -281,7 +288,7 @@ export function QuestionAudioRecorder({
               <audio controls preload="metadata" className="w-full h-9" src={candidateUrl}>Seu navegador não suporta reprodução de áudio.</audio>
               <div className="grid grid-cols-2 gap-2">
                 <button type="button" onClick={clearCandidate} disabled={isBusy} className="rounded-lg bg-white/10 px-2 py-2 text-xs font-bold text-white hover:bg-white/20 disabled:opacity-50"><RotateCcw className="inline w-3.5 h-3.5 mr-1" /> GRAVAR NOVAMENTE</button>
-                <button type="button" onClick={confirmAudio} disabled={isBusy} className="rounded-lg bg-emerald-600 px-2 py-2 text-xs font-bold text-white hover:bg-emerald-500 disabled:opacity-50">{uploadMutation.isPending ? <><Loader2 className="inline w-3.5 h-3.5 mr-1 animate-spin" /> ANEXANDO</> : <><CheckCircle2 className="inline w-3.5 h-3.5 mr-1" /> USAR ESTE ÁUDIO</>}</button>
+                <button type="button" onClick={confirmAudio} disabled={isBusy} className="rounded-lg bg-emerald-600 px-2 py-2 text-xs font-bold text-white hover:bg-emerald-500 disabled:opacity-50">{uploading ? <><Loader2 className="inline w-3.5 h-3.5 mr-1 animate-spin" /> ANEXANDO</> : <><CheckCircle2 className="inline w-3.5 h-3.5 mr-1" /> USAR ESTE ÁUDIO</>}</button>
               </div>
             </div>
           )}

@@ -2530,6 +2530,27 @@ export function registerUploadRoute(app: Express) {
     }
   });
 
+  app.post("/api/upload/validra-question-audio",(_req,res,next)=>{
+    if(!VALIDRA_CHECKOUT_READY){res.status(503).json({error:"Checkout ValidraPay indisponível."});return;}next();
+  },jsonParserBig,async(req:Request,res:Response)=>{
+    try{
+      const identity=await requireCustomerSession(getCustomerSessionTokenFromRequest(req));
+      const {flowId,itemIndex,productId,optionId,questionId,source,data}=req.body??{};
+      const scope={flowId,itemIndex,productId,optionId,questionId};
+      const {validraAudioScopeLabel}=await import("./validraAudioFormat");
+      validraAudioScopeLabel(scope);
+      const [spec]=await (await import("./validraCartForms")).loadValidraItemRequirements([{productId,optionId}]);
+      const question=spec?.questions.find(q=>q.id===questionId&&q.fieldType==="audio");
+      if(!question?.audio)throw new Error("validra_cart_form_invalid");
+      const audio=await (await import("./validraDocumentStorage")).createValidraAudioUpload(identity.phone,scope,source,data,question.audio);
+      res.json({success:true,...audio});
+    }catch(error){
+      const e=error as {code?:string;message?:string};
+      res.status(e.code==="UNAUTHORIZED"?401:e.code==="FORBIDDEN"||e.message==="validra_customer_mismatch"?403:
+        ["validra_invalid_document","validra_cart_form_invalid"].includes(e.message??"")?400:503).json({error:"Não foi possível registrar o áudio. Revise o formato e a duração."});
+    }
+  });
+
   // Authenticated download: no public object URL, no cache or query token.
   // Reads stay available after the checkout gate is disabled.
   app.get("/api/validra/documents/order-docs/:filename",async(req:Request,res:Response)=>{
@@ -2540,7 +2561,7 @@ export function registerUploadRoute(app: Express) {
       const {readAuthorizedValidraDocument}=await import("./validraDocumentStorage");
       const document=await readAuthorizedValidraDocument("order-docs/"+String(req.params.filename),{admin,ownerPhone});
       const extension=document.mimeType==="application/pdf"?"pdf":document.mimeType==="image/jpeg"?"jpg":document.mimeType.split("/")[1];
-      res.set({"Content-Type":document.mimeType,"Content-Disposition":'attachment; filename="documento.'+extension+'"',"Content-Length":String(document.buffer.length)});
+      res.set({"Content-Type":document.mimeType,"Content-Disposition":(document.mimeType==="audio/wav"?'inline; filename="audio.wav"':'attachment; filename="documento.'+extension+'"'),"Content-Length":String(document.buffer.length)});
       res.send(document.buffer);
     }catch{res.status(404).json({error:"Documento indisponível."});}
   });

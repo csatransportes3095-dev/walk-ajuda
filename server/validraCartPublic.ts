@@ -1,7 +1,7 @@
 import { eq } from "drizzle-orm";
 import { customers } from "../drizzle/schema";
 import { loadValidraItemRequirements,validateValidraItemForm } from "./validraCartForms";
-import { resolveOwnedValidraDocument } from "./validraDocumentStorage";
+import { resolveOwnedValidraDocument,resolveOwnedValidraAudio } from "./validraDocumentStorage";
 import type { ValidraItemRequirements,ValidraItemFormInput } from "../shared/validraCartForms";
 import { freezeValidraReferral } from "./validraCartReferral";
 import { getDb } from "./db";
@@ -16,14 +16,24 @@ type PublicCartInput={externalId:string;cpToken:string;phone:string;items?:CartS
 export async function assembleValidraCartForms(specs:ValidraItemRequirements[],forms:ValidraItemFormInput[]|undefined,owner:{customerId:number;phone:string},externalId:string){
   if(forms&&forms.length!==specs.length)throw new Error("validra_cart_form_invalid");
   const validated=specs.map((spec,index)=>validateValidraItemForm(spec,forms?.[index]));
-  const keys=validated.flatMap(form=>form.documents.map(doc=>doc.fileKey));
+  const keys=validated.flatMap(form=>[...form.documents,...form.audio].map(doc=>doc.fileKey));
   // One uploaded reference per document field, even for repeated options.
   if(keys.length>60||new Set(keys).size!==keys.length)throw new Error("validra_cart_form_invalid");
   const result=[];
-  for(const form of validated){
-    const documents=[];
+  for(const [index,form] of validated.entries()){
+    const documents=[],audioAnswers=[];
     for(const doc of form.documents)documents.push(await resolveOwnedValidraDocument(doc,owner,externalId));
-    result.push({answers:form.answers,documents});
+    for(const audio of form.audio)audioAnswers.push(await resolveOwnedValidraAudio({
+      flowId:audio.flowId,itemIndex:index,productId:specs[index].productId,optionId:specs[index].optionId,questionId:audio.questionId,
+    },audio.fileKey,audio,owner,externalId));
+    const answers=JSON.parse(form.answers) as Array<{questionId:number;answer:string;answerType?:string}>;
+    const canonical=answers.map(answer=>{
+      const audio=audioAnswers.find(a=>a.questionId===answer.questionId);
+      return audio?{...answer,audioUrl:audio.fileUrl,durationSeconds:audio.durationSeconds}:answer;
+    });
+    const serialized=JSON.stringify(canonical);
+    if(Buffer.byteLength(serialized,"utf8")>60000)throw new Error("validra_cart_form_invalid");
+    result.push({answers:serialized,documents,...(audioAnswers.length?{audioAnswers}:{})});
   }
   return result;
 }
@@ -71,6 +81,7 @@ export async function checkoutPublicValidraCart(input:PublicCartInput,allowNew:b
       effectivePhone:owner.phone,clientName:customer.name,productId:item.productId,
       serviceName:item.serviceName,serviceOption:item.serviceOption,answers:forms[index].answers,
       documents:forms[index].documents,
+      ...(forms[index].audioAnswers?{audioAnswers:forms[index].audioAnswers}:{}),
     }))};
   }
   const result=await runValidraCartCheckout(input.externalId,snapshot,allowNew,new ValidraPayClient(),true);

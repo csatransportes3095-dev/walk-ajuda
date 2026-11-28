@@ -11,7 +11,7 @@ vi.mock("./validraPrivateStorage",async importOriginal=>({
   putPrivateValidraObject:vi.fn(),headPrivateValidraObject:vi.fn(),getPrivateValidraObject:vi.fn(),
 }));
 import { putPrivateValidraObject,headPrivateValidraObject,getPrivateValidraObject } from "./validraPrivateStorage";
-import { createValidraDocumentUpload,readAuthorizedValidraDocument } from "./validraDocumentStorage";
+import { createValidraDocumentUpload,readAuthorizedValidraDocument,createValidraAudioUpload,resolveOwnedValidraAudio } from "./validraDocumentStorage";
 import { ensureValidraAttemptStorage } from "./validraAttemptStorage";
 import { persistPaidValidraOrder } from "./validraOrderPersistence";
 import { runValidraCheckout, validraPurchaseDigest } from "./validraCheckout";
@@ -32,6 +32,7 @@ const dbUrl = process.env.VALIDRA_TEST_DATABASE_URL;
 const key = "vpk_live_" + "A".repeat(26) + "_" + "B".repeat(52);
 const phone = "11999990000";
 const fixtureSchema = [
+  "CREATE TABLE IF NOT EXISTS orderQuestionAudioAnswers (id INT AUTO_INCREMENT PRIMARY KEY,registrationId INT NOT NULL,orderStatusId INT NOT NULL,customerPhone VARCHAR(32) NOT NULL,productId INT NOT NULL,optionId INT NOT NULL,questionId INT NOT NULL,storageKey VARCHAR(512) NOT NULL,audioUrl TEXT NOT NULL,mimeType VARCHAR(128) NOT NULL,fileSize INT NOT NULL,durationSeconds INT NOT NULL,createdAt TIMESTAMP DEFAULT CURRENT_TIMESTAMP,UNIQUE KEY audio_order_question(orderStatusId,questionId)) ENGINE=InnoDB",
   "CREATE TABLE IF NOT EXISTS referralCommissionAttributions (id INT AUTO_INCREMENT PRIMARY KEY,referrerCustomerId INT,referrerPhone VARCHAR(32) NOT NULL,referrerName VARCHAR(128),referredCustomerId INT NOT NULL,referredPhone VARCHAR(32) NOT NULL,referredName VARCHAR(128),source VARCHAR(32) NOT NULL,sourceReference VARCHAR(128),registrationId INT NOT NULL,orderStatusId INT NOT NULL UNIQUE,orderNumber INT,productId INT,optionId INT,serviceName VARCHAR(256),serviceOption VARCHAR(256),commissionRule VARCHAR(32) NOT NULL,commissionValue INT NOT NULL,status VARCHAR(32) NOT NULL,invalidReason VARCHAR(512),invalidatedAt TIMESTAMP NULL,eligibleAt TIMESTAMP NULL,paidAt TIMESTAMP NULL,paidBy VARCHAR(128),paymentReference VARCHAR(256),createdAt TIMESTAMP DEFAULT CURRENT_TIMESTAMP,updatedAt TIMESTAMP DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP) ENGINE=InnoDB",
   "CREATE TABLE IF NOT EXISTS productOptions (id INT PRIMARY KEY, productId INT NOT NULL, autoScheduleEnabled INT NOT NULL DEFAULT 0) ENGINE=InnoDB",
   "CREATE TABLE IF NOT EXISTS scheduleAppointments (id INT AUTO_INCREMENT PRIMARY KEY, token VARCHAR(64) NOT NULL UNIQUE, registrationId INT NOT NULL, subOrderIndex INT NOT NULL DEFAULT 0, customerPhone VARCHAR(32) NOT NULL, customerName VARCHAR(128), customerEmail VARCHAR(320), customerPhotoUrl TEXT, serviceName VARCHAR(256), templateId INT, slotId INT, slotDate VARCHAR(16), slotTime VARCHAR(8), status ENUM('pending','confirmed','cancelled','completed') NOT NULL DEFAULT 'pending', instructions TEXT, sentByEmail INT NOT NULL DEFAULT 0, confirmedAt TIMESTAMP NULL, adminSeenConfirmedAt TIMESTAMP NULL, hasScheduleNotification INT NOT NULL DEFAULT 0, createdAt TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP, updatedAt TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP, INDEX fixture_schedule_registration(registrationId,subOrderIndex)) ENGINE=InnoDB",
@@ -98,7 +99,7 @@ describe.skipIf(!dbUrl)("ValidraPay real MySQL integration (simulated provider)"
     vi.mocked(headPrivateValidraObject).mockReset().mockResolvedValue({httpStatus:200,contentLength:16,etag:"fixture-etag"});
     vi.mocked(putPrivateValidraObject).mockReset().mockResolvedValue(undefined);
     vi.mocked(getPrivateValidraObject).mockReset().mockResolvedValue(Buffer.from("%PDF-fixture-123"));
-    for (const table of ["validra_notice_jobs","referralCommissionAttributions","validra_document_uploads", "validra_schedule_jobs", "scheduleAppointments", "productOptions", "orderFiles", "financialSales", "validra_payment_reviews", "validra_event_jobs", "validra_webhook_events", "validra_order_followup", "validra_cart_orders", "validra_cart_snapshots", "validra_checkout_attempts", "orderStatusHistory", "accessCodePhones", "accessCodes", "orderCounter", "customers", "orderStatusTypes"]) await pool.query("DELETE FROM " + table);
+    for (const table of ["orderQuestionAudioAnswers","validra_notice_jobs","referralCommissionAttributions","validra_document_uploads", "validra_schedule_jobs", "scheduleAppointments", "productOptions", "orderFiles", "financialSales", "validra_payment_reviews", "validra_event_jobs", "validra_webhook_events", "validra_order_followup", "validra_cart_orders", "validra_cart_snapshots", "validra_checkout_attempts", "orderStatusHistory", "accessCodePhones", "accessCodes", "orderCounter", "customers", "orderStatusTypes"]) await pool.query("DELETE FROM " + table);
     await pool.execute("INSERT INTO customers (id, phone) VALUES (21, ?)", [phone]);
     await pool.execute("INSERT INTO orderStatusTypes (`key`) VALUES ('pedido_recebido')");
     await pool.execute("INSERT INTO productOptions(id,productId,autoScheduleEnabled) VALUES (11,1,1),(22,2,0)");
@@ -172,7 +173,7 @@ describe.skipIf(!dbUrl)("ValidraPay real MySQL integration (simulated provider)"
   });
 
   function cartFixture(f:ReturnType<typeof makeFixture>):ValidraCartSnapshot {
-    const first={productId:1,optionId:11,serviceName:"Produto A",serviceOption:"Opcao A",baseCents:2000,amountCents:2000,couponCents:0,resellerCents:0,resellerEligible:false,resellerPercent:0,promotional:false};
+    const first={productId:1,optionId:11,serviceName:"Produto A",serviceOption:"Opcao A",baseCents:2000,amountCents:2000,couponCents:0,resellerCents:0,resellerEligible:false,resellerPercent:0,promotional:false,commissionValue:0};
     const second={...first,productId:2,optionId:22,serviceName:"Produto B",serviceOption:"Opcao B",baseCents:2990,amountCents:2990};
     return {quote:{customerId:21,phone,coupon:null,globalPromotion:false,subtotalCents:4990,couponCents:0,resellerCents:0,amountCents:4990,items:[first,second]},orders:[first,second].map(i=>({...f.input.order,productId:i.productId,serviceName:i.serviceName,serviceOption:i.serviceOption}))};
   }
@@ -183,6 +184,33 @@ describe.skipIf(!dbUrl)("ValidraPay real MySQL integration (simulated provider)"
         [doc.fileKey,customerId,customerPhone,doc.label,doc.fileUrl,doc.mimeType,16,"fixture-etag"]);
     }
   }
+
+  it("binds private audio to its exact cart position and persists only after paid",async()=>{
+    const f=makeFixture(),snapshot=cartFixture(f);
+    const wav=Buffer.alloc(44+32000);
+    wav.write("RIFF",0);wav.writeUInt32LE(wav.length-8,4);wav.write("WAVEfmt ",8);wav.writeUInt32LE(16,16);
+    wav.writeUInt16LE(1,20);wav.writeUInt16LE(1,22);wav.writeUInt32LE(16000,24);wav.writeUInt32LE(32000,28);
+    wav.writeUInt16LE(2,32);wav.writeUInt16LE(16,34);wav.write("data",36);wav.writeUInt32LE(32000,40);
+    const scope={flowId:randomUUID(),itemIndex:0,productId:1,optionId:11,questionId:51};
+    const settings={min:1,max:10,allowRerecord:false,allowFileUpload:true};
+    vi.mocked(headPrivateValidraObject).mockResolvedValue({httpStatus:200,contentLength:wav.length,etag:"audio-etag"});
+    const uploaded=await createValidraAudioUpload(phone,scope,"recording",wav.toString("base64"),settings);
+    expect(uploaded.durationSeconds).toBe(1);
+    await expect(createValidraAudioUpload(phone,{...scope,questionId:52},"recording",wav.toString("base64"),{...settings,min:2})).rejects.toThrow("validra_invalid_document");
+    await expect(resolveOwnedValidraAudio({...scope,itemIndex:1},uploaded.fileKey,settings,{customerId:21,phone},f.input.externalId)).rejects.toThrow("validra_document_not_authorized");
+    await expect(resolveOwnedValidraAudio(scope,uploaded.fileKey,settings,{customerId:22,phone:"11999990001"},f.input.externalId)).rejects.toThrow("validra_document_not_authorized");
+    const spec:ValidraItemRequirements={productId:1,optionId:11,service:"A",option:"A",questions:[{id:51,question:"Grave",fieldType:"audio",required:true,parentQuestionId:null,triggerOption:null,sortOrder:0,choices:[],audio:settings}],documents:[]};
+    const other={...spec,productId:2,optionId:22,questions:[]};
+    const forms=await assembleValidraCartForms([spec,other],[{audioFlowId:scope.flowId,answers:[{questionId:51,answer:uploaded.fileKey}],documents:[]},{answers:[],documents:[]}],{customerId:21,phone},f.input.externalId);
+    snapshot.orders=snapshot.orders.map((order,index)=>({...order,...forms[index]}));
+    await runValidraCartCheckout(f.input.externalId,snapshot,true,f.client);
+    const [before]=await pool.query<RowDataPacket[]>("SELECT COUNT(*) AS total FROM orderQuestionAudioAnswers");
+    expect(Number(before[0].total)).toBe(0);
+    const paid=await persistPaidValidraCart(f.input.externalId,f.paid());
+    await persistPaidValidraCart(f.input.externalId,f.paid());
+    const [rows]=await pool.query<RowDataPacket[]>("SELECT registrationId,questionId,storageKey,durationSeconds FROM orderQuestionAudioAnswers");
+    expect(rows).toMatchObject([{registrationId:paid.orders[0].registration_id,questionId:51,storageKey:uploaded.fileKey,durationSeconds:1}]);
+  });
 
   it("freezes a first-order referral and queues one notice per audience without paying commission",async()=>{
     const f=makeFixture(),snapshot=cartFixture(f);

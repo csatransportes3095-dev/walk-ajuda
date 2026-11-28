@@ -32,7 +32,10 @@ describe("Public Validra cart forms",()=>{
     expect(()=>validateValidraItemForm(spec,{answers:[{questionId:1,answer:"Sim"}],documents:[]})).toThrow("validra_cart_form_invalid");
     for(const key of ["requireVehicle2016","showYearField"] as const)expect(()=>buildValidraItemRequirements(product,{...option,[key]:1},[],[])).toThrow("validra_cart_requirements_not_ready");
     expect(()=>buildValidraItemRequirements(product,{...option,docNameMode:"custom"},[],[])).toThrow("validra_cart_requirements_not_ready");
-    expect(()=>buildValidraItemRequirements(product,option,[{...first,fieldType:"audio"}],[])).toThrow("validra_cart_requirements_not_ready");
+    expect(()=>buildValidraItemRequirements(product,option,[{...first,fieldType:"audio",audioMinDurationSeconds:301}],[])).toThrow("validra_cart_requirements_not_ready");
+    const audio=buildValidraItemRequirements(product,option,[{...first,fieldType:"audio"}],[]);
+    expect(()=>validateValidraItemForm(audio,{answers:[],documents:[]})).toThrow("validra_cart_form_invalid");
+    expect(()=>validateValidraItemForm(audio,{answers:[{questionId:1,answer:"fake"}],documents:[]})).toThrow("validra_cart_form_invalid");
     expect(()=>buildValidraItemRequirements(product,option,[{...first,options:'[{"label":"Ir","flowAction":"jump","flowTarget":999}]'}],[])).toThrow("validra_cart_requirements_not_ready");
     expect(buildValidraItemRequirements(product,{...option,isPdfOnly:1},[],[]).documents).toMatchObject([{fieldId:"legacy:pdf",pdfOnly:true}]);
   });
