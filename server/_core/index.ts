@@ -6,6 +6,10 @@ process.env.TZ = "UTC";
 
 import "dotenv/config";
 import express from "express";
+import { registerValidraWebhook } from "../validraWebhook";
+import { startValidraEventWorker } from "../validraEventWorker";
+import { VALIDRA_CHECKOUT_READY } from "../checkoutPaymentProvider";
+import { ValidraPayClient, validraApiConfigured } from "../validraPay";
 import { registerSiteIdentity } from "../siteAccessIdentity";
 import { createSiteAccessGateway } from "../siteAccessGateway";
 import { createServer } from "http";
@@ -283,6 +287,7 @@ async function startServer() {
   // site-access screen. Every other site route still passes through the gateway.
   app.use("/api/h2-android/agent", express.json({ limit: "24kb" }));
   registerH2AndroidAgentRoutes(app);
+  registerValidraWebhook(app);
   app.use(createSiteAccessGateway());
   const server = createServer(app);
   // Recuperação automática e idempotente do agendamento encerrado por engano.
@@ -700,6 +705,14 @@ async function startServer() {
     scheduleFatalProcessExit();
   });
   server.listen(port, "0.0.0.0", () => {
+    if (VALIDRA_CHECKOUT_READY && validraApiConfigured()) {
+      try {
+        const stopValidraWorker = startValidraEventWorker(new ValidraPayClient());
+        server.once("close", stopValidraWorker);
+      } catch {
+        console.error("[ValidraPay] Worker not configured");
+      }
+    }
     console.log(`Server running on http://0.0.0.0:${port}/`);
     // Diagnostic audit is read-only (SELECT + external HEAD) and must not
     // delay Render's HTTP health check or block essential migrations.

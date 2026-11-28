@@ -33,119 +33,119 @@ jobs:
           s = p.read_text()
           anchor = '''const PRESET_COLORS = [\n'''
           component = r'''type ProductManifestConfig = {
-  enabled: boolean;
-  title: string;
-  body: string;
-  acceptLabel: string;
-  buttonLabel: string;
-};
+            enabled: boolean;
+            title: string;
+            body: string;
+            acceptLabel: string;
+            buttonLabel: string;
+          };
 
-const DEFAULT_PRODUCT_MANIFEST: ProductManifestConfig = {
-  enabled: false,
-  title: 'Antes de continuar',
-  body: '',
-  acceptLabel: 'Li, entendi e aceito as condições acima.',
-  buttonLabel: 'ACEITAR E CONTINUAR',
-};
+          const DEFAULT_PRODUCT_MANIFEST: ProductManifestConfig = {
+            enabled: false,
+            title: 'Antes de continuar',
+            body: '',
+            acceptLabel: 'Li, entendi e aceito as condições acima.',
+            buttonLabel: 'ACEITAR E CONTINUAR',
+          };
 
-function parseProductManifest(raw: unknown): ProductManifestConfig {
-  if (typeof raw !== 'string' || !raw.trim()) return DEFAULT_PRODUCT_MANIFEST;
-  try {
-    const parsed = JSON.parse(raw);
-    return {
-      enabled: parsed?.enabled === true,
-      title: String(parsed?.title || DEFAULT_PRODUCT_MANIFEST.title),
-      body: String(parsed?.body || ''),
-      acceptLabel: String(parsed?.acceptLabel || DEFAULT_PRODUCT_MANIFEST.acceptLabel),
-      buttonLabel: String(parsed?.buttonLabel || DEFAULT_PRODUCT_MANIFEST.buttonLabel),
-    };
-  } catch {
-    return DEFAULT_PRODUCT_MANIFEST;
-  }
-}
+          function parseProductManifest(raw: unknown): ProductManifestConfig {
+            if (typeof raw !== 'string' || !raw.trim()) return DEFAULT_PRODUCT_MANIFEST;
+            try {
+              const parsed = JSON.parse(raw);
+              return {
+                enabled: parsed?.enabled === true,
+                title: String(parsed?.title || DEFAULT_PRODUCT_MANIFEST.title),
+                body: String(parsed?.body || ''),
+                acceptLabel: String(parsed?.acceptLabel || DEFAULT_PRODUCT_MANIFEST.acceptLabel),
+                buttonLabel: String(parsed?.buttonLabel || DEFAULT_PRODUCT_MANIFEST.buttonLabel),
+              };
+            } catch {
+              return DEFAULT_PRODUCT_MANIFEST;
+            }
+          }
 
-function ProductManifestEditor({ productId }: { productId: number }) {
-  const key = `product_manifest_${productId}`;
-  const utils = trpc.useUtils();
-  const { data: settings } = trpc.settings.getAll.useQuery();
-  const [enabled, setEnabled] = useState(false);
-  const [title, setTitle] = useState(DEFAULT_PRODUCT_MANIFEST.title);
-  const [body, setBody] = useState('');
-  const [acceptLabel, setAcceptLabel] = useState(DEFAULT_PRODUCT_MANIFEST.acceptLabel);
-  const [buttonLabel, setButtonLabel] = useState(DEFAULT_PRODUCT_MANIFEST.buttonLabel);
+          function ProductManifestEditor({ productId }: { productId: number }) {
+            const key = `product_manifest_${productId}`;
+            const utils = trpc.useUtils();
+            const { data: settings } = trpc.settings.getAll.useQuery();
+            const [enabled, setEnabled] = useState(false);
+            const [title, setTitle] = useState(DEFAULT_PRODUCT_MANIFEST.title);
+            const [body, setBody] = useState('');
+            const [acceptLabel, setAcceptLabel] = useState(DEFAULT_PRODUCT_MANIFEST.acceptLabel);
+            const [buttonLabel, setButtonLabel] = useState(DEFAULT_PRODUCT_MANIFEST.buttonLabel);
 
-  React.useEffect(() => {
-    const config = parseProductManifest((settings as Record<string, string> | undefined)?.[key]);
-    setEnabled(config.enabled);
-    setTitle(config.title);
-    setBody(config.body);
-    setAcceptLabel(config.acceptLabel);
-    setButtonLabel(config.buttonLabel);
-  }, [settings, key]);
+            React.useEffect(() => {
+              const config = parseProductManifest((settings as Record<string, string> | undefined)?.[key]);
+              setEnabled(config.enabled);
+              setTitle(config.title);
+              setBody(config.body);
+              setAcceptLabel(config.acceptLabel);
+              setButtonLabel(config.buttonLabel);
+            }, [settings, key]);
 
-  const saveMut = trpc.settings.update.useMutation({
-    onSuccess: () => {
-      utils.settings.getAll.invalidate();
-      toast.success('Manifesto do produto salvo!');
-    },
-  });
+            const saveMut = trpc.settings.update.useMutation({
+              onSuccess: () => {
+                utils.settings.getAll.invalidate();
+                toast.success('Manifesto do produto salvo!');
+              },
+            });
 
-  const save = () => {
-    if (enabled && !body.trim()) {
-      toast.error('Digite o texto do manifesto antes de ativar.');
-      return;
-    }
-    if (!title.trim() || !acceptLabel.trim() || !buttonLabel.trim()) {
-      toast.error('Preencha título, frase de aceite e botão.');
-      return;
-    }
-    const config: ProductManifestConfig = {
-      enabled,
-      title: title.trim(),
-      body: body.trim(),
-      acceptLabel: acceptLabel.trim(),
-      buttonLabel: buttonLabel.trim(),
-    };
-    saveMut.mutate({ settings: { [key]: JSON.stringify(config) } });
-  };
+            const save = () => {
+              if (enabled && !body.trim()) {
+                toast.error('Digite o texto do manifesto antes de ativar.');
+                return;
+              }
+              if (!title.trim() || !acceptLabel.trim() || !buttonLabel.trim()) {
+                toast.error('Preencha título, frase de aceite e botão.');
+                return;
+              }
+              const config: ProductManifestConfig = {
+                enabled,
+                title: title.trim(),
+                body: body.trim(),
+                acceptLabel: acceptLabel.trim(),
+                buttonLabel: buttonLabel.trim(),
+              };
+              saveMut.mutate({ settings: { [key]: JSON.stringify(config) } });
+            };
 
-  return (
-    <div className="rounded-xl border-2 border-amber-500/30 bg-amber-950/10 p-4 space-y-3">
-      <div className="flex items-center justify-between gap-3">
-        <div>
-          <p className="text-sm font-black text-amber-300">MANIFESTO / TERMO DE ACEITE</p>
-          <p className="text-[10px] text-gray-400">Configurado por produto. Quando ativo, o cliente precisa ler e aceitar antes de continuar.</p>
-        </div>
-        <label className="flex items-center gap-2 text-xs font-bold text-white">
-          <input type="checkbox" checked={enabled} onChange={e => setEnabled(e.target.checked)} /> Ativo
-        </label>
-      </div>
-      <div>
-        <label className="text-[10px] text-amber-300 font-bold block mb-1">Título do manifesto</label>
-        <input value={title} onChange={e => setTitle(e.target.value)} style={{ ...whiteInputStyle, fontSize: '12px', padding: '7px 10px' }} placeholder="Ex: Antes de continuar" />
-      </div>
-      <div>
-        <label className="text-[10px] text-amber-300 font-bold block mb-1">Texto que o cliente precisa ler</label>
-        <textarea value={body} onChange={e => setBody(e.target.value)} rows={7} style={{ ...whiteInputStyle, fontSize: '12px', padding: '8px 10px', resize: 'vertical' }} placeholder="Digite aqui todas as regras, condições e avisos deste produto..." />
-      </div>
-      <div className="grid grid-cols-1 gap-2 md:grid-cols-2">
-        <div>
-          <label className="text-[10px] text-amber-300 font-bold block mb-1">Frase do aceite</label>
-          <input value={acceptLabel} onChange={e => setAcceptLabel(e.target.value)} style={{ ...whiteInputStyle, fontSize: '12px', padding: '7px 10px' }} />
-        </div>
-        <div>
-          <label className="text-[10px] text-amber-300 font-bold block mb-1">Texto do botão</label>
-          <input value={buttonLabel} onChange={e => setButtonLabel(e.target.value)} style={{ ...whiteInputStyle, fontSize: '12px', padding: '7px 10px' }} />
-        </div>
-      </div>
-      <Button type="button" onClick={save} disabled={saveMut.isPending} className="w-full bg-amber-500 hover:bg-amber-400 text-black font-black">
-        <Save className="w-3 h-3 mr-1" /> Salvar Manifesto
-      </Button>
-    </div>
-  );
-}
+            return (
+              <div className="rounded-xl border-2 border-amber-500/30 bg-amber-950/10 p-4 space-y-3">
+                <div className="flex items-center justify-between gap-3">
+                  <div>
+                    <p className="text-sm font-black text-amber-300">MANIFESTO / TERMO DE ACEITE</p>
+                    <p className="text-[10px] text-gray-400">Configurado por produto. Quando ativo, o cliente precisa ler e aceitar antes de continuar.</p>
+                  </div>
+                  <label className="flex items-center gap-2 text-xs font-bold text-white">
+                    <input type="checkbox" checked={enabled} onChange={e => setEnabled(e.target.checked)} /> Ativo
+                  </label>
+                </div>
+                <div>
+                  <label className="text-[10px] text-amber-300 font-bold block mb-1">Título do manifesto</label>
+                  <input value={title} onChange={e => setTitle(e.target.value)} style={{ ...whiteInputStyle, fontSize: '12px', padding: '7px 10px' }} placeholder="Ex: Antes de continuar" />
+                </div>
+                <div>
+                  <label className="text-[10px] text-amber-300 font-bold block mb-1">Texto que o cliente precisa ler</label>
+                  <textarea value={body} onChange={e => setBody(e.target.value)} rows={7} style={{ ...whiteInputStyle, fontSize: '12px', padding: '8px 10px', resize: 'vertical' }} placeholder="Digite aqui todas as regras, condições e avisos deste produto..." />
+                </div>
+                <div className="grid grid-cols-1 gap-2 md:grid-cols-2">
+                  <div>
+                    <label className="text-[10px] text-amber-300 font-bold block mb-1">Frase do aceite</label>
+                    <input value={acceptLabel} onChange={e => setAcceptLabel(e.target.value)} style={{ ...whiteInputStyle, fontSize: '12px', padding: '7px 10px' }} />
+                  </div>
+                  <div>
+                    <label className="text-[10px] text-amber-300 font-bold block mb-1">Texto do botão</label>
+                    <input value={buttonLabel} onChange={e => setButtonLabel(e.target.value)} style={{ ...whiteInputStyle, fontSize: '12px', padding: '7px 10px' }} />
+                  </div>
+                </div>
+                <Button type="button" onClick={save} disabled={saveMut.isPending} className="w-full bg-amber-500 hover:bg-amber-400 text-black font-black">
+                  <Save className="w-3 h-3 mr-1" /> Salvar Manifesto
+                </Button>
+              </div>
+            );
+          }
 
-'''
+          '''
           s = replace_once(s, anchor, component + anchor, 'componente manifesto adm')
           s = replace_once(s,
               '''                    <h4 className="text-sm font-bold text-purple-400">Editar Card</h4>\n                    <div>''',
@@ -208,36 +208,36 @@ function ProductManifestEditor({ productId }: { productId: number }) {
 
           # Teste de regressao do manifesto por produto.
           Path('server/productManifestFlow.test.ts').write_text(r'''import { describe, expect, it } from 'vitest';
-import fs from 'node:fs';
+          import fs from 'node:fs';
 
-const admin = fs.readFileSync('client/src/pages/AdminProducts.tsx', 'utf8');
-const home = fs.readFileSync('client/src/pages/Home.tsx', 'utf8');
-const card = fs.readFileSync('client/src/components/StorefrontProductCard.tsx', 'utf8');
+          const admin = fs.readFileSync('client/src/pages/AdminProducts.tsx', 'utf8');
+          const home = fs.readFileSync('client/src/pages/Home.tsx', 'utf8');
+          const card = fs.readFileSync('client/src/components/StorefrontProductCard.tsx', 'utf8');
 
-describe('manifesto por produto', () => {
-  it('permite editar e salvar o manifesto pelo ADM no produto', () => {
-    expect(admin).toContain('MANIFESTO / TERMO DE ACEITE');
-    expect(admin).toContain('ProductManifestEditor productId={product.id}');
-    expect(admin).toContain('product_manifest_${productId}');
-    expect(admin).toContain('Salvar Manifesto');
-  });
+          describe('manifesto por produto', () => {
+            it('permite editar e salvar o manifesto pelo ADM no produto', () => {
+              expect(admin).toContain('MANIFESTO / TERMO DE ACEITE');
+              expect(admin).toContain('ProductManifestEditor productId={product.id}');
+              expect(admin).toContain('product_manifest_${productId}');
+              expect(admin).toContain('Salvar Manifesto');
+            });
 
-  it('carrega a configuracao por produto na vitrine', () => {
-    expect(home).toContain('product_manifest_${product.id}');
-    expect(home).toContain('manifest,');
-  });
+            it('carrega a configuracao por produto na vitrine', () => {
+              expect(home).toContain('product_manifest_${product.id}');
+              expect(home).toContain('manifest,');
+            });
 
-  it('exige leitura e aceite antes da acao', () => {
-    expect(card).toContain('manifestOpen');
-    expect(card).toContain('manifestAcceptedKey');
-    expect(card).toContain('Leitura obrigatória');
-    expect(card).toContain('disabled={!manifestChecked}');
-    expect(card).toContain("triggerAction('buy')");
-    expect(card).toContain("triggerAction('cart')");
-    expect(card).toContain('openManifest(nextId)');
-  });
-});
-''')
+            it('exige leitura e aceite antes da acao', () => {
+              expect(card).toContain('manifestOpen');
+              expect(card).toContain('manifestAcceptedKey');
+              expect(card).toContain('Leitura obrigatória');
+              expect(card).toContain('disabled={!manifestChecked}');
+              expect(card).toContain("triggerAction('buy')");
+              expect(card).toContain("triggerAction('cart')");
+              expect(card).toContain('openManifest(nextId)');
+            });
+          });
+          ''')
           PY
       - name: Validar whitespace
         run: git diff --check

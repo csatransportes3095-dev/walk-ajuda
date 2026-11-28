@@ -1,0 +1,523 @@
+import { afterAll, beforeAll, beforeEach, describe, expect, it, vi } from "vitest";
+import { createPool, type Pool, type RowDataPacket } from "mysql2/promise";
+import { drizzle } from "drizzle-orm/mysql2";
+import { createHmac, randomUUID } from "node:crypto";
+import type { AddressInfo } from "node:net";
+import express from "express";
+vi.mock("./db", () => ({ getDb: vi.fn(), addOrderStatus: vi.fn(), generateOrderNumber: vi.fn() }));
+import { getDb } from "./db";
+vi.mock("./validraPrivateStorage",async importOriginal=>({
+  ...(await importOriginal<typeof import("./validraPrivateStorage")>()),
+  putPrivateValidraObject:vi.fn(),headPrivateValidraObject:vi.fn(),getPrivateValidraObject:vi.fn(),
+}));
+import { putPrivateValidraObject,headPrivateValidraObject,getPrivateValidraObject } from "./validraPrivateStorage";
+import { createValidraDocumentUpload,readAuthorizedValidraDocument,createValidraAudioUpload,resolveOwnedValidraAudio } from "./validraDocumentStorage";
+import { ensureValidraAttemptStorage } from "./validraAttemptStorage";
+import { persistPaidValidraOrder } from "./validraOrderPersistence";
+import { runValidraCheckout, validraPurchaseDigest } from "./validraCheckout";
+import { ValidraPayClient, type ValidraCharge } from "./validraPay";
+import { registerValidraWebhook } from "./validraWebhook";
+import { ensureValidraCartStorage, reserveValidraCart, persistPaidValidraCart, loadOwnedValidraCart, listOwnedValidraCartOrders, type ValidraCartSnapshot } from "./validraCartPersistence";
+import { ensureValidraEventStorage, enqueueValidraEvent, processNextValidraEvent } from "./validraEventWorker";
+import { runValidraCartCheckout } from "./validraCartCheckout";
+import { assembleValidraCartForms } from "./validraCartPublic";
+import type { ValidraItemRequirements } from "../shared/validraCartForms";
+import { ensureValidraScheduleStorage, processNextValidraSchedule } from "./validraScheduleWorker";
+import { processNextValidraNotice } from "./validraNoticeWorker";
+import type { ensureAutomaticScheduleForOrder } from "./autoSchedule";
+
+// A real disposable MySQL service in CI, never DATABASE_URL or production.
+// All payment provider calls are in-process fake responses.
+const dbUrl = process.env.VALIDRA_TEST_DATABASE_URL;
+const key = "vpk_live_" + "A".repeat(26) + "_" + "B".repeat(52);
+const phone = "11999990000";
+const fixtureSchema = [
+  "CREATE TABLE IF NOT EXISTS orderQuestionAudioAnswers (id INT AUTO_INCREMENT PRIMARY KEY,registrationId INT NOT NULL,orderStatusId INT NOT NULL,customerPhone VARCHAR(32) NOT NULL,productId INT NOT NULL,optionId INT NOT NULL,questionId INT NOT NULL,storageKey VARCHAR(512) NOT NULL,audioUrl TEXT NOT NULL,mimeType VARCHAR(128) NOT NULL,fileSize INT NOT NULL,durationSeconds INT NOT NULL,createdAt TIMESTAMP DEFAULT CURRENT_TIMESTAMP,UNIQUE KEY audio_order_question(orderStatusId,questionId)) ENGINE=InnoDB",
+  "CREATE TABLE IF NOT EXISTS referralCommissionAttributions (id INT AUTO_INCREMENT PRIMARY KEY,referrerCustomerId INT,referrerPhone VARCHAR(32) NOT NULL,referrerName VARCHAR(128),referredCustomerId INT NOT NULL,referredPhone VARCHAR(32) NOT NULL,referredName VARCHAR(128),source VARCHAR(32) NOT NULL,sourceReference VARCHAR(128),registrationId INT NOT NULL,orderStatusId INT NOT NULL UNIQUE,orderNumber INT,productId INT,optionId INT,serviceName VARCHAR(256),serviceOption VARCHAR(256),commissionRule VARCHAR(32) NOT NULL,commissionValue INT NOT NULL,status VARCHAR(32) NOT NULL,invalidReason VARCHAR(512),invalidatedAt TIMESTAMP NULL,eligibleAt TIMESTAMP NULL,paidAt TIMESTAMP NULL,paidBy VARCHAR(128),paymentReference VARCHAR(256),createdAt TIMESTAMP DEFAULT CURRENT_TIMESTAMP,updatedAt TIMESTAMP DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP) ENGINE=InnoDB",
+  "CREATE TABLE IF NOT EXISTS productOptions (id INT PRIMARY KEY, productId INT NOT NULL, autoScheduleEnabled INT NOT NULL DEFAULT 0) ENGINE=InnoDB",
+  "CREATE TABLE IF NOT EXISTS scheduleAppointments (id INT AUTO_INCREMENT PRIMARY KEY, token VARCHAR(64) NOT NULL UNIQUE, registrationId INT NOT NULL, subOrderIndex INT NOT NULL DEFAULT 0, customerPhone VARCHAR(32) NOT NULL, customerName VARCHAR(128), customerEmail VARCHAR(320), customerPhotoUrl TEXT, serviceName VARCHAR(256), templateId INT, slotId INT, slotDate VARCHAR(16), slotTime VARCHAR(8), status ENUM('pending','confirmed','cancelled','completed') NOT NULL DEFAULT 'pending', instructions TEXT, sentByEmail INT NOT NULL DEFAULT 0, confirmedAt TIMESTAMP NULL, adminSeenConfirmedAt TIMESTAMP NULL, hasScheduleNotification INT NOT NULL DEFAULT 0, createdAt TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP, updatedAt TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP, INDEX fixture_schedule_registration(registrationId,subOrderIndex)) ENGINE=InnoDB",
+  "CREATE TABLE IF NOT EXISTS orderFiles (id INT AUTO_INCREMENT PRIMARY KEY, registrationId INT NOT NULL, customerPhone VARCHAR(32) NOT NULL, label VARCHAR(256) NOT NULL, fileUrl TEXT NOT NULL, fileKey VARCHAR(512) NOT NULL, mimeType VARCHAR(128) NOT NULL DEFAULT 'image/jpeg', fromAdmin INT NOT NULL DEFAULT 0, addedByAdmin INT NOT NULL DEFAULT 0, createdAt TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP, CHECK (label <> 'FAIL_TEST_DOCUMENT')) ENGINE=InnoDB",
+  "CREATE TABLE IF NOT EXISTS financialSales (id INT AUTO_INCREMENT PRIMARY KEY, registrationId INT, customerName VARCHAR(256) NOT NULL DEFAULT '', customerPhone VARCHAR(32) NOT NULL DEFAULT '', productName VARCHAR(256) NOT NULL DEFAULT '', productOption VARCHAR(256) NOT NULL DEFAULT '', saleValue INT NOT NULL DEFAULT 0, costValue INT NOT NULL DEFAULT 0, paymentMethod VARCHAR(64) NOT NULL DEFAULT 'pix', status VARCHAR(32) NOT NULL DEFAULT 'pendente', saleDate BIGINT NOT NULL, receivedDate BIGINT, notes TEXT, createdAt TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP, updatedAt TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP) ENGINE=InnoDB",
+  "CREATE TABLE IF NOT EXISTS customers (id INT PRIMARY KEY, phone VARCHAR(32) NOT NULL, email VARCHAR(320), referredByPhone VARCHAR(32), blocked INT NOT NULL DEFAULT 0, deletedAt TIMESTAMP NULL) ENGINE=InnoDB",
+  "CREATE TABLE IF NOT EXISTS accessCodes (id INT AUTO_INCREMENT PRIMARY KEY, code VARCHAR(64) NOT NULL UNIQUE, type ENUM('general','vip') NOT NULL DEFAULT 'vip', status ENUM('active','used','disabled') NOT NULL DEFAULT 'active', clientName TEXT, usedAt TIMESTAMP NULL, usedBy TEXT, accessedByPhone VARCHAR(32), maxUses INT DEFAULT 1, currentUses INT DEFAULT 0, expiresAt TIMESTAMP NULL, timeOnly INT NOT NULL DEFAULT 0, allowedProductIds TEXT, createdAt TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP) ENGINE=InnoDB",
+  "CREATE TABLE IF NOT EXISTS accessCodePhones (id INT AUTO_INCREMENT PRIMARY KEY, codeId INT NOT NULL, phone VARCHAR(32) NOT NULL, consumed INT DEFAULT 0, archived INT NOT NULL DEFAULT 0, rgCnhApproved INT NOT NULL DEFAULT 0, orderSource VARCHAR(16) NOT NULL DEFAULT 'auto', accessedAt TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP, refCode VARCHAR(64), refExpiresAt BIGINT, refOwnerName VARCHAR(128), deletedAt TIMESTAMP NULL, deletedReason VARCHAR(256), thirdPartyName VARCHAR(128), thirdPartyPhone VARCHAR(32), resellerDiscountApplied DECIMAL(10,2), cartGroupId VARCHAR(64), cartTotal DECIMAL(10,2), cartCouponCode VARCHAR(64), cartCouponDiscount DECIMAL(10,2), cartItemIndex INT DEFAULT 0) ENGINE=InnoDB",
+  "CREATE TABLE IF NOT EXISTS orderCounter (id INT AUTO_INCREMENT PRIMARY KEY, createdAt TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP) ENGINE=InnoDB",
+  "CREATE TABLE IF NOT EXISTS orderStatusHistory (id INT AUTO_INCREMENT PRIMARY KEY, registrationId INT NOT NULL, orderNumber INT, customerPhone VARCHAR(32) NOT NULL, status VARCHAR(64) NOT NULL, note TEXT, serviceName VARCHAR(256), serviceOption VARCHAR(256), pricePaid VARCHAR(64), answers TEXT, isUrgent INT NOT NULL DEFAULT 0, commissionPaid INT NOT NULL DEFAULT 0, referralInvalid INT NOT NULL DEFAULT 0, referralInvalidReason VARCHAR(512), referralInvalidAt TIMESTAMP NULL, deliveryEstimate BIGINT, approval VARCHAR(16) NOT NULL DEFAULT 'approved', createdAt TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP, deliveredNotifiedAt TIMESTAMP NULL, CHECK (serviceName <> 'FAIL_TEST_ORDER')) ENGINE=InnoDB",
+  "CREATE TABLE IF NOT EXISTS orderStatusTypes (id INT AUTO_INCREMENT PRIMARY KEY, `key` VARCHAR(64) NOT NULL UNIQUE, isActive INT NOT NULL DEFAULT 1, isGlobal INT NOT NULL DEFAULT 1, sortOrder INT NOT NULL DEFAULT 0) ENGINE=InnoDB",
+  "CREATE TABLE IF NOT EXISTS productStatusFlows (id INT AUTO_INCREMENT PRIMARY KEY, productId INT NOT NULL UNIQUE, flowId INT NOT NULL) ENGINE=InnoDB",
+  "CREATE TABLE IF NOT EXISTS orderStatusFlows (id INT AUTO_INCREMENT PRIMARY KEY, isActive INT NOT NULL DEFAULT 1) ENGINE=InnoDB",
+  "CREATE TABLE IF NOT EXISTS orderStatusFlowItems (id INT AUTO_INCREMENT PRIMARY KEY, flowId INT NOT NULL, statusKey VARCHAR(64) NOT NULL, sortOrder INT NOT NULL DEFAULT 0) ENGINE=InnoDB"
+];
+
+function makeFixture(serviceName = "Produto de teste") {
+  const externalId = randomUUID();
+  const order = { effectivePhone: phone, productId: 1, clientName: "Cliente teste", serviceName, serviceOption: "Opcao teste", answers: "[]" };
+  const input = { externalId, customerId: 21, purchaseDigest: validraPurchaseDigest(order), amountCents: 4990, order };
+  let charge: ValidraCharge = {
+    id: "chg_" + externalId.replace(/-/g, ""), external_id: externalId, status: "active",
+    amount: "49.90", payment: null, amount_refunded: "0.00", pix_copy_paste: "fake-ci-pix",
+    qr_code_png_base64: null, expires_at: "2026-11-28T16:30:00Z", updated_at: "2026-11-28T16:00:00Z"
+  };
+  const transport = vi.fn<typeof fetch>(async (url, init) => {
+    if (init?.method === "POST") {
+      expect(url).toBe("https://app.validrapay.com/v1/charges");
+      expect(init.headers).toMatchObject({ "Idempotency-Key": "chg-" + externalId });
+      expect(JSON.parse(String(init.body))).toMatchObject({ external_id: externalId, amount: "49.90" });
+    } else expect(url).toBe("https://app.validrapay.com/v1/charges/" + charge.id);
+    return new Response(JSON.stringify(charge), { status: init?.method === "POST" ? 201 : 200 });
+  });
+  return {
+    input, transport, client: new ValidraPayClient(key, transport),
+    paid: (change: Partial<ValidraCharge> = {}) => {
+      charge = { ...charge, status: "paid", payment: { end_to_end_id: "E-test", amount: "49.90", paid_at: "2026-11-28T16:10:00Z" }, ...change };
+      return charge;
+    },
+  };
+}
+
+describe.skipIf(!dbUrl)("ValidraPay real MySQL integration (simulated provider)", () => {
+  let pool: Pool;
+  async function count(table: "orderStatusHistory" | "accessCodePhones" | "orderCounter" | "validra_webhook_events" | "orderFiles" | "financialSales" | "validra_schedule_jobs" | "scheduleAppointments" | "validra_notice_jobs" | "referralCommissionAttributions") {
+    const [rows] = await pool.query<RowDataPacket[]>("SELECT COUNT(*) AS total FROM " + table);
+    return Number(rows[0].total);
+  }
+  async function releaseTestPoll(externalId: string) {
+    await pool.execute("UPDATE validra_checkout_attempts SET last_query_at = NULL WHERE external_id = ?", [externalId]);
+  }
+  beforeAll(async () => {
+    const url = new URL(dbUrl!);
+    if (url.protocol !== "mysql:" || url.hostname !== "127.0.0.1" || url.pathname !== "/validra_ci" || url.username !== "validra_ci") throw new Error("Only the isolated local validra_ci database is allowed");
+    pool = createPool(dbUrl!);
+    vi.mocked(getDb).mockResolvedValue(drizzle(pool));
+    for (const ddl of fixtureSchema) await pool.query(ddl);
+    await ensureValidraAttemptStorage();
+    await ensureValidraCartStorage();
+    await ensureValidraEventStorage();
+    await ensureValidraScheduleStorage();
+  }, 30000);
+  beforeEach(async () => {
+    vi.mocked(headPrivateValidraObject).mockReset().mockResolvedValue({httpStatus:200,contentLength:16,etag:"fixture-etag"});
+    vi.mocked(putPrivateValidraObject).mockReset().mockResolvedValue(undefined);
+    vi.mocked(getPrivateValidraObject).mockReset().mockResolvedValue(Buffer.from("%PDF-fixture-123"));
+    for (const table of ["orderQuestionAudioAnswers","validra_notice_jobs","referralCommissionAttributions","validra_document_uploads", "validra_schedule_jobs", "scheduleAppointments", "productOptions", "orderFiles", "financialSales", "validra_payment_reviews", "validra_event_jobs", "validra_webhook_events", "validra_order_followup", "validra_cart_orders", "validra_cart_snapshots", "validra_checkout_attempts", "orderStatusHistory", "accessCodePhones", "accessCodes", "orderCounter", "customers", "orderStatusTypes"]) await pool.query("DELETE FROM " + table);
+    await pool.execute("INSERT INTO customers (id, phone) VALUES (21, ?)", [phone]);
+    await pool.execute("INSERT INTO orderStatusTypes (`key`) VALUES ('pedido_recebido')");
+    await pool.execute("INSERT INTO productOptions(id,productId,autoScheduleEnabled) VALUES (11,1,1),(22,2,0)");
+  });
+  afterAll(async () => { if (pool) await pool.end(); });
+
+  it("creates an unpaid Pix, confirms paid, and returns one order after repeated requests", async () => {
+    const f = makeFixture();
+    expect(await runValidraCheckout(f.input, true, f.client)).toMatchObject({ kind: "payment", payment: { amount: "49.90", pixCopyPaste: "fake-ci-pix" } });
+    expect(await count("orderStatusHistory")).toBe(0);
+    await expect(runValidraCheckout(f.input, true, f.client)).rejects.toThrow("validra_wait_before_retry");
+    expect(f.transport).toHaveBeenCalledTimes(1);
+    f.paid();
+    await releaseTestPoll(f.input.externalId);
+    const paid = await runValidraCheckout(f.input, false, f.client);
+    expect(paid).toMatchObject({ kind: "persisted", order: { initialStatus: "pedido_recebido" } });
+    if (paid.kind !== "persisted") throw new Error("order missing");
+    expect(await runValidraCheckout(f.input, false, f.client)).toEqual({ kind: "duplicate", registrationId: paid.order.registrationId });
+    expect(await count("orderStatusHistory")).toBe(1);
+    expect(await count("accessCodePhones")).toBe(1);
+    expect(f.transport).toHaveBeenCalledTimes(2);
+    const [rows] = await pool.query<RowDataPacket[]>("SELECT pricePaid, registrationId FROM orderStatusHistory");
+    expect(rows[0]).toMatchObject({ pricePaid: "R$ 49,90", registrationId: paid.order.registrationId });
+  });
+
+  it("serializes two simultaneous confirmations of the same charge", async () => {
+    const f = makeFixture();
+    await runValidraCheckout(f.input, true, f.client);
+    const paid = f.paid();
+    const results = await Promise.all([persistPaidValidraOrder(f.input, f.client, paid), persistPaidValidraOrder(f.input, f.client, paid)]);
+    expect(results.filter(r => !r.duplicate)).toHaveLength(1);
+    expect(results.filter(r => r.duplicate)).toHaveLength(1);
+    expect(new Set(results.map(r => r.registrationId)).size).toBe(1);
+    expect(await count("orderStatusHistory")).toBe(1);
+    expect(await count("accessCodePhones")).toBe(1);
+  });
+
+  it("rejects changed customer, purchase or price, and a disabled new attempt", async () => {
+    const f = makeFixture();
+    await expect(runValidraCheckout(f.input, false, f.client)).rejects.toThrow("validra_new_attempts_disabled");
+    expect(f.transport).not.toHaveBeenCalled();
+    await runValidraCheckout(f.input, true, f.client);
+    for (const changed of [{ customerId: 22 }, { purchaseDigest: "b".repeat(64) }, { amountCents: 51 }]) {
+      await expect(runValidraCheckout({ ...f.input, ...changed }, true, f.client)).rejects.toThrow("validra_attempt_conflict");
+    }
+    expect(await count("orderStatusHistory")).toBe(0);
+    expect(f.transport).toHaveBeenCalledTimes(1);
+  });
+
+  it("does not create an order for the wrong amount or late/refunded payments", async () => {
+    for (const changed of [{ amount_refunded: "1.00" }, { paid_after_expiration: true }, { paid_after_cancellation: true }, { payment: { end_to_end_id: "E-test", amount: "0.51", paid_at: "2026-11-28T16:10:00Z" } }]) {
+      const f = makeFixture();
+      await runValidraCheckout(f.input, true, f.client);
+      f.paid(changed);
+      await releaseTestPoll(f.input.externalId);
+      await expect(runValidraCheckout(f.input, true, f.client)).rejects.toThrow("validra_payment_needs_review");
+    }
+    expect(await count("orderStatusHistory")).toBe(0);
+  });
+
+  it("rolls back registration and consumption when status insertion fails", async () => {
+    const f = makeFixture("FAIL_TEST_ORDER");
+    await runValidraCheckout(f.input, true, f.client);
+    const paid = f.paid();
+    await expect(persistPaidValidraOrder(f.input, f.client, paid)).rejects.toThrow();
+    expect(await count("orderStatusHistory")).toBe(0);
+    expect(await count("accessCodePhones")).toBe(0);
+    expect(await count("orderCounter")).toBe(0);
+    const [rows] = await pool.execute<RowDataPacket[]>("SELECT registration_id, state FROM validra_checkout_attempts WHERE external_id = ?", [f.input.externalId]);
+    expect(rows[0]).toMatchObject({ registration_id: null, state: "pending" });
+  });
+
+  function cartFixture(f:ReturnType<typeof makeFixture>):ValidraCartSnapshot {
+    const first={productId:1,optionId:11,serviceName:"Produto A",serviceOption:"Opcao A",baseCents:2000,amountCents:2000,couponCents:0,resellerCents:0,resellerEligible:false,resellerPercent:0,promotional:false,commissionValue:0};
+    const second={...first,productId:2,optionId:22,serviceName:"Produto B",serviceOption:"Opcao B",baseCents:2990,amountCents:2990};
+    return {quote:{customerId:21,phone,coupon:null,globalPromotion:false,subtotalCents:4990,couponCents:0,resellerCents:0,amountCents:4990,items:[first,second]},orders:[first,second].map(i=>({...f.input.order,productId:i.productId,serviceName:i.serviceName,serviceOption:i.serviceOption}))};
+  }
+
+  async function registerFixtureDocuments(snapshot:ValidraCartSnapshot,customerId=21,customerPhone=phone){
+    for(const order of snapshot.orders)for(const doc of order.documents??[]){
+      await pool.execute("INSERT INTO validra_document_uploads(file_key,customer_id,customer_phone,label,file_url,mime_type,byte_length,etag) VALUES (?,?,?,?,?,?,?,?)",
+        [doc.fileKey,customerId,customerPhone,doc.label,doc.fileUrl,doc.mimeType,16,"fixture-etag"]);
+    }
+  }
+
+  it("binds private audio to its exact cart position and persists only after paid",async()=>{
+    const f=makeFixture(),snapshot=cartFixture(f);
+    const wav=Buffer.alloc(44+32000);
+    wav.write("RIFF",0);wav.writeUInt32LE(wav.length-8,4);wav.write("WAVEfmt ",8);wav.writeUInt32LE(16,16);
+    wav.writeUInt16LE(1,20);wav.writeUInt16LE(1,22);wav.writeUInt32LE(16000,24);wav.writeUInt32LE(32000,28);
+    wav.writeUInt16LE(2,32);wav.writeUInt16LE(16,34);wav.write("data",36);wav.writeUInt32LE(32000,40);
+    const scope={flowId:randomUUID(),itemIndex:0,productId:1,optionId:11,questionId:51};
+    const settings={min:1,max:10,allowRerecord:false,allowFileUpload:true};
+    vi.mocked(headPrivateValidraObject).mockResolvedValue({httpStatus:200,contentLength:wav.length,etag:"audio-etag"});
+    const uploaded=await createValidraAudioUpload(phone,scope,"recording",wav.toString("base64"),settings);
+    expect(uploaded.durationSeconds).toBe(1);
+    await expect(createValidraAudioUpload(phone,{...scope,questionId:52},"recording",wav.toString("base64"),{...settings,min:2})).rejects.toThrow("validra_invalid_document");
+    await expect(resolveOwnedValidraAudio({...scope,itemIndex:1},uploaded.fileKey,settings,{customerId:21,phone},f.input.externalId)).rejects.toThrow("validra_document_not_authorized");
+    await expect(resolveOwnedValidraAudio(scope,uploaded.fileKey,settings,{customerId:22,phone:"11999990001"},f.input.externalId)).rejects.toThrow("validra_document_not_authorized");
+    const spec:ValidraItemRequirements={productId:1,optionId:11,service:"A",option:"A",questions:[{id:51,question:"Grave",fieldType:"audio",required:true,parentQuestionId:null,triggerOption:null,sortOrder:0,choices:[],audio:settings}],documents:[]};
+    const other={...spec,productId:2,optionId:22,questions:[]};
+    const forms=await assembleValidraCartForms([spec,other],[{audioFlowId:scope.flowId,answers:[{questionId:51,answer:uploaded.fileKey}],documents:[]},{answers:[],documents:[]}],{customerId:21,phone},f.input.externalId);
+    snapshot.orders=snapshot.orders.map((order,index)=>({...order,...forms[index]}));
+    await runValidraCartCheckout(f.input.externalId,snapshot,true,f.client);
+    const [before]=await pool.query<RowDataPacket[]>("SELECT COUNT(*) AS total FROM orderQuestionAudioAnswers");
+    expect(Number(before[0].total)).toBe(0);
+    const paid=await persistPaidValidraCart(f.input.externalId,f.paid());
+    await persistPaidValidraCart(f.input.externalId,f.paid());
+    const [rows]=await pool.query<RowDataPacket[]>("SELECT registrationId,questionId,storageKey,durationSeconds FROM orderQuestionAudioAnswers");
+    expect(rows).toMatchObject([{registrationId:paid.orders[0].registration_id,questionId:51,storageKey:uploaded.fileKey,durationSeconds:1}]);
+  });
+
+  it("freezes a first-order referral and queues one notice per audience without paying commission",async()=>{
+    const f=makeFixture(),snapshot=cartFixture(f);
+    const referrerPhone="11999990001";
+    await pool.execute("INSERT INTO customers(id,phone) VALUES(22,?)",[referrerPhone]);
+    await pool.execute("UPDATE customers SET referredByPhone=?,email=? WHERE id=21",[referrerPhone,"customer@example.test"]);
+    snapshot.quote.items[0]={...snapshot.quote.items[0],commissionValue:500};
+    snapshot.referral={referrerCustomerId:22,referrerPhone,referrerName:"Referrer",commissionValue:500,promotionNoCommission:false};
+    await runValidraCartCheckout(f.input.externalId,snapshot,true,f.client);
+    expect(await count("validra_notice_jobs")).toBe(0);
+    expect(await count("referralCommissionAttributions")).toBe(0);
+    const paid=await persistPaidValidraCart(f.input.externalId,f.paid());
+    await persistPaidValidraCart(f.input.externalId,f.paid());
+    const [commissions]=await pool.query<RowDataPacket[]>("SELECT registrationId,commissionValue,status,commissionRule,paidAt FROM referralCommissionAttributions");
+    expect(commissions).toMatchObject([{registrationId:paid.orders[0].registration_id,commissionValue:500,status:"em_analise",commissionRule:"fixed_option",paidAt:null}]);
+    const send=vi.fn(async()=>{});
+    const deps={send,adminEmail:"admin@example.test"};
+    expect(await count("validra_notice_jobs")).toBe(2);
+    for(let i=0;i<3;i++)await processNextValidraNotice(deps);
+    expect(send).toHaveBeenCalledTimes(2);
+    const [notices]=await pool.query<RowDataPacket[]>("SELECT recipient_kind,state FROM validra_notice_jobs ORDER BY recipient_kind");
+    expect(notices).toMatchObject([{recipient_kind:"admin",state:"accepted"},{recipient_kind:"customer",state:"accepted"}]);
+    const another=makeFixture(),second=cartFixture(another);
+    second.quote.items[0]={...second.quote.items[0],commissionValue:500};second.referral=snapshot.referral;
+    await runValidraCartCheckout(another.input.externalId,second,true,another.client);
+    await persistPaidValidraCart(another.input.externalId,another.paid());
+    expect(await count("referralCommissionAttributions")).toBe(1);
+  });
+
+  it("records promotional referral as ineligible and does not retry uncertain email delivery",async()=>{
+    const f=makeFixture(),snapshot=cartFixture(f);
+    await pool.execute("INSERT INTO customers(id,phone) VALUES(22,?)",["11999990001"]);
+    await pool.execute("UPDATE customers SET referredByPhone=? WHERE id=21",["11999990001"]);
+    snapshot.quote.items[0]={...snapshot.quote.items[0],commissionValue:500,promotional:true};
+    snapshot.referral={referrerCustomerId:22,referrerPhone:"11999990001",referrerName:null,commissionValue:0,promotionNoCommission:true};
+    await runValidraCartCheckout(f.input.externalId,snapshot,true,f.client);
+    await persistPaidValidraCart(f.input.externalId,f.paid());
+    const [commissions]=await pool.query<RowDataPacket[]>("SELECT commissionValue,status,commissionRule FROM referralCommissionAttributions");
+    expect(commissions).toMatchObject([{commissionValue:0,status:"nao_elegivel",commissionRule:"promotion_no_commission"}]);
+    const send=vi.fn(async()=>{throw new Error("ambiguous transport");});
+    for(let i=0;i<4;i++)await processNextValidraNotice({send,adminEmail:"admin@example.test"});
+    expect(send).toHaveBeenCalledTimes(1);
+    const [notices]=await pool.query<RowDataPacket[]>("SELECT recipient_kind,state FROM validra_notice_jobs ORDER BY recipient_kind");
+    expect(notices).toMatchObject([{recipient_kind:"admin",state:"review"},{recipient_kind:"customer",state:"skipped"}]);
+  });
+
+  it("persists distinct answers and owned documents for repeated option positions",async()=>{
+    const f=makeFixture(),snapshot=cartFixture(f);
+    snapshot.quote.items[1]={...snapshot.quote.items[0],baseCents:2990,amountCents:2990};
+    snapshot.orders[1]={...snapshot.orders[0]};
+    const spec:ValidraItemRequirements={productId:1,optionId:11,service:"Produto A",option:"Opcao A",questions:[{id:41,question:"Nome para o item",fieldType:"text",required:true,parentQuestionId:null,triggerOption:null,sortOrder:0,choices:[]}],documents:[{fieldId:"dynamic:7",label:"Documento",pdfOnly:true,imageOnly:false,inputSource:"gallery"}]};
+    const docs=[1,2].map(index=>({label:"Documento",fileKey:"order-docs/item-"+index+".pdf",fileUrl:"https://h2colombiano.com/api/validra/documents/order-docs/item-"+index+".pdf",mimeType:"application/pdf"}));
+    snapshot.orders[0].documents=[docs[0]];snapshot.orders[1].documents=[docs[1]];
+    await registerFixtureDocuments(snapshot);
+    const inputs=docs.map((doc,index)=>({answers:[{questionId:41,answer:"Item "+(index+1)}],documents:[{fieldId:"dynamic:7",fileKey:doc.fileKey}]}));
+    await expect(assembleValidraCartForms([spec,spec],inputs,{customerId:22,phone:"11999990001"},f.input.externalId)).rejects.toThrow("validra_document_not_authorized");
+    const forms=await assembleValidraCartForms([spec,spec],inputs,{customerId:21,phone},f.input.externalId);
+    snapshot.orders=snapshot.orders.map((order,index)=>({...order,...forms[index]}));
+    await runValidraCartCheckout(f.input.externalId,snapshot,true,f.client);
+    expect(await count("orderFiles")).toBe(0);
+    await persistPaidValidraCart(f.input.externalId,f.paid());
+    const [rows]=await pool.query<RowDataPacket[]>("SELECT o.item_index,h.answers,d.fileKey FROM validra_cart_orders o JOIN orderStatusHistory h ON h.id=o.order_status_id JOIN orderFiles d ON d.registrationId=o.registration_id ORDER BY o.item_index");
+    expect(rows.map(row=>({index:Number(row.item_index),answer:JSON.parse(row.answers)[0].answer,key:row.fileKey}))).toEqual([{index:0,answer:"Item 1",key:docs[0].fileKey},{index:1,answer:"Item 2",key:docs[1].fileKey}]);
+    expect(await persistPaidValidraCart(f.input.externalId,f.paid())).toMatchObject({duplicate:true});
+    expect(await count("orderFiles")).toBe(2);
+  });
+
+  it("reconciles a signed-inbox cart payment into all orders exactly once",async()=>{
+    const f=makeFixture(), snapshot=cartFixture(f);
+    snapshot.orders[0].documents=[{label:"Documento A",fileKey:"order-docs/fixture-a.pdf",fileUrl:"https://h2colombiano.com/api/validra/documents/order-docs/fixture-a.pdf",mimeType:"application/pdf"}];
+    await registerFixtureDocuments(snapshot);
+    expect(await runValidraCartCheckout(f.input.externalId,snapshot,true,f.client)).toMatchObject({kind:"payment"});
+    expect(await count("orderStatusHistory")).toBe(0);
+    expect(await count("orderFiles")).toBe(0);
+    expect(await count("financialSales")).toBe(0);
+    const paid=f.paid();
+    await enqueueValidraEvent({event_id:"evt_"+"C".repeat(26),event_type:"charge.paid",charge_id:paid.id,external_id:f.input.externalId,occurred_at:paid.updated_at});
+    await releaseTestPoll(f.input.externalId);
+    expect(await processNextValidraEvent(f.client)).toBe(true);
+    expect(await count("orderStatusHistory")).toBe(2);
+    const [lines]=await pool.query<RowDataPacket[]>("SELECT pricePaid FROM orderStatusHistory ORDER BY id");
+    expect(lines.map(row=>row.pricePaid)).toEqual(["R$ 20,00","R$ 29,90"]);
+    const [sales]=await pool.query<RowDataPacket[]>("SELECT f.saleValue, f.status, f.paymentMethod, f.receivedDate FROM financialSales f JOIN validra_cart_orders o ON o.registration_id=f.registrationId ORDER BY o.item_index");
+    expect(sales.map(row=>({amount:Number(row.saleValue),status:row.status,method:row.paymentMethod,paidAt:Number(row.receivedDate)}))).toEqual([
+      {amount:2000,status:"pago",method:"pix",paidAt:Date.parse("2026-11-28T16:10:00Z")},
+      {amount:2990,status:"pago",method:"pix",paidAt:Date.parse("2026-11-28T16:10:00Z")},
+    ]);
+    const [docs]=await pool.query<RowDataPacket[]>("SELECT d.label,d.fileKey,o.item_index FROM orderFiles d JOIN validra_cart_orders o ON o.registration_id=d.registrationId");
+    expect(docs).toMatchObject([{label:"Documento A",fileKey:"order-docs/fixture-a.pdf",item_index:0}]);
+    const [followup]=await pool.query<RowDataPacket[]>("SELECT COUNT(*) AS total FROM validra_order_followup");
+    expect(Number(followup[0].total)).toBe(2);
+    await enqueueValidraEvent({event_id:"evt_"+"C".repeat(26),event_type:"charge.paid",charge_id:paid.id,external_id:f.input.externalId,occurred_at:paid.updated_at});
+    expect(await processNextValidraEvent(f.client)).toBe(false);
+    await enqueueValidraEvent({event_id:"evt_"+"D".repeat(26),event_type:"charge.expired",charge_id:paid.id,external_id:f.input.externalId,occurred_at:paid.updated_at});
+    await releaseTestPoll(f.input.externalId);
+    expect(await processNextValidraEvent(f.client)).toBe(true);
+    expect(await count("orderStatusHistory")).toBe(2);
+    expect(f.transport.mock.calls.filter(([,init])=>init?.method==="POST")).toHaveLength(1);
+    expect(await count("orderFiles")).toBe(1);
+    expect(await count("financialSales")).toBe(2);
+    expect(await persistPaidValidraCart(f.input.externalId,paid)).toMatchObject({duplicate:true});
+    expect(await count("orderFiles")).toBe(1);
+    expect(await count("financialSales")).toBe(2);
+  });
+
+  it("rolls back all cart orders, documents and financial rows if a later document insert fails",async()=>{
+    const f=makeFixture(),snapshot=cartFixture(f);
+    snapshot.orders[0].documents=[{label:"Documento A",fileKey:"order-docs/fixture-a.pdf",fileUrl:"https://h2colombiano.com/api/validra/documents/order-docs/fixture-a.pdf",mimeType:"application/pdf"}];
+    snapshot.orders[1].documents=[{label:"FAIL_TEST_DOCUMENT",fileKey:"order-docs/fixture-b.pdf",fileUrl:"https://h2colombiano.com/api/validra/documents/order-docs/fixture-b.pdf",mimeType:"application/pdf"}];
+    await registerFixtureDocuments(snapshot);
+    await runValidraCartCheckout(f.input.externalId,snapshot,true,f.client);
+    await expect(persistPaidValidraCart(f.input.externalId,f.paid())).rejects.toThrow();
+    for(const table of ["orderStatusHistory","accessCodePhones","orderCounter","orderFiles","financialSales"] as const)expect(await count(table)).toBe(0);
+    const [attempt]=await pool.execute<RowDataPacket[]>("SELECT state,registration_id FROM validra_checkout_attempts WHERE external_id=?",[f.input.externalId]);
+    expect(attempt[0]).toMatchObject({state:"pending",registration_id:null});
+    const [followup]=await pool.query<RowDataPacket[]>("SELECT COUNT(*) AS total FROM validra_order_followup");
+    expect(Number(followup[0].total)).toBe(0);
+  });
+
+  it("rejects malformed document references before any provider call",async()=>{
+    const f=makeFixture(),snapshot=cartFixture(f);
+    snapshot.orders[0].documents=[{label:"Documento",fileKey:"order-docs/fixture.pdf",fileUrl:"javascript:alert(1)",mimeType:"application/pdf"}];
+    await expect(runValidraCartCheckout(f.input.externalId,snapshot,true,f.client)).rejects.toThrow("validra_invalid_cart_snapshot");
+    expect(f.transport).not.toHaveBeenCalled();
+  });
+
+  it("registers an authenticated upload, binds it to one attempt and blocks reuse",async()=>{
+    const f=makeFixture(),snapshot=cartFixture(f);
+    const bytes=Buffer.from("%PDF-fixture-123");
+    expect(bytes.length).toBe(16);
+    const doc=await createValidraDocumentUpload(phone,"Documento",bytes.toString("base64"));
+    expect(doc.fileKey).toMatch(/^order-docs\/validra-[a-f0-9-]+\.pdf$/);
+    expect(doc.fileUrl).toBe("https://h2colombiano.com/api/validra/documents/"+doc.fileKey);
+    await expect(readAuthorizedValidraDocument(doc.fileKey,{admin:false,ownerPhone:"11999990001"})).rejects.toThrow("validra_document_not_authorized");
+    await expect(readAuthorizedValidraDocument(doc.fileKey,{admin:false})).rejects.toThrow("validra_document_not_authorized");
+    await expect(readAuthorizedValidraDocument(doc.fileKey,{admin:true})).rejects.toThrow("validra_document_not_authorized");
+    expect(getPrivateValidraObject).not.toHaveBeenCalled();
+    expect((await readAuthorizedValidraDocument(doc.fileKey,{admin:false,ownerPhone:phone})).mimeType).toBe("application/pdf");
+    const [ownership]=await pool.execute<RowDataPacket[]>("SELECT customer_id,customer_phone,reserved_external_id FROM validra_document_uploads WHERE file_key=?",[doc.fileKey]);
+    expect(ownership[0]).toMatchObject({customer_id:21,customer_phone:phone,reserved_external_id:null});
+    snapshot.orders[0].documents=[doc];
+    await runValidraCartCheckout(f.input.externalId,snapshot,true,f.client);
+    const [reserved]=await pool.execute<RowDataPacket[]>("SELECT reserved_external_id FROM validra_document_uploads WHERE file_key=?",[doc.fileKey]);
+    expect(reserved[0].reserved_external_id).toBe(f.input.externalId);
+    const another=makeFixture();
+    await expect(runValidraCartCheckout(another.input.externalId,snapshot,true,another.client)).rejects.toThrow("validra_document_not_authorized");
+    expect(another.transport).not.toHaveBeenCalled();
+    await releaseTestPoll(f.input.externalId);
+    f.paid();
+    expect(await runValidraCartCheckout(f.input.externalId,snapshot,false,f.client)).toMatchObject({kind:"persisted"});
+    expect(await count("orderFiles")).toBe(1);
+  });
+
+  it("rejects another customer's document and unregistered or altered references before charging",async()=>{
+    const f=makeFixture(),snapshot=cartFixture(f);
+    const doc={label:"Documento",fileKey:"order-docs/fixture.pdf",fileUrl:"https://h2colombiano.com/api/validra/documents/order-docs/fixture.pdf",mimeType:"application/pdf"};
+    snapshot.orders[0].documents=[doc];
+    await expect(runValidraCartCheckout(f.input.externalId,snapshot,true,f.client)).rejects.toThrow("validra_document_not_authorized");
+    await pool.execute("INSERT INTO customers(id,phone) VALUES (22,?)",["11999990001"]);
+    await registerFixtureDocuments(snapshot,22,"11999990001");
+    await expect(runValidraCartCheckout(f.input.externalId,snapshot,true,f.client)).rejects.toThrow("validra_document_not_authorized");
+    expect(headPrivateValidraObject).not.toHaveBeenCalled();
+    await pool.execute("UPDATE validra_document_uploads SET customer_id=21,customer_phone=?",[phone]);
+    snapshot.orders[0].documents=[{...doc,fileUrl:"https://other.example.test/"+doc.fileKey}];
+    // The private URL is now checked by snapshot validation, before registry
+    // lookup or any storage/provider call. Keep the strict rejection.
+    await expect(runValidraCartCheckout(f.input.externalId,snapshot,true,f.client)).rejects.toThrow("validra_invalid_cart_snapshot");
+    expect(headPrivateValidraObject).not.toHaveBeenCalled();
+    expect(f.transport).not.toHaveBeenCalled();
+    snapshot.orders[0].documents=[doc];
+    vi.mocked(headPrivateValidraObject).mockResolvedValueOnce({httpStatus:200,contentLength:16,etag:"changed-etag"});
+    await expect(runValidraCartCheckout(f.input.externalId,snapshot,true,f.client)).rejects.toThrow("validra_document_storage_unavailable");
+    expect(f.transport).not.toHaveBeenCalled();
+    const [attempts]=await pool.query<RowDataPacket[]>("SELECT COUNT(*) AS total FROM validra_checkout_attempts");
+    expect(Number(attempts[0].total)).toBe(0);
+  });
+
+  it("sends a paid attempt with a missing ownership binding to review without creating orders",async()=>{
+    const f=makeFixture(),snapshot=cartFixture(f);
+    snapshot.orders[0].documents=[{label:"Documento",fileKey:"order-docs/fixture.pdf",fileUrl:"https://h2colombiano.com/api/validra/documents/order-docs/fixture.pdf",mimeType:"application/pdf"}];
+    await registerFixtureDocuments(snapshot);
+    await runValidraCartCheckout(f.input.externalId,snapshot,true,f.client);
+    await pool.query("DELETE FROM validra_document_uploads");
+    const paid=f.paid();
+    await enqueueValidraEvent({event_id:"evt_"+"F".repeat(26),event_type:"charge.paid",charge_id:paid.id,external_id:f.input.externalId,occurred_at:paid.updated_at});
+    await releaseTestPoll(f.input.externalId);
+    expect(await processNextValidraEvent(f.client)).toBe(true);
+    const [reviews]=await pool.query<RowDataPacket[]>("SELECT reason FROM validra_payment_reviews");
+    expect(reviews[0]?.reason).toBe("binding_conflict");
+    expect(await count("orderStatusHistory")).toBe(0);
+    expect(await count("orderFiles")).toBe(0);
+  });
+
+  it("recovers the frozen cart only for its owner and returns every persisted item",async()=>{
+    const f=makeFixture(),snapshot=cartFixture(f);
+    await runValidraCartCheckout(f.input.externalId,snapshot,true,f.client,true);
+    expect((await loadOwnedValidraCart(f.input.externalId,{customerId:21,phone}))?.snapshot).toEqual(snapshot);
+    await expect(loadOwnedValidraCart(f.input.externalId,{customerId:22,phone:"11999990001"})).rejects.toThrow("validra_attempt_conflict");
+    await expect(loadOwnedValidraCart(f.input.externalId,{customerId:21,phone:"11999990001"})).rejects.toThrow("validra_attempt_conflict");
+    const another=makeFixture();
+    await expect(runValidraCartCheckout(another.input.externalId,snapshot,true,another.client,true)).rejects.toThrow("validra_other_attempt_pending");
+    expect(another.transport).not.toHaveBeenCalled();
+    const stored=(await loadOwnedValidraCart(f.input.externalId,{customerId:21,phone}))!.snapshot;
+    await releaseTestPoll(f.input.externalId);
+    f.paid();
+    expect(await runValidraCartCheckout(f.input.externalId,stored,false,f.client,true)).toMatchObject({kind:"persisted"});
+    expect(await listOwnedValidraCartOrders(f.input.externalId,{customerId:21,phone})).toHaveLength(2);
+    expect(f.transport.mock.calls.filter(([,init])=>init?.method==="POST")).toHaveLength(1);
+  });
+
+  const scheduleStub:typeof ensureAutomaticScheduleForOrder=async(input,store)=>{
+    if(!store)throw new Error("transactional store missing");
+    const a=await store.createAppointment({token:randomUUID(),registrationId:input.registrationId,subOrderIndex:input.subOrderIndex??0,customerPhone:input.customerPhone,customerName:input.customerName,serviceName:input.serviceName});
+    return {created:true,appointmentId:a.id,token:a.token};
+  };
+
+  it("schedules only the enabled option after payment and never duplicates it on replay",async()=>{
+    const f=makeFixture(),snapshot=cartFixture(f);
+    await runValidraCartCheckout(f.input.externalId,snapshot,true,f.client);
+    const schedule=vi.fn(scheduleStub);
+    expect(await processNextValidraSchedule(schedule)).toBe(false);
+    expect(await count("scheduleAppointments")).toBe(0);
+    const paid=await persistPaidValidraCart(f.input.externalId,f.paid());
+    await Promise.all([processNextValidraSchedule(schedule),processNextValidraSchedule(schedule)]);
+    for(let i=0;i<3;i++)await processNextValidraSchedule(schedule);
+    expect(schedule).toHaveBeenCalledTimes(1);
+    expect(schedule.mock.calls[0][0]).toMatchObject({registrationId:paid.orders[0].registration_id,optionId:11,subOrderIndex:0,customerPhone:phone});
+    expect(await count("scheduleAppointments")).toBe(1);
+    const [jobs]=await pool.query<RowDataPacket[]>("SELECT state,result_code FROM validra_schedule_jobs ORDER BY item_index");
+    expect(jobs).toMatchObject([{state:"done",result_code:"created"},{state:"done",result_code:"option_disabled"}]);
+    await pool.query("UPDATE scheduleAppointments SET status='cancelled'");
+    await persistPaidValidraCart(f.input.externalId,f.paid());
+    expect(await processNextValidraSchedule(schedule)).toBe(false);
+    expect(await count("scheduleAppointments")).toBe(1);
+    const [rows]=await pool.query<RowDataPacket[]>("SELECT status FROM scheduleAppointments");
+    expect(rows[0].status).toBe("cancelled");
+  });
+
+  it("rolls back appointment on follow-up failure and recovers an expired claim",async()=>{
+    const f=makeFixture(),snapshot=cartFixture(f);
+    await runValidraCartCheckout(f.input.externalId,snapshot,true,f.client);
+    await persistPaidValidraCart(f.input.externalId,f.paid());
+    const fail:typeof ensureAutomaticScheduleForOrder=async(input,store)=>{
+      await scheduleStub(input,store);
+      throw new Error("simulated interruption before completion");
+    };
+    await processNextValidraSchedule(fail);
+    expect(await count("scheduleAppointments")).toBe(0);
+    const [failed]=await pool.query<RowDataPacket[]>("SELECT state,result_code FROM validra_schedule_jobs WHERE item_index=0");
+    expect(failed[0]).toMatchObject({state:"queued",result_code:"temporary_failure"});
+    await pool.query("UPDATE validra_schedule_jobs SET state='running',lease_token='expired-lease',lease_until=CURRENT_TIMESTAMP(3)-INTERVAL 1 SECOND WHERE item_index=0");
+    for(let i=0;i<3;i++)await processNextValidraSchedule(scheduleStub);
+    expect(await count("scheduleAppointments")).toBe(1);
+    expect(await count("orderStatusHistory")).toBe(2);
+    const [done]=await pool.query<RowDataPacket[]>("SELECT state,result_code,attempts FROM validra_schedule_jobs WHERE item_index=0");
+    expect(done[0]).toMatchObject({state:"done",result_code:"created",attempts:2});
+  });
+
+  it("preserves an appointment completed before the first follow-up",async()=>{
+    const f=makeFixture(),snapshot=cartFixture(f);
+    await runValidraCartCheckout(f.input.externalId,snapshot,true,f.client);
+    const paid=await persistPaidValidraCart(f.input.externalId,f.paid());
+    await pool.execute("INSERT INTO scheduleAppointments(token,registrationId,customerPhone,status) VALUES (?,?,?,'completed')",["fixture-existing",paid.orders[0].registration_id,phone]);
+    const schedule=vi.fn(scheduleStub);
+    for(let i=0;i<3;i++)await processNextValidraSchedule(schedule);
+    expect(schedule).not.toHaveBeenCalled();
+    const [rows]=await pool.query<RowDataPacket[]>("SELECT token,status FROM scheduleAppointments");
+    expect(rows).toMatchObject([{token:"fixture-existing",status:"completed"}]);
+    const [jobs]=await pool.query<RowDataPacket[]>("SELECT result_code FROM validra_schedule_jobs ORDER BY item_index");
+    expect(jobs).toMatchObject([{result_code:"existing_appointment"},{result_code:"option_disabled"}]);
+  });
+
+  it("records refund review without creating another order",async()=>{
+    const f=makeFixture(),snapshot=cartFixture(f);
+    await runValidraCartCheckout(f.input.externalId,snapshot,true,f.client);
+    const paid=f.paid({status:"partially_refunded",amount_refunded:"1.00"});
+    await enqueueValidraEvent({event_id:"evt_"+"E".repeat(26),event_type:"charge.paid",charge_id:paid.id,external_id:f.input.externalId,occurred_at:paid.updated_at});
+    await releaseTestPoll(f.input.externalId);
+    await processNextValidraEvent(f.client);
+    const [reviews]=await pool.query<RowDataPacket[]>("SELECT reason FROM validra_payment_reviews");
+    expect(reviews[0]?.reason).toBe("refund_review");
+    expect(await count("orderStatusHistory")).toBe(0);
+  });
+
+  it("accepts a signed HTTP webhook only once and rejects tampered bytes", async () => {
+    const secret = "local-ci-webhook-test-only";
+    vi.stubEnv("VALIDRA_WEBHOOK_SECRET", secret);
+    vi.stubEnv("VALIDRA_WEBHOOK_PREVIOUS_SECRET", "");
+    const app = express();
+    registerValidraWebhook(app);
+    app.use(express.json());
+    const server = app.listen(0, "127.0.0.1");
+    await new Promise<void>(resolve => server.once("listening", resolve));
+    try {
+      const target = "http://127.0.0.1:" + (server.address() as AddressInfo).port + "/webhooks/validrapay";
+      const raw = JSON.stringify({ id: "evt_" + "A".repeat(26), type: "ping", api_version: "v1", environment: "production", created_at: "2026-11-28T16:00:00Z", data: {} });
+      const t = Math.floor(Date.now() / 1000);
+      const sig = createHmac("sha256", secret).update(t + "." + raw).digest("hex");
+      const send = (body: string) => fetch(target, { method: "POST", headers: { "Content-Type": "application/json", "Validra-Signature": "t=" + t + ",v1=" + sig }, body });
+      expect((await send(raw + " ")).status).toBe(401);
+      expect((await send(raw)).status).toBe(204);
+      expect((await send(raw)).status).toBe(204);
+      expect(await count("validra_webhook_events")).toBe(1);
+      expect(await count("orderStatusHistory")).toBe(0);
+    } finally {
+      await new Promise<void>(resolve => server.close(() => resolve()));
+      vi.unstubAllEnvs();
+    }
+  });
+});
