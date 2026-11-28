@@ -1,6 +1,6 @@
 import { sql } from "drizzle-orm";
 import { getDb } from "./db";
-import { validraAmount } from "./validraPay";
+import { ValidraPayClient, validraAmount } from "./validraPay";
 
 export async function ensureValidraAttemptStorage() {
   const db = await getDb();
@@ -31,4 +31,21 @@ export async function reserveValidraAttempt(input: { externalId: string; custome
   const row = (rows as unknown as Array<{customer_id: number; purchase_digest: string; amount_cents: string | number; charge_id: string | null; registration_id: number | null; state: string}>)[0];
   if (!row || Number(row.customer_id) !== input.customerId || row.purchase_digest !== input.purchaseDigest || Number(row.amount_cents) !== input.amountCents) throw new Error("validra_attempt_conflict");
   return row;
+}
+
+/** Server-only reconciliation of an existing immutable attempt. Does not fulfill orders. */
+export async function reconcileValidraAttempt(externalId: string, customerId: number, client = new ValidraPayClient()) {
+  const db = await ensureValidraAttemptStorage();
+  const [rows] = await db.execute(sql`SELECT amount_cents, charge_id, state FROM validra_checkout_attempts WHERE external_id = ${externalId} AND customer_id = ${customerId}`);
+  const row = (rows as unknown as Array<{amount_cents: string | number; charge_id: string | null; state: string}>)[0];
+  if (!row) throw new Error("validra_attempt_not_found");
+  const attempt = { externalId, amountCents: Number(row.amount_cents) };
+  const charge = row.charge_id ? await client.getCharge({...attempt, chargeId: row.charge_id}) : await client.getChargeByExternalId(attempt);
+  await db.execute(sql`UPDATE validra_checkout_attempts SET charge_id = ${charge.id}
+    WHERE external_id = ${externalId} AND customer_id = ${customerId}
+    AND (charge_id IS NULL OR charge_id = ${charge.id})`);
+  const [bound] = await db.execute(sql`SELECT charge_id FROM validra_checkout_attempts WHERE external_id = ${externalId} AND customer_id = ${customerId}`);
+  if ((bound as unknown as Array<{charge_id: string}>)[0]?.charge_id !== charge.id) throw new Error("validra_charge_conflict");
+  const paid = await client.confirmPaid({...attempt, chargeId: charge.id});
+  return { chargeId: charge.id, confirmedPaid: paid !== null };
 }
