@@ -14,7 +14,7 @@ import { persistPaidValidraOrder } from "./validraOrderPersistence";
 import { runValidraCheckout, validraPurchaseDigest } from "./validraCheckout";
 import { ValidraPayClient, type ValidraCharge } from "./validraPay";
 import { registerValidraWebhook } from "./validraWebhook";
-import { ensureValidraCartStorage, reserveValidraCart, persistPaidValidraCart, type ValidraCartSnapshot } from "./validraCartPersistence";
+import { ensureValidraCartStorage, reserveValidraCart, persistPaidValidraCart, loadOwnedValidraCart, listOwnedValidraCartOrders, type ValidraCartSnapshot } from "./validraCartPersistence";
 import { ensureValidraEventStorage, enqueueValidraEvent, processNextValidraEvent } from "./validraEventWorker";
 import { runValidraCartCheckout } from "./validraCartCheckout";
 import { ensureValidraScheduleStorage, processNextValidraSchedule } from "./validraScheduleWorker";
@@ -290,6 +290,23 @@ describe.skipIf(!dbUrl)("ValidraPay real MySQL integration (simulated provider)"
     expect(reviews[0]?.reason).toBe("binding_conflict");
     expect(await count("orderStatusHistory")).toBe(0);
     expect(await count("orderFiles")).toBe(0);
+  });
+
+  it("recovers the frozen cart only for its owner and returns every persisted item",async()=>{
+    const f=makeFixture(),snapshot=cartFixture(f);
+    await runValidraCartCheckout(f.input.externalId,snapshot,true,f.client,true);
+    expect((await loadOwnedValidraCart(f.input.externalId,{customerId:21,phone}))?.snapshot).toEqual(snapshot);
+    await expect(loadOwnedValidraCart(f.input.externalId,{customerId:22,phone:"11999990001"})).rejects.toThrow("validra_attempt_conflict");
+    await expect(loadOwnedValidraCart(f.input.externalId,{customerId:21,phone:"11999990001"})).rejects.toThrow("validra_attempt_conflict");
+    const another=makeFixture();
+    await expect(runValidraCartCheckout(another.input.externalId,snapshot,true,another.client,true)).rejects.toThrow("validra_other_attempt_pending");
+    expect(another.transport).not.toHaveBeenCalled();
+    const stored=(await loadOwnedValidraCart(f.input.externalId,{customerId:21,phone}))!.snapshot;
+    await releaseTestPoll(f.input.externalId);
+    f.paid();
+    expect(await runValidraCartCheckout(f.input.externalId,stored,false,f.client,true)).toMatchObject({kind:"persisted"});
+    expect(await listOwnedValidraCartOrders(f.input.externalId,{customerId:21,phone})).toHaveLength(2);
+    expect(f.transport.mock.calls.filter(([,init])=>init?.method==="POST")).toHaveLength(1);
   });
 
   const scheduleStub:typeof ensureAutomaticScheduleForOrder=async(input,store)=>{

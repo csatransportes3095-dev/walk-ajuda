@@ -1158,6 +1158,7 @@ export default function Home() {
   const FEATURE3_DESC = settings?.feature3_desc || "";
 
   const submitMutation = trpc.uploads.submitFiles.useMutation();
+  const validraCartMutation = trpc.uploads.checkoutValidraCart.useMutation();
   const validateCouponMutation = trpc.coupons.validate.useMutation();
   const registerResellerOrderMutation = trpc.resellers.registerOrder.useMutation();
   const addBlockingNoteMutation = trpc.customers.addBlockingNote.useMutation();
@@ -1559,8 +1560,12 @@ export default function Home() {
   };
 
   const validraStorageKey = "h2_validra_attempt:" + [clientPhone.replace(/\D/g, ""), selectedProduct?.id || 0, selectedOption?.id || 0, selectedPriceModel?.id || 0, selectedTier?.id || 0].join(":");
-  const savedValidraAttempt = (() => { try { return localStorage.getItem(validraStorageKey); } catch { return null; } })();
-  const usingValidraCheckout = Boolean(savedValidraAttempt || (checkoutProvider.data?.provider === "validrapay" && checkoutProvider.data.validraReady));
+  const savedSingleValidraAttempt = (() => { try { return localStorage.getItem(validraStorageKey); } catch { return null; } })();
+  const validraCartStorageKey = "h2_validra_cart_attempt:" + clientPhone.replace(/\D/g,"");
+  const savedValidraCartAttempt = (()=>{try{return localStorage.getItem(validraCartStorageKey);}catch{return null;}})();
+  const usingValidraCartCheckout = Boolean(savedValidraCartAttempt || (flowOrigin==="cart" && cart.length>1 && checkoutProvider.data?.provider==="validrapay" && checkoutProvider.data.validraReady));
+  const savedValidraAttempt = usingValidraCartCheckout ? savedValidraCartAttempt : savedSingleValidraAttempt;
+  const usingValidraCheckout = Boolean(usingValidraCartCheckout || savedValidraAttempt || (checkoutProvider.data?.provider === "validrapay" && checkoutProvider.data.validraReady));
   const currentValidraPayment = validraPayment?.externalId === savedValidraAttempt ? validraPayment : null;
 
   const handleFinalSubmit = async () => {
@@ -1570,6 +1575,63 @@ export default function Home() {
       setSubmitFailure(message);
       toast.error(message, options);
     };
+
+    // Cart Pix is a single server-priced attempt, never the legacy per-item
+    // loop. Consult a pending attempt even if the cart was edited/reloaded.
+    if(usingValidraCartCheckout){
+      if(!checkoutProvider.data?.validraReady){reportSubmitFailure("Pix automático indisponível. Não pague novamente.");return;}
+      const cpToken=localStorage.getItem("cp_token")||"";
+      if(!cpToken||!clientPhone.trim()){reportSubmitFailure("Entre na sua conta para consultar o Pix.");return;}
+      if(!savedValidraCartAttempt){
+        if(savedSingleValidraAttempt||cart.length<2||cart.some(item=>!item.option)||
+           activeResellerSlug||getResellerDiscountAmount()>0||vipInstallmentSelection.mode==="vip_installment"||
+           referrerName.trim()||referrerPhone.trim()||bypassCode.trim()||thirdPartyName.trim()||thirdPartyPhone.trim()){
+          reportSubmitFailure("Este carrinho ainda não está disponível no Pix automático. Nenhuma cobrança foi criada.");return;
+        }
+      }
+      submitLockRef.current=true;setIsSubmitting(true);setSubmitProgress("Consultando carrinho Pix...");
+      try{
+        const externalId=savedValidraCartAttempt||crypto.randomUUID();
+        localStorage.setItem(validraCartStorageKey,externalId);
+        // A resume ignores current prices, cart mutations and coupon changes.
+        const selection=cart.length>1&&cart.every(item=>item.option)?cart.map(item=>({
+          productId:item.product.id,optionId:item.option!.id,priceModelId:item.priceModel?.id,warrantyTierId:item.tier?.id,
+        })):undefined;
+        const result=await validraCartMutation.mutateAsync({
+          cpToken,phone:clientPhone.trim(),externalId,items:selection,
+          couponCode:!sitePromoOverrides&&couponDiscount&&couponCode.trim()?couponCode.trim().toUpperCase():undefined,
+        });
+        if(result.kind==="not_started"){
+          localStorage.removeItem(validraCartStorageKey);
+          setValidraPayment(null);
+          reportSubmitFailure("Não há cobrança para esta tentativa. Monte o carrinho novamente.");
+          return;
+        }
+        if(result.kind==="payment"){
+          setValidraPayment(result.payment);
+          return;
+        }
+        if(result.kind==="persisted"){
+          const money=(cents:number)=>"R$ "+(cents/100).toFixed(2).replace(".",",");
+          setSubmittedOrderData({
+            cartItems:result.summary.items.map(item=>({service:item.service,nameOption:item.nameOption,price:money(item.amountCents)})),
+            answers:[],docs:[],totalValue:money(result.summary.amountCents),referrerName:"",referrerPhone:"",
+            clientName:result.summary.clientName,clientPhone:result.summary.phone,clientCity:clientCity.trim(),
+          });
+          localStorage.removeItem(validraCartStorageKey);
+          setValidraPayment(null);setCart([]);
+          setAutomaticScheduleLinks([]);setPostOrderScheduleDecision("completed");setPostOrderReferralStep("done");
+          setSuccessMessage("Pagamento confirmado! "+result.orders.length+" pedido(s) registrado(s). Consulte Acompanhar Pedido para ver a agenda.");
+          setStep("success");
+          return;
+        }
+      }catch(error){
+        reportSubmitFailure(error instanceof Error?error.message:"Não foi possível consultar. Não faça outro Pix.");
+      }finally{
+        setIsSubmitting(false);setSubmitProgress("");submitLockRef.current=false;
+      }
+      return;
+    }
 
     if (!clientName.trim()) { reportSubmitFailure('Preencha seu nome completo'); submitLockRef.current = false; return; }
     if (!clientPhone.trim()) { reportSubmitFailure('Preencha seu telefone'); submitLockRef.current = false; return; }
@@ -4531,7 +4593,8 @@ export default function Home() {
               {cadastroSubStep === 'pagamento' && (<>
               {usingValidraCheckout ? (
                 <div className="neon-blue-border p-4 space-y-3">
-                  <p className="text-blue-300 font-black text-center">PIX VALIDRAPAY</p>
+                  <p className="text-blue-300 font-black text-center">{usingValidraCartCheckout?"PIX VALIDRAPAY — CARRINHO":"PIX VALIDRAPAY"}</p>
+                  {usingValidraCartCheckout && <p className="text-white/70 text-sm text-center">Uma única cobrança para todos os itens. Confira o valor confirmado pelo servidor antes de pagar.</p>}
                   {currentValidraPayment ? <>
                     <p className="text-white font-bold text-center">R$ {currentValidraPayment.amount.replace(".", ",")}</p>
                     {currentValidraPayment.qrCodePngBase64 && <img className="mx-auto max-w-56 rounded-lg" alt="QR Code Pix" src={"data:image/png;base64," + currentValidraPayment.qrCodePngBase64} />}

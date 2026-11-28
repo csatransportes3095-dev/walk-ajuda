@@ -79,7 +79,7 @@ function validateSnapshot(snapshot: ValidraCartSnapshot) {
 
 /** Reserve the coupon and freeze the complete server-validated cart before
  * creating a Pix. No network I/O inside the transaction. Internal only. */
-export async function reserveValidraCart(externalId: string, snapshot: ValidraCartSnapshot, allowNew = true) {
+export async function reserveValidraCart(externalId: string, snapshot: ValidraCartSnapshot, allowNew = true, exclusiveCustomer = false) {
   if (!/^[A-Za-z0-9_-]{1,64}$/.test(externalId)) throw new Error("validra_invalid_attempt");
   const purchaseDigest=validateSnapshot(snapshot);
   const {quote,orders}=snapshot;
@@ -105,6 +105,13 @@ export async function reserveValidraCart(externalId: string, snapshot: ValidraCa
     await bindValidraDocuments(tx,documents,quote,externalId,!hasSnapshot);
     if (!hasSnapshot) {
       if (attempt.state!=="pending"||attempt.charge_id||attempt.registration_id) throw new Error("validra_attempt_conflict");
+      // Public cart starts serialize on the customer row above. READ COMMITTED
+      // ensures the next transaction sees the previously committed attempt.
+      if(exclusiveCustomer){
+        const [other]=await tx.execute(sql`SELECT external_id FROM validra_checkout_attempts
+          WHERE customer_id=${quote.customerId} AND state<>'consumed' AND external_id<>${externalId} LIMIT 1`);
+        if((other as unknown[]).length)throw new Error("validra_other_attempt_pending");
+      }
       if (quote.coupon) {
         const expected=quote.coupon;
         const [locked]=await tx.execute(sql`SELECT id,code,discountType,discountValue,productId,optionId,status,maxUses,currentUses,startsAt,expiresAt
@@ -119,7 +126,35 @@ export async function reserveValidraCart(externalId: string, snapshot: ValidraCa
         VALUES(${externalId},${JSON.stringify(snapshot)},${quote.coupon?.id??null},${quote.coupon?"reserved":"none"})`);
     }
     return {externalId,customerId:quote.customerId,purchaseDigest,amountCents:quote.amountCents};
-  });
+  },{isolationLevel:"read committed"});
+}
+
+/** Resume only the server's immutable snapshot, scoped to the verified owner.
+ * Never reprice a pending payment or accept edited data from the browser. */
+export async function loadOwnedValidraCart(externalId:string,owner:{customerId:number;phone:string}){
+  const db=await ensureValidraCartStorage();
+  const [rows]=await db.execute(sql`SELECT a.customer_id,a.purchase_digest,a.amount_cents,a.state,s.snapshot_json
+    FROM validra_checkout_attempts a LEFT JOIN validra_cart_snapshots s ON s.external_id=a.external_id
+    WHERE a.external_id=${externalId}`);
+  const row=(rows as unknown as Array<Attempt&{snapshot_json:string|null}>)[0];
+  if(!row)return null;
+  if(Number(row.customer_id)!==owner.customerId||!row.snapshot_json)throw new Error("validra_attempt_conflict");
+  const snapshot=JSON.parse(row.snapshot_json) as ValidraCartSnapshot;
+  if(validateSnapshot(snapshot)!==row.purchase_digest||snapshot.quote.customerId!==owner.customerId||
+      snapshot.quote.phone!==owner.phone||snapshot.quote.amountCents!==Number(row.amount_cents))
+    throw new Error("validra_attempt_conflict");
+  return {snapshot,state:row.state};
+}
+
+export async function listOwnedValidraCartOrders(externalId:string,owner:{customerId:number;phone:string}){
+  const owned=await loadOwnedValidraCart(externalId,owner);
+  if(!owned||owned.state!=="consumed")throw new Error("validra_attempt_conflict");
+  const db=await ensureValidraCartStorage();
+  const [rows]=await db.execute(sql`SELECT registration_id,order_status_id,order_number FROM validra_cart_orders
+    WHERE external_id=${externalId} ORDER BY item_index`);
+  const orders=rows as unknown as Array<{registration_id:number;order_status_id:number;order_number:number}>;
+  if(orders.length!==owned.snapshot.orders.length)throw new Error("validra_attempt_conflict");
+  return orders;
 }
 
 /** One confirmed charge -> all orders, or none. Never call with webhook

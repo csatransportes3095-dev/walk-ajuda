@@ -1470,6 +1470,33 @@ export const appRouter = router({
   }),
   // === UPLOADS / ENVIO DE PEDIDO ===
   uploads: router({
+    checkoutValidraCart: publicProcedure
+      .input(z.object({
+        cpToken:z.string().min(32).max(256),phone:z.string().max(32),externalId:z.string().uuid(),
+        items:z.array(z.object({productId:z.number().int().positive(),optionId:z.number().int().positive(),priceModelId:z.number().int().positive().optional(),warrantyTierId:z.number().int().positive().optional()}).strict()).min(2).max(30).optional(),
+        couponCode:z.string().trim().max(64).optional(),
+      }).strict())
+      .mutation(async({input,ctx})=>{
+        const {CHECKOUT_PROVIDER_KEY,parseCheckoutProvider,VALIDRA_CHECKOUT_READY}=await import("./checkoutPaymentProvider");
+        if(!VALIDRA_CHECKOUT_READY)throw new TRPCError({code:"PRECONDITION_FAILED",message:"Checkout ValidraPay indisponível."});
+        const {requireCustomerSession}=await import("./customerSession");
+        const identity=await requireCustomerSession(input.cpToken,input.phone);
+        const ip=(ctx.req.headers["x-forwarded-for"] as string||"").split(",")[0].trim()||ctx.req.socket?.remoteAddress||"unknown";
+        if((ip!=="unknown"&&await isIpBlocked(ip))||(await checkPhoneBlockedAndBlockIp(identity.phone,ip,"fazer_pedido")).blocked)
+          throw new TRPCError({code:"FORBIDDEN",message:"Acesso bloqueado."});
+        const provider=parseCheckoutProvider(await getSystemConfig(CHECKOUT_PROVIDER_KEY));
+        try{
+          const {checkoutPublicValidraCart}=await import("./validraCartPublic");
+          return await checkoutPublicValidraCart({...input,phone:identity.phone},provider==="validrapay");
+        }catch(error){
+          const message=error instanceof Error?error.message:"";
+          const safe=message==="validra_cart_requirements_not_ready"?"Este carrinho contém opções ou condições ainda não liberadas para Pix automático. Nenhuma nova cobrança foi criada.":
+            message==="validra_other_attempt_pending"?"Existe outra tentativa pendente. Consulte o pedido anterior ou fale com o suporte antes de pagar novamente.":
+            message==="validra_wait_before_retry"?"Aguarde 5 segundos antes de consultar novamente.":
+            "Não foi possível confirmar esta tentativa. Não faça outro Pix; consulte novamente ou fale com o suporte.";
+          throw new TRPCError({code:"PRECONDITION_FAILED",message:safe});
+        }
+      }),
     submitFiles: publicProcedure
       .input(z.object({
         clientName: z.string(), service: z.string(), nameOption: z.string(),
