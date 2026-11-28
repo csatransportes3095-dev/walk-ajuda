@@ -4,8 +4,38 @@ import { drizzle } from "drizzle-orm/mysql2";
 import { createHmac, randomUUID } from "node:crypto";
 import type { AddressInfo } from "node:net";
 import express from "express";
-vi.mock("./db", () => ({ getDb: vi.fn(), addOrderStatus: vi.fn(), generateOrderNumber: vi.fn() }));
-import { getDb } from "./db";
+import { createExpressMiddleware } from "@trpc/server/adapters/express";
+import { getTableColumns,getTableName } from "drizzle-orm";
+import { customers,products,productOptions,customerPasswordSessions } from "../drizzle/schema";
+vi.mock("./db",async importOriginal=>({
+  ...(await importOriginal<typeof import("./db")>()),
+  getDb:vi.fn(),addOrderStatus:vi.fn(),generateOrderNumber:vi.fn(),
+  getSetting:vi.fn(async()=>null),getSystemConfig:vi.fn(async()=>null),
+  isIpBlocked:vi.fn(async()=>false),checkPhoneBlockedAndBlockIp:vi.fn(async()=>({blocked:false})),
+  logIpAccess:vi.fn(async()=>{}),listProductOptions:vi.fn(async()=>[]),listWarrantyTiers:vi.fn(async()=>[]),
+  assignOrderStatusFlow:vi.fn(async()=>{}),getCustomerByPhone:vi.fn(async()=>null),
+  addOrderFile:vi.fn(async()=>{}),updateCustomer:vi.fn(async()=>{}),
+}));
+vi.mock("./checkoutPaymentProvider",async importOriginal=>({
+  ...(await importOriginal<typeof import("./checkoutPaymentProvider")>()),
+  VALIDRA_CHECKOUT_READY:true, // test-only; real source remains locked
+}));
+vi.mock("./routers/optionPriceModels",async importOriginal=>({
+  ...(await importOriginal<typeof import("./routers/optionPriceModels")>()),
+  getActiveOptionPriceModelsForPromotion:vi.fn(async()=>[]),
+}));
+vi.mock("./routers/vipMemberships",async importOriginal=>({
+  ...(await importOriginal<typeof import("./routers/vipMemberships")>()),
+  isVipMemberByPhone:vi.fn(async()=>false),
+}));
+vi.mock("./_core/sendMailDirect",()=>({sendMailDirect:vi.fn(async()=>{})}));
+vi.mock("./autoSchedule",async importOriginal=>({
+  ...(await importOriginal<typeof import("./autoSchedule")>()),
+  ensureAutomaticScheduleForOrder:vi.fn(async()=>({url:null})),
+}));
+import { getDb,getSystemConfig,listProductOptions,addOrderFile,getCustomerByPhone,assignOrderStatusFlow } from "./db";
+import { sendMailDirect } from "./_core/sendMailDirect";
+import { ensureAutomaticScheduleForOrder } from "./autoSchedule";
 import { ensureValidraAttemptStorage } from "./validraAttemptStorage";
 import { persistPaidValidraOrder } from "./validraOrderPersistence";
 import { runValidraCheckout, validraPurchaseDigest } from "./validraCheckout";
@@ -18,9 +48,16 @@ import { reserveValidraRecovery,ensureValidraRecoveryStorage,processNextValidraR
 const dbUrl = process.env.VALIDRA_TEST_DATABASE_URL;
 const key = "vpk_live_" + "A".repeat(26) + "_" + "B".repeat(52);
 const phone = "11999990000";
+// For catalogue/session SELECTs, derive the columns from the production
+// schema, but create only disposable fixture tables, not a production clone.
+function catalogFixture(table:typeof customers|typeof products|typeof productOptions|typeof customerPasswordSessions){
+  const columns=Object.values(getTableColumns(table)) as Array<{name:string;getSQLType():string}>;
+  return "CREATE TABLE IF NOT EXISTS "+getTableName(table)+" ("+
+    columns.map(c=>"\x60"+c.name+"\x60 "+c.getSQLType()+(c.name==="id"?" PRIMARY KEY":c.name==="blocked"||c.name==="isReseller"?" DEFAULT 0":" NULL")).join(",")+") ENGINE=InnoDB";
+}
 const fixtureSchema = [
+  catalogFixture(customers),catalogFixture(products),catalogFixture(productOptions),catalogFixture(customerPasswordSessions),
   "CREATE TABLE IF NOT EXISTS financialSales (id INT AUTO_INCREMENT PRIMARY KEY,registrationId INT,customerName VARCHAR(256) NOT NULL DEFAULT '',customerPhone VARCHAR(32) NOT NULL DEFAULT '',productName VARCHAR(256) NOT NULL DEFAULT '',productOption VARCHAR(256) NOT NULL DEFAULT '',saleValue INT NOT NULL DEFAULT 0,costValue INT NOT NULL DEFAULT 0,paymentMethod VARCHAR(64) NOT NULL DEFAULT 'pix',status VARCHAR(32) NOT NULL DEFAULT 'pendente',saleDate BIGINT NOT NULL,receivedDate BIGINT,notes TEXT,createdAt TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP,updatedAt TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP,CHECK(productName <> 'FAIL_FINANCE')) ENGINE=InnoDB",
-  "CREATE TABLE IF NOT EXISTS customers (id INT PRIMARY KEY, phone VARCHAR(32) NOT NULL, blocked INT NOT NULL DEFAULT 0, deletedAt TIMESTAMP NULL) ENGINE=InnoDB",
   "CREATE TABLE IF NOT EXISTS accessCodes (id INT AUTO_INCREMENT PRIMARY KEY, code VARCHAR(64) NOT NULL UNIQUE, type ENUM('general','vip') NOT NULL DEFAULT 'vip', status ENUM('active','used','disabled') NOT NULL DEFAULT 'active', clientName TEXT, usedAt TIMESTAMP NULL, usedBy TEXT, accessedByPhone VARCHAR(32), maxUses INT DEFAULT 1, currentUses INT DEFAULT 0, expiresAt TIMESTAMP NULL, timeOnly INT NOT NULL DEFAULT 0, allowedProductIds TEXT, createdAt TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP) ENGINE=InnoDB",
   "CREATE TABLE IF NOT EXISTS accessCodePhones (id INT AUTO_INCREMENT PRIMARY KEY, codeId INT NOT NULL, phone VARCHAR(32) NOT NULL, consumed INT DEFAULT 0, archived INT NOT NULL DEFAULT 0, rgCnhApproved INT NOT NULL DEFAULT 0, orderSource VARCHAR(16) NOT NULL DEFAULT 'auto', accessedAt TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP, refCode VARCHAR(64), refExpiresAt BIGINT, refOwnerName VARCHAR(128), deletedAt TIMESTAMP NULL, deletedReason VARCHAR(256), thirdPartyName VARCHAR(128), thirdPartyPhone VARCHAR(32), resellerDiscountApplied DECIMAL(10,2), cartGroupId VARCHAR(64), cartTotal DECIMAL(10,2), cartCouponCode VARCHAR(64), cartCouponDiscount DECIMAL(10,2), cartItemIndex INT DEFAULT 0) ENGINE=InnoDB",
   "CREATE TABLE IF NOT EXISTS orderCounter (id INT AUTO_INCREMENT PRIMARY KEY, createdAt TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP) ENGINE=InnoDB",
@@ -67,6 +104,7 @@ describe.skipIf(!dbUrl)("ValidraPay real MySQL integration (simulated provider)"
     await pool.execute("UPDATE validra_checkout_attempts SET last_query_at = NULL WHERE external_id = ?", [externalId]);
   }
   beforeAll(async () => {
+    if(process.env.DATABASE_URL)throw new Error("Production DATABASE_URL is forbidden in this test");
     const url = new URL(dbUrl!);
     if (url.protocol !== "mysql:" || url.hostname !== "127.0.0.1" || url.pathname !== "/validra_ci" || url.username !== "validra_ci") throw new Error("Only the isolated local validra_ci database is allowed");
     pool = createPool(dbUrl!);
@@ -76,7 +114,7 @@ describe.skipIf(!dbUrl)("ValidraPay real MySQL integration (simulated provider)"
     await ensureValidraRecoveryStorage();
   }, 30000);
   beforeEach(async () => {
-    for (const table of ["validra_payment_recovery","financialSales","validra_checkout_attempts", "orderStatusHistory", "accessCodePhones", "accessCodes", "orderCounter", "customers", "orderStatusTypes"]) await pool.query("DELETE FROM " + table);
+    for (const table of ["customerPasswordSessions","productOptions","products","validra_payment_recovery","financialSales","validra_checkout_attempts", "orderStatusHistory", "accessCodePhones", "accessCodes", "orderCounter", "customers", "orderStatusTypes"]) await pool.query("DELETE FROM " + table);
     await pool.execute("INSERT INTO customers (id, phone) VALUES (21, ?)", [phone]);
     await pool.execute("INSERT INTO orderStatusTypes (`key`) VALUES ('pedido_recebido')");
   });
@@ -134,6 +172,86 @@ describe.skipIf(!dbUrl)("ValidraPay real MySQL integration (simulated provider)"
     const [rows]=await pool.query<RowDataPacket[]>("SELECT state,snapshot_json FROM validra_payment_recovery");
     expect(rows).toMatchObject([{state:"complete",snapshot_json:null}]);
   });
+
+  it("runs the actual submitFiles HTTP route, confirms after the browser closes, and preserves the original follow-up calls",async()=>{
+    const f=makeFixture();
+    const token="local-ci-session-"+randomUUID();
+    await pool.execute("INSERT INTO products(id,name,isActive) VALUES(1,?,1)",["Produto de teste"]);
+    await pool.execute("INSERT INTO productOptions(id,productId,label,price,isActive,originalPrice,autoScheduleEnabled) VALUES(11,1,?,?,1,'',0)",["Opcao teste","R$ 49,90"]);
+    await pool.execute("INSERT INTO customerPasswordSessions(id,phone,token,expiresAt) VALUES(1,?,?,CURRENT_TIMESTAMP+INTERVAL 1 HOUR)",[phone,token]);
+    vi.mocked(getSystemConfig).mockResolvedValue("validrapay");
+    vi.mocked(listProductOptions).mockResolvedValue([{id:11,productId:1,label:"Opcao teste",price:"R$ 49,90",isActive:1,originalPrice:""}] as any);
+    vi.mocked(getCustomerByPhone).mockResolvedValue(null);
+    vi.mocked(addOrderFile).mockClear();
+    vi.mocked(assignOrderStatusFlow).mockClear();
+    vi.mocked(sendMailDirect).mockClear();
+    vi.mocked(ensureAutomaticScheduleForOrder).mockClear();
+    vi.stubEnv("VALIDRA_API_KEY",key);
+    vi.stubEnv("H2_CUSTOMER_OTP_V2_ENABLED","false");
+    const localFetch=globalThis.fetch;
+    vi.stubGlobal("fetch",f.transport);
+    let server:ReturnType<ReturnType<typeof express>["listen"]>|undefined;
+    try{
+      const {appRouter}=await import("./routers");
+      const app=express();
+      app.use("/api/trpc",createExpressMiddleware({
+        router:appRouter,
+        createContext:({req,res})=>({req,res,user:null}),
+      }));
+      server=app.listen(0,"127.0.0.1");
+      await new Promise<void>(resolve=>server!.once("listening",resolve));
+      const endpoint="http://127.0.0.1:"+(server.address() as AddressInfo).port+"/api/trpc/uploads.submitFiles";
+      const payload={validraAttemptId:f.input.externalId,cpToken:token,phone,clientName:"Cliente teste",
+        email:"customer@example.test",city:"Teste",productId:1,optionId:11,autoScheduleOptionId:11,
+        service:"untrusted service",nameOption:"untrusted option",price:"R$ 0,51",
+        answers:JSON.stringify([{questionId:5,question:"Pergunta existente",answer:"Resposta existente"}]),
+        documents:[{label:"Documento existente",url:"https://example.test/order-docs/fixture.pdf",fileKey:"order-docs/fixture.pdf",mime:"application/pdf"}],
+      };
+      const submit=async(body:typeof payload)=>{
+        const response=await localFetch(endpoint,{method:"POST",headers:{"Content-Type":"application/json"},body:JSON.stringify({json:body})});
+        const result=await response.json() as any;
+        expect(response.status,JSON.stringify(result)).toBe(200);
+        return result.result.data.json;
+      };
+      const pending=await submit(payload);
+      expect(pending).toMatchObject({success:false,validraPayment:{amount:"49.90",pixCopyPaste:"fake-ci-pix"}});
+      expect(await count("financialSales")).toBe(0);
+      expect(await count("orderStatusHistory")).toBe(0);
+      expect(addOrderFile).not.toHaveBeenCalled();
+      expect(sendMailDirect).not.toHaveBeenCalled();
+      // Neither a different logged-in identity nor browser price is trusted.
+      expect((await submit({...payload,cpToken:"invalid-session-"+randomUUID()})).success).toBe(false);
+      f.paid();
+      await pool.execute("UPDATE validra_payment_recovery SET next_check_at=CURRENT_TIMESTAMP(3)-INTERVAL 1 SECOND");
+      const resume=vi.fn(async recovery=>{
+        const caller=appRouter.createCaller({req:{headers:{},socket:{}} as any,res:{} as any,user:null,validraRecovery:recovery});
+        const result=await caller.uploads.submitFiles(recovery.snapshot.input as Parameters<typeof caller.uploads.submitFiles>[0]);
+        expect(result).toMatchObject({success:true});
+        return result;
+      });
+      expect(await processNextValidraRecovery(resume,f.client)).toBe(true);
+      expect(resume).toHaveBeenCalledTimes(1);
+      const [orders]=await pool.query<RowDataPacket[]>("SELECT registrationId,pricePaid,serviceName,serviceOption,answers FROM orderStatusHistory");
+      expect(orders).toHaveLength(1);
+      expect(orders[0]).toMatchObject({pricePaid:"R$ 49,90",serviceName:"Produto de teste",serviceOption:"Opcao teste",answers:payload.answers});
+      expect(addOrderFile).toHaveBeenCalledTimes(1);
+      expect(addOrderFile).toHaveBeenCalledWith(expect.objectContaining({registrationId:orders[0].registrationId,label:"Documento existente",fileUrl:payload.documents[0].url}));
+      expect(assignOrderStatusFlow).toHaveBeenCalledTimes(1);
+      expect(ensureAutomaticScheduleForOrder).toHaveBeenCalledTimes(1);
+      expect(sendMailDirect).toHaveBeenCalledTimes(2);
+      const [sales]=await pool.query<RowDataPacket[]>("SELECT registrationId,saleValue,status FROM financialSales");
+      expect(sales).toEqual([expect.objectContaining({registrationId:orders[0].registrationId,saleValue:4990,status:"pago"})]);
+      expect(await submit(payload)).toMatchObject({success:true,registrationId:orders[0].registrationId});
+      expect(await count("orderStatusHistory")).toBe(1);
+      expect(addOrderFile).toHaveBeenCalledTimes(1);
+      expect(sendMailDirect).toHaveBeenCalledTimes(2);
+      expect(f.transport.mock.calls.filter(([,init])=>init?.method==="POST")).toHaveLength(1);
+    }finally{
+      if(server)await new Promise<void>(resolve=>server!.close(()=>resolve()));
+      vi.unstubAllGlobals();vi.unstubAllEnvs();
+      vi.mocked(getSystemConfig).mockResolvedValue(null);
+    }
+  },90000);
 
   it("serializes two simultaneous confirmations of the same charge", async () => {
     const f = makeFixture();

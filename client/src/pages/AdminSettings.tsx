@@ -82,6 +82,7 @@ export default function AdminSettings() {
   type PixAccount = { id: number; label: string; pixKey: string; pixType: string; pixName: string; pixBank: string; isActive: number; createdAt: Date };
   const { data: pixAccounts = [], refetch: refetchPix } = trpc.pix.list.useQuery();
   const providerQuery = trpc.pix.checkoutProvider.useQuery();
+  const validraReadiness=trpc.pix.validraReadiness.useQuery(undefined,{enabled:false,retry:false});
   const [providerPasswordOpen, setProviderPasswordOpen] = useState(false);
   const [nextProvider, setNextProvider] = useState<"manual" | "validrapay">("manual");
   const providerMutation = trpc.pix.setCheckoutProvider.useMutation({
@@ -1282,6 +1283,13 @@ export default function AdminSettings() {
               <h2 className="text-lg font-bold text-white">Forma de pagamento</h2>
               {providerQuery.isError ? <p className="text-red-300 text-sm">Não foi possível consultar a configuração.</p> : !providerQuery.data ? <p className="text-white/60 text-sm">Carregando...</p> : (
                 <div className="grid gap-2">
+                  <div className="col-span-full space-y-1">
+                    <button type="button" disabled={validraReadiness.isFetching} onClick={()=>void validraReadiness.refetch()} className="px-3 py-2 rounded-lg border border-white/20 text-sm font-semibold">
+                      {validraReadiness.isFetching?"Verificando conexão...":"TESTAR CONEXÃO VALIDRAPAY (SEM COBRANÇA)"}
+                    </button>
+                    {validraReadiness.data&&<p className="text-xs">{validraReadiness.data.ready?"Credenciais e webhook confirmados pelo provedor.":"Conexão ainda não validada. Confira as credenciais e o webhook no ambiente."}</p>}
+                    {validraReadiness.isError&&<p className="text-xs text-red-400">Não foi possível testar a conexão.</p>}
+                  </div>
                   {(["manual", "validrapay"] as const).map(provider => (
                     <button key={provider} type="button" disabled={providerMutation.isPending || providerQuery.data?.provider === provider || (provider === "validrapay" && !providerQuery.data?.validraReady)}
                       onClick={() => { setNextProvider(provider); setProviderPasswordOpen(true); }}

@@ -63,6 +63,20 @@ describe("ValidraPay cobrança Pix: contrato isolado", () => {
     }
   });
 
+  it("checks activation credentials by read-only GET /me, without creating a charge",async()=>{
+    const {createHash}=await import("node:crypto");
+    const secret="test-only-webhook";
+    const me={environment:"production",api_key:{scopes:["charges:read","charges:write"]},
+      charges:{enabled:true},webhook_endpoint:{configured:true,status:"active",host:"h2colombiano.com",
+        secret_fingerprint:createHash("sha256").update(secret).digest("hex").slice(0,8)}};
+    const {client,transport}=mockClient(me);
+    expect(await client.checkReadiness(secret)).toMatchObject({ready:true,validScopes:true});
+    expect(transport).toHaveBeenCalledTimes(1);
+    expect(transport.mock.calls[0][0]).toBe("https://app.validrapay.com/v1/me");
+    expect(transport.mock.calls[0][1]?.method??"GET").toBe("GET");
+    expect(await mockClient(me).client.checkReadiness("different")).toMatchObject({ready:false});
+    expect(await mockClient({...me,api_key:{scopes:[...me.api_key.scopes,"transfers:write"]}}).client.checkReadiness(secret)).toMatchObject({ready:false});
+  });
   it("valida HMAC dos bytes originais, prazo e rotação de segredo", () => {
     const now = 1791986400;
     const raw = Buffer.from(JSON.stringify({ id: "evt_" + "A".repeat(26), type: "ping", api_version: "v1", environment: "production", created_at: "2026-11-28T16:00:00Z", data: {} }));

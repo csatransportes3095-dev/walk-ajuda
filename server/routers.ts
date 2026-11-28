@@ -8953,12 +8953,24 @@ export const appRouter = router({
       if (!await getDb()) throw new TRPCError({ code: "SERVICE_UNAVAILABLE" });
       return { provider: parseCheckoutProvider(await getSystemConfig(CHECKOUT_PROVIDER_KEY)), validraReady: VALIDRA_CHECKOUT_READY };
     }),
+    validraReadiness: adminProcedure.query(async()=>{
+      const {ValidraPayClient,validraApiConfigured}=await import("./validraPay");
+      if(!validraApiConfigured())return {ready:false,configured:false,chargesEnabled:false,webhookConfigured:false,validScopes:false};
+      try{return {configured:true,...await new ValidraPayClient().checkReadiness()};}
+      catch{return {ready:false,configured:true,chargesEnabled:false,webhookConfigured:false,validScopes:false};}
+    }),
     setCheckoutProvider: adminProcedure
       .input(z.object({ provider: z.enum(["manual", "validrapay"]), editPassword: z.string().min(1) }))
       .mutation(async ({ input }) => {
         if (!isLoanEditPasswordValid(input.editPassword)) throw new TRPCError({ code: "FORBIDDEN", message: "Senha interna inválida ou não configurada." });
         const { CHECKOUT_PROVIDER_KEY, VALIDRA_CHECKOUT_READY } = await import("./checkoutPaymentProvider");
         if (input.provider === "validrapay" && !VALIDRA_CHECKOUT_READY) throw new TRPCError({ code: "PRECONDITION_FAILED", message: "ValidraPay ainda não liberada para checkout." });
+        if(input.provider==="validrapay"){
+          try{
+            const {ValidraPayClient}=await import("./validraPay");
+            if(!(await new ValidraPayClient().checkReadiness()).ready)throw new Error("not_ready");
+          }catch{throw new TRPCError({code:"PRECONDITION_FAILED",message:"Credenciais ou webhook da ValidraPay não validados."});}
+        }
         const { getDb } = await import("./db");
         if (!await getDb()) throw new TRPCError({ code: "SERVICE_UNAVAILABLE" });
         await setSystemConfig(CHECKOUT_PROVIDER_KEY, input.provider);
