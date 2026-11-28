@@ -1,15 +1,49 @@
 import { eq, sql } from "drizzle-orm";
-import { accessCodePhones, coupons } from "../drizzle/schema";
+import { accessCodePhones, coupons, financialSales, orderFiles } from "../drizzle/schema";
 import { ensureValidraAttemptStorage } from "./validraAttemptStorage";
 import { persistValidraOrderInTransaction, type TrustedPaidOrderInput } from "./validraOrderPersistence";
 import { validraPurchaseDigest } from "./validraCheckout";
 import { validraAmount, validraChargeIsPaid, type ValidraCharge } from "./validraPay";
 import type { ValidraCartQuote } from "./validraCartQuote";
 
+// Internal contract: references must be resolved from authenticated, server-verified
+// uploads before calling reserveValidraCart. A URL or key from the browser alone
+// is not evidence of ownership. No raw file bytes or credentials in the snapshot.
+export type ValidraCartDocument = {
+  label: string;
+  fileKey: string;
+  fileUrl: string;
+  mimeType: string;
+};
+type ValidraCartOrder = TrustedPaidOrderInput["order"] & { documents?: ValidraCartDocument[] };
+
 export type ValidraCartSnapshot = {
   quote: ValidraCartQuote;
-  orders: TrustedPaidOrderInput["order"][];
+  orders: ValidraCartOrder[];
 };
+
+function validDocuments(documents: ValidraCartDocument[] | undefined): boolean {
+  if (documents === undefined) return true;
+  if (!Array.isArray(documents) || documents.length > 30) return false;
+  const keys = new Set<string>();
+  for (const doc of documents) {
+    if (!doc || typeof doc.label !== "string" || !doc.label.trim() || doc.label.length > 256 ||
+        typeof doc.fileKey !== "string" || doc.fileKey.length > 512 ||
+        !/^order-docs\/[A-Za-z0-9_.-]+$/.test(doc.fileKey) ||
+        doc.fileKey.endsWith("/.") || doc.fileKey.endsWith("/..") ||
+        typeof doc.fileUrl !== "string" || doc.fileUrl.length > 2048 ||
+        typeof doc.mimeType !== "string" || doc.mimeType.length > 128 ||
+        !/^(image\/(jpeg|png|gif|webp|heic|heif)|application\/pdf|video\/(mp4|webm|quicktime|x-msvideo|mpeg|ogg))$/.test(doc.mimeType) ||
+        keys.has(doc.fileKey)) return false;
+    try {
+      const url = new URL(doc.fileUrl);
+      if (url.protocol !== "https:" || url.username || url.password || url.search || url.hash ||
+          !url.pathname.endsWith("/" + doc.fileKey)) return false;
+    } catch { return false; }
+    keys.add(doc.fileKey);
+  }
+  return true;
+}
 type Attempt = { customer_id: number; purchase_digest: string; amount_cents: number|string; charge_id: string|null; registration_id: number|null; state: string };
 
 export async function ensureValidraCartStorage() {
@@ -40,9 +74,9 @@ function validateSnapshot(snapshot: ValidraCartSnapshot) {
   const {quote,orders}=snapshot;
   validraAmount(quote.amountCents);
   if (!orders.length||orders.length!==quote.items.length||orders.length>30||
-      quote.items.some(i=>!Number.isSafeInteger(i.amountCents)||i.amountCents<0)||
+      quote.items.some(i=>!Number.isSafeInteger(i.amountCents)||i.amountCents<0||i.amountCents>2147483647)||
       quote.items.reduce((sum,i)=>sum+i.amountCents,0)!==quote.amountCents||
-      orders.some((o,i)=>o.effectivePhone!==quote.phone||o.productId!==quote.items[i].productId||o.serviceName!==quote.items[i].serviceName||o.serviceOption!==quote.items[i].serviceOption)) throw new Error("validra_invalid_cart_snapshot");
+      orders.some((o,i)=>o.effectivePhone!==quote.phone||o.productId!==quote.items[i].productId||o.serviceName!==quote.items[i].serviceName||o.serviceOption!==quote.items[i].serviceOption||!validDocuments(o.documents)||(o.clientName?.length??0)>256||!Number.isSafeInteger(quote.items[i].optionId)||quote.items[i].optionId<=0)) throw new Error("validra_invalid_cart_snapshot");
   return validraPurchaseDigest(snapshot);
 }
 
@@ -107,11 +141,26 @@ export async function persistPaidValidraCart(externalId: string, charge: Validra
     const [customerRows]=await tx.execute(sql`SELECT phone,blocked,deletedAt FROM customers WHERE id=${quote.customerId} FOR UPDATE`);
     const customer=(customerRows as unknown as Array<{phone:string;blocked:number;deletedAt:Date|null}>)[0];
     if (!customer||customer.deletedAt||Number(customer.blocked)!==0||customer.phone.replace(/\D/g,"")!==quote.phone) throw new Error("validra_customer_mismatch");
+    const paidAt=Date.parse(charge.payment?.paid_at??"");
+    if (!Number.isSafeInteger(paidAt)||paidAt<=0) throw new Error("validra_invalid_paid_at");
     const results=[];
     for (let i=0;i<orders.length;i++) {
       const item=quote.items[i];
-      const persisted=await persistValidraOrderInTransaction(tx,orders[i],item.amountCents);
+      const {documents,...order}=orders[i];
+      const persisted=await persistValidraOrderInTransaction(tx,order,item.amountCents);
       if (!persisted.orderNumber) throw new Error("validra_order_persistence_failed");
+      // Same transaction and registration as the initial status. Any document
+      // or financial failure rolls back every item and charge consumption.
+      if (documents?.length) await tx.insert(orderFiles).values(documents.map(doc=>({
+        registrationId:persisted.registrationId,customerPhone:quote.phone,
+        label:doc.label,fileKey:doc.fileKey,fileUrl:doc.fileUrl,mimeType:doc.mimeType,
+      })));
+      await tx.insert(financialSales).values({
+        registrationId:persisted.registrationId,customerName:order.clientName??"",
+        customerPhone:quote.phone,productName:item.serviceName,productOption:item.serviceOption,
+        saleValue:item.amountCents,costValue:0,paymentMethod:"pix",status:"pago",
+        saleDate:paidAt,receivedDate:paidAt,notes:null,
+      });
       await tx.update(accessCodePhones).set({cartGroupId:externalId,cartTotal:(quote.subtotalCents/100).toFixed(2),cartCouponCode:quote.coupon?.code??null,cartCouponDiscount:(quote.couponCents/100).toFixed(2),cartItemIndex:i,resellerDiscountApplied:(item.resellerCents/100).toFixed(2)}).where(eq(accessCodePhones.id,persisted.registrationId));
       await tx.execute(sql`INSERT INTO validra_cart_orders(external_id,item_index,registration_id,order_status_id,order_number)
         VALUES(${externalId},${i},${persisted.registrationId},${persisted.orderStatusId},${persisted.orderNumber})`);
