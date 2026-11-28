@@ -20,3 +20,45 @@ jobs:
           cache: pnpm
       - run: pnpm install --frozen-lockfile
       - run: pnpm exec vitest run server/validraPay.test.ts server/validraOrderPersistence.test.ts server/orderPersistence.test.ts server/validraCheckout.test.ts
+  mysql-integration:
+    runs-on: ubuntu-24.04
+    timeout-minutes: 20
+    services:
+      mysql:
+        image: mysql:8.4
+        env:
+          MYSQL_ROOT_PASSWORD: validra-ci-root-only
+          MYSQL_DATABASE: validra_ci
+          MYSQL_USER: validra_ci
+          MYSQL_PASSWORD: validra-ci-fixture-only
+        ports:
+          - 3306:3306
+        options: >-
+          --health-cmd="mysqladmin ping -h localhost"
+          --health-interval=5s
+          --health-timeout=5s
+          --health-retries=24
+    env:
+      VALIDRA_TEST_DATABASE_URL: mysql://validra_ci:validra-ci-fixture-only@127.0.0.1:3306/validra_ci
+    steps:
+      - uses: actions/checkout@v4
+      - uses: pnpm/action-setup@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '22'
+          cache: pnpm
+      - run: pnpm install --frozen-lockfile
+      - run: pnpm exec vitest run server/validraCheckout.mysql.test.ts
+  build-check:
+    runs-on: ubuntu-24.04
+    timeout-minutes: 20
+    steps:
+      - uses: actions/checkout@v4
+      - uses: pnpm/action-setup@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '22'
+          cache: pnpm
+      - run: pnpm install --frozen-lockfile
+      - run: pnpm exec vite build
+      - run: pnpm exec esbuild server/_core/index.ts --platform=node --packages=external --bundle --format=esm --outfile=/tmp/validra-server-check.mjs
