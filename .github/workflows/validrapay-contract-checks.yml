@@ -1,0 +1,22 @@
+name: ValidraPay isolated contract checks
+on:
+  push:
+    branches: [feat/validrapay-checkout-20261128]
+  pull_request:
+    branches: [stable/payment-base-20261128]
+  workflow_dispatch:
+permissions:
+  contents: read
+jobs:
+  validate:
+    runs-on: ubuntu-24.04
+    timeout-minutes: 20
+    steps:
+      - uses: actions/checkout@v4
+      - uses: pnpm/action-setup@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '22'
+          cache: pnpm
+      - run: pnpm install --frozen-lockfile
+      - run: pnpm exec vitest run server/validraPay.test.ts
