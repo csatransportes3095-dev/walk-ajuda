@@ -20,6 +20,8 @@ const chargeSchema = z.object({
     paid_at: z.string(),
   }).nullable(),
   amount_refunded: moneySchema,
+  paid_after_expiration: z.boolean().optional(),
+  paid_after_cancellation: z.boolean().optional(),
 });
 export type ValidraCharge = z.infer<typeof chargeSchema>;
 
@@ -32,6 +34,13 @@ export function validraAmount(cents: number): string {
     throw new Error("validra_invalid_amount");
   }
   return String(Math.floor(cents / 100)) + "." + String(cents % 100).padStart(2, "0");
+}
+
+export function validraChargeIsPaid(charge: ValidraCharge, attempt: ValidraAttempt): boolean {
+  return charge.external_id === attempt.externalId && charge.amount === validraAmount(attempt.amountCents)
+    && charge.status === "paid" && charge.payment !== null
+    && charge.payment.amount === charge.amount && charge.amount_refunded === "0.00"
+    && !charge.paid_after_expiration && !charge.paid_after_cancellation;
 }
 
 export class ValidraApiError extends Error {
@@ -135,7 +144,7 @@ export class ValidraPayClient {
   /** Call from a durable reconciliation worker; a webhook alone never authorizes fulfillment. */
   async confirmPaid(attempt: BoundValidraAttempt): Promise<ValidraCharge | null> {
     const charge = await this.getCharge(attempt);
-    if (charge.status !== "paid" || !charge.payment || charge.payment.amount !== validraAmount(attempt.amountCents) || charge.amount_refunded !== "0.00") return null;
+    if (!validraChargeIsPaid(charge, attempt)) return null;
     return charge;
   }
 

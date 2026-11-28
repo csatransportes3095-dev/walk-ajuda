@@ -1498,6 +1498,7 @@ export const appRouter = router({
         paymentProofMime: z.string().optional(),
         vipInstallmentCheckoutToken: z.string().min(16).max(80).optional(),
         botSubmissionKey: z.string().uuid().optional(),
+        validraAttemptId: z.string().uuid().optional(),
         answers: z.string().optional(),
         // Referências aditivas de respostas em áudio: usadas somente pelo novo tipo de pergunta.
         productId: z.number().int().positive().optional(),
@@ -1541,6 +1542,12 @@ export const appRouter = router({
         let claimedBotDb: any;
         let claimedBotRequestKey: string | undefined;
         try {
+          const { CHECKOUT_PROVIDER_KEY, parseCheckoutProvider, VALIDRA_CHECKOUT_READY } = await import("./checkoutPaymentProvider");
+          const paymentProvider = parseCheckoutProvider(await getSystemConfig(CHECKOUT_PROVIDER_KEY));
+          const usingValidra = paymentProvider === "validrapay" || Boolean(input.validraAttemptId);
+          if (usingValidra && (!VALIDRA_CHECKOUT_READY || !input.validraAttemptId)) {
+            return { success: false, message: "Checkout ValidraPay ainda não disponível. Nenhuma cobrança foi criada." };
+          }
           // Validar acesso: aceitar accessCode (sistema antigo) OU cpToken (novo sistema)
           let cpTokenValid = false;
           let cpTokenPhone = '';
@@ -1716,6 +1723,17 @@ export const appRouter = router({
               input.cartCouponCode = input.couponCode.trim().toUpperCase();
               input.cartCouponDiscount = officialDiscount;
             }
+          }
+
+          const validraContext = usingValidra ? await (await import("./validraCheckoutPricing")).resolveValidraSingleCheckout(input, isVipModelAccess) : null;
+          if (validraContext) {
+            input.phone = validraContext.phone;
+            input.service = validraContext.service;
+            input.nameOption = validraContext.nameOption;
+            input.price = validraContext.price;
+            input.paymentProof = undefined;
+            input.paymentProofUrl = undefined;
+            input.paymentProofMime = undefined;
           }
 
           const emailTo = await getSetting('email_to') || 'h2@h2colombiano.com';
@@ -1915,7 +1933,20 @@ export const appRouter = router({
           try {
             persistenceDb = await (await import('./db')).getDb();
             if (persistenceDb && effectivePhone) {
-              persistedOrder = await persistPublicOrder({
+              if (validraContext && input.validraAttemptId) {
+                const { runValidraCheckout, validraPurchaseDigest } = await import("./validraCheckout");
+                const { cpToken: _token, accessCode: _code, validraAttemptId: _attempt, originalPrice: _original, price: _price, ...purchase } = input;
+                const outcome = await runValidraCheckout({
+                  externalId: input.validraAttemptId,
+                  customerId: validraContext.customerId,
+                  purchaseDigest: validraPurchaseDigest({ purchase, amountCents: validraContext.amountCents }),
+                  amountCents: validraContext.amountCents,
+                  order: { effectivePhone, clientName: input.clientName, serviceName: input.service, serviceOption: input.nameOption, productId: input.productId, answers: input.answers },
+                }, paymentProvider === "validrapay");
+                if (outcome.kind === "payment") return { success: false, message: "Aguardando confirmação do PIX.", validraPayment: outcome.payment };
+                if (outcome.kind === "duplicate") return { success: true, persisted: true, registrationId: outcome.registrationId, message: "Pedido já registrado. Nenhuma duplicidade criada." };
+                persistedOrder = outcome.order;
+              } else persistedOrder = await persistPublicOrder({
                 effectivePhone,
                 cpTokenValid,
                 accessCode: input.accessCode,
@@ -1947,6 +1978,7 @@ export const appRouter = router({
             }
           } catch (e) {
             console.error('[OrderStatus] Erro ao persistir pedido antes das notificações:', e);
+            if (validraContext) return { success: false, message: String((e as Error)?.message) === "validra_wait_before_retry" ? "Aguarde 5 segundos para consultar novamente." : "Não foi possível confirmar esta tentativa. Não faça outro PIX; consulte novamente ou fale com o suporte." };
           }
           if (!isPersistedPublicOrder(persistedOrder)) {
             console.error('[OrderStatus] Pedido rejeitado: registrationId/status inicial não foram persistidos.');
@@ -8250,6 +8282,7 @@ export const appRouter = router({
     set: adminProcedure
       .input(z.object({ key: z.string(), value: z.string() }))
       .mutation(async ({ input }) => {
+        if (input.key === "checkout_payment_provider_v1") throw new TRPCError({ code: "FORBIDDEN", message: "Use o seletor de pagamento protegido por senha." });
         await setSystemConfig(input.key, input.value);
         return { ok: true };
       }),

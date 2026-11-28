@@ -18,3 +18,6 @@ O módulo usa apenas cobrança Pix e consulta, com autenticação Bearer no serv
 6. Testar carrinhos, descontos, parcelamentos e demais entradas do checkout antes de permitir ativação, além da validação de assinatura, do valor e da não duplicidade.
 
 Este commit não altera o checkout, o ADM, o Worker, o H2 ADS ou as configurações do Render. Não é uma integração ponta a ponta pronta para ativar.
+
+## Checkout conectado em desenvolvimento
+O fluxo unitário de compra direta agora passa pelo submitFiles: sessão, catálogo/seleção, tentativa persistida, geração/consulta Pix, confirmação e transação do pedido. A tela mostra QR/copia e cola e permite consultar e finalizar. O webhook registra eventos assinados em inbox persistente antes de responder. O gate VALIDRA_CHECKOUT_READY permanece false: ainda faltam consumo autônomo da inbox, retomada de pedidos/documentos/notificações, revisão administrativa de cobranças atrasadas/estornadas, carrinho, cupons, revendedores, parcelamentos e testes reais de MySQL/HTTP/UI. A consulta do cliente não substitui o processamento autônomo dos eventos. Não há autorização para cobrança real ou ativação.

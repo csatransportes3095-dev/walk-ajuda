@@ -319,6 +319,8 @@ export default function Home() {
   const sitePromoOverrides = globalPromotionOverridesIndividual(globalPromotion, promotionNowMs);
   const botEnabled = Boolean(settings && settings.bot_assistant_enabled !== '0');
   const { data: activePix } = trpc.pix.getActive.useQuery();
+  const checkoutProvider = trpc.pix.checkoutProvider.useQuery();
+  const [validraPayment, setValidraPayment] = useState<{ externalId: string; status: string; amount: string; pixCopyPaste: string | null; qrCodePngBase64: string | null; expiresAt: string | null } | null>(null);
   const { data: faqData } = trpc.faq.getPublic.useQuery();
 
   const [isSubmitting, setIsSubmitting] = useState(false);
@@ -1556,6 +1558,11 @@ export default function Home() {
     });
   };
 
+  const validraStorageKey = "h2_validra_attempt:" + [clientPhone.replace(/\D/g, ""), selectedProduct?.id || 0, selectedOption?.id || 0, selectedPriceModel?.id || 0, selectedTier?.id || 0].join(":");
+  const savedValidraAttempt = (() => { try { return localStorage.getItem(validraStorageKey); } catch { return null; } })();
+  const usingValidraCheckout = Boolean(savedValidraAttempt || (checkoutProvider.data?.provider === "validrapay" && checkoutProvider.data.validraReady));
+  const currentValidraPayment = validraPayment?.externalId === savedValidraAttempt ? validraPayment : null;
+
   const handleFinalSubmit = async () => {
     if (submitLockRef.current || isSubmitting) return;
     setSubmitFailure('');
@@ -1570,7 +1577,11 @@ export default function Home() {
     if (!clientEmail.trim()) { reportSubmitFailure('Preencha seu email para receber atualizações do pedido'); submitLockRef.current = false; return; }
     const emailRegex = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
     if (!emailRegex.test(clientEmail.trim())) { reportSubmitFailure('Digite um email válido'); submitLockRef.current = false; return; }
-    if (!restoredFileUrls.paymentProof) {
+    if (usingValidraCheckout && (cart.length > 1 || couponDiscount || activeResellerSlug || getResellerDiscountAmount() > 0 || vipInstallmentSelection.mode === 'vip_installment')) {
+      reportSubmitFailure('Esta modalidade ainda não está disponível na ValidraPay. Nenhum PIX foi gerado.');
+      return;
+    }
+    if (!usingValidraCheckout && !restoredFileUrls.paymentProof) {
       const message = paymentProofUploadState === 'uploading' || paymentProofUploadState === 'preparing'
         ? 'Aguarde o envio do comprovante terminar.'
         : paymentProofUploadState === 'failed'
@@ -1748,7 +1759,12 @@ export default function Home() {
       // Comprovante PIX já deve estar confirmado no servidor antes de Finalizar.
       // Não abrir outro upload aqui evita concorrência e duplicidade em 4G instável.
       const paymentProofUploadedUrl = restoredFileUrls.paymentProof;
-      if (!paymentProofUploadedUrl) throw new Error('PROOF_NOT_UPLOADED');
+      if (!usingValidraCheckout && !paymentProofUploadedUrl) throw new Error('PROOF_NOT_UPLOADED');
+      let validraAttemptId: string | undefined;
+      if (usingValidraCheckout) {
+        validraAttemptId = savedValidraAttempt || crypto.randomUUID();
+        localStorage.setItem(validraStorageKey, validraAttemptId);
+      }
 
       // Normalizar MIME type do comprovante (HEIC/HEIF → image/jpeg para compatibilidade)
       const getProofMime = (f: File | null) => {
@@ -2022,8 +2038,9 @@ export default function Home() {
         cpToken: cpTokenForSubmit || undefined,
         couponCode: !sitePromoOverrides && couponDiscount && couponCode.trim() ? couponCode.trim().toUpperCase() : undefined,
         vipInstallmentCheckoutToken: vipInstallmentActive ? vipCheckoutTokenRef.current : undefined,
+        validraAttemptId,
         paymentProof: undefined,
-        paymentProofUrl: paymentProofUploadedUrl,
+        paymentProofUrl: usingValidraCheckout ? undefined : paymentProofUploadedUrl,
         paymentProofMime: getProofMime(paymentProof),
         answers: answersArray.length > 0 ? JSON.stringify(answersArray) : undefined,
         productId: selectedProduct?.id,
@@ -2050,7 +2067,15 @@ export default function Home() {
         })(),
       });
 
+      if (usingValidraCheckout && 'validraPayment' in result && result.validraPayment) {
+        setValidraPayment(result.validraPayment);
+        return;
+      }
       if (isPersistedOrderResult(result)) {
+        if (usingValidraCheckout) {
+          localStorage.removeItem(validraStorageKey);
+          setValidraPayment(null);
+        }
         if (vipInstallmentActive) {
           persistVipInstallmentRecovery(result.registrationId, vipCheckoutTokenRef.current);
           setSubmitProgress('Finalizando Parcelamento VIP...');
@@ -4504,6 +4529,17 @@ export default function Home() {
               )}
               {/* PAGAMENTO PIX - só aparece no substep pagamento */}
               {cadastroSubStep === 'pagamento' && (<>
+              {usingValidraCheckout ? (
+                <div className="neon-blue-border p-4 space-y-3">
+                  <p className="text-blue-300 font-black text-center">PIX VALIDRAPAY</p>
+                  {currentValidraPayment ? <>
+                    <p className="text-white font-bold text-center">R$ {currentValidraPayment.amount.replace(".", ",")}</p>
+                    {currentValidraPayment.qrCodePngBase64 && <img className="mx-auto max-w-56 rounded-lg" alt="QR Code Pix" src={"data:image/png;base64," + currentValidraPayment.qrCodePngBase64} />}
+                    {currentValidraPayment.pixCopyPaste && <button type="button" className="w-full rounded-lg bg-blue-600 p-3 text-white font-bold" onClick={async () => { try { await navigator.clipboard.writeText(currentValidraPayment.pixCopyPaste!); toast.success("PIX copiado!"); } catch { toast.error("Não foi possível copiar o PIX."); } }}>COPIAR PIX</button>}
+                    <p className="text-white/70 text-sm text-center">{currentValidraPayment.status === "processing" ? "Preparando cobrança. Consulte novamente." : "Pague uma única vez e consulte a confirmação. Não envie comprovante."}</p>
+                  </> : <p className="text-white/70 text-sm text-center">Gere a cobrança para receber o QR Code e o Pix copia e cola.</p>}
+                </div>
+              ) : (<>
               <div className="neon-blue-border p-4" style={{background:'rgba(0,0,0,0.8)'}}>
                 <div className="flex items-center justify-center gap-2 mb-3">
                   <svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="#60a5fa" strokeWidth="2"><path d="M12 2L2 7l10 5 10-5-10-5zM2 17l10 5 10-5M2 12l10 5 10-5"/></svg>
@@ -4606,6 +4642,7 @@ export default function Home() {
                 )}
               </div>
 
+              </>)}
               {/* FINALIZAR */}
               {isSubmitting && (
                 <div className="w-full bg-[#0d0d1a] border border-purple-500/30 rounded-xl p-4 space-y-3">
@@ -4625,15 +4662,15 @@ export default function Home() {
                 </div>
               )}
               {/* Botão FINALIZAR — pulsa neon verde somente quando comprovante carregado */}
-              <button type="button" data-tour="finalizar" onClick={handleFinalSubmit} disabled={!restoredFileUrls.paymentProof || isSubmitting}
+              <button type="button" data-tour="finalizar" onClick={handleFinalSubmit} disabled={(!usingValidraCheckout && !restoredFileUrls.paymentProof) || isSubmitting}
                 className={`w-full px-4 py-4 font-black rounded-xl transition-all duration-300 text-lg flex items-center justify-center gap-3 tracking-wider ${
                   isSubmitting ? 'bg-gray-700 text-gray-400 cursor-not-allowed' :
-                  restoredFileUrls.paymentProof ? 'neon-finalizar-pulse text-white cursor-pointer' :
+                  (usingValidraCheckout || restoredFileUrls.paymentProof) ? 'neon-finalizar-pulse text-white cursor-pointer' :
                   'bg-gray-700/60 text-gray-500 cursor-not-allowed border-2 border-gray-600'
                 }`}>
                 {isSubmitting ? (
                   <><Loader2 className="w-5 h-5 animate-spin" /> {submitProgress || 'ENVIANDO...'}</>
-                ) : restoredFileUrls.paymentProof ? (
+                ) : usingValidraCheckout ? (currentValidraPayment || savedValidraAttempt ? "CONSULTAR PAGAMENTO E FINALIZAR" : "GERAR PIX") : restoredFileUrls.paymentProof ? (
                   <><div className="w-10 h-10 rounded-full bg-white/20 flex items-center justify-center flex-shrink-0"><svg width="22" height="22" viewBox="0 0 24 24" fill="white"><path d="M6 2l.01 6L10 12l-3.99 4.01L6 22h12v-6l-4-4 4-3.99V2H6zm10 14.5V20H8v-3.5l4-4 4 4z"/></svg></div><div className="text-left"><p className="text-white font-black text-base">CLIQUE AQUI PARA FINALIZAR</p><p className="text-green-200 text-xs font-normal">Seu pedido será liberado após a confirmação do pagamento.</p></div><svg width="20" height="20" viewBox="0 0 24 24" fill="white"><polyline points="9 18 15 12 9 6"/></svg></>
                 ) : paymentProofUploadState === 'preparing' || paymentProofUploadState === 'uploading' ? 'AGUARDE O ENVIO DO COMPROVANTE' : 'ENVIE O COMPROVANTE PARA FINALIZAR'}
               </button>

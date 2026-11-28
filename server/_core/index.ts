@@ -6,6 +6,7 @@ process.env.TZ = "UTC";
 
 import "dotenv/config";
 import express from "express";
+import { registerValidraWebhook } from "../validraWebhook";
 import { registerSiteIdentity } from "../siteAccessIdentity";
 import { createSiteAccessGateway } from "../siteAccessGateway";
 import { createServer } from "http";
@@ -283,6 +284,7 @@ async function startServer() {
   // site-access screen. Every other site route still passes through the gateway.
   app.use("/api/h2-android/agent", express.json({ limit: "24kb" }));
   registerH2AndroidAgentRoutes(app);
+  registerValidraWebhook(app);
   app.use(createSiteAccessGateway());
   const server = createServer(app);
   // Recuperação automática e idempotente do agendamento encerrado por engano.

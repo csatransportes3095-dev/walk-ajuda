@@ -2,7 +2,7 @@ import { eq, sql } from "drizzle-orm";
 import { accessCodePhones, accessCodes, orderCounter, orderStatusHistory } from "../drizzle/schema";
 import { createSqlOrderPersistenceStore, persistPublicOrder, type PublicOrderPersistenceInput } from "./orderPersistence";
 import { ensureValidraAttemptStorage, reconcileValidraAttempt } from "./validraAttemptStorage";
-import { ValidraPayClient, validraAmount } from "./validraPay";
+import { ValidraPayClient, validraAmount, validraChargeIsPaid, type ValidraCharge } from "./validraPay";
 
 type AttemptRow = {
   customer_id: number;
@@ -43,7 +43,7 @@ export function validatePaidOrderBinding(row: AttemptRow | undefined, input: Pic
  * manual persistence and notifications remain unchanged. No external calls
  * or schema DDL inside the transaction. Notify only after commit, and never
  * from the duplicate response. */
-export async function persistPaidValidraOrder(input: TrustedPaidOrderInput, client = new ValidraPayClient()) {
+export async function persistPaidValidraOrder(input: TrustedPaidOrderInput, client = new ValidraPayClient(), verifiedServerCharge?: ValidraCharge) {
   const amount = validraAmount(input.amountCents);
   if (!/^[A-Za-z0-9_-]{1,64}$/.test(input.externalId) || !/^[a-f0-9]{64}$/.test(input.purchaseDigest)) throw new Error("validra_invalid_attempt");
   const db = await ensureValidraAttemptStorage();
@@ -51,7 +51,7 @@ export async function persistPaidValidraOrder(input: TrustedPaidOrderInput, clie
     FROM validra_checkout_attempts WHERE external_id = ${input.externalId}`);
   const pre = validatePaidOrderBinding((preRows as unknown as AttemptRow[])[0], input);
   if (pre.duplicate) return pre;
-  const verified = await reconcileValidraAttempt(input.externalId, input.customerId, client);
+  const verified = verifiedServerCharge ? { chargeId: verifiedServerCharge.id, confirmedPaid: validraChargeIsPaid(verifiedServerCharge, input) } : await reconcileValidraAttempt(input.externalId, input.customerId, client);
   if (!verified.confirmedPaid) throw new Error("validra_payment_not_confirmed");
 
   return db.transaction(async tx => {
