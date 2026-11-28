@@ -174,7 +174,7 @@ export async function ensureAutomaticScheduleForOrder(input: {
   customerEmail?: string | null;
   serviceName?: string | null;
   subOrderIndex?: number;
-}): Promise<AutomaticScheduleResult> {
+}, transactionalStore?: { createAppointment: typeof createAppointment }): Promise<AutomaticScheduleResult> {
   const registrationId = Number(input.registrationId);
   const optionId = Number(input.optionId);
   const subOrderIndex = Number.isInteger(input.subOrderIndex) ? Number(input.subOrderIndex) : 0;
@@ -203,6 +203,8 @@ export async function ensureAutomaticScheduleForOrder(input: {
     };
   }
   if (existing && (existing.status === "completed" || existing.status === "cancelled")) {
+    // A paid-checkout replay is not a request to reopen a finished schedule.
+    if (transactionalStore) return { created: false, appointmentId: existing.id, registrationId, optionId };
     await deleteAppointment(existing.id);
   }
 
@@ -222,7 +224,7 @@ export async function ensureAutomaticScheduleForOrder(input: {
   }
 
   const token = crypto.randomBytes(16).toString("hex");
-  const appointment = await createAppointment({
+  const appointment = await (transactionalStore?.createAppointment ?? createAppointment)({
     token,
     registrationId,
     subOrderIndex,

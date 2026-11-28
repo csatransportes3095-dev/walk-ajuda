@@ -14,6 +14,8 @@ import { registerValidraWebhook } from "./validraWebhook";
 import { ensureValidraCartStorage, reserveValidraCart, persistPaidValidraCart, type ValidraCartSnapshot } from "./validraCartPersistence";
 import { ensureValidraEventStorage, enqueueValidraEvent, processNextValidraEvent } from "./validraEventWorker";
 import { runValidraCartCheckout } from "./validraCartCheckout";
+import { ensureValidraScheduleStorage, processNextValidraSchedule } from "./validraScheduleWorker";
+import type { ensureAutomaticScheduleForOrder } from "./autoSchedule";
 
 // A real disposable MySQL service in CI, never DATABASE_URL or production.
 // All payment provider calls are in-process fake responses.
@@ -21,6 +23,8 @@ const dbUrl = process.env.VALIDRA_TEST_DATABASE_URL;
 const key = "vpk_live_" + "A".repeat(26) + "_" + "B".repeat(52);
 const phone = "11999990000";
 const fixtureSchema = [
+  "CREATE TABLE IF NOT EXISTS productOptions (id INT PRIMARY KEY, productId INT NOT NULL, autoScheduleEnabled INT NOT NULL DEFAULT 0) ENGINE=InnoDB",
+  "CREATE TABLE IF NOT EXISTS scheduleAppointments (id INT AUTO_INCREMENT PRIMARY KEY, token VARCHAR(64) NOT NULL UNIQUE, registrationId INT NOT NULL, subOrderIndex INT NOT NULL DEFAULT 0, customerPhone VARCHAR(32) NOT NULL, customerName VARCHAR(128), customerEmail VARCHAR(320), customerPhotoUrl TEXT, serviceName VARCHAR(256), templateId INT, slotId INT, slotDate VARCHAR(16), slotTime VARCHAR(8), status ENUM('pending','confirmed','cancelled','completed') NOT NULL DEFAULT 'pending', instructions TEXT, sentByEmail INT NOT NULL DEFAULT 0, confirmedAt TIMESTAMP NULL, adminSeenConfirmedAt TIMESTAMP NULL, hasScheduleNotification INT NOT NULL DEFAULT 0, createdAt TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP, updatedAt TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP, INDEX fixture_schedule_registration(registrationId,subOrderIndex)) ENGINE=InnoDB",
   "CREATE TABLE IF NOT EXISTS orderFiles (id INT AUTO_INCREMENT PRIMARY KEY, registrationId INT NOT NULL, customerPhone VARCHAR(32) NOT NULL, label VARCHAR(256) NOT NULL, fileUrl TEXT NOT NULL, fileKey VARCHAR(512) NOT NULL, mimeType VARCHAR(128) NOT NULL DEFAULT 'image/jpeg', fromAdmin INT NOT NULL DEFAULT 0, addedByAdmin INT NOT NULL DEFAULT 0, createdAt TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP, CHECK (label <> 'FAIL_TEST_DOCUMENT')) ENGINE=InnoDB",
   "CREATE TABLE IF NOT EXISTS financialSales (id INT AUTO_INCREMENT PRIMARY KEY, registrationId INT, customerName VARCHAR(256) NOT NULL DEFAULT '', customerPhone VARCHAR(32) NOT NULL DEFAULT '', productName VARCHAR(256) NOT NULL DEFAULT '', productOption VARCHAR(256) NOT NULL DEFAULT '', saleValue INT NOT NULL DEFAULT 0, costValue INT NOT NULL DEFAULT 0, paymentMethod VARCHAR(64) NOT NULL DEFAULT 'pix', status VARCHAR(32) NOT NULL DEFAULT 'pendente', saleDate BIGINT NOT NULL, receivedDate BIGINT, notes TEXT, createdAt TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP, updatedAt TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP) ENGINE=InnoDB",
   "CREATE TABLE IF NOT EXISTS customers (id INT PRIMARY KEY, phone VARCHAR(32) NOT NULL, blocked INT NOT NULL DEFAULT 0, deletedAt TIMESTAMP NULL) ENGINE=InnoDB",
@@ -62,7 +66,7 @@ function makeFixture(serviceName = "Produto de teste") {
 
 describe.skipIf(!dbUrl)("ValidraPay real MySQL integration (simulated provider)", () => {
   let pool: Pool;
-  async function count(table: "orderStatusHistory" | "accessCodePhones" | "orderCounter" | "validra_webhook_events" | "orderFiles" | "financialSales") {
+  async function count(table: "orderStatusHistory" | "accessCodePhones" | "orderCounter" | "validra_webhook_events" | "orderFiles" | "financialSales" | "validra_schedule_jobs" | "scheduleAppointments") {
     const [rows] = await pool.query<RowDataPacket[]>("SELECT COUNT(*) AS total FROM " + table);
     return Number(rows[0].total);
   }
@@ -78,11 +82,13 @@ describe.skipIf(!dbUrl)("ValidraPay real MySQL integration (simulated provider)"
     await ensureValidraAttemptStorage();
     await ensureValidraCartStorage();
     await ensureValidraEventStorage();
+    await ensureValidraScheduleStorage();
   }, 30000);
   beforeEach(async () => {
-    for (const table of ["orderFiles", "financialSales", "validra_payment_reviews", "validra_event_jobs", "validra_webhook_events", "validra_order_followup", "validra_cart_orders", "validra_cart_snapshots", "validra_checkout_attempts", "orderStatusHistory", "accessCodePhones", "accessCodes", "orderCounter", "customers", "orderStatusTypes"]) await pool.query("DELETE FROM " + table);
+    for (const table of ["validra_schedule_jobs", "scheduleAppointments", "productOptions", "orderFiles", "financialSales", "validra_payment_reviews", "validra_event_jobs", "validra_webhook_events", "validra_order_followup", "validra_cart_orders", "validra_cart_snapshots", "validra_checkout_attempts", "orderStatusHistory", "accessCodePhones", "accessCodes", "orderCounter", "customers", "orderStatusTypes"]) await pool.query("DELETE FROM " + table);
     await pool.execute("INSERT INTO customers (id, phone) VALUES (21, ?)", [phone]);
     await pool.execute("INSERT INTO orderStatusTypes (`key`) VALUES ('pedido_recebido')");
+    await pool.execute("INSERT INTO productOptions(id,productId,autoScheduleEnabled) VALUES (11,1,1),(22,2,0)");
   });
   afterAll(async () => { if (pool) await pool.end(); });
 
@@ -213,6 +219,68 @@ describe.skipIf(!dbUrl)("ValidraPay real MySQL integration (simulated provider)"
     snapshot.orders[0].documents=[{label:"Documento",fileKey:"order-docs/fixture.pdf",fileUrl:"javascript:alert(1)",mimeType:"application/pdf"}];
     await expect(runValidraCartCheckout(f.input.externalId,snapshot,true,f.client)).rejects.toThrow("validra_invalid_cart_snapshot");
     expect(f.transport).not.toHaveBeenCalled();
+  });
+
+  const scheduleStub:typeof ensureAutomaticScheduleForOrder=async(input,store)=>{
+    if(!store)throw new Error("transactional store missing");
+    const a=await store.createAppointment({token:randomUUID(),registrationId:input.registrationId,subOrderIndex:input.subOrderIndex??0,customerPhone:input.customerPhone,customerName:input.customerName,serviceName:input.serviceName});
+    return {created:true,appointmentId:a.id,token:a.token};
+  };
+
+  it("schedules only the enabled option after payment and never duplicates it on replay",async()=>{
+    const f=makeFixture(),snapshot=cartFixture(f);
+    await runValidraCartCheckout(f.input.externalId,snapshot,true,f.client);
+    const schedule=vi.fn(scheduleStub);
+    expect(await processNextValidraSchedule(schedule)).toBe(false);
+    expect(await count("scheduleAppointments")).toBe(0);
+    const paid=await persistPaidValidraCart(f.input.externalId,f.paid());
+    await Promise.all([processNextValidraSchedule(schedule),processNextValidraSchedule(schedule)]);
+    for(let i=0;i<3;i++)await processNextValidraSchedule(schedule);
+    expect(schedule).toHaveBeenCalledTimes(1);
+    expect(schedule.mock.calls[0][0]).toMatchObject({registrationId:paid.orders[0].registration_id,optionId:11,subOrderIndex:0,customerPhone:phone});
+    expect(await count("scheduleAppointments")).toBe(1);
+    const [jobs]=await pool.query<RowDataPacket[]>("SELECT state,result_code FROM validra_schedule_jobs ORDER BY item_index");
+    expect(jobs).toMatchObject([{state:"done",result_code:"created"},{state:"done",result_code:"option_disabled"}]);
+    await pool.query("UPDATE scheduleAppointments SET status='cancelled'");
+    await persistPaidValidraCart(f.input.externalId,f.paid());
+    expect(await processNextValidraSchedule(schedule)).toBe(false);
+    expect(await count("scheduleAppointments")).toBe(1);
+    const [rows]=await pool.query<RowDataPacket[]>("SELECT status FROM scheduleAppointments");
+    expect(rows[0].status).toBe("cancelled");
+  });
+
+  it("rolls back appointment on follow-up failure and recovers an expired claim",async()=>{
+    const f=makeFixture(),snapshot=cartFixture(f);
+    await runValidraCartCheckout(f.input.externalId,snapshot,true,f.client);
+    await persistPaidValidraCart(f.input.externalId,f.paid());
+    const fail:typeof ensureAutomaticScheduleForOrder=async(input,store)=>{
+      await scheduleStub(input,store);
+      throw new Error("simulated interruption before completion");
+    };
+    await processNextValidraSchedule(fail);
+    expect(await count("scheduleAppointments")).toBe(0);
+    const [failed]=await pool.query<RowDataPacket[]>("SELECT state,result_code FROM validra_schedule_jobs WHERE item_index=0");
+    expect(failed[0]).toMatchObject({state:"queued",result_code:"temporary_failure"});
+    await pool.query("UPDATE validra_schedule_jobs SET state='running',lease_token='expired-lease',lease_until=CURRENT_TIMESTAMP(3)-INTERVAL 1 SECOND WHERE item_index=0");
+    for(let i=0;i<3;i++)await processNextValidraSchedule(scheduleStub);
+    expect(await count("scheduleAppointments")).toBe(1);
+    expect(await count("orderStatusHistory")).toBe(2);
+    const [done]=await pool.query<RowDataPacket[]>("SELECT state,result_code,attempts FROM validra_schedule_jobs WHERE item_index=0");
+    expect(done[0]).toMatchObject({state:"done",result_code:"created",attempts:2});
+  });
+
+  it("preserves an appointment completed before the first follow-up",async()=>{
+    const f=makeFixture(),snapshot=cartFixture(f);
+    await runValidraCartCheckout(f.input.externalId,snapshot,true,f.client);
+    const paid=await persistPaidValidraCart(f.input.externalId,f.paid());
+    await pool.execute("INSERT INTO scheduleAppointments(token,registrationId,customerPhone,status) VALUES (?,?,?,'completed')",["fixture-existing",paid.orders[0].registration_id,phone]);
+    const schedule=vi.fn(scheduleStub);
+    for(let i=0;i<3;i++)await processNextValidraSchedule(schedule);
+    expect(schedule).not.toHaveBeenCalled();
+    const [rows]=await pool.query<RowDataPacket[]>("SELECT token,status FROM scheduleAppointments");
+    expect(rows).toMatchObject([{token:"fixture-existing",status:"completed"}]);
+    const [jobs]=await pool.query<RowDataPacket[]>("SELECT result_code FROM validra_schedule_jobs ORDER BY item_index");
+    expect(jobs).toMatchObject([{result_code:"existing_appointment"},{result_code:"option_disabled"}]);
   });
 
   it("records refund review without creating another order",async()=>{

@@ -1,5 +1,6 @@
 import { sql } from "drizzle-orm";
 import { randomUUID } from "node:crypto";
+import { processNextValidraSchedule } from "./validraScheduleWorker";
 import { getDb } from "./db";
 import { ensureValidraCartStorage, persistPaidValidraCart } from "./validraCartPersistence";
 import { bindValidraCharge } from "./validraAttemptStorage";
@@ -150,9 +151,12 @@ export function startValidraEventWorker(client:ValidraPayClient){
   const tick=async()=>{
     if(running)return;
     running=true;
-    try{for(let i=0;i<5;i++)if(!await processNextValidraEvent(client))break;}
-    catch{console.error("[ValidraPay] Event reconciliation unavailable");}
-    finally{running=false;}
+    try{
+      try{for(let i=0;i<5;i++)if(!await processNextValidraEvent(client))break;}
+      catch{console.error("[ValidraPay] Event reconciliation unavailable");}
+      try{for(let i=0;i<5;i++)if(!await processNextValidraSchedule())break;}
+      catch{console.error("[ValidraPay] Schedule follow-up unavailable");}
+    }finally{running=false;}
   };
   const timer=setInterval(()=>{void tick();},6000);
   timer.unref?.();
