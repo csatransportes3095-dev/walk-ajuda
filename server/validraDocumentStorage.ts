@@ -113,3 +113,17 @@ export async function bindValidraDocuments(tx:ValidraTransaction,documents:Valid
     }
   }
 }
+
+/** Resolve only the authenticated owner's registered file key. Neither URLs,
+ * MIME types nor labels are accepted from the public cart request. */
+export async function resolveOwnedValidraDocument(input:{fileKey:string;label:string;pdfOnly:boolean;imageOnly:boolean},owner:Owner,externalId:string):Promise<ValidraCartDocument>{
+  const db=await ensureValidraDocumentStorage();
+  const [rows]=await db.execute(sql`SELECT * FROM validra_document_uploads WHERE file_key=${input.fileKey}`);
+  const row=(rows as unknown as StoredDocument[])[0];
+  if(!row||row.label!==input.label)throw new Error("validra_document_not_authorized");
+  const doc={fileKey:input.fileKey,label:input.label,fileUrl:row.file_url,mimeType:row.mime_type};
+  requireBinding(row,doc,owner,externalId,true);
+  if((input.pdfOnly&&doc.mimeType!=="application/pdf")||(input.imageOnly&&!/^image\/(jpeg|png|webp)$/.test(doc.mimeType)))
+    throw new Error("validra_cart_form_invalid");
+  return doc;
+}

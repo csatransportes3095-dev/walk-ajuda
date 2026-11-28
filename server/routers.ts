@@ -1470,10 +1470,33 @@ export const appRouter = router({
   }),
   // === UPLOADS / ENVIO DE PEDIDO ===
   uploads: router({
+    validraCartRequirements: publicProcedure
+      .input(z.object({
+        cpToken:z.string().min(32).max(256),phone:z.string().max(32),
+        items:z.array(z.object({productId:z.number().int().positive(),optionId:z.number().int().positive(),priceModelId:z.number().int().positive().optional(),warrantyTierId:z.number().int().positive().optional()}).strict()).min(2).max(30),
+      }).strict())
+      .query(async({input,ctx})=>{
+        const {CHECKOUT_PROVIDER_KEY,parseCheckoutProvider,VALIDRA_CHECKOUT_READY}=await import("./checkoutPaymentProvider");
+        if(!VALIDRA_CHECKOUT_READY||parseCheckoutProvider(await getSystemConfig(CHECKOUT_PROVIDER_KEY))!=="validrapay")throw new TRPCError({code:"PRECONDITION_FAILED",message:"Checkout ValidraPay indisponível."});
+        const {requireCustomerSession}=await import("./customerSession");
+        const identity=await requireCustomerSession(input.cpToken,input.phone);
+        const ip=(ctx.req.headers["x-forwarded-for"] as string||"").split(",")[0].trim()||ctx.req.socket?.remoteAddress||"unknown";
+        if((ip!=="unknown"&&await isIpBlocked(ip))||(await checkPhoneBlockedAndBlockIp(identity.phone,ip,"fazer_pedido")).blocked)
+          throw new TRPCError({code:"FORBIDDEN",message:"Acesso bloqueado."});
+        try{
+          return await (await import("./validraCartForms")).loadValidraItemRequirements(input.items);
+        }catch{
+          throw new TRPCError({code:"PRECONDITION_FAILED",message:"Há requisitos neste carrinho ainda não compatíveis com Pix automático. Nenhuma cobrança foi criada."});
+        }
+      }),
     checkoutValidraCart: publicProcedure
       .input(z.object({
         cpToken:z.string().min(32).max(256),phone:z.string().max(32),externalId:z.string().uuid(),
         items:z.array(z.object({productId:z.number().int().positive(),optionId:z.number().int().positive(),priceModelId:z.number().int().positive().optional(),warrantyTierId:z.number().int().positive().optional()}).strict()).min(2).max(30).optional(),
+        forms:z.array(z.object({
+          answers:z.array(z.object({questionId:z.number().int().positive(),answer:z.string().max(2000)}).strict()).max(60),
+          documents:z.array(z.object({fieldId:z.string().min(1).max(64),fileKey:z.string().min(1).max(512)}).strict()).max(30),
+        }).strict()).min(2).max(30).optional(),
         couponCode:z.string().trim().max(64).optional(),
       }).strict())
       .mutation(async({input,ctx})=>{
@@ -1491,6 +1514,7 @@ export const appRouter = router({
         }catch(error){
           const message=error instanceof Error?error.message:"";
           const safe=message==="validra_cart_requirements_not_ready"?"Este carrinho contém opções ou condições ainda não liberadas para Pix automático. Nenhuma nova cobrança foi criada.":
+            message==="validra_cart_form_invalid"||message==="validra_document_not_authorized"?"Os formulários ou documentos de um ou mais itens não foram autorizados. Consulte esta tentativa e revise os dados antes de pagar.":
             message==="validra_other_attempt_pending"?"Existe outra tentativa pendente. Consulte o pedido anterior ou fale com o suporte antes de pagar novamente.":
             message==="validra_wait_before_retry"?"Aguarde 5 segundos antes de consultar novamente.":
             "Não foi possível confirmar esta tentativa. Não faça outro Pix; consulte novamente ou fale com o suporte.";

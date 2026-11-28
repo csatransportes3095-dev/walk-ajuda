@@ -17,6 +17,8 @@ import { registerValidraWebhook } from "./validraWebhook";
 import { ensureValidraCartStorage, reserveValidraCart, persistPaidValidraCart, loadOwnedValidraCart, listOwnedValidraCartOrders, type ValidraCartSnapshot } from "./validraCartPersistence";
 import { ensureValidraEventStorage, enqueueValidraEvent, processNextValidraEvent } from "./validraEventWorker";
 import { runValidraCartCheckout } from "./validraCartCheckout";
+import { assembleValidraCartForms } from "./validraCartPublic";
+import type { ValidraItemRequirements } from "../shared/validraCartForms";
 import { ensureValidraScheduleStorage, processNextValidraSchedule } from "./validraScheduleWorker";
 import type { ensureAutomaticScheduleForOrder } from "./autoSchedule";
 
@@ -175,6 +177,27 @@ describe.skipIf(!dbUrl)("ValidraPay real MySQL integration (simulated provider)"
         [doc.fileKey,customerId,customerPhone,doc.label,doc.fileUrl,doc.mimeType,16,"fixture-etag"]);
     }
   }
+
+  it("persists distinct answers and owned documents for repeated option positions",async()=>{
+    const f=makeFixture(),snapshot=cartFixture(f);
+    snapshot.quote.items[1]={...snapshot.quote.items[0],baseCents:2990,amountCents:2990};
+    snapshot.orders[1]={...snapshot.orders[0]};
+    const spec:ValidraItemRequirements={productId:1,optionId:11,service:"Produto A",option:"Opcao A",questions:[{id:41,question:"Nome para o item",fieldType:"text",required:true,parentQuestionId:null,triggerOption:null,sortOrder:0,choices:[]}],documents:[{fieldId:"dynamic:7",label:"Documento",pdfOnly:true,imageOnly:false,inputSource:"gallery"}]};
+    const docs=[1,2].map(index=>({label:"Documento",fileKey:"order-docs/item-"+index+".pdf",fileUrl:"https://storage.example.test/order-docs/item-"+index+".pdf",mimeType:"application/pdf"}));
+    snapshot.orders[0].documents=[docs[0]];snapshot.orders[1].documents=[docs[1]];
+    await registerFixtureDocuments(snapshot);
+    const inputs=docs.map((doc,index)=>({answers:[{questionId:41,answer:"Item "+(index+1)}],documents:[{fieldId:"dynamic:7",fileKey:doc.fileKey}]}));
+    await expect(assembleValidraCartForms([spec,spec],inputs,{customerId:22,phone:"11999990001"},f.input.externalId)).rejects.toThrow("validra_document_not_authorized");
+    const forms=await assembleValidraCartForms([spec,spec],inputs,{customerId:21,phone},f.input.externalId);
+    snapshot.orders=snapshot.orders.map((order,index)=>({...order,...forms[index]}));
+    await runValidraCartCheckout(f.input.externalId,snapshot,true,f.client);
+    expect(await count("orderFiles")).toBe(0);
+    await persistPaidValidraCart(f.input.externalId,f.paid());
+    const [rows]=await pool.query<RowDataPacket[]>("SELECT o.item_index,h.answers,d.fileKey FROM validra_cart_orders o JOIN orderStatusHistory h ON h.id=o.order_status_id JOIN orderFiles d ON d.registrationId=o.registration_id ORDER BY o.item_index");
+    expect(rows.map(row=>({index:Number(row.item_index),answer:JSON.parse(row.answers)[0].answer,key:row.fileKey}))).toEqual([{index:0,answer:"Item 1",key:docs[0].fileKey},{index:1,answer:"Item 2",key:docs[1].fileKey}]);
+    expect(await persistPaidValidraCart(f.input.externalId,f.paid())).toMatchObject({duplicate:true});
+    expect(await count("orderFiles")).toBe(2);
+  });
 
   it("reconciles a signed-inbox cart payment into all orders exactly once",async()=>{
     const f=makeFixture(), snapshot=cartFixture(f);

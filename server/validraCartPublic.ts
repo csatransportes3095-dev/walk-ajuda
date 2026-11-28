@@ -1,5 +1,8 @@
-import { and,eq,sql } from "drizzle-orm";
-import { customers,productOptions,productQuestions,optionDocuments,products } from "../drizzle/schema";
+import { eq } from "drizzle-orm";
+import { customers } from "../drizzle/schema";
+import { loadValidraItemRequirements,validateValidraItemForm } from "./validraCartForms";
+import { resolveOwnedValidraDocument } from "./validraDocumentStorage";
+import type { ValidraItemRequirements,ValidraItemFormInput } from "../shared/validraCartForms";
 import { getDb } from "./db";
 import { resolveValidraCartQuote,type CartSelection } from "./validraCartQuote";
 import { createSqlOrderPersistenceStore } from "./orderPersistence";
@@ -7,16 +10,21 @@ import { loadOwnedValidraCart,listOwnedValidraCartOrders,type ValidraCartSnapsho
 import { runValidraCartCheckout } from "./validraCartCheckout";
 import { ValidraPayClient } from "./validraPay";
 
-type PublicCartInput={externalId:string;cpToken:string;phone:string;items?:CartSelection[];couponCode?:string};
+type PublicCartInput={externalId:string;cpToken:string;phone:string;items?:CartSelection[];forms?:ValidraItemFormInput[];couponCode?:string};
 
-export function assertSimpleValidraCartOption(option:{
-  type?:string|null;requireProfilePhoto:number;requireCarDocument:number;requireAlvara:number;requireCondutaxi:number;
-  requireVehicle2016:number;isPdfOnly:number;showYearField:number;docNameMode:string;commissionValue:number
-},questions:number,documents:number){
-  if(option.type!=="standard"||option.requireProfilePhoto||option.requireCarDocument||option.requireAlvara||
-    option.requireCondutaxi||option.requireVehicle2016||option.isPdfOnly||option.showYearField||
-    option.docNameMode!=="none"||option.commissionValue||questions||documents)
-    throw new Error("validra_cart_requirements_not_ready");
+export async function assembleValidraCartForms(specs:ValidraItemRequirements[],forms:ValidraItemFormInput[]|undefined,owner:{customerId:number;phone:string},externalId:string){
+  if(forms&&forms.length!==specs.length)throw new Error("validra_cart_form_invalid");
+  const validated=specs.map((spec,index)=>validateValidraItemForm(spec,forms?.[index]));
+  const keys=validated.flatMap(form=>form.documents.map(doc=>doc.fileKey));
+  // One uploaded reference per document field, even for repeated options.
+  if(keys.length>60||new Set(keys).size!==keys.length)throw new Error("validra_cart_form_invalid");
+  const result=[];
+  for(const form of validated){
+    const documents=[];
+    for(const doc of form.documents)documents.push(await resolveOwnedValidraDocument(doc,owner,externalId));
+    result.push({answers:form.answers,documents});
+  }
+  return result;
 }
 
 function publicSummary(snapshot:ValidraCartSnapshot){
@@ -30,8 +38,9 @@ function publicSummary(snapshot:ValidraCartSnapshot){
 }
 
 /** Called only from the gated tRPC procedure after session and IP validation.
- * New carts are restricted to simple options until per-item forms, referral
- * accounting and notices are integrated. Resume is based on the stored quote. */
+ * Per-item requirements and registered documents are validated before reserve.
+ * Unsupported commercial and advanced requirements remain blocked. Resume
+ * is based only on the stored quote, not edited browser forms. */
 export async function checkoutPublicValidraCart(input:PublicCartInput,allowNew:boolean){
   const db=await getDb();
   if(!db)throw new Error("validra_database_unavailable");
@@ -51,20 +60,15 @@ export async function checkoutPublicValidraCart(input:PublicCartInput,allowNew:b
     await createSqlOrderPersistenceStore(db as unknown as Parameters<typeof createSqlOrderPersistenceStore>[0]).assertNoOpenVipInstallmentDebt?.(owner.phone);
     const quote=await resolveValidraCartQuote({cpToken:input.cpToken,phone:owner.phone,items:input.items,couponCode:input.couponCode});
     if(quote.customerId!==owner.customerId||quote.phone!==owner.phone)throw new Error("validra_customer_mismatch");
-    // Refuse every option with outstanding form requirements, even if a
-    // malicious client omits fields or submits only the first cart item.
-    for(const item of quote.items){
-      const [option]=await db.select().from(productOptions).where(and(eq(productOptions.id,item.optionId),eq(productOptions.productId,item.productId),eq(productOptions.isActive,1))).limit(1);
-      const [product]=await db.select({id:products.id,isActive:products.isActive}).from(products).where(eq(products.id,item.productId)).limit(1);
-      if(!option||!product||!product.isActive)throw new Error("validra_selection_unavailable");
-      const [questions]=await db.select({id:productQuestions.id}).from(productQuestions)
-        .where(sql`${productQuestions.optionId}=${item.optionId} OR (${productQuestions.productId}=${item.productId} AND ${productQuestions.optionId} IS NULL)`).limit(1);
-      const [document]=await db.select({id:optionDocuments.id}).from(optionDocuments).where(eq(optionDocuments.optionId,item.optionId)).limit(1);
-      assertSimpleValidraCartOption(option,questions?1:0,document?1:0);
-    }
-    snapshot={quote,orders:quote.items.map(item=>({
+    // Fetch current catalogue requirements for EVERY position. A repeated
+    // option has a separate submission and cannot borrow another item's data.
+    const specs=await loadValidraItemRequirements(quote.items);
+    if(specs.length!==quote.items.length||specs.some((spec,index)=>spec.productId!==quote.items[index].productId||spec.optionId!==quote.items[index].optionId))throw new Error("validra_selection_unavailable");
+    const forms=await assembleValidraCartForms(specs,input.forms,owner,input.externalId);
+    snapshot={quote,orders:quote.items.map((item,index)=>({
       effectivePhone:owner.phone,clientName:customer.name,productId:item.productId,
-      serviceName:item.serviceName,serviceOption:item.serviceOption,answers:"[]",
+      serviceName:item.serviceName,serviceOption:item.serviceOption,answers:forms[index].answers,
+      documents:forms[index].documents,
     }))};
   }
   const result=await runValidraCartCheckout(input.externalId,snapshot,allowNew,new ValidraPayClient(),true);

@@ -19,6 +19,7 @@ import { StorefrontFilters } from "@/components/StorefrontFilters";
 import { getCatalogCategory, catalogCategoryAvailability } from "@/lib/storefrontCategories";
 import { QuestionAudioRecorder, type AudioDraft } from "@/components/QuestionAudioRecorder";
 import { uploadOrderFileReliably } from "@/lib/reliableOrderUpload";
+import { ValidraCartForms,type ValidraCartFormsState } from "@/components/ValidraCartForms";
 import { isPersistedOrderResult } from "@shared/orderSubmission";
 import { getVehicleModels, getVehicleQuestionKind, VEHICLE_BRANDS, VEHICLE_COLORS, VEHICLE_YEARS } from "@shared/vehicleCatalog";
 import { applyVipBenefitToPrice, formatBrazilMoney, parseBrazilMoney } from "@shared/vipPricing";
@@ -909,6 +910,7 @@ export default function Home() {
 
   // ===== CARRINHO =====
   const [cart, setCart] = useState<CartItem[]>([]);
+  const [validraCartForms,setValidraCartForms]=useState<ValidraCartFormsState|null>(null);
   const [showCart, setShowCart] = useState(false);
   const [cartPendingProduct, setCartPendingProduct] = useState<Product | null>(null);
 
@@ -941,6 +943,8 @@ export default function Home() {
 
   const startCartCheckout = () => {
     if (cart.length === 0) return;
+    if(cart.length>1&&!checkoutProvider.data){toast.error("Não foi possível confirmar a forma de pagamento. Tente novamente.");return;}
+    setValidraCartForms(null);
     setFlowOrigin('cart');
     // Usa o primeiro item do carrinho para iniciar o fluxo
     const first = cart[0];
@@ -956,6 +960,11 @@ export default function Home() {
     setAlvaraFile(null); setCondutaxiFile(null);
     setQuestionAnswers({});
     setShowCart(false);
+    if(cart.length>1&&checkoutProvider.data?.provider==="validrapay"&&checkoutProvider.data.validraReady){
+      // Dedicated per-position forms on the payment screen replace the
+      // first-item-only manual document/question flow.
+      setStep("cadastro");setCadastroSubStep("dados");return;
+    }
     // Seguir o mesmo fluxo de etapas que handleOptionSelection
     const option = first.option;
     const product = first.product;
@@ -1567,6 +1576,11 @@ export default function Home() {
   const savedValidraAttempt = usingValidraCartCheckout ? savedValidraCartAttempt : savedSingleValidraAttempt;
   const usingValidraCheckout = Boolean(usingValidraCartCheckout || savedValidraAttempt || (checkoutProvider.data?.provider === "validrapay" && checkoutProvider.data.validraReady));
   const currentValidraPayment = validraPayment?.externalId === savedValidraAttempt ? validraPayment : null;
+  const validraCartSelection=cart.length>1&&cart.every(item=>item.option)?cart.map(item=>({
+    productId:item.product.id,optionId:item.option!.id,priceModelId:item.priceModel?.id,warrantyTierId:item.tier?.id,
+  })):undefined;
+  const validraFormsScope=JSON.stringify([clientPhone.replace(/\D/g,""),cart.map(item=>item.id),validraCartSelection]);
+  const validraFormsReady=validraCartForms?.scope===validraFormsScope&&validraCartForms.ready;
 
   const handleFinalSubmit = async () => {
     if (submitLockRef.current || isSubmitting) return;
@@ -1583,6 +1597,7 @@ export default function Home() {
       const cpToken=localStorage.getItem("cp_token")||"";
       if(!cpToken||!clientPhone.trim()){reportSubmitFailure("Entre na sua conta para consultar o Pix.");return;}
       if(!savedValidraCartAttempt){
+        if(!validraFormsReady||!validraCartForms){reportSubmitFailure("Preencha e envie os documentos e respostas de cada item.");return;}
         if(savedSingleValidraAttempt||cart.length<2||cart.some(item=>!item.option)||
            activeResellerSlug||getResellerDiscountAmount()>0||vipInstallmentSelection.mode==="vip_installment"||
            referrerName.trim()||referrerPhone.trim()||bypassCode.trim()||thirdPartyName.trim()||thirdPartyPhone.trim()){
@@ -1593,18 +1608,18 @@ export default function Home() {
       try{
         const externalId=savedValidraCartAttempt||crypto.randomUUID();
         localStorage.setItem(validraCartStorageKey,externalId);
-        // A resume ignores current prices, cart mutations and coupon changes.
-        const selection=cart.length>1&&cart.every(item=>item.option)?cart.map(item=>({
-          productId:item.product.id,optionId:item.option!.id,priceModelId:item.priceModel?.id,warrantyTierId:item.tier?.id,
-        })):undefined;
+        // Resume is consultation only: never upload again or start a new
+        // charge from a stale local ID, even if the cart was edited.
         const result=await validraCartMutation.mutateAsync({
-          cpToken,phone:clientPhone.trim(),externalId,items:selection,
-          couponCode:!sitePromoOverrides&&couponDiscount&&couponCode.trim()?couponCode.trim().toUpperCase():undefined,
+          cpToken,phone:clientPhone.trim(),externalId,
+          items:savedValidraCartAttempt?undefined:validraCartSelection,
+          forms:savedValidraCartAttempt?undefined:validraCartForms?.forms,
+          couponCode:!savedValidraCartAttempt&&!sitePromoOverrides&&couponDiscount&&couponCode.trim()?couponCode.trim().toUpperCase():undefined,
         });
         if(result.kind==="not_started"){
           localStorage.removeItem(validraCartStorageKey);
-          setValidraPayment(null);
-          reportSubmitFailure("Não há cobrança para esta tentativa. Monte o carrinho novamente.");
+          setValidraPayment(null);setValidraCartForms(null);
+          reportSubmitFailure("Não há cobrança para esta tentativa. Revise os formulários e o carrinho antes de gerar o Pix.");
           return;
         }
         if(result.kind==="payment"){
@@ -1619,7 +1634,7 @@ export default function Home() {
             clientName:result.summary.clientName,clientPhone:result.summary.phone,clientCity:clientCity.trim(),
           });
           localStorage.removeItem(validraCartStorageKey);
-          setValidraPayment(null);setCart([]);
+          setValidraPayment(null);setValidraCartForms(null);setCart([]);
           setAutomaticScheduleLinks([]);setPostOrderScheduleDecision("completed");setPostOrderReferralStep("done");
           setSuccessMessage("Pagamento confirmado! "+result.orders.length+" pedido(s) registrado(s). Consulte Acompanhar Pedido para ver a agenda.");
           setStep("success");
@@ -4595,6 +4610,8 @@ export default function Home() {
                 <div className="neon-blue-border p-4 space-y-3">
                   <p className="text-blue-300 font-black text-center">{usingValidraCartCheckout?"PIX VALIDRAPAY — CARRINHO":"PIX VALIDRAPAY"}</p>
                   {usingValidraCartCheckout && <p className="text-white/70 text-sm text-center">Uma única cobrança para todos os itens. Confira o valor confirmado pelo servidor antes de pagar.</p>}
+                  {usingValidraCartCheckout&&!savedValidraCartAttempt&&validraCartSelection&&<ValidraCartForms key={validraFormsScope} scope={validraFormsScope} items={validraCartSelection} phone={clientPhone.trim()} cpToken={localStorage.getItem("cp_token")||""} onChange={setValidraCartForms} disabled={isSubmitting}/>}
+
                   {currentValidraPayment ? <>
                     <p className="text-white font-bold text-center">R$ {currentValidraPayment.amount.replace(".", ",")}</p>
                     {currentValidraPayment.qrCodePngBase64 && <img className="mx-auto max-w-56 rounded-lg" alt="QR Code Pix" src={"data:image/png;base64," + currentValidraPayment.qrCodePngBase64} />}
@@ -4725,7 +4742,7 @@ export default function Home() {
                 </div>
               )}
               {/* Botão FINALIZAR — pulsa neon verde somente quando comprovante carregado */}
-              <button type="button" data-tour="finalizar" onClick={handleFinalSubmit} disabled={(!usingValidraCheckout && !restoredFileUrls.paymentProof) || isSubmitting}
+              <button type="button" data-tour="finalizar" onClick={handleFinalSubmit} disabled={(!usingValidraCheckout && !restoredFileUrls.paymentProof) || isSubmitting || (usingValidraCartCheckout&&!savedValidraCartAttempt&&!validraFormsReady)}
                 className={`w-full px-4 py-4 font-black rounded-xl transition-all duration-300 text-lg flex items-center justify-center gap-3 tracking-wider ${
                   isSubmitting ? 'bg-gray-700 text-gray-400 cursor-not-allowed' :
                   (usingValidraCheckout || restoredFileUrls.paymentProof) ? 'neon-finalizar-pulse text-white cursor-pointer' :
