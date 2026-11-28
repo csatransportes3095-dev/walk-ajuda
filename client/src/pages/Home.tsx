@@ -1158,6 +1158,17 @@ export default function Home() {
   const FEATURE3_DESC = settings?.feature3_desc || "";
 
   const submitMutation = trpc.uploads.submitFiles.useMutation();
+  const validraFrozenSubmission=useRef<Parameters<typeof submitMutation.mutateAsync>[0]|null>(null);
+  const submitSingleOrder=async(payload:Parameters<typeof submitMutation.mutateAsync>[0])=>{
+    if(!payload.validraAttemptId)return submitMutation.mutateAsync(payload);
+    const prior=validraFrozenSubmission.current;
+    if(prior?.validraAttemptId===payload.validraAttemptId){
+      if(prior.phone!==payload.phone)throw new Error("Cliente da tentativa mudou. Consulte o pagamento antes de continuar.");
+      return submitMutation.mutateAsync({...prior,cpToken:payload.cpToken,accessCode:payload.accessCode});
+    }
+    validraFrozenSubmission.current=payload;
+    return submitMutation.mutateAsync(payload);
+  };
   const validateCouponMutation = trpc.coupons.validate.useMutation();
   const registerResellerOrderMutation = trpc.resellers.registerOrder.useMutation();
   const addBlockingNoteMutation = trpc.customers.addBlockingNote.useMutation();
@@ -1699,8 +1710,10 @@ export default function Home() {
       // ─────────────────────────────────────────────────────────────────────────
 
       // Documentos dinâmicos
-      const dynamicDocsArray: { label: string; url?: string; fileKey?: string; data?: string; mime?: string }[] = [];
-      if (hasDynamicDocs) {
+      const frozen=usingValidraCheckout&&savedValidraAttempt&&validraFrozenSubmission.current?.validraAttemptId===savedValidraAttempt
+        ?validraFrozenSubmission.current:null;
+      const dynamicDocsArray: { label: string; url?: string; fileKey?: string; data?: string; mime?: string }[] = frozen?.documents?[...frozen.documents]:[];
+      if (!frozen && hasDynamicDocs) {
         const docsNeedingUpload = dynamicDocs.filter(d => docFiles[d.id] && !restoredFileUrls.dynamicDocs[d.id]);
         const totalDocs = docsNeedingUpload.length;
         let uploadedCount = 0;
@@ -1725,7 +1738,7 @@ export default function Home() {
 
       // Documentos legados (foto, CRLV, alvará, condutaxi) — sempre URL, nunca base64
       setSubmitProgress('Enviando documentos...');
-      if (!hasDynamicDocs) {
+      if (!frozen && !hasDynamicDocs) {
         if (restoredFileUrls.profilePhoto) {
           dynamicDocsArray.push({ label: 'Foto de Perfil', url: restoredFileUrls.profilePhoto });
         } else if (profilePhoto) {
@@ -2015,7 +2028,7 @@ export default function Home() {
 
       const result = vipInstallmentActive && vipPendingRegistrationIdRef.current
         ? ({ success: true, persisted: true, registrationId: vipPendingRegistrationIdRef.current } as any)
-        : await submitMutation.mutateAsync({
+        : await submitSingleOrder({
         clientName: clientName.trim() || 'Cliente',
         service: selectedProduct?.name || 'Não especificado',
         nameOption: nameOptionWithTier,
@@ -2074,6 +2087,7 @@ export default function Home() {
       if (isPersistedOrderResult(result)) {
         if (usingValidraCheckout) {
           localStorage.removeItem(validraStorageKey);
+          validraFrozenSubmission.current=null;
           setValidraPayment(null);
         }
         if (vipInstallmentActive) {
@@ -2165,6 +2179,15 @@ export default function Home() {
       submitLockRef.current = false;
     }
   };
+
+  // Same existing checkout, with automatic consultation while the payment
+  // screen is open. Stop on errors and preserve the explicit consult button.
+  useEffect(()=>{
+    if(!usingValidraCheckout||!checkoutProvider.data?.validraReady||!currentValidraPayment||
+      step!=="cadastro"||cadastroSubStep!=="pagamento"||isSubmitting||submitFailure)return;
+    const timer=window.setTimeout(()=>void handleFinalSubmit(),7000);
+    return ()=>window.clearTimeout(timer);
+  },[usingValidraCheckout,checkoutProvider.data?.validraReady,currentValidraPayment,step,cadastroSubStep,isSubmitting,submitFailure]);
 
   const needsFileUpload = (product: Product | null, option?: ProductOption | null): boolean => {
     // Se tem opção selecionada, verificar documentos dinâmicos primeiro
@@ -4536,7 +4559,7 @@ export default function Home() {
                     <p className="text-white font-bold text-center">R$ {currentValidraPayment.amount.replace(".", ",")}</p>
                     {currentValidraPayment.qrCodePngBase64 && <img className="mx-auto max-w-56 rounded-lg" alt="QR Code Pix" src={"data:image/png;base64," + currentValidraPayment.qrCodePngBase64} />}
                     {currentValidraPayment.pixCopyPaste && <button type="button" className="w-full rounded-lg bg-blue-600 p-3 text-white font-bold" onClick={async () => { try { await navigator.clipboard.writeText(currentValidraPayment.pixCopyPaste!); toast.success("PIX copiado!"); } catch { toast.error("Não foi possível copiar o PIX."); } }}>COPIAR PIX</button>}
-                    <p className="text-white/70 text-sm text-center">{currentValidraPayment.status === "processing" ? "Preparando cobrança. Consulte novamente." : "Pague uma única vez e consulte a confirmação. Não envie comprovante."}</p>
+                    <p className="text-white/70 text-sm text-center">{currentValidraPayment.status === "processing" ? "Preparando cobrança. Consulte novamente." : "Pague uma única vez. A confirmação é consultada automaticamente nesta tela. Não envie comprovante."}</p>
                   </> : <p className="text-white/70 text-sm text-center">Gere a cobrança para receber o QR Code e o Pix copia e cola.</p>}
                 </div>
               ) : (<>

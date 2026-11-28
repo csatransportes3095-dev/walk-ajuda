@@ -1,5 +1,5 @@
 import { eq, sql } from "drizzle-orm";
-import { accessCodePhones, accessCodes, orderCounter, orderStatusHistory } from "../drizzle/schema";
+import { accessCodePhones, accessCodes, orderCounter, orderStatusHistory, financialSales } from "../drizzle/schema";
 import { createSqlOrderPersistenceStore, persistPublicOrder, type PublicOrderPersistenceInput } from "./orderPersistence";
 import { ensureValidraAttemptStorage, reconcileValidraAttempt } from "./validraAttemptStorage";
 import { ValidraPayClient, validraAmount, validraChargeIsPaid, type ValidraCharge } from "./validraPay";
@@ -51,8 +51,10 @@ export async function persistPaidValidraOrder(input: TrustedPaidOrderInput, clie
     FROM validra_checkout_attempts WHERE external_id = ${input.externalId}`);
   const pre = validatePaidOrderBinding((preRows as unknown as AttemptRow[])[0], input);
   if (pre.duplicate) return pre;
-  const verified = verifiedServerCharge ? { chargeId: verifiedServerCharge.id, confirmedPaid: validraChargeIsPaid(verifiedServerCharge, input) } : await reconcileValidraAttempt(input.externalId, input.customerId, client);
+  const verified = verifiedServerCharge ? { chargeId: verifiedServerCharge.id, confirmedPaid: validraChargeIsPaid(verifiedServerCharge, input), paidAt: verifiedServerCharge.payment?.paid_at } : await reconcileValidraAttempt(input.externalId, input.customerId, client);
   if (!verified.confirmedPaid) throw new Error("validra_payment_not_confirmed");
+  const receivedAt=Date.parse(verified.paidAt??"");
+  if(!Number.isSafeInteger(receivedAt)||receivedAt<=0||input.amountCents>2147483647)throw new Error("validra_payment_needs_review");
 
   return db.transaction(async tx => {
     const [lockedRows] = await tx.execute(sql`SELECT customer_id, purchase_digest, amount_cents, charge_id, registration_id, state
@@ -97,6 +99,17 @@ export async function persistPaidValidraOrder(input: TrustedPaidOrderInput, clie
       },
     });
     if (!persisted.orderNumber) throw new Error("validra_order_persistence_failed");
+    // The only added business effect is the existing financial sale marked
+    // paid, in the same transaction as consuming this confirmed Pix.
+    await tx.insert(financialSales).values({
+      registrationId:persisted.registrationId,
+      customerName:input.order.clientName??"",
+      customerPhone:input.order.effectivePhone,
+      productName:input.order.serviceName??"",
+      productOption:input.order.serviceOption??"",
+      saleValue:input.amountCents,costValue:0,paymentMethod:"pix",
+      status:"pago",saleDate:receivedAt,receivedDate:receivedAt,notes:null,
+    });
     await tx.execute(sql`UPDATE validra_checkout_attempts SET state = 'consumed', registration_id = ${persisted.registrationId}
       WHERE external_id = ${input.externalId} AND state = 'pending' AND registration_id IS NULL AND charge_id = ${verified.chargeId}`);
     const [committedRows] = await tx.execute(sql`SELECT registration_id, state FROM validra_checkout_attempts WHERE external_id = ${input.externalId}`);

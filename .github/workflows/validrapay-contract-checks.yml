@@ -1,7 +1,7 @@
 name: ValidraPay isolated contract checks
 on:
   push:
-    branches: [feat/validrapay-checkout-20261128]
+    branches: [feat/validrapay-payment-only-20261128]
   pull_request:
     branches: [stable/payment-base-20261128]
   workflow_dispatch:

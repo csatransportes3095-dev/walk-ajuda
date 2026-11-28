@@ -72,5 +72,5 @@ export async function reconcileValidraAttempt(externalId: string, customerId: nu
   const attempt = { externalId, amountCents: Number(row.amount_cents) };
   const charge = row.charge_id ? await client.getCharge({...attempt, chargeId: row.charge_id}) : await client.getChargeByExternalId(attempt);
   await bindValidraCharge(externalId, customerId, charge);
-  return { chargeId: charge.id, confirmedPaid: validraChargeIsPaid(charge, attempt) };
+  return { chargeId: charge.id, confirmedPaid: validraChargeIsPaid(charge, attempt), paidAt:charge.payment?.paid_at };
 }

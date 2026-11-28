@@ -1,23 +1,13 @@
-# ValidraPay: integração isolada (não ativar em produção ainda)
+# ValidraPay — somente meio de pagamento
+Base exata em produção no Render: c2a4519d77d268f68c2cfb6cb58f5245a9962d1d. Esta branch reaproveita a integração inicial de pagamento anterior ao trabalho de formulários. Não substitui questionários, gravações, uploads, R2, agenda, comissões, notificações, status, ou catálogo. O caminho manual original é o padrão.
 
-Base: commit c2a4519d77d268f68c2cfb6cb58f5245a9962d1d, versão LIVE confirmada antes do desenvolvimento.
-O módulo usa apenas cobrança Pix e consulta, com autenticação Bearer no servidor, idempotência, confirmação por consulta e validação HMAC dos bytes originais. Não cria pagamentos reais nos testes.
+## O que está conectado
+- Seletor exclusivo no ADM, gate de liberação ainda false.
+- Na compra direta de um item, o submitFiles existente recebe um identificador de tentativa, verifica sessão e preço oficial, cria/consulta Pix com chave de idempotência e confirma pelo GET autenticado. Mantém o payload da compra no estado da página durante a consulta automática, sem reenviar uploads. O QR e copia-e-cola são exibidos na etapa de pagamento.
+- Somente pagamento confirmado e correspondente pode criar pedido. Consumo e registro do pedido e venda financeira paga acontecem na mesma transação, usando persistPublicOrder e financialSales existentes. Depois do commit, o submitFiles continua pelas rotinas existentes, sem substituir os formulários ou pós-pedido.
+- Webhook verifica assinatura e guarda o evento duravelmente. Não gera cobrança nem substitui a consulta autenticada do servidor.
+- Testes com provedor simulado, MySQL descartável e build.
 
-## Configuração futura
-- VALIDRA_API_KEY: chave inteira, somente no Render, com charges:read e charges:write.
-- VALIDRA_WEBHOOK_SECRET: segredo vpw_live_ do endpoint. Não enviar pelo chat ou guardar em código.
-- Endpoint a implementar: /webhooks/validrapay, montado antes do parser JSON global.
-- Ambiente de produção: https://app.validrapay.com/v1. Sandbox somente mediante liberação da ValidraPay.
-
-## Bloqueadores para ativação
-1. Persistir tentativa de pagamento antes do POST; external_id único e imutável, valor em centavos calculado do catálogo e das regras oficiais do servidor (cupom, VIP, revendedor, carrinho).
-2. Vincular a tentativa ao cliente autenticado e à composição exata da compra. Deduplicar confirmação e consumo da cobrança em transação com o pedido; impedir reaproveitamento e pagamento duplicado.
-3. Implementar fila persistente de eventos assinados, com id único e reconciliação por GET; continuar recebendo eventos de cobranças anteriores independentemente do modo de novos pagamentos.
-4. Integrar o checkout e o ADM com uma única seleção persistida (manual ou validrapay), padrão manual, autenticação de ADM e verificação de prontidão antes de ativar. Não usar fallback silencioso nem mostrar os dois meios.
-5. Preservar cobranças pendentes ao trocar o modo e tratar expiradas, canceladas, atrasadas, estornos e conflitos para revisão.
-6. Testar carrinhos, descontos, parcelamentos e demais entradas do checkout antes de permitir ativação, além da validação de assinatura, do valor e da não duplicidade.
-
-Este commit não altera o checkout, o ADM, o Worker, o H2 ADS ou as configurações do Render. Não é uma integração ponta a ponta pronta para ativar.
-
-## Checkout conectado em desenvolvimento
-O fluxo unitário de compra direta agora passa pelo submitFiles: sessão, catálogo/seleção, tentativa persistida, geração/consulta Pix, confirmação e transação do pedido. A tela mostra QR/copia e cola e permite consultar e finalizar. O webhook registra eventos assinados em inbox persistente antes de responder. O gate VALIDRA_CHECKOUT_READY permanece false: ainda faltam consumo autônomo da inbox, retomada de pedidos/documentos/notificações, revisão administrativa de cobranças atrasadas/estornadas, carrinho, cupons, revendedores, parcelamentos e testes reais de MySQL/HTTP/UI. A consulta do cliente não substitui o processamento autônomo dos eventos. Não há autorização para cobrança real ou ativação.
+## Limites de liberação
+A versão é deliberadamente enxuta e ainda não é uma implantação. Carrinho, cupom, revendedor, parcelamento VIP e ColombiaBot permanecem no modo manual; não ativar a seleção exclusiva ValidraPay enquanto esses caminhos não tiverem suporte de pagamento. A consulta automática funciona enquanto a tela estiver aberta; evento recebido com a tela fechada ainda requer reconciliação/retomada do fluxo original. Não liberar pagamentos reais enquanto não houver validação de ponta a ponta e recuperação de uma cobrança paga sem duplicidade, inclusive se a conexão cair após a confirmação. Nenhuma nova infraestrutura de arquivos ou credenciais R2 é necessária para esta branch. As credenciais ValidraPay (VALIDRA_API_KEY e VALIDRA_WEBHOOK_SECRET) devem permanecer no ambiente protegido, nunca no repositório ou chat.
+Nenhum deploy, nenhuma alteração de produção, main ou branch de recuperação. A branch experimental anterior permanece preservada para referência.

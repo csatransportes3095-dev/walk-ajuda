@@ -43,6 +43,7 @@ export async function resolveValidraSingleCheckout(input: Selection, vip: boolea
   }
   const amountCents = parseBrazilMoneyToCents(price);
   validraAmount(amountCents);
+  if(amountCents>2147483647)throw new Error("validra_checkout_type_not_ready");
   const optionLabel = option.label + (model ? " — " + model.label : "") + (tier ? " - Garantia: " + (tier.warrantyValue > 0 ? tier.warrantyValue + " " + tier.warrantyType + (tier.warrantyLabel ? " " + tier.warrantyLabel : "") : tier.warrantyLabel || tier.warrantyType) : "");
   return { customerId: customer.id, phone: session.phone, amountCents, service: product.name, nameOption: optionLabel, price: "R$ " + validraAmount(amountCents).replace(".", ",") };
 }

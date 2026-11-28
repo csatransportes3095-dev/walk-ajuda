@@ -2360,8 +2360,9 @@ export const appRouter = router({
           // O acompanhamento usa exclusivamente customerPassword (senha universal).
           // PINs antigos permanecem no banco apenas como histórico; nenhum novo PIN é gerado.
 
-          // Lançar automaticamente no Controle Financeiro como Pendente
-          if (outerRegId) {
+          // Manual keeps the original pending financial sale; the confirmed
+          // Validra Pix was already recorded as paid in the order transaction.
+          if (outerRegId && !validraContext) {
             try {
               // Extrair preço do nameOption (que pode conter tier de garantia)
               // Formato: "Nome Opção - Garantia: X corridas" ou apenas "Nome Opção"

@@ -18,6 +18,7 @@ const dbUrl = process.env.VALIDRA_TEST_DATABASE_URL;
 const key = "vpk_live_" + "A".repeat(26) + "_" + "B".repeat(52);
 const phone = "11999990000";
 const fixtureSchema = [
+  "CREATE TABLE IF NOT EXISTS financialSales (id INT AUTO_INCREMENT PRIMARY KEY,registrationId INT,customerName VARCHAR(256) NOT NULL DEFAULT '',customerPhone VARCHAR(32) NOT NULL DEFAULT '',productName VARCHAR(256) NOT NULL DEFAULT '',productOption VARCHAR(256) NOT NULL DEFAULT '',saleValue INT NOT NULL DEFAULT 0,costValue INT NOT NULL DEFAULT 0,paymentMethod VARCHAR(64) NOT NULL DEFAULT 'pix',status VARCHAR(32) NOT NULL DEFAULT 'pendente',saleDate BIGINT NOT NULL,receivedDate BIGINT,notes TEXT,createdAt TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP,updatedAt TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP,CHECK(productName <> 'FAIL_FINANCE')) ENGINE=InnoDB",
   "CREATE TABLE IF NOT EXISTS customers (id INT PRIMARY KEY, phone VARCHAR(32) NOT NULL, blocked INT NOT NULL DEFAULT 0, deletedAt TIMESTAMP NULL) ENGINE=InnoDB",
   "CREATE TABLE IF NOT EXISTS accessCodes (id INT AUTO_INCREMENT PRIMARY KEY, code VARCHAR(64) NOT NULL UNIQUE, type ENUM('general','vip') NOT NULL DEFAULT 'vip', status ENUM('active','used','disabled') NOT NULL DEFAULT 'active', clientName TEXT, usedAt TIMESTAMP NULL, usedBy TEXT, accessedByPhone VARCHAR(32), maxUses INT DEFAULT 1, currentUses INT DEFAULT 0, expiresAt TIMESTAMP NULL, timeOnly INT NOT NULL DEFAULT 0, allowedProductIds TEXT, createdAt TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP) ENGINE=InnoDB",
   "CREATE TABLE IF NOT EXISTS accessCodePhones (id INT AUTO_INCREMENT PRIMARY KEY, codeId INT NOT NULL, phone VARCHAR(32) NOT NULL, consumed INT DEFAULT 0, archived INT NOT NULL DEFAULT 0, rgCnhApproved INT NOT NULL DEFAULT 0, orderSource VARCHAR(16) NOT NULL DEFAULT 'auto', accessedAt TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP, refCode VARCHAR(64), refExpiresAt BIGINT, refOwnerName VARCHAR(128), deletedAt TIMESTAMP NULL, deletedReason VARCHAR(256), thirdPartyName VARCHAR(128), thirdPartyPhone VARCHAR(32), resellerDiscountApplied DECIMAL(10,2), cartGroupId VARCHAR(64), cartTotal DECIMAL(10,2), cartCouponCode VARCHAR(64), cartCouponDiscount DECIMAL(10,2), cartItemIndex INT DEFAULT 0) ENGINE=InnoDB",
@@ -57,7 +58,7 @@ function makeFixture(serviceName = "Produto de teste") {
 
 describe.skipIf(!dbUrl)("ValidraPay real MySQL integration (simulated provider)", () => {
   let pool: Pool;
-  async function count(table: "orderStatusHistory" | "accessCodePhones" | "orderCounter" | "validra_webhook_events") {
+  async function count(table: "orderStatusHistory" | "accessCodePhones" | "orderCounter" | "validra_webhook_events" | "financialSales") {
     const [rows] = await pool.query<RowDataPacket[]>("SELECT COUNT(*) AS total FROM " + table);
     return Number(rows[0].total);
   }
@@ -73,7 +74,7 @@ describe.skipIf(!dbUrl)("ValidraPay real MySQL integration (simulated provider)"
     await ensureValidraAttemptStorage();
   }, 30000);
   beforeEach(async () => {
-    for (const table of ["validra_checkout_attempts", "orderStatusHistory", "accessCodePhones", "accessCodes", "orderCounter", "customers", "orderStatusTypes"]) await pool.query("DELETE FROM " + table);
+    for (const table of ["financialSales","validra_checkout_attempts", "orderStatusHistory", "accessCodePhones", "accessCodes", "orderCounter", "customers", "orderStatusTypes"]) await pool.query("DELETE FROM " + table);
     await pool.execute("INSERT INTO customers (id, phone) VALUES (21, ?)", [phone]);
     await pool.execute("INSERT INTO orderStatusTypes (`key`) VALUES ('pedido_recebido')");
   });
@@ -83,6 +84,7 @@ describe.skipIf(!dbUrl)("ValidraPay real MySQL integration (simulated provider)"
     const f = makeFixture();
     expect(await runValidraCheckout(f.input, true, f.client)).toMatchObject({ kind: "payment", payment: { amount: "49.90", pixCopyPaste: "fake-ci-pix" } });
     expect(await count("orderStatusHistory")).toBe(0);
+    expect(await count("financialSales")).toBe(0);
     await expect(runValidraCheckout(f.input, true, f.client)).rejects.toThrow("validra_wait_before_retry");
     expect(f.transport).toHaveBeenCalledTimes(1);
     f.paid();
@@ -96,6 +98,9 @@ describe.skipIf(!dbUrl)("ValidraPay real MySQL integration (simulated provider)"
     expect(f.transport).toHaveBeenCalledTimes(2);
     const [rows] = await pool.query<RowDataPacket[]>("SELECT pricePaid, registrationId FROM orderStatusHistory");
     expect(rows[0]).toMatchObject({ pricePaid: "R$ 49,90", registrationId: paid.order.registrationId });
+    const [sales]=await pool.query<RowDataPacket[]>("SELECT registrationId,saleValue,status,paymentMethod,receivedDate FROM financialSales");
+    expect(sales).toHaveLength(1);
+    expect(sales[0]).toMatchObject({registrationId:paid.order.registrationId,saleValue:4990,status:"pago",paymentMethod:"pix",receivedDate:Date.parse("2026-11-28T16:10:00Z")});
   });
 
   it("serializes two simultaneous confirmations of the same charge", async () => {
@@ -108,6 +113,15 @@ describe.skipIf(!dbUrl)("ValidraPay real MySQL integration (simulated provider)"
     expect(new Set(results.map(r => r.registrationId)).size).toBe(1);
     expect(await count("orderStatusHistory")).toBe(1);
     expect(await count("accessCodePhones")).toBe(1);
+  });
+
+  it("rolls back the paid order if the existing financial sale cannot be written",async()=>{
+    const f=makeFixture("FAIL_FINANCE");
+    await runValidraCheckout(f.input,true,f.client);
+    await expect(persistPaidValidraOrder(f.input,f.client,f.paid())).rejects.toThrow();
+    for(const table of ["orderStatusHistory","accessCodePhones","financialSales","orderCounter"] as const)expect(await count(table)).toBe(0);
+    const [rows]=await pool.execute<RowDataPacket[]>("SELECT state,registration_id FROM validra_checkout_attempts WHERE external_id=?",[f.input.externalId]);
+    expect(rows[0]).toMatchObject({state:"pending",registration_id:null});
   });
 
   it("rejects changed customer, purchase or price, and a disabled new attempt", async () => {
