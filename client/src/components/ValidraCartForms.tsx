@@ -1,6 +1,6 @@
 import { useEffect,useRef,useState } from "react";
 import { trpc } from "@/lib/trpc";
-import { visibleValidraQuestions,type ValidraItemFormInput,type ValidraFormDocument } from "@shared/validraCartForms";
+import { resolveValidraQuestionFlow,type ValidraItemFormInput,type ValidraFormDocument } from "@shared/validraCartForms";
 
 type Selection={productId:number;optionId:number;priceModelId?:number;warrantyTierId?:number};
 type ItemDraft={answers:Record<number,string>;files:Record<string,string>};
@@ -47,8 +47,9 @@ export function ValidraCartForms({scope,items,phone,cpToken,onChange,disabled}:{
     let ready=!busy;
     const forms=specs.map((spec,index)=>{
       const draft=drafts[index]??blank;
-      const visible=visibleValidraQuestions(spec.questions,draft.answers);
-      if(visible.some(q=>q.required&&!draft.answers[q.id]?.trim())||visible.some(q=>q.fieldType==="select"&&draft.answers[q.id]&&!q.choices.some(choice=>choice.label===draft.answers[q.id]&&!choice.blocked))||spec.documents.some(doc=>!draft.files[doc.fieldId]))ready=false;
+      const flow=resolveValidraQuestionFlow(spec.questions,draft.answers);
+      const visible=flow.questions;
+      if(flow.invalid||visible.some(q=>q.required&&!draft.answers[q.id]?.trim())||visible.some(q=>q.fieldType==="select"&&draft.answers[q.id]&&!q.choices.some(choice=>choice.label===draft.answers[q.id]&&!choice.blocked))||spec.documents.some(doc=>!draft.files[doc.fieldId]))ready=false;
       return {
         answers:visible.filter(q=>draft.answers[q.id]?.trim()).map(q=>({questionId:q.id,answer:draft.answers[q.id]})),
         documents:spec.documents.filter(doc=>draft.files[doc.fieldId]).map(doc=>({fieldId:doc.fieldId,fileKey:draft.files[doc.fieldId]})),
@@ -63,7 +64,8 @@ export function ValidraCartForms({scope,items,phone,cpToken,onChange,disabled}:{
     <p className="text-white font-bold">DOCUMENTOS E PERGUNTAS POR ITEM</p>
     {query.data.map((spec,index)=>{
       const draft=drafts[index]??blank;
-      const visible=visibleValidraQuestions(spec.questions,draft.answers);
+      const flow=resolveValidraQuestionFlow(spec.questions,draft.answers);
+      const visible=flow.questions;
       return <fieldset key={index} disabled={disabled||!!busy} className="space-y-3 rounded-lg border border-white/20 p-3">
         <legend className="text-blue-300 font-bold px-1">Item {index+1}: {spec.service} — {spec.option}</legend>
         {!spec.questions.length&&!spec.documents.length&&<p className="text-white/70 text-sm">Nenhum formulário adicional.</p>}
@@ -75,7 +77,12 @@ export function ValidraCartForms({scope,items,phone,cpToken,onChange,disabled}:{
               const answers={...current.answers,[question.id]:answer};
               // Changing a parent invalidates its descendants in this item only.
               const clear=(parent:number)=>{for(const child of spec.questions.filter(q=>q.parentQuestionId===parent)){delete answers[child.id];clear(child.id);}};
-              if(current.answers[question.id]!==answer)clear(question.id);
+              if(current.answers[question.id]!==answer){
+                clear(question.id);
+                const previous=resolveValidraQuestionFlow(spec.questions,current.answers).questions;
+                const position=previous.findIndex(q=>q.id===question.id);
+                for(const later of previous.slice(position+1))delete answers[later.id];
+              }
               return {...prev,[index]:{...current,answers}};
             });
           };
@@ -86,6 +93,8 @@ export function ValidraCartForms({scope,items,phone,cpToken,onChange,disabled}:{
             </select>:question.fieldType==="textarea"?<textarea className={fieldClass} value={value} maxLength={2000} onChange={e=>change(e.target.value)}/>:<input className={fieldClass} value={value} maxLength={2000} onChange={e=>change(e.target.value)}/>}
           </label>;
         })}
+        {flow.invalid&&<p className="text-red-300" role="alert">Caminho de respostas indisponível. Revise a seleção.</p>}
+        {flow.message&&<p className="text-white/90 border border-white/20 rounded-lg p-2">{flow.message}</p>}
         {spec.documents.map(doc=><label key={doc.fieldId} className="block space-y-1 text-sm text-white">
           <span>{doc.label} * {draft.files[doc.fieldId]?"— enviado":""}</span>
           <input type="file" className={fieldClass} accept={doc.pdfOnly?"application/pdf":doc.imageOnly?"image/jpeg,image/png,image/webp":"application/pdf,image/jpeg,image/png,image/webp"} capture={doc.inputSource==="camera"?"environment":undefined} onChange={async event=>{

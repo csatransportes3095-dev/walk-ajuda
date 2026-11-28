@@ -33,8 +33,19 @@ describe("Public Validra cart forms",()=>{
     for(const key of ["requireVehicle2016","showYearField","commissionValue"] as const)expect(()=>buildValidraItemRequirements(product,{...option,[key]:1},[],[])).toThrow("validra_cart_requirements_not_ready");
     expect(()=>buildValidraItemRequirements(product,{...option,docNameMode:"custom"},[],[])).toThrow("validra_cart_requirements_not_ready");
     expect(()=>buildValidraItemRequirements(product,option,[{...first,fieldType:"audio"}],[])).toThrow("validra_cart_requirements_not_ready");
-    expect(()=>buildValidraItemRequirements(product,option,[{...first,options:'[{"label":"Fim","flowAction":"finish"}]'}],[])).toThrow("validra_cart_requirements_not_ready");
+    expect(()=>buildValidraItemRequirements(product,option,[{...first,options:'[{"label":"Ir","flowAction":"jump","flowTarget":999}]'}],[])).toThrow("validra_cart_requirements_not_ready");
     expect(buildValidraItemRequirements(product,{...option,isPdfOnly:1},[],[]).documents).toMatchObject([{fieldId:"legacy:pdf",pdfOnly:true}]);
+  });
+  it("applies jump, finish and message per position without accepting hidden answers",()=>{
+    const root={...first,options:JSON.stringify([{label:"Pular",flowAction:"jump",flowTarget:3},{label:"Fim",flowAction:"finish"},{label:"Aviso",flowAction:"message",flowMessage:"Concluído"},"Normal"])};
+    const middle={...child,id:2,parentQuestionId:null,triggerOption:null};
+    const last={...middle,id:3,sortOrder:2};
+    const spec=buildValidraItemRequirements(product,option,[root,middle,last],[]);
+    const input=(answers:{questionId:number;answer:string}[])=>({answers,documents:[]});
+    expect(JSON.parse(validateValidraItemForm(spec,input([{questionId:1,answer:"Pular"},{questionId:3,answer:"Final"}])).answers).map((x:{questionId:number})=>x.questionId)).toEqual([1,3]);
+    expect(()=>validateValidraItemForm(spec,input([{questionId:1,answer:"Pular"},{questionId:2,answer:"Oculto"},{questionId:3,answer:"Final"}]))).toThrow("validra_cart_form_invalid");
+    for(const answer of ["Fim","Aviso"])expect(JSON.parse(validateValidraItemForm(spec,input([{questionId:1,answer}])).answers)).toHaveLength(1);
+    expect(()=>validateValidraItemForm(spec,input([{questionId:1,answer:"Normal"}]))).toThrow("validra_cart_form_invalid");
   });
   it("keeps release gate before customer and provider calls and uses a separate cart mutation",()=>{
     const router=readFileSync("server/routers.ts","utf8").split("checkoutValidraCart: publicProcedure")[1].split("submitFiles: publicProcedure")[0];

@@ -1,7 +1,7 @@
 import { randomUUID } from "node:crypto";
 import { sql } from "drizzle-orm";
 import { getDb } from "./db";
-import { r2PutObject, r2HeadObject } from "./r2Storage";
+import { putPrivateValidraObject, headPrivateValidraObject, getPrivateValidraObject, privateValidraFileUrl } from "./validraPrivateStorage";
 import type { ValidraTransaction } from "./validraOrderPersistence";
 
 export type ValidraCartDocument = {label:string;fileKey:string;fileUrl:string;mimeType:string};
@@ -54,10 +54,9 @@ export async function createValidraDocumentUpload(authenticatedPhone:string,labe
   if(customers.length!==1||!customer||!Number.isSafeInteger(Number(customer.id))||Number(customer.id)<=0||
       customer.phone!==authenticatedPhone||Number(customer.blocked)!==0||customer.deletedAt)throw new Error("validra_customer_mismatch");
   const fileKey="order-docs/validra-"+randomUUID()+"."+ext;
-  const {url:fileUrl}=await r2PutObject(fileKey,buffer,mimeType);
-  const url=new URL(fileUrl);
-  if(url.protocol!=="https:"||url.username||url.password||url.search||url.hash||!url.pathname.endsWith("/"+fileKey))throw new Error("validra_document_storage_unavailable");
-  const head=await r2HeadObject(fileKey);
+  const fileUrl=privateValidraFileUrl(fileKey);
+  await putPrivateValidraObject(fileKey,buffer,mimeType);
+  const head=await headPrivateValidraObject(fileKey);
   if(head.httpStatus!==200||head.contentLength!==buffer.length||!head.etag||head.etag.length>256)throw new Error("validra_document_storage_unavailable");
   // Do not upsert: an existing key may never be reassigned to another owner.
   await db.execute(sql`INSERT INTO validra_document_uploads(file_key,customer_id,customer_phone,label,file_url,mime_type,byte_length,etag)
@@ -67,7 +66,7 @@ export async function createValidraDocumentUpload(authenticatedPhone:string,labe
 
 function requireBinding(row:StoredDocument|undefined,doc:ValidraCartDocument,owner:Owner,externalId:string,allowUnreserved:boolean){
   if(!row||Number(row.customer_id)!==owner.customerId||row.customer_phone!==owner.phone||
-      row.label!==doc.label||row.file_url!==doc.fileUrl||row.mime_type!==doc.mimeType||
+      row.label!==doc.label||row.file_url!==doc.fileUrl||doc.fileUrl!==privateValidraFileUrl(doc.fileKey)||row.mime_type!==doc.mimeType||
       (row.reserved_external_id!==externalId&&!(allowUnreserved&&row.reserved_external_id===null))||
       !Number.isSafeInteger(Number(row.byte_length))||Number(row.byte_length)<=0||Number(row.byte_length)>MAX_DOCUMENT_BYTES||!row.etag)
     throw new Error("validra_document_not_authorized");
@@ -94,7 +93,7 @@ export async function preflightValidraDocuments(db:DocumentDb,documents:ValidraC
     const row=requireBinding((rows as unknown as StoredDocument[])[0],doc,owner,externalId,true);
     if(row.reserved_external_id===externalId)continue;
     try{
-      const head=await r2HeadObject(doc.fileKey);
+      const head=await headPrivateValidraObject(doc.fileKey);
       if(head.httpStatus!==200||head.contentLength!==Number(row.byte_length)||head.etag!==row.etag)throw new Error();
     }catch{throw new Error("validra_document_storage_unavailable");}
   }
@@ -126,4 +125,26 @@ export async function resolveOwnedValidraDocument(input:{fileKey:string;label:st
   if((input.pdfOnly&&doc.mimeType!=="application/pdf")||(input.imageOnly&&!/^image\/(jpeg|png|webp)$/.test(doc.mimeType)))
     throw new Error("validra_cart_form_invalid");
   return doc;
+}
+
+/** Only a current owner or an authenticated ADM of a consumed purchase reads
+ * the bytes. Never issue a direct bucket URL. */
+export async function readAuthorizedValidraDocument(fileKey:string,access:{ownerPhone?:string;admin:boolean}){
+  const url=privateValidraFileUrl(fileKey);
+  const db=await ensureValidraDocumentStorage();
+  const [rows]=await db.execute(sql`SELECT * FROM validra_document_uploads WHERE file_key=${fileKey}`);
+  const row=(rows as unknown as StoredDocument[])[0];
+  const denied=()=>new Error("validra_document_not_authorized");
+  if(!row||row.file_url!==url||! /^(image\/(jpeg|png|webp)|application\/pdf)$/.test(row.mime_type)||
+    !Number.isSafeInteger(Number(row.byte_length))||Number(row.byte_length)<=0||Number(row.byte_length)>MAX_DOCUMENT_BYTES||!row.etag)throw denied();
+  if(access.admin){
+    if(!row.reserved_external_id)throw denied();
+    const [paid]=await db.execute(sql`SELECT external_id FROM validra_checkout_attempts WHERE external_id=${row.reserved_external_id} AND customer_id=${row.customer_id} AND state='consumed'`);
+    if(!(paid as unknown[]).length)throw denied();
+  }else{
+    if(!access.ownerPhone||access.ownerPhone!==row.customer_phone)throw denied();
+    const [customers]=await db.execute(sql`SELECT id FROM customers WHERE id=${row.customer_id} AND phone=${access.ownerPhone} AND blocked=0 AND deletedAt IS NULL`);
+    if(!(customers as unknown[]).length)throw denied();
+  }
+  return {mimeType:row.mime_type,buffer:await getPrivateValidraObject(fileKey,{etag:row.etag,byteLength:Number(row.byte_length),mimeType:row.mime_type})};
 }

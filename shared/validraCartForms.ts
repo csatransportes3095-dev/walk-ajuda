@@ -3,14 +3,14 @@
 export type ValidraFormQuestion={
   id:number;question:string;fieldType:"text"|"textarea"|"select";required:boolean;
   parentQuestionId:number|null;triggerOption:string|null;sortOrder:number;
-  choices:{label:string;blocked:boolean}[];
+  choices:{label:string;blocked:boolean;action?:"continue"|"jump"|"finish"|"message";targetQuestionId?:number;message?:string}[];
 };
 export type ValidraFormDocument={fieldId:string;label:string;pdfOnly:boolean;imageOnly:boolean;inputSource:"both"|"camera"|"gallery"};
 export type ValidraItemRequirements={productId:number;optionId:number;service:string;option:string;questions:ValidraFormQuestion[];documents:ValidraFormDocument[]};
 export type ValidraItemFormInput={answers:{questionId:number;answer:string}[];documents:{fieldId:string;fileKey:string}[]};
 export type ValidraAnswerMap=Record<number,string>;
 export const normalizeValidraAnswer=(value:string|null|undefined)=>String(value||"").normalize("NFD").replace(/[\u0300-\u036f]/g,"").trim().replace(/\s+/g," ").toUpperCase();
-export function visibleValidraQuestions(questions:ValidraFormQuestion[],answers:ValidraAnswerMap){
+export function resolveValidraQuestionFlow(questions:ValidraFormQuestion[],answers:ValidraAnswerMap){
   const result:ValidraFormQuestion[]=[];
   const visited=new Set<number>();
   const ordered=[...questions].sort((a,b)=>a.sortOrder-b.sortOrder||a.id-b.id);
@@ -22,5 +22,22 @@ export function visibleValidraQuestions(questions:ValidraFormQuestion[],answers:
     }
   }
   ordered.filter(q=>q.parentQuestionId===null).forEach(visit);
-  return result;
+  const visible:ValidraFormQuestion[]=[];
+  for(let i=0;i<result.length;i++){
+    const question=result[i];visible.push(question);
+    const answer=normalizeValidraAnswer(answers[question.id]);
+    const choice=answer&&question.fieldType==="select"?question.choices.find(c=>normalizeValidraAnswer(c.label)===answer):undefined;
+    if(!choice)continue;
+    if(choice.blocked)return {questions:visible,invalid:true,message:null};
+    if(choice.action==="finish"||choice.action==="message")return {questions:visible,invalid:false,message:choice.action==="message"?choice.message??null:null};
+    if(choice.action==="jump"){
+      const next=result.findIndex(q=>q.id===choice.targetQuestionId);
+      if(next<=i)return {questions:visible,invalid:true,message:null};
+      i=next-1;
+    }
+  }
+  return {questions:visible,invalid:false,message:null};
+}
+export function visibleValidraQuestions(questions:ValidraFormQuestion[],answers:ValidraAnswerMap){
+  return resolveValidraQuestionFlow(questions,answers).questions;
 }

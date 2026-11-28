@@ -2530,6 +2530,21 @@ export function registerUploadRoute(app: Express) {
     }
   });
 
+  // Authenticated download: no public object URL, no cache or query token.
+  // Reads stay available after the checkout gate is disabled.
+  app.get("/api/validra/documents/order-docs/:filename",async(req:Request,res:Response)=>{
+    res.set({"Cache-Control":"private, no-store","X-Content-Type-Options":"nosniff","Referrer-Policy":"no-referrer","Content-Security-Policy":"sandbox; default-src 'none'"});
+    try{
+      const admin=isAdminRequest(req);
+      const ownerPhone=admin?undefined:(await requireCustomerSession(getCustomerSessionTokenFromRequest(req))).phone;
+      const {readAuthorizedValidraDocument}=await import("./validraDocumentStorage");
+      const document=await readAuthorizedValidraDocument("order-docs/"+String(req.params.filename),{admin,ownerPhone});
+      const extension=document.mimeType==="application/pdf"?"pdf":document.mimeType==="image/jpeg"?"jpg":document.mimeType.split("/")[1];
+      res.set({"Content-Type":document.mimeType,"Content-Disposition":'attachment; filename="documento.'+extension+'"',"Content-Length":String(document.buffer.length)});
+      res.send(document.buffer);
+    }catch{res.status(404).json({error:"Documento indisponível."});}
+  });
+
   // ─── UPLOAD DO APK (admin only) ─────────────────────────────────────────────
   const uploadApkMw = multer({ storage: multer.memoryStorage(), limits: { fileSize: 50 * 1024 * 1024 } });
   app.post('/api/upload/apk', uploadApkMw.single('file'), async (req: Request, res: Response) => {

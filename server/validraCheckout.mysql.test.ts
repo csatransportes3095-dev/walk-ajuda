@@ -6,9 +6,12 @@ import type { AddressInfo } from "node:net";
 import express from "express";
 vi.mock("./db", () => ({ getDb: vi.fn(), addOrderStatus: vi.fn(), generateOrderNumber: vi.fn() }));
 import { getDb } from "./db";
-vi.mock("./r2Storage",()=>({r2PutObject:vi.fn(),r2HeadObject:vi.fn()}));
-import { r2PutObject,r2HeadObject } from "./r2Storage";
-import { createValidraDocumentUpload } from "./validraDocumentStorage";
+vi.mock("./validraPrivateStorage",async importOriginal=>({
+  ...(await importOriginal<typeof import("./validraPrivateStorage")>()),
+  putPrivateValidraObject:vi.fn(),headPrivateValidraObject:vi.fn(),getPrivateValidraObject:vi.fn(),
+}));
+import { putPrivateValidraObject,headPrivateValidraObject,getPrivateValidraObject } from "./validraPrivateStorage";
+import { createValidraDocumentUpload,readAuthorizedValidraDocument } from "./validraDocumentStorage";
 import { ensureValidraAttemptStorage } from "./validraAttemptStorage";
 import { persistPaidValidraOrder } from "./validraOrderPersistence";
 import { runValidraCheckout, validraPurchaseDigest } from "./validraCheckout";
@@ -90,8 +93,9 @@ describe.skipIf(!dbUrl)("ValidraPay real MySQL integration (simulated provider)"
     await ensureValidraScheduleStorage();
   }, 30000);
   beforeEach(async () => {
-    vi.mocked(r2HeadObject).mockReset().mockResolvedValue({httpStatus:200,contentLength:16,etag:"fixture-etag"});
-    vi.mocked(r2PutObject).mockReset().mockImplementation(async key=>({key,url:"https://storage.example.test/"+key}));
+    vi.mocked(headPrivateValidraObject).mockReset().mockResolvedValue({httpStatus:200,contentLength:16,etag:"fixture-etag"});
+    vi.mocked(putPrivateValidraObject).mockReset().mockResolvedValue(undefined);
+    vi.mocked(getPrivateValidraObject).mockReset().mockResolvedValue(Buffer.from("%PDF-fixture-123"));
     for (const table of ["validra_document_uploads", "validra_schedule_jobs", "scheduleAppointments", "productOptions", "orderFiles", "financialSales", "validra_payment_reviews", "validra_event_jobs", "validra_webhook_events", "validra_order_followup", "validra_cart_orders", "validra_cart_snapshots", "validra_checkout_attempts", "orderStatusHistory", "accessCodePhones", "accessCodes", "orderCounter", "customers", "orderStatusTypes"]) await pool.query("DELETE FROM " + table);
     await pool.execute("INSERT INTO customers (id, phone) VALUES (21, ?)", [phone]);
     await pool.execute("INSERT INTO orderStatusTypes (`key`) VALUES ('pedido_recebido')");
@@ -183,7 +187,7 @@ describe.skipIf(!dbUrl)("ValidraPay real MySQL integration (simulated provider)"
     snapshot.quote.items[1]={...snapshot.quote.items[0],baseCents:2990,amountCents:2990};
     snapshot.orders[1]={...snapshot.orders[0]};
     const spec:ValidraItemRequirements={productId:1,optionId:11,service:"Produto A",option:"Opcao A",questions:[{id:41,question:"Nome para o item",fieldType:"text",required:true,parentQuestionId:null,triggerOption:null,sortOrder:0,choices:[]}],documents:[{fieldId:"dynamic:7",label:"Documento",pdfOnly:true,imageOnly:false,inputSource:"gallery"}]};
-    const docs=[1,2].map(index=>({label:"Documento",fileKey:"order-docs/item-"+index+".pdf",fileUrl:"https://storage.example.test/order-docs/item-"+index+".pdf",mimeType:"application/pdf"}));
+    const docs=[1,2].map(index=>({label:"Documento",fileKey:"order-docs/item-"+index+".pdf",fileUrl:"https://h2colombiano.com/api/validra/documents/order-docs/item-"+index+".pdf",mimeType:"application/pdf"}));
     snapshot.orders[0].documents=[docs[0]];snapshot.orders[1].documents=[docs[1]];
     await registerFixtureDocuments(snapshot);
     const inputs=docs.map((doc,index)=>({answers:[{questionId:41,answer:"Item "+(index+1)}],documents:[{fieldId:"dynamic:7",fileKey:doc.fileKey}]}));
@@ -201,7 +205,7 @@ describe.skipIf(!dbUrl)("ValidraPay real MySQL integration (simulated provider)"
 
   it("reconciles a signed-inbox cart payment into all orders exactly once",async()=>{
     const f=makeFixture(), snapshot=cartFixture(f);
-    snapshot.orders[0].documents=[{label:"Documento A",fileKey:"order-docs/fixture-a.pdf",fileUrl:"https://storage.example.test/order-docs/fixture-a.pdf",mimeType:"application/pdf"}];
+    snapshot.orders[0].documents=[{label:"Documento A",fileKey:"order-docs/fixture-a.pdf",fileUrl:"https://h2colombiano.com/api/validra/documents/order-docs/fixture-a.pdf",mimeType:"application/pdf"}];
     await registerFixtureDocuments(snapshot);
     expect(await runValidraCartCheckout(f.input.externalId,snapshot,true,f.client)).toMatchObject({kind:"payment"});
     expect(await count("orderStatusHistory")).toBe(0);
@@ -239,8 +243,8 @@ describe.skipIf(!dbUrl)("ValidraPay real MySQL integration (simulated provider)"
 
   it("rolls back all cart orders, documents and financial rows if a later document insert fails",async()=>{
     const f=makeFixture(),snapshot=cartFixture(f);
-    snapshot.orders[0].documents=[{label:"Documento A",fileKey:"order-docs/fixture-a.pdf",fileUrl:"https://storage.example.test/order-docs/fixture-a.pdf",mimeType:"application/pdf"}];
-    snapshot.orders[1].documents=[{label:"FAIL_TEST_DOCUMENT",fileKey:"order-docs/fixture-b.pdf",fileUrl:"https://storage.example.test/order-docs/fixture-b.pdf",mimeType:"application/pdf"}];
+    snapshot.orders[0].documents=[{label:"Documento A",fileKey:"order-docs/fixture-a.pdf",fileUrl:"https://h2colombiano.com/api/validra/documents/order-docs/fixture-a.pdf",mimeType:"application/pdf"}];
+    snapshot.orders[1].documents=[{label:"FAIL_TEST_DOCUMENT",fileKey:"order-docs/fixture-b.pdf",fileUrl:"https://h2colombiano.com/api/validra/documents/order-docs/fixture-b.pdf",mimeType:"application/pdf"}];
     await registerFixtureDocuments(snapshot);
     await runValidraCartCheckout(f.input.externalId,snapshot,true,f.client);
     await expect(persistPaidValidraCart(f.input.externalId,f.paid())).rejects.toThrow();
@@ -264,6 +268,12 @@ describe.skipIf(!dbUrl)("ValidraPay real MySQL integration (simulated provider)"
     expect(bytes.length).toBe(16);
     const doc=await createValidraDocumentUpload(phone,"Documento",bytes.toString("base64"));
     expect(doc.fileKey).toMatch(/^order-docs\/validra-[a-f0-9-]+\.pdf$/);
+    expect(doc.fileUrl).toBe("https://h2colombiano.com/api/validra/documents/"+doc.fileKey);
+    await expect(readAuthorizedValidraDocument(doc.fileKey,{admin:false,ownerPhone:"11999990001"})).rejects.toThrow("validra_document_not_authorized");
+    await expect(readAuthorizedValidraDocument(doc.fileKey,{admin:false})).rejects.toThrow("validra_document_not_authorized");
+    await expect(readAuthorizedValidraDocument(doc.fileKey,{admin:true})).rejects.toThrow("validra_document_not_authorized");
+    expect(getPrivateValidraObject).not.toHaveBeenCalled();
+    expect((await readAuthorizedValidraDocument(doc.fileKey,{admin:false,ownerPhone:phone})).mimeType).toBe("application/pdf");
     const [ownership]=await pool.execute<RowDataPacket[]>("SELECT customer_id,customer_phone,reserved_external_id FROM validra_document_uploads WHERE file_key=?",[doc.fileKey]);
     expect(ownership[0]).toMatchObject({customer_id:21,customer_phone:phone,reserved_external_id:null});
     snapshot.orders[0].documents=[doc];
@@ -281,18 +291,18 @@ describe.skipIf(!dbUrl)("ValidraPay real MySQL integration (simulated provider)"
 
   it("rejects another customer's document and unregistered or altered references before charging",async()=>{
     const f=makeFixture(),snapshot=cartFixture(f);
-    const doc={label:"Documento",fileKey:"order-docs/fixture.pdf",fileUrl:"https://storage.example.test/order-docs/fixture.pdf",mimeType:"application/pdf"};
+    const doc={label:"Documento",fileKey:"order-docs/fixture.pdf",fileUrl:"https://h2colombiano.com/api/validra/documents/order-docs/fixture.pdf",mimeType:"application/pdf"};
     snapshot.orders[0].documents=[doc];
     await expect(runValidraCartCheckout(f.input.externalId,snapshot,true,f.client)).rejects.toThrow("validra_document_not_authorized");
     await pool.execute("INSERT INTO customers(id,phone) VALUES (22,?)",["11999990001"]);
     await registerFixtureDocuments(snapshot,22,"11999990001");
     await expect(runValidraCartCheckout(f.input.externalId,snapshot,true,f.client)).rejects.toThrow("validra_document_not_authorized");
-    expect(r2HeadObject).not.toHaveBeenCalled();
+    expect(headPrivateValidraObject).not.toHaveBeenCalled();
     await pool.execute("UPDATE validra_document_uploads SET customer_id=21,customer_phone=?",[phone]);
     snapshot.orders[0].documents=[{...doc,fileUrl:"https://other.example.test/"+doc.fileKey}];
     await expect(runValidraCartCheckout(f.input.externalId,snapshot,true,f.client)).rejects.toThrow("validra_document_not_authorized");
     snapshot.orders[0].documents=[doc];
-    vi.mocked(r2HeadObject).mockResolvedValueOnce({httpStatus:200,contentLength:16,etag:"changed-etag"});
+    vi.mocked(headPrivateValidraObject).mockResolvedValueOnce({httpStatus:200,contentLength:16,etag:"changed-etag"});
     await expect(runValidraCartCheckout(f.input.externalId,snapshot,true,f.client)).rejects.toThrow("validra_document_storage_unavailable");
     expect(f.transport).not.toHaveBeenCalled();
     const [attempts]=await pool.query<RowDataPacket[]>("SELECT COUNT(*) AS total FROM validra_checkout_attempts");
@@ -301,7 +311,7 @@ describe.skipIf(!dbUrl)("ValidraPay real MySQL integration (simulated provider)"
 
   it("sends a paid attempt with a missing ownership binding to review without creating orders",async()=>{
     const f=makeFixture(),snapshot=cartFixture(f);
-    snapshot.orders[0].documents=[{label:"Documento",fileKey:"order-docs/fixture.pdf",fileUrl:"https://storage.example.test/order-docs/fixture.pdf",mimeType:"application/pdf"}];
+    snapshot.orders[0].documents=[{label:"Documento",fileKey:"order-docs/fixture.pdf",fileUrl:"https://h2colombiano.com/api/validra/documents/order-docs/fixture.pdf",mimeType:"application/pdf"}];
     await registerFixtureDocuments(snapshot);
     await runValidraCartCheckout(f.input.externalId,snapshot,true,f.client);
     await pool.query("DELETE FROM validra_document_uploads");

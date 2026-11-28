@@ -2,7 +2,7 @@ import { and,eq,sql } from "drizzle-orm";
 import { products,productOptions,productQuestions,optionDocuments } from "../drizzle/schema";
 import { getDb,getSetting } from "./db";
 import { getVehicleQuestionKind } from "../shared/vehicleCatalog";
-import { normalizeValidraAnswer,visibleValidraQuestions,type ValidraItemRequirements,type ValidraItemFormInput,type ValidraFormQuestion,type ValidraFormDocument } from "../shared/validraCartForms";
+import { normalizeValidraAnswer,resolveValidraQuestionFlow,type ValidraItemRequirements,type ValidraItemFormInput,type ValidraFormQuestion,type ValidraFormDocument } from "../shared/validraCartForms";
 import type { CartSelection } from "./validraCartQuote";
 
 type Option=Pick<typeof productOptions.$inferSelect,"id"|"productId"|"label"|"type"|"requireProfilePhoto"|"requireCarDocument"|"requireAlvara"|"requireCondutaxi"|"requireVehicle2016"|"isPdfOnly"|"showYearField"|"docNameMode"|"commissionValue">;
@@ -20,11 +20,16 @@ function choicesFor(q:Question,rules:BlockingRule[]){
   return raw.map(value=>{
     const item=typeof value==="string"?{label:value}:value;
     if(!item||typeof item.label!=="string"||!item.label.trim()||item.label.length>1000||
-        (item.flowAction&&item.flowAction!=="continue"))throw unavailable();
+        (item.flowAction&&!["continue","jump","finish","message"].includes(item.flowAction)))throw unavailable();
     const key=normalizeValidraAnswer(item.label);
     if(seen.has(key))throw unavailable();
     seen.add(key);
-    return {label:item.label,blocked:item.blocking===true||rules.some(rule=>rule&&rule.enabled!==false&&Number(rule.questionId)===q.id&&normalizeValidraAnswer(String(rule.answer??""))===key)};
+    const action=(item.flowAction||"continue") as NonNullable<ValidraFormQuestion["choices"][number]["action"]>;
+    const targetQuestionId=action==="jump"?Number(item.flowTarget):undefined;
+    if(action==="jump"&&(!Number.isSafeInteger(targetQuestionId)||!targetQuestionId||targetQuestionId===q.id))throw unavailable();
+    if(action==="message"&&(typeof item.flowMessage!=="string"||!item.flowMessage.trim()||item.flowMessage.length>2000))throw unavailable();
+    return {label:item.label,blocked:item.blocking===true||rules.some(rule=>rule&&rule.enabled!==false&&Number(rule.questionId)===q.id&&normalizeValidraAnswer(String(rule.answer??""))===key),action,
+      ...(targetQuestionId?{targetQuestionId}:{}),...(action==="message"?{message:item.flowMessage}:{})};
   });
 }
 
@@ -51,6 +56,9 @@ export function buildValidraItemRequirements(product:Product,option:Option,quest
     return {id:q.id,question:q.question,fieldType:q.fieldType as ValidraFormQuestion["fieldType"],required:q.isRequired===1,
       parentQuestionId:q.parentQuestionId,triggerOption:q.triggerOption,sortOrder:q.sortOrder,choices:choicesFor(q,rules)};
   });
+  for(const q of specs)for(const choice of q.choices){
+    if(choice.action==="jump"&&!questionIds.has(choice.targetQuestionId!))throw unavailable();
+  }
   const pdfOnly=Boolean(product.isPdfOnly||option.isPdfOnly||["pdf_only","pdf-only","pdf"].includes(option.type??""));
   const required:ValidraFormDocument[]=[];
   if(documents.length){
@@ -110,7 +118,9 @@ export function validateValidraItemForm(spec:ValidraItemRequirements,input:Valid
       answers[question.id]=selected.label;
     }else answers[question.id]=value;
   }
-  const visible=visibleValidraQuestions(spec.questions,answers);
+  const flow=resolveValidraQuestionFlow(spec.questions,answers);
+  if(flow.invalid)throw invalid();
+  const visible=flow.questions;
   if([...seen].some(id=>!visible.some(q=>q.id===id))||visible.some(q=>q.required&&!answers[q.id]))throw invalid();
   const depths=new Map<number,number>();
   const canonical=visible.flatMap(q=>{

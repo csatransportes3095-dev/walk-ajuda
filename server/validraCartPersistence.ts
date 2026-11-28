@@ -5,6 +5,7 @@ import { persistValidraOrderInTransaction, type TrustedPaidOrderInput } from "./
 import { validraPurchaseDigest } from "./validraCheckout";
 import { validraAmount, validraChargeIsPaid, type ValidraCharge } from "./validraPay";
 import type { ValidraCartQuote } from "./validraCartQuote";
+import { privateValidraFileUrl } from "./validraPrivateStorage";
 
 import { ensureValidraDocumentStorage, preflightValidraDocuments, bindValidraDocuments, type ValidraCartDocument } from "./validraDocumentStorage";
 export type { ValidraCartDocument } from "./validraDocumentStorage";
@@ -34,7 +35,7 @@ function validDocuments(documents: ValidraCartDocument[] | undefined): boolean {
     try {
       const url = new URL(doc.fileUrl);
       if (url.protocol !== "https:" || url.username || url.password || url.search || url.hash ||
-          !url.pathname.endsWith("/" + doc.fileKey)) return false;
+          !url.pathname.endsWith("/" + doc.fileKey)||doc.fileUrl!==privateValidraFileUrl(doc.fileKey)) return false;
     } catch { return false; }
     keys.add(doc.fileKey);
   }
